@@ -298,5 +298,83 @@ t perl-env-home-fp 0 "" happy.sarif "$P${FS}use warnings;${FS}a${FS}my \$h = \$E
 t perl-inline-use 1 "helper-perl-danger" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl -e 'use IO::Socket::INET;'"
 t perl-inline-env 1 "helper-perl-danger" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl -0777 -pe 'print \$ENV{GH_TOKEN};'"
 
+# --- installer tmp_bin aliases (Codex P1: replacement=$tmp_bin) ---
+t toctou-alias 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}replacement=\"\${tmp_bin}\"${RS}$I${FS}replacement=\"\${tmp_bin}\"${FS}a${FS}cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${replacement}\""
+t toctou-alias-pre 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}replacement=\"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${replacement}\""
+t toctou-alias-chain 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}a=\"\${tmp_bin}\"${RS}$I${FS}a=\"\${tmp_bin}\"${FS}a${FS}b=\"\${a}\"${RS}$I${FS}b=\"\${a}\"${FS}a${FS}cat /tmp/evil > \"\${b}\""
+t toctou-alias-inert-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}replacement=\"\${tmp_bin}\""
+t toctou-alias-read 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}read replacement <<< \"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat /tmp/evil > \"\${replacement}\""
+t toctou-alias-printfv 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}printf -v replacement '%s' \"\${tmp_bin}\"${RS}$I${FS}got_sha=${FS}a${FS}cat /tmp/evil > \"\${replacement}\""
+t toctou-alias-for 1 "muse-installer-toctou" happy.sarif "$I${FS}tmp_bin=\"\$(mktemp)\"${FS}a${FS}for replacement in \"\${tmp_bin}\"; do :; done${RS}$I${FS}got_sha=${FS}a${FS}cat /tmp/evil > \"\${replacement}\""
+
+# --- indirect token expansion (Codex P1: ${!secret_name}) ---
+t stage-indirect 1 "helper-secret-expand" happy.sarif "$PR${FS}} > \"\${prompt_file}\"${FS}a${FS}secret_name=GH_TOKEN; printf '%s' \"\${!secret_name}\" >> \"\${prompt_file}\""
+t stage-indirect-sub 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\${!ref[0]}\""
+t stage-indirect-keys-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\${!arr[@]}\""
+t stage-indirect-prefix-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\${!GH_*}\""
+t stage-singlequote-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo '\${GH_TOKEN}'"
+t stage-singlequote-indirect-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo '\${!ref}'"
+
+# --- varmap reassignment (Codex P1: loader+=ake staleness) ---
+t varmap-plus-eq 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; loader+=ake; \"\${loader}\" -C \"\${GITHUB_WORKSPACE}\" all"
+t varmap-declare 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; declare loader=make; \"\${loader}\" -C /tmp all"
+t varmap-unset 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=make; unset loader; \"\${loader}\" -C /tmp all"
+t varmap-indented 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m${RS}$H${FS}loader=m${FS}a${FS}  loader=make${RS}$H${FS}  loader=make${FS}a${FS}\"\${loader}\" -C /tmp all"
+t varmap-arith 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; ((loader = 5)); \"\${loader}\" -C /tmp all"
+t varmap-read 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; read loader < /dev/null; \"\${loader}\" -C /tmp all"
+t varmap-printfv 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; printf -v loader '%s' x; \"\${loader}\" -C /tmp all"
+t varmap-for 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=m; for loader in a b; do :; done; \"\${loader}\" -C /tmp all"
+t varmap-multiassign 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=old; export ziplog=x loader=new; \"\${loader}\" -C /tmp all"
+t varmap-cmdsubst-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x=\"\$(printf hi)\""
+
+# --- CORE-qualified perl calls (Codex P1: CORE::open) ---
+t perl-core-open 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::open(my \$fh, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\");"
+t perl-core-sysopen 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::sysopen(my \$fh, \$f, O_RDWR);"
+t perl-core-system 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::system(\"id\");"
+t perl-amp-open 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}&open(my \$fh, \"|-\", \"id\");"
+t perl-foo-open-fp 0 "" happy.sarif "$P${FS}use warnings;${FS}a${FS}Foo::open(my \$fh, \"|-\", \"id\");"
+
+# --- copy-class exec flags (Codex P1: tar --checkpoint-action, sed e) ---
+t copy-tar-checkpoint 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/out.tar --checkpoint=1 --checkpoint-action=exec='bash \${GITHUB_WORKSPACE}/evil.sh' /dev/null"
+t copy-tar-tocommand 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/x --to-command=/bin/sh /dev/null"
+t copy-tar-compress 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/x -I evil /dev/null"
+t copy-tar-plain-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/out.tar /dev/null"
+t copy-sed-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 's/x/y/e' /tmp/f"
+t copy-sed-e-cmd 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed -e '/pat/e' /tmp/f"
+t copy-sed-w-trusted 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 'w \${SCRIPT_DIR}/x' /tmp/f"
+t copy-sed-plain-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 's/x/y/g' /tmp/f"
+t copy-sed-f-unpinned 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed -f \"\${GITHUB_WORKSPACE}/evil.sed\" /tmp/f"
+t copy-ed-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf 'w\nq\n' | ed /tmp/f"
+
+# --- symlink-alias writes (Codex P1: ln -s SCRIPT_DIR) ---
+t link-alias-write 1 "helper-symlink-alias" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln -s \"\${SCRIPT_DIR}\" /tmp/review-scripts${RS}$H${FS}ln -s \"\${SCRIPT_DIR}\"${FS}a${FS}cp \"\${GITHUB_WORKSPACE}/evil.sh\" /tmp/review-scripts/diff.sh"
+t link-src-relative 1 "helper-symlink-alias" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln -s ../scripts/x /tmp/l"
+t link-src-workspace 1 "helper-symlink-alias" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln -s \"\${GITHUB_WORKSPACE}/x\" /tmp/l"
+t link-src-system-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln -s /usr/bin/tool /tmp/t"
+t link-hardlink-tmp-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln /tmp/a /tmp/b"
+t link-cp-symlink 1 "helper-symlink-alias" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp -s \"\${SCRIPT_DIR}/x\" /tmp/l"
+t link-targetdir 1 "helper-symlink-alias" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ln -s -t /tmp/links \"\${SCRIPT_DIR}/a\" \"\${SCRIPT_DIR}/b\""
+
+# --- perl comment handling (Codex P1: q(#) truncation) ---
+t perl-q-comment 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}my \$marker = q(#); system(\"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\");"
+t perl-comment-code 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}# system(\"id\");"
+t perl-regex-hash-fp 0 "" happy.sarif "$P${FS}use warnings;${FS}a${FS}my \$x = (\$y =~ s/#//r);"
+
+# --- xargs dispatch (Codex P1: xargs bash evil.sh) ---
+t xargs-bash 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf x | xargs bash evil.sh"
+t xargs-git-clone 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf x | xargs git clone evil"
+t xargs-argfile 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf x | xargs -a \"\${GITHUB_WORKSPACE}/evil\" echo"
+t xargs-slotvar 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf x | xargs --process-slot-var=PATH echo"
+
+# --- compare fail-closed shape (Codex P1: && false neutralizer) ---
+t cmp-and-false 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}[[ \"\${got_sha}\" != \"\${want_sha}\" ]]${FS}[[ \"\${got_sha}\" != \"\${want_sha}\" && false ]]"
+t cmp-single-quote 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}\"\${got_sha}\"${FS}'\${got_sha}'"
+t cmp-eq-inverted 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}!=${FS}=="
+t cmp-bare-exit 1 "muse-installer-no-compare" happy.sarif "$I${FS}3:exit 1${FS}r${FS}exit 1${FS}exit"
+t cmp-no-exit 1 "muse-installer-no-compare" happy.sarif "$I${FS}3:exit 1${FS}d"
+t cmp-single-bracket-fp 0 "" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}[[${FS}[${RS}$I${FS}if [ \"\${got_sha}\"${FS}r${FS}]]${FS}]"
+t cmp-sha256c-fp 0 "" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ \"\${got_sha}\" != \"\${want_sha}\" ]]; then${FS}if false; then${RS}$I${FS}got_sha=${FS}a${FS}sha256sum -c \"\${SCRIPT_DIR}/checksums.txt\""
+t cmp-or-true 1 "muse-installer-no-compare" happy.sarif "$I${FS}if [[ \"\${got_sha}\"${FS}r${FS}if [[ \"\${got_sha}\" != \"\${want_sha}\" ]]; then${FS}if false; then${RS}$I${FS}got_sha=${FS}a${FS}sha256sum -c x || true"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

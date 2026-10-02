@@ -116,7 +116,7 @@ def main():
         # ran and passed; there is just nothing to filter.
         print("::notice::Drift audit passed with no SARIF to filter "
               "(empty scan); exemption inactive.")
-        sys.exit(0)
+        return 0
     try:
         with open("semgrep.sarif") as fh:
             sarif = json.load(fh)

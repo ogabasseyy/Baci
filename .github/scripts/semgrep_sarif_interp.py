@@ -13,6 +13,7 @@ from semgrep_sarif_poison import audit_env_dump
 from semgrep_sarif_programs import jq_program_has_env
 from semgrep_sarif_shell import (ENV_POISON, peel_prefix,
                                  script_operand)
+from semgrep_sarif_xargs import audit_xargs
 
 
 def _jq_program(rest):
@@ -170,7 +171,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
                   "readonly", "local", "set"):
         audit_env_dump(base, rest, drift)
     elif base == "xargs":
-        _check_xargs(rest, drift, src)
+        audit_xargs(rest, drift, src, _check_command)
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
                   "flock", "chrt", "ionice", "taskset", "sg",
                   "tmux", "screen"):
@@ -245,54 +246,3 @@ def _check_env(rest, drift, src=""):
     pre = tail[:len(tail) - len(cmd_rest) - 1]
     _check_command(argv0, list(cmd_rest), list(pre), drift,
                    src)
-
-
-def _check_xargs(rest, drift, src=""):
-    # Arguments are opaque to the invoked command, so any
-    # workspace-rooted token fails closed; the command itself
-    # takes the path rule. -e/-E values are ambiguous: fail
-    # closed (use --eof= instead).
-    if any(_ws_rooted(tok) for tok in rest) \
-            and "helper-untrusted-exec" not in drift:
-        drift.append("helper-untrusted-exec")
-        return
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        if tok == "--":
-            i += 1
-            break
-        if re.fullmatch(r"-[a-zA-Z0-9]*[eE][a-zA-Z0-9]*",
-                        tok):
-            if "helper-untrusted-exec" not in drift:
-                drift.append("helper-untrusted-exec")
-            return
-        if tok in ("-n", "-P", "-I", "-d", "-a", "-L", "-s",
-                   "--max-args", "--max-procs", "--replace",
-                   "--delimiter", "--arg-file"):
-            i += 2
-        elif tok.startswith("--") and "=" in tok:
-            i += 1
-        elif re.fullmatch(r"-[a-zA-Z0-9]+", tok):
-            if tok[-1] in "nPIdaLs":
-                i += 2
-            else:
-                i += 1
-        else:
-            break
-    if i >= len(rest):
-        return
-    cmd = rest[i]
-    if ("/" in cmd or cmd.startswith(".")) \
-            and not _safe_exec_path(cmd) \
-            and "helper-untrusted-exec" not in drift:
-        drift.append("helper-untrusted-exec")
-    if cmd.rsplit("/", 1)[-1] in NET_DENY \
-            and not (src == "install.sh" and cmd == "curl") \
-            and "helper-network-tool" not in drift:
-        drift.append("helper-network-tool")
-    if cmd.rsplit("/", 1)[-1] in LOAD_DENY \
-            and "helper-code-loader" not in drift:
-        drift.append("helper-code-loader")
-    if cmd.rsplit("/", 1)[-1] == "git":
-        audit_git(rest[i + 1:], drift)

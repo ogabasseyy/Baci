@@ -21,6 +21,8 @@ from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
                                  logical_lines, peel_prefix,
                                  split_commands2, tokenize,
                                  unquote)
+from semgrep_sarif_varmap import (_collect_vars, _resolve,
+                                  audit_unresolved_argv)
 
 DEFERRED_RE = re.compile(
     r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
@@ -46,10 +48,12 @@ BARE_POISON_RE = re.compile(
 SECRET_EXPAND_RE = re.compile(
     r"\$\{[#!]?GH_TOKEN\b|\$GH_TOKEN\b"
     r"|\$\{[#!]?GITHUB_TOKEN\b|\$GITHUB_TOKEN\b")
+# Bare ${!name} indirects to a caller-chosen variable (value!);
+# [@]/[*] subscripts and !prefix* globs list names only.
+INDIRECT_RE = re.compile(
+    r"\$\{![A-Za-z_]\w*(\[(?![@*]\])[^]]*\])?\}")
 
 
-CARRY_VARS = ("HOME", "GITHUB_WORKSPACE", "RUNNER_TEMP",
-              "SCRIPT_DIR", "TMPDIR", "TEMP", "TMP")
 def _strip_case_patterns(nosub):
     # Drop case pattern prefixes clause by clause (;;-separated,
     # quote-aware): the first ) at paren depth 0 ends the
@@ -98,66 +102,7 @@ def _strip_case_patterns(nosub):
     return "; ".join(kept)
 
 
-def _collect_vars(raw_lines):
-    # Last top-level literal assignment per name (bash last-
-    # wins), so ${install_dir}/... resolves before path checks
-    # while a SCRIPT_DIR alias reassigned to the workspace
-    # resolves to the workspace at use. An unresolvable last
-    # assignment deletes the entry: keeping the earlier literal
-    # would resolve dynamic content to a stale trusted-looking
-    # value. Conditional/indented assigns never resolve.
-    carry = "(?:" + "|".join(CARRY_VARS) + ")"
-    varmap = {}
-    for line in raw_lines:
-        m = re.match(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)"
-                     r"=(.*)$", line)
-        if not m:
-            continue
-        name = m.group(1)
-        val = m.group(2).strip()
-        if len(val) >= 2 and val[0] == val[-1] \
-                and val[0] in ("'", '"'):
-            inner = val[1:-1]
-        elif re.fullmatch(r"\S+", val or " "):
-            inner = val
-        else:
-            varmap.pop(name, None)
-            continue
-        if "`" in inner or "$(" in inner:
-            varmap.pop(name, None)
-            continue
-        scrubbed = re.sub(r"\$(?:\{" + carry + r"\}|" + carry
-                           + r")", "", inner)
-        if "$" in scrubbed:
-            varmap.pop(name, None)
-            continue
-        varmap[name] = inner
-    for _ in range(3):
-        for key in varmap:
-            varmap[key] = _resolve(varmap[key], varmap)
-    return varmap
-
-
-def _resolve(text, varmap):
-    # Plain $V and ${V} only; ${V-op...} expansions keep their
-    # literal text (fail closed). Single-quote imprecision is
-    # fail-closed: resolving a literal can only add markers.
-    def sub(m):
-        name = m.group(2)
-        if name not in varmap:
-            return m.group(0)
-        if m.group(1):
-            if not m.group(3):
-                return m.group(0)
-            return varmap[name]
-        if m.group(3):
-            return varmap[name] + "}"
-        return varmap[name]
-    return re.sub(r"\$(\{)?([A-Za-z_][A-Za-z0-9_]*)(\})?",
-                  sub, text)
-
-
-def _audit_expansions(line, drift, src=""):
+def _audit_expansions(line, drift, src="", stale=frozenset()):
     # Unquoted-heredoc-body audit: words are stdin data (never
     # commands), but expansions execute. Extracted commands
     # audit fully; arithmetic regions for nested $/backtick.
@@ -165,7 +110,7 @@ def _audit_expansions(line, drift, src=""):
     # cannot fuse with another body's text into a phantom.
     _, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, src)
+        _audit_line(inner, drift, src, stale)
     if any("$" in body or "`" in body
            for body in arith_regions(line)) \
             and "helper-arithmetic-sub" not in drift:
@@ -187,12 +132,12 @@ def _strip_redirects(words):
     return kept
 
 
-def _audit_line(line, drift, src=""):
+def _audit_line(line, drift, src="", stale=frozenset()):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, src)
+        _audit_line(inner, drift, src, stale)
     for inner in subscript_cmdsubst(line):
-        _audit_line(inner, drift, src)
+        _audit_line(inner, drift, src, stale)
     if DEFERRED_RE.search(line) \
             and "helper-deferred-exec" not in drift:
         drift.append("helper-deferred-exec")
@@ -209,7 +154,10 @@ def _audit_line(line, drift, src=""):
     if BARE_POISON_RE.search(line) \
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
-    if SECRET_EXPAND_RE.search(line) \
+    if SECRET_EXPAND_RE.search(nosq) \
+            and "helper-secret-expand" not in drift:
+        drift.append("helper-secret-expand")
+    if INDIRECT_RE.search(nosq) \
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")
     for tgt in redirect_targets(cleaned):
@@ -226,14 +174,38 @@ def _audit_line(line, drift, src=""):
     nosub = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{?", "",
                    cleaned)
     nosub = _strip_case_patterns(nosub)
-    for piece, _, _ in split_commands2(nosub):
-        words = [unquote(t) for t in tokenize(piece)]
+    # The splitter breaks &&/|| inside [[ ]], so operands
+    # surface as phantom argv0s; [[ ]] executes nothing, so the
+    # unresolved rule sleeps there. Markers come from raw
+    # tokens: a quoted "[[" is data, not a conditional.
+    in_test = False
+    prev = ""
+    for piece, after_open, _ in split_commands2(nosub):
+        # Array/assign parens hold data (MUSE_SEEN+=(...)),
+        # never commands; a bare ( ... ) subshell still
+        # executes, so only an =/+= before the ( sleeps the
+        # unresolved rule. ==/!=/<=/>= are comparisons.
+        paren_data = after_open and re.search(
+            r"(\+=|(?<![=!<>+])=)\s*$", prev)
+        prev = piece
+        raw_words = tokenize(piece)
+        if "[[" in raw_words:
+            in_test = True
+        words = [unquote(t) for t in raw_words]
         words = _strip_redirects(words)
         if not words:
+            if "]]" in raw_words:
+                in_test = False
             continue
         argv0, rest = peel_prefix(words)
         if not argv0:
+            if "]]" in raw_words:
+                in_test = False
             continue
+        if not in_test and not paren_data:
+            audit_unresolved_argv(argv0, stale, drift)
+        if "]]" in raw_words:
+            in_test = False
         if argv0 in ("for", "select"):
             # Loop variables assign: a poison name rebinds
             # the environment for every later command.
@@ -248,11 +220,11 @@ def _audit_line(line, drift, src=""):
         if argv0 == "trap":
             handler = _trap_handler(rest)
             if handler is not None:
-                _audit_line(handler, drift, src)
+                _audit_line(handler, drift, src, stale)
         elif argv0 in ("mapfile", "readarray"):
             cb = _mapfile_callback(rest)
             if cb is not None:
-                _audit_line(cb, drift, src)
+                _audit_line(cb, drift, src, stale)
         if re.match(r"^[\*\?\[]", argv0) \
                 or re.match(r"^\d*[<>]", argv0):
             continue
@@ -269,13 +241,14 @@ def _audit_shell_file(path, drift):
     except OSError:
         drift.append("helper-unreadable")
         return
-    varmap = _collect_vars(raw)
+    varmap, stale = _collect_vars(raw)
     src = os.path.basename(path)
     code, bodies = _strip_heredocs(raw)
     for line in logical_lines(code):
-        _audit_line(_resolve(line, varmap), drift, src)
+        _audit_line(_resolve(line, varmap), drift, src, stale)
     for line in bodies:
-        _audit_expansions(_resolve(line, varmap), drift, src)
+        _audit_expansions(_resolve(line, varmap), drift, src,
+                           stale)
 
 
 def invoked_shell_refs(raw):

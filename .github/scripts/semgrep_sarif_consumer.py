@@ -7,16 +7,16 @@ import re
 from semgrep_sarif_helpers import (DEFERRED_RE, XTRACE_RE,
                                    _audit_shell_file,
                                    invoked_shell_refs)
+from semgrep_sarif_perl import audit_perl_file
 from semgrep_sarif_pins import PINNED_CHECKOUT_USES
-from semgrep_sarif_programs import (audit_jq_content,
-                                    audit_perl_content)
+from semgrep_sarif_programs import audit_jq_content
 from semgrep_sarif_scan import arith_regions
 from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
                                  map_key_value,
                                  peel_prefix, run_segments,
                                  script_operand, split_commands2,
-                                 strip_comments, tokenize,
-                                 unquote, unquote_value)
+                                 tokenize, unquote,
+                                 unquote_value)
 from semgrep_sarif_steps import (is_step_boundary, step_end,
                                  step_name, step_start)
 
@@ -274,9 +274,7 @@ def audit_helpers(ctx, drift):
             if text is None:
                 continue
             if name.endswith(".pl"):
-                text = "\n".join(strip_comments(line)
-                                 for line in text.splitlines())
-                audit_perl_content(text, drift)
+                audit_perl_file(text, drift)
             else:
                 audit_jq_content(text, drift)
         elif "helper-unknown-format" not in drift:

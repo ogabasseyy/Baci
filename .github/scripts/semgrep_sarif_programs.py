@@ -81,7 +81,10 @@ def _is_call_open(text, at, name):
     if re.search(r"(?:sub|use|no)\s+$", before):
         return False
     if before[-1:] in ("{", "$", "@", "%", ":"):
-        return False
+        # CORE:: names the builtin itself (a real open);
+        # any other package qualifier is a method call.
+        if not re.search(r"(?<!\w)CORE::$", before):
+            return False
     after = text[at + len(name):]
     rest = after[re.match(r"\s*", after).end():]
     if rest.startswith(("=>", ":", "::")):

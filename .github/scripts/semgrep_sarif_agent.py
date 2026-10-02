@@ -4,8 +4,8 @@ masquerade as flags), scrub both GitHub tokens exactly, and
 build model_args from --model pairs only.
 """
 import re
-from semgrep_sarif_helpers import (CARRY_VARS, _collect_vars,
-                                   _resolve)
+from semgrep_sarif_varmap import (CARRY_VARS, _collect_vars,
+                                  _resolve)
 from semgrep_sarif_runner import (_dequote, _peel_env,
                                   _shell_words)
 from semgrep_sarif_scan import extract_subshells
@@ -144,7 +144,7 @@ def audit_agent_runner(drift):
         # Resolve top-level literal variables first: a constructed
         # path (MUSE_BIN=...muse; "${MUSE_BIN}" exec ...) must count
         # as an invocation, not slip past the literal match.
-        varmap = _collect_vars(runner_raw)
+        varmap, _ = _collect_vars(runner_raw)
         expanded = [_resolve(line, varmap) for line in logical]
         # Command-position words (quote-glued, env-peeled): prose
         # mentions (echo "muse ...") and identifiers (muse_rc) sit

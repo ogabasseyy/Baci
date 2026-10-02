@@ -4,7 +4,9 @@ version/checksums, verify-before-install order, pinned
 versioned URL, no pipe-to-shell).
 """
 import re
-from semgrep_sarif_install import audit_install_binding
+from semgrep_sarif_install import (audit_compare_shape,
+                                   audit_install_binding,
+                                   audit_tmp_aliases)
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
@@ -162,16 +164,11 @@ def audit_installer(drift):
                      if re.search(r"(?:^|[\s;&|()$`'\"])"
                                   r"sha256sum(?:\s|$)", line)
                      and first_cmd(line) not in ("echo", "printf")]
-        cmp_at = [i for i, line in enumerate(installer)
-                  if "got_sha" in line and "want_sha" in line
-                  and "!=" in line
-                  and first_cmd(line) not in ("echo", "printf")]
         install_at = audit_install_binding(installer, first_cmd,
                                            drift)
         if not verify_at:
             drift.append("muse-installer-no-verify")
-        if not cmp_at:
-            drift.append("muse-installer-no-compare")
+        cmp_at = audit_compare_shape(installer, drift)
         if install_at and verify_at and cmp_at \
                 and min(install_at) < max(verify_at + cmp_at):
             drift.append("muse-installer-unverified-install")
@@ -180,33 +177,48 @@ def audit_installer(drift):
             # Post-verify immutability: the hash freezes tmp_bin
             # (the compare reads the stale got_sha, so the hash
             # line — not the compare — is the freeze point; a
-            # later re-hash re-freezes). Any textual tmp_bin
-            # reference past it with a write shape drifts; the
-            # mktemp value itself is unguessable, so textual
-            # keying is complete. Reads drift too: fail closed.
+            # later re-hash re-freezes). Keyed on the alias
+            # closure (replacement="${tmp_bin}" writes through
+            # the alias), not the bare name. Any write shape
+            # past the freeze — or a rebind to an unverified
+            # value — drifts. Reads drift too: fail closed.
             frozen = max(verify_at)
+            aliases = audit_tmp_aliases(installer)
+            key = r"(?:%s)\b" % "|".join(sorted(aliases))
+
+            def ref(text):
+                return re.search(key, text)
             hit = False
             for i in range(frozen + 1, len(installer)):
                 line = installer[i]
-                if not re.search(r"tmp_bin\b", line):
+                if not ref(line):
                     continue
                 if i in install_at:
                     continue  # blessed install reads it
                 for piece, _, _ in split_commands2(line):
-                    if not re.search(r"tmp_bin\b", piece):
+                    if not ref(piece):
                         continue
+                    m = re.match(
+                        r"(?:export|declare|local|readonly|"
+                        r"typeset)?\s*([A-Za-z_]\w*)=(.*)$",
+                        piece.strip())
+                    if m and m.group(1) in aliases \
+                            and not any(re.search(
+                                r"\$\{?" + n + r"\b", m.group(2))
+                                for n in aliases):
+                        hit = True  # post-verify rebind
                     fc = first_cmd(piece)
-                    if re.search(r">\s*\S*tmp_bin\b", piece):
+                    if re.search(r">\s*\S*" + key, piece):
                         hit = True
                     elif fc in ("cp", "mv", "ln", "install",
                                 "tee", "patch", "ed", "truncate",
                                 "shred"):
                         hit = True
                     elif fc == "curl" and re.search(
-                            r"-o\s*\"?\$?\{?tmp_bin\b", piece):
+                            r"-o\s*\"?\$?\{?" + key, piece):
                         hit = True
                     elif fc == "dd" and re.search(
-                            r"\bof=\S*tmp_bin\b", piece):
+                            r"\bof=\S*" + key, piece):
                         hit = True
                     elif fc in ("sed", "perl", "awk") \
                             and "-i" in piece:

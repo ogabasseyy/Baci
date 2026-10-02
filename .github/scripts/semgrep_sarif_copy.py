@@ -2,12 +2,19 @@
 not target the trusted tree, the muse binary (or its ancestor
 dirs -- a link swap redirects the absolute-path invocation),
 or the agent-readable workspace (token staging). Reads are
-safe: only destinations (plus patch/sed programs, which carry
-taint) are checked. Residual: GITHUB_ENV/GITHUB_PATH writes
-need value-sensitive rules (follow-up).
+safe: only destinations (plus patch programs, which carry
+taint) are checked -- and execution channels: tar program
+flags (see semgrep_sarif_tar), sed programs (see
+semgrep_sarif_sed), ed/ex (denied:
+unseen stdin scripts with shell escapes), and link sources
+(a trusted/workspace/relative source aliases later writes
+into the protected tree). Residual: GITHUB_ENV/GITHUB_PATH
+writes need value-sensitive rules (follow-up).
 """
 from semgrep_sarif_install import _install_operands
 from semgrep_sarif_scan import _write_zone
+from semgrep_sarif_sed import audit_sed_programs
+from semgrep_sarif_tar import audit_tar_exec
 
 COPY_TOOLS = {"cp", "mv", "ln", "install", "tee", "dd", "tar",
               "unzip", "zip", "patch", "ed", "ex", "sed"}
@@ -78,11 +85,63 @@ def _is_inplace(rest):
         for tok in rest)
 
 
+def _cp_symbolic(rest):
+    # cp -s/--symbolic-link (bundles included): -t consumes
+    # its value, so -ts never misreads as symbolic.
+    for tok in rest:
+        if tok == "--":
+            return False
+        if tok == "--symbolic-link":
+            return True
+        if tok.startswith("-") and not tok.startswith("--") \
+                and len(tok) > 1:
+            for ch in tok[1:]:
+                if ch == "s":
+                    return True
+                if ch == "t":
+                    break
+    return False
+
+
+def _link_sources(rest):
+    # Link sources: every operand but the destination (all of
+    # them under -t; the lone operand links into the CWD,
+    # which is the workspace at helper runtime).
+    tdir = _flag_value(rest, ("-t", "--target-directory"))
+    ops = _operands(rest)
+    if tdir is not None:
+        return [op for op in ops if op != tdir]
+    if len(ops) <= 1:
+        return ops
+    return ops[:-1]
+
+
+def _source_alias(src):
+    # A link source that resolves into (or cannot be shown
+    # outside) the trusted tree or workspace: writes through
+    # the link land there. Absolute system/tmp paths pass.
+    zone = _write_zone(src)
+    if zone in ("trusted", "workspace"):
+        return True
+    return zone is None and not src.startswith("/")
+
+
+def audit_link_sources(base, rest, drift):
+    if base != "ln" and not (base == "cp" and _cp_symbolic(rest)):
+        return
+    for src in _link_sources(rest):
+        if _source_alias(src):
+            if "helper-symlink-alias" not in drift:
+                drift.append("helper-symlink-alias")
+            break
+
+
 def audit_copy_dest(base, rest, drift, src=""):
     if base == "install" and src == "install.sh":
         # Structurally audited: the binding rules pin its
         # operands exactly, so the helper pass stands down.
         return
+    audit_link_sources(base, rest, drift)
     targets, implicit = [], None
     if base in ("cp", "mv", "ln"):
         tdir = _flag_value(rest, ("-t", "--target-directory"))
@@ -106,6 +165,7 @@ def audit_copy_dest(base, rest, drift, src=""):
         targets = [tok[3:] for tok in rest
                    if tok.startswith("of=")]
     elif base == "tar":
+        audit_tar_exec(rest, drift)
         if _is_extract(rest):
             cdir = _flag_value(rest, ("-C", "--directory"))
             if cdir is not None:
@@ -136,14 +196,19 @@ def audit_copy_dest(base, rest, drift, src=""):
             if not targets:
                 implicit = "trusted"  # stdin patch: unbounded
     elif base in ("ed", "ex"):
+        # Scripted edits with shell escapes (!cmd): the audit
+        # cannot see stdin, so any invocation drifts.
+        if "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
         ops = _operands(rest)
         if ops:
             targets = [ops[0]]
         else:
             implicit = "trusted"  # e-command can name anything
     elif base == "sed":
+        targets = audit_sed_programs(rest, drift)
         if _is_inplace(rest):
-            targets = _sed_files(rest)
+            targets += _sed_files(rest)
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
     if implicit is not None:

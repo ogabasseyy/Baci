@@ -9,7 +9,7 @@ import {
   isReceiptEligible,
   normalizePaymentStatus,
   normalizeShippingStatus,
-} from '@/lib/storefront-account-document-data';
+} from '@/lib/storefront-account-document-eligibility';
 import { resolveStorefrontOrderPaymentAccounts } from '@/lib/storefront-order-payment-accounts';
 import { storefrontAccountDocumentQuerySchema } from '@/schemas/storefront-account-document';
 
@@ -183,7 +183,15 @@ export async function GET(request: NextRequest) {
         recordedByUserId: order.recorded_by_user_id,
         total: order.total,
         amountPaid: order.amount_paid,
-        itemCount: order.order_items?.length ?? 0,
+        money: {
+          total: order.total,
+          subtotal: order.subtotal,
+          shipping_fee: order.shipping_fee,
+          tax_amount: order.tax_amount,
+          discount_amount: order.discount_amount,
+          amount_paid: order.amount_paid,
+        },
+        items: order.order_items ?? [],
       };
       // A fully-covered manual balance is a receipt in substance even under
       // a non-paid label; resolve the type code from the same boolean so a

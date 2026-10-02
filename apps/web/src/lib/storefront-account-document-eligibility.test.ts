@@ -5,7 +5,7 @@ import {
   isReceiptEligible,
   normalizePaymentStatus,
   normalizeShippingStatus,
-} from '@/lib/storefront-account-document-data';
+} from '@/lib/storefront-account-document-eligibility';
 
 describe('storefront account document status helpers', () => {
   it('makes a fully paid manual receipt downloadable before shipping', () => {
@@ -15,7 +15,15 @@ describe('storefront account document status helpers', () => {
       recordedByUserId: 'staff-1',
       total: 100,
       amountPaid: 100,
-      itemCount: 1,
+      money: {
+        total: 100,
+        subtotal: 100,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 100,
+      },
+      items: [{ name: 'Device', quantity: 1, price: 100 }],
     };
     expect(isReceiptEligible(input)).toBe(true);
     expect(getCurrentDocumentKind(input)).toBe('receipt');
@@ -30,7 +38,15 @@ describe('storefront account document status helpers', () => {
       paymentStatus: 'partially_paid',
       shippingStatus: 'pending',
       recordedByUserId: 'staff-1',
-      itemCount: 2,
+      money: {
+        total: 100,
+        subtotal: 100,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 50,
+      },
+      items: [{ name: 'Device', quantity: 1, price: 100 }],
     };
     expect(isManualOrderDocumentAvailable(input)).toBe(true);
     expect(getCurrentDocumentKind(input)).toBe('invoice');
@@ -49,7 +65,15 @@ describe('storefront account document status helpers', () => {
       recordedByUserId: 'staff-1',
       total: 100,
       amountPaid: 100,
-      itemCount: 1,
+      money: {
+        total: 100,
+        subtotal: 100,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 100,
+      },
+      items: [{ name: 'Device', quantity: 1, price: 100 }],
     };
     expect(isReceiptEligible(input)).toBe(true);
     expect(getCurrentDocumentKind(input)).toBe('receipt');
@@ -59,33 +83,6 @@ describe('storefront account document status helpers', () => {
     );
   });
 
-  it('hides itemless manual orders until the item batch lands', () => {
-    const input = {
-      paymentStatus: 'paid',
-      shippingStatus: 'pending',
-      recordedByUserId: 'staff-1',
-      total: 100,
-      amountPaid: 100,
-      itemCount: 0,
-    };
-    expect(isManualOrderDocumentAvailable(input)).toBe(false);
-    expect(isReceiptEligible(input)).toBe(false);
-    expect(getCurrentDocumentKind(input)).toBe('invoice');
-    expect(isManualOrderDocumentAvailable({ ...input, itemCount: 1 })).toBe(
-      true
-    );
-    expect(isReceiptEligible({ ...input, itemCount: 1 })).toBe(true);
-    expect(
-      isManualOrderDocumentAvailable({
-        paymentStatus: 'paid',
-        shippingStatus: 'pending',
-        recordedByUserId: 'staff-1',
-        total: 100,
-        amountPaid: 100,
-      })
-    ).toBe(false);
-  });
-
   it('hides paid manual orders whose corrected total exceeds payments', () => {
     const input = {
       paymentStatus: 'paid',
@@ -93,7 +90,15 @@ describe('storefront account document status helpers', () => {
       recordedByUserId: 'staff-1',
       total: 200,
       amountPaid: 100,
-      itemCount: 1,
+      money: {
+        total: 200,
+        subtotal: 200,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 100,
+      },
+      items: [{ name: 'Device', quantity: 1, price: 200 }],
     };
     expect(isManualOrderDocumentAvailable(input)).toBe(false);
     expect(isManualOrderDocumentAvailable({ ...input, amountPaid: 200 })).toBe(

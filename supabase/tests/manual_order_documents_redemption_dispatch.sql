@@ -99,6 +99,24 @@ SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('0',64), 'web')
 RESET ROLE;
 SELECT pg_temp.assert_true((SELECT count(*) = 2 FROM public.receipt_claims AS rc WHERE rc.token_hash IN (repeat('8', 64), repeat('0', 64)) AND rc.customer_id = (SELECT o.customer_id FROM public.orders AS o WHERE o.id = '10000000-0000-4000-8000-000000000028')), 'sibling claims follow the moved order');
 
+-- A verified user linked to a different row takes the order-scoped path
+-- even when the claim row's email matches: the row-linking core would
+-- assign the same user_id twice and violate the merchant/user uniqueness.
+INSERT INTO public.customers (id, merchant_id, user_id, email) VALUES ('10000000-0000-4000-8000-000000000038', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000039', 'older@example.com');
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000037', '10000000-0000-4000-8000-000000000001', 'current@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000040', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000037', '10000000-0000-4000-8000-000000000010', 'current@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000040', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000040' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000040' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('1f', 32))->>'status' = 'created'), 'matching-email claim created');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000039', 'current@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000039', true);
+SELECT set_config('request.jwt.claims', '{"email":"current@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('1f',32), 'web')->>'status' = 'ok', 'matching email with linked row redeems via relinking');
+RESET ROLE;
+SELECT pg_temp.assert_true((SELECT customer_id = '10000000-0000-4000-8000-000000000038' FROM public.orders WHERE id = '10000000-0000-4000-8000-000000000040'), 'claimed order links the existing user row');
+
 -- The dispatch marker atomically validates the rendered snapshot and records
 -- dispatch start while holding the order row, closing the check-then-mark gap
 -- between the sender's final read and the transport call.

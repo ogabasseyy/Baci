@@ -197,7 +197,7 @@ export async function loadStructuredDiscoveryCandidates({
   const [lexical, semantic, facts, variants] = await Promise.all([
     lexicalPromise, semanticPromise,
     loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category }),
-    loadVariantRecallIds(intent, merchantId, supabase),
+    loadVariantRecallIds(intent, merchantId, supabase, { brand, category }),
   ]);
   // Free-text relevance votes independently from structured-fact votes
   // (facts plus variant recall), so an exact keyword hit that also satisfies

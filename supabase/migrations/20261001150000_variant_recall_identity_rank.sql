@@ -9,13 +9,16 @@
 -- defined in 20261001110000, so SQL ranking and post-hydration verdicts agree.
 DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer); -- live .0930 form: a missed overload makes short calls ambiguous (42725).
 DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);
+DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb);
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,
   p_limit integer DEFAULT 2000,
   p_offset integer DEFAULT 0,
   p_identity jsonb DEFAULT '[]'::jsonb,
-  p_excluded_types jsonb DEFAULT '[]'::jsonb
+  p_excluded_types jsonb DEFAULT '[]'::jsonb,
+  p_brand text DEFAULT NULL,
+  p_category text DEFAULT NULL
 ) RETURNS TABLE (product_id uuid, attributes jsonb)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path TO ''
 AS $$
@@ -246,6 +249,13 @@ BEGIN
           WHERE NOT discovery.recall_variant_filter_verifiably_fails(pv.attributes, filters.filter)
         )
       )
+      -- Catalog filters narrow before the cap, mirroring the hard
+      -- post-hydration substring match (literal, case-insensitive): rows
+      -- failing here would be dropped downstream, so narrowing strands none.
+      AND (NULLIF(p_brand, '') IS NULL
+        OR pg_catalog.position(pg_catalog.lower(NULLIF(p_brand, '')), pg_catalog.lower(p.brand)) > 0)
+      AND (NULLIF(p_category, '') IS NULL
+        OR pg_catalog.position(pg_catalog.lower(NULLIF(p_category, '')), pg_catalog.lower(p.category)) > 0)
   ),
   best AS (
     -- One row per product: the cap measures candidate products, so a single
@@ -280,7 +290,7 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) TO anon, authenticated, service_role;
-COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb) IS 'Published-merchant variant attributes for discovery recall; joint branch verdicts rank before attribute tiers; NULL merchant returns no rows.';
+ALTER FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb, text, text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb, text, text) TO anon, authenticated, service_role;
+COMMENT ON FUNCTION public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb, text, text) IS 'Published-merchant variant attributes for discovery recall; joint branch verdicts rank before attribute tiers; NULL merchant returns no rows.';

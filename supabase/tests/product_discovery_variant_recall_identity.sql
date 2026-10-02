@@ -215,6 +215,38 @@ BEGIN
   END IF;
   SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
   FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000203',
+    '[{"key":"storage_gb","operator":"eq","value":256,"branch":0}]'::jsonb,
+    1,
+    0,
+    '[{"branch":0,"product_type":"phone"}]'::jsonb,
+    '[]'::jsonb,
+    NULL,
+    'Laptops'
+  ) WITH ORDINALITY AS ranked(product_id, attributes, rank);
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000232'::uuid
+  ] THEN
+    RAISE EXCEPTION 'catalog category must narrow before ranking and the cap, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000203',
+    '[{"key":"storage_gb","operator":"eq","value":256,"branch":0}]'::jsonb,
+    10,
+    0,
+    '[{"branch":0,"product_type":"phone"}]'::jsonb,
+    '[]'::jsonb,
+    'Acme',
+    'Smartphones'
+  ) WITH ORDINALITY AS ranked(product_id, attributes, rank);
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000231'::uuid
+  ] THEN
+    RAISE EXCEPTION 'catalog brand and category must intersect before the cap, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
+  FROM public.search_product_variant_recall(
     'cb58d110-0000-4000-8000-000000000204',
     '[{"key":"storage_gb","operator":"eq","value":256,"branch":0},{"key":"color","operator":"eq","value":"Black","branch":1}]'::jsonb,
     10,

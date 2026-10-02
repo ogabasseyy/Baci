@@ -157,10 +157,10 @@ BEGIN
     -- both sides: without this a multi-space value falsely mismatches.
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     IF actual_text IS DISTINCT FROM expected_text THEN RETURN true; ELSE RETURN false; END IF;
   END IF;
 END;
@@ -221,10 +221,10 @@ BEGIN
     -- both sides: without this a multi-space value falsely mismatches.
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.
     IF expected_text = '' THEN RETURN false; END IF;
@@ -285,10 +285,10 @@ BEGIN
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN true; END IF;
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
       pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
-      '[[:space:]]+', ' ', 'g');
+      '[[:space:]   -     　﻿]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.
     IF expected_text = '' THEN RETURN false; END IF;

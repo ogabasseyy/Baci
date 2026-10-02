@@ -144,6 +144,8 @@ it('ranks variant recall by joint branch verdicts before attribute tiers', () =>
   );
   expect(recall).toContain("p_identity jsonb DEFAULT '[]'::jsonb");
   expect(recall).toContain("p_excluded_types jsonb DEFAULT '[]'::jsonb");
+  expect(recall).toContain('p_brand text DEFAULT NULL');
+  expect(recall).toContain('p_category text DEFAULT NULL');
   expect(recall).toContain('canonical_identity_product_type');
   expect(recall).toContain('complete_alternative_count');
   expect(recall).toContain('clear_branch_count');

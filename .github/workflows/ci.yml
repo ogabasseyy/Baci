@@ -310,6 +310,7 @@ jobs:
           --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
           --sql-check supabase/tests/product_discovery_combined_search.sql
           --sql-check supabase/tests/product_discovery_variant_recall.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_text.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
@@ -348,6 +349,7 @@ jobs:
           --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
           --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
           --sql-check supabase/tests/mcp_search_option_windows.sql
+          --sql-check supabase/tests/mcp_search_option_windows_guard.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

@@ -138,6 +138,24 @@ it('forwards excluded product types so the RPC sinks verified-excluded rows', as
   });
 });
 
+it('forwards catalog brand and category so the RPC narrows before the cap', async () => {
+  const supabase = rpc([]);
+  await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase, {
+    brand: 'Acme',
+    category: 'audio',
+  });
+  expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
+    p_merchant_id: 'merchant-1',
+    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
+    p_identity: [{ branch: 0 }],
+    p_excluded_types: [],
+    p_brand: 'Acme',
+    p_category: 'audio',
+    p_limit: 1000,
+    p_offset: 0,
+  });
+});
+
 it('numbers each alternative branch so the RPC scores branches separately', async () => {
   const supabase = rpc([]);
   await loadVariantRecallIds(

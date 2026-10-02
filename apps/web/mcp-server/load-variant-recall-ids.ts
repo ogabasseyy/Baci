@@ -48,7 +48,8 @@ function variantSatisfies(attributes: Record<string, unknown>, constraint: Inten
 export async function loadVariantRecallIds(
   intent: McpDiscoveryIntent | undefined,
   merchantId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  catalogFilters?: { brand?: string; category?: string }
 ): Promise<{ ids: string[]; truncated: boolean }> {
   // Branch identity rides along: alternatives are OR branches, so the RPC
   // must score each branch separately instead of counting exact matches
@@ -89,6 +90,8 @@ export async function loadVariantRecallIds(
         p_filters: filters,
         p_identity: identity,
         p_excluded_types: excludedTypes,
+        p_brand: catalogFilters?.brand,
+        p_category: catalogFilters?.category,
         p_limit: limit,
         p_offset: offset,
       });

@@ -71,14 +71,3 @@ export function resolvePublicProductOption(
     purchasable,
   };
 }
-
-/** Supply canonical eligibility to the generic variant-selection algorithms. */
-export function projectPublicVariantSelection<TVariant extends Variant>(
-  parent: Parent,
-  variants: readonly TVariant[] | null | undefined
-) {
-  return (variants ?? []).map((variant) => ({
-    ...variant,
-    is_purchasable: resolvePublicProductOption(parent, { variant }).purchasable,
-  }));
-}

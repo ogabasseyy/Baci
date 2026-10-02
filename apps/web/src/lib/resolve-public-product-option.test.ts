@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  projectPublicVariantSelection,
-  resolvePublicProductOption,
-} from './resolve-public-product-option';
+import { resolvePublicProductOption } from './resolve-public-product-option';
 
 describe('public option resolution', () => {
   const parent = {
@@ -71,14 +68,6 @@ describe('public option resolution', () => {
         { variant: { condition: null } }
       ).condition
     ).toBe('new');
-  });
-  it('projects strict eligibility even when the parent disables quantity tracking', () => {
-    expect(
-      projectPublicVariantSelection({ ...parent, manage_stock: false }, [
-        { inventory_tracking_policy: 'serialized_strict', stock_quantity: 0 },
-        { inventory_tracking_policy: 'off', stock_quantity: 0 },
-      ]).map((variant) => variant.is_purchasable)
-    ).toEqual([false, true]);
   });
   it('treats an explicit null inventory policy as managed for known option values', () => {
     expect(

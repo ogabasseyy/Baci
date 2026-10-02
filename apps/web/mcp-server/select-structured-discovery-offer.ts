@@ -1,11 +1,10 @@
 import { normalizeCanonicalProductCondition, toGoogleListingCondition } from '@baci/shared/lib';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
-import { getEffectiveStock } from '../src/lib/product-stock';
 import { resolvePublicProductOption } from '../src/lib/resolve-public-product-option';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
-import { getMcpProductStockSummary } from './product-stock-summary';
+import { getStructuredDiscoveryStockSummary } from './structured-discovery-stock-summary';
 
 type HydratedProduct = Awaited<ReturnType<typeof hydrateSearchProductAvailability>>[number];
 type DiscoveryAlternative = McpDiscoveryIntent['alternatives'][number];
@@ -34,11 +33,6 @@ function finitePrice(value: unknown): number | undefined {
 function hasPositiveStock(value: unknown) {
   const quantity = Number(value ?? 0);
   return Number.isFinite(quantity) && quantity > 0;
-}
-
-function stockQuantity(value: unknown): number | null {
-  const quantity = Number(value ?? 0);
-  return Number.isFinite(quantity) && quantity >= 0 ? quantity : null;
 }
 
 function matchesAlternative(
@@ -252,28 +246,18 @@ export function selectStructuredDiscoveryOffer(
   const match = matches[0];
   if (!match) return undefined;
 
-  // A paired offer summarizes its variant alone (PDP: variant stock
-  // replaces the offer's); bare offers keep the offer-only summary.
-  const pairedOffer = match.kind === 'offer' && match.pairedVariant !== undefined;
-  // Legacy null child quantities inherit the parent stock, mirroring
-  // isPublicVariantPurchasable; raw null is read before coercion to zero.
-  const childStock = (rawQuantity: unknown) =>
-    stockQuantity(rawQuantity == null ? getEffectiveStock(parentStock) : rawQuantity);
-  // A serialized_strict selection is stock-gated by projected units even
-  // under an unmanaged parent; other policies keep the parent's state.
   const selectedPolicy = match.kind === 'variant' ? record(match.sourceOption).effective_policy
-    : pairedOffer ? record(match.pairedVariant).effective_policy : undefined;
-  const stockSummary = getMcpProductStockSummary({
-    ...product,
-    manage_stock: selectedPolicy === 'serialized_strict' ? true : parentStock.manage_stock,
-    has_variants: match.kind === 'variant',
-    has_condition_offers: match.kind === 'offer' && !pairedOffer,
-    stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)
-      : pairedOffer
-        ? childStock(record(match.pairedVariant).stock_quantity) ?? 0
-      : 0,
-  }, match.kind === 'variant' ? [{ stock_quantity: childStock(match.stockQuantity) }] : undefined,
-  match.kind === 'offer' && !pairedOffer ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined);
+    : match.kind === 'offer' && match.pairedVariant !== undefined
+      ? record(match.pairedVariant).effective_policy : undefined;
+  const stockSummary = getStructuredDiscoveryStockSummary({
+    product,
+    parentStock,
+    kind: match.kind,
+    pairedVariant: match.pairedVariant === undefined ? undefined : record(match.pairedVariant),
+    selectedPolicy,
+    selectedStockQuantity: match.kind === 'base' ? product.stock_quantity : match.stockQuantity,
+  });
+  const pairedOffer = match.kind === 'offer' && match.pairedVariant !== undefined;
 
   return {
     ...row,

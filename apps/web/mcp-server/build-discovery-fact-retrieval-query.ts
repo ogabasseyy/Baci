@@ -123,8 +123,13 @@ function identityKey(prefix: string, value: string): string | undefined {
 }
 
 function typeTerms(productType: string): string[] {
-  const key = identityKey('type', canonicalizeDiscoveryProductType(productType));
-  return key ? [key] : [];
+  const normalized = canonicalizeDiscoveryProductType(productType);
+  if (!normalized) return [];
+  const cleaned = normalized.replace(/[^a-z0-9_]/g, '');
+  if (cleaned !== normalized || Array.from(cleaned).length > MAX_IDENTITY_LEXEME_CHARS) {
+    return [`fact${createHash('sha256').update(`type\u001f${normalized}`, 'utf8').digest('hex')}`];
+  }
+  return [`type${cleaned}`];
 }
 
 /** tsquery text for the facts index, built from structured alternatives so

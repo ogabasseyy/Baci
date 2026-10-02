@@ -2,7 +2,7 @@
 
 import type { SearchParamSource } from '@baci/shared/lib';
 import { useState } from 'react';
-import { projectPublicVariantSelection } from '@/lib/resolve-public-product-option';
+import { projectPublicVariantSelection } from '@/lib/project-public-variant-selection';
 import {
   getVariantConditionOptions,
   hasVariantConditionAxis,
@@ -114,6 +114,7 @@ export function useProductDetailsSelectionState(
       attributes: variant.attributes ?? {},
       condition: variant.condition ?? null,
       id: variant.id ?? null,
+      inventory_tracking_policy: variant.inventory_tracking_policy ?? null,
       // Reseed when price-first inputs change client-side.
       price_modifier: variant.price_modifier ?? null,
       price_override: variant.price_override ?? null,

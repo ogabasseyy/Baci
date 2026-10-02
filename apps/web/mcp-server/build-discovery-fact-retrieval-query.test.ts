@@ -27,6 +27,14 @@ it('keys every spelling selection treats as the same type to one canonical lexem
   expect(buildDiscoveryFactRetrievalQuery(intent({ product_type: 'headphones' }))).toBe('(typeheadphones)');
 });
 
+it('digests custom product types whose punctuation would collide after cleanup', () => {
+  const punctuated = buildDiscoveryFactRetrievalQuery(intent({ product_type: 'foo/bar' }));
+  const plain = buildDiscoveryFactRetrievalQuery(intent({ product_type: 'foobar' }));
+  expect(punctuated).not.toBe(plain);
+  expect(punctuated).toBe('(fact668d16f9323f7e381d20b7e1f59560acb94b3733d9f8a1be5e54b59bae51ff9b)');
+  expect(plain).toBe('(typefoobar)');
+});
+
 it('emits unit-suffixed equality values and unit lexemes for ranges', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ attributes: [
     { key: 'power_w', operator: 'eq', value: 30 },

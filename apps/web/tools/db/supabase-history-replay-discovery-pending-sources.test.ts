@@ -16,6 +16,9 @@ const DISCOVERY_MIGRATIONS = [
   '20261002090726_variant_recall_base_condition.sql',
   '20261002090727_browse_base_condition_purchasability.sql',
   '20261002090728_fact_base_condition_purchasability.sql',
+  '20261002090729_harden_public_condition_offer_matching.sql',
+  '20261002090730_ascii_discovery_attribute_digest.sql',
+  '20261002090731_managed_nullable_base_stock.sql',
 ] as const;
 
 describe('discovery pending replay sources', () => {

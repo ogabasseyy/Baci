@@ -299,7 +299,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260927150500_complete_legacy_paystack_cancellation_refunds.sql',
-    sha256: 'bc34f27a57e203c2f62d474bb1de609009bc22eb6892e01f13b17c074b3402bb',
+    sha256: '84ed20d3cca910ece555aac23c3922345bd7ad2070b62465e57de8716ea28a54',
   },
   {
     repositoryPath:
@@ -315,6 +315,11 @@ export const EXPECTED_PENDING_SOURCES = [
     repositoryPath:
       'supabase/migrations/20260927150800_duplicate_payment_capture_review_type.sql',
     sha256: '9cde352bd23a1204adaf98493089587f00ce13f46a674604552df5d22232b2a5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260927150900_merge_duplicate_payment_capture_evidence.sql',
+    sha256: '061154e1c62cb8de328ba6c9211abbdef206fe2d57612bf52ef0020cdf17adc4',
   },
   {
     repositoryPath:

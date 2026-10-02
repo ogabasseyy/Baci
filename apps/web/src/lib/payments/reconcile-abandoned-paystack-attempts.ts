@@ -186,9 +186,26 @@ export async function reconcileAbandonedPaystackAttempts({
             provider_status: result.data.status,
           },
         });
-      const reviewFiled =
-        !reviewError || (reviewError as { code?: string }).code === '23505';
-      if (reviewFiled) {
+      const reviewFiled = !reviewError;
+      const duplicateReview =
+        !reviewFiled && (reviewError as { code?: string }).code === '23505';
+      let evidenceDurable = reviewFiled;
+      if (duplicateReview) {
+        // Another capture on this order already occupies the review slot;
+        // merge this attempt in so operations sees every charge.
+        const { data: merged, error: mergeError } = await supabase.rpc(
+          'merge_duplicate_payment_capture_evidence_v1',
+          {
+            p_order_id: attempt.order_id,
+            p_merchant_id: attempt.merchant_id,
+            p_transaction_id: attempt.id,
+            p_gateway_reference: attempt.gateway_reference,
+            p_reason: `Stale attempt ${attempt.gateway_reference} verified as captured`,
+          }
+        );
+        evidenceDurable = !mergeError && merged === true;
+      }
+      if (evidenceDurable) {
         const { error: stampError } = await supabase
           .from('transactions')
           .update({

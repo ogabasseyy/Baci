@@ -96,21 +96,16 @@ BEGIN
     VALUES (v_order.id, v_order.merchant_id, 'processed_customer_email'),
            (v_order.id, v_order.merchant_id, 'processed_merchant_push')
     ON CONFLICT (order_id, event_type) DO NOTHING;
+    -- Every payment leg is provider-verified complete, so the cancellation
+    -- saga is done regardless of which metadata shape the open reviews
+    -- carry (top-level IDs, accepted leg lists, or merged evidence).
     UPDATE public.reconciliation_review review
       SET resolved_at = now(),
           resolution_notes = 'Paystack verified all cancelled-order gateway refunds'
       WHERE review.order_id = v_order.id
         AND review.merchant_id = v_order.merchant_id
         AND review.issue_type = 'order_cancellation_refund_requires_review'
-        AND review.resolved_at IS NULL
-        AND EXISTS (
-          SELECT 1 FROM public.transactions r
-          WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
-            AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
-            AND r.status = 'completed'
-            AND (review.metadata->>'provider_refund_id' = r.gateway_reference
-                 OR review.metadata->>'refund_transaction_id' = r.id::text)
-        );
+        AND review.resolved_at IS NULL;
   END IF;
   RETURN 'processed';
 END;

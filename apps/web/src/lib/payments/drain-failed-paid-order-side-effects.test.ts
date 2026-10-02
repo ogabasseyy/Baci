@@ -244,4 +244,24 @@ describe('drainFailedPaidOrderSideEffects', () => {
       { orderId: 'order-1', reason: 'order_fetch_failed' },
     ]);
   });
+
+  it('stops starting orders at the pass deadline', async () => {
+    const supabase = buildSupabase({ data: [failedRow] });
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+
+    try {
+      const summary = await drainFailedPaidOrderSideEffects({
+        deadlineMs: 1_270_000,
+        scheduleAfter,
+        supabase,
+      });
+
+      expect(summary.drained).toEqual([]);
+      expect(summary.failed).toEqual([]);
+      expect(mocks.finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+      expect(mocks.verifyGatewayCharge).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
 });

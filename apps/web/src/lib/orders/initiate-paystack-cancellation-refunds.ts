@@ -179,20 +179,24 @@ export async function initiatePaystackCancellationRefunds({
         },
       });
     if (insertTxError) {
-      // The provider accepted this refund but no local row exists, so the
-      // webhook and polling reconcilers cannot discover it. Persist the
-      // provider ID in the review before quarantining.
-      await quarantineRefund({
-        metadata: {
-          provider_refund_id: paystackRefund.data.id,
-          payment_transaction_id: transaction.id,
-          audit_record_failed: true,
-        },
-        order,
-        reason: 'Paystack accepted refund but its local audit record failed',
-        supabase,
-        transactions: [transaction],
-      });
+      if (insertTxError.code !== '23505') {
+        // The provider accepted this refund but no local row exists, so the
+        // webhook and polling reconcilers cannot discover it. Persist the
+        // provider ID in the review before quarantining.
+        await quarantineRefund({
+          metadata: {
+            provider_refund_id: paystackRefund.data.id,
+            payment_transaction_id: transaction.id,
+            audit_record_failed: true,
+          },
+          order,
+          reason: 'Paystack accepted refund but its local audit record failed',
+          supabase,
+          transactions: [transaction],
+        });
+      }
+      // A duplicate audit row means the webhook recovery recorded this
+      // refund first: the row exists, so polling reconciles it normally.
     }
     refundIds.push(paystackRefund.data.id);
   }

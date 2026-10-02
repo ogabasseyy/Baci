@@ -174,6 +174,21 @@ describe('initiatePaystackCancellationRefunds', () => {
     }
   });
 
+  it('treats a duplicate audit row as recorded without quarantining', async () => {
+    acceptedRefund();
+    insert.mockResolvedValue({ error: { code: '23505' } });
+
+    const refundIds = await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [transaction],
+    });
+
+    expect(refundIds).toEqual([101]);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
   it('throws a retriable error on ambiguous provider failures', async () => {
     mocks.initiatePaystackRefund.mockResolvedValue({
       code: 'NETWORK_ERROR',

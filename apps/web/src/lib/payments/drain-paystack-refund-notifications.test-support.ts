@@ -49,6 +49,8 @@ export function database(
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], count: 0, error: null }),
     maybeSingle: vi
       .fn()
       .mockResolvedValue({ data: { id: row.id }, error: null }),

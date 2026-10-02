@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { reconcilePaystackCancellationRefund } from '@/lib/payments/reconcile-paystack-cancellation-refund';
 import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
+import { recoverUnknownPaystackRefund } from '@/lib/payments/recover-unknown-paystack-refund';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 
 export async function handlePaystackCancellationRefundEvent(
@@ -17,6 +18,7 @@ export async function handlePaystackCancellationRefundEvent(
   // audit row, including unlinked legacy rows the payment-reference path
   // cannot reach and held rows polling skips.
   const refundId = data?.id;
+  let unknownRefundId: number | undefined;
   if (typeof refundId === 'number' && Number.isSafeInteger(refundId)) {
     const { data: refund, error: lookupError } = await supabase
       .from('transactions')
@@ -75,6 +77,11 @@ export async function handlePaystackCancellationRefundEvent(
       }
       return NextResponse.json({ message: 'Refund event reconciled' });
     }
+    // The event references a provider refund with no local audit row: a
+    // merchant-created replacement, or an event that beat the audit
+    // insert. Recover it via provider reads below instead of dropping
+    // the ID and rechecking only stale local rows.
+    unknownRefundId = refundId;
   }
   // Fallback: the original payment reference, nested per the refund
   // resource shape with the flat field retained for compatibility. The
@@ -91,6 +98,25 @@ export async function handlePaystackCancellationRefundEvent(
     flatReference
   );
   if (paymentReference !== undefined) {
+    if (unknownRefundId !== undefined) {
+      try {
+        await recoverUnknownPaystackRefund(
+          supabase,
+          unknownRefundId,
+          paymentReference
+        );
+      } catch (error) {
+        logger.error({
+          message: 'Paystack refund recovery failed',
+          error,
+        });
+        return NextResponse.json(
+          { error: 'Refund reconciliation unavailable' },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json({ message: 'Refund event reconciled' });
+    }
     try {
       await reconcilePaystackRefundEvent(supabase, paymentReference);
     } catch (error) {

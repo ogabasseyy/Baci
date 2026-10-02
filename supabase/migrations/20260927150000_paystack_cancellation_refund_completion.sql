@@ -193,6 +193,17 @@ BEGIN
     SET status = 'delivery_uncertain',
         last_error = 'Claim expired; delivery outcome needs review'
     FROM stale WHERE n.id = stale.id;
+  -- Rows that burned all five attempts are never claimable again: move
+  -- them to the observable terminal state instead of stranding them as
+  -- failed forever without an operational signal.
+  WITH exhausted AS (
+    SELECT id FROM public.paystack_cancellation_refund_notifications
+    WHERE status IN ('pending', 'failed') AND attempts >= 5
+    ORDER BY created_at LIMIT 50 FOR UPDATE SKIP LOCKED
+  ) UPDATE public.paystack_cancellation_refund_notifications n
+    SET status = 'delivery_uncertain',
+        last_error = 'Notification retry limit exhausted; delivery outcome needs review'
+    FROM exhausted WHERE n.id = exhausted.id;
   RETURN QUERY WITH candidates AS (
     SELECT id FROM public.paystack_cancellation_refund_notifications
     WHERE status IN ('pending', 'failed') AND attempts < 5

@@ -5,6 +5,7 @@ import { handlePaystackCancellationRefundEvent } from './paystack-cancellation-r
 const mocks = vi.hoisted(() => ({
   reconcilePaystackCancellationRefund: vi.fn(),
   reconcilePaystackRefundEvent: vi.fn(),
+  recoverUnknownPaystackRefund: vi.fn(),
 }));
 
 vi.mock('@/lib/payments/reconcile-paystack-cancellation-refund', () => ({
@@ -13,6 +14,9 @@ vi.mock('@/lib/payments/reconcile-paystack-cancellation-refund', () => ({
 }));
 vi.mock('@/lib/payments/reconcile-paystack-refund-event', () => ({
   reconcilePaystackRefundEvent: mocks.reconcilePaystackRefundEvent,
+}));
+vi.mock('@/lib/payments/recover-unknown-paystack-refund', () => ({
+  recoverUnknownPaystackRefund: mocks.recoverUnknownPaystackRefund,
 }));
 
 describe('handlePaystackCancellationRefundEvent', () => {
@@ -31,6 +35,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     vi.clearAllMocks();
     mocks.reconcilePaystackRefundEvent.mockResolvedValue(undefined);
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
+    mocks.recoverUnknownPaystackRefund.mockResolvedValue(undefined);
   });
 
   it('reconciles the refund row matching the provider refund ID', async () => {
@@ -194,6 +199,39 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
     expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
+  });
+
+  it('recovers an unknown provider refund instead of rechecking stale rows', async () => {
+    const db = database(null);
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 202, transaction: { reference: 'PSK-1' } },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
+      db,
+      202,
+      'PSK-1'
+    );
+    expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
+    expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+  });
+
+  it('fails retryably when unknown-refund recovery throws', async () => {
+    const db = database(null);
+    mocks.recoverUnknownPaystackRefund.mockRejectedValue(new Error('down'));
+
+    const response = await handlePaystackCancellationRefundEvent(db, {
+      data: { id: 202, transaction_reference: 'PAYMENT-1' },
+      event: 'refund.processed',
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Refund reconciliation unavailable',
+    });
   });
 
   it('fails retryably when event reconciliation throws', async () => {

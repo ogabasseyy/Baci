@@ -7,6 +7,7 @@ import {
   type AbandonedPaystackAttemptSummary,
   reconcileAbandonedPaystackAttempts,
 } from '@/lib/payments/reconcile-abandoned-paystack-attempts';
+import { reconcileGatewayPassDeadlineMs } from '@/lib/payments/reconcile-gateway-paid-orders-budget';
 import { reconcileWedgedGatewayOrders } from '@/lib/payments/reconcile-wedged-gateway-orders';
 import { createServiceClient } from '@/lib/supabase/service';
 
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     const scheduleAfter = (task: () => Promise<void>) => after(task);
+    // The three serial passes share the invocation budget in equal
+    // cumulative shares: a slow backlog in an early pass must not starve
+    // the recovery jobs behind it or terminate the route.
+    const invocationStartedAt = Date.now();
     let abandonedAttemptSweep: AbandonedPaystackAttemptSummary = {
       checked: 0,
       completed: [],
@@ -52,6 +57,7 @@ export async function GET(request: NextRequest) {
     let abandonedAttemptSweepFailed = false;
     try {
       abandonedAttemptSweep = await reconcileAbandonedPaystackAttempts({
+        deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 0),
         scheduleAfter,
         supabase,
       });
@@ -64,10 +70,12 @@ export async function GET(request: NextRequest) {
       });
     }
     const summary = await reconcileWedgedGatewayOrders({
+      deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 1),
       scheduleAfter,
       supabase,
     });
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
+      deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 2),
       scheduleAfter,
       supabase,
     });

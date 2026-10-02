@@ -51,11 +51,13 @@ export async function reconcileWedgedGatewayOrders({
   scheduleAfter,
   limit = DEFAULT_LIMIT,
   olderThanMinutes = DEFAULT_OLDER_THAN_MINUTES,
+  deadlineMs,
 }: {
   supabase: SupabaseClient;
   scheduleAfter: (task: () => Promise<void>) => void;
   limit?: number;
   olderThanMinutes?: number;
+  deadlineMs?: number;
 }): Promise<WedgedOrderSweepSummary> {
   const summary: WedgedOrderSweepSummary = {
     checked: 0,
@@ -97,6 +99,16 @@ export async function reconcileWedgedGatewayOrders({
 
   for (const raw of candidates ?? []) {
     const candidate = raw as unknown as WedgedCandidate;
+    // Stop starting candidates at the pass deadline: serial provider
+    // re-verification can outlast the invocation budget, and unstarted
+    // rows stay eligible for the next sweep.
+    if (deadlineMs !== undefined && Date.now() >= deadlineMs) {
+      logger.info({
+        message: 'Stopping wedged-order sweep at pass deadline',
+        transactionId: candidate.id,
+      });
+      break;
+    }
     summary.checked += 1;
 
     try {

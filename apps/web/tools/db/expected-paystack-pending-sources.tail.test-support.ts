@@ -367,7 +367,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928183900_normalize_abandoned_sweep_rpc_gateways.sql',
-    sha256: '7154827a5e1f41e61efb40a476bd159c474094768bf7a98a3b7b6371e2b6aebc',
+    sha256: '2b92d93717ae65aedfc31c73cf94a878ba752caeea839cd851652920406a33e1',
   },
   {
     repositoryPath:
@@ -377,12 +377,12 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928184100_normalized_candidate_indexes.sql',
-    sha256: '563ccf7f476112a45653833d1c7bffceba484a5db6a21cb068651663a5058f77',
+    sha256: '1004a1c723ad8e6cdcc3d493479362b47a5c790020c5464dccc30974a8a1e4b3',
   },
   {
     repositoryPath:
       'supabase/migrations/20260928184200_candidate_selection_rpcs.sql',
-    sha256: '430ef60550d61d9b5d15ee3634ce600d754457596493809e8ccbbe9d34a0c06a',
+    sha256: 'd9595c96f6bfce1379f6b4361f7a8f405cc6f8d4655bb8cc6246b5225befd716',
   },
   {
     repositoryPath:

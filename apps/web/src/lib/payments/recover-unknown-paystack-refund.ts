@@ -34,14 +34,17 @@ export async function recoverUnknownPaystackRefund(
     );
   } catch (error) {
     // The provider answered for a real refund but its transaction
-    // pointer is malformed, so no payment can resolve: throwing bare
-    // would 503 every redelivery with no durable trace, and polling
-    // can never rediscover an unknown refund. File the evidence
-    // against the webhook hint (or a refund-keyed fallback when the
-    // event carries none) and still throw for glitch recovery.
+    // pointer is malformed — or the resolved payment reference is
+    // missing/outside the recovery alphabet — so no payment can
+    // resolve: throwing bare would 503 every redelivery with no
+    // durable trace, and polling can never rediscover an unknown
+    // refund. File the evidence against the webhook hint (or a
+    // refund-keyed fallback when the event carries none) and still
+    // throw for glitch recovery.
     if (
       error instanceof Error &&
-      error.message === 'paystack_refund_transaction_invalid'
+      (error.message === 'paystack_refund_transaction_invalid' ||
+        error.message === 'paystack_refund_payment_reference_invalid')
     ) {
       const raw = (error as { providerRefund?: unknown }).providerRefund as
         | {
@@ -53,6 +56,10 @@ export async function recoverUnknownPaystackRefund(
         | null
         | undefined;
       const reference = paymentReference ?? `unknown-refund:${refundId}`;
+      const reason =
+        error.message === 'paystack_refund_transaction_invalid'
+          ? `Paystack refund ${refundId} returned a malformed transaction pointer for reference ${reference}`
+          : `Paystack refund ${refundId} resolved a payment reference outside the recovery alphabet for reference ${reference}`;
       await fileInvalidPaystackRefundEvidenceReview(supabase, {
         evidence: {
           providerPaymentTransactionId: raw?.transaction,
@@ -61,7 +68,7 @@ export async function recoverUnknownPaystackRefund(
             typeof raw?.status === 'string' ? raw.status : 'unknown',
           reference,
         },
-        reason: `Paystack refund ${refundId} returned a malformed transaction pointer for reference ${reference}`,
+        reason,
         reference,
         refundId,
       });

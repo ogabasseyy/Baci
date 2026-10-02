@@ -13,7 +13,7 @@ const VERIFY_TIMEOUT_MS = 5_000;
 interface PendingAttempt {
   amount: number;
   currency: string;
-  gateway_reference: string;
+  gateway_reference: string | null;
   id: string;
   merchant_id: string;
   metadata: Record<string, unknown> | null;
@@ -83,17 +83,22 @@ export async function processAbandonedPaystackAttempt(
 ): Promise<void> {
   // No gateway predicate: the id/order/merchant/reference/status
   // filters already bind the row, and the sweep normalizes legacy
-  // gateway spellings (` Paystack `) an exact match would miss.
-  const guardAttempt = () =>
-    supabase
+  // gateway spellings (` Paystack `) an exact match would miss. A
+  // missing reference binds with IS NULL: `eq` never matches NULL.
+  const guardAttempt = () => {
+    const query = supabase
       .from('transactions')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', attempt.id)
       .eq('order_id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
-      .eq('transaction_type', 'payment')
-      .eq('gateway_reference', attempt.gateway_reference)
-      .eq('status', attempt.status);
+      .eq('transaction_type', 'payment');
+    const bound =
+      attempt.gateway_reference == null
+        ? query.is('gateway_reference', null)
+        : query.eq('gateway_reference', attempt.gateway_reference);
+    return bound.eq('status', attempt.status);
+  };
   const hold = async (reason: string) => {
     const entry: { id: string; reason: string; rotationFailed?: boolean } = {
       id: attempt.id,
@@ -114,6 +119,29 @@ export async function processAbandonedPaystackAttempt(
     }
   };
 
+  const gatewayReference = attempt.gateway_reference;
+  if (gatewayReference == null) {
+    // Missing-reference rows can never verify — there is no reference
+    // to check — yet still block merchant cancellation while
+    // pending/processing. File the evidence and stamp without
+    // guarding, verifying, or rotating; the stamp (not retirement)
+    // removes them from automated retries.
+    const filed = await fileInvalidAttemptReference({
+      attempt,
+      reason: 'gateway_reference_missing',
+      supabase,
+    });
+    if (filed) {
+      summary.reviewsFiled.push(attempt.id);
+      return;
+    }
+    summary.failed = true;
+    await hold('invalid_reference');
+    return;
+  }
+  // Narrowed view for the verifiable path below: every helper from
+  // here on requires a concrete reference.
+  const verifiableAttempt = { ...attempt, gateway_reference: gatewayReference };
   // A completed row is a filing-only retry: its duplicate filings
   // failed after the atomic finalizer settled it, so it must never
   // re-finalize nor retire — only its review is still owed.
@@ -130,7 +158,7 @@ export async function processAbandonedPaystackAttempt(
   let result: Awaited<ReturnType<typeof verifyTransaction>>;
   try {
     result = await verify(
-      attempt.gateway_reference,
+      gatewayReference,
       AbortSignal.timeout(VERIFY_TIMEOUT_MS)
     );
   } catch {
@@ -177,7 +205,7 @@ export async function processAbandonedPaystackAttempt(
       // paid order. File a durable review — deduped, unstamped — and
       // keep rotating for a late verify.
       const filed = await fileUnresolvedAttemptReference({
-        attempt,
+        attempt: verifiableAttempt,
         reason: result.code,
         supabase,
       });
@@ -220,7 +248,7 @@ export async function processAbandonedPaystackAttempt(
     (result.data.status === 'success' || isCompletedRetry)
   ) {
     await resolveVerifiedAbandonedAttemptCapture({
-      attempt,
+      attempt: verifiableAttempt,
       deadlineMs,
       finalizePayment,
       hold,
@@ -235,7 +263,7 @@ export async function processAbandonedPaystackAttempt(
   }
   if (mismatchKind) {
     const filingFailed = await resolveAbandonedAttemptMismatch({
-      attempt,
+      attempt: verifiableAttempt,
       hold,
       mismatchKind,
       result,
@@ -276,7 +304,7 @@ export async function processAbandonedPaystackAttempt(
       .eq('order_id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
       .eq('transaction_type', 'payment')
-      .eq('gateway_reference', attempt.gateway_reference)
+      .eq('gateway_reference', gatewayReference)
       .eq('status', attempt.status)
       .select('id');
   const retirement = await retire().catch(() => null);

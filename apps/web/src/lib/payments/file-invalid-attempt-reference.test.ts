@@ -49,6 +49,34 @@ describe('fileInvalidAttemptReference', () => {
     );
   });
 
+  it('files a missing-reference review without occupying the ref slot', async () => {
+    await expect(
+      fileInvalidAttemptReference({
+        attempt: { ...attempt, gateway_reference: null },
+        reason: 'gateway_reference_missing',
+        supabase,
+      })
+    ).resolves.toBe(true);
+
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'abandoned_attempt_evidence_mismatch',
+        paystack_ref: null,
+        txn_id: 'attempt-1',
+        reason: expect.stringContaining('carries no gateway reference'),
+        metadata: expect.objectContaining({ missing_reference: true }),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({
+        p_expected_reference: null,
+        p_resolution: 'missing_reference',
+        p_transaction_id: 'attempt-1',
+      })
+    );
+  });
+
   it('merges into the existing review before stamping on conflict', async () => {
     insert.mockResolvedValue({ error: { code: '23505' } });
 

@@ -72,13 +72,22 @@ export async function verifyUnknownPaystackRefundProvider(
     });
   }
   // The recovery path shares the webhook's reference alphabet: a reference
-  // the selector will not pick is unusable downstream.
+  // the selector will not pick is unusable downstream. Carry the raw
+  // payload like the malformed-transaction branch: the caller files it
+  // as invalid evidence before rejecting, so the verified refund
+  // leaves a durable trace instead of 503ing with nothing recorded.
   if (
     typeof resolvedPaymentReference !== 'string' ||
     selectPaystackRefundReference(resolvedPaymentReference, undefined) !==
       resolvedPaymentReference
   ) {
-    throw new Error('paystack_refund_payment_reference_invalid');
+    const error = new Error(
+      'paystack_refund_payment_reference_invalid'
+    ) as Error & {
+      providerRefund?: unknown;
+    };
+    error.providerRefund = current;
+    throw error;
   }
   return { current, resolvedPaymentReference };
 }

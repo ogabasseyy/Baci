@@ -13,7 +13,7 @@ interface PendingAttempt {
   amount: number;
   currency: string;
   gateway: string | null;
-  gateway_reference: string;
+  gateway_reference: string | null;
   id: string;
   merchant_id: string;
   metadata: Record<string, unknown> | null;
@@ -71,7 +71,9 @@ export async function reconcileAbandonedPaystackAttempts({
   // the bounded batch before exact filtering. The RPC returns the
   // stale main branch plus the filing-only retry branch
   // (completed captures with failed duplicate filings, never on
-  // partially-paid orders), oldest first per branch.
+  // partially-paid orders) plus a bounded missing-reference
+  // trickle the worker files without verifying, oldest first
+  // per branch with null timestamps ahead of the limit.
   const { data: attempts, error: lookupError } = await supabase.rpc(
     'select_abandoned_paystack_attempt_candidates_v1',
     {

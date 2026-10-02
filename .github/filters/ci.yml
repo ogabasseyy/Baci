@@ -170,6 +170,8 @@ deploy_scripts:
   - '.github/scripts/sync-cloudflare-vercel-production-env.test.mjs'
   - '.github/scripts/preview-workflow-contract.test.mjs'
   - '.github/scripts/preview-workflow-contract-parsing.test.mjs'
+  - '.github/scripts/preview-workflow-redact-contract.test.mjs'
+  - '.github/scripts/preview-env-turbo-cache.test.mjs'
   - '.github/scripts/preview-workflow-contract.helpers.mjs'
   - '.github/scripts/preview-deploy-run.sh'
   - '.github/scripts/preview-deploy-run.test.mjs'

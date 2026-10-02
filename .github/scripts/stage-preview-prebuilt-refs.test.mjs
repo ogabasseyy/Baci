@@ -139,9 +139,11 @@ test('drops phantom references from the shipped maps', () => {
       filePathMap: {
         '/gone.js': 'apps/web/.next/node_modules/gone-abc123',
         '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
       },
     }),
     'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
   });
   try {
     const stage = join(root, 'stage');
@@ -150,11 +152,12 @@ test('drops phantom references from the shipped maps', () => {
     const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
     assert.deepEqual(rewritten.filePathMap, {
       '/ok.js': 'node_modules/ok/index.js',
+      '/ok2.js': 'node_modules/ok2/index.js',
     });
     const manifest = JSON.parse(
       readFileSync(join(stage, '.preview-refs-manifest.json'), 'utf8')
     );
-    assert.deepEqual(manifest.refs, ['node_modules/ok/index.js']);
+    assert.deepEqual(manifest.refs, ['node_modules/ok/index.js', 'node_modules/ok2/index.js']);
     assert.deepEqual(manifest.skipped, [
       { value: 'apps/web/.next/node_modules/gone-abc123', reason: 'missing' },
     ]);
@@ -194,9 +197,7 @@ test('fails a function that loses every usable reference', () => {
   });
   try {
     // Global ratio passes (2 missing vs 5 staged); per-config must fire.
-    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
-      encoding: 'utf8',
-    });
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     assert.match(run.stderr, /lost every usable reference/);
   } finally {
@@ -262,7 +263,7 @@ test('fails closed when missing refs dominate staged files', () => {
       encoding: 'utf8',
     });
     assert.equal(dominated.status, 1);
-    assert.match(dominated.stderr, /dominate .* refusing to ship/);
+    assert.match(dominated.stderr, /refusing to ship/);
     const empty = layout({});
     try {
       const noOutput = spawnSync('node', [SCRIPT, empty, join(empty, 's2')], {

@@ -11,20 +11,19 @@
 // so the deploy job can extract it at root and the CLI's references resolve.
 //
 // Layout rule mirrors the CLI: absolute, escaping, and output-internal
-// values are skipped from staging but stay in the shipped maps, where the
-// CLI rejects or resolves them exactly as in an unmodified map. Only
-// missing (phantom), protected, and invalid values are dropped: the CLI
-// would ENOENT, wrongly upload, or crash on them. Fails closed when
-// nothing stages while references are missing (wrong-base smell).
-// Absolute and escaping values stay in the map but never count as usable
-// or resolving: the CLI rejects them, so a function kept alive only by
-// such entries would ship with zero genuinely resolving references.
-// These staging rules are fail-fast UX, not the security boundary: the
-// build job is untrusted, so the deploy-side materializer re-enforces them.
+// values stay in the shipped maps (the CLI rejects or resolves them as
+// in an unmodified map) but never count as usable or resolving. Missing
+// (phantom), symlink, protected, and invalid values drop: symlinks are
+// never followed, so outside-root targets cannot be laundered into the
+// stage artifact. Ties refuse to ship: missing must be strictly
+// outnumbered by resolving. Guardrails are fail-fast UX, not the
+// security boundary: the build job is untrusted, so the deploy-side
+// materializer re-enforces them.
 //
 // Usage: stage-preview-prebuilt-refs.mjs [project-root] [staging-dir]
 // Defaults: root = cwd, staging = <root>/.preview-refs-stage (recreated).
-import { appendFileSync, copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+const sanitizeRef = (v) => v.replace(/[`\r\n]/g, '').slice(0, 200);
+import { appendFileSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 const root = resolve(process.argv[2] ?? process.cwd());
@@ -57,7 +56,6 @@ mkdirSync(stage, { recursive: true });
 const staged = [];
 const skipped = [];
 const unusableConfigs = [];
-let stringValues = 0;
 let missingCount = 0;
 const insideOutputValues = [];
 const pendingRewrites = [];
@@ -94,7 +92,6 @@ for (const configPath of vcConfigs(outputDir)) {
       dropped += 1;
       continue;
     }
-    stringValues += 1;
     if (isAbsolute(value)) {
       skipped.push({ value, reason: 'absolute' });
       kept[key] = value;
@@ -109,12 +106,12 @@ for (const configPath of vcConfigs(outputDir)) {
     }
     const posixRel = rel.split(sep).join('/');
     if (posixRel === '.vercel/output' || posixRel.startsWith('.vercel/output/')) {
-      // Lexically inside the output dir is not enough: a stale asset
-      // reference points at nothing the output upload carries, so verify
-      // it is a real file before treating it as resolving.
+      // Stale or linked asset refs point at nothing the output upload
+      // carries, so only a real file counts as resolving. lstat, not
+      // stat: never resolve through a symlink here.
       let outStat;
       try {
-        outStat = statSync(abs);
+        outStat = lstatSync(abs);
       } catch {
         outStat = null;
       }
@@ -144,19 +141,19 @@ for (const configPath of vcConfigs(outputDir)) {
     }
     let srcStat;
     try {
-      srcStat = statSync(abs);
+      srcStat = lstatSync(abs);
     } catch {
       srcStat = null;
     }
-    if (!srcStat?.isFile()) {
-      // Phantom reference (e.g. transient build files): the CLI would
-      // ENOENT re-adding it, so drop it from the shipped map instead of
-      // failing the whole build. The guardrail below catches a
-      // systematically wrong base, where nothing real stages. An existing
-      // non-file (directory, FIFO) is a different condition from an
-      // absent phantom, so it gets its own manifest reason while still
-      // counting as unresolved on both guardrails.
-      skipped.push({ value, reason: srcStat ? 'non-file' : 'missing' });
+    if (!srcStat?.isFile() || srcStat?.isSymbolicLink()) {
+      // Phantom refs (e.g. transient build files) drop from the shipped
+      // map instead of failing the build; the guardrail below catches a
+      // systematically wrong base. lstat, not stat: a symlink (even to a
+      // real file) must never be followed here, or an outside-root or
+      // protected target would be laundered into the stage artifact as a
+      // regular file. Distinct reasons, all unresolved on both guardrails.
+      const reason = !srcStat ? 'missing' : srcStat.isSymbolicLink() ? 'symlink' : 'non-file';
+      skipped.push({ value, reason });
       missingCount += 1;
       dropped += 1;
       continue;
@@ -190,12 +187,13 @@ for (const configPath of vcConfigs(outputDir)) {
 // many distinct drops. Observed incident motivating this shape: 21
 // transient `apps/web/.next/node_modules/*` refs alongside a normally
 // staged tree. The per-config total-loss check is the primary guard; the
-// global majority rule below is the backstop for a systematically wrong
-// base.
+// global backstop below is for a systematically wrong base. Tie policy:
+// missing must be strictly outnumbered by resolving; a tie refuses to
+// ship, since a wrong drop surfaces as a runtime request failure.
 const resolving = new Set(staged).size + new Set(insideOutputValues).size;
-if (stringValues > 0 && missingCount > resolving) {
+if (missingCount > 0 && missingCount >= resolving) {
   console.error(
-    `error: ${missingCount} missing reference(s) dominate ${resolving} resolving; refusing to ship (wrong base?)`
+    `error: ${missingCount} missing reference(s) vs ${resolving} resolving; refusing to ship (wrong base?)`
   );
   process.exit(1);
 }
@@ -225,8 +223,8 @@ if (droppedProtected > 0 || droppedInvalid > 0) {
 }
 if (missingCount > 0) {
   const missingVals = skipped
-    .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
-    .map((s) => s.value);
+    .filter((s) => s.reason === 'missing' || s.reason === 'non-file' || s.reason === 'symlink')
+    .map((s) => sanitizeRef(s.value));
   const shown = missingVals.slice(0, 20);
   console.error(
     `WARNING: dropped ${missingCount} dangling reference(s) from shipped maps:\n` +
@@ -254,8 +252,8 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   // Values are build-controlled: strip span-breaking characters (same
   // rule as the deploy helper's ref sanitization).
   const dropped = skipped
-    .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
-    .map((s) => s.value.replace(/[`\r\n]/g, '').slice(0, 200));
+    .filter((s) => s.reason === 'missing' || s.reason === 'non-file' || s.reason === 'symlink')
+    .map((s) => sanitizeRef(s.value));
   const guardedCounts = [];
   if (droppedProtected > 0) guardedCounts.push(`${droppedProtected} protected`);
   if (droppedInvalid > 0) guardedCounts.push(`${droppedInvalid} invalid`);
@@ -279,10 +277,15 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     console.error(`WARNING: could not write step summary: ${error.message}`);
   }
 }
-// Last step: apply the buffered map rewrites. Everything fallible
-// above (guards, manifest, summary) completed first, so a failure
-// anywhere earlier leaves the original maps for a retry to see.
-for (const { configPath, config, kept } of pendingRewrites) {
+// Last step: apply the buffered map rewrites. Serialize every body
+// before touching disk, then write each config via temp-file plus
+// rename, so a mid-loop throw cannot leave a half-written map.
+const serialized = pendingRewrites.map(({ configPath, config, kept }) => {
   config.filePathMap = kept;
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  return { configPath, body: `${JSON.stringify(config, null, 2)}\n` };
+});
+for (const { configPath, body } of serialized) {
+  const tmp = `${configPath}.tmp-${process.pid}`;
+  writeFileSync(tmp, body);
+  renameSync(tmp, configPath);
 }

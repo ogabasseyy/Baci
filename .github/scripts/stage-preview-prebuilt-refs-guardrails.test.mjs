@@ -39,7 +39,7 @@ test('counts repeated phantom occurrences, not distinct values', () => {
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
-    assert.match(run.stderr, /dominate .* refusing to ship/);
+    assert.match(run.stderr, /refusing to ship/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -52,17 +52,17 @@ test('drops stale output-internal refs instead of counting them', () => {
       filePathMap: {
         '/stale.js': '.vercel/output/functions/a.func/missing.js',
         '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
       },
     }),
     'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
   });
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 0, run.stderr);
     const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
-    assert.deepEqual(rewritten.filePathMap, {
-      '/ok.js': 'node_modules/ok/index.js',
-    });
+    assert.deepEqual(rewritten.filePathMap, { '/ok.js': 'node_modules/ok/index.js', '/ok2.js': 'node_modules/ok2/index.js' });
     const manifest = JSON.parse(
       readFileSync(join(root, 'stage', '.preview-refs-manifest.json'), 'utf8')
     );
@@ -84,17 +84,17 @@ test('traces directory refs as non-file, still unresolved', () => {
       filePathMap: {
         '/dir.js': 'node_modules/ok',
         '/ok.js': 'node_modules/ok/index.js',
+        '/ok2.js': 'node_modules/ok2/index.js',
       },
     }),
     'node_modules/ok/index.js': 'ok',
+    'node_modules/ok2/index.js': 'ok2',
   });
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 0, run.stderr);
     const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8'));
-    assert.deepEqual(rewritten.filePathMap, {
-      '/ok.js': 'node_modules/ok/index.js',
-    });
+    assert.deepEqual(rewritten.filePathMap, { '/ok.js': 'node_modules/ok/index.js', '/ok2.js': 'node_modules/ok2/index.js' });
     const manifest = JSON.parse(
       readFileSync(join(root, 'stage', '.preview-refs-manifest.json'), 'utf8')
     );
@@ -207,7 +207,7 @@ test('duplicate staged refs do not mask distinct phantoms', () => {
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
-    assert.match(run.stderr, /dominate .* refusing to ship/);
+    assert.match(run.stderr, /refusing to ship/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -230,7 +230,7 @@ test('normalizes output-internal aliases in the resolving count', () => {
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
-    assert.match(run.stderr, /dominate .* refusing to ship/);
+    assert.match(run.stderr, /refusing to ship/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

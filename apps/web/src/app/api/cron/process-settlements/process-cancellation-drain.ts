@@ -66,32 +66,48 @@ export async function processCancellationDrain(
   const sideEffectLimit = cancellationSideEffectDrainLimit(
     Date.now() - workersStartedAt
   );
-  if (sideEffectLimit <= 0) {
+  const sideEffectSkippedDueToBudget = sideEffectLimit <= 0;
+  if (sideEffectSkippedDueToBudget) {
     logger.warn({
       message: 'Skipping cancellation side-effect drain: cron budget exhausted',
       elapsedMs: Date.now() - workersStartedAt,
     });
   }
-  const [cancellationResult] = await Promise.allSettled([
-    drainFailedOrderCancellationSideEffects({
-      deadlineMs: cancellationDrainDeadlineMs(workersStartedAt),
-      // Emails admit against their own cutoff: the 90s side-effect
-      // deadline leaves no 48s sender budget after a full reconcile
-      // phase, excluding every customer email on each backlog run.
-      emailDeadlineMs: cancellationEmailDrainDeadlineMs(workersStartedAt),
-      limit: sideEffectLimit,
-      sendCancellationEmail,
-      supabase,
-    }),
-  ]);
+  // Skip the call outright at a zero limit: the drain would only issue
+  // empty select round-trips. Mirrors the full settlement path, which
+  // substitutes the same empty summary.
+  const [cancellationResult] = sideEffectSkippedDueToBudget
+    ? [
+        {
+          status: 'fulfilled' as const,
+          value: { drained: [], failed: [], skipped: [] },
+        },
+      ]
+    : await Promise.allSettled([
+        drainFailedOrderCancellationSideEffects({
+          deadlineMs: cancellationDrainDeadlineMs(workersStartedAt),
+          // Emails admit against their own cutoff: the 90s side-effect
+          // deadline leaves no 48s sender budget after a full reconcile
+          // phase, excluding every customer email on each backlog run.
+          emailDeadlineMs: cancellationEmailDrainDeadlineMs(workersStartedAt),
+          limit: sideEffectLimit,
+          sendCancellationEmail,
+          supabase,
+        }),
+      ]);
   // Budget the serial drain from the remaining invocation time: an
   // aborted send strands its notification as processing, which becomes
   // permanently non-retryable delivery_uncertain. Skipped rows stay
   // pending/failed for the next invocation.
   const drainLimit = notificationDrainLimit(Date.now() - workersStartedAt);
-  if (drainLimit <= 0) {
+  const notificationSkippedDueToBudget = drainLimit <= 0;
+  if (notificationSkippedDueToBudget) {
+    // The zero-limit call below still runs: its exhausted/uncertain
+    // counts feed the 503 signal, so skipping it would report rot as
+    // success. Only the claim loop stands down.
     logger.warn({
-      message: 'Skipping refund notification drain: cron budget exhausted',
+      message:
+        'Skipping refund notification sends: cron budget exhausted (exhausted/uncertain counts still reported)',
       elapsedMs: Date.now() - workersStartedAt,
     });
   }
@@ -173,6 +189,11 @@ export async function processCancellationDrain(
   }
   return NextResponse.json({
     success: true,
+    // A skipped drain is deferred work, not an idle system: pollers
+    // must distinguish 'nothing to do' from 'no time to do it'.
+    // Mirrors the full settlement path's flag.
+    skippedDueToBudget:
+      sideEffectSkippedDueToBudget || notificationSkippedDueToBudget,
     cancellationSideEffectDrain: cancellationResult.value,
     paystackRefunds: refundResult.value,
     legacyPaystackRefunds: legacyRefundResult.value,

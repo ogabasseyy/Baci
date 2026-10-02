@@ -20,6 +20,13 @@ VALUES
     'Fact Exclusion Test Merchant',
     'fact-exclusion-test-merchant',
     true
+  ),
+  (
+    'cb58d110-0000-4000-8000-000000000606',
+    'fact-availability-test@example.test',
+    'Fact Availability Test Merchant',
+    'fact-availability-test-merchant',
+    true
   );
 
 INSERT INTO public.products
@@ -108,6 +115,61 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000636', 'cb58d110-0000-4000-8000-000000000634',
    'cb58d110-0000-4000-8000-000000000604', 'used', 40000, 2, 'active');
 
+-- Availability fixtures live on their own merchant: a depleted managed
+-- base and a unit-less strict anchor drop; unmanaged, stocked,
+-- stocked-anchor, and unlimited bases stay. The oversized parent drops
+-- as snapshot-truncated.
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, condition,
+   manage_stock, stock_quantity, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000640', 'cb58d110-0000-4000-8000-000000000606',
+   'Black depleted base', 'black-depleted-base', 'Acme', 50000, 'active', false, 'new',
+   true, 0, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000641', 'cb58d110-0000-4000-8000-000000000606',
+   'Black unmanaged base', 'black-unmanaged-base', 'Acme', 50000, 'active', false, 'new',
+   false, 0, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000642', 'cb58d110-0000-4000-8000-000000000606',
+   'Black stocked base', 'black-stocked-base', 'Acme', 50000, 'active', false, 'new',
+   true, 5, 'off', '{}'),
+  ('cb58d110-0000-4000-8000-000000000643', 'cb58d110-0000-4000-8000-000000000606',
+   'Black strict anchor stocked', 'black-strict-anchor-stocked', 'Acme', 50000, 'active', false, 'new',
+   true, 0, 'serialized_strict', '{}'),
+  ('cb58d110-0000-4000-8000-000000000645', 'cb58d110-0000-4000-8000-000000000606',
+   'Black strict anchor depleted', 'black-strict-anchor-depleted', 'Acme', 50000, 'active', false, 'new',
+   true, 0, 'serialized_strict', '{}'),
+  ('cb58d110-0000-4000-8000-000000000647', 'cb58d110-0000-4000-8000-000000000606',
+   'Black unlimited anchor zero', 'black-unlimited-anchor-zero', 'Acme', 50000, 'active', false, 'new',
+   true, 0, 'serialized_then_unlimited', '{}'),
+  ('cb58d110-0000-4000-8000-000000000649', 'cb58d110-0000-4000-8000-000000000606',
+   'Black oversized', 'black-oversized', 'Acme', 50000, 'active', true, 'new',
+   true, 5, 'off', '{}');
+
+INSERT INTO public.product_variants
+  (id, product_id, merchant_id, attributes, stock_quantity, condition,
+   is_inventory_anchor, inventory_tracking_policy)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000644', 'cb58d110-0000-4000-8000-000000000643',
+   'cb58d110-0000-4000-8000-000000000606', '{"role":"anchor"}', 0, 'new', true, 'inherit'),
+  ('cb58d110-0000-4000-8000-000000000646', 'cb58d110-0000-4000-8000-000000000645',
+   'cb58d110-0000-4000-8000-000000000606', '{"role":"anchor"}', 0, 'new', true, 'inherit'),
+  ('cb58d110-0000-4000-8000-000000000648', 'cb58d110-0000-4000-8000-000000000647',
+   'cb58d110-0000-4000-8000-000000000606', '{"role":"anchor"}', 0, 'new', true, 'inherit');
+
+INSERT INTO public.variant_inventory
+  (variant_id, merchant_id, identifier_type, identifier_value, status)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000644', 'cb58d110-0000-4000-8000-000000000606',
+  'serial', 'AVAIL-606-1', 'available'
+);
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
+SELECT ('cb58d110-0000-4000-8000-' || lpad(to_hex(g), 12, '0'))::uuid,
+  'cb58d110-0000-4000-8000-000000000649',
+  'cb58d110-0000-4000-8000-000000000606',
+  jsonb_build_object('storage_gb', 256, 'slot', g), 5, 'new'
+FROM pg_catalog.generate_series(1, 129) AS g;
+
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
 
@@ -149,8 +211,29 @@ BEGIN
   FROM public.search_product_discovery_facts(
     'cb58d110-0000-4000-8000-000000000604', 'black'
   );
-  IF cardinality(fact_ids) IS DISTINCT FROM 8 THEN
-    RAISE EXCEPTION 'unconditioned facts must stay fail-open, got %', fact_ids;
+  IF cardinality(fact_ids) IS DISTINCT FROM 6
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000625'::uuid]
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000631'::uuid] THEN
+    RAISE EXCEPTION 'unconditioned facts must filter unavailable rows, got %', fact_ids;
+  END IF;
+  -- Availability gates every fact mode before ranking: the depleted
+  -- managed base, the unit-less strict anchor, and the oversized parent
+  -- drop; unmanaged, stocked, stocked-anchor, and unlimited bases stay.
+  SELECT array_agg(product_id) INTO fact_ids
+  FROM public.search_product_discovery_facts(
+    'cb58d110-0000-4000-8000-000000000606', 'black'
+  );
+  IF cardinality(fact_ids) IS DISTINCT FROM 4
+    OR NOT (fact_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000641'::uuid,
+      'cb58d110-0000-4000-8000-000000000642'::uuid,
+      'cb58d110-0000-4000-8000-000000000643'::uuid,
+      'cb58d110-0000-4000-8000-000000000647'::uuid
+    ])
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000640'::uuid]
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000645'::uuid]
+    OR fact_ids @> ARRAY['cb58d110-0000-4000-8000-000000000649'::uuid] THEN
+    RAISE EXCEPTION 'availability facts must keep servable bases only, got %', fact_ids;
   END IF;
   -- Intent-level excluded types filter before ranking; the type-less row
   -- drops with the phone under a nonempty exclusion list.

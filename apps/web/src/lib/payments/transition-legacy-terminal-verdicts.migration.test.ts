@@ -41,4 +41,12 @@ describe('legacy terminal verdict transition migration', () => {
     );
     expect(migrationSql).toContain("AND n.event_type = 'failed_merchant_push'");
   });
+
+  it('stays within the file modularity limit', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const lineCount = readFileSync(migrationPath, 'utf8').split('\n').length;
+    expect(lineCount).toBeLessThanOrEqual(300);
+  });
 });

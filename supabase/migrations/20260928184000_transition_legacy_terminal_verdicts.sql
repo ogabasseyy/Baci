@@ -52,17 +52,7 @@ BEGIN
       -- Normalize like the aggregate coverage gate: a legacy `Paystack`
       -- leg and its `paystack` refund must verify together. Missing or
       -- blank gateways never match.
-      AND NULLIF(
-        upper(
-          regexp_replace(
-            COALESCE(gateway, ''),
-            '^\s+|\s+$',
-            '',
-            'g'
-          )
-        ),
-        ''
-      ) = 'PAYSTACK'
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
       AND status = 'completed';
   IF NOT FOUND AND v_refund.metadata->>'payment_transaction_id' IS NULL THEN
     -- Legacy refunds carry no payment link. Mirror the cancellation claim
@@ -83,27 +73,7 @@ BEGIN
         WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
           AND transaction_type = 'payment' AND status = 'completed'
           AND amount > 0
-          AND NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          ) = NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(v_refund.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          )
+          AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(v_refund.gateway)
           AND amount >= v_refund.amount;
     END IF;
   END IF;
@@ -228,44 +198,14 @@ BEGIN
           -- Normalize gateways exactly like the aggregate coverage
           -- gate (whitespace-trimmed, uppercased; missing gateways
           -- never match).
-          AND NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(r.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          ) = NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(p.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          )
+          AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
           AND r.status = 'completed'
           AND r.amount > 0
           AND upper(r.currency) = upper(p.currency)
           -- A locally completed Paystack refund counts only after this RPC
           -- provider-verified it; other gateways keep local-status trust.
           AND (
-            NULLIF(
-              upper(
-                regexp_replace(
-                  COALESCE(r.gateway, ''),
-                  '^\s+|\s+$',
-                  '',
-                  'g'
-                )
-              ),
-              ''
-            ) <> 'PAYSTACK'
+            public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'
             OR r.metadata->>'provider_refund_status' = 'processed'
           )
           AND (

@@ -46,9 +46,10 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('files a duplicate-capture review and retires a verified successful attempt', async () => {
-    const { client, lookup, update } = createClient();
+    const { client, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -78,9 +79,9 @@ describe('abandoned Paystack attempt duplicate captures', () => {
         p_transaction_id: 'attempt-1',
       })
     );
-    expect(lookup.is).toHaveBeenCalledWith(
-      'metadata->abandoned_sweep_resolution',
-      null
+    expect(rpc).toHaveBeenCalledWith(
+      'select_abandoned_paystack_attempt_candidates_v1',
+      expect.objectContaining({ p_limit: 25 })
     );
   });
 
@@ -90,6 +91,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -128,6 +130,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     // conflict came from the global ref slot.
     const rpc = vi
       .fn()
+      .mockResolvedValueOnce({ data: [candidate], error: null })
       .mockResolvedValueOnce({ data: false, error: null })
       .mockResolvedValue({ data: true, error: null });
     withReviewTable(client, reviewInsert);
@@ -157,6 +160,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
       .fn()
       .mockResolvedValue({ error: { code: '23505' } });
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -180,6 +184,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     const { client, update } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -248,6 +253,7 @@ describe('abandoned Paystack attempt duplicate captures', () => {
     const { client } = createClient();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+    rpc.mockResolvedValueOnce({ data: [candidate], error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 
@@ -262,15 +268,17 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   });
 
   it('files a marked completed retry without re-finalizing or retiring it', async () => {
-    const { client, update } = createClient([], {}, [
+    const retryRows = [
       {
         ...candidate,
         metadata: { duplicate_capture_review_pending: true },
         status: 'completed',
       },
-    ]);
+    ];
+    const { client, update } = createClient([], {}, retryRows);
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: retryRows, error: null });
     const finalizePayment = vi.fn();
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
@@ -304,15 +312,17 @@ describe('abandoned Paystack attempt duplicate captures', () => {
   });
 
   it('files a marked completed retry under a reversed provider status', async () => {
-    const { client, update } = createClient([], {}, [
+    const retryRows = [
       {
         ...candidate,
         metadata: { duplicate_capture_review_pending: true },
         status: 'completed',
       },
-    ]);
+    ];
+    const { client, update } = createClient([], {}, retryRows);
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    rpc.mockResolvedValueOnce({ data: retryRows, error: null });
     withReviewTable(client, reviewInsert);
     Object.assign(client, { rpc });
 

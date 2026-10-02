@@ -20,51 +20,33 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     createdAt: firstRun - 13 * 60 * 60_000,
     updatedAt: firstRun - 13 * 60 * 60_000 + index,
   }));
-  const cutoffs = new Map<string, number>();
-  const candidatesEqCalls: unknown[][] = [];
-  let candidatesEqSeen = 0;
-  const candidates = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn((...args: unknown[]) => {
-      candidatesEqCalls.push(args);
-      return candidates;
-    }),
-    ilike: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    is: vi.fn().mockReturnThis(),
-    neq: vi.fn().mockReturnThis(),
-    not: vi.fn().mockReturnThis(),
-    or: vi.fn((filter: string) => {
-      const match = (filter.split(',')[0] ?? '').match(/^(\w+)\.lt\.(.+)$/);
-      if (match?.[1] && match?.[2]) {
-        cutoffs.set(match[1], Date.parse(match[2]));
+  const rpc = vi.fn(
+    (
+      fn: string,
+      args: {
+        p_limit: number;
+        p_or_cutoff: string;
+        p_or_recheck_cutoff: string;
       }
-      return candidates;
-    }),
-    order: vi.fn().mockReturnThis(),
-    limit: vi.fn((limit: number) => {
-      // The sweep runs two candidate queries (main, then filing-only
-      // retries): only the main query resolves the canned rows here.
-      const queryEqCalls = candidatesEqCalls.slice(candidatesEqSeen);
-      candidatesEqSeen = candidatesEqCalls.length;
-      const isPendingRetry = queryEqCalls.some(
-        ([column]) => column === 'metadata->>duplicate_capture_review_pending'
-      );
+    ) => {
+      // Simulate the candidate RPC: cutoff filters, oldest-first
+      // order, per-branch limit.
+      if (fn !== 'select_abandoned_paystack_attempt_candidates_v1') {
+        return Promise.resolve({ data: true, error: null });
+      }
       return Promise.resolve({
-        data: isPendingRetry
-          ? []
-          : rows
-              .filter(
-                (row) =>
-                  row.createdAt < (cutoffs.get('created_at') ?? 0) &&
-                  row.updatedAt < (cutoffs.get('updated_at') ?? 0)
-              )
-              .sort((left, right) => left.updatedAt - right.updatedAt)
-              .slice(0, limit),
+        data: rows
+          .filter(
+            (row) =>
+              row.createdAt < Date.parse(args.p_or_cutoff) &&
+              row.updatedAt < Date.parse(args.p_or_recheck_cutoff)
+          )
+          .sort((left, right) => left.updatedAt - right.updatedAt)
+          .slice(0, args.p_limit),
         error: null,
       });
-    }),
-  };
+    }
+  );
   const completed = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
@@ -85,12 +67,7 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
     }),
   };
   const from = vi.fn((table: string) => ({
-    select: (columns: string) =>
-      table === 'orders'
-        ? order
-        : columns.includes('paid_order:')
-          ? candidates
-          : completed,
+    select: () => (table === 'orders' ? order : completed),
     update: (payload: { updated_at: string }) => {
       let targetId = '';
       return {
@@ -113,12 +90,12 @@ it('checks the next stale attempt before rechecking 25 held attempts on the next
   });
 
   const first = await reconcileAbandonedPaystackAttempts({
-    supabase: { from } as never,
+    supabase: { from, rpc } as never,
     verify,
   });
   vi.setSystemTime(firstRun + 60 * 60_000);
   const second = await reconcileAbandonedPaystackAttempts({
-    supabase: { from } as never,
+    supabase: { from, rpc } as never,
     verify,
   });
 

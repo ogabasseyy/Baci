@@ -20,63 +20,30 @@ export async function reconcileCompletedPaystackCancellationRefunds(
   limit = 25,
   deadlineMs: number = NO_RECONCILE_DEADLINE
 ): Promise<{ checked: number; failed: number }> {
-  const select =
-    'id, order_id, merchant_id, gateway_reference, amount, currency, description, metadata, status, cancellation_order:orders!transactions_order_id_fkey!inner(payment_status,shipping_status,cancelled_at)';
-  const { data, error } = await supabase
-    .from('transactions')
-    .select(select)
-    .eq('transaction_type', 'refund')
-    .eq('gateway', 'paystack')
-    .eq('status', 'completed')
-    // Wedged orders (completed legs never flipped to paid) cancel and verify
-    // like paid orders: without 'pending' their completed refunds never reach
-    // the transition RPC. The per-row reconcile resolves the linked payment
-    // and the RPC admits only funded legs, so unfunded rows still fail
-    // deterministically with a review instead of transitioning.
-    .in('cancellation_order.payment_status', [
-      'paid',
-      'partially_paid',
-      'pending',
-    ])
-    .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
-    .not('cancellation_order.cancelled_at', 'is', null)
-    .order('updated_at', { ascending: true })
-    .limit(limit);
-  if (error) throw new Error('completed_refund_lookup_failed');
-
-  // Finalized orders keep a bounded contradiction recheck: a legacy row
-  // trusted before verification, or a later contradictory provider
-  // verdict whose webhook was missed, would otherwise never reach the
-  // transition RPC that detects it. Weekly per-row cadence (verified
-  // and rotated rows bump updated_at) with a small per-tick cap keeps
-  // the sweep from crowding the pre-finalization batch.
+  // Candidate selection runs inside the database: PostgREST cannot
+  // express the normalized gateway predicate legacy rows require
+  // (` Paystack ` must match), and a loose prefilter would both
+  // discard the partial candidate index and let corrupt rows occupy
+  // the bounded batch before exact filtering. The RPC returns the
+  // finalized contradiction recheck first (weekly per-row cadence
+  // with a small per-tick cap so it never crowds the
+  // pre-finalization batch), then the pre-finalization batch.
   const finalizedCutoff = new Date(
     Date.now() - FINALIZED_CONTRADICTION_WINDOW_MS
   ).toISOString();
-  const { data: finalizedData, error: finalizedError } = await supabase
-    .from('transactions')
-    .select(select)
-    .eq('transaction_type', 'refund')
-    .eq('gateway', 'paystack')
-    .eq('status', 'completed')
-    .eq('cancellation_order.payment_status', 'refunded')
-    .in('cancellation_order.shipping_status', ['cancelled', 'canceled'])
-    .not('cancellation_order.cancelled_at', 'is', null)
-    // Null timestamps are the oldest eligible rows: a bare less-than
-    // compares SQL unknown and would exclude a finalized legacy
-    // refund from the contradiction sweep forever.
-    .or(`updated_at.is.null,updated_at.lt.${finalizedCutoff}`)
-    .order('updated_at', { ascending: true })
-    .limit(FINALIZED_CONTRADICTION_RECHECK_LIMIT);
-  if (finalizedError) throw new Error('completed_refund_lookup_failed');
+  const { data, error } = await supabase.rpc(
+    'select_completed_paystack_cancellation_refund_candidates_v1',
+    {
+      p_finalized_cutoff: finalizedCutoff,
+      p_finalized_limit: FINALIZED_CONTRADICTION_RECHECK_LIMIT,
+      p_limit: limit,
+    }
+  );
+  if (error) throw new Error('completed_refund_lookup_failed');
 
   let failed = 0;
   let checked = 0;
-  // Finalized rows first: the sweep is capped at five, so it costs the
-  // pre-finalization batch almost nothing — but trailing it would let a
-  // sustained backlog consume the whole row-start window and starve the
-  // contradiction recheck indefinitely.
-  for (const refund of [...(finalizedData ?? []), ...(data ?? [])]) {
+  for (const refund of data ?? []) {
     // Stop before the pass deadline so the settlement sweep keeps its
     // share of the cron budget instead of timing out behind this worker.
     if (shouldYieldReconcileWorker(deadlineMs)) break;

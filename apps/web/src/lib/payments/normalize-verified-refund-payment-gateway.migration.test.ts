@@ -19,9 +19,11 @@ describe('verified refund payment gateway normalization migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "COALESCE(gateway, ''), '^\\s+|\\s+$', '', 'g'"
+      "public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'"
     );
-    expect(migrationSql).toContain(") = 'PAYSTACK'");
+    expect(migrationSql).toContain(
+      'public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)'
+    );
   });
 
   it('keeps no exact gateway match on the linked payment lookup', () => {
@@ -39,5 +41,13 @@ describe('verified refund payment gateway normalization migration', () => {
     expect(migrationSql).toContain(
       "transaction_type = 'refund' AND gateway = 'paystack'"
     );
+  });
+
+  it('stays within the file modularity limit', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const lineCount = readFileSync(migrationPath, 'utf8').split('\n').length;
+    expect(lineCount).toBeLessThanOrEqual(300);
   });
 });

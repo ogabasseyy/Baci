@@ -83,6 +83,7 @@ export function database(
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
+  const updates: { table: string; values: Record<string, unknown> }[] = [];
   // Models the RPC-committed dispatch marker: once marked, a second
   // conditional write filtered by dispatch_started_at IS NULL matches zero
   // rows, so the suite fails if the sender ever re-adds one.
@@ -121,7 +122,10 @@ export function database(
           return builder;
         }),
         match: vi.fn(() => builder),
-        update: vi.fn(() => builder),
+        update: vi.fn((values: Record<string, unknown>) => {
+          updates.push({ table, values });
+          return builder;
+        }),
         in: vi.fn(() => builder),
         or: vi.fn(() => builder),
         order: vi.fn(() => builder),
@@ -193,6 +197,7 @@ export function database(
     client: client as unknown as SupabaseClient,
     rpc: client.rpc,
     filters,
+    updates,
   };
 }
 export const row = {

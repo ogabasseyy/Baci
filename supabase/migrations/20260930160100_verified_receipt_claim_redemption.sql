@@ -52,16 +52,17 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.redeem_verified_receipt_claim(text, text)
   FROM PUBLIC, anon, authenticated;
--- Required for the SECURITY INVOKER public wrappers below: they run as the
--- caller, so revoking this grant would break redemption for verified users.
-GRANT EXECUTE ON FUNCTION private.redeem_verified_receipt_claim(text, text) TO authenticated;
-
+-- The public wrappers stay SECURITY DEFINER (matching the delegates
+-- hardening, which promotes pure-delegation wrappers): authenticated callers
+-- have no USAGE on schema private, so INVOKER wrappers would 42501. Callers
+-- need EXECUTE on the public wrappers only; the private implementation runs
+-- as the owner either way.
 CREATE OR REPLACE FUNCTION public.redeem_receipt_claim_v2(p_token_hash text, p_source text)
-RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
   SELECT private.redeem_verified_receipt_claim(p_token_hash, p_source);
 $$;
 CREATE OR REPLACE FUNCTION public.redeem_receipt_claim(p_token_hash text)
-RETURNS jsonb LANGUAGE sql SECURITY INVOKER SET search_path = '' AS $$
+RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
   SELECT private.redeem_verified_receipt_claim(p_token_hash, 'web');
 $$;
 REVOKE ALL ON FUNCTION private.redeem_receipt_claim_v2(text, text)

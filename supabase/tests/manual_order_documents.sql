@@ -1,5 +1,8 @@
 BEGIN;
 CREATE FUNCTION pg_temp.assert_true(ok boolean, label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %', label; END IF; END $$;
+-- Mirror production's delegates boundary: authenticated callers have no
+-- USAGE on schema private, so redemption must work through DEFINER wrappers.
+REVOKE USAGE ON SCHEMA private FROM authenticated;
 -- The enqueue triggers ship disabled so rows cannot enqueue while an older
 -- cron binary is live; the enable step below mirrors the documented rollout.
 SELECT pg_temp.assert_true((SELECT count(*) = 2 FROM pg_trigger WHERE tgname IN ('enqueue_manual_documents_after_items', 'enqueue_manual_document_after_order_update') AND tgenabled = 'D'), 'enqueue triggers ship disabled');

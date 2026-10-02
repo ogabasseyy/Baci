@@ -257,7 +257,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: 'aa66be58cfc32c2aacbd785c20885b83029d73533127621507fba3618b6c2afa',
+    sha256: '264adfb7dab0810c20af2225ef52bceb839c04c6fd3a78f421a8a628130b8d69',
   },
   {
     repositoryPath:

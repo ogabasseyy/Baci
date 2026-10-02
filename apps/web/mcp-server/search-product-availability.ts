@@ -3,19 +3,32 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import type { McpSearchProductRow } from './search-products-query-helpers';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY } from '../src/lib/hydrate-public-products';
-import {
-  getPublicSerializedVariantSummariesByProductId,
-  type PublicSerializedVariantSummary,
-} from '../src/lib/public-serialized-variant-summary';
+import { isPublicVariantPurchasable } from '../src/lib/is-public-variant-purchasable';
+import type { PublicSerializedVariantSummary } from '../src/lib/public-serialized-variant-summary';
 
 interface ProductVariant {
   id?: string;
   attributes: Record<string, unknown> | null;
   condition?: string | null;
   created_at?: string | null;
+  effective_policy?: string | null;
   price_override?: number | null;
   product_id: string;
   stock_quantity?: number | null;
+}
+
+// Variant availability follows the PDP rule against the RPC-projected
+// effective policy, not the parent flag alone: an explicit
+// serialized_strict variant under an unmanaged parent is stock-gated,
+// while rows without a projected policy stay fail-open on the parent.
+function isSearchVariantAvailable(
+  product: McpSearchProductRow,
+  variant: ProductVariant,
+): boolean {
+  return isPublicVariantPurchasable(product, {
+    inventory_tracking_policy: variant.effective_policy ?? undefined,
+    stock_quantity: variant.stock_quantity,
+  });
 }
 
 // Storefront snapshot windows (pdp_core_slug_case_insensitive): the PDP
@@ -69,31 +82,40 @@ export async function hydrateSearchProductAvailability(
   requestedCondition?: string
 ) {
   const condition = normalizeCanonicalProductCondition(requestedCondition);
-  // Simple serialized products resolve through the same projection as the
-  // PDP: the helper returns summaries only for serialized policies (variant
-  // products are projected inside the variants RPC instead, keeping this
-  // lookup to one anchor row per simple product). A lookup failure keeps
-  // stored stock rather than zeroing purchasability, but the affected rows
-  // are flagged instead of passing as confidently verified.
+  // Simple serialized products resolve through the anchor projection RPC:
+  // the product_variants SELECT policy is authenticated-only, so an
+  // anon-keyed direct-table read silently returns no anchor rows and the
+  // wrong policy is evaluated. The RPC returns serialized rows only (off
+  // resolves to stored stock by absence). A lookup failure keeps stored
+  // stock rather than zeroing purchasability, but the affected rows are
+  // flagged instead of passing as confidently verified.
   const serializedSummaries = new Map<string, PublicSerializedVariantSummary>();
   const serializedLookupFailedIds = new Set<string>();
   const simpleProductIds = products
     .filter((product) => product.has_variants !== true)
     .map((product) => product.id);
   if (simpleProductIds.length > 0) {
-    try {
-      const summaries = await getPublicSerializedVariantSummariesByProductId(
-        supabase,
-        merchantId,
-        simpleProductIds
-      );
-      for (const summary of summaries) {
-        if (!summary.variantId) serializedSummaries.set(summary.productId, summary);
+    await runOptionBatches(simpleProductIds, 100, async (batch) => {
+      const { data, error } = await supabase.rpc('get_mcp_search_serialized_anchor_policies', {
+        p_product_ids: batch,
+        p_merchant_id: merchantId,
+      });
+      if (error) {
+        console.error('Failed to fetch serialized summaries for search:', error);
+        for (const id of batch) serializedLookupFailedIds.add(id);
+      } else {
+        for (const row of data ?? []) {
+          if (row.effective_policy !== 'serialized_strict' &&
+            row.effective_policy !== 'serialized_then_unlimited') continue;
+          serializedSummaries.set(row.product_id, {
+            productId: row.product_id,
+            variantId: null,
+            publicAvailableUnits: row.available_units ?? 0,
+            inventoryTrackingPolicy: row.effective_policy,
+          });
+        }
       }
-    } catch (error) {
-      console.error('Failed to fetch serialized summaries for search:', error);
-      for (const id of simpleProductIds) serializedLookupFailedIds.add(id);
-    }
+    });
   }
   const effectiveProducts = products.map((product) => {
     const summary = serializedSummaries.get(product.id);
@@ -212,7 +234,7 @@ export async function hydrateSearchProductAvailability(
       (!condition || baseCondition === condition) &&
       (product.manage_stock !== true || Number(product.stock_quantity ?? 0) > 0);
     const pricedOptions = [
-      ...variants.filter((variant) => product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0)
+      ...variants.filter((variant) => isSearchVariantAvailable(product, variant))
         .map((variant) => ({
           price: variant.price_override ?? product.price,
           condition: normalizeCanonicalProductCondition(
@@ -263,9 +285,7 @@ export async function hydrateSearchProductAvailability(
       variantLookupStatus,
       offerLookupStatus,
       basePurchasable,
-      availableVariants: variants.filter((variant) =>
-        product.manage_stock !== true || Number(variant.stock_quantity ?? 0) > 0
-      ),
+      availableVariants: variants.filter((variant) => isSearchVariantAvailable(product, variant)),
       // Unfiltered by condition but windowed like the snapshot: gates and the
       // condition-axis check see the same 128 the PDP reasons over.
       allVariants: windowedVariants,

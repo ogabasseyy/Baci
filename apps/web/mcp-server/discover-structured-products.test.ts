@@ -42,6 +42,9 @@ function client(fixture: Fixture) {
       rows.sort((left, right) => String(left.condition).localeCompare(String(right.condition)) || String(left.id).localeCompare(String(right.id)));
       return { data: rows, error: null };
     }
+    if (name === 'get_mcp_search_serialized_anchor_policies') {
+      return { data: [], error: null };
+    }
     return { data: null, error: new Error(`Unexpected RPC ${name}`) };
   });
 

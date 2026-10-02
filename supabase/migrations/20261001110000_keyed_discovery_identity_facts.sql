@@ -4,14 +4,18 @@
 -- could fill the capped fact window before the actual phone loads. Index
 -- key-specific identity lexemes derived from the same authoritative fields
 -- the matcher verifies, so the capped window fills with identity matches.
+-- Identity normalization mirrors TS identityKey exactly: NFKC first, then
+-- trim with the JavaScript trim set (compatibility decomposition can create
+-- trimmable edges), lowercase, and collapse whitespace runs to _.
 CREATE OR REPLACE FUNCTION discovery.discovery_identity_normalize(raw text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
 AS $$
   SELECT pg_catalog.regexp_replace(
-    pg_catalog.lower(pg_catalog.normalize(
-      pg_catalog.regexp_replace(raw, '^[[:space:]]+|[[:space:]]+$', '', 'g'), 'NFKC')),
-    '[[:space:]-]+', '_', 'g');
+    pg_catalog.lower(pg_catalog.regexp_replace(
+      pg_catalog.normalize(raw, 'NFKC'),
+      '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
+    '[[:space:]   -     　﻿-]+', '_', 'g');
 $$;
 
 -- Identity lexeme with a Unicode-safe fallback: fully non-ASCII values

@@ -206,3 +206,14 @@ it('lets the first offer row claim its condition even when it is out of stock', 
   // the later in-stock duplicate must not surface as a purchasable option.
   expect(selectStructuredDiscoveryOffer(row, intent({}))).toBeUndefined();
 });
+
+it('skips serialized_strict variants depleted under an unmanaged parent', () => {
+  const row = makeRow({ has_variants: true });
+  row.availableVariants = [
+    { id: 'strict-depleted', product_id: 'phone', attributes: { storage_gb: 256 }, price_override: 400, stock_quantity: 0, effective_policy: 'serialized_strict' },
+  ] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(row, intent({ attributes: [
+    { key: 'storage_gb', operator: 'eq', value: 256 },
+  ] }));
+  expect(selected).toBeUndefined();
+});

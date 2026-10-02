@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
+import { buildDiscoveryFactRetrievalQuery } from './build-discovery-fact-retrieval-query';
 import { loadDiscoveryFactCandidates } from './load-discovery-fact-candidates';
 import { loadVariantRecallIds } from './load-variant-recall-ids';
 import { DISCOVERY_PRODUCT_PROJECTION } from './discovery-product-projection';
@@ -201,7 +202,16 @@ export async function loadStructuredDiscoveryCandidates({
   // Free-text relevance votes independently from structured-fact votes
   // (facts plus variant recall), so an exact keyword hit that also satisfies
   // the structured facts outranks a fact-only match instead of tying it.
-  const rankedIds = reciprocalRankFusion([lexical.ids], [facts.ids, variants.ids], [semantic.value.ids]);
+  // But an unconstrained browse emits no structured terms, so the fact
+  // query falls back to the same free-text query: a separate group would
+  // double-count keyword evidence against semantic-only candidates. Rebuild
+  // with an empty fallback to detect that case exactly (the builder is pure)
+  // and fuse lexical with fallback-fact IDs into one max-scored group.
+  const hasStructuredFactTerms = intent !== undefined &&
+    buildDiscoveryFactRetrievalQuery(intent, '') !== '(a & !a)';
+  const rankedIds = hasStructuredFactTerms
+    ? reciprocalRankFusion([lexical.ids], [facts.ids, variants.ids], [semantic.value.ids])
+    : reciprocalRankFusion([lexical.ids, facts.ids], [variants.ids], [semantic.value.ids]);
   // RRF order keeps the best candidates; overflow past the global budget
   // marks truncation like any other cap instead of hydrating silently.
   const cappedIds = rankedIds.slice(0, MAX_STRUCTURED_CANDIDATE_PRODUCTS);

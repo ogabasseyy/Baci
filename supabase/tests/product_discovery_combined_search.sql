@@ -108,6 +108,12 @@ BEGIN
     RAISE EXCEPTION 'Compatibility-whitespace type did not use the shared canonicalizer lexeme';
   END IF;
   document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
+    '{"model":"¨phone"}'::jsonb);
+  IF NOT document @@ plainto_tsquery('simple', 'modelphone') OR
+     document @@ plainto_tsquery('simple', 'model_phone') THEN
+    RAISE EXCEPTION 'Compatibility-whitespace model did not use the post-NFKC trim lexeme';
+  END IF;
+  document := discovery.product_discovery_search_document_v5('Generic', 'Acme', 'Accessories', '',
     '{"model":"三星手机","product_type":"手机"}'::jsonb);
   IF NOT document @@ plainto_tsquery('simple',
       'fact' || pg_catalog.encode(extensions.digest(pg_catalog.convert_to(

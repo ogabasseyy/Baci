@@ -5,30 +5,10 @@
 -- and unverified products. Verified excluded types sink below every
 -- non-excluded row. Ranking stays fail-open: missing fields demote, never
 -- exclude. The five-argument form is dropped for the excluded-types param.
--- Canonical product type shared by stored and expected recall identity:
--- explicit metadata wins, else the storefront category map, mirroring the
--- matcher's productTypeOf (including its smartphones/laptops/tablets map)
--- so SQL ranking and post-hydration verdicts agree.
-CREATE OR REPLACE FUNCTION discovery.canonical_identity_product_type(product_type text, category text)
-RETURNS text
-LANGUAGE sql IMMUTABLE PARALLEL SAFE SECURITY INVOKER SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN nullif(discovery.discovery_identity_normalize(product_type), '') IS NOT NULL
-    THEN CASE discovery.discovery_identity_normalize(product_type)
-      WHEN 'phone' THEN 'phone' WHEN 'phones' THEN 'phone' WHEN 'smartphone' THEN 'phone' WHEN 'smartphones' THEN 'phone'
-      WHEN 'smart_phone' THEN 'phone' WHEN 'smart_phones' THEN 'phone' WHEN 'mobile_phone' THEN 'phone' WHEN 'mobile_phones' THEN 'phone'
-      WHEN 'cell_phone' THEN 'phone' WHEN 'cell_phones' THEN 'phone' WHEN 'laptop' THEN 'laptop' WHEN 'laptops' THEN 'laptop'
-      WHEN 'tablet' THEN 'tablet' WHEN 'tablets' THEN 'tablet' WHEN 'chargers' THEN 'charger' WHEN 'cables' THEN 'cable'
-      WHEN 'security_cameras' THEN 'security_camera' WHEN 'fragrance_diffusers' THEN 'fragrance_diffuser'
-      ELSE discovery.discovery_identity_normalize(product_type) END
-    WHEN nullif(discovery.discovery_identity_normalize(category), '') = 'smartphones' THEN 'phone'
-    WHEN nullif(discovery.discovery_identity_normalize(category), '') = 'laptops' THEN 'laptop'
-    WHEN nullif(discovery.discovery_identity_normalize(category), '') = 'tablets' THEN 'tablet'
-  END;
-$$;
-
+-- Stored and expected types route through the product-type canonicalizer
+-- defined in 20261001110000, so SQL ranking and post-hydration verdicts agree.
 DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer); -- live .0930 form: a missed overload makes short calls ambiguous (42725).
+DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb);
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,
@@ -210,10 +190,12 @@ BEGIN
       -- Per-branch JOINT verdicts: identity and attributes must satisfy the
       -- SAME branch, or hybrids tie valid products. Absent identity rows or
       -- filters complete vacuously; IS NOT TRUE (not NOT) keeps NULL
-      -- verdicts failing, mirroring the FILTER semantics above.
+      -- verdicts failing, mirroring the FILTER semantics above. The clear
+      -- tier tolerates attributes missing from the variant (unverified,
+      -- possibly satisfied by product metadata) while contradictions sink.
       SELECT
         count(*) FILTER (WHERE branch_state.identity_complete AND branch_state.attrs_complete) AS complete_alternatives,
-        count(*) FILTER (WHERE branch_state.identity_clear AND branch_state.attrs_complete) AS clear_branches
+        count(*) FILTER (WHERE branch_state.identity_clear AND branch_state.attrs_clear) AS clear_branches
       FROM (
         SELECT
           b.branch,
@@ -234,7 +216,12 @@ BEGIN
             SELECT 1 FROM filters AS f
             WHERE f.branch = b.branch
               AND discovery.recall_variant_filter_exactly_matches(pv.attributes, f.filter) IS NOT TRUE
-          ) AS attrs_complete
+          ) AS attrs_complete,
+          NOT EXISTS (
+            SELECT 1 FROM filters AS f
+            WHERE f.branch = b.branch
+              AND discovery.recall_variant_filter_verifiably_fails(pv.attributes, f.filter)
+          ) AS attrs_clear
         FROM (
           SELECT f.branch FROM filters AS f GROUP BY f.branch
           UNION

@@ -2,20 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 
-// Serialized-policy discovery runs for every simple product; tests that do
-// not exercise it stub an empty policy lookup.
-function emptyPolicyFrom() {
-  const builder = {
-    select: vi.fn(() => builder),
-    eq: vi.fn(() => builder),
-    in: vi.fn(() => builder),
-    returns: vi.fn(() => builder),
-    then: (resolve: (value: unknown) => unknown) =>
-      Promise.resolve({ data: [], error: null }).then(resolve),
-  };
-  return builder;
-}
-
 describe('hydrateSearchProductAvailability PostgREST paging', () => {
   it('pages variant lookups so no response can hit the 1,000-row clamp', async () => {
     const products = Array.from({ length: 8 }, (_, index) => ({
@@ -39,7 +25,7 @@ describe('hydrateSearchProductAvailability PostgREST paging', () => {
         error: null,
       };
     });
-    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
+    const supabase = { rpc } as unknown as SupabaseClient;
 
     const hydrated = await hydrateSearchProductAvailability(
       products,
@@ -85,7 +71,7 @@ describe('hydrateSearchProductAvailability PostgREST paging', () => {
         error: null,
       };
     });
-    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
+    const supabase = { rpc } as unknown as SupabaseClient;
 
     const hydrated = await hydrateSearchProductAvailability(
       products,
@@ -127,7 +113,7 @@ describe('hydrateSearchProductAvailability PostgREST paging', () => {
         error: null,
       };
     });
-    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
+    const supabase = { rpc } as unknown as SupabaseClient;
 
     const hydrated = await hydrateSearchProductAvailability(
       products,
@@ -174,7 +160,7 @@ describe('hydrateSearchProductAvailability PostgREST paging', () => {
         error: null,
       };
     });
-    const supabase = { rpc, from: vi.fn(emptyPolicyFrom) } as unknown as SupabaseClient;
+    const supabase = { rpc } as unknown as SupabaseClient;
 
     const pending = hydrateSearchProductAvailability(products, supabase, 'merchant-1');
     // Six batches of seven: release each wave as it arrives so the run

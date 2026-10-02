@@ -108,6 +108,29 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000432', 'cb58d110-0000-4000-8000-000000000433',
    'cb58d110-0000-4000-8000-000000000203', '{"storage_gb": 1e999}', 5);
 
+-- JavaScript-trim fixtures run under their own merchant: the loader trims
+-- U+FEFF while PostgreSQL [[:space:]] does not, so recall must use the
+-- same explicit trim set or it strands the variant before the cap.
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000207',
+  'trim-test@example.test',
+  'Trim Test Merchant',
+  'trim-test-merchant',
+  true
+);
+
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, manage_stock, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000440', 'cb58d110-0000-4000-8000-000000000207',
+   'Trim option', 'trim-option', 'Acme', 50000, 'active', true, true, 'off', '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000441', 'cb58d110-0000-4000-8000-000000000440',
+   'cb58d110-0000-4000-8000-000000000207', ('{"color":"black' || chr(65279) || '"}')::jsonb, 5);
+
 DO $$
 BEGIN
   BEGIN
@@ -287,6 +310,16 @@ BEGIN
       'cb58d110-0000-4000-8000-000000000433'::uuid
     ]) THEN
     RAISE EXCEPTION 'past-range stored numerics must recall as Infinity for ranges, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000207',
+    '[{"key":"color","operator":"eq","value":"black"}]'::jsonb,
+    10
+  );
+  IF cardinality(recall_ids) IS DISTINCT FROM 1
+    OR recall_ids[1] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000440'::uuid THEN
+    RAISE EXCEPTION 'values with JavaScript-only trim characters must recall trimmed, got %', recall_ids;
   END IF;
 END;
 $$;

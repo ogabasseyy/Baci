@@ -20775,6 +20775,17 @@ export type Database = {
           total_count: number;
         }[];
       };
+      get_mcp_search_serialized_anchor_policies: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          available_units: number;
+          effective_policy: string;
+          product_id: string;
+        }[];
+      };
       search_product_variant_recall: {
         Args: {
           p_excluded_types?: Json;

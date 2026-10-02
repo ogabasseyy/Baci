@@ -46,6 +46,9 @@ function client(fixture: Fixture) {
       const merchant = String(args?.p_merchant_id ?? '');
       return { data: (fixture.variants ?? []).filter((row) => String(row.merchant_id ?? '') === merchant), error: null };
     }
+    if (name === 'get_mcp_search_serialized_anchor_policies') {
+      return { data: [], error: null };
+    }
     return { data: null, error: new Error(`Unexpected RPC ${name}`) };
   });
 

@@ -87,7 +87,7 @@ DECLARE
   axis text;
 BEGIN
   axis := pg_catalog.lower(pg_catalog.regexp_replace(pg_catalog.regexp_replace(
-    pg_catalog.regexp_replace(entry_key, '^[[:space:]]+|[[:space:]]+$', '', 'g'),
+    pg_catalog.regexp_replace(entry_key, '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g'),
     '([a-z0-9])([A-Z])', '\1_\2', 'g'), '[[:space:].-]+', '_', 'g'));
   axis := CASE axis WHEN 'colour' THEN 'color' WHEN 'gpu' THEN 'graphics'
     WHEN 'ram_options' THEN 'ram' WHEN 'storage_capacity' THEN 'storage' ELSE axis END;
@@ -156,10 +156,10 @@ BEGIN
     -- Collapse internal whitespace like the matcher, which normalizes
     -- both sides: without this a multi-space value falsely mismatches.
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     IF actual_text IS DISTINCT FROM expected_text THEN RETURN true; ELSE RETURN false; END IF;
   END IF;
@@ -220,10 +220,10 @@ BEGIN
     -- Collapse internal whitespace like the matcher, which normalizes
     -- both sides: without this a multi-space value falsely mismatches.
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.
@@ -284,10 +284,10 @@ BEGIN
   ELSE
     IF pg_catalog.jsonb_typeof(last_value) IS DISTINCT FROM 'string' THEN RETURN true; END IF;
     actual_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(last_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     expected_text := pg_catalog.regexp_replace(pg_catalog.lower(pg_catalog.regexp_replace(
-      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]]+|[[:space:]]+$', '', 'g')),
+      pg_catalog.normalize(filter_value #>> '{}', 'NFC'), '^[[:space:]   -     　﻿]+|[[:space:]   -     　﻿]+$', '', 'g')),
       '[[:space:]]+', ' ', 'g');
     -- A blank constraint value never matches in the loader, even against a
     -- blank variant value.

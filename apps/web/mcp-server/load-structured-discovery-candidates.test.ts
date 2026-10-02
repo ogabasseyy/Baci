@@ -286,9 +286,24 @@ describe('loadStructuredDiscoveryCandidates', () => {
     fixture.rpc.mockImplementation(async (name) => name === 'search_product_discovery_facts'
       ? { data: ranked(['keyword-exact']), error: null } : original(name));
     const result = await loadStructuredDiscoveryCandidates({ query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase,
+      intent: { alternatives: [{ product_type: 'camera' }] }, factQuery: '(typecamera)',
       semanticSearch: async () => ['semantic-match'],
     });
     expect(result.products.map(({id}) => id)).toEqual(['keyword-exact', 'semantic-match']);
+  });
+
+  it('counts fallback-fact duplicates as one lexical vote on unconstrained browse', async () => {
+    const fixture = setup({ lexicalPages: [ranked(['keyword-exact', 'semantic-match'])], products: productRows(['keyword-exact', 'semantic-match']) });
+    const original = fixture.rpc.getMockImplementation()!;
+    fixture.rpc.mockImplementation(async (name) => name === 'search_product_discovery_facts'
+      ? { data: ranked(['keyword-exact']), error: null } : original(name));
+    const result = await loadStructuredDiscoveryCandidates({ query: 'camera', merchantId: 'merchant-1', supabase: fixture.supabase,
+      intent: { alternatives: [{}] },
+      semanticSearch: async () => ['semantic-match'],
+    });
+    // The fact query falls back to the same free-text query, so the
+    // lexical+facts duplicate must not outvote two independent evidences.
+    expect(result.products.map(({id}) => id)).toEqual(['semantic-match', 'keyword-exact']);
   });
 
 });

@@ -1,5 +1,6 @@
 import { normalizeCanonicalProductCondition, toGoogleListingCondition } from '@baci/shared/lib';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
+import { isPublicVariantPurchasable } from '../src/lib/is-public-variant-purchasable';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
@@ -81,6 +82,23 @@ export function selectStructuredDiscoveryOffer(
   const excludedTypes = structuredDiscoveryIdentity.excludedTypesOf(intent);
   const candidates: Candidate[] = [];
   const manageStock = product.manage_stock === true;
+  const parentStock = {
+    manage_stock: product.manage_stock === null || typeof product.manage_stock === 'boolean'
+      ? product.manage_stock
+      : undefined,
+    stock: typeof product.stock === 'number' ? product.stock : null,
+    stock_quantity: typeof product.stock_quantity === 'number' ? product.stock_quantity : null,
+  };
+  // PDP rule on the projected effective policy, matching hydration.
+  const purchasableVariant = (rawVariant: unknown): boolean => {
+    const variant = record(rawVariant);
+    return isPublicVariantPurchasable(parentStock, {
+      inventory_tracking_policy: typeof variant.effective_policy === 'string'
+        ? variant.effective_policy
+        : undefined,
+      stock_quantity: typeof variant.stock_quantity === 'number' ? variant.stock_quantity : null,
+    });
+  };
   const metadataAttributes = record(discovery.attributes);
   const baseCondition = normalizeCanonicalProductCondition(
     typeof product.condition === 'string' ? product.condition : null
@@ -116,7 +134,7 @@ export function selectStructuredDiscoveryOffer(
   if (product.has_variants === true) {
     for (const rawVariant of row.availableVariants) {
       const variant = record(rawVariant);
-      if (manageStock && !hasPositiveStock(variant.stock_quantity)) continue;
+      if (!purchasableVariant(rawVariant)) continue;
       const price = finitePrice(variant.price_override) ?? finitePrice(product.price);
       if (price === undefined) continue;
       const variantCondition = typeof variant.condition === 'string' ? variant.condition : null;
@@ -153,7 +171,7 @@ export function selectStructuredDiscoveryOffer(
   const offersSelectable = !structuredDiscoveryIdentity.variantsOwnConditionAxis(product, variantUniverse) &&
     (!product.has_variants || variantUniverse.some((rawVariant) => {
       const variant = record(rawVariant);
-      if (manageStock && !hasPositiveStock(variant.stock_quantity)) return false;
+      if (!purchasableVariant(rawVariant)) return false;
       return (finitePrice(variant.price_override) ?? finitePrice(product.price)) !== undefined;
     }));
   const seenOfferConditions = new Set<string>();
@@ -186,7 +204,7 @@ export function selectStructuredDiscoveryOffer(
     // become candidates, so the match-then-sort below sees exactly the set
     // the eager version would have kept.
     const pairings = product.has_variants === true
-      ? variantUniverse.filter((rawVariant) => !manageStock || hasPositiveStock(record(rawVariant).stock_quantity))
+      ? variantUniverse.filter((rawVariant) => purchasableVariant(rawVariant))
       : [];
     if (pairings.length === 0) addCandidate({ ...offerCore, attributes: {}, compareAtPrice: productCompareAtPrice });
     for (const rawVariant of pairings) {

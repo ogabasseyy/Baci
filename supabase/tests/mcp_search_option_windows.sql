@@ -7,9 +7,10 @@ DO $$
 DECLARE
   v_variant_function oid := 'public.get_mcp_search_product_variants(uuid[],uuid)'::pg_catalog.regprocedure;
   v_offer_function oid := 'public.get_mcp_search_product_offers(uuid[],uuid)'::pg_catalog.regprocedure;
+  v_anchor_function oid := 'public.get_mcp_search_serialized_anchor_policies(uuid[],uuid)'::pg_catalog.regprocedure;
   v_function oid;
 BEGIN
-  FOREACH v_function IN ARRAY ARRAY[v_variant_function, v_offer_function] LOOP
+  FOREACH v_function IN ARRAY ARRAY[v_variant_function, v_offer_function, v_anchor_function] LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_catalog.pg_proc AS proc
       WHERE proc.oid = v_function
@@ -59,6 +60,27 @@ VALUES
   ('e4100000-0000-4000-8000-000000000014', 'e4100000-0000-4000-8000-000000000002', 'Unpublished product', 50000, 'active', true, true),
   ('e4100000-0000-4000-8000-000000000015', 'e4100000-0000-4000-8000-000000000003', 'Admin product', 50000, 'active', true, true);
 
+-- The anchor override is the anon-blind case: product policy off with a
+-- serialized_strict anchor, whose units the projection must count.
+INSERT INTO public.products (id, merchant_id, name, price, status, has_variants, inventory_tracking_policy)
+VALUES
+  ('e4100000-0000-4000-8000-000000000016', 'e4100000-0000-4000-8000-000000000001', 'Serialized simple', 50000, 'active', false, 'off'),
+  ('e4100000-0000-4000-8000-000000000017', 'e4100000-0000-4000-8000-000000000001', 'Plain simple', 50000, 'active', false, 'off');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, is_inventory_anchor, inventory_tracking_policy)
+VALUES
+  ('e4100000-0000-4000-8000-000000000207', 'e4100000-0000-4000-8000-000000000016',
+   'e4100000-0000-4000-8000-000000000001', true, 'serialized_strict');
+
+INSERT INTO public.variant_inventory (merchant_id, variant_id, identifier_type, identifier_value, status)
+VALUES (
+  'e4100000-0000-4000-8000-000000000001',
+  'e4100000-0000-4000-8000-000000000207',
+  'serial',
+  'SER-ANCHOR-1',
+  'available'
+);
+
 INSERT INTO public.product_variants
   (id, product_id, merchant_id, attributes, price_override, stock_quantity, created_at)
 SELECT
@@ -103,7 +125,54 @@ DECLARE
   v_count integer;
   v_max_price numeric;
   v_offer_ids uuid[];
+  v_policy text;
+  v_units integer;
 BEGIN
+  SELECT option_row.effective_policy INTO v_policy
+  FROM public.get_mcp_search_product_variants(
+    ARRAY['e4100000-0000-4000-8000-000000000012'::uuid],
+    'e4100000-0000-4000-8000-000000000001'
+  ) AS option_row;
+  IF v_policy IS DISTINCT FROM 'off' THEN
+    RAISE EXCEPTION 'variant RPC must project the resolved effective policy, got %', v_policy;
+  END IF;
+
+  SELECT anchor_row.effective_policy, anchor_row.available_units
+  INTO v_policy, v_units
+  FROM public.get_mcp_search_serialized_anchor_policies(
+    ARRAY[
+      'e4100000-0000-4000-8000-000000000011'::uuid,
+      'e4100000-0000-4000-8000-000000000016'::uuid,
+      'e4100000-0000-4000-8000-000000000017'::uuid
+    ],
+    'e4100000-0000-4000-8000-000000000001'
+  ) AS anchor_row;
+  IF v_policy IS DISTINCT FROM 'serialized_strict' OR v_units IS DISTINCT FROM 1 THEN
+    RAISE EXCEPTION 'anchor projection must resolve the strict override with its units, got %/%', v_policy, v_units;
+  END IF;
+
+  SELECT pg_catalog.count(*) INTO v_count
+  FROM public.get_mcp_search_serialized_anchor_policies(
+    ARRAY[
+      'e4100000-0000-4000-8000-000000000011'::uuid,
+      'e4100000-0000-4000-8000-000000000016'::uuid,
+      'e4100000-0000-4000-8000-000000000017'::uuid
+    ],
+    'e4100000-0000-4000-8000-000000000001'
+  );
+  IF v_count <> 1 THEN
+    RAISE EXCEPTION 'anchor projection must omit variant products and off-policy simples, got % rows', v_count;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.get_mcp_search_serialized_anchor_policies(
+      ARRAY['e4100000-0000-4000-8000-000000000016'::uuid],
+      'e4100000-0000-4000-8000-000000000002'
+    )
+  ) THEN
+    RAISE EXCEPTION 'a different merchant retrieved the anchor projection';
+  END IF;
+
   SELECT pg_catalog.count(*), pg_catalog.max(option_row.price_override)
   INTO v_count, v_max_price
   FROM public.get_mcp_search_product_variants(

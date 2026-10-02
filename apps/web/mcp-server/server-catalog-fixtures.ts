@@ -146,6 +146,15 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       });
       return true;
     }
+    if (url.pathname.endsWith('/rest/v1/rpc/get_mcp_search_serialized_anchor_policies')) {
+      // Fixture products carry no serialized policies; the empty set keeps
+      // stored stock without flagging lookups failed.
+      request.on('data', () => {});
+      request.on('end', () => {
+        response.end(JSON.stringify([]));
+      });
+      return true;
+    }
     if (url.pathname.endsWith('/rest/v1/rpc/get_product_offers')) {
       let body = '';
       request.on('data', (chunk: Buffer) => { body += chunk.toString(); });

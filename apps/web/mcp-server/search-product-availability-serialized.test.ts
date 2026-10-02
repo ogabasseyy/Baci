@@ -2,62 +2,36 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { hydrateSearchProductAvailability } from './search-product-availability';
 
-function chain<T>(data: T) {
-  const query: Record<string, (...args: never[]) => unknown> = {};
-  const self = () => query as never;
-  query.select = self;
-  query.eq = self;
-  query.in = self;
-  query.returns = self;
-  query.overrideTypes = self;
-  query.retry = self;
-  query.then = ((resolve: (value: { data: T; error: null }) => unknown) =>
-    Promise.resolve({ data, error: null }).then(resolve)) as never;
-  return query;
-}
-
 function serializedSupabase(options: {
   policy: string;
   units: number;
-  anchorPolicy?: string;
 }) {
-  const from = vi.fn((table: string) => {
-    if (table === 'products') {
-      return chain([
-        {
-          id: 'serialized-phone',
-          inventory_tracking_policy: options.policy,
-          has_variants: false,
-          status: 'active',
-        },
-      ]);
-    }
-    return chain([
-      {
-        id: 'anchor-1',
-        product_id: 'serialized-phone',
-        inventory_tracking_policy: options.anchorPolicy ?? 'inherit',
-        is_inventory_anchor: true,
-      },
-    ]);
-  });
-  const rpc = vi.fn((name: string) => {
-    if (name === 'get_public_serialized_variant_availability_counts') {
-      return chain(
-        options.units > 0
-          ? [
-              {
-                product_id: 'serialized-phone',
-                variant_id: null,
-                public_available_units: options.units,
-              },
-            ]
-          : []
-      );
+  const rpc = vi.fn(async (name: string) => {
+    if (name === 'get_mcp_search_serialized_anchor_policies') {
+      return {
+        data: [
+          {
+            product_id: 'serialized-phone',
+            effective_policy: options.policy,
+            available_units: options.units,
+          },
+        ],
+        error: null,
+      };
     }
     return { data: [], error: null };
   });
-  return { from, rpc } as unknown as SupabaseClient;
+  return { rpc } as unknown as SupabaseClient;
+}
+
+function failingAnchorSupabase() {
+  const rpc = vi.fn(async (name: string) => {
+    if (name === 'get_mcp_search_serialized_anchor_policies') {
+      return { data: null, error: new Error('anchor offline') };
+    }
+    return { data: [], error: null };
+  });
+  return { rpc } as unknown as SupabaseClient;
 }
 
 const serializedProduct = {
@@ -109,15 +83,9 @@ describe('hydrateSearchProductAvailability serialized projection', () => {
   });
 
   it('falls back to stored stock when the availability lookup fails', async () => {
-    const supabase = {
-      from: vi.fn(() => {
-        throw new Error('counts unavailable');
-      }),
-      rpc: vi.fn(async () => ({ data: [], error: null })),
-    } as unknown as SupabaseClient;
     const [hydrated] = await hydrateSearchProductAvailability(
       [serializedProduct],
-      supabase,
+      failingAnchorSupabase(),
       'merchant-1'
     );
 
@@ -126,15 +94,9 @@ describe('hydrateSearchProductAvailability serialized projection', () => {
   });
 
   it('flags rows whose serialized lookup failed instead of passing them as verified', async () => {
-    const supabase = {
-      from: vi.fn(() => {
-        throw new Error('counts unavailable');
-      }),
-      rpc: vi.fn(async () => ({ data: [], error: null })),
-    } as unknown as SupabaseClient;
     const [hydrated] = await hydrateSearchProductAvailability(
       [serializedProduct],
-      supabase,
+      failingAnchorSupabase(),
       'merchant-1'
     );
 

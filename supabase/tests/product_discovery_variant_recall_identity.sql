@@ -118,6 +118,41 @@ VALUES
   ('cb58d110-0000-4000-8000-000000000293', 'cb58d110-0000-4000-8000-000000000283',
    'cb58d110-0000-4000-8000-000000000205', '{"storage_gb":256}', 5);
 
+-- Clear-tier fixtures live under a fourth merchant: the valid phone splits
+-- its attributes (storage on the variant, color in product metadata for the
+-- post-hydration matcher), while the laptop carries both on a contradicted
+-- identity and the second phone contradicts color on the variant itself.
+INSERT INTO public.merchants (id, email, business_name, slug, is_published)
+VALUES (
+  'cb58d110-0000-4000-8000-000000000206',
+  'clear-test@example.test',
+  'Clear Test Merchant',
+  'clear-test-merchant',
+  true
+);
+
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, category, price, status, has_variants, manage_stock, inventory_tracking_policy, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000251', 'cb58d110-0000-4000-8000-000000000206',
+   'Clear phone', 'clear-phone', 'Acme', 'Smartphones', 50000, 'active', true, true, 'off',
+   '{"product_type":"phone","attributes":{"color":"black"}}'),
+  ('cb58d110-0000-4000-8000-000000000252', 'cb58d110-0000-4000-8000-000000000206',
+   'Clear laptop', 'clear-laptop', 'Acme', 'Laptops', 90000, 'active', true, true, 'off',
+   '{"product_type":"laptop"}'),
+  ('cb58d110-0000-4000-8000-000000000253', 'cb58d110-0000-4000-8000-000000000206',
+   'Contradicted phone', 'contradicted-phone', 'Acme', 'Smartphones', 45000, 'active', true, true, 'off',
+   '{"product_type":"phone"}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000351', 'cb58d110-0000-4000-8000-000000000251',
+   'cb58d110-0000-4000-8000-000000000206', '{"storage_gb":256}', 5),
+  ('cb58d110-0000-4000-8000-000000000352', 'cb58d110-0000-4000-8000-000000000252',
+   'cb58d110-0000-4000-8000-000000000206', '{"storage_gb":256,"color":"black"}', 5),
+  ('cb58d110-0000-4000-8000-000000000353', 'cb58d110-0000-4000-8000-000000000253',
+   'cb58d110-0000-4000-8000-000000000206', '{"storage_gb":256,"color":"white"}', 5);
+
 -- Exercise the recall RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -209,6 +244,21 @@ BEGIN
     'cb58d110-0000-4000-8000-000000000282'::uuid
   ] THEN
     RAISE EXCEPTION 'verified-excluded products must sink below every non-excluded row, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000206',
+    '[{"key":"storage_gb","operator":"eq","value":256,"branch":0},{"key":"color","operator":"eq","value":"black","branch":0}]'::jsonb,
+    10,
+    0,
+    '[{"branch":0,"product_type":"phone"}]'::jsonb
+  ) WITH ORDINALITY AS ranked(product_id, attributes, rank);
+  IF recall_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000251'::uuid,
+    'cb58d110-0000-4000-8000-000000000252'::uuid,
+    'cb58d110-0000-4000-8000-000000000253'::uuid
+  ] THEN
+    RAISE EXCEPTION 'missing variant attributes must stay clear while contradictions sink, got %', recall_ids;
   END IF;
 END;
 $$;

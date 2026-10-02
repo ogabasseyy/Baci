@@ -31,6 +31,8 @@ export const manualDocumentOrderSchema = z.object({
   customer_email: nullableText,
   customer_phone: nullableText,
   invoice_type_code: nullableText,
+  invoice_note: z.string().nullish(),
+  notes: z.string().nullish(),
   shipping_address: z
     .object({
       address: z.string().optional(),
@@ -39,6 +41,8 @@ export const manualDocumentOrderSchema = z.object({
       city: z.string().optional(),
       state: z.string().optional(),
       postal_code: z.string().optional(),
+      // Mobile staff app persists camelCase; the PDF builder normalizes it.
+      postalCode: z.string().optional(),
       country: z.string().optional(),
     })
     .nullable(),

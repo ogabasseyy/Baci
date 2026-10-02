@@ -1,5 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+interface DispatchOrderItem {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+  variant_name: string | null;
+  condition: string | null;
+}
+
 interface DispatchOrderSnapshot {
   customer_id: string | null;
   customer_email: string | null;
@@ -7,7 +16,7 @@ interface DispatchOrderSnapshot {
   amount_paid: number;
   payment_status: string;
   shipping_status: string;
-  order_items: readonly unknown[];
+  order_items: readonly DispatchOrderItem[];
 }
 
 interface DispatchOutboxRow {
@@ -22,8 +31,9 @@ interface DispatchOutboxRow {
  * check-then-mark in application code leaves a millisecond race between the
  * re-read and the marker; the RPC holds the order row while comparing, so a
  * payment, contact correction, or item edit landing mid-dispatch aborts
- * instead of sending a stale document. Callers must pass the exact values
- * the PDF was rendered from.
+ * instead of sending a stale document. The item comparison covers contents,
+ * not just the count: a same-count name, price, or variant edit must abort
+ * too. Callers must pass the exact values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
@@ -42,6 +52,16 @@ export async function markManualDocumentDispatchStarted(
       p_payment_status: order.payment_status,
       p_shipping_status: order.shipping_status,
       p_item_count: order.order_items.length,
+      p_items: [...order.order_items]
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          variant_name: item.variant_name,
+          condition: item.condition,
+        })),
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');

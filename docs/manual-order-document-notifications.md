@@ -31,13 +31,14 @@ already have dispatched (`delivery_outcome_unknown`, dispatch started) stay
 terminal to preserve at-most-once delivery. Resending after a successful send
 is therefore deliberate:
 
-1. Correct the order contact (`customer_email`/`customer_id`) on the order row.
-2. Delete the sent `order_notification_outbox` row; the claim, its order links,
+1. Delete the sent `order_notification_outbox` row; the claim, its order links,
    and the dead claim URL cascade with it.
-3. Touch a monitored column (`payment_status`, `amount_paid`, `total`,
-   `customer_email`, `customer_id`, `recorded_by_user_id`, `import_job_id`,
-   `external_source`, or `shipping_status`) so the update trigger re-evaluates
-   and queues a fresh row with a new claim token for the corrected address.
+2. Correct the order contact (`customer_email`/`customer_id`) on the order row.
+   The correction itself is a real change on a monitored column, so the update
+   trigger re-evaluates and queues a fresh row with a new claim token for the
+   corrected address. (Correcting first and deleting after would strand the
+   resend: the conflict handler leaves sent rows terminal, and a no-op touch
+   cannot retrigger the `IS DISTINCT FROM` update trigger.)
 
 Total corrections alone also re-evaluate eligibility; a paid order whose total
 now exceeds its payments additionally needs a consistent `payment_status`

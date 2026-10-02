@@ -237,7 +237,7 @@ export const receiptClaimRecordSchema = z.object({
   customer_email: z.string(),
   customer_id: z.string(),
   customer_name: z.string().nullable(),
-  document_kind: z.enum(['invoice', 'receipt']).nullish(),
+  document_kind: z.enum(['invoice', 'proforma_invoice', 'receipt']).nullish(),
   expires_at: z.string(),
   id: z.string(),
   merchant_id: z.string(),

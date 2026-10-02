@@ -42,8 +42,10 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
     kind === 'receipt'
       ? 'Your PDF receipt is attached. No app installation is needed to keep your proof of payment.'
       : 'This invoice shows the amount paid and outstanding balance. It is not proof of payment in full.';
+  // The template wraps introHtml in its own <p>: pass phrasing content only,
+  // like the import-notification callers, so parsers keep the styled wrapper.
   const optionalAppHtml = appLinks.length
-    ? `<p>Optional: download the app, then sign in with the same verified email to see your linked purchases. ${appLinks.map(([label, url]) => `<a href="${escapeText(url ?? '')}">${label}</a>`).join(' | ')}</p>`
+    ? `<br><br>Optional: download the app, then sign in with the same verified email to see your linked purchases. ${appLinks.map(([label, url]) => `<a href="${escapeText(url ?? '')}">${label}</a>`).join(' | ')}`
     : '';
   return {
     subject: `Your ${kindLabel} is ready - #${orderNumber}`,
@@ -73,7 +75,7 @@ export function buildManualOrderDocumentEmail(input: ManualDocumentEmailInput) {
       headline: `Your ${kindLabel} is ready`,
       subhead: `Order #${escapeText(orderNumber)}`,
       greetingName: escapeText(input.customerName),
-      introHtml: `<p>Your PDF ${kindLabel} is attached.</p><p>${escapeText(disclaimer)}</p><p>${escapeText(verification)}</p>${optionalAppHtml}`,
+      introHtml: `Your PDF ${kindLabel} is attached.<br><br>${escapeText(disclaimer)}<br><br>${escapeText(verification)}${optionalAppHtml}`,
       sectionLabel: 'Your purchase',
       deviceRowsHtml: renderReceiptDeviceRows(
         input.devices.map(escapeText),

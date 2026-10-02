@@ -78,6 +78,23 @@ describe('receipt claim preview', () => {
     });
   });
 
+  it('carries the proforma kind through to the claim page', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { ...baseClaim, document_kind: 'proforma_invoice' },
+      error: null,
+    });
+
+    const result = await loadReceiptClaimPreview({
+      supabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      claim: expect.objectContaining({ documentKind: 'proforma_invoice' }),
+      ok: true,
+    });
+  });
+
   it('uses a generic merchant fallback when the claim merchant has no name', async () => {
     const supabase = createSupabaseRpcMock({
       data: {

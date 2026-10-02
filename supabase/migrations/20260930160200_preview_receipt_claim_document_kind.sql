@@ -61,10 +61,25 @@ BEGIN
   WHERE rco.receipt_claim_id = v_claim.id;
 
   IF v_claim.manual_notification_id IS NOT NULL THEN
+    -- Mirror the sender's proforma rule (resolveInvoiceTypeCode with
+    -- wasPaid=false): an unpaid, invoice-method order with no accepted
+    -- payment and no explicit stored code previews as the proforma the
+    -- customer actually received, not a commercial invoice.
     SELECT COALESCE(
       (
-        SELECT CASE WHEN n.event_type = 'manual_order_invoice' THEN 'invoice' ELSE 'receipt' END
+        SELECT CASE
+          WHEN n.event_type = 'manual_order_invoice'
+            AND lower(btrim(o.payment_method)) = 'invoice'
+            AND o.payment_status IS DISTINCT FROM 'paid'
+            AND lower(btrim(o.payment_status)) IS DISTINCT FROM 'partially_paid'
+            AND COALESCE(o.amount_paid, 0) <= 0
+            AND COALESCE(nullif(btrim(o.invoice_type_code), ''), '380') = '380'
+          THEN 'proforma_invoice'
+          WHEN n.event_type = 'manual_order_invoice' THEN 'invoice'
+          ELSE 'receipt'
+        END
         FROM public.order_notification_outbox AS n
+        JOIN public.orders AS o ON o.id = n.order_id
         WHERE n.id = v_claim.manual_notification_id
       ),
       'receipt'

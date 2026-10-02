@@ -197,12 +197,16 @@ BEGIN
     v_order.merchant_id, v_notification.id, v_customer.id,
     v_order.customer_email, v_order.customer_name, p_token_hash
   ) ON CONFLICT (manual_notification_id) WHERE manual_notification_id IS NOT NULL
+  -- An unsent, unclaimed row adopts a corrected recipient instead of
+  -- terminally skipping: nothing went out and nobody linked, so the new
+  -- identity (and rotated token) is exactly the corrected send.
   DO UPDATE SET token_hash = EXCLUDED.token_hash,
+    customer_id = EXCLUDED.customer_id,
+    customer_email = EXCLUDED.customer_email,
+    customer_name = EXCLUDED.customer_name,
     expires_at = now() + interval '90 days', updated_at = now()
   WHERE public.receipt_claims.claimed_at IS NULL
     AND public.receipt_claims.notification_sent_at IS NULL
-    AND public.receipt_claims.customer_id = EXCLUDED.customer_id
-    AND public.receipt_claims.customer_email_normalized = EXCLUDED.customer_email_normalized
   RETURNING id INTO v_claim_id;
   IF v_claim_id IS NULL THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
   INSERT INTO public.receipt_claim_orders (receipt_claim_id, order_id)

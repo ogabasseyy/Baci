@@ -15,7 +15,7 @@ export interface ReceiptClaimPreview {
   claimed: boolean;
   customerName: string | null;
   devices: string[];
-  documentKind: 'invoice' | 'receipt';
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt';
   merchantName: string;
 }
 
@@ -48,7 +48,12 @@ function buildClaimPreview(claim: ReceiptClaimRecord): ReceiptClaimPreview {
     claimed: Boolean(claim.claimed_at),
     customerName: claim.customer_name,
     devices: buildReceiptDeviceList(orders as ReceiptClaimOrderForDeviceList[]),
-    documentKind: claim.document_kind === 'invoice' ? 'invoice' : 'receipt',
+    documentKind:
+      claim.document_kind === 'invoice'
+        ? 'invoice'
+        : claim.document_kind === 'proforma_invoice'
+          ? 'proforma_invoice'
+          : 'receipt',
     merchantName:
       claim.merchant?.business_name ?? claim.merchant?.slug ?? 'Store',
   };

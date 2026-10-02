@@ -27,11 +27,13 @@ export function buildManualOrderDocumentPdfInput({
   merchant,
   recipientEmail,
   preferredPaymentAccount,
+  transactions,
 }: {
   order: ManualDocumentOrder;
   merchant: ManualDocumentMerchant;
   recipientEmail: string;
   preferredPaymentAccount: ManualOrderDocumentPaymentAccount | null;
+  transactions?: ReceiptOrder['transactions'];
 }): { receiptOrder: ReceiptOrder; receiptMerchant: ReceiptMerchant } {
   const showBankDetails = showMerchantBankDetails(order.currency || 'NGN');
   const receiptOrder: ReceiptOrder = {
@@ -41,6 +43,7 @@ export function buildManualOrderDocumentPdfInput({
     customer_email: recipientEmail,
     amount_paid: order.amount_paid,
     balance: Math.max(0, order.total - order.amount_paid),
+    transactions,
     virtual_account:
       showBankDetails && preferredPaymentAccount
         ? {
@@ -55,6 +58,9 @@ export function buildManualOrderDocumentPdfInput({
           address_line1:
             order.shipping_address.address_line1 ||
             order.shipping_address.address,
+          postal_code:
+            order.shipping_address.postal_code ||
+            order.shipping_address.postalCode,
         }
       : null,
     items: order.order_items.map((item) => ({

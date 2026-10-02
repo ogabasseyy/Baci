@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { vi } from 'vitest';
 
-const merchant = {
+export const merchantFixture = {
   id: 'merchant-1',
   slug: 'ogabassey',
   business_name: 'Ogabassey',
@@ -25,7 +25,7 @@ const merchant = {
   bank_name: null,
   bank_account_name: null,
 };
-const order = {
+export const orderFixture = {
   id: 'order-1',
   merchant_id: 'merchant-1',
   customer_id: 'customer-1',
@@ -77,10 +77,14 @@ export function database(
     latestPaymentAt?: string | null;
     transactionsError?: { message: string } | null;
     dispatchStatus?: string;
+    paymentHistory?: Record<string, unknown>[];
+    paymentHistoryError?: { message: string } | null;
+    taxSubtotals?: Record<string, unknown>[];
+    taxSubtotalsError?: { message: string } | null;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
-  const effectiveOrder = { ...order, ...orderOverride };
+  const effectiveOrder = { ...orderFixture, ...orderOverride };
   const client = {
     rpc: vi.fn().mockImplementation((fn: string) => {
       if (fn === 'mark_manual_document_dispatch_started')
@@ -125,11 +129,19 @@ export function database(
             data:
               table === 'order_payment_accounts'
                 ? (options.paymentAccounts ?? [])
-                : [],
+                : table === 'transactions'
+                  ? (options.paymentHistory ?? [])
+                  : table === 'order_tax_subtotals'
+                    ? (options.taxSubtotals ?? [])
+                    : [],
             error:
               table === 'order_payment_accounts'
                 ? (options.paymentAccountError ?? null)
-                : null,
+                : table === 'transactions'
+                  ? (options.paymentHistoryError ?? null)
+                  : table === 'order_tax_subtotals'
+                    ? (options.taxSubtotalsError ?? null)
+                    : null,
           })
         ),
         maybeSingle: vi.fn(() => {
@@ -152,9 +164,9 @@ export function database(
           return Promise.resolve({
             data:
               table === 'orders'
-                ? { ...order, ...orderOverride }
+                ? { ...orderFixture, ...orderOverride }
                 : table === 'merchants'
-                  ? { ...merchant, ...options.merchantOverride }
+                  ? { ...merchantFixture, ...options.merchantOverride }
                   : table === 'receipt_claims'
                     ? { id: 'claim-1' }
                     : options.dispatchMissing

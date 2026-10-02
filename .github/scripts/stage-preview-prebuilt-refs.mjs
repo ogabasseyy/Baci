@@ -82,6 +82,7 @@ function isRegularFile(p) {
 }
 
 const staged = [];
+const stagedReal = [];
 const skipped = [];
 const unusableConfigs = [];
 let missingCount = 0;
@@ -192,11 +193,14 @@ for (const configPath of vcConfigs(outputDir)) {
       continue;
     }
     // Stage from the resolved path at the lexical layout: the shipped
-    // map keeps the lexical value, so the CLI looks it up there.
+    // map keeps the lexical value, so the CLI looks it up there. The
+    // guardrail counts the resolved path: link aliases of one file
+    // must not each count as resolving.
     const dest = join(stage, rel);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(target.real, dest);
     staged.push(posixRel);
+    stagedReal.push(targetPosix);
     kept[key] = value;
     usable += 1;
   }
@@ -218,8 +222,9 @@ for (const configPath of vcConfigs(outputDir)) {
 // guardrails below catch systematic misclassification; preview READY plus
 // served verification catch the rest. The missing side counts
 // occurrences (a repeated phantom is repeated evidence); the resolving
-// side counts distinct files, so one heavily-referenced file cannot mask
-// many distinct drops. Observed incident motivating this shape: 21
+// side counts distinct resolved files, so link aliases of one file
+// cannot mask many distinct drops. Observed incident motivating this
+// shape: 21
 // transient `apps/web/.next/node_modules/*` refs alongside a normally
 // staged tree. The per-config total-loss check is the primary guard; the
 // global backstop below is for a systematically wrong base. Tie policy:
@@ -229,7 +234,7 @@ for (const configPath of vcConfigs(outputDir)) {
 // values can never be legitimate runtime refs (CI-tree paths, corrupt
 // data), so their count carries no wrong-base signal. Per-config
 // total-loss still fails when a function loses everything usable.
-const resolving = new Set(staged).size + new Set(insideOutputValues).size;
+const resolving = new Set(stagedReal).size + new Set(insideOutputValues).size;
 if (missingCount > 0 && missingCount >= resolving) {
   console.error(
     `error: ${missingCount} missing reference(s) vs ${resolving} resolving; refusing to ship (wrong base?)`

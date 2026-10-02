@@ -139,6 +139,35 @@ test('stages through inside-root ancestor symlinks', () => {
   }
 });
 
+test('counts staged resolving by real path, not spelling', () => {
+  // Two ancestor links to one inside-root file plus one direct file
+  // plus two missing refs must fail: resolved resolving is 2, so the
+  // 2 missing tie. Lexical counting would see 3 and ship.
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/a.js': 'node_modules/link1/f.js',
+        '/b.js': 'node_modules/link2/f.js',
+        '/ok.js': 'node_modules/ok/index.js',
+        '/gone.js': 'node_modules/gone/index.js',
+        '/gone2.js': 'node_modules/gone2/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+    'real/f.js': 'shared-bytes',
+  });
+  symlinkSync(join(root, 'real'), join(root, 'node_modules/link1'));
+  symlinkSync(join(root, 'real'), join(root, 'node_modules/link2'));
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /2 missing reference\(s\) vs 2 resolving; refusing to ship/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('refuses to ship on a phantom tie', () => {
   // One phantom plus one resolving file is a tie: wrong drops surface
   // as runtime failures, so ties fail closed.

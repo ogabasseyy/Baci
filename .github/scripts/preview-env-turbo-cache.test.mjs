@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { previewWorkflowContract } from './preview-workflow-contract.helpers.mjs';
 
 // Hermetic regression for the preview build's turbo cache-mode conflict:
 // the pulled env file must carry no TURBO_CACHE/TURBO_REMOTE_ONLY, and the
@@ -18,6 +19,10 @@ test('redacted build env is accepted by turbo with the job cache mode', (t) => {
     timeout: 60000,
   });
   if (probe.status !== 0) {
+    // Loud skip: a silent vacuous pass would hide a dead gate.
+    console.error(
+      'WARNING: skipping turbo cache-mode regression: turbo toolchain unavailable'
+    );
     t.skip('turbo toolchain unavailable');
     return;
   }
@@ -44,12 +49,11 @@ test('redacted build env is accepted by turbo with the job cache mode', (t) => {
     // if the step ever drifts or duplicates the key; either quote style).
     // The file carries no TURBO_CACHE/TURBO_REMOTE_ONLY (deleted, not
     // blanked), so no step-vs-file precedence is assumed here.
-    const workflowText = readFileSync(
-      fileURLToPath(new URL('../workflows/preview.yml', import.meta.url)),
-      'utf8'
-    );
+    // Scoped to the build job so a future legitimate TURBO_CACHE in
+    // another job cannot break this test with a confusing count error.
+    const buildBlock = previewWorkflowContract.jobBlock('build');
     const cacheModes = [
-      ...workflowText.matchAll(/^\s*TURBO_CACHE:\s*["']([^"']+)["']\s*$/gm),
+      ...buildBlock.matchAll(/^\s*TURBO_CACHE:\s*["']([^"']+)["']\s*$/gm),
     ].map((match) => match[1]);
     assert.equal(
       cacheModes.length,

@@ -77,7 +77,8 @@ VALUES
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 SELECT ('cb58d110-0000-4000-8000-' || lpad(to_hex(g), 12, '0'))::uuid,
   'cb58d110-0000-4000-8000-000000000542',
-  'cb58d110-0000-4000-8000-000000000503', '{"storage_gb":256}', 5, 'new'
+  'cb58d110-0000-4000-8000-000000000503',
+  jsonb_build_object('storage_gb', 256, 'slot', g), 5, 'new'
 FROM pg_catalog.generate_series(1, 129) AS g;
 
 INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
@@ -94,16 +95,19 @@ VALUES
    'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 0, 'active'),
   ('cb58d110-0000-4000-8000-000000000535', 'cb58d110-0000-4000-8000-000000000519',
    'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active'),
-  -- Duplicate bare offers resolve first-row-wins: the shadowed product's
-  -- ordered-first used offer is depleted, the twin's is stocked.
+  -- Duplicate bare offers resolve first-row-wins. UNIQUE(product_id,
+  -- condition) forbids two used rows, so the pair rides the only
+  -- schema-legal canonical collision: open_box sorts first and both rows
+  -- canonicalize to open_box. The shadowed product's ordered-first row is
+  -- depleted, the twin's is stocked.
   ('cb58d110-0000-4000-8000-000000000536', 'cb58d110-0000-4000-8000-000000000520',
-   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 0, 'active'),
+   'cb58d110-0000-4000-8000-000000000503', 'open_box', 40000, 0, 'active'),
   ('cb58d110-0000-4000-8000-000000000537', 'cb58d110-0000-4000-8000-000000000520',
-   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active'),
+   'cb58d110-0000-4000-8000-000000000503', 'refurbished', 40000, 2, 'active'),
   ('cb58d110-0000-4000-8000-000000000540', 'cb58d110-0000-4000-8000-000000000538',
-   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 2, 'active'),
+   'cb58d110-0000-4000-8000-000000000503', 'open_box', 40000, 2, 'active'),
   ('cb58d110-0000-4000-8000-000000000541', 'cb58d110-0000-4000-8000-000000000538',
-   'cb58d110-0000-4000-8000-000000000503', 'used', 40000, 0, 'active');
+   'cb58d110-0000-4000-8000-000000000503', 'refurbished', 40000, 0, 'active');
 
 -- Helper pins run as service_role like the other direct discovery calls;
 -- only the published RPC surface runs as the public caller below.
@@ -137,17 +141,17 @@ BEGIN
     p_limit => 10,
     p_condition => 'used'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 5
+  IF cardinality(recall_ids) IS DISTINCT FROM 4
     OR NOT (recall_ids @> ARRAY[
       'cb58d110-0000-4000-8000-000000000512'::uuid,
       'cb58d110-0000-4000-8000-000000000513'::uuid,
       'cb58d110-0000-4000-8000-000000000514'::uuid,
-      'cb58d110-0000-4000-8000-000000000519'::uuid,
-      'cb58d110-0000-4000-8000-000000000538'::uuid
+      'cb58d110-0000-4000-8000-000000000519'::uuid
     ])
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000511'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000518'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000520'::uuid]
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000538'::uuid]
     OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000542'::uuid] THEN
     RAISE EXCEPTION 'used recall must keep variant, offer and base matches only, got %', recall_ids;
   END IF;
@@ -165,7 +169,9 @@ BEGIN
     RAISE EXCEPTION 'new recall must drop the used-only and open-box-only products, got %', recall_ids;
   END IF;
   -- A legacy requested spelling canonicalizes before comparing, matching
-  -- hydration: refurbished recalls the open-box option.
+  -- hydration: refurbished recalls the open-box option, the first-stocked
+  -- twin resolves through its ordered-first stocked row, and the shadowed
+  -- twin stays out on its depleted first row.
   SELECT array_agg(product_id) INTO recall_ids
   FROM public.search_product_variant_recall(
     p_merchant_id => 'cb58d110-0000-4000-8000-000000000503',
@@ -173,9 +179,13 @@ BEGIN
     p_limit => 10,
     p_condition => 'refurbished'
   );
-  IF cardinality(recall_ids) IS DISTINCT FROM 1
-    OR recall_ids[1] IS DISTINCT FROM 'cb58d110-0000-4000-8000-000000000517'::uuid THEN
-    RAISE EXCEPTION 'refurbished recall must reach the open-box option, got %', recall_ids;
+  IF cardinality(recall_ids) IS DISTINCT FROM 2
+    OR NOT (recall_ids @> ARRAY[
+      'cb58d110-0000-4000-8000-000000000517'::uuid,
+      'cb58d110-0000-4000-8000-000000000538'::uuid
+    ])
+    OR recall_ids @> ARRAY['cb58d110-0000-4000-8000-000000000520'::uuid] THEN
+    RAISE EXCEPTION 'refurbished recall must reach the open-box option and the first-stocked twin only, got %', recall_ids;
   END IF;
   SELECT array_agg(product_id) INTO recall_ids
   FROM public.search_product_variant_recall(

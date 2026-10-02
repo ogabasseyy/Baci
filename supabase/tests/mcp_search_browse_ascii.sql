@@ -68,7 +68,8 @@ VALUES
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
 SELECT ('e5100000-0000-4000-8000-' || lpad(to_hex(g), 12, '0'))::uuid,
   'e5100000-0000-4000-8000-000000000625',
-  'e5100000-0000-4000-8000-000000000601', '{"storage_gb":256}', 5, 'new'
+  'e5100000-0000-4000-8000-000000000601',
+  jsonb_build_object('storage_gb', 256, 'slot', g), 5, 'new'
 FROM pg_catalog.generate_series(1, 129) AS g;
 
 -- Exclusion fixtures live on their own merchant: a phone, a tablet, and a
@@ -85,20 +86,24 @@ VALUES
   ('e5100000-0000-4000-8000-000000000623', 'e5100000-0000-4000-8000-000000000603',
    'Windowed offers', 'windowed-offers', 'Excl', 'Audio', 50000, 'active', '2024-01-01T00:00:00Z', '{"product_type":"phone"}');
 
--- Sixteen new offers order ahead of the used one, so the match falls
--- outside hydration's 16-row window and must not admit the product.
+-- One live offer per condition fills the hydrated window in (condition,
+-- id) order with the used match last: UNIQUE(product_id, condition) plus
+-- the four-value condition check cap rows at four, so the 16-row window
+-- cannot truncate and the last-row match must resolve.
 INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
-SELECT ('e5100000-0000-4000-8000-' || lpad(to_hex(700 + g), 12, '0'))::uuid,
-  'e5100000-0000-4000-8000-000000000623',
-  'e5100000-0000-4000-8000-000000000603', 'new', 40000, 2, 'active'
-FROM pg_catalog.generate_series(1, 16) AS g;
-
-INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
-VALUES (
-  ('e5100000-0000-4000-8000-' || lpad(to_hex(717), 12, '0'))::uuid,
-  'e5100000-0000-4000-8000-000000000623',
-  'e5100000-0000-4000-8000-000000000603', 'used', 40000, 2, 'active'
-);
+VALUES
+  (('e5100000-0000-4000-8000-' || lpad(to_hex(701), 12, '0'))::uuid,
+   'e5100000-0000-4000-8000-000000000623',
+   'e5100000-0000-4000-8000-000000000603', 'new', 40000, 2, 'active'),
+  (('e5100000-0000-4000-8000-' || lpad(to_hex(702), 12, '0'))::uuid,
+   'e5100000-0000-4000-8000-000000000623',
+   'e5100000-0000-4000-8000-000000000603', 'open_box', 40000, 2, 'active'),
+  (('e5100000-0000-4000-8000-' || lpad(to_hex(703), 12, '0'))::uuid,
+   'e5100000-0000-4000-8000-000000000623',
+   'e5100000-0000-4000-8000-000000000603', 'refurbished', 40000, 2, 'active'),
+  (('e5100000-0000-4000-8000-' || lpad(to_hex(717), 12, '0'))::uuid,
+   'e5100000-0000-4000-8000-000000000623',
+   'e5100000-0000-4000-8000-000000000603', 'used', 40000, 2, 'active');
 
 -- Availability fixtures carry stock except the depleted pin and the
 -- unmanaged contrast (servable without stock).
@@ -255,15 +260,17 @@ BEGIN
   IF cardinality(browse_ids) IS DISTINCT FROM 4 THEN
     RAISE EXCEPTION 'unexcluded browse must keep all four rows, got %', browse_ids;
   END IF;
-  -- A condition match past the 16-row offer window stays unresolvable.
+  -- A full-house window resolves its last-row match: the used offer
+  -- lands fourth in (condition, id) order and stays resolvable.
   SELECT array_agg(id) INTO browse_ids
   FROM public.search_products_browse(
     p_merchant_id => 'e5100000-0000-4000-8000-000000000603',
     p_condition => 'used',
     p_limit => 10
   );
-  IF browse_ids IS NOT NULL THEN
-    RAISE EXCEPTION 'windowed-out offer matches must admit nothing, got %', browse_ids;
+  IF cardinality(browse_ids) IS DISTINCT FROM 1
+    OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000623'::uuid THEN
+    RAISE EXCEPTION 'full-house used browse must resolve the last-row match, got %', browse_ids;
   END IF;
   BEGIN
     PERFORM * FROM public.search_products_browse(

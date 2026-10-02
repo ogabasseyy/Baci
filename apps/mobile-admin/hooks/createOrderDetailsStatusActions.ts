@@ -99,11 +99,18 @@ export function createOrderDetailsStatusActions({
         visible: true,
       });
     } catch (error: unknown) {
-      const nextError = error as Error;
+      // Rejections can be nullish or non-Error: read defensively so
+      // the catch itself never throws and Alert always gets text.
+      const nextError: { code?: unknown; message?: unknown } =
+        typeof error === 'object' && error !== null ? error : {};
+      const errorMessage =
+        typeof nextError.message === 'string'
+          ? nextError.message
+          : 'Failed to update status';
 
       if (
-        nextError.message?.includes('PAYMENT_REQUIRED') ||
-        nextError.message?.includes('paid before processing')
+        errorMessage.includes('PAYMENT_REQUIRED') ||
+        errorMessage.includes('paid before processing')
       ) {
         Alert.alert(
           'Payment Required',
@@ -123,21 +130,19 @@ export function createOrderDetailsStatusActions({
       const errorCode =
         nextError instanceof OrderStatusUpdateError
           ? nextError.code
-          : (nextError as { code?: unknown }).code;
+          : nextError.code;
       const cancellationShowsServerReason =
         newStatus === 'cancelled' &&
         (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||
           errorCode === 'ORDER_NOT_CANCELLABLE');
       Alert.alert(
         'Error',
-        cancellationShowsServerReason
-          ? nextError.message
-          : 'Failed to update status'
+        cancellationShowsServerReason ? errorMessage : 'Failed to update status'
       );
       if (IS_DEV_RUNTIME) {
         console.error('Order details status update failed', {
           currentStatus: order.shipping_status,
-          errorMessage: nextError.message,
+          errorMessage,
           nextStatus: newStatus,
           orderId: order.id,
           paymentStatus: order.payment_status,

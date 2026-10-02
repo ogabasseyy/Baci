@@ -30,4 +30,20 @@ describe('over-refund completed-leg attribution migration', () => {
     );
     expect(migrationSql).toContain("AND p.status = 'completed' AND 1 = (");
   });
+
+  it('normalizes gateways exactly like the aggregate coverage gate', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // Exact equality would drop every refund for a legacy leg the
+    // claim gate finalized, hiding excess provider debits.
+    expect(migrationSql).toContain(
+      "AND NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(p.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+    );
+    expect(migrationSql).toContain(
+      "NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
+    );
+  });
 });

@@ -57,10 +57,33 @@ BEGIN
         AND coalesce(gateway, '') NOT IN
           ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery');
     IF v_external_payments = 1 THEN
+      -- Normalize gateways like the aggregate coverage gate: a legacy
+      -- `Paystack` leg and its `paystack` refund must verify together.
       SELECT * INTO v_payment FROM public.transactions
         WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
           AND transaction_type = 'payment' AND status = 'completed'
-          AND amount > 0 AND gateway = v_refund.gateway
+          AND amount > 0
+          AND NULLIF(
+            upper(
+              regexp_replace(
+                COALESCE(gateway, ''),
+                '^\s+|\s+$',
+                '',
+                'g'
+              )
+            ),
+            ''
+          ) = NULLIF(
+            upper(
+              regexp_replace(
+                COALESCE(v_refund.gateway, ''),
+                '^\s+|\s+$',
+                '',
+                'g'
+              )
+            ),
+            ''
+          )
           AND amount >= v_refund.amount;
     END IF;
   END IF;
@@ -152,14 +175,48 @@ BEGIN
       AND NOT EXISTS (
         SELECT 1 FROM public.transactions r
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
-          AND r.transaction_type = 'refund' AND r.gateway = p.gateway
+          AND r.transaction_type = 'refund'
+          -- Normalize gateways exactly like the aggregate coverage
+          -- gate (whitespace-trimmed, uppercased; missing gateways
+          -- never match).
+          AND NULLIF(
+            upper(
+              regexp_replace(
+                COALESCE(r.gateway, ''),
+                '^\s+|\s+$',
+                '',
+                'g'
+              )
+            ),
+            ''
+          ) = NULLIF(
+            upper(
+              regexp_replace(
+                COALESCE(p.gateway, ''),
+                '^\s+|\s+$',
+                '',
+                'g'
+              )
+            ),
+            ''
+          )
           AND r.status = 'completed'
           AND r.amount > 0
           AND upper(r.currency) = upper(p.currency)
           -- A locally completed Paystack refund counts only after this RPC
           -- provider-verified it; other gateways keep local-status trust.
           AND (
-            r.gateway <> 'paystack'
+            NULLIF(
+              upper(
+                regexp_replace(
+                  COALESCE(r.gateway, ''),
+                  '^\s+|\s+$',
+                  '',
+                  'g'
+                )
+              ),
+              ''
+            ) <> 'PAYSTACK'
             OR r.metadata->>'provider_refund_status' = 'processed'
           )
           AND (

@@ -8,6 +8,17 @@ function formatAmount(amount: number, currency: string): string {
   }).format(amount);
 }
 
+// Mirror the aggregate claim gate: trimmed, uppercased gateway
+// comparison with missing gateways never matching, so a legacy
+// `Paystack` leg and its `paystack` refund agree on coverage here
+// and in the claim gate instead of dead-lettering a notification
+// for a successfully finalized order.
+function normalizeLedgerGateway(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toUpperCase();
+}
+
 /**
  * Total the refunded amount for a cancelled order's notification, mirroring
  * the completion RPC: every funded external payment leg sums its linked
@@ -76,9 +87,11 @@ export async function refundNotificationLedgerAmount({
       return { amount: leg.amount, currency: leg.currency };
     }
     const legCurrency = String(leg.currency ?? '').toUpperCase();
+    const legGateway = normalizeLedgerGateway(leg.gateway);
     const matchedKobo = refunds
       .filter((refund) => {
-        if (refund.gateway !== leg.gateway) return false;
+        const refundGateway = normalizeLedgerGateway(refund.gateway);
+        if (refundGateway === '' || refundGateway !== legGateway) return false;
         const metadata = refund.metadata as {
           payment_transaction_id?: unknown;
           provider_refund_status?: unknown;
@@ -86,7 +99,7 @@ export async function refundNotificationLedgerAmount({
         // A locally completed Paystack refund counts only after it is
         // provider-verified; other gateways keep local-status trust.
         if (
-          refund.gateway === 'paystack' &&
+          refundGateway === 'PAYSTACK' &&
           metadata?.provider_refund_status !== 'processed'
         )
           return false;

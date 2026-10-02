@@ -315,4 +315,27 @@ describe('processCancellationDrain', () => {
       })
     );
   });
+
+  it('logs a missing exhausted count as zero on the failure path', async () => {
+    mocks.drainFailedOrderCancellationSideEffects.mockResolvedValueOnce({
+      drained: [],
+      failed: [{ orderId: 'order-1', reason: 'failed', step: 'refund' }],
+      skipped: [],
+    });
+    mocks.drainPaystackRefundNotifications.mockResolvedValueOnce({
+      claimed: 1,
+      failed: 0,
+      sent: 1,
+    });
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
+
+    expect(response.status).toBe(503);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationExhausted: 0 })
+    );
+  });
 });

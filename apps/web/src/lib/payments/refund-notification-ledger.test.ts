@@ -319,4 +319,70 @@ describe('refundNotificationLedgerAmount', () => {
       })
     ).rejects.toThrow('refund_notification_ledger_lookup_failed');
   });
+
+  it('matches gateways that differ only by casing or whitespace', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'Paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: '  paystack ',
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('60');
+  });
+
+  it('rejects a missing refund gateway like the claim gate', async () => {
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: 'paystack',
+          id: 'pay-1',
+          status: 'completed',
+        },
+      ],
+      refunds: [
+        {
+          amount: 60,
+          currency: 'NGN',
+          gateway: null,
+          metadata: {
+            payment_transaction_id: 'pay-1',
+            provider_refund_status: 'processed',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
 });

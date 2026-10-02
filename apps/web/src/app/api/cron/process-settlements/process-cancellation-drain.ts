@@ -122,9 +122,12 @@ export async function processCancellationDrain(
     notificationResult[0].status === 'fulfilled'
       ? notificationResult[0].value.failed
       : 0;
+  // A worker shape without the field must read as zero, not
+  // undefined: `undefined > 0` happens to be false, but the value is
+  // logged and returned in the success payload.
   const notificationExhausted =
     notificationResult[0].status === 'fulfilled'
-      ? notificationResult[0].value.exhausted
+      ? (notificationResult[0].value.exhausted ?? 0)
       : 0;
   // Terminal rows awaiting operations review: visible in the failure
   // log and the success payload, but not a 503 — there is no
@@ -132,7 +135,7 @@ export async function processCancellationDrain(
   // the route forever and mask fresh failures behind stale ones.
   const notificationUncertain =
     notificationResult[0].status === 'fulfilled'
-      ? notificationResult[0].value.uncertain
+      ? (notificationResult[0].value.uncertain ?? 0)
       : 0;
   if (
     cancellationResult.status === 'rejected' ||

@@ -22,7 +22,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS paystack_refund_reference_watch_open_idx
 -- reference advisory lock the completion path claims under: rows
 -- returned mean the payment landed first and the caller handles them;
 -- an empty set leaves the watch open for the completion to claim.
-CREATE FUNCTION public.open_paystack_refund_reference_watch_v1(
+CREATE OR REPLACE FUNCTION public.open_paystack_refund_reference_watch_v1(
   p_paystack_ref text,
   p_evidence jsonb
 ) RETURNS jsonb
@@ -51,9 +51,22 @@ BEGIN
     ) VALUES (v_reference, NULL, p_evidence);
   EXCEPTION WHEN unique_violation THEN
     -- A prior scan (or redelivery) already watches this reference:
-    -- refresh the event verdict and re-scan under the lock.
+    -- refresh the event verdict and re-scan under the lock. A
+    -- non-failed verdict is sticky: a delayed failed redelivery must
+    -- not overwrite an earlier processed observation, or the claim
+    -- files failed-only evidence the audit reader excludes and
+    -- cancellation refunds the leg again.
     UPDATE public.paystack_refund_recovery_watch
-      SET evidence = p_evidence, updated_at = now()
+      SET evidence = p_evidence || jsonb_build_object(
+        'provider_refund_status',
+        CASE
+          WHEN evidence->>'provider_refund_status' IS DISTINCT FROM 'failed'
+            AND p_evidence->>'provider_refund_status' = 'failed'
+          THEN evidence->>'provider_refund_status'
+          ELSE p_evidence->>'provider_refund_status'
+        END
+      ),
+      updated_at = now()
       WHERE paystack_ref = v_reference
         AND provider_refund_id IS NULL
         AND status = 'open';
@@ -97,7 +110,7 @@ GRANT EXECUTE ON FUNCTION public.open_paystack_refund_reference_watch_v1(text,js
 -- Resolve the reference watch once the event's evidence is durably
 -- handled. Returns false when no open or claimed reference watch
 -- exists, so callers on paths that never opened one stay silent.
-CREATE FUNCTION public.resolve_paystack_refund_reference_watch_v1(
+CREATE OR REPLACE FUNCTION public.resolve_paystack_refund_reference_watch_v1(
   p_paystack_ref text
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$

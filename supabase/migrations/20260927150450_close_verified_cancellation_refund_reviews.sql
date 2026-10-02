@@ -4,7 +4,7 @@
 -- each migration under the 300-line maximum; this step must apply before
 -- it. Reviews that record unresolved provider evidence (audit failures,
 -- ambiguous initiation) stay open for operations.
-CREATE FUNCTION public.close_verified_cancellation_refund_reviews_v1(
+CREATE OR REPLACE FUNCTION public.close_verified_cancellation_refund_reviews_v1(
   p_order_id uuid,
   p_merchant_id uuid
 ) RETURNS void
@@ -57,6 +57,14 @@ BEGIN
         OR review.metadata ? 'accepted_refund_ids'
         OR (review.metadata->>'ambiguous_initiation')::boolean IS FALSE
       )
+      -- Malformed refund evidence (array, string, scalar) keeps the
+      -- review open for operations: jsonb_each raises on non-objects,
+      -- which would roll back the verified refund transition, order
+      -- transition, settlement reversal, and notification enqueue on
+      -- every retry.
+      AND jsonb_typeof(
+        coalesce(review.metadata->'refund_evidence', '{}'::jsonb)
+      ) = 'object'
       AND NOT EXISTS (
         SELECT 1
         FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)

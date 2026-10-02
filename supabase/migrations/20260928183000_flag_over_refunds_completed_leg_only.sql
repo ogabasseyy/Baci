@@ -30,12 +30,47 @@ BEGIN
       FROM public.transactions p
       LEFT JOIN public.transactions r
         ON r.order_id = p.order_id AND r.merchant_id = p.merchant_id
-       AND r.transaction_type = 'refund' AND r.gateway = p.gateway
+       AND r.transaction_type = 'refund'
+       -- Normalize gateways exactly like the aggregate coverage gate
+       -- (whitespace-trimmed, uppercased; missing gateways never
+       -- match): exact equality would drop every refund for a legacy
+       -- leg the claim gate finalized, hiding excess provider debits.
+       AND NULLIF(
+         upper(
+           regexp_replace(
+             COALESCE(r.gateway, ''),
+             '^\s+|\s+$',
+             '',
+             'g'
+           )
+         ),
+         ''
+       ) = NULLIF(
+         upper(
+           regexp_replace(
+             COALESCE(p.gateway, ''),
+             '^\s+|\s+$',
+             '',
+             'g'
+           )
+         ),
+         ''
+       )
        AND r.status = 'completed'
        AND r.amount > 0
        AND upper(r.currency) = upper(p.currency)
        AND (
-         r.gateway <> 'paystack'
+         NULLIF(
+           upper(
+             regexp_replace(
+               COALESCE(r.gateway, ''),
+               '^\s+|\s+$',
+               '',
+               'g'
+             )
+           ),
+           ''
+         ) <> 'PAYSTACK'
          OR r.metadata->>'provider_refund_status' = 'processed'
        )
        AND (

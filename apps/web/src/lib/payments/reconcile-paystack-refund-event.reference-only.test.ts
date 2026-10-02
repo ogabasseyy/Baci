@@ -35,7 +35,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -64,7 +64,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(stalled)
       .mockReturnValueOnce(refunds)
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -143,6 +143,50 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
+  it('rescans under the lock even when the passes handled matches', async () => {
+    const completed = buildPaymentCandidates([cancelledPaymentRow()]);
+    const completedReview = buildReviewInsert();
+    const lateReview = buildReviewInsert();
+    const lateRow = cancelledPaymentRow({
+      id: 'payment-9',
+      order_id: 'order-9',
+    });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [cancelledPaymentRow(), lateRow],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(completed)
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(completedReview)
+      .mockReturnValueOnce(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildRefundCandidates([]))
+      .mockReturnValueOnce(lateReview);
+    const supabase = { from, rpc } as never;
+
+    await reconcilePaystackRefundEvent(supabase, 'PSK-1', 'processed');
+
+    // The completed pass handled payment-1, but a second payment may
+    // have completed between the passes: the locked rescan still
+    // runs, skips the handled row, files the fresh one, and resolves.
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_reference_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(completedReview.insert).toHaveBeenCalledTimes(1);
+    expect(lateReview.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ order_id: 'order-9' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_reference_watch_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
+  });
+
   it('runs the stalled pass alongside completed matches', async () => {
     const completed = buildPaymentCandidates([cancelledPaymentRow()]);
     const stalled = buildPaymentCandidates([
@@ -158,7 +202,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(stalled)
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(stalledReview);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -188,7 +232,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent(
       { from, rpc } as never,
@@ -234,7 +278,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(page2)
       .mockReturnValueOnce(refunds)
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -298,14 +342,22 @@ describe('Paystack reference-only refund events', () => {
     from
       .mockReturnValueOnce(refundsPage2)
       .mockReturnValueOnce(buildPaymentLookup());
-    const rpc = vi.fn().mockResolvedValue({ data: 'processed', error: null });
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data:
+          name === 'open_paystack_refund_reference_watch_v1' ? [] : 'processed',
+        error: null,
+      })
+    );
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
     // Reconciling moves rows out of the in-flight statuses, so the
     // second page keys off the last seen id instead of an offset.
     expect(refundsPage2.gt).toHaveBeenCalledWith('id', 'refund-9');
-    expect(rpc).toHaveBeenCalledTimes(11);
+    // Ten verifications plus the trailing atomic open-and-rescan,
+    // which runs even when the passes handled matches.
+    expect(rpc).toHaveBeenCalledTimes(12);
     expect(rpc).toHaveBeenCalledWith(
       'record_verified_paystack_cancellation_refund_v1',
       expect.objectContaining({ p_refund_id: 'refund-10' })
@@ -331,7 +383,12 @@ describe('Paystack reference-only refund events', () => {
         ])
       )
       .mockReturnValueOnce(review);
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data: name === 'open_paystack_refund_reference_watch_v1' ? [] : true,
+        error: null,
+      })
+    );
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -362,7 +419,7 @@ describe('Paystack reference-only refund events', () => {
         ])
       )
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
@@ -388,7 +445,7 @@ describe('Paystack reference-only refund events', () => {
       .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
       .mockReturnValueOnce(buildRefundCandidates([]))
       .mockReturnValueOnce(review);
-    const rpc = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 

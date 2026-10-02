@@ -35,6 +35,7 @@ const baseOrder = {
       price: 4500,
       variant_name: null,
       condition: 'new',
+      item_description: null,
     },
   ],
 };

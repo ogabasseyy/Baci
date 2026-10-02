@@ -19,20 +19,29 @@ import {
   processClaimedOrderNotificationRows,
 } from './order-notification-outbox-worker';
 
-function createSupabase(errors: unknown[]) {
-  const maybeSingle = vi.fn();
-  for (const error of errors) {
-    maybeSingle.mockResolvedValueOnce({
-      data: error ? null : { id: row.id },
-      error,
-    });
-  }
+function createSupabase(
+  errors: unknown[],
+  liveMetadata: Record<string, unknown> = {}
+) {
+  const updateErrors = [...errors];
+  const select = vi.fn();
+  // The sent path re-reads the live row (select metadata) before the status
+  // update (select id); resolve each from its own source.
+  const maybeSingle = vi.fn(async () => {
+    const calls = select.mock.calls;
+    if (calls[calls.length - 1]?.[0] === 'metadata') {
+      return { data: { id: row.id, metadata: liveMetadata }, error: null };
+    }
+    const error = updateErrors.shift();
+    return { data: error ? null : { id: row.id }, error: error ?? null };
+  });
   const builder = {
     match: vi.fn(() => builder),
     maybeSingle,
-    select: vi.fn(() => builder),
+    select,
     update: vi.fn(() => builder),
   };
+  select.mockImplementation(() => builder);
   return { client: { from: vi.fn(() => builder) }, builder };
 }
 
@@ -108,18 +117,16 @@ describe('order notification outbox worker', () => {
   });
 
   it('marks successful sends as sent while preserving existing metadata', async () => {
-    const { client, builder } = createSupabase([null]);
+    const { client, builder } = createSupabase([null], {
+      source: 'shipping_status_trigger',
+    });
     mockNotificationResult({
       status: 'sent',
       messageId: 'message-1',
     });
     const summary = createOrderNotificationCronSummary(1);
 
-    await processClaimedOrderNotificationRows(
-      client as never,
-      [{ ...row, metadata: { source: 'shipping_status_trigger' } }],
-      summary
-    );
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
 
     expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
     expect(beginDispatch).toHaveBeenCalledWith(
@@ -256,6 +263,10 @@ describe('order notification outbox worker', () => {
   it('normalizes rejected sent-marker writes before applying the safe fallback', async () => {
     const { client, builder } = createSupabase([]);
     builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: {} },
+        error: null,
+      })
       .mockRejectedValueOnce(new Error('database connection reset'))
       .mockResolvedValueOnce({ data: { id: row.id }, error: null });
     mockNotificationResult({
@@ -267,6 +278,28 @@ describe('order notification outbox worker', () => {
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
     expect(summary).toMatchObject({ sent: 1, retried: 0 });
+    expect(builder.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        skip_reason: 'delivery_outcome_unknown',
+        status: 'skipped',
+      })
+    );
+  });
+
+  it('terminalizes a sent email as outcome-unknown when the live re-read fails', async () => {
+    const { client, builder } = createSupabase([]);
+    builder.maybeSingle
+      .mockRejectedValueOnce(new Error('database connection reset'))
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    mockNotificationResult({
+      status: 'sent',
+      messageId: 'message-1',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
+
+    expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',

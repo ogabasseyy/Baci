@@ -6,6 +6,12 @@ import { resetOrderNotificationOutboxDispatch } from '@/lib/order-notification-o
 import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-notification-outbox-shipment-metadata';
 import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
+import {
+  markOutboxNotificationSent,
+  type OrderNotificationOutboxStatus,
+  OutboxStatusUpdateError,
+  updateOutboxStatus,
+} from './order-notification-outbox-status';
 
 const RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
 const RETRY_MAX_DELAY_MS = 60 * 60 * 1000;
@@ -32,7 +38,6 @@ export type ClaimedOrderNotificationOutboxRow = z.infer<
   typeof claimedOrderNotificationOutboxRowSchema
 >;
 
-type OrderNotificationOutboxStatus = 'pending' | 'sent' | 'skipped' | 'failed';
 type SupabaseClientLike = ReturnType<typeof createServiceClient>;
 
 export interface OrderNotificationCronSummary {
@@ -45,19 +50,6 @@ export interface OrderNotificationCronSummary {
   success: true;
 }
 
-class OutboxStatusUpdateError extends Error {
-  constructor(
-    readonly outboxId: string,
-    options: { cause: unknown }
-  ) {
-    super(
-      `Failed to persist order notification outbox row ${outboxId}`,
-      options
-    );
-    this.name = 'OutboxStatusUpdateError';
-  }
-}
-
 export function createOrderNotificationCronSummary(
   claimed: number
 ): OrderNotificationCronSummary {
@@ -68,80 +60,6 @@ export function createOrderNotificationCronSummary(
 function retryDelayMs(attemptCount: number): number {
   const exponent = Math.max(0, attemptCount - 1);
   return Math.min(RETRY_BASE_DELAY_MS * 2 ** exponent, RETRY_MAX_DELAY_MS);
-}
-
-async function updateOutboxStatus(
-  supabase: SupabaseClientLike,
-  row: ClaimedOrderNotificationOutboxRow,
-  values: Record<string, unknown>
-) {
-  try {
-    const { data, error } = await supabase
-      .from('order_notification_outbox')
-      .update({
-        ...values,
-        locked_at: null,
-        locked_by: null,
-        updated_at: new Date().toISOString(),
-      })
-      .match({
-        id: row.id,
-        locked_by: row.claim_owner,
-        status: 'processing',
-      })
-      .select('id')
-      .maybeSingle();
-    if (!error && data?.id === row.id) return;
-    throw error ?? new Error('order notification claim was lost');
-  } catch (error) {
-    logger.error({
-      message: 'Failed to update order notification outbox row',
-      outboxId: row.id,
-      error,
-    });
-    throw new OutboxStatusUpdateError(row.id, { cause: error });
-  }
-}
-
-async function markSent(
-  supabase: SupabaseClientLike,
-  row: ClaimedOrderNotificationOutboxRow,
-  messageId: string | undefined
-) {
-  // Re-read: the sender may have snapshotted dispatch metadata (e.g. the
-  // sent document kind) after this row was claimed; merging the message ID
-  // into the live value preserves it instead of clobbering the row with
-  // the stale claim-time copy.
-  const { data: current, error: readError } = await supabase
-    .from('order_notification_outbox')
-    .select('metadata')
-    .match({ id: row.id, locked_by: row.claim_owner, status: 'processing' })
-    .maybeSingle();
-  if (readError || !current) {
-    logger.error({
-      message: 'Failed to re-read order notification outbox row',
-      outboxId: row.id,
-      error: readError,
-    });
-    throw new OutboxStatusUpdateError(row.id, {
-      cause: readError ?? new Error('order notification claim was lost'),
-    });
-  }
-  const liveMetadata =
-    current.metadata &&
-    typeof current.metadata === 'object' &&
-    !Array.isArray(current.metadata)
-      ? (current.metadata as Record<string, unknown>)
-      : {};
-  await updateOutboxStatus(supabase, row, {
-    last_error: null,
-    metadata: {
-      ...liveMetadata,
-      ...(messageId ? { message_id: messageId } : {}),
-    },
-    sent_at: new Date().toISOString(),
-    status: 'sent' satisfies OrderNotificationOutboxStatus,
-  });
 }
 
 async function markSkipped(
@@ -246,7 +164,7 @@ async function processClaimedRow(
     if (result.status === 'sent') {
       summary.sent += 1;
       try {
-        await markSent(supabase, row, result.messageId);
+        await markOutboxNotificationSent(supabase, row, result.messageId);
       } catch (error) {
         if (!(error instanceof OutboxStatusUpdateError)) throw error;
         await markDeliveryOutcomeUnknown(

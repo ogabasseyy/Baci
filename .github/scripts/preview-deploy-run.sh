@@ -11,15 +11,19 @@
 # Writes preview-deploy.log in the working directory; publishes the
 # preview_url step output and the advisory summary link.
 #
-# Exit: 0 with a captured URL (clean success or hang-after-ready).
-# Otherwise the CLI status, 124/137 on timeout without a URL, or 1 when a
-# clean run prints no parseable URL.
+# Exit: 0 with a captured URL (clean success, or a hang whose URL
+# inspects as a live deployment). Otherwise the CLI status, 124/137 on
+# timeout without a URL (or with an unverified one), or 1 when a clean
+# run prints no parseable URL.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then
   echo "Usage: $0 <deploy-command...>" >&2
   exit 64
 fi
+# First argv word is the CLI runner (pinned-CLI script in the workflow,
+# stub in tests); reused for the timeout-path readiness check below.
+vercel_runner="$1"
 : "${PREVIEW_REF:?PREVIEW_REF must be set to the target ref}"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set}"
 : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
@@ -51,6 +55,16 @@ preview_url="$(grep -oiE 'preview:[[:space:]]*https://[^ )]+' preview-deploy.log
 if [ "$deploy_status" -ne 0 ] && [ "$deploy_status" -ne 124 ] && [ "$deploy_status" -ne 137 ]; then
   echo "Deploy failed with status $deploy_status; inspect preview-deploy.log." >&2
   exit "$deploy_status"
+fi
+# A timeout kill cannot distinguish 'hung after READY' from 'killed
+# mid-finalization after an early Preview line' (production answers the
+# same question by promoting; previews verify with a read-only inspect).
+# No timeout wrapper: one fast read, and the step timeout bounds it.
+if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then
+  if [ -n "$preview_url" ] && ! "$vercel_runner" inspect "$preview_url" >/dev/null 2>&1; then
+    echo "Deploy timed out and $preview_url did not inspect as a live deployment; check the Vercel dashboard for an orphaned deployment before retrying." >&2
+    exit "$deploy_status"
+  fi
 fi
 if [ -z "$preview_url" ]; then
   if [ "$deploy_status" -eq 124 ] || [ "$deploy_status" -eq 137 ]; then

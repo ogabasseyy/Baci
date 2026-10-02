@@ -41,8 +41,15 @@ function withHarness(callback) {
 }
 
 function runDeploy({ cwd, stub, outputs, summary }, stubBody, extraEnv = {}) {
-  writeFileSync(stub, `#!/usr/bin/env bash\n${stubBody}\n`, { mode: 0o755 });
-  return spawnSync('bash', [SCRIPT, 'bash', stub], {
+  // argv[1] doubles as the CLI runner: the deploy phase invokes the stub
+  // argless, while the timeout-path readiness check calls it with
+  // `inspect <url>` (FAKE_INSPECT_EXIT defaults to live).
+  writeFileSync(
+    stub,
+    `#!/usr/bin/env bash\nif [ "\${1:-}" = inspect ]; then exit "\${FAKE_INSPECT_EXIT:-0}"; fi\n${stubBody}\n`,
+    { mode: 0o755 }
+  );
+  return spawnSync('bash', [SCRIPT, stub], {
     cwd,
     encoding: 'utf8',
     env: {
@@ -83,6 +90,18 @@ test('accepts a captured URL when the CLI hangs after printing it', () => {
     });
     assert.equal(result.status, 0, result.stderr);
     assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));
+  });
+});
+
+test('fails a hung deploy whose URL does not inspect as live', () => {
+  withHarness((harness) => {
+    const result = runDeploy(harness, `echo 'Preview: ${PREVIEW_URL}'`, {
+      FAKE_TIMEOUT_EXIT: '124',
+      FAKE_INSPECT_EXIT: '1',
+    });
+    assert.equal(result.status, 124);
+    assert.match(result.stderr, /did not inspect as a live deployment/);
+    assert.equal(read(harness.outputs), '');
   });
 });
 

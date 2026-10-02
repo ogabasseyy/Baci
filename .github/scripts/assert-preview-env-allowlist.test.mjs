@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -86,6 +86,69 @@ test('rejects a non-blank duplicate even when one assignment is blank', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /DUPED/);
   });
+});
+
+test('rejects embedded credentials in allowlisted URLs without echoing them', () => {
+  const allow = '# seeded\nKV_REST_API_URL\nGO54_EMAIL\n';
+  withFiles(
+    'KV_REST_API_URL="https://relaxed-rail-123.upstash.io"\nGO54_EMAIL="ops@example.com"\n',
+    allow,
+    (envFile, allowFile) => {
+      assert.equal(run(envFile, allowFile).status, 0);
+    }
+  );
+  withFiles('KV_REST_API_URL="redis://default:hunter2@host:6379"\n', allow, (envFile, allowFile) => {
+    const result = run(envFile, allowFile);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /KV_REST_API_URL/);
+    assert.doesNotMatch(result.stderr, /hunter2/);
+  });
+  withFiles('KV_REST_API_URL="https://edge-config.vercel.com/ecfg?token=abc"\n', allow, (envFile, allowFile) => {
+    const result = run(envFile, allowFile);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /embeds credentials/);
+  });
+  withFiles('KV_REST_API_URL=""\n', allow, (envFile, allowFile) => {
+    assert.equal(run(envFile, allowFile).status, 0);
+  });
+});
+
+test('accepts the real pull-output shape through normalize, redact, and exposure check', () => {
+  const fixture = fileURLToPath(
+    new URL('./fixtures/preview-env-pull-shape.fixture.env', import.meta.url),
+  );
+  const redactPatterns = fileURLToPath(
+    new URL('./preview-env-redact.sed', import.meta.url),
+  );
+  const allowlist = fileURLToPath(
+    new URL('./preview-env-allowlist.txt', import.meta.url),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'preview-env-shape-'));
+  try {
+    const envFile = join(directory, '.env.preview.local');
+    copyFileSync(fixture, envFile);
+    // Same order as the workflow: normalize sensitive tokens, redact
+    // privileged keys, then run the exposure check. No sed -i (BSD/GNU
+    // differ); the normalize pattern must mirror preview.yml.
+    for (const args of [
+      ['-E', 's/=["\']?\\[SENSITIVE\\]["\']?[[:space:]]*$/=""/', envFile],
+      ['-E', '-f', redactPatterns, envFile],
+    ]) {
+      const sed = spawnSync('sed', args, { encoding: 'utf8' });
+      assert.equal(sed.status, 0, sed.stderr);
+      writeFileSync(envFile, sed.stdout);
+    }
+    const result = spawnSync('node', [SCRIPT, envFile, allowlist], {
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const final = readFileSync(envFile, 'utf8');
+    assert.doesNotMatch(final, /fixture-redacted-secret/);
+    assert.match(final, /FIXTURE_SENSITIVE_TOKEN=""/);
+    assert.match(final, /fixture-safe-value/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('exits nonzero when inputs are missing', () => {

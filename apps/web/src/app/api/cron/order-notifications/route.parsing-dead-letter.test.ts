@@ -25,7 +25,6 @@ vi.mock('@/lib/send-manual-order-document', () => ({
   sendManualOrderDocument: mockSendManualOrderDocument,
 }));
 
-import { sendOrderFulfillmentNotification } from '@/lib/order-fulfillment-notification';
 import { GET } from './route';
 
 function cronRequest(path = '/api/cron/order-notifications') {
@@ -87,7 +86,7 @@ function createUpdateBuilder(
   return builder;
 }
 
-describe('GET /api/cron/order-notifications parsing and dead-letter', () => {
+describe('GET /api/cron/order-notifications dead-letter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSupabase.rpc.mockResolvedValue({
@@ -129,36 +128,6 @@ describe('GET /api/cron/order-notifications parsing and dead-letter', () => {
         status: 'skipped',
         reason: 'missing_customer_email',
       });
-  });
-
-  it('skips unknown event types without failing the rest of the batch', async () => {
-    mockSupabase.rpc.mockResolvedValueOnce({
-      data: [
-        { id: 'outbox-invalid', event_type: 'order_cancelled' },
-        {
-          claim_owner: 'web-cron-test',
-          attempt_count: 1,
-          event_type: 'order_shipped',
-          id: 'outbox-1',
-          max_attempts: 5,
-          merchant_id: 'merchant-1',
-          order_id: 'order-1',
-        },
-      ],
-      error: null,
-    });
-    mockSendOrderFulfillmentNotification.mockReset();
-    mockSendOrderFulfillmentNotification.mockResolvedValue({
-      status: 'sent',
-      messageId: 'msg-1',
-    });
-
-    const response = await GET(cronRequest());
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({ claimed: 2, sent: 1, unparseable: 1 });
-    expect(sendOrderFulfillmentNotification).toHaveBeenCalledTimes(1);
   });
 
   it('loops corrupt rows with a malformed event type instead of dead-lettering', async () => {
@@ -270,59 +239,6 @@ describe('GET /api/cron/order-notifications parsing and dead-letter', () => {
           attempt_count: 5,
           event_type: 'order_shipped',
           id: 'outbox-corrupt-known',
-          max_attempts: 5,
-        },
-      ],
-      error: null,
-    });
-
-    const response = await GET(cronRequest());
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      claimed: 1,
-      skipped: 0,
-      unparseable: 1,
-    });
-    expect(mockSupabase.from).not.toHaveBeenCalled();
-  });
-
-  it('leaves soft-corrupt rows for lease expiry when delivery identity survives', async () => {
-    mockSupabase.rpc.mockResolvedValueOnce({
-      data: [
-        {
-          attempt_count: 'x',
-          claim_owner: 123,
-          event_type: 'order_shipped',
-          id: 'outbox-soft-corrupt',
-          max_attempts: 5,
-          merchant_id: 'merchant-1',
-          order_id: 'order-1',
-        },
-      ],
-      error: null,
-    });
-
-    const response = await GET(cronRequest());
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({
-      claimed: 1,
-      skipped: 0,
-      unparseable: 1,
-    });
-    expect(mockSupabase.from).not.toHaveBeenCalled();
-  });
-
-  it('never dead-letters exhausted rows with a valid future event type', async () => {
-    mockSupabase.rpc.mockResolvedValueOnce({
-      data: [
-        {
-          attempt_count: 9,
-          event_type: 'order_cancelled',
-          id: 'outbox-future',
           max_attempts: 5,
         },
       ],

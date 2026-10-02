@@ -179,9 +179,17 @@ BEGIN
   -- (staff corrected the recipient without re-linking) must not strand the
   -- verified recipient. But reassigning the mismatched row would expose its
   -- other orders through the customer-scoped archive, so link ONLY the
-  -- claimed orders instead of delegating to the row-linking core.
+  -- claimed orders instead of delegating to the row-linking core. A user
+  -- already linked to a DIFFERENT row takes the same path even when the
+  -- claim row's email matches: the row-linking core would assign the same
+  -- user_id twice and violate idx_customers_merchant_user.
   IF v_claim.manual_notification_id IS NOT NULL
-    AND lower(btrim(v_customer.email)) IS DISTINCT FROM v_email THEN
+    AND (lower(btrim(v_customer.email)) IS DISTINCT FROM v_email
+      OR EXISTS (SELECT 1 FROM public.customers AS c
+                 WHERE c.merchant_id IS NOT DISTINCT FROM v_claim.merchant_id
+                   AND c.user_id = v_user_id
+                   AND c.deleted_at IS NULL
+                   AND c.id IS DISTINCT FROM v_customer.id)) THEN
     RETURN private.redeem_manual_order_claim_order_scoped(
       v_claim.id, v_user_id, v_email, p_source);
   END IF;

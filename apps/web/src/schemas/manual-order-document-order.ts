@@ -3,6 +3,16 @@ import { z } from 'zod';
 const number = z.coerce.number().finite().nonnegative();
 const nullableText = z.string().nullable();
 
+const manualDocumentOrderItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  quantity: number.positive(),
+  price: number,
+  variant_name: nullableText,
+  condition: nullableText,
+  item_description: nullableText,
+});
+
 export const manualDocumentOrderSchema = z.object({
   id: z.string(),
   merchant_id: z.string(),
@@ -49,15 +59,51 @@ export const manualDocumentOrderSchema = z.object({
     })
     .passthrough()
     .nullable(),
-  order_items: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      quantity: number.positive(),
-      price: number,
-      variant_name: nullableText,
-      condition: nullableText,
-      item_description: nullableText,
-    })
-  ),
+  order_items: z.array(manualDocumentOrderItemSchema),
 });
+
+// The archive/download predicate validates through the sender's own content
+// schemas, so the storefront can never advertise a document the sender
+// terminally skips as order_validation_failed: the money breakdown plus
+// per-item validity over non-empty items. Only the fallible fields are
+// picked (ids are uuid-typed, the rest unvalidated-nullable), and unknown
+// shapes fail closed via safeParse.
+const manualDocumentArchiveMoneySchema = manualDocumentOrderSchema.pick({
+  amount_paid: true,
+  discount_amount: true,
+  shipping_fee: true,
+  subtotal: true,
+  tax_amount: true,
+  total: true,
+});
+const manualDocumentArchiveItemSchema = manualDocumentOrderItemSchema.pick({
+  name: true,
+  price: true,
+  quantity: true,
+});
+
+export interface ManualDocumentArchiveMoney {
+  total?: number | string | null;
+  subtotal?: number | string | null;
+  shipping_fee?: number | string | null;
+  tax_amount?: number | string | null;
+  discount_amount?: number | string | null;
+  amount_paid?: number | string | null;
+}
+
+export interface ManualDocumentArchiveItem {
+  name?: unknown;
+  price?: unknown;
+  quantity?: unknown;
+}
+
+export function isManualOrderDocumentContentValid(
+  order: unknown,
+  items: unknown
+): boolean {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  return (
+    manualDocumentArchiveMoneySchema.safeParse(order).success &&
+    z.array(manualDocumentArchiveItemSchema).safeParse(items).success
+  );
+}

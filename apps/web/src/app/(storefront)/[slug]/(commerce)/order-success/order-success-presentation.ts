@@ -67,7 +67,7 @@ export function resolvePaidInvoiceDocument({
   order: OrderData | null;
 }): { kind: 'invoice' | 'receipt'; label: string } {
   // Same eligibility as getCurrentDocumentKind
-  // (storefront-account-document-data, the receipts archive authority):
+  // (storefront-account-document-eligibility, the receipts archive authority):
   // every paid imported historical order is receipt-eligible regardless
   // of shipping status; other paid orders need shipped/delivered.
   const isPaid = order?.payment_status?.trim().toLowerCase() === 'paid';

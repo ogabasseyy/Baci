@@ -14,11 +14,14 @@ import type {
   StorefrontAccountDocumentTaxSubtotalRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
+import {
+  getCurrentDocumentKind,
+  normalizePaymentStatus,
+  normalizeShippingStatus,
+} from '@/lib/storefront-account-document-eligibility';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
-
-const RECEIPT_READY_STATUSES = new Set(['shipped', 'delivered']);
 
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';
@@ -41,98 +44,6 @@ export class StorefrontAccountDocumentError extends Error {
     super(message);
     this.name = 'StorefrontAccountDocumentError';
   }
-}
-
-export function normalizePaymentStatus(status: string | null | undefined) {
-  return status?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-}
-
-export function normalizeShippingStatus(status: string | null | undefined) {
-  return status?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-}
-
-function isImportedHistoricalOrder(input: {
-  externalSource?: string | null;
-  importJobId?: string | null;
-}) {
-  return Boolean(input.externalSource || input.importJobId);
-}
-
-interface DocumentEligibilityInput {
-  paymentStatus: string | null | undefined;
-  shippingStatus: string | null | undefined;
-  externalSource?: string | null;
-  importJobId?: string | null;
-  recordedByUserId?: string | null;
-  total?: number | string | null;
-  amountPaid?: number | string | null;
-  itemCount?: number | null;
-}
-
-export function isManualOrderDocumentAvailable(
-  input: DocumentEligibilityInput
-) {
-  // Mirror the sender's paid-balance consistency check: a paid order whose
-  // total was corrected above its payments is skipped, never sent, so the
-  // archive must not advertise a document for it.
-  const paidBalanceSettled =
-    normalizePaymentStatus(input.paymentStatus) !== 'paid' ||
-    (input.total != null &&
-      input.amountPaid != null &&
-      Number.isFinite(Number(input.total)) &&
-      Number(input.total) >= 0 &&
-      Number.isFinite(Number(input.amountPaid)) &&
-      Number(input.amountPaid) >= Number(input.total));
-  return (
-    Boolean(input.recordedByUserId) &&
-    !isImportedHistoricalOrder(input) &&
-    !['cancelled', 'canceled', 'returned', 'failed'].includes(
-      normalizeShippingStatus(input.shippingStatus)
-    ) &&
-    ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
-      normalizePaymentStatus(input.paymentStatus)
-    ) &&
-    paidBalanceSettled &&
-    // Items commit separately from the order: an itemless manual order is
-    // not a document yet, and the enqueue trigger refuses it too, so both
-    // the archive flag and the receipt gate below stay false until the
-    // batch lands. Unknown counts fail closed for the same reason.
-    typeof input.itemCount === 'number' &&
-    input.itemCount > 0
-  );
-}
-
-export function isReceiptEligible(input: DocumentEligibilityInput) {
-  // A fully-covered manual order is substantively paid even under a non-paid
-  // label (e.g. an over-amount partial): mirror the sender/trigger
-  // normalization so the archive agrees with the emailed document.
-  if (input.recordedByUserId && !isImportedHistoricalOrder(input)) {
-    return (
-      isManualOrderDocumentAvailable(input) &&
-      input.total != null &&
-      input.amountPaid != null &&
-      Number.isFinite(Number(input.total)) &&
-      Number(input.total) >= 0 &&
-      Number.isFinite(Number(input.amountPaid)) &&
-      Number(input.amountPaid) >= Number(input.total)
-    );
-  }
-
-  if (normalizePaymentStatus(input.paymentStatus) !== 'paid') {
-    return false;
-  }
-
-  if (isImportedHistoricalOrder(input)) {
-    return true;
-  }
-
-  return RECEIPT_READY_STATUSES.has(
-    normalizeShippingStatus(input.shippingStatus)
-  );
-}
-
-export function getCurrentDocumentKind(input: DocumentEligibilityInput) {
-  return isReceiptEligible(input) ? 'receipt' : 'invoice';
 }
 
 export async function getStorefrontAccountDocumentData({
@@ -258,7 +169,15 @@ export async function getStorefrontAccountDocumentData({
     recordedByUserId: order.recorded_by_user_id,
     total: order.total,
     amountPaid: order.amount_paid,
-    itemCount: (itemsResult.data || []).length,
+    money: {
+      total: order.total,
+      subtotal: order.subtotal,
+      shipping_fee: order.shipping_fee,
+      tax_amount: order.tax_amount,
+      discount_amount: order.discount_amount,
+      amount_paid: order.amount_paid,
+    },
+    items: itemsResult.data || [],
   });
   const transactionRows = (transactionsResult.data ||
     []) as StorefrontAccountDocumentTransactionRow[];

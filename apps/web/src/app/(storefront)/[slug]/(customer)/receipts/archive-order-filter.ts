@@ -1,4 +1,4 @@
-import { normalizeShippingStatus } from '@/lib/storefront-account-document-data';
+import { normalizeShippingStatus } from '@/lib/storefront-account-document-eligibility';
 import type { StorefrontOrder } from '@/types/storefront-order';
 
 const ARCHIVE_STATUSES = new Set(['shipped', 'delivered']);

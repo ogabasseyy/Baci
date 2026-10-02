@@ -87,7 +87,12 @@ export async function GET(
       );
     }
 
-    const blob = generateReceiptBlob(data.receiptOrder, data.receiptMerchant);
+    // The eligibility gate above already established receipt kind: pass it
+    // explicitly instead of letting the generator infer from the payment
+    // flag, which stays non-paid on settled manual balances.
+    const blob = generateReceiptBlob(data.receiptOrder, data.receiptMerchant, {
+      documentKind: 'receipt',
+    });
 
     return new NextResponse(blob, {
       headers: {

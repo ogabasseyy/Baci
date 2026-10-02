@@ -57,6 +57,7 @@ export const manualDocumentOrderSchema = z.object({
       price: number,
       variant_name: nullableText,
       condition: nullableText,
+      item_description: nullableText,
     })
   ),
 });

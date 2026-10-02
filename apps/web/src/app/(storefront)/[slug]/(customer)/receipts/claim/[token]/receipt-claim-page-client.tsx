@@ -213,9 +213,11 @@ export default function ReceiptClaimPageClient({
                 <div className="rounded-md border border-store-border bg-store-secondary/60 p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em] text-store-primary">
                     <Smartphone aria-hidden="true" className="size-4" />
-                    {documentLabel === 'invoice'
-                      ? 'Device invoices'
-                      : 'Device receipts'}
+                    {preview?.documentKind === 'proforma_invoice'
+                      ? 'Device proforma invoices'
+                      : documentLabel === 'invoice'
+                        ? 'Device invoices'
+                        : 'Device receipts'}
                   </div>
                   <ol className="space-y-2 pl-5 text-sm">
                     {createDeviceListItems(preview.devices).map((item) => (

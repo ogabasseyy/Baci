@@ -38,7 +38,10 @@ function cronRequest(path = '/api/cron/order-notifications') {
 function createUpdateBuilder() {
   let matchedId = '';
   const maybeSingle = vi.fn<
-    () => Promise<{ data: { id: string } | null; error: unknown }>
+    () => Promise<{
+      data: { id: string; metadata?: Record<string, unknown> } | null;
+      error: unknown;
+    }>
   >(async () => ({ data: { id: matchedId }, error: null }));
   const builder = {
     match: vi.fn((values: { id: string }) => {
@@ -667,5 +670,49 @@ describe('GET /api/cron/order-notifications', () => {
     const response = await GET(cronRequest());
 
     expect(response.status).toBe(500);
+  });
+
+  it('merges completion metadata into the live row instead of the claim copy', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          claim_owner: 'web-cron-test',
+          attempt_count: 1,
+          event_type: 'manual_order_receipt',
+          id: 'outbox-manual',
+          max_attempts: 5,
+          merchant_id: 'merchant-1',
+          order_id: 'order-1',
+          metadata: { source: 'manual_order_document' },
+        },
+      ],
+      error: null,
+    });
+    const builder = createUpdateBuilder();
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: {
+        id: 'outbox-manual',
+        metadata: {
+          source: 'manual_order_document',
+          sent_document_kind: 'proforma_invoice',
+        },
+      },
+      error: null,
+    });
+    mockSupabase.from.mockReturnValue(builder);
+
+    const response = await GET(cronRequest());
+
+    expect(response.status).toBe(200);
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'sent',
+        metadata: {
+          source: 'manual_order_document',
+          sent_document_kind: 'proforma_invoice',
+          message_id: 'manual-document-1',
+        },
+      })
+    );
   });
 });

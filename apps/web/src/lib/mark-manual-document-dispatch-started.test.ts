@@ -40,6 +40,7 @@ const order = {
       price: 100,
       variant_name: null,
       condition: 'new',
+      item_description: 'Sealed box',
     },
   ],
 };
@@ -95,6 +96,7 @@ describe('markManualDocumentDispatchStarted', () => {
           price: 100,
           variant_name: null,
           condition: 'new',
+          item_description: 'Sealed box',
         },
       ],
     });

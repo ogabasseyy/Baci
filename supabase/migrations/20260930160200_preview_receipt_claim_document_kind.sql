@@ -115,3 +115,8 @@ REVOKE ALL ON FUNCTION private.preview_receipt_claim(text)
   FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION private.preview_receipt_claim(text)
   TO anon, authenticated, service_role;
+-- The public wrapper delegates directly to the private implementation, so it
+-- must also run as the owner: authenticated callers have no USAGE on schema
+-- private (delegates boundary), and an INVOKER wrapper 42501s for signed-in
+-- claim-link opens before automatic redemption can run.
+ALTER FUNCTION public.preview_receipt_claim(text) SECURITY DEFINER;

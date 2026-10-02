@@ -23,7 +23,7 @@ CREATE TABLE public.orders (
   transaction_date timestamptz, invoice_issue_date date, shipping_address jsonb,
   fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid()
 );
-CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, created_at timestamptz DEFAULT now());
+CREATE TABLE public.order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE, name text, quantity integer, price numeric, variant_name text, condition text, item_description text, created_at timestamptz DEFAULT now());
 CREATE TABLE public.order_notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES public.orders ON DELETE CASCADE,
   merchant_id uuid REFERENCES public.merchants,

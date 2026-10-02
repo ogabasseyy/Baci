@@ -66,6 +66,7 @@ export function buildManualOrderDocumentPdfInput({
     items: order.order_items.map((item) => ({
       ...item,
       product_name: item.name,
+      description: item.item_description || undefined,
     })),
   };
   const receiptMerchant = {

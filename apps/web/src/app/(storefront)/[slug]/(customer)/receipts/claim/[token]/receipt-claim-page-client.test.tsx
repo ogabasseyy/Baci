@@ -148,6 +148,15 @@ describe('ReceiptClaimPageClient', () => {
     expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
   });
 
+  it('labels proforma claim previews as proforma invoices', () => {
+    renderClient({
+      initialClaim: { ...preview, documentKind: 'proforma_invoice' as const },
+    });
+
+    expect(screen.getByText('Device proforma invoices')).toBeInTheDocument();
+    expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
+  });
+
   it('does not show Ogabassey app links on other merchant claim pages', () => {
     renderClient();
 

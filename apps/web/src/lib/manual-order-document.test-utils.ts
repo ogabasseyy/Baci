@@ -60,6 +60,7 @@ export const orderFixture = {
       price: 950000,
       condition: 'new',
       variant_name: '256GB',
+      item_description: 'Sealed box, 2-year warranty',
     },
   ],
 };

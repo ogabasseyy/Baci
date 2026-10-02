@@ -7,6 +7,7 @@ interface DispatchOrderItem {
   price: number;
   variant_name: string | null;
   condition: string | null;
+  item_description: string | null;
 }
 
 interface DispatchOrderSnapshot {
@@ -103,6 +104,7 @@ export async function markManualDocumentDispatchStarted(
           price: item.price,
           variant_name: item.variant_name,
           condition: item.condition,
+          item_description: item.item_description,
         })),
     }
   );

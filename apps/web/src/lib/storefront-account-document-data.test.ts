@@ -83,6 +83,22 @@ describe('storefront account document status helpers', () => {
     ).toBe(false);
   });
 
+  it('treats a fully-covered manual partial as a receipt like the emailed document', () => {
+    const input = {
+      paymentStatus: 'partially_paid',
+      shippingStatus: 'pending',
+      recordedByUserId: 'staff-1',
+      total: 100,
+      amountPaid: 100,
+    };
+    expect(isReceiptEligible(input)).toBe(true);
+    expect(getCurrentDocumentKind(input)).toBe('receipt');
+    expect(isReceiptEligible({ ...input, amountPaid: 50 })).toBe(false);
+    expect(getCurrentDocumentKind({ ...input, amountPaid: 50 })).toBe(
+      'invoice'
+    );
+  });
+
   it('hides paid manual orders whose corrected total exceeds payments', () => {
     const input = {
       paymentStatus: 'paid',

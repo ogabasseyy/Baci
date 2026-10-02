@@ -50,7 +50,7 @@ export async function sendManualOrderDocument({
     supabase
       .from('orders')
       .select(
-        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, notes, order_items(id, name, quantity, price, variant_name, condition)'
+        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, notes, order_items(id, name, quantity, price, variant_name, condition, item_description)'
       )
       .eq('id', row.order_id)
       .eq('merchant_id', row.merchant_id)
@@ -102,7 +102,11 @@ export async function sendManualOrderDocument({
     return { status: 'skipped', reason: 'missing_customer' };
   if (!order.order_items.length)
     return { status: 'skipped', reason: 'missing_order_items' };
-  const isPaid = order.payment_status === 'paid';
+  // A fully-covered balance is substantively paid even under a non-paid
+  // label (e.g. an over-amount partial): mirror the trigger so a settled
+  // order renders a receipt, never a zero-balance invoice.
+  const isPaid =
+    order.payment_status === 'paid' || order.amount_paid >= order.total;
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };

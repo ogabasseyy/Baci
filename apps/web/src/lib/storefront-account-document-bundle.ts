@@ -150,7 +150,9 @@ export function buildStorefrontAccountDocumentBundle({
   // account views label the same document the route downloads.
   const invoiceTypeCode = resolveInvoiceTypeCode({
     paymentMethod: order.payment_method,
-    isPaid: paymentStatus === 'paid',
+    // A receipt-eligible order is settled in substance (paid flag or covered
+    // manual balance), so its billing record resolves the commercial code.
+    isPaid: paymentStatus === 'paid' || receiptEligible,
     wasPaid: paymentStatus === 'refunded',
     paymentStatus,
     amountPaid,

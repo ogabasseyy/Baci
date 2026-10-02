@@ -7,7 +7,11 @@
 -- row itself) therefore succeeded without ever creating the row the
 -- claim needs, leaving the order paid, its settlement unreversed, and
 -- processed-refund notifications unsent. Match the claim's three funded
--- statuses here.
+-- statuses here. The internal-gateway predicates normalize via
+-- public.normalized_gateway_name_v1 (forward-declared in
+-- 20260928140000): legacy `Wallet` / ` wallet ` rows are internal,
+-- while missing or blank gateways coalesce back to '' and stay
+-- external, as before.
 CREATE OR REPLACE FUNCTION public.cancel_order_as_merchant(
   p_order_id uuid,
   p_reason text DEFAULT NULL
@@ -146,8 +150,8 @@ BEGIN
        -- resumes them and runs aggregate finalization.
        AND t.status IN ('completed', 'refund_pending', 'refunded')
        AND t.amount > 0
-       AND COALESCE(t.gateway, '') NOT IN (
-         'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'
+       AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
+         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
        )
   ) THEN
     INSERT INTO public.order_cancellation_side_effects (
@@ -192,9 +196,9 @@ SELECT o.id, o.merchant_id, 'refund', 'failed',
         AND t.transaction_type = 'payment'
         AND t.status IN ('refund_pending', 'refunded')
         AND t.amount > 0
-        AND COALESCE(t.gateway, '') NOT IN (
-          'wallet', 'savings', 'store_credit', 'cash', 'manual',
-          'pay_on_delivery'
+        AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
+          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+          'PAY_ON_DELIVERY'
         )
    )
    AND NOT EXISTS (
@@ -204,9 +208,9 @@ SELECT o.id, o.merchant_id, 'refund', 'failed',
         AND t.transaction_type = 'payment'
         AND t.status = 'completed'
         AND t.amount > 0
-        AND COALESCE(t.gateway, '') NOT IN (
-          'wallet', 'savings', 'store_credit', 'cash', 'manual',
-          'pay_on_delivery'
+        AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
+          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+          'PAY_ON_DELIVERY'
         )
    )
    AND NOT EXISTS (

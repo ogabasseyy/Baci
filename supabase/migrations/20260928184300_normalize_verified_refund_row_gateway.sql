@@ -7,7 +7,10 @@
 -- deterministic, files a hold for, and removes from future polling —
 -- leaving the cancelled order paid and its settlement unreversed.
 -- The id filter already binds the row; the gateway check now uses the
--- shared normalizer. All other behavior is unchanged from
+-- shared normalizer. The internal-gateway set lookups below normalize
+-- the same way, so legacy `Wallet` / ` wallet ` rows are internal
+-- while missing or blank gateways coalesce back to '' and stay
+-- external, as before. All other behavior is unchanged from
 -- 20260928184000_transition_legacy_terminal_verdicts.sql.
 
 CREATE OR REPLACE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
@@ -66,8 +69,8 @@ BEGIN
       WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
         AND transaction_type = 'payment' AND status = 'completed'
         AND amount > 0
-        AND coalesce(gateway, '') NOT IN
-          ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery');
+        AND coalesce(public.normalized_gateway_name_v1(gateway), '') NOT IN
+          ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY');
     IF v_external_payments = 1 THEN
       -- Normalize gateways like the aggregate coverage gate: a legacy
       -- `Paystack` leg and its `paystack` refund must verify together.
@@ -191,8 +194,8 @@ BEGIN
     WHERE p.order_id = v_order.id AND p.merchant_id = v_order.merchant_id
       AND p.transaction_type = 'payment' AND p.status IN ('completed', 'refund_pending')
       AND p.amount > 0
-      AND coalesce(p.gateway, '') NOT IN
-        ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+      AND coalesce(public.normalized_gateway_name_v1(p.gateway), '') NOT IN
+        ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       AND NOT EXISTS (
         SELECT 1 FROM public.transactions r
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
@@ -228,9 +231,9 @@ BEGIN
                    AND only_payment.transaction_type = 'payment'
                    AND only_payment.status = 'completed'
                    AND only_payment.amount > 0
-                   AND coalesce(only_payment.gateway, '') NOT IN (
-                     'wallet', 'savings', 'store_credit', 'cash', 'manual',
-                     'pay_on_delivery'
+                   AND coalesce(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
+                     'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+                     'PAY_ON_DELIVERY'
                    )
               )
             )
@@ -252,8 +255,8 @@ BEGIN
         WHERE funded.order_id = v_order.id AND funded.merchant_id = v_order.merchant_id
           AND funded.transaction_type = 'payment' AND funded.status = 'completed'
           AND funded.amount > 0
-          AND coalesce(funded.gateway, '') NOT IN
-            ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+          AND coalesce(public.normalized_gateway_name_v1(funded.gateway), '') NOT IN
+            ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       )
     )
   ) THEN

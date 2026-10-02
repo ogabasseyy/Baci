@@ -1,6 +1,5 @@
 import { Alert } from 'react-native';
 import type { OrderDetailsRecord } from '@/components/orders/order-details.types';
-import { OrderStatusUpdateError } from '@/hooks/orders/order-status-update-error';
 import type { ShippingStatus } from '@/hooks/useOrders';
 
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -127,10 +126,7 @@ export function createOrderDetailsStatusActions({
       // across a bundle boundary fails instanceof but still carries
       // the server's code. Both actionable cancel rejections surface
       // the server reason instead of the generic fallback.
-      const errorCode =
-        nextError instanceof OrderStatusUpdateError
-          ? nextError.code
-          : nextError.code;
+      const errorCode = nextError.code;
       const cancellationShowsServerReason =
         newStatus === 'cancelled' &&
         (errorCode === 'PAYMENT_RECONCILIATION_REQUIRED' ||

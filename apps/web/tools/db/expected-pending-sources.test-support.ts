@@ -272,7 +272,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
-    sha256: '8e97b83f0fa6d90ab286e2f1adef2f4f1d554ce3acc52dde7c2d60447f392656',
+    sha256: 'deb384a93d7246f05d6b51763f254dac0d63478ea4665e9bcb45e15b3b5317d9',
   },
 ]
   .sort((left, right) =>

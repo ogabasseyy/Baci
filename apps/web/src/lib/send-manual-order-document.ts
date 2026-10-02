@@ -195,12 +195,16 @@ export async function sendManualOrderDocument({
   let dispatchStarted = false;
   let providerAccepted = false;
   async function persistDispatch(started: boolean) {
-    if (started) await markManualDocumentDispatchStarted(supabase, row, order);
-    const query = supabase
+    // The atomic RPC already committed dispatch_started_at: a second
+    // conditional write here would match zero rows and fail every send.
+    if (started) {
+      await markManualDocumentDispatchStarted(supabase, row, order);
+      dispatchStarted = true;
+      return;
+    }
+    const { data: updated, error: updateError } = await supabase
       .from('order_notification_outbox')
-      .update({
-        dispatch_started_at: started ? new Date().toISOString() : null,
-      })
+      .update({ dispatch_started_at: null })
       .match({
         id: row.id,
         order_id: row.order_id,
@@ -208,16 +212,12 @@ export async function sendManualOrderDocument({
         event_type: row.event_type,
         locked_by: row.claim_owner,
         status: 'processing',
-      });
-    const { data: updated, error: updateError } = await (started
-      ? query.is('dispatch_started_at', null)
-      : query
-    )
+      })
       .select('id')
       .maybeSingle();
     if (updateError || updated?.id !== row.id)
       throw new Error('Manual document dispatch lease lost');
-    dispatchStarted = started;
+    dispatchStarted = false;
   }
   try {
     const result = await sendEmail({

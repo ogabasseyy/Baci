@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -145,12 +145,13 @@ test('leaves maps untouched when a guardrail fails', () => {
       '/gone2.js': 'node_modules/gone2/index.js',
     },
   });
-  const root = layout({ [configRel]: original });
+  const root = layout({ [configRel]: original, [`${configRel}.tmp-stage-refs`]: 'stale' });
   try {
     const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
     assert.equal(run.status, 1);
     // A same-workspace retry must see the original maps, not truncated ones.
     assert.equal(readFileSync(join(root, configRel), 'utf8'), original);
+    assert.deepEqual(readdirSync(join(root, '.vercel/output/functions/a.func')).filter((n) => n.includes('.tmp-')), []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

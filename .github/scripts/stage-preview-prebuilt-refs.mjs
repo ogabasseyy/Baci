@@ -88,6 +88,10 @@ const unusableConfigs = [];
 let missingCount = 0;
 const insideOutputValues = [];
 const pendingRewrites = [];
+const tmpFor = (configPath) => `${configPath}.tmp-stage-refs`;
+// Sweep stale rewrite temps before the scan, so even a run that fails
+// its guardrails cleans up leftovers from a killed run.
+for (const configPath of vcConfigs(outputDir)) rmSync(tmpFor(configPath), { force: true });
 
 for (const configPath of vcConfigs(outputDir)) {
   let config;
@@ -204,6 +208,8 @@ for (const configPath of vcConfigs(outputDir)) {
     kept[key] = value;
     usable += 1;
   }
+  // dropped == 0 ships the map byte-identical (no rewrite below), so
+  // an absolute/escaping-only config needs no usable refs to be safe.
   if (dropped > 0 && usable === 0) unusableConfigs.push(configPath);
   if (Object.keys(kept).length !== Object.keys(maps).length) {
     // Buffer the rewrite: the guardrails run after the full scan, and a
@@ -258,8 +264,6 @@ writeReport({ stage, staged, skipped, missingCount });
 // mixed config set of individually consistent files. Temp names are
 // deterministic per config, so a retry overwrites rather than piles up
 // stale files, and leftovers from a killed run are swept first.
-const tmpFor = (configPath) => `${configPath}.tmp-stage-refs`;
-for (const { configPath } of pendingRewrites) rmSync(tmpFor(configPath), { force: true });
 const serialized = pendingRewrites.map(({ configPath, config, kept }) => {
   config.filePathMap = kept;
   return { configPath, body: `${JSON.stringify(config, null, 2)}\n` };

@@ -147,6 +147,10 @@ BEGIN
     ('{"product_type":"' || repeat('ﬃ', 33) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator rejected short NFKC product_type';
   END IF;
+  IF NOT discovery.product_discovery_metadata_valid(
+    ('{"product_type":"phone' || repeat('-', 101) || '"}')::jsonb) THEN
+    RAISE EXCEPTION 'discovery metadata validator rejected collapsible hyphenated type';
+  END IF;
   IF discovery.product_discovery_metadata_valid(
     ('{"product_type":"' || repeat('ﬃ', 100) || '"}')::jsonb) THEN
     RAISE EXCEPTION 'discovery metadata validator accepted a product type that NFKC-expands past 100 units';

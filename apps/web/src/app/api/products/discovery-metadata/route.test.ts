@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectedSource } from '@/schemas/update-product-discovery-metadata.test-support';
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
@@ -9,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   permission: vi.fn(),
   update: vi.fn(),
   eq: vi.fn(),
-  is: vi.fn(),
   maybeSingle: vi.fn(),
 }));
 
@@ -35,6 +35,7 @@ import { PUT } from './route';
 const merchantId = '11111111-1111-4111-8111-111111111111';
 const productId = '22222222-2222-4222-8222-222222222222';
 const validBody = {
+  expectedSource,
   productId,
   expectedMetadata: null,
   metadata: {
@@ -62,22 +63,11 @@ describe('product discovery metadata API', () => {
     mocks.rpc.mockReturnValue({
       returns: () => ({ maybeSingle: mocks.maybeSingle }),
     });
-    mocks.update.mockReturnValue({ eq: mocks.eq });
-    mocks.eq.mockReturnValue({
-      eq: mocks.eq,
-      is: mocks.is,
-      select: vi.fn().mockReturnValue({ maybeSingle: mocks.maybeSingle }),
-    });
-    mocks.is.mockReturnValue({
-      select: vi.fn().mockReturnValue({ maybeSingle: mocks.maybeSingle }),
-    });
     mocks.maybeSingle.mockResolvedValue({
       data: { id: productId },
       error: null,
     });
   });
-
-  afterEach(() => vi.restoreAllMocks());
 
   it('guards a reviewed empty snapshot and reports stale writes without overwriting', async () => {
     mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
@@ -153,8 +143,11 @@ describe('product discovery metadata API', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
 
     expect(
-      (await PUT(request(JSON.stringify({ ...validBody, unexpected: true }))))
-        .status
+      (
+        await PUT(
+          request(JSON.stringify({ ...validBody, expectedSource: undefined }))
+        )
+      ).status
     ).toBe(400);
     expect(
       (
@@ -199,6 +192,7 @@ describe('product discovery metadata API', () => {
         p_merchant_id: merchantId,
         p_metadata: { ...validBody.metadata, product_type: 'laptop' },
         p_expected_metadata: null,
+        p_expected_source: expectedSource,
       }
     );
     expect(mocks.update).not.toHaveBeenCalled();
@@ -217,12 +211,16 @@ describe('product discovery metadata API', () => {
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it('maps only the metadata storage constraint to a safe client error', async () => {
+  it.each([
+    'message',
+    'details',
+    'hint',
+  ])('maps the metadata storage constraint in %s to a safe client error', async (field) => {
     mocks.maybeSingle.mockResolvedValueOnce({
       data: null,
       error: {
         code: '23514',
-        message:
+        [field]:
           'violates check constraint "products_discovery_metadata_object"; private row detail',
       },
     });
@@ -247,6 +245,7 @@ describe('product discovery metadata API', () => {
   it('replaces the whole metadata document on PUT rather than merging omitted facts', async () => {
     const body = {
       productId: validBody.productId,
+      expectedSource,
       expectedMetadata: { model: 'old model' },
       metadata: { product_type: 'phone' },
     };

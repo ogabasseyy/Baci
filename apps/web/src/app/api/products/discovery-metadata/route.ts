@@ -57,6 +57,14 @@ export async function GET(request: NextRequest) {
         id: row.id,
         name: row.name,
         expectedMetadata: row.discovery_metadata,
+        expectedSource: {
+          name: row.name,
+          category: row.category,
+          metadata: row.metadata,
+          specifications: row.specifications,
+          mpn: row.mpn,
+          color: row.color,
+        },
         ...proposeDiscoveryFacts(row),
         specifications: row.specifications,
         mpn: row.mpn,
@@ -116,12 +124,15 @@ export async function PUT(request: NextRequest) {
       p_merchant_id: merchant.merchantId,
       p_metadata: parsed.data.metadata,
       p_expected_metadata: parsed.data.expectedMetadata,
+      p_expected_source: parsed.data.expectedSource,
     })
     .returns<{ id: string }[]>()
     .maybeSingle();
   if (
     error?.code === '23514' &&
-    error.message?.includes('products_discovery_metadata_object')
+    [error.message, error.details, error.hint].some((field) =>
+      field?.includes('products_discovery_metadata_object')
+    )
   )
     return NextResponse.json(
       { error: 'Discovery facts exceed the supported storage limit' },

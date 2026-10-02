@@ -62,6 +62,8 @@ it('scopes pagination to merchant and returns a bounded review page with raw sna
     metadata: {},
     discovery_metadata: null,
     specifications: [],
+    mpn: null,
+    color: null,
   }));
   const response = await GET(request(`?cursor=${cursor}`));
   const body = await response.json();
@@ -72,6 +74,14 @@ it('scopes pagination to merchant and returns a bounded review page with raw sna
   expect(body.products[0]).toMatchObject({
     draft: { product_type: 'phone' },
     expectedMetadata: null,
+    expectedSource: {
+      name: 'Phone',
+      category: 'Smartphones',
+      metadata: {},
+      specifications: [],
+      mpn: null,
+      color: null,
+    },
   });
   expect(response.headers.get('Cache-Control')).toBe('no-store');
 });

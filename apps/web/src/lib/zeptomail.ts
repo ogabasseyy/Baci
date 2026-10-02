@@ -2,7 +2,8 @@ import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
-  senderLoopWorstMs,
+  clampZeptomailAttemptsPerSender,
+  resolveZeptomailFallbackAdmission,
   ZEPTOMAIL_MAX_RETRIES,
   ZEPTOMAIL_RETRY_BASE_DELAY_MS,
 } from '@/lib/zeptomail-send-budget';
@@ -496,10 +497,8 @@ export async function sendEmail({
 
   // Run the retry loop for a single From identity. Returns the success result,
   // or the parsed failure when all attempts for this sender were exhausted.
-  const attemptsPerSender = Math.max(
-    1,
-    Math.min(maxAttemptsPerSender, RETRY_CONFIG.maxRetries + 1)
-  );
+  const attemptsPerSender =
+    clampZeptomailAttemptsPerSender(maxAttemptsPerSender);
   const dispatch = async (
     activeSender: { address: string; name: string },
     attemptOffset: number,
@@ -599,25 +598,14 @@ export async function sendEmail({
   // Fail-open: a merchant custom sender may be rejected by ZeptoMail (stale or
   // not-yet-verified domain, restricted sender). Order confirmations must not be
   // lost to that, so retry once from the platform domain — mirroring the
-  // auth-email hook, which also falls back to the platform sender. When the
-  // caller passes a fallback deadline, the primary loop already spent the
-  // retry budget, so the fallback gets a single shot from the healthy
-  // platform domain (the sweep retries transient failures next tick)
-  // and runs whenever that single attempt fits. Gating on another full
-  // loop would skip the fallback on every retry — admission reserves
-  // exactly one loop plus the cutoff buffer — exhausting the row
-  // solely because the merchant sender is stale. Skipping on a truly
-  // exhausted budget still avoids aborting mid-send and stranding the
-  // row as delivery_uncertain instead of a clean retryable failure.
-  const fallbackAttempts =
-    fallbackDeadlineMs === undefined ? attemptsPerSender : 1;
-  const fallbackWorstMs = senderLoopWorstMs(fallbackAttempts);
-  const fallbackBudgetMs =
-    fallbackDeadlineMs === undefined
-      ? undefined
-      : fallbackDeadlineMs - Date.now();
-  const fallbackFits =
-    fallbackBudgetMs === undefined || fallbackBudgetMs >= fallbackWorstMs;
+  // auth-email hook, which also falls back to the platform sender.
+  const { fallbackAttempts, fallbackBudgetMs, fallbackFits, fallbackWorstMs } =
+    resolveZeptomailFallbackAdmission({
+      attemptsPerSender,
+      ...(fallbackDeadlineMs !== undefined && {
+        remainingBudgetMs: fallbackDeadlineMs - Date.now(),
+      }),
+    });
   if (fallbackBudgetMs !== undefined && !fallbackFits) {
     console.warn(
       `ZeptoMail skipping platform-sender fallback: ${String(fallbackBudgetMs)}ms remain, ${String(fallbackWorstMs)}ms required`

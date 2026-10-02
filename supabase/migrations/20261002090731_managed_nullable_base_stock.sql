@@ -34,4 +34,3 @@ REVOKE ALL ON FUNCTION discovery.base_product_option_is_purchasable(uuid, uuid) 
 GRANT EXECUTE ON FUNCTION discovery.base_product_option_is_purchasable(uuid, uuid) TO anon, authenticated, service_role;
 COMMENT ON FUNCTION discovery.base_product_option_is_purchasable(uuid, uuid) IS
   'Base option purchasability using the canonical serialized anchor projection and parent stock fallback.';
-

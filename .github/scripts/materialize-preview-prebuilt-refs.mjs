@@ -18,7 +18,7 @@
 //
 // Usage: materialize-preview-prebuilt-refs.mjs [deploy-root] [quarantine-dir]
 // Defaults: root = cwd, quarantine = <root>/.preview-refs-quarantine.
-import { copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs';
+import { appendFileSync, copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 const root = resolve(process.argv[2] ?? process.cwd());
@@ -82,3 +82,15 @@ for (const full of walk(quarantine)) {
 }
 
 console.log(`materialized ${count} referenced file(s) from quarantine`);
+if (process.env.GITHUB_STEP_SUMMARY) {
+  // Best-effort annotation: files are already materialized, so a
+  // broken summary path must not fail the deploy.
+  try {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `Prebuilt refs materialized: ${count} file(s) (manifest: .preview-refs-manifest.json)\n`
+    );
+  } catch (error) {
+    console.error(`WARNING: could not write step summary: ${error.message}`);
+  }
+}

@@ -27,4 +27,3 @@ describe('ASCII-safe discovery attribute digest migration', () => {
     expect(asciiDigestSql).toContain('discovery_identity_lexeme_v6(text, text) FROM PUBLIC');
   });
 });
-

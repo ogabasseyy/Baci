@@ -54,6 +54,10 @@ export function useProductDetailsSelectionState(
     condition: productData.condition,
     manage_stock: productData.manage_stock,
     variants: variantResolutionVariants,
+    // Route-condition validation retains an independent condition only for
+    // the parent family or a matching offer; the offers must ride along or
+    // valid paired-offer links lose their grade here.
+    offers: productData.offers,
   };
   // PDP-only price-first default; feeds/cart keep the shared resolver.
   const defaultVariantSelection =

@@ -201,7 +201,7 @@ export async function loadStructuredDiscoveryCandidates({
     : Promise.resolve({ value: { ids: [], truncated: false }, unavailable: false });
   const [lexical, semantic, facts, variants] = await Promise.all([
     lexicalPromise, semanticPromise,
-    loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category, condition }),
+    loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category, condition, excludedTypes: intent?.excluded_product_types }),
     loadVariantRecallIds(intent, merchantId, supabase, { brand, category, condition }),
   ]);
   // Free-text relevance votes independently from structured-fact votes

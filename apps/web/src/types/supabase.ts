@@ -20766,6 +20766,7 @@ export type Database = {
           brand_filter?: string;
           category_filter?: string;
           condition_filter?: string;
+          excluded_types_filter?: Json;
           merchant_id_param: string;
           query_text: string;
           result_limit?: number;
@@ -20774,6 +20775,36 @@ export type Database = {
         Returns: {
           product_id: string;
           total_count: number;
+        }[];
+      };
+      get_mcp_search_product_offers: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          compare_at_price: number;
+          condition: string;
+          id: string;
+          price: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_product_variants: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          attributes: Json;
+          condition: string;
+          created_at: string;
+          effective_policy: string;
+          id: string;
+          price_override: number;
+          product_id: string;
+          stock_quantity: number;
         }[];
       };
       get_mcp_search_serialized_anchor_policies: {

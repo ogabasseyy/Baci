@@ -75,7 +75,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
     expect(result.truncated).toBe(false);
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
       merchant_id_param: 'merchant-1', query_text: 'ZX-42', result_limit: 100, result_offset: 0,
-      brand_filter: null, category_filter: null, condition_filter: null,
+      brand_filter: null, category_filter: null, condition_filter: null, excluded_types_filter: null,
     });
   });
 
@@ -85,7 +85,7 @@ describe('loadStructuredDiscoveryCandidates', () => {
       factQuery: '(phone & (samsung | google) & 256gb)', merchantId: 'merchant-1', supabase: fixture.supabase });
     expect(fixture.rpc).toHaveBeenCalledWith('search_product_discovery_facts', {
       merchant_id_param: 'merchant-1', query_text: '(phone & (samsung | google) & 256gb)', result_limit: 100, result_offset: 0,
-      brand_filter: null, category_filter: null, condition_filter: null,
+      brand_filter: null, category_filter: null, condition_filter: null, excluded_types_filter: null,
     });
   });
 

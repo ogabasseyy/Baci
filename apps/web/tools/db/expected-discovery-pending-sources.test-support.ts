@@ -159,4 +159,29 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261001330000_browse_option_gate_reuse.sql',
     sha256: '87cdeaaa1737ea4ba1cbe97b0b98cc674039ea876cfadb9489cda62fd0d40c53',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001340000_fact_option_paired_purchasable.sql',
+    sha256: '4fdae2db758c66f2b36332a8a915a21ef63347df199f4ac87ab182728536872b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001350000_browse_exclusion_unknown_drop.sql',
+    sha256: '8971ba5fb7c1489abb50fb16b9d089ee64bea4517b738984c117f605e3d3514f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001360000_browse_availability_gate.sql',
+    sha256: '5e1edb90df416a415fd89fe6e2fd6646880f749224ced621c5e4581ddef71c6b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001370000_browse_truncation_filter.sql',
+    sha256: '486162c28e4d60fbd0585205dd9a1de17a7c9a4b325773bb0458d52b53ca1b7d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261001380000_fact_excluded_types.sql',
+    sha256: '433c5d879cfe821925112d4b683a8038cc0c597f245da30d42864013bd50b40c',
+  },
 ] as const;

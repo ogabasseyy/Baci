@@ -53,6 +53,24 @@ VALUES
   ('e5100000-0000-4000-8000-000000000632', 'e5100000-0000-4000-8000-000000000619',
    'e5100000-0000-4000-8000-000000000601', '{"storage_gb":256}', 5, 'new');
 
+-- A depleted managed base and an oversized parent filter before paging;
+-- the unmanaged twin stays servable without stock.
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, category, price, status, created_at, condition, has_variants, manage_stock, stock_quantity, discovery_metadata)
+VALUES
+  ('e5100000-0000-4000-8000-000000000624', 'e5100000-0000-4000-8000-000000000601',
+   'Depleted base', 'depleted-base', 'Depl', 'Audio', 50000, 'active', NULL, 'new', false, true, 0, '{}'),
+  ('e5100000-0000-4000-8000-000000000625', 'e5100000-0000-4000-8000-000000000601',
+   'Oversized browse', 'oversized-browse', 'Over', 'Audio', 50000, 'active', NULL, 'new', true, true, 5, '{}'),
+  ('e5100000-0000-4000-8000-000000000626', 'e5100000-0000-4000-8000-000000000601',
+   'Unmanaged base', 'unmanaged-base', 'Unmg', 'Audio', 50000, 'active', NULL, 'new', false, false, 0, '{}');
+
+INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity, condition)
+SELECT ('e5100000-0000-4000-8000-' || lpad(to_hex(g), 12, '0'))::uuid,
+  'e5100000-0000-4000-8000-000000000625',
+  'e5100000-0000-4000-8000-000000000601', '{"storage_gb":256}', 5, 'new'
+FROM pg_catalog.generate_series(1, 129) AS g;
+
 -- Exclusion fixtures live on their own merchant: a phone, a tablet, and a
 -- type-less row that must stay reachable (unverified, never excluded).
 INSERT INTO public.products
@@ -80,6 +98,14 @@ VALUES (
   ('e5100000-0000-4000-8000-' || lpad(to_hex(717), 12, '0'))::uuid,
   'e5100000-0000-4000-8000-000000000623',
   'e5100000-0000-4000-8000-000000000603', 'used', 40000, 2, 'active'
+);
+
+-- Availability fixtures carry stock except the depleted pin and the
+-- unmanaged contrast (servable without stock).
+UPDATE public.products SET stock_quantity = 5
+WHERE id NOT IN (
+  'e5100000-0000-4000-8000-000000000624',
+  'e5100000-0000-4000-8000-000000000626'
 );
 
 SET LOCAL ROLE anon;
@@ -135,10 +161,13 @@ BEGIN
     p_sort => 'newest',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 7
+  IF cardinality(browse_ids) IS DISTINCT FROM 8
     OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000614'::uuid
     OR browse_ids[6] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000618'::uuid
-    OR browse_ids[7] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000619'::uuid THEN
+    OR browse_ids[7] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000619'::uuid
+    OR browse_ids[8] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000626'::uuid
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000624'::uuid]
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000625'::uuid] THEN
     RAISE EXCEPTION 'newest browse must lead with the 2025 row and park undated rows last, got %', browse_ids;
   END IF;
   -- Requested conditions narrow before paging: only the used base
@@ -159,8 +188,10 @@ BEGIN
     p_condition => 'new',
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 6
-    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000617'::uuid] THEN
+  IF cardinality(browse_ids) IS DISTINCT FROM 7
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000617'::uuid]
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000624'::uuid]
+    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000625'::uuid] THEN
     RAISE EXCEPTION 'new browse must drop the used base, got %', browse_ids;
   END IF;
   SELECT array_agg(id) INTO browse_ids
@@ -212,13 +243,9 @@ BEGIN
     p_excluded_types => '["phone"]'::jsonb,
     p_limit => 10
   );
-  IF cardinality(browse_ids) IS DISTINCT FROM 2
-    OR NOT (browse_ids @> ARRAY[
-      'e5100000-0000-4000-8000-000000000621'::uuid,
-      'e5100000-0000-4000-8000-000000000622'::uuid
-    ])
-    OR browse_ids @> ARRAY['e5100000-0000-4000-8000-000000000620'::uuid] THEN
-    RAISE EXCEPTION 'excluded browse must drop the phone only, got %', browse_ids;
+  IF cardinality(browse_ids) IS DISTINCT FROM 1
+    OR browse_ids[1] IS DISTINCT FROM 'e5100000-0000-4000-8000-000000000621'::uuid THEN
+    RAISE EXCEPTION 'excluded browse must keep the tablet only, got %', browse_ids;
   END IF;
   SELECT array_agg(id) INTO browse_ids
   FROM public.search_products_browse(

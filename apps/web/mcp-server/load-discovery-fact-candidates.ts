@@ -3,14 +3,14 @@ import { extractRankedProductIds, toRankedSearchProductRows } from './search-pro
 
 /** Indexed verified facts are a separate candidate source, under product RLS. */
 export async function loadDiscoveryFactCandidates(query: string, merchantId: string, supabase: SupabaseClient,
-  filters: { brand?: string; category?: string; condition?: string } = {}) {
+  filters: { brand?: string; category?: string; condition?: string; excludedTypes?: string[] } = {}) {
   const ids: string[] = [];
   try {
     for (let offset = 0; offset < 500; offset += 100) {
       const { data, error } = await supabase.rpc('search_product_discovery_facts', {
         merchant_id_param: merchantId, query_text: query, result_limit: 100, result_offset: offset,
         brand_filter: filters.brand ?? null, category_filter: filters.category ?? null,
-        condition_filter: filters.condition ?? null,
+        condition_filter: filters.condition ?? null, excluded_types_filter: filters.excludedTypes ?? null,
       });
       if (error) return { ids, truncated: true };
       const rows = toRankedSearchProductRows(data);

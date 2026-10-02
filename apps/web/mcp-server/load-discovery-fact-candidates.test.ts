@@ -28,6 +28,16 @@ describe('verified fact retrieval', () => {
     }));
   });
 
+  it('forwards excluded product types so the RPC narrows before the cap', async () => {
+    const rpc = vi.fn(async () => ({ data: [], error: null }));
+    await loadDiscoveryFactCandidates('ZX-42', 'merchant', { rpc } as unknown as SupabaseClient, {
+      excludedTypes: ['phone'],
+    });
+    expect(rpc).toHaveBeenCalledWith('search_product_discovery_facts', expect.objectContaining({
+      excluded_types_filter: ['phone'],
+    }));
+  });
+
   it('retains confirmed IDs and marks partial coverage when a facts page fails', async () => {
     const rpc = vi.fn().mockResolvedValueOnce({data: Array.from({length: 100}, (_, i) => ({product_id: String(i), total_count: 120})), error: null})
       .mockResolvedValueOnce({data: null, error: {code: 'unavailable'}});

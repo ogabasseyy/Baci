@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampZeptomailAttemptsPerSender,
+  resolveZeptomailFallbackAdmission,
   senderLoopWorstMs,
   zeptomailSendAdmissionBudgetMs,
 } from './zeptomail-send-budget';
@@ -26,5 +28,46 @@ describe('zeptomail send budget', () => {
     expect(zeptomailSendAdmissionBudgetMs()).toBe(
       senderLoopWorstMs(4) + 10_000
     );
+  });
+
+  it('clamps per-sender attempt caps into the retry loop', () => {
+    expect(clampZeptomailAttemptsPerSender(0)).toBe(1);
+    expect(clampZeptomailAttemptsPerSender(2)).toBe(2);
+    expect(clampZeptomailAttemptsPerSender(99)).toBe(4);
+  });
+
+  it('runs the full fallback loop without a deadline', () => {
+    expect(resolveZeptomailFallbackAdmission({ attemptsPerSender: 4 })).toEqual(
+      {
+        fallbackAttempts: 4,
+        fallbackBudgetMs: undefined,
+        fallbackFits: true,
+        fallbackWorstMs: senderLoopWorstMs(4),
+      }
+    );
+  });
+
+  it('single-shots the fallback when one attempt fits the budget', () => {
+    const admission = resolveZeptomailFallbackAdmission({
+      attemptsPerSender: 4,
+      remainingBudgetMs: senderLoopWorstMs(1),
+    });
+
+    expect(admission).toEqual({
+      fallbackAttempts: 1,
+      fallbackBudgetMs: senderLoopWorstMs(1),
+      fallbackFits: true,
+      fallbackWorstMs: senderLoopWorstMs(1),
+    });
+  });
+
+  it('declines the fallback when even one attempt overruns', () => {
+    const admission = resolveZeptomailFallbackAdmission({
+      attemptsPerSender: 4,
+      remainingBudgetMs: senderLoopWorstMs(1) - 1,
+    });
+
+    expect(admission.fallbackAttempts).toBe(1);
+    expect(admission.fallbackFits).toBe(false);
   });
 });

@@ -70,15 +70,21 @@ async function reconcileSharedReferencePayment(
   let cursor: string | null = null;
   let seenAnyRefund = false;
   for (;;) {
+    // Legacy rows may pad or re-case the gateway (` Paystack `):
+    // prefilter case-insensitively server-side, then exact-normalize
+    // each row below. The keyset cursor still advances over the
+    // unfiltered page, and the missing-audit review files only after
+    // the full scan — a foreign-only page must not stop the scan or
+    // file while genuine matches wait on later pages.
     const query = supabase
       .from('transactions')
       .select(
-        'id, order_id, merchant_id, gateway_reference, amount, currency, metadata, status'
+        'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, metadata, status'
       )
       .eq('order_id', payment.order_id)
       .eq('merchant_id', payment.merchant_id)
       .eq('transaction_type', 'refund')
-      .eq('gateway', 'paystack')
+      .ilike('gateway', '%paystack%')
       .eq('metadata->>payment_transaction_id', payment.id)
       // A new signed provider event may resolve a held refund. Only polling
       // excludes review holds; the provider read still verifies all evidence.
@@ -89,26 +95,11 @@ async function reconcileSharedReferencePayment(
       cursor === null ? await query : await query.gt('id', cursor);
     if (error) throw new Error('refund_event_lookup_failed');
     const page = (refunds ?? []) as RefundRow[];
-    if (!seenAnyRefund && page.length === 0) {
-      // No in-flight local row: either a late duplicate of an
-      // already-reconciled refund (stays silent) or a provider refund
-      // with no local audit row at all, which polling can never
-      // rediscover — that fails closed with a durable review.
-      await fileReferenceOnlyPaystackRefundReview(supabase, {
-        amount: Number(paymentRow.amount) || 0,
-        currency: paymentRow.currency ?? 'NGN',
-        merchantId: paymentRow.merchant_id,
-        orderId: paymentRow.order_id,
-        paymentId: paymentRow.id,
-        // The query selected this payment by reference, so it identifies
-        // the leg even when the stored row omits it.
-        paymentReference: transactionReference,
-        providerRefundStatus,
-      });
-      return;
-    }
-    seenAnyRefund = seenAnyRefund || page.length > 0;
-    for (const refund of page) {
+    const matches = page.filter(
+      (refund) => normalizePaymentGateway(refund.gateway) === 'PAYSTACK'
+    );
+    seenAnyRefund = seenAnyRefund || matches.length > 0;
+    for (const refund of matches) {
       try {
         await reconcilePaystackCancellationRefund(supabase, refund);
       } catch (reason) {
@@ -116,9 +107,28 @@ async function reconcileSharedReferencePayment(
         await fileRefundEvidenceReview(supabase, refund, reason.message);
         await holdPaystackRefundForReview(supabase, refund.id, reason.message);
       }
-      cursor = refund.id;
+    }
+    if (page.length > 0) {
+      cursor = (page[page.length - 1]?.id as string | undefined) ?? cursor;
     }
     if (page.length < REFUND_PAGE_SIZE) break;
+  }
+  if (!seenAnyRefund) {
+    // No in-flight local row: either a late duplicate of an
+    // already-reconciled refund (stays silent) or a provider refund
+    // with no local audit row at all, which polling can never
+    // rediscover — that fails closed with a durable review.
+    await fileReferenceOnlyPaystackRefundReview(supabase, {
+      amount: Number(paymentRow.amount) || 0,
+      currency: paymentRow.currency ?? 'NGN',
+      merchantId: paymentRow.merchant_id,
+      orderId: paymentRow.order_id,
+      paymentId: paymentRow.id,
+      // The query selected this payment by reference, so it identifies
+      // the leg even when the stored row omits it.
+      paymentReference: transactionReference,
+      providerRefundStatus,
+    });
   }
 }
 

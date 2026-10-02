@@ -18,6 +18,7 @@ import {
   buildRefundCandidates,
   buildReviewInsert,
   cancelledPaymentRow,
+  REFUND_FIXTURE,
 } from './reconcile-paystack-refund-event.test-helpers';
 
 describe('Paystack reference-only refund events', () => {
@@ -324,6 +325,56 @@ describe('Paystack reference-only refund events', () => {
     expect(from).toHaveBeenCalledTimes(5);
   });
 
+  it('reconciles a legacy-cased refund row and skips foreign rows', async () => {
+    provider.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 42,
+        status: 'processed',
+        transaction: 123,
+      },
+      success: true,
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      success: true,
+    });
+    const refunds = buildRefundCandidates([
+      {
+        ...REFUND_FIXTURE,
+        gateway: ' Paystack ',
+        id: 'refund-legacy',
+      },
+      { ...REFUND_FIXTURE, gateway: 'korapay', id: 'refund-foreign' },
+    ]);
+    const from = vi
+      .fn()
+      .mockReturnValue(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildPaymentCandidates([cancelledPaymentRow()]))
+      .mockReturnValueOnce(refunds)
+      .mockReturnValueOnce(buildPaymentLookup());
+    const rpc = vi.fn((name: string) =>
+      Promise.resolve({
+        data:
+          name === 'open_paystack_refund_reference_watch_v1' ? [] : 'processed',
+        error: null,
+      })
+    );
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    expect(refunds.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
+    expect(rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-legacy' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_refund_id: 'refund-foreign' })
+    );
+  });
+
   it('revisits every in-flight refund past the first page', async () => {
     provider.fetchRefund.mockResolvedValue({
       data: {
@@ -342,6 +393,7 @@ describe('Paystack reference-only refund events', () => {
     const rows = Array.from({ length: 11 }, (_, index) => ({
       amount: 100,
       currency: 'NGN',
+      gateway: 'paystack',
       gateway_reference: '42',
       id: `refund-${index}`,
       merchant_id: 'merchant-1',

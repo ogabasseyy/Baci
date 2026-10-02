@@ -15,12 +15,16 @@ const AUDIT_WRITE_MARGIN_MS = 8_000;
 // race); admission budgets must leave that buffer on top of the loop.
 const SEND_CUTOFF_BUFFER_MS = 10_000;
 
+/** Clamp a per-sender attempt cap into the configured retry loop. */
+export function clampZeptomailAttemptsPerSender(
+  maxAttemptsPerSender: number
+): number {
+  return Math.max(1, Math.min(maxAttemptsPerSender, ZEPTOMAIL_MAX_RETRIES + 1));
+}
+
 /** Worst-case wall time for one sender's retry loop. */
 export function senderLoopWorstMs(maxAttempts: number): number {
-  const attempts = Math.max(
-    1,
-    Math.min(maxAttempts, ZEPTOMAIL_MAX_RETRIES + 1)
-  );
+  const attempts = clampZeptomailAttemptsPerSender(maxAttempts);
   let backoffMs = 0;
   for (let i = 0; i < attempts - 1; i++) {
     backoffMs += ZEPTOMAIL_RETRY_BASE_DELAY_MS * 2 ** i;
@@ -42,4 +46,45 @@ export function zeptomailSendAdmissionBudgetMs(
   maxAttemptsPerSender: number = ZEPTOMAIL_MAX_RETRIES + 1
 ): number {
   return senderLoopWorstMs(maxAttemptsPerSender) + SEND_CUTOFF_BUFFER_MS;
+}
+
+export interface ZeptomailFallbackAdmission {
+  fallbackAttempts: number;
+  fallbackBudgetMs: number | undefined;
+  fallbackFits: boolean;
+  fallbackWorstMs: number;
+}
+
+/**
+ * Admit the platform-sender fallback. Without a deadline the fallback
+ * runs the full per-sender loop; under a deadline the primary loop
+ * already spent the retry budget, so the fallback gets a single shot
+ * from the healthy platform domain (the sweep retries transient
+ * failures next tick) and runs whenever that single attempt fits.
+ * Gating on another full loop would skip the fallback on every retry
+ * — admission reserves exactly one loop plus the cutoff buffer —
+ * exhausting the row solely because the merchant sender is stale.
+ * Skipping on a truly exhausted budget still avoids aborting mid-send
+ * and stranding the row as delivery_uncertain instead of a clean
+ * retryable failure. Pass the remaining budget (deadline minus now);
+ * omit it when the caller set no fallback deadline.
+ */
+export function resolveZeptomailFallbackAdmission({
+  attemptsPerSender,
+  remainingBudgetMs,
+}: {
+  attemptsPerSender: number;
+  remainingBudgetMs?: number;
+}): ZeptomailFallbackAdmission {
+  const fallbackAttempts =
+    remainingBudgetMs === undefined ? attemptsPerSender : 1;
+  const fallbackWorstMs = senderLoopWorstMs(fallbackAttempts);
+  const fallbackFits =
+    remainingBudgetMs === undefined || remainingBudgetMs >= fallbackWorstMs;
+  return {
+    fallbackAttempts,
+    fallbackBudgetMs: remainingBudgetMs,
+    fallbackFits,
+    fallbackWorstMs,
+  };
 }

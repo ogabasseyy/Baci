@@ -4,6 +4,7 @@ export const REFUND_FIXTURE = {
   id: 'refund-1',
   order_id: 'order-1',
   merchant_id: 'merchant-1',
+  gateway: 'paystack',
   gateway_reference: '42',
   amount: 100,
   currency: 'NGN',
@@ -48,7 +49,7 @@ export function buildRefundCandidates(data: unknown, error: unknown = null) {
     // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaited thenables.
     then: (resolve: (result: unknown) => void) => resolve({ data, error }),
   };
-  for (const key of ['select', 'eq', 'in', 'order', 'limit', 'gt']) {
+  for (const key of ['select', 'eq', 'ilike', 'in', 'order', 'limit', 'gt']) {
     builder[key] = vi.fn().mockReturnValue(builder);
   }
   return builder;

@@ -55,7 +55,10 @@ test('deploy step invokes the trusted runner with prebuilt flags', () => {
 
 test('preview URL parsing anchors on the deploy assignment line', () => {
   assert.match(previewDeployScript, /grep -oiE 'preview:/);
-  assert.match(previewDeployScript, /https:\/\/\[A-Za-z0-9-\]\+\\.vercel\\.app/);
+  assert.match(
+    previewDeployScript,
+    /https:\/\/baci-\[A-Za-z0-9-\]\*-basseys-projects-d7395611\\.vercel\\.app/
+  );
   // Last match wins (Vercel prints the assignment after upload echoes;
   // same convention as deploy-with-retry.sh). Never first-match.
   assert.match(previewDeployScript, /\|\s*tail -n 1/);

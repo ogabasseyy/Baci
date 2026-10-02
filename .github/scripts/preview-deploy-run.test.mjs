@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT = fileURLToPath(
   new URL('./preview-deploy-run.sh', import.meta.url),
 );
-const PREVIEW_URL = 'https://baci-x-team.vercel.app';
+const PREVIEW_URL =
+  'https://baci-p4e7k4wyn-basseys-projects-d7395611.vercel.app';
 
 // GNU timeout is absent on macOS runners, so tests prepend a double that
 // execs the command and optionally forces the exit status. Real timeout
@@ -148,6 +149,25 @@ test('ignores off-domain lookalikes containing vercel.app', () => {
     const result = runDeploy(
       harness,
       `echo 'Preview: https://evil.example/x?.vercel.app'`
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Could not find the Preview URL/);
+  });
+});
+
+test('rejects vercel.app URLs outside this project namespace', () => {
+  withHarness((harness) => {
+    const result = runDeploy(
+      harness,
+      `echo 'Preview: https://other-app.vercel.app'; echo 'Preview: https://baci-evil.vercel.app'; echo 'Preview: ${PREVIEW_URL}'`
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(read(harness.outputs), new RegExp(`preview_url=${PREVIEW_URL}`));
+  });
+  withHarness((harness) => {
+    const result = runDeploy(
+      harness,
+      `echo 'Preview: https://attacker-site.vercel.app'`
     );
     assert.equal(result.status, 1);
     assert.match(result.stderr, /Could not find the Preview URL/);

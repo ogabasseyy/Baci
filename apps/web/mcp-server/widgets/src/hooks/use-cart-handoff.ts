@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { getCartHandoffUrl } from '../cart-handoff-result';
+import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
@@ -24,6 +25,19 @@ export function useCartHandoff() {
   const handleAddToCart = async (product: Product) => {
     const requestId = ++handoffRequestId.current;
     setCartError(null);
+    // Option-bearing results open the PDP directly: the cart handoff rejects
+    // variant/condition products, and its selection URL is slug-only, so a
+    // tool call here would discard the matched option.
+    const optionLink = resolveOptionAwareProductUrl(product);
+    if (optionLink.hasOptions) {
+      try {
+        openOgabasseyUrl(optionLink.url);
+      } catch {
+        if (requestId !== handoffRequestId.current) return;
+        setCartError('Could not open the cart. Please try again.');
+      }
+      return;
+    }
     if (!window.openai?.callTool) {
       setCartError('ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.');
       return;

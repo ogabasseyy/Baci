@@ -87,4 +87,50 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       toolsByName.get('add_to_cart').inputSchema.properties
     ).not.toHaveProperty('session_id');
   });
+
+  it('publishes the search_products intent contract', async () => {
+    const { GET } = await import('./route');
+    const body = await GET().json();
+    const searchProducts = body.tools.find(
+      (tool: { name: string }) => tool.name === 'search_products'
+    );
+
+    expect(searchProducts.description).toContain('intent');
+    expect(searchProducts.inputSchema.required).toEqual(
+      expect.arrayContaining(['intent'])
+    );
+    expect(searchProducts.inputSchema.properties.intent).toMatchObject({
+      type: 'object',
+      required: ['alternatives'],
+      properties: {
+        alternatives: expect.objectContaining({
+          minItems: 1,
+          maxItems: 5,
+        }),
+      },
+    });
+    const attributeBranches =
+      searchProducts.inputSchema.properties.intent.properties.alternatives.items
+        .properties.attributes.items.oneOf;
+    expect(attributeBranches).toHaveLength(2);
+    expect(attributeBranches[0]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['storage_gb', 'power_w']) },
+        operator: { enum: ['eq', 'gte', 'lte'] },
+        value: {
+          anyOf: [
+            { const: 0 },
+            { type: 'number', minimum: 0.000001, maximum: 1000000000 },
+          ],
+        },
+      },
+    });
+    expect(attributeBranches[1]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['color']) },
+        operator: { enum: ['eq'] },
+        value: { type: 'string' },
+      },
+    });
+  });
 });

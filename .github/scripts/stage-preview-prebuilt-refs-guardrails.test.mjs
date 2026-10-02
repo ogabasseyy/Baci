@@ -144,3 +144,74 @@ test('absolute and escaping refs do not satisfy the usable guard', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('leaves maps untouched when a guardrail fails', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const original = JSON.stringify({
+    filePathMap: {
+      '/gone.js': 'node_modules/gone/index.js',
+      '/gone2.js': 'node_modules/gone2/index.js',
+    },
+  });
+  const root = layout({ [configRel]: original });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    // A same-workspace retry must see the original maps, not truncated ones.
+    assert.equal(readFileSync(join(root, configRel), 'utf8'), original);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('warns about protected and invalid drops that pass the guards', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: JSON.stringify({
+      filePathMap: {
+        '/p.js': 'trusted-ops/evil.js',
+        '/i.js': 42,
+        '/ok.js': 'node_modules/ok/index.js',
+      },
+    }),
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const summary = join(root, 'summary.md');
+    writeFileSync(summary, '');
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+      env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(
+      run.stderr,
+      /WARNING: dropped 1 protected-path and 1 invalid entries/
+    );
+    const text = readFileSync(summary, 'utf8');
+    assert.match(text, /\(0 dangling, 1 protected, 1 invalid\)/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects an array filePathMap instead of coercing it', () => {
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const original = JSON.stringify({ filePathMap: ['node_modules/ok/index.js'] });
+  const root = layout({
+    [configRel]: original,
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], {
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /filePathMap is not an object/);
+    assert.equal(readFileSync(join(root, configRel), 'utf8'), original);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

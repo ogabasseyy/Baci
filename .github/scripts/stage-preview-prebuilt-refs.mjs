@@ -60,6 +60,7 @@ const unusableConfigs = [];
 let stringValues = 0;
 let missingCount = 0;
 let insideOutputCount = 0;
+const pendingRewrites = [];
 
 for (const configPath of vcConfigs(outputDir)) {
   let config;
@@ -71,6 +72,10 @@ for (const configPath of vcConfigs(outputDir)) {
   }
   const maps = config?.filePathMap;
   if (!maps || typeof maps !== 'object') continue;
+  if (Array.isArray(maps)) {
+    console.error(`error: filePathMap is not an object in ${configPath}`);
+    process.exit(1);
+  }
   const kept = {};
   let usable = 0;
   let dropped = 0;
@@ -161,8 +166,10 @@ for (const configPath of vcConfigs(outputDir)) {
   }
   if (dropped > 0 && usable === 0) unusableConfigs.push(configPath);
   if (Object.keys(kept).length !== Object.keys(maps).length) {
-    config.filePathMap = kept;
-    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    // Buffer the rewrite: the guardrails run after the full scan, and a
+    // failed run must not leave truncated maps on disk — a same-workspace
+    // retry would see fewer string values and could wrongly pass.
+    pendingRewrites.push({ configPath, config, kept });
   }
 }
 
@@ -194,6 +201,23 @@ if (unusableConfigs.length > 0) {
   );
   process.exit(1);
 }
+// Both guardrails passed: apply the buffered map rewrites now, so a
+// failed run never leaves truncated maps behind for a retry to see.
+for (const { configPath, config, kept } of pendingRewrites) {
+  config.filePathMap = kept;
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+}
+const droppedProtected = skipped.filter((s) => s.reason === 'protected-path').length;
+const droppedInvalid = skipped.filter((s) => s.reason === 'invalid').length;
+if (droppedProtected > 0 || droppedInvalid > 0) {
+  const parts = [];
+  if (droppedProtected > 0) parts.push(`${droppedProtected} protected-path`);
+  if (droppedInvalid > 0) parts.push(`${droppedInvalid} invalid`);
+  const total = droppedProtected + droppedInvalid;
+  console.error(
+    `WARNING: dropped ${parts.join(' and ')} ${total === 1 ? 'entry' : 'entries'} from shipped maps (see .preview-refs-manifest.json)`
+  );
+}
 if (missingCount > 0) {
   const missingVals = skipped
     .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
@@ -223,9 +247,16 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   const dropped = skipped
     .filter((s) => s.reason === 'missing' || s.reason === 'non-file')
     .map((s) => s.value.replace(/[`\r\n]/g, '').slice(0, 200));
+  const guardedCounts = [];
+  if (droppedProtected > 0) guardedCounts.push(`${droppedProtected} protected`);
+  if (droppedInvalid > 0) guardedCounts.push(`${droppedInvalid} invalid`);
+  const danglingLabel =
+    `(${dropped.length} dangling` +
+    (guardedCounts.length > 0 ? `, ${guardedCounts.join(', ')}` : '') +
+    ')';
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
-    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} (${dropped.length} dangling)\n` +
+    `### Prebuilt refs\nstaged ${new Set(staged).size}, skipped ${skipped.length} ${danglingLabel}\n` +
       dropped.slice(0, 20).map((v) => `- \`${v}\``).join('\n') +
       (dropped.length > 0 ? '\n' : '')
   );

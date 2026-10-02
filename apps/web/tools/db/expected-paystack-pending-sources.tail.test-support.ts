@@ -384,4 +384,14 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928184200_candidate_selection_rpcs.sql',
     sha256: '430ef60550d61d9b5d15ee3634ce600d754457596493809e8ccbbe9d34a0c06a',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928184300_normalize_verified_refund_row_gateway.sql',
+    sha256: '210af41e0cf6ddfa8b38664eeed24a2920e18c470af20570ba25af7ea4c3674d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928184400_close_reviews_evidence_null_safety.sql',
+    sha256: '28e4c0235b156841dea5fa4f19ea0bc6d0226989700e18bf31e93e631f50799f',
+  },
 ];

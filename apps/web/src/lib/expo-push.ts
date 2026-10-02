@@ -24,6 +24,7 @@ import {
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
 import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
+import { createDeliveryStartBoundary } from './push-delivery-boundary';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -218,19 +219,15 @@ export async function notifyMerchant(
   }));
 
   let result: NotificationSendResult;
-  // Chunking and delivery-start failures happen before any Expo request,
-  // so the push definitely was not sent and callers can safely retry or
-  // fall back to email. Anything after dispatch starts stays unknown.
-  let providerDispatchStarted = false;
+  const deliveryBoundary = createDeliveryStartBoundary(
+    options?.onDeliveryStart
+  );
   try {
     const { deliveryUncertain, tickets } = await sendPushNotifications(
       messages,
       {
         ...options,
-        onDeliveryStart: async () => {
-          await options?.onDeliveryStart?.();
-          providerDispatchStarted = true;
-        },
+        onDeliveryStart: deliveryBoundary.markDeliveryStarted,
       }
     );
 
@@ -245,7 +242,7 @@ export async function notifyMerchant(
     result = {
       sent: 0,
       failed: tokens.length,
-      ...(providerDispatchStarted
+      ...(deliveryBoundary.wasDeliveryStarted()
         ? { deliveryOutcome: 'unknown' as const }
         : {}),
       errors: [

@@ -22,7 +22,7 @@
 //
 // Usage: stage-preview-prebuilt-refs.mjs [project-root] [staging-dir]
 // Defaults: root = cwd, staging = <root>/.preview-refs-stage (recreated).
-const sanitizeRef = (v) => v.replace(/[`\r\n]/g, '').slice(0, 200);
+const sanitizeRef = (v) => v.replace(/[\0-\x1f`]/g, '').slice(0, 200);
 import { appendFileSync, copyFileSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -76,7 +76,9 @@ for (const configPath of vcConfigs(outputDir)) {
     console.error(`error: filePathMap is not an object in ${configPath}`);
     process.exit(1);
   }
-  const kept = {};
+  // Null-prototype dict: build-controlled keys may include __proto__,
+  // which a plain object would silently swallow instead of keeping.
+  const kept = Object.create(null);
   let usable = 0;
   let dropped = 0;
   for (const [key, value] of Object.entries(maps)) {
@@ -190,6 +192,10 @@ for (const configPath of vcConfigs(outputDir)) {
 // global backstop below is for a systematically wrong base. Tie policy:
 // missing must be strictly outnumbered by resolving; a tie refuses to
 // ship, since a wrong drop surfaces as a runtime request failure.
+// Protected/invalid drops are exempt from this ratio by design: those
+// values can never be legitimate runtime refs (CI-tree paths, corrupt
+// data), so their count carries no wrong-base signal. Per-config
+// total-loss still fails when a function loses everything usable.
 const resolving = new Set(staged).size + new Set(insideOutputValues).size;
 if (missingCount > 0 && missingCount >= resolving) {
   console.error(

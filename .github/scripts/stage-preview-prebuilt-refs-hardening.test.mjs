@@ -93,7 +93,28 @@ test('sanitizes dangling values in the stderr warning', () => {
     assert.equal(run.status, 0, run.stderr);
     assert.ok(!run.stderr.includes('\nFAKEERROR\n'));
     assert.ok(!run.stderr.includes('y'.repeat(201)));
-    assert.match(run.stderr, /31mredFAKEERROR/);
+    assert.ok(!run.stderr.includes('\x1b'));
+    assert.match(run.stderr, /\[31mredFAKEERROR/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps a __proto__ filePathMap key', () => {
+  // The rebuilt map must preserve hostile keys as own properties, not
+  // silently drop them through the Object prototype.
+  const configRel = '.vercel/output/functions/a.func/.vc-config.json';
+  const root = layout({
+    [configRel]: '{"filePathMap":{"__proto__":"node_modules/proto/index.js","/ok.js":"node_modules/ok/index.js"}}',
+    'node_modules/proto/index.js': 'proto',
+    'node_modules/ok/index.js': 'ok',
+  });
+  try {
+    const run = spawnSync('node', [SCRIPT, root, join(root, 'stage')], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr);
+    const rewritten = JSON.parse(readFileSync(join(root, configRel), 'utf8')).filePathMap;
+    assert.ok(Object.hasOwn(rewritten, '__proto__'));
+    assert.equal(rewritten['__proto__'], 'node_modules/proto/index.js');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

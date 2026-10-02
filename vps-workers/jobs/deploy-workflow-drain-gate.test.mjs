@@ -45,6 +45,9 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
+    // Production latch reads fingerprint the installed dotenv, never a
+    // runner export (job-level env reaches the check script's resolver).
+    assert.match(readiness, /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
     assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
     // Production is mid-rollout (worker role LOGIN-capable until this PR's
@@ -110,6 +113,13 @@ describe('production cache-invalidation drain rollout gate', () => {
     assert.match(
       capability,
       /\[ "\$identity" != "\$\{GIGL_PRE_SMOKE_IDENTITY:-\}" \]/
+    );
+    // Production smoke/identity is file-authoritative at the job level,
+    // so a runner export can never certify one token while cron runs
+    // another (the smoke entry sets the same mode for its filter).
+    assert.match(
+      capability,
+      /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m
     );
   });
 
@@ -205,6 +215,8 @@ describe('production cache-invalidation drain rollout gate', () => {
       tracking,
       /^ {2}- 'packages\/shared\/src\/lib\/gigl-tracking-status\.ts'$/m
     );
+    // The shipped dotenv reader is a runtime dependency of every poll.
+    assert.match(tracking, /^ {2}- '\.github\/scripts\/gigl-dotenv\.sh'$/m);
   });
 
   it('keeps every GIGL-named behavioral worker file in the tracking filter', () => {

@@ -17,7 +17,11 @@
 # dotenv precedence); every other caller-exported variable -- a service key
 # lingering in a cron/SSH/runner environment, GITHUB_TOKEN in CI -- is
 # dropped at that boundary even though BACI_WORKER_ENV=/dev/null only stops
-# further FILE loads.
+# further FILE loads. GIGL_ENV_FILE_AUTHORITATIVE=1 inverts the precedence
+# for allowlisted names (the file always wins; file-absent caller values
+# are dropped): the smoke entry sets it because a smoke certifies the
+# installed dotenv, while the poller keeps caller-wins for manual runs
+# (cron's minimal env makes it a no-op there).
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-tracking-scoped-env.sh must be sourced, not executed' >&2
   exit 2
@@ -51,12 +55,21 @@ gigl_tracking_scope_env() {
     GIGL_SCOPED_ENV_NAMES="${GIGL_SCOPED_ENV_NAMES:+$GIGL_SCOPED_ENV_NAMES }$export_key"
     # A set process variable wins even when empty (exact dotenv
     # precedence); printenv exits 0 for set-but-empty on coreutils/BSD.
-    if printenv "$export_key" >/dev/null 2>&1; then
+    # File-authoritative mode (GIGL_ENV_FILE_AUTHORITATIVE=1, set by the
+    # smoke entry) skips this: the smoke certifies the INSTALLED dotenv,
+    # so a runner export must never override the file value being proven.
+    if [ "${GIGL_ENV_FILE_AUTHORITATIVE:-}" != "1" ] && printenv "$export_key" >/dev/null 2>&1; then
       return 0
     fi
     export_value="$(gigl_dotenv_value "$shared_env" "$export_key")"
     if [ -n "$export_value" ]; then
       export "$export_key=$export_value"
+    else
+      # File-authoritative with a file-absent key: drop any caller value
+      # so the exec boundary cannot pass an uncertified override. (In
+      # default mode this only fires when the caller never set the key,
+      # so the unset is a no-op there.)
+      unset "$export_key"
     fi
   }
 

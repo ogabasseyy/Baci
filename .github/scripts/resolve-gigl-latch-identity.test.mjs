@@ -74,6 +74,23 @@ describe('GIGL latch identity resolver', () => {
     );
   });
 
+  it('ignores process overrides in file-authoritative mode', () => {
+    // Production smoke/identity must fingerprint the installed dotenv,
+    // never a runner export (which would certify one token while cron
+    // runs another).
+    const { fingerprint, scope } = resolve({
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=file-token\n',
+      processEnv: {
+        GIGL_ENABLED: '1',
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+        GIGL_TRACKING_WORKER_TOKEN: 'runner-token',
+      },
+    });
+
+    assert.equal(scope, 'disabled');
+    assert.equal(fingerprint, fingerprintOf('file-token'));
+  });
+
   it('fingerprints the effective worker token', () => {
     const { fingerprint } = resolve({
       envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',

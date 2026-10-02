@@ -32,7 +32,10 @@ effective() {
   # printenv exits 0 for set-but-empty and 1 for unset on coreutils/BSD.
   # Capture through $( ) on both paths so trailing newlines are stripped
   # identically (fingerprint stability across file/process sources).
-  if printenv "$key" >/dev/null 2>&1; then
+  # File-authoritative mode (GIGL_ENV_FILE_AUTHORITATIVE=1, set at the
+  # workflow job level) skips the process lookup: production identity
+  # must fingerprint the installed dotenv, never a runner export.
+  if [ "${GIGL_ENV_FILE_AUTHORITATIVE:-}" != "1" ] && printenv "$key" >/dev/null 2>&1; then
     value="$(printenv "$key")"
   else
     value="$(file_value "$key")"

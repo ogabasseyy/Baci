@@ -21,6 +21,12 @@ file="${1:?dotenv path is required}"
 # shellcheck source=.github/scripts/gigl-dotenv.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gigl-dotenv.sh"
 gigl_enabled="$(gigl_dotenv_value "$file" 'GIGL_ENABLED' | tr '[:upper:]' '[:lower:]')"
+# Trim like the runtime (isExplicitlyDisabledEnv) and the latch resolver:
+# the reader preserves inner spaces of quoted values, so `GIGL_ENABLED=" OFF "`
+# must count as disabled — without this the gate would treat an
+# intentionally disabled environment as enabled and fail on the missing
+# token, blocking production deployment.
+gigl_enabled="$(printf '%s' "$gigl_enabled" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 case "$gigl_enabled" in
   0|false|off) echo 'GIGL is not enabled; skipping fallback token injection.' ;;
   *) node .github/scripts/inject-prebuilt-env-secret.mjs GIGL_TRACKING_WORKER_TOKEN "$file" 'build-time-presence-stand-in-not-used-at-runtime-000000000000' ;;

@@ -168,6 +168,38 @@ describe('gigl-tracking-scoped-env', () => {
     );
   });
 
+  it('lets the file win in file-authoritative mode', () => {
+    const result = runFilterProbe({
+      sharedEnv: SHARED_ENV_FIXTURE,
+      extraEnv: {
+        GIGL_EMAIL: 'caller-override@example.com',
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
+  });
+
+  it('drops file-absent caller values in file-authoritative mode', () => {
+    const fileWithoutUrl = SHARED_ENV_FIXTURE.replace(
+      'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\n',
+      ''
+    );
+    const result = runFilterProbe({
+      sharedEnv: fileWithoutUrl,
+      extraEnv: {
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+        NEXT_PUBLIC_SUPABASE_URL: 'https://runner.example.com',
+      },
+    });
+    const expected = expectedChildEnv();
+    delete expected.NEXT_PUBLIC_SUPABASE_URL;
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(parseChildEnv(result.stdout), expected);
+  });
+
   it('fails closed when the shared env file is missing', () => {
     const result = runFilterProbe({ sharedEnv: null });
 
@@ -232,6 +264,19 @@ describe('gigl-tracking-scoped-env', () => {
       assert.ok(execIndex < delegateIndex);
     });
   }
+
+  it('runs the smoke entry in file-authoritative mode', () => {
+    const source = readFileSync(
+      join(binDir, 'verify-gigl-tracking-worker-capability.sh'),
+      'utf8'
+    );
+    const modeIndex = source.indexOf('export GIGL_ENV_FILE_AUTHORITATIVE=1');
+    const callIndex = source.indexOf('gigl_tracking_scope_env');
+
+    assert.notEqual(modeIndex, -1);
+    assert.notEqual(callIndex, -1);
+    assert.ok(modeIndex < callIndex);
+  });
 
   it('ships the shared dotenv reader to the VPS next to the filter', () => {
     const releaseHelper = readFileSync(

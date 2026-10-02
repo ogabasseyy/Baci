@@ -48,7 +48,18 @@ function runExpectingInjectorRefusal(contents) {
 }
 
 describe('verify gigl fallback token', () => {
-  for (const value of ['0', 'false', 'off', 'OFF']) {
+  for (const value of [
+    '0',
+    'false',
+    'off',
+    'OFF',
+    // Quoted/whitespace-padded disable values: the reader preserves
+    // inner spaces, so the gate must trim like the runtime — otherwise
+    // an intentionally disabled environment fails on the missing token.
+    '" OFF "',
+    ' "off" ',
+    '  off  ',
+  ]) {
     it(`skips injection when GIGL is explicitly disabled (${value})`, () => {
       const { stdout } = runWithDotenv(`GIGL_ENABLED=${value}\n`);
 

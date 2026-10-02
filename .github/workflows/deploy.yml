@@ -73,6 +73,11 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    # Production identity is file-authoritative: the latch resolver must
+    # fingerprint the installed dotenv, never a runner export (a runner
+    # variable would otherwise certify one token while cron runs another).
+    env:
+      GIGL_ENV_FILE_AUTHORITATIVE: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -222,6 +227,11 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    # Production identity is file-authoritative: the latch resolver must
+    # fingerprint the installed dotenv, never a runner export (the smoke
+    # entry sets the same mode for the filter it execs through).
+    env:
+      GIGL_ENV_FILE_AUTHORITATIVE: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

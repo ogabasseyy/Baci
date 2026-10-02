@@ -90,6 +90,10 @@ tracking:
   - 'apps/web/src/scripts/process-gigl-tracking.ts'
   - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
   - 'supabase/migrations/*gigl*'
+  # Shipped to the VPS by prepare-worker-release.sh and sourced on every
+  # poll: a reader change is a behavioral worker change and must trigger
+  # the install/SHA/smoke gates like any other worker file.
+  - '.github/scripts/gigl-dotenv.sh'
   - '.github/filters/deploy.yml'
 migrations:
   - 'supabase/migrations/**'

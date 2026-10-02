@@ -221,4 +221,30 @@ describe('recordPaystackCancellationRefund', () => {
       })
     );
   });
+
+  it.each([null, undefined, 'ok'])(
+    'quarantines delivery-uncertain when the success payload has no refund data (%s)',
+    async (data) => {
+      const { supabase } = database();
+
+      await expect(
+        recordPaystackCancellationRefund({
+          order: initiationOrder,
+          paystackRefund: { data, success: true } as never,
+          supabase,
+          transaction: initiationTransaction,
+          transactionAmount: 12.5,
+        })
+      ).rejects.toThrow('quarantined');
+
+      expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            malformed_refund_response: true,
+          }),
+          reason: expect.stringContaining('without refund data'),
+        })
+      );
+    }
+  );
 });

@@ -44,6 +44,7 @@ export async function handlePaystackCancellationRefundFailure({
   const isAmbiguousFailure =
     paystackRefund.code === 'NETWORK_ERROR' ||
     paystackRefund.code === 'HTTP_408' ||
+    paystackRefund.code === 'MALFORMED_RESPONSE' ||
     paystackRefund.code?.startsWith('HTTP_5');
   // A rate-limited, unconfigured, or unauthenticated leg was definitely
   // not accepted: nothing reached Paystack, so quarantining terminally

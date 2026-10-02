@@ -8,7 +8,7 @@
 -- Ambiguous initiation merges its flag under the leg key so the
 -- completion gate never auto-closes the review on other legs' evidence.
 DROP FUNCTION IF EXISTS public.merge_paystack_cancellation_refund_leg_evidence_v1(uuid, uuid, uuid, text, jsonb, jsonb);
-CREATE FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(
+CREATE OR REPLACE FUNCTION public.merge_paystack_cancellation_refund_leg_evidence_v1(
   p_order_id uuid,
   p_merchant_id uuid,
   p_payment_transaction_id uuid,
@@ -74,9 +74,9 @@ BEGIN
             -- not clear an earlier ambiguity — only operations resolves
             -- the uncertainty that a provider refund already exists.
             'ambiguous', coalesce(p_ambiguous, false) OR coalesce(
-              ((metadata->'refund_evidence')->('leg:' || p_payment_transaction_id::text)->>'ambiguous')::boolean,
-              false
-            ),
+              (metadata->'refund_evidence')->('leg:' || p_payment_transaction_id::text)->>'ambiguous',
+              'false'
+            ) <> 'false',
             'observed_at', now()
           )
         ),

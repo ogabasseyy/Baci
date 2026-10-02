@@ -51,11 +51,19 @@ BEGIN
       -- legs prove a partial deterministic failure instead); merged
       -- legs carry it under their leg key. Only operations (or a future
       -- provider-evidence check) resolves that uncertainty.
-      AND coalesce((review.metadata->>'ambiguous_initiation')::boolean, false) IS NOT TRUE
+      -- Compare flag text directly: casting to boolean raises on a
+      -- corrupt value and would roll back the verified refund
+      -- transition on every retry. Only an explicit 'false' (or a
+      -- missing flag) passes; anything else stays open for
+      -- operations.
+      AND (
+        review.metadata->>'ambiguous_initiation' IS NULL
+        OR review.metadata->>'ambiguous_initiation' = 'false'
+      )
       AND (
         review.metadata->>'failed_payment_transaction_id' IS NULL
         OR review.metadata ? 'accepted_refund_ids'
-        OR (review.metadata->>'ambiguous_initiation')::boolean IS FALSE
+        OR review.metadata->>'ambiguous_initiation' = 'false'
       )
       -- Malformed refund evidence (array, string, scalar) keeps the
       -- review open for operations: jsonb_each raises on non-objects,
@@ -68,7 +76,10 @@ BEGIN
       AND NOT EXISTS (
         SELECT 1
         FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)
-        WHERE (e.value->>'audit_record_failed')::boolean IS TRUE
+        -- Text comparison, not a boolean cast: a corrupt flag must
+        -- block closure instead of raising, and only an explicit
+        -- 'false' clears.
+        WHERE (e.value->>'audit_record_failed') <> 'false'
           AND e.key LIKE 'provider:%'
           AND NOT EXISTS (
             SELECT 1 FROM public.transactions r
@@ -83,7 +94,7 @@ BEGIN
         SELECT 1
         FROM jsonb_each(coalesce(review.metadata->'refund_evidence', '{}'::jsonb)) AS e(key, value)
         WHERE e.key LIKE 'leg:%'
-          AND coalesce((e.value->>'ambiguous')::boolean, false) IS TRUE
+          AND (e.value->>'ambiguous') <> 'false'
       );
 END;
 $$;

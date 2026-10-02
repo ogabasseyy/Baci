@@ -20,9 +20,10 @@ describe('close verified cancellation refund reviews migration', () => {
 
     // New deterministic and exhausted-rate-limit filings record
     // ambiguous_initiation: false; only legacy rows with no marker at
-    // all stay open as ambiguous.
+    // all stay open as ambiguous. Text comparison, not a cast: a
+    // corrupt flag must keep the review open, not raise.
     expect(migrationSql).toContain(
-      "OR (review.metadata->>'ambiguous_initiation')::boolean IS FALSE"
+      "OR review.metadata->>'ambiguous_initiation' = 'false'"
     );
   });
 

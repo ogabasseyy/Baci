@@ -112,19 +112,18 @@ BEGIN
         -- merchant debit. OR, never overwrite: a marker once raised
         -- stays until operations resolves the review.
         'audit_record_failed',
-          coalesce((v_metadata->>'audit_record_failed')::boolean, false)
+          coalesce(v_metadata->>'audit_record_failed', 'false') <> 'false'
           OR coalesce(
-            (coalesce(p_metadata, '{}'::jsonb)->>'audit_record_failed')::boolean,
-            false
-          ),
+            coalesce(p_metadata, '{}'::jsonb)->>'audit_record_failed',
+            'false'
+          ) <> 'false',
         'reference_only_refund_event',
-          coalesce(
-            (v_metadata->>'reference_only_refund_event')::boolean, false
-          )
+          coalesce(v_metadata->>'reference_only_refund_event', 'false')
+          <> 'false'
           OR coalesce(
-            (coalesce(p_metadata, '{}'::jsonb)->>'reference_only_refund_event')::boolean,
-            false
-          )
+            coalesce(p_metadata, '{}'::jsonb)->>'reference_only_refund_event',
+            'false'
+          ) <> 'false'
       ),
       '{refund_evidence}',
       v_existing_evidence || v_incoming_evidence,

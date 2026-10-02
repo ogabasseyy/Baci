@@ -122,7 +122,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927150450_close_verified_cancellation_refund_reviews.sql',
-    sha256: 'd3f3197c5be2401716f9f59747c278c7d066b5a3294e9e3c41097768c3aeb23f',
+    sha256: 'fe621e0d439160935f98102927ac6b28f18b319d10823269c4ea747cffaaf79c',
   },
   {
     repositoryPath:
@@ -177,7 +177,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927151500_merge_paystack_cancellation_refund_leg_evidence.sql',
-    sha256: 'f538c8fcc3aa9863fc135aa5bce289be8d7030b8834be1a6944d176cb0b4c713',
+    sha256: 'b4512d7069383622dc9d2ef5e81aa1aab568e567a7e309bd27f6b741371eb3a6',
   },
   {
     repositoryPath:
@@ -257,7 +257,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928180000_merge_leg_evidence_provider_refund_status.sql',
-    sha256: '18197dede6001367b1313d4e001f7c09cb73d2892d41a75c02bfc74faee0e2e8',
+    sha256: '42d6bdf72d42bde6763c08515af70f72078b001e49d2c1367d63537372667ef5',
   },
   {
     repositoryPath:
@@ -287,12 +287,12 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928182400_merge_leg_evidence_sticky_verdict.sql',
-    sha256: 'b4ebe5af6582ee97f989e68f78ccc6389052010bdd0fe40f1d13858f04ec3db4',
+    sha256: 'd9f8680e14893330bed50203e0e7777453de499c808dddfea33c7d3709425843',
   },
   {
     repositoryPath:
       'supabase/migrations/20260928182500_paystack_refund_reference_watch.sql',
-    sha256: '46395e73db1e2618782082e1a268c83287b78d0bf286392e2fefbeb8b11d252f',
+    sha256: 'd9c01621144a16642d1845e4e6ff9481255ac9f312a6e4017c9480df8587baf2',
   },
   {
     repositoryPath:
@@ -312,7 +312,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928182900_file_recovery_review_preserve_markers.sql',
-    sha256: 'e96cfbe6edc5472c00f7353e57567c7806e0744df66265370a898d0e43dcbea4',
+    sha256: 'c7435de8de24aef3cd61eee9cf076b2d35596a59518c6d16fbf21c443391e7bc',
   },
   {
     repositoryPath:

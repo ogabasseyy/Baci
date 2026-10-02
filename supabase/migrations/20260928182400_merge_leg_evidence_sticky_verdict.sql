@@ -103,9 +103,9 @@ BEGIN
             -- not clear an earlier ambiguity — only operations resolves
             -- the uncertainty that a provider refund already exists.
             'ambiguous', coalesce(p_ambiguous, false) OR coalesce(
-              ((metadata->'refund_evidence')->v_leg_key->>'ambiguous')::boolean,
-              false
-            ),
+              (metadata->'refund_evidence')->v_leg_key->>'ambiguous',
+              'false'
+            ) <> 'false',
             -- The audit-blocking reader keys failed-only exclusion on
             -- marked entries carrying the leg id and provider verdict;
             -- it reads entry values, never the leg key. A NULL verdict

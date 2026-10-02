@@ -1,6 +1,7 @@
 import { normalizeCanonicalProductCondition, toGoogleListingCondition } from '@baci/shared/lib';
 import type { McpDiscoveryIntent } from '../src/schemas/mcp-discovery-intent';
 import { isPublicVariantPurchasable } from '../src/lib/is-public-variant-purchasable';
+import { getEffectiveStock } from '../src/lib/product-stock';
 import { normalizeDiscoveryOptionAttributes } from './normalize-discovery-option-attributes';
 import type { hydrateSearchProductAvailability } from './search-product-availability';
 import { structuredDiscoveryIdentity } from './structured-discovery-identity';
@@ -233,11 +234,8 @@ export function selectStructuredDiscoveryOffer(
   const matches = candidates
     .map((candidate) => ({
       ...candidate,
-      // Paired offers prove specs through their variant exactly like the
-      // variant path, so product metadata merges underneath and the variant
-      // overrides the keys it owns. Only bare offers (no pairing possible)
-      // skip the merge: with no live variant to scope them, the base
-      // metadata may describe a different variant.
+      // Product metadata merges under variant-proven attributes; only bare
+      // offers skip the merge (no live variant scopes them).
       attributes: candidate.kind === 'offer' && candidate.pairedVariant === undefined
         && product.has_variants === true
         ? candidate.attributes
@@ -254,19 +252,22 @@ export function selectStructuredDiscoveryOffer(
   const match = matches[0];
   if (!match) return undefined;
 
-  // A paired offer needs its variant for purchase like the PDP, where the
-  // variant's stock replaces the offer's, so the pair summarizes the
-  // variant alone; bare offers keep the offer-only summary.
+  // A paired offer summarizes its variant alone (PDP: variant stock
+  // replaces the offer's); bare offers keep the offer-only summary.
   const pairedOffer = match.kind === 'offer' && match.pairedVariant !== undefined;
+  // Legacy null child quantities inherit the parent stock, mirroring
+  // isPublicVariantPurchasable; raw null is read before coercion to zero.
+  const childStock = (rawQuantity: unknown) =>
+    stockQuantity(rawQuantity == null ? getEffectiveStock(parentStock) : rawQuantity);
   const stockSummary = getMcpProductStockSummary({
     ...product,
     has_variants: match.kind === 'variant',
     has_condition_offers: match.kind === 'offer' && !pairedOffer,
     stock_quantity: match.kind === 'base' ? stockQuantity(product.stock_quantity)
       : pairedOffer
-        ? stockQuantity(record(match.pairedVariant).stock_quantity) ?? 0
+        ? childStock(record(match.pairedVariant).stock_quantity) ?? 0
       : 0,
-  }, match.kind === 'variant' ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined,
+  }, match.kind === 'variant' ? [{ stock_quantity: childStock(match.stockQuantity) }] : undefined,
   match.kind === 'offer' && !pairedOffer ? [{ stock_quantity: stockQuantity(match.stockQuantity) }] : undefined);
 
   return {

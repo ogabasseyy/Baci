@@ -34,47 +34,35 @@ describe('loadStructuredDiscoveryCandidates', () => {
 
   it.each([500, 501])('distinguishes an exact-cap %s-product catalog from truncation', async (count) => {
     const rows = productRows(Array.from({length: count}, (_, index) => `p-${index}`));
-    const ranges: number[][] = [];
-    const from = () => {
-      const builder = {
-        select: () => builder, eq: () => builder, order: () => builder,
-        range: (start: number, end: number) => {
-          ranges.push([start, end]);
-          return Promise.resolve({data: rows.slice(start, end + 1), error: null});
-        },
-      };
-      return builder;
-    };
+    const pages: number[][] = [];
+    const rpc = vi.fn(async (_name: string, args: { p_limit: number; p_offset: number }) => {
+      pages.push([args.p_offset, args.p_limit]);
+      return { data: rows.slice(args.p_offset, args.p_offset + args.p_limit), error: null };
+    });
     const result = await loadStructuredDiscoveryCandidates({
-      merchantId: 'merchant-1', supabase: {from} as unknown as SupabaseClient,
+      merchantId: 'merchant-1', supabase: { rpc } as unknown as SupabaseClient,
     });
     expect(result.products).toHaveLength(500);
     expect(result.truncated).toBe(count > 500);
-    expect(ranges.at(-1)).toEqual([500, 500]);
+    expect(pages.at(-1)).toEqual([500, 1]);
   });
 
   it('preserves 500 confirmed browse products when the final cap probe fails', async () => {
     const rows = productRows(Array.from({ length: 500 }, (_, index) => `p-${index}`));
-    const ranges: number[][] = [];
-    const from = () => {
-      const builder = {
-        select: () => builder, eq: () => builder, order: () => builder,
-        range: (start: number, end: number) => {
-          ranges.push([start, end]);
-          if (start === 500) return Promise.resolve({ data: null, error: new Error('probe failed') });
-          return Promise.resolve({ data: rows.slice(start, end + 1), error: null });
-        },
-      };
-      return builder;
-    };
+    const pages: number[][] = [];
+    const rpc = vi.fn(async (_name: string, args: { p_limit: number; p_offset: number }) => {
+      pages.push([args.p_offset, args.p_limit]);
+      if (args.p_offset === 500) return { data: null, error: new Error('probe failed') };
+      return { data: rows.slice(args.p_offset, args.p_offset + args.p_limit), error: null };
+    });
 
     const result = await loadStructuredDiscoveryCandidates({
-      merchantId: 'merchant-1', supabase: { from } as unknown as SupabaseClient,
+      merchantId: 'merchant-1', supabase: { rpc } as unknown as SupabaseClient,
     });
 
     expect(result.products).toHaveLength(500);
     expect(result.truncated).toBe(true);
-    expect(ranges.at(-1)).toEqual([500, 500]);
+    expect(pages.at(-1)).toEqual([500, 1]);
   });
 
   it('retrieves verified-fact-only matches independently of marketing and embeddings', async () => {
@@ -186,13 +174,11 @@ describe('loadStructuredDiscoveryCandidates', () => {
 
   it('preserves confirmed browse pages after a later page fails', async () => {
     const rows = productRows(Array.from({length: 100}, (_, i) => `p-${i}`));
-    const from = () => {
-      const builder = { select: () => builder, eq: () => builder, order: () => builder,
-        range: async (start: number) => { if (start > 0) throw new Error('page unavailable'); return {data: rows, error: null}; },
-      };
-      return builder;
+    const rpc = async (_name: string, args: { p_limit: number; p_offset: number }) => {
+      if (args.p_offset > 0) throw new Error('page unavailable');
+      return { data: rows.slice(args.p_offset, args.p_offset + args.p_limit), error: null };
     };
-    const result = await loadStructuredDiscoveryCandidates({merchantId: 'merchant-1', supabase: {from} as unknown as SupabaseClient});
+    const result = await loadStructuredDiscoveryCandidates({merchantId: 'merchant-1', supabase: { rpc } as unknown as SupabaseClient});
     expect(result.products).toHaveLength(100);
     expect(result.truncated).toBe(true);
   });
@@ -227,41 +213,36 @@ describe('loadStructuredDiscoveryCandidates', () => {
   });
 
   it('browses active merchant products with bounded stable pages when query is absent', async () => {
-    const pages = [productRows(Array.from({ length: 100 }, (_, index) => `p-${index}`)), productRows(['last'])];
-    let page = 0;
-    const calls: unknown[][] = [];
-    const from = vi.fn(() => {
-      const current = page++;
-      const builder = {
-        select: vi.fn((...args: unknown[]) => { calls.push(['select', ...args]); return builder; }),
-        eq: vi.fn((...args: unknown[]) => { calls.push(['eq', ...args]); return builder; }),
-        order: vi.fn((...args: unknown[]) => { calls.push(['order', ...args]); return builder; }),
-        range: vi.fn((...args: unknown[]) => {
-          calls.push(['range', ...args]);
-          return Promise.resolve({ data: pages[current], error: null });
-        }),
-      };
-      return builder;
-    });
+    const rows = [...productRows(Array.from({ length: 100 }, (_, index) => `p-${index}`)), ...productRows(['last'])];
+    const rpc = vi.fn(async (_name: string, args: { p_limit: number; p_offset: number }) => ({
+      data: rows.slice(args.p_offset, args.p_offset + args.p_limit), error: null,
+    }));
 
     const result = await loadStructuredDiscoveryCandidates({
-      merchantId: 'merchant-2', supabase: { from } as unknown as SupabaseClient,
+      merchantId: 'merchant-2', supabase: { rpc } as unknown as SupabaseClient,
     });
 
     expect(result.products).toHaveLength(101);
     expect(result.truncated).toBe(false);
-    expect(calls).toContainEqual(['eq', 'merchant_id', 'merchant-2']);
-    expect(calls).toContainEqual(['eq', 'status', 'active']);
-    expect(calls).toContainEqual(['range', 100, 199]);
+    expect(rpc).toHaveBeenCalledWith('search_products_browse', {
+      p_merchant_id: 'merchant-2', p_brand: undefined, p_category: undefined,
+      p_sort: undefined, p_limit: 100, p_offset: 100,
+    });
   });
-  it('narrows the browse window with escaped brand/category substrings before the cap', async () => {
+  it('narrows the browse window with raw brand/category substrings before the cap', async () => {
     const fixture = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
+    fixture.rpc.mockImplementation(async (name: string) => ({
+      data: name === 'search_products_browse' ? productRows(['p-1']) : [], error: null,
+    }));
     const result = await loadStructuredDiscoveryCandidates({
       merchantId: 'merchant-3', supabase: fixture.supabase, brand: 'S%ms_ng', category: 'Phones',
     });
     expect(result.products).toHaveLength(1);
-    expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'brand', '%S\\%ms\\_ng%']);
-    expect(fixture.queryCalls[0]?.calls).toContainEqual(['ilike', 'category', '%Phones%']);
+    // Bound parameters match literally: LIKE wildcards ride raw, no escaping.
+    expect(fixture.rpc).toHaveBeenCalledWith('search_products_browse', {
+      p_merchant_id: 'merchant-3', p_brand: 'S%ms_ng', p_category: 'Phones',
+      p_sort: undefined, p_limit: 100, p_offset: 0,
+    });
   });
 
   it('orders the browse window newest-first before the cap when requested', async () => {
@@ -269,11 +250,12 @@ describe('loadStructuredDiscoveryCandidates', () => {
     await loadStructuredDiscoveryCandidates({
       merchantId: 'merchant-3', supabase: newest.supabase, sort: 'newest',
     });
-    expect(newest.queryCalls[0]?.calls).toContainEqual(['order', 'created_at', { ascending: false }]);
-    expect(newest.queryCalls[0]?.calls).toContainEqual(['order', 'id', { ascending: true }]);
+    expect(newest.rpc).toHaveBeenCalledWith('search_products_browse',
+      expect.objectContaining({ p_sort: 'newest' }));
     const stable = setup({ lexicalPages: [[]], products: productRows(['p-1']) });
     await loadStructuredDiscoveryCandidates({ merchantId: 'merchant-3', supabase: stable.supabase });
-    expect(stable.queryCalls[0]?.calls).toContainEqual(['order', 'id', { ascending: true }]);
-    expect(stable.queryCalls[0]?.calls).not.toContainEqual(['order', 'created_at', { ascending: false }]);
+    expect(stable.rpc).toHaveBeenCalledWith('search_products_browse',
+      expect.objectContaining({ p_merchant_id: 'merchant-3' }));
+    expect(stable.rpc.mock.calls[0]?.[1]).not.toMatchObject({ p_sort: 'newest' });
   });
 });

@@ -34,10 +34,10 @@ export function resolveCurrentOffer(
 
   let stock = productData.manage_stock ? getEffectiveStock(productData) : 999;
 
-  if (
-    selectedCondition.toLowerCase() !==
-    (productData.condition || 'new').toLowerCase()
-  ) {
+  // Canonical on both sides: a legacy-spelled parent (uk_used,
+  // refurbished) is the selection's own family, so same-condition offer
+  // rows stay parent-priced instead of replacing parent price and stock.
+  if (normalizeConditionType(productData.condition) !== selectedCondition) {
     // Canonical comparison: stored rows use merchant spellings (refurbished,
     // uk_used) that never equal the canonical selection raw, which silently
     // fell back to the parent price for exactly those offers.

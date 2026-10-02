@@ -1,5 +1,21 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+// Unconstrained browse rows, shared by the table endpoint and the browse
+// RPC: the stub ignores narrowing/sort params like the table endpoint
+// ignored ilike/order params, serving the same window for paging tests.
+const BROWSE_PRODUCT_ROWS = [
+  { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
+  { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
+  { id: 'object-image-product', name: 'Object Image Phone', slug: 'object-image-phone', price: 130000, images: [{ url: 'https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif' }], manage_stock: false, stock_quantity: 0, has_variants: false },
+  { id: 'transformed-image-product', name: 'Transformed Image Phone', slug: 'transformed-image-phone', price: 140000, images: ['https://cdn.ogabassey.com/image/width=750/core-assets/products/phone.avif?v=2'], manage_stock: false, stock_quantity: 0, has_variants: false },
+  { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
+  { id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+  { id: 'variant-cheaper-than-parent', name: 'Affordable Variant Phone', slug: 'affordable-variant-phone', price: 200000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+  { id: 'variant-pricier-than-parent', name: 'Pricier Variant Phone', slug: 'pricier-variant-phone', price: 80000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+  { id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+  { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
+];
+
 export function serveCatalogFixture(request: IncomingMessage, response: ServerResponse, url: URL): boolean {
     if (url.pathname.endsWith('/rest/v1/products')) {
       // Serialized-policy lookup (getPublicSerializedVariantSummariesByProductId
@@ -43,18 +59,7 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
       } else if (url.searchParams.get('id') === 'eq.untracked-variant-product') {
         response.end(JSON.stringify({ id: 'untracked-variant-product', name: 'Untracked Variant Phone', slug: 'untracked-variant-phone', price: 100000, manage_stock: false, stock_quantity: 0, has_variants: true }));
       } else if (!url.searchParams.has('id') && !url.searchParams.has('name')) {
-        const rows = [
-          { id: 'available-product', name: 'Test Phone', slug: 'test-phone', price: 100000, compare_at_price: 120000, images: ['https://images.example.test/phone.jpg'], manage_stock: false, stock_quantity: 0, has_variants: false },
-          { id: 'avif-product', name: 'AVIF Phone', slug: 'avif-phone', price: 120000, images: ['https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif'], manage_stock: false, stock_quantity: 0, has_variants: false },
-          { id: 'object-image-product', name: 'Object Image Phone', slug: 'object-image-phone', price: 130000, images: [{ url: 'https://cdn.ogabassey.com/core-assets/products/redmi-15-midnight-black.avif' }], manage_stock: false, stock_quantity: 0, has_variants: false },
-          { id: 'transformed-image-product', name: 'Transformed Image Phone', slug: 'transformed-image-phone', price: 140000, images: ['https://cdn.ogabassey.com/image/width=750/core-assets/products/phone.avif?v=2'], manage_stock: false, stock_quantity: 0, has_variants: false },
-          { id: 'condition-offer-product', name: 'Used Offer Phone', slug: 'used-offer-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: false, has_condition_offers: true },
-          { id: 'variant-available-product', name: 'Variant Available Phone', slug: 'variant-available-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-          { id: 'variant-cheaper-than-parent', name: 'Affordable Variant Phone', slug: 'affordable-variant-phone', price: 200000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-          { id: 'variant-pricier-than-parent', name: 'Pricier Variant Phone', slug: 'pricier-variant-phone', price: 80000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-          { id: 'variant-sold-out-product', name: 'Variant Sold Out Phone', slug: 'variant-sold-out-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-          { id: 'variant-empty-product', name: 'Variant Empty Phone', slug: 'variant-empty-phone', price: 100000, images: [], manage_stock: true, stock_quantity: 0, has_variants: true },
-        ];
+        const rows = BROWSE_PRODUCT_ROWS;
         const isRecommendation = url.searchParams.get('select')?.includes('description,condition,brand,category,manage_stock');
         const candidates = isRecommendation
           ? [
@@ -165,6 +170,17 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
           : requested.p_product_id === 'condition-offer-product'
             ? [{ condition: 'used', price: 80000, stock_quantity: 2, grade: 'A', condition_notes: null }]
             : []));
+      });
+      return true;
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/search_products_browse')) {
+      let body = '';
+      request.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      request.on('end', () => {
+        const requested = JSON.parse(body) as { p_limit?: number; p_offset?: number };
+        const offset = requested.p_offset ?? 0;
+        const limit = requested.p_limit ?? BROWSE_PRODUCT_ROWS.length;
+        response.end(JSON.stringify(BROWSE_PRODUCT_ROWS.slice(offset, offset + limit)));
       });
       return true;
     }

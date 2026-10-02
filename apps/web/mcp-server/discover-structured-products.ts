@@ -58,7 +58,7 @@ export async function discoverStructuredProducts({ intent, query, args, merchant
   const factQuery = buildDiscoveryFactRetrievalQuery(intent, query);
   const candidates = await loadStructuredDiscoveryCandidates({
     query, factQuery, intent, brand: args.brand, category: args.category, sort: args.sort,
-    merchantId, supabase, semanticSearch,
+    merchantId, supabase, semanticSearch, condition: args.condition,
   });
   const selected = [];
   let optionsLookupFailed = false;

@@ -156,6 +156,22 @@ it('forwards catalog brand and category so the RPC narrows before the cap', asyn
   });
 });
 
+it('forwards the requested condition so the RPC narrows before the cap', async () => {
+  const supabase = rpc([]);
+  await loadVariantRecallIds(intent(storageEq(256)), 'merchant-1', supabase, {
+    condition: 'used',
+  });
+  expect(supabase.rpc).toHaveBeenCalledWith('search_product_variant_recall', {
+    p_merchant_id: 'merchant-1',
+    p_filters: [{ key: 'storage_gb', operator: 'eq', value: 256, branch: 0 }],
+    p_identity: [{ branch: 0 }],
+    p_excluded_types: [],
+    p_condition: 'used',
+    p_limit: 1000,
+    p_offset: 0,
+  });
+});
+
 it('numbers each alternative branch so the RPC scores branches separately', async () => {
   const supabase = rpc([]);
   await loadVariantRecallIds(

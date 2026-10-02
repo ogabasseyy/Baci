@@ -49,7 +49,7 @@ export async function loadVariantRecallIds(
   intent: McpDiscoveryIntent | undefined,
   merchantId: string,
   supabase: SupabaseClient,
-  catalogFilters?: { brand?: string; category?: string }
+  catalogFilters?: { brand?: string; category?: string; condition?: string }
 ): Promise<{ ids: string[]; truncated: boolean }> {
   // Branch identity rides along: alternatives are OR branches, so the RPC
   // must score each branch separately instead of counting exact matches
@@ -92,6 +92,9 @@ export async function loadVariantRecallIds(
         p_excluded_types: excludedTypes,
         p_brand: catalogFilters?.brand,
         p_category: catalogFilters?.category,
+        // Requested conditions ride in so the RPC narrows before the cap;
+        // other-condition rows would otherwise crowd out the match.
+        p_condition: catalogFilters?.condition,
         p_limit: limit,
         p_offset: offset,
       });

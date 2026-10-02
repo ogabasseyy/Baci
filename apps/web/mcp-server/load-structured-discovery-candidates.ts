@@ -27,6 +27,7 @@ type LoadStructuredDiscoveryCandidatesInput = {
   intent?: McpDiscoveryIntent;
   brand?: string;
   category?: string;
+  condition?: string;
   sort?: string;
   merchantId: string;
   supabase: SupabaseClient;
@@ -34,10 +35,6 @@ type LoadStructuredDiscoveryCandidatesInput = {
 };
 
 type BrowseFilters = { brand?: string; category?: string; sort?: string };
-
-function likeContains(value: string) {
-  return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
-}
 
 type SearchProductsArgs = { sort: 'relevance' };
 
@@ -124,34 +121,31 @@ async function loadSemanticIds(
 
 async function loadBrowseRows(merchantId: string, supabase: SupabaseClient, filters: BrowseFilters) {
   // The browse window is an arbitrary UUID slice, so brand/category narrow it
-  // server-side with the same substring semantics as post-hydration filters
-  // instead of filtering after the cap. A newest sort orders server-side too:
-  // sorting the capped slice afterward would hide newer rows past the cap.
-  const browseQuery = (columns: string) => {
-    let query = supabase.from('products').select(columns)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active');
-    if (filters.brand) query = query.ilike('brand', likeContains(filters.brand));
-    if (filters.category) query = query.ilike('category', likeContains(filters.category));
-    if (filters.sort === 'newest') {
-      return query.order('created_at', { ascending: false }).order('id', { ascending: true });
-    }
-    return query.order('id', { ascending: true });
+  // server-side instead of filtering after the cap, and a newest sort orders
+  // server-side too. The RPC applies the same ASCII-only substring
+  // comparison as the post-hydration filter (ilike would fold non-ASCII
+  // case per the database locale and strand genuine matches past the cap).
+  const fetchPage = async (limit: number, offset: number) => {
+    const { data, error } = await supabase.rpc('search_products_browse', {
+      p_merchant_id: merchantId,
+      p_brand: filters.brand,
+      p_category: filters.category,
+      p_sort: filters.sort,
+      p_limit: limit,
+      p_offset: offset,
+    });
+    if (error) throw error;
+    return toMcpSearchProductRows(data);
   };
   const products: McpSearchProductRow[] = [];
   try {
     for (let offset = 0; offset < MAX_LEXICAL_CANDIDATES; offset += LEXICAL_PAGE_SIZE) {
-      const { data, error } = await browseQuery(DISCOVERY_PRODUCT_PROJECTION)
-        .range(offset, offset + LEXICAL_PAGE_SIZE - 1);
-      if (error) throw error;
-      const rows = toMcpSearchProductRows(data);
+      const rows = await fetchPage(LEXICAL_PAGE_SIZE, offset);
       products.push(...rows);
       if (rows.length < LEXICAL_PAGE_SIZE) return { products, truncated: false };
     }
-    const { data: next, error } = await browseQuery('id')
-      .range(MAX_LEXICAL_CANDIDATES, MAX_LEXICAL_CANDIDATES);
-    if (error) return { products, truncated: true };
-    return { products, truncated: Array.isArray(next) && next.length > 0 };
+    const next = await fetchPage(1, MAX_LEXICAL_CANDIDATES);
+    return { products, truncated: next.length > 0 };
   } catch {
     return { products, truncated: true };
   }
@@ -179,6 +173,7 @@ export async function loadStructuredDiscoveryCandidates({
   intent,
   brand,
   category,
+  condition,
   sort,
   merchantId,
   supabase,
@@ -203,7 +198,7 @@ export async function loadStructuredDiscoveryCandidates({
   const [lexical, semantic, facts, variants] = await Promise.all([
     lexicalPromise, semanticPromise,
     loadDiscoveryFactCandidates(factQuery || query || '(a & !a)', merchantId, supabase, { brand, category }),
-    loadVariantRecallIds(intent, merchantId, supabase, { brand, category }),
+    loadVariantRecallIds(intent, merchantId, supabase, { brand, category, condition }),
   ]);
   // Free-text relevance votes independently from structured-fact votes
   // (facts plus variant recall), so an exact keyword hit that also satisfies

@@ -255,48 +255,35 @@ it('stages the builder move so a mid-migration failure stays retry-safe', () => 
   }
 });
 
-it('indexes key-specific identity lexemes for capped retrieval', () => {
-  const identity = readFileSync(new URL('../../../supabase/migrations/20261001110000_keyed_discovery_identity_facts.sql', import.meta.url), 'utf8');
-  expect(identity.startsWith('-- disable-transaction')).toBe(true);
-  expect(identity).toContain('product_discovery_search_document_v5');
-  expect(identity).toContain('discovery.discovery_identity_lexeme');
-  expect(identity).toContain('discovery.discovery_identity_matcher_normalize');
-  expect(identity).toContain("tag IN ('brand', 'model', 'compat')");
-  expect(identity).toContain('pg_catalog.translate(');
-  expect(identity).not.toContain('pg_catalog.lower(');
-  expect(identity).toContain("'fact' || pg_catalog.encode(extensions.digest");
-  expect(identity).toContain("tag || pg_catalog.chr(31) || normalized");
-  expect(identity).toContain('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new');
-  expect(identity.indexOf('CREATE INDEX CONCURRENTLY products_discovery_identity_search_idx_new'))
-    .toBeLessThan(identity.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
-  expect(identity.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_identity_search_idx;'))
-    .toBeGreaterThan(identity.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
-  expect(identity).toContain('RENAME TO products_discovery_identity_search_idx;');
-  expect(identity).toContain("to_regclass('public.products_discovery_identity_search_idx') IS NULL");
-  expect(identity).toContain('i.indisvalid');
-  expect(identity).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx');
+it('narrows variant recall by the requested condition before the cap', () => {
+  const canonical = readFileSync(new URL('../../../supabase/migrations/20261001170000_canonical_product_condition.sql', import.meta.url), 'utf8');
+  expect(canonical.split('\n').length).toBeLessThanOrEqual(300);
+  expect(canonical).toContain('CREATE FUNCTION discovery.canonical_product_condition(value text)');
+  expect(canonical).toContain("WHEN 'uk_used' THEN 'used'");
+  expect(canonical).toContain("WHEN 'refurbished' THEN 'open_box'");
+  expect(canonical).toContain('pg_catalog.translate(');
+  expect(canonical).not.toContain('pg_catalog.lower(');
+  const recall = readFileSync(new URL('../../../supabase/migrations/20261001180000_variant_recall_condition.sql', import.meta.url), 'utf8');
+  expect(recall.split('\n').length).toBeLessThanOrEqual(300);
+  expect(recall).toContain(
+    'DROP FUNCTION IF EXISTS public.search_product_variant_recall(uuid, jsonb, integer, integer, jsonb, jsonb, text, text);'
+  );
+  expect(recall).toContain('p_condition text DEFAULT NULL');
+  expect(recall).toContain('discovery.canonical_product_condition(pv.condition)');
+  expect(recall).toContain('FROM public.product_offers AS o');
+  expect(recall).toContain('p.has_variants IS NOT TRUE');
+  expect(recall.indexOf('NULLIF(p_condition, ')).toBeLessThan(recall.indexOf('LIMIT least'));
 });
 
-it('indexes correlated verified text attribute pairs after the concurrent replacement build', () => {
-  const correlated = readFileSync(new URL('../../../supabase/migrations/20261001080000_correlated_text_attribute_search.sql', import.meta.url), 'utf8');
-  expect(correlated.startsWith('-- disable-transaction')).toBe(true);
-  expect(correlated).toContain('product_discovery_search_document_v3');
-  expect(correlated).toContain('pg_catalog.encode');
-  expect(correlated).toContain('extensions.digest');
-  expect(correlated).toContain("pg_catalog.convert_to(pair.key || pg_catalog.chr(31) || pair.normalized_value, 'UTF8')");
-  expect(correlated).toContain("attribute.key IN ('color', 'connector', 'processor', 'connectivity')");
-  expect(correlated).toContain("pg_catalog.jsonb_typeof(attribute.value) = 'string'");
-  expect(correlated).toContain('pg_catalog.normalize(attribute.value #>>');
-  expect(correlated).toContain('NFC');
-  expect(correlated).toContain('pg_catalog.chr(31)');
-  expect(correlated).toContain('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new');
-  expect(correlated.indexOf('CREATE INDEX CONCURRENTLY products_discovery_correlated_search_idx_new'))
-    .toBeLessThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
-  expect(correlated.indexOf('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_correlated_search_idx;'))
-    .toBeGreaterThan(correlated.indexOf('CREATE OR REPLACE FUNCTION public.search_product_discovery_facts('));
-  expect(correlated).toContain('RENAME TO products_discovery_correlated_search_idx;');
-  expect(correlated).toContain("to_regclass('public.products_discovery_correlated_search_idx') IS NULL");
-  expect(correlated).toContain('i.indisvalid');
-  expect(correlated).toContain('SECURITY INVOKER');
-  expect(correlated).toContain('DROP INDEX CONCURRENTLY IF EXISTS public.products_discovery_keyed_search_idx');
+it('serves the browse window through ASCII-only narrowing before the cap', () => {
+  const browse = readFileSync(new URL('../../../supabase/migrations/20261001190000_ascii_mcp_search_browse.sql', import.meta.url), 'utf8');
+  expect(browse.split('\n').length).toBeLessThanOrEqual(300);
+  expect(browse).toContain('CREATE OR REPLACE FUNCTION public.search_products_browse(');
+  expect(browse).toContain('pg_catalog.strpos(');
+  expect(browse).toContain('pg_catalog.translate(');
+  expect(browse).not.toContain('pg_catalog.lower(');
+  expect(browse).not.toContain('ilike');
+  expect(browse).toContain("p_sort = 'newest'");
+  expect(browse).toContain('is_published');
+  expect(browse.indexOf('NULLIF(p_brand, ')).toBeLessThan(browse.indexOf('LIMIT least'));
 });

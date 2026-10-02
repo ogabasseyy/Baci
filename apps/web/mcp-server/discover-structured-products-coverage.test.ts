@@ -49,6 +49,11 @@ function client(fixture: Fixture) {
     if (name === 'get_mcp_search_serialized_anchor_policies') {
       return { data: [], error: null };
     }
+    if (name === 'search_products_browse') {
+      const limit = Number(args?.p_limit ?? 100);
+      const offset = Number(args?.p_offset ?? 0);
+      return { data: fixture.products.slice(offset, offset + limit), error: null };
+    }
     return { data: null, error: new Error(`Unexpected RPC ${name}`) };
   });
 

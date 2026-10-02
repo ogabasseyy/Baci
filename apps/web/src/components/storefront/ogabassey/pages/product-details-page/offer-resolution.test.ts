@@ -25,6 +25,18 @@ describe('resolveCurrentOffer', () => {
     expect(offer.rawPrice).toBe(400);
   });
 
+  it('keeps the parent price when the legacy-spelled parent matches the selection', () => {
+    const offer = resolveCurrentOffer(
+      productWith({
+        condition: 'uk_used',
+        offers: [{ condition: 'used', rawPrice: 450, stock_quantity: 1 }],
+      }),
+      'used',
+      {}
+    );
+    expect(offer.rawPrice).toBe(500);
+  });
+
   it('prefers the selected variant price over any offer price', () => {
     const offer = resolveCurrentOffer(
       productWith({

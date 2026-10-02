@@ -313,6 +313,8 @@ jobs:
           --sql-check supabase/tests/product_discovery_variant_recall_text.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity.sql
           --sql-check supabase/tests/product_discovery_variant_recall_identity_exact.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_condition.sql
+          --sql-check supabase/tests/mcp_search_browse_ascii.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
           --sql-check supabase/migrations/tests/quiz_live_score_publication_gate_v2.sql

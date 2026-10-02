@@ -1,6 +1,7 @@
 // Raw frozen replay-source data; update migration hashes in lockstep.
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
+import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
 import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-pending-sources';
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
@@ -216,7 +217,7 @@ const PENDING_SOURCES = [
   'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
-  '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add 20260928080000_product_discovery_embeddings.sql',
+  DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

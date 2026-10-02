@@ -81,6 +81,26 @@ describe('useCartHandoff', () => {
     expect(result.current.cartError).toBeNull();
   });
 
+  it('opens an option-bearing result directly without calling the cart tool', async () => {
+    const openExternal = vi.fn();
+    const callTool = vi.fn();
+    window.openai = { openExternal, callTool };
+    const { result } = renderHook(() => useCartHandoff());
+
+    await act(async () => {
+      await result.current.handleAddToCart({
+        ...product,
+        url: 'https://ogabassey.com/products/redmi?variantId=v1&condition=used',
+      });
+    });
+
+    expect(callTool).not.toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith({
+      href: 'https://ogabassey.com/products/redmi?variantId=v1&condition=used',
+    });
+    expect(result.current.cartError).toBeNull();
+  });
+
   it('does not replay an older persisted add URL when reviewing the cart', () => {
     const openExternal = vi.fn();
     window.openai = {

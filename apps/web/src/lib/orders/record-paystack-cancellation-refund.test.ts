@@ -134,6 +134,32 @@ describe('recordPaystackCancellationRefund', () => {
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 
+  it('accepts a legacy-cased conflicting audit row', async () => {
+    const { supabase } = database({
+      conflictRow: {
+        amount: 12.5,
+        currency: ' ngn ',
+        gateway: ' Paystack ',
+        gateway_reference: '101',
+        id: 'other-row',
+        metadata: { payment_transaction_id: 'tx-1' },
+        transaction_type: 'refund',
+      },
+      insertError: { code: '23505' },
+    });
+
+    const refundId = await recordPaystackCancellationRefund({
+      order: initiationOrder,
+      paystackRefund: acceptedRefund(),
+      supabase,
+      transaction: initiationTransaction,
+      transactionAmount: 12.5,
+    });
+
+    expect(refundId).toBe(101);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
   it('quarantines when the conflicting row covers a different leg', async () => {
     const { supabase } = database({
       conflictRow: {

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchRefund } from './fetch-paystack-refund';
+import { normalizeCurrencyCode } from './normalize-currency-code';
 import { normalizePaymentGateway } from './normalize-payment-gateway';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 
@@ -109,7 +110,8 @@ export async function reconcilePaystackCancellationRefund(
     !Number.isFinite(refundAmount) ||
     refundAmount <= 0 ||
     refundAmount > paymentAmount ||
-    payment.currency.toUpperCase() !== refund.currency.toUpperCase()
+    normalizeCurrencyCode(payment.currency) !==
+      normalizeCurrencyCode(refund.currency)
   ) {
     throw new Error('refund_payment_link_mismatch');
   }
@@ -145,8 +147,10 @@ export async function reconcilePaystackCancellationRefund(
     original.reference !== payment.gateway_reference ||
     original.amount !== Math.round(Number(payment.amount) * 100) ||
     current.amount !== Math.round(Number(refund.amount) * 100) ||
-    current.currency.toUpperCase() !== refund.currency.toUpperCase() ||
-    original.currency.toUpperCase() !== refund.currency.toUpperCase() ||
+    normalizeCurrencyCode(current.currency) !==
+      normalizeCurrencyCode(refund.currency) ||
+    normalizeCurrencyCode(original.currency) !==
+      normalizeCurrencyCode(refund.currency) ||
     (typeof refund.metadata?.provider_payment_transaction_id === 'number' &&
       refund.metadata.provider_payment_transaction_id !== original.id)
   )

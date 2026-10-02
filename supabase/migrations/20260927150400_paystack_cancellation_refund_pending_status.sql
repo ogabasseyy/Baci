@@ -39,7 +39,7 @@ BEGIN
       AND status = 'completed';
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
     OR v_payment.amount <> v_refund.amount
-    OR upper(v_refund.currency) <> upper(p_currency)
+    OR upper(btrim(v_refund.currency)) <> upper(btrim(p_currency))
     OR round(v_refund.amount * 100)::bigint <> p_amount_kobo
     OR (v_refund.metadata ? 'provider_payment_transaction_id' AND
         CASE WHEN coalesce(v_refund.metadata->>'provider_payment_transaction_id', '') ~ '^[0-9]+$'

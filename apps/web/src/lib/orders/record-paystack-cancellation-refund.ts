@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
 type RefundSuccess = Extract<
   Awaited<ReturnType<typeof initiatePaystackRefund>>,
@@ -183,12 +185,14 @@ export async function recordPaystackCancellationRefund({
       recordedByAnotherWriter =
         !conflictLookupError &&
         conflicting?.transaction_type === 'refund' &&
-        conflicting?.gateway === 'paystack' &&
+        normalizePaymentGateway(conflicting?.gateway) === 'PAYSTACK' &&
         conflicting?.gateway_reference === String(paystackRefund.data.id) &&
         conflictingLeg === transaction.id &&
         Number(conflicting?.amount) === transactionAmount &&
-        conflicting?.currency ===
-          (transaction.currency || order.currency || 'NGN');
+        normalizeCurrencyCode(conflicting?.currency) ===
+          normalizeCurrencyCode(
+            transaction.currency || order.currency || 'NGN'
+          );
     }
     if (!recordedByAnotherWriter) {
       // The provider accepted this refund but no local row exists, so the

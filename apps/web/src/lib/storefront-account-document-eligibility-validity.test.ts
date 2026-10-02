@@ -84,6 +84,28 @@ describe('storefront account document content validity', () => {
     expect(isManualOrderDocumentAvailable(manualInput({ items }))).toBe(false);
   });
 
+  it.each([
+    '',
+    'NG',
+    'NAIRA',
+    ' NGN',
+    42,
+  ])('hides orders with an invalid currency (%#)', (currency) => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({ money: { ...validMoney, currency } })
+      )
+    ).toBe(false);
+  });
+
+  it('shows orders with a valid currency', () => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({ money: { ...validMoney, currency: 'NGN' } })
+      )
+    ).toBe(true);
+  });
+
   it('hides paid orders with invalid content the sender would skip', () => {
     const input = manualInput({
       paymentStatus: 'paid',

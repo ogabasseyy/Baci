@@ -5,7 +5,10 @@ import {
 } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
-import { markManualDocumentDispatchStarted } from '@/lib/mark-manual-document-dispatch-started';
+import {
+  checkManualDocumentDispatchLease,
+  persistManualDocumentDispatch,
+} from '@/lib/mark-manual-document-dispatch-started';
 import {
   resolveNotificationReplyTo,
   resolveOrderNotificationRecipient,
@@ -189,45 +192,26 @@ export async function sendManualOrderDocument({
   let dispatchStarted = false;
   let providerAccepted = false;
   async function persistDispatch(started: boolean) {
-    // The atomic RPC already committed dispatch_started_at: a second
-    // conditional write here would match zero rows and fail every send.
-    if (started) {
-      await markManualDocumentDispatchStarted(
-        supabase,
-        row,
-        order,
-        pdfDocumentKind,
-        {
-          merchantBankCode: merchant.bank_code,
-          merchantBankAccountNumber: merchant.bank_account_number,
-          merchantBankName: merchant.bank_name,
-          merchantBankAccountName: merchant.bank_account_name,
-          virtualAccountNumber: preferredPaymentAccount?.account_number ?? null,
-          virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
-          virtualAccountName: preferredPaymentAccount?.account_name ?? null,
-        },
-        taxSubtotals,
-        transactions
-      );
-      dispatchStarted = true;
-      return;
-    }
-    const { data: updated, error: updateError } = await supabase
-      .from('order_notification_outbox')
-      .update({ dispatch_started_at: null })
-      .match({
-        id: row.id,
-        order_id: row.order_id,
-        merchant_id: row.merchant_id,
-        event_type: row.event_type,
-        locked_by: row.claim_owner,
-        status: 'processing',
-      })
-      .select('id')
-      .maybeSingle();
-    if (updateError || updated?.id !== row.id)
-      throw new Error('Manual document dispatch lease lost');
-    dispatchStarted = false;
+    await persistManualDocumentDispatch(
+      supabase,
+      row,
+      order,
+      pdfDocumentKind,
+      {
+        merchantBankCode: merchant.bank_code,
+        merchantBankAccountNumber: merchant.bank_account_number,
+        merchantBankName: merchant.bank_name,
+        merchantBankAccountName: merchant.bank_account_name,
+        virtualAccountNumber: preferredPaymentAccount?.account_number ?? null,
+        virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
+        virtualAccountName: preferredPaymentAccount?.account_name ?? null,
+      },
+      taxSubtotals,
+      transactions,
+      merchant,
+      started
+    );
+    dispatchStarted = started;
   }
   try {
     const result = await sendEmail({
@@ -271,6 +255,18 @@ export async function sendManualOrderDocument({
       };
     }
     providerAccepted = true;
+    // A data change that landed after the dispatch marker reset it: the
+    // just-sent PDF is stale, so fail for a bounded corrective retry
+    // instead of recording a clean sent.
+    const lease = await checkManualDocumentDispatchLease(supabase, row.id);
+    if (lease === 'unknown')
+      return {
+        status: 'failed',
+        error: 'dispatch_lease_check_failed',
+        deliveryOutcome: 'unknown',
+      };
+    if (lease === 'reset')
+      return { status: 'failed', error: 'document_changed_during_send' };
     const { data: marked, error: markError } = await supabase
       .from('receipt_claims')
       .update({ notification_sent_at: new Date().toISOString() })

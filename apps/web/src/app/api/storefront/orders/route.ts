@@ -191,6 +191,7 @@ export async function GET(request: NextRequest) {
           tax_amount: order.tax_amount,
           discount_amount: order.discount_amount,
           amount_paid: order.amount_paid,
+          currency: order.currency,
         },
         items: order.order_items ?? [],
       };

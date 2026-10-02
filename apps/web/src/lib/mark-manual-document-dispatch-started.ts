@@ -43,6 +43,7 @@ interface DispatchOutboxRow {
   order_id: string;
   merchant_id: string;
   claim_owner: string;
+  event_type: string;
 }
 
 export interface DispatchPaymentSnapshot {
@@ -53,6 +54,17 @@ export interface DispatchPaymentSnapshot {
   virtualAccountNumber: string | null;
   virtualAccountBankName: string | null;
   virtualAccountName: string | null;
+}
+
+export interface DispatchMerchantIdentitySnapshot {
+  businessName: string | null;
+  legalEntityName: string | null;
+  businessAddress: string | null;
+  registeredAddress: Record<string, unknown> | null;
+  cacRcNumber: string | null;
+  taxIdentificationNumber: string | null;
+  vatRegistrationStatus: string | null;
+  vatRate: number | null;
 }
 
 export interface DispatchTaxSubtotal {
@@ -86,13 +98,16 @@ export interface DispatchTransaction {
  * the same way so a bank-detail edit cannot silently misdirect a transfer,
  * but only for invoice and proforma kinds: receipts render no payment
  * instructions, so comparing them would spuriously abort every receipt for
- * an order with an assigned account. The rendered VAT subtotals are covered
- * too (count plus canonical rows) since a same-total category correction
- * would otherwise email a stale tax breakdown, as is the rendered payment
- * history: a payment inserted or corrected mid-dispatch must abort rather
- * than email a stale Payment table. The rendered kind is passed explicitly
- * so the RPC can snapshot exactly what is being sent. Callers must pass
- * the exact values the PDF was rendered from.
+ * an order with an assigned account. The rendered issuer identity (business
+ * name, legal entity, addresses, RC/TIN, VAT registration) is compared for
+ * every kind instead since receipts print the issuer header too. The
+ * rendered VAT subtotals are covered too (count plus canonical rows) since
+ * a same-total category correction would otherwise email a stale tax
+ * breakdown, as is the rendered payment history: a payment inserted or
+ * corrected mid-dispatch must abort rather than email a stale Payment
+ * table. The rendered kind is passed explicitly so the RPC can snapshot
+ * exactly what is being sent. Callers must pass the exact values the PDF
+ * was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
@@ -101,7 +116,8 @@ export async function markManualDocumentDispatchStarted(
   documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
   payment: DispatchPaymentSnapshot,
   taxSubtotals: readonly DispatchTaxSubtotal[],
-  transactions: readonly DispatchTransaction[]
+  transactions: readonly DispatchTransaction[],
+  merchant: DispatchMerchantIdentitySnapshot
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -171,6 +187,14 @@ export async function markManualDocumentDispatchStarted(
           description: txn.description,
           metadata: txn.metadata,
         })),
+      p_merchant_business_name: merchant.businessName,
+      p_merchant_legal_entity_name: merchant.legalEntityName,
+      p_merchant_business_address: merchant.businessAddress,
+      p_merchant_registered_address: merchant.registeredAddress,
+      p_merchant_cac_rc_number: merchant.cacRcNumber,
+      p_merchant_tax_identification_number: merchant.taxIdentificationNumber,
+      p_merchant_vat_registration_status: merchant.vatRegistrationStatus,
+      p_merchant_vat_rate: merchant.vatRate,
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');
@@ -178,4 +202,89 @@ export async function markManualDocumentDispatchStarted(
     throw new Error('Manual document order changed before dispatch');
   if (data?.status !== 'marked')
     throw new Error('Manual document dispatch lease lost');
+}
+
+interface DispatchMerchantRow {
+  business_name: string | null;
+  legal_entity_name: string | null;
+  business_address: string | null;
+  registered_address: Record<string, unknown> | null;
+  cac_rc_number: string | null;
+  tax_identification_number: string | null;
+  vat_registration_status: string | null;
+  vat_rate: number | null;
+}
+
+/**
+ * Writes or clears the dispatch marker around transport. The atomic RPC
+ * already committed dispatch_started_at, so clearing is a conditional
+ * lease-holding write, not a second mark.
+ */
+export async function persistManualDocumentDispatch(
+  supabase: SupabaseClient,
+  row: DispatchOutboxRow,
+  order: DispatchOrderSnapshot,
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt',
+  payment: DispatchPaymentSnapshot,
+  taxSubtotals: readonly DispatchTaxSubtotal[],
+  transactions: readonly DispatchTransaction[],
+  merchant: DispatchMerchantRow,
+  started: boolean
+): Promise<void> {
+  if (started) {
+    await markManualDocumentDispatchStarted(
+      supabase,
+      row,
+      order,
+      documentKind,
+      payment,
+      taxSubtotals,
+      transactions,
+      {
+        businessName: merchant.business_name,
+        legalEntityName: merchant.legal_entity_name,
+        businessAddress: merchant.business_address,
+        registeredAddress: merchant.registered_address,
+        cacRcNumber: merchant.cac_rc_number,
+        taxIdentificationNumber: merchant.tax_identification_number,
+        vatRegistrationStatus: merchant.vat_registration_status,
+        vatRate: merchant.vat_rate,
+      }
+    );
+    return;
+  }
+  const { data: updated, error: updateError } = await supabase
+    .from('order_notification_outbox')
+    .update({ dispatch_started_at: null })
+    .match({
+      id: row.id,
+      order_id: row.order_id,
+      merchant_id: row.merchant_id,
+      event_type: row.event_type,
+      locked_by: row.claim_owner,
+      status: 'processing',
+    })
+    .select('id')
+    .maybeSingle();
+  if (updateError || updated?.id !== row.id)
+    throw new Error('Manual document dispatch lease lost');
+}
+
+/**
+ * Re-reads the dispatch marker after transport. A data change that landed
+ * after the marker reset it via the enqueue trigger, so a reset marker
+ * means the just-sent PDF is stale and the worker must retry with fresh
+ * data instead of recording a clean sent.
+ */
+export async function checkManualDocumentDispatchLease(
+  supabase: SupabaseClient,
+  outboxId: string
+): Promise<'held' | 'reset' | 'unknown'> {
+  const { data: lease, error: leaseError } = await supabase
+    .from('order_notification_outbox')
+    .select('dispatch_started_at')
+    .match({ id: outboxId })
+    .maybeSingle();
+  if (leaseError || !lease) return 'unknown';
+  return lease.dispatch_started_at ? 'held' : 'reset';
 }

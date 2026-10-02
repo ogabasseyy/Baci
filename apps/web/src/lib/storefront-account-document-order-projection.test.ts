@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isProviderConfirmedTransaction } from './storefront-account-document-bundle';
+import { isProviderConfirmedTransaction } from './storefront-account-document-order-projection';
 
 describe('isProviderConfirmedTransaction', () => {
   it.each([

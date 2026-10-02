@@ -71,4 +71,26 @@ describe('manualDocumentMerchantSchema', () => {
       ).toBeNull();
     }
   });
+
+  it('requires a host-safe claim slug', () => {
+    for (const slug of ['ogabassey', 'future-merchant', 'Shop1', 'a']) {
+      expect(
+        manualDocumentMerchantSchema.parse({ ...baseMerchant, slug }).slug
+      ).toBe(slug);
+    }
+    for (const slug of [
+      '',
+      ' ogabassey',
+      'ogabassey ',
+      'oga.bassey',
+      'oga_bassey',
+      '-ogabassey',
+      'ogabassey-',
+      'oga bassey',
+    ]) {
+      expect(() =>
+        manualDocumentMerchantSchema.parse({ ...baseMerchant, slug })
+      ).toThrow();
+    }
+  });
 });

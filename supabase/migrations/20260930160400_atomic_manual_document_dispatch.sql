@@ -17,16 +17,31 @@
 -- transfer. Receipts render no payment instructions, so the payment
 -- comparison (including the virtual-account lookup) only runs for invoice
 -- and proforma kinds; otherwise every receipt for an order with an assigned
--- account would spuriously abort. Cosmetic merchant fields (name, logo,
--- colors) stay outside the snapshot, as do ledger rows, which derive from
--- the covered payment state. The rendered VAT subtotals are snapshotted
--- (count plus canonical rows) since a same-total category correction would
--- otherwise email a stale tax breakdown. The worker retries after an abort
--- and converges (fresh send or document_state_changed skip). Safe predeploy:
--- only the new worker calls it. The rendered payment-history rows are
--- snapshotted the same way (count plus canonical rows over the sender's
--- settled-status filter): a payment inserted or corrected mid-dispatch
--- would otherwise email a stale Payment table.
+-- account would spuriously abort. The rendered issuer identity (business
+-- name, legal entity, addresses, RC/TIN, VAT registration) is compared for
+-- every kind instead: receipts print the issuer header too, so a committed
+-- correction must abort rather than email stale issuer or tax data.
+-- Cosmetic merchant fields (logo, colors) stay outside the snapshot, as do
+-- ledger rows, which derive from the covered payment state. The rendered
+-- VAT subtotals are snapshotted (count plus canonical rows) since a
+-- same-total category correction would otherwise email a stale tax
+-- breakdown. The worker retries after an abort and converges (fresh send
+-- or document_state_changed skip). Safe predeploy: only the new worker
+-- calls it. The rendered payment-history rows are snapshotted the same way
+-- (count plus canonical rows over the sender's settled-status filter): a
+-- payment inserted or corrected mid-dispatch would otherwise email a stale
+-- Payment table.
+-- Every child-table read below locks its rows FOR SHARE first (locking
+-- clauses are illegal on aggregates, so a bare PERFORM takes the locks and
+-- the count/canonical-row aggregates re-read the locked rows), so a
+-- concurrent item, tax, transaction, or account UPDATE/DELETE blocks until
+-- this comparison commits instead of slipping between the re-read and the
+-- mark; the writer's trigger then sees the set marker and resets it, and
+-- the worker's post-transport lease check aborts the stale send for a
+-- bounded retry. Pure INSERTs during this function's own microseconds
+-- cannot take a row lock, so a same-instant insert can still miss both the
+-- comparison and the reset; that residual is bounded by this transaction's
+-- duration (no I/O inside) rather than the whole send window.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -67,7 +82,15 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_tax_count integer,
   p_tax_subtotals jsonb,
   p_txn_count integer,
-  p_transactions jsonb
+  p_transactions jsonb,
+  p_merchant_business_name text,
+  p_merchant_legal_entity_name text,
+  p_merchant_business_address text,
+  p_merchant_registered_address jsonb,
+  p_merchant_cac_rc_number text,
+  p_merchant_tax_identification_number text,
+  p_merchant_vat_registration_status text,
+  p_merchant_vat_rate numeric
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -87,6 +110,14 @@ DECLARE
   v_tax_subtotals jsonb;
   v_txn_count bigint;
   v_transactions jsonb;
+  v_merchant_business_name text;
+  v_merchant_legal_entity_name text;
+  v_merchant_business_address text;
+  v_merchant_registered_address jsonb;
+  v_merchant_cac_rc_number text;
+  v_merchant_tax_identification_number text;
+  v_merchant_vat_registration_status text;
+  v_merchant_vat_rate numeric;
 BEGIN
   -- Lock the order before the outbox (same order as the claim and trigger
   -- paths) and hold it through the comparison and the mark.
@@ -102,6 +133,8 @@ BEGIN
   IF NOT FOUND OR v_order IS NULL THEN
     RETURN jsonb_build_object('status', 'lease_lost');
   END IF;
+  PERFORM 1 FROM public.order_items AS oi
+  WHERE oi.order_id = v_order.id FOR SHARE OF oi;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -121,11 +154,18 @@ BEGIN
   -- unexpired non-legacy paystack row); a missing row leaves NULLs, which
   -- match a null snapshot. FOR SHARE narrows the open-transaction window
   -- the same way the order lock does.
+  SELECT m.business_name, m.legal_entity_name, m.business_address,
+    m.registered_address, m.cac_rc_number, m.tax_identification_number,
+    m.vat_registration_status, m.vat_rate,
+    m.bank_code, m.bank_account_number, m.bank_name, m.bank_account_name
+  INTO v_merchant_business_name, v_merchant_legal_entity_name,
+    v_merchant_business_address, v_merchant_registered_address,
+    v_merchant_cac_rc_number, v_merchant_tax_identification_number,
+    v_merchant_vat_registration_status, v_merchant_vat_rate,
+    v_merchant_bank_code, v_merchant_bank_account_number,
+    v_merchant_bank_name, v_merchant_bank_account_name
+  FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
   IF v_compare_payment THEN
-    SELECT m.bank_code, m.bank_account_number, m.bank_name, m.bank_account_name
-    INTO v_merchant_bank_code, v_merchant_bank_account_number,
-      v_merchant_bank_name, v_merchant_bank_account_name
-    FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
     SELECT opa.account_number, opa.bank_name, opa.account_name
     INTO v_va_account_number, v_va_bank_name, v_va_account_name
     FROM public.order_payment_accounts AS opa
@@ -141,6 +181,8 @@ BEGIN
   -- The PDF tax breakdown renders the same five columns; both sides sort
   -- rows by id (uuid text order matches byte order), so the canonical order
   -- is collation-independent.
+  PERFORM 1 FROM public.order_tax_subtotals AS ts
+  WHERE ts.order_id = v_order.id FOR SHARE OF ts;
   SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -153,6 +195,9 @@ BEGIN
   -- The settled-status filter mirrors the sender's read exactly
   -- (payment type, completed/success): a row flipping out of the filter
   -- changes the count and aborts, and unsettled rows never count.
+  PERFORM 1 FROM public.transactions AS t
+  WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
+    AND t.status IN ('completed', 'success') FOR SHARE OF t;
   SELECT count(*) INTO v_txn_count FROM public.transactions AS t
   WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success');
@@ -189,6 +234,14 @@ BEGIN
     OR v_order.shipping_address IS DISTINCT FROM p_shipping_address
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
     OR v_items IS DISTINCT FROM p_items
+    OR v_merchant_business_name IS DISTINCT FROM p_merchant_business_name
+    OR v_merchant_legal_entity_name IS DISTINCT FROM p_merchant_legal_entity_name
+    OR v_merchant_business_address IS DISTINCT FROM p_merchant_business_address
+    OR v_merchant_registered_address IS DISTINCT FROM p_merchant_registered_address
+    OR v_merchant_cac_rc_number IS DISTINCT FROM p_merchant_cac_rc_number
+    OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
+    OR v_merchant_vat_registration_status IS DISTINCT FROM p_merchant_vat_registration_status
+    OR v_merchant_vat_rate IS DISTINCT FROM p_merchant_vat_rate
     OR (v_compare_payment AND (
       v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
       OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
@@ -212,7 +265,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric)
   TO service_role;

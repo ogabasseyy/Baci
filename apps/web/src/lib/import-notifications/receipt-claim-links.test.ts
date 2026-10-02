@@ -78,6 +78,32 @@ describe('receipt claim links', () => {
     }
   });
 
+  it('throws for a host-unsafe slug instead of minting a broken link', () => {
+    for (const slug of [
+      '',
+      ' ogabassey',
+      'oga.bassey',
+      'oga_bassey',
+      '-ogabassey',
+    ]) {
+      expect(() =>
+        buildReceiptClaimUrl({
+          merchant: { slug, custom_domain: null },
+          token: 'token_123',
+        })
+      ).toThrow('Invalid merchant slug for receipt claim URL');
+    }
+  });
+
+  it('ignores an unsafe slug when the custom domain wins', () => {
+    expect(
+      buildReceiptClaimUrl({
+        merchant: { slug: 'oga.bassey', custom_domain: 'ogabassey.com' },
+        token: 'token_123',
+      })
+    ).toBe('https://ogabassey.com/receipts/claim/token_123');
+  });
+
   it('does not add customer email hints to receipt claim links', () => {
     expect(
       buildReceiptClaimUrl({

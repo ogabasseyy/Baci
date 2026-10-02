@@ -5,14 +5,17 @@ import { formatReceiptListDate } from '../receipt-list-date';
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 
 function getCurrencyFormatter(currency: string): Intl.NumberFormat {
-  let formatter = currencyFormatterCache.get(currency);
+  // A malformed staff-entered code must not crash the whole list: fall
+  // back to NGN for display (the document pipeline fails closed on it).
+  const code = /^[A-Za-z]{3}$/.test(currency) ? currency : 'NGN';
+  let formatter = currencyFormatterCache.get(code);
   if (!formatter) {
     formatter = new Intl.NumberFormat('en-NG', {
       style: 'currency',
-      currency,
+      currency: code,
       minimumFractionDigits: 0,
     });
-    currencyFormatterCache.set(currency, formatter);
+    currencyFormatterCache.set(code, formatter);
   }
   return formatter;
 }

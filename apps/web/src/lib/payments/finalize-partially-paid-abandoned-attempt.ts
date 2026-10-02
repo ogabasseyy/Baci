@@ -53,6 +53,9 @@ export async function finalizePartiallyPaidAbandonedAttempt({
     // normalize a wedged processing row to pending first. Zero matched rows
     // means a concurrent webhook completed it meanwhile — a genuine
     // concurrent change, not a wedged row.
+    // No gateway predicate: the id/order/merchant/reference/status
+    // filters already bind the row, and the sweep normalizes legacy
+    // gateway spellings (` Paystack `) an exact match would miss.
     const { data: admitted, error: admitError } = await supabase
       .from('transactions')
       .update({ status: 'pending', updated_at: new Date().toISOString() })
@@ -60,7 +63,6 @@ export async function finalizePartiallyPaidAbandonedAttempt({
       .eq('order_id', attempt.order_id)
       .eq('merchant_id', attempt.merchant_id)
       .eq('transaction_type', 'payment')
-      .eq('gateway', 'paystack')
       .eq('gateway_reference', attempt.gateway_reference)
       .eq('status', 'processing')
       .select('id');

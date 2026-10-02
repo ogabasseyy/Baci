@@ -42,23 +42,38 @@ export function cancellationDrainDeadlineMs(startedAtMs: number): number {
 // emails on the 90s side-effect deadline leaves only ~30s after a
 // full reconcile phase, excluding every email on each backlog run.
 // Emails get their own cutoff past a full reconcile phase plus the
-// admission budget. The email send aborts 10s before its cutoff, and
-// refund row-starts still gate on the 90s deadline, so the phase's
-// worst-case end (a 30s refund tail at 120s) is unchanged and the
-// notification reserve holds: 108s + 150s + 30s = 288s of 300s.
+// admission budget plus the claim-write allowance the post-lookup
+// guard requires on top of the send budget: without it the guard
+// (48s + 8s) can never pass after a full 60s reconcile, skipping
+// every email unclaimed on each backlog run. The email send aborts
+// 10s before its cutoff, and refund row-starts still gate on the 90s
+// deadline, so the phase's worst-case end (a 30s refund tail at 120s)
+// is unchanged and the notification reserve holds:
+// 116s + 150s + 30s = 296s of 300s.
 // Shared with reconcile-worker-deadline WORKER_BUDGET_MS and
 // zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER): keep
 // identical, and keep the invariant test below in lockstep.
 const RECONCILE_PHASE_MS = 60_000;
 const EMAIL_ADMISSION_MS = 48_000;
+// Allowance for the claim RPC itself when the drain rechecks the
+// email budget after the order/merchant reads: mirrors zeptomail's
+// audit-write margin for a single database write. Imported by the
+// drain's post-lookup guard so the cutoff and the guard share it.
+export const CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS = 8_000;
 
 /**
  * Absolute epoch-ms cutoff for customer-email admission and sends for
  * work started at `startedAtMs`: a full reconcile phase plus the
- * one-attempt sender admission budget. Refund steps keep gating on
+ * one-attempt sender admission budget plus the claim-write
+ * allowance. Refund steps keep gating on
  * `cancellationDrainDeadlineMs`; only email admission, rechecks, and
  * the email send cutoff use this later deadline.
  */
 export function cancellationEmailDrainDeadlineMs(startedAtMs: number): number {
-  return startedAtMs + RECONCILE_PHASE_MS + EMAIL_ADMISSION_MS;
+  return (
+    startedAtMs +
+    RECONCILE_PHASE_MS +
+    EMAIL_ADMISSION_MS +
+    CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS
+  );
 }

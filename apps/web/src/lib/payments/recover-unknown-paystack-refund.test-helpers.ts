@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 
 const payment = {
   amount: 100,
+  gateway: 'paystack',
   gateway_reference: 'PSK-1',
   id: 'pay-1',
   merchant_id: 'merchant-1',
@@ -18,6 +19,7 @@ const order = {
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockResolvedValue({ data, error }),

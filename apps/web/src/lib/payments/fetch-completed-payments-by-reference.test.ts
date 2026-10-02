@@ -6,16 +6,19 @@ function paymentChain(limit: ReturnType<typeof vi.fn>) {
   const chain: {
     eq: ReturnType<typeof vi.fn>;
     gt: ReturnType<typeof vi.fn>;
+    ilike: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
     gt: vi.fn(),
+    ilike: vi.fn(),
     limit,
     order: vi.fn(),
   };
   chain.eq.mockReturnValue(chain);
   chain.gt.mockReturnValue(chain);
+  chain.ilike.mockReturnValue(chain);
   chain.order.mockReturnValue(chain);
   return chain;
 }
@@ -38,6 +41,7 @@ function database(pages: unknown[][]) {
 
 const payment = {
   amount: 100,
+  gateway: 'paystack',
   gateway_reference: 'PSK-1',
   id: 'pay-1',
   merchant_id: 'merchant-1',
@@ -53,9 +57,9 @@ describe('fetchCompletedPaymentsByReference', () => {
     expect(result).toEqual([payment]);
     expect(from).toHaveBeenCalledWith('transactions');
     expect(select).toHaveBeenCalledWith(
-      'id, order_id, merchant_id, gateway_reference, amount'
+      'id, order_id, merchant_id, gateway, gateway_reference, amount'
     );
-    expect(chain.eq).toHaveBeenCalledWith('gateway', 'paystack');
+    expect(chain.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
     expect(chain.eq).toHaveBeenCalledWith('gateway_reference', 'PSK-1');
     expect(chain.eq).toHaveBeenCalledWith('transaction_type', 'payment');
     expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
@@ -112,6 +116,30 @@ describe('fetchCompletedPaymentsByReference', () => {
 
   it('returns an empty list when nothing matches', async () => {
     const { supabase } = database([[]]);
+
+    const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
+
+    expect(result).toEqual([]);
+  });
+
+  it.each([
+    'Paystack',
+    ' paystack ',
+  ])('matches a legacy payment stored as %s', async (gateway) => {
+    const { supabase } = database([
+      [{ ...payment, gateway }],
+      [{ ...payment, gateway }],
+    ]);
+
+    const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
+
+    expect(result).toEqual([{ ...payment, gateway }]);
+  });
+
+  it('drops a foreign gateway the loose prefilter admitted', async () => {
+    const { supabase } = database([
+      [{ ...payment, gateway: 'korapay', id: 'pay-foreign' }],
+    ]);
 
     const result = await fetchCompletedPaymentsByReference(supabase, 'PSK-1');
 

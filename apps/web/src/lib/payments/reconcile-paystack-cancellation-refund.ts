@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchRefund } from './fetch-paystack-refund';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 
 /** A signed event is only a wake-up hint. Provider reads decide the transition. */
@@ -15,13 +16,6 @@ const EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION = new Set([
   'manual',
   'pay_on_delivery',
 ]);
-
-// Legacy rows may pad or re-case gateway names (` Paystack `). Normalize
-// exactly like the aggregate coverage paths: missing/blank never matches.
-const normalizeGatewayName = (value: unknown): string =>
-  String(value ?? '')
-    .trim()
-    .toUpperCase();
 
 async function resolveLinkedPayment(
   supabase: SupabaseClient,
@@ -45,7 +39,7 @@ async function resolveLinkedPayment(
   // The id/order/merchant/type/status filters already bind the row; an
   // exact gateway match here would misfile a legacy `Paystack` leg as a
   // bad link, so normalize before the gateway check instead.
-  if (payment && normalizeGatewayName(payment.gateway) !== 'PAYSTACK')
+  if (payment && normalizePaymentGateway(payment.gateway) !== 'PAYSTACK')
     throw new Error('refund_payment_link_mismatch');
   return payment;
 }
@@ -69,12 +63,12 @@ async function resolveSoleLegacyPayment(
   const candidates = (data ?? []).filter(
     (payment) =>
       !EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION.has(
-        normalizeGatewayName(payment.gateway).toLowerCase()
+        normalizePaymentGateway(payment.gateway).toLowerCase()
       )
   );
   if (candidates.length !== 1) throw new Error('refund_payment_link_mismatch');
   const [sole] = candidates;
-  if (normalizeGatewayName(sole?.gateway) !== 'PAYSTACK')
+  if (normalizePaymentGateway(sole?.gateway) !== 'PAYSTACK')
     throw new Error('refund_payment_link_mismatch');
   return sole;
 }

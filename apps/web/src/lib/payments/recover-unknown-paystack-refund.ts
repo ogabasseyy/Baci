@@ -26,8 +26,53 @@ export async function recoverUnknownPaystackRefund(
   refundId: number,
   paymentReference?: string
 ): Promise<void> {
-  const { current, resolvedPaymentReference } =
-    await verifyUnknownPaystackRefundProvider(refundId, paymentReference);
+  let verified: Awaited<ReturnType<typeof verifyUnknownPaystackRefundProvider>>;
+  try {
+    verified = await verifyUnknownPaystackRefundProvider(
+      refundId,
+      paymentReference
+    );
+  } catch (error) {
+    // The provider answered for a real refund but its transaction
+    // pointer is malformed, so no payment can resolve: throwing bare
+    // would 503 every redelivery with no durable trace, and polling
+    // can never rediscover an unknown refund. File the evidence
+    // against the webhook hint (or a refund-keyed fallback when the
+    // event carries none) and still throw for glitch recovery.
+    if (
+      error instanceof Error &&
+      error.message === 'paystack_refund_transaction_invalid'
+    ) {
+      const raw = (error as { providerRefund?: unknown }).providerRefund as
+        | {
+            amount?: unknown;
+            currency?: unknown;
+            status?: unknown;
+            transaction?: unknown;
+          }
+        | null
+        | undefined;
+      const reference = paymentReference ?? `unknown-refund:${refundId}`;
+      await fileInvalidPaystackRefundEvidenceReview(supabase, {
+        evidence: {
+          providerPaymentTransactionId: raw?.transaction,
+          providerRefundId: refundId,
+          providerRefundStatus:
+            typeof raw?.status === 'string' ? raw.status : 'unknown',
+          reference,
+        },
+        reason: `Paystack refund ${refundId} returned a malformed transaction pointer for reference ${reference}`,
+        reference,
+        refundId,
+      });
+      await resolvePaystackRefundRecoveryWatch(supabase, {
+        providerRefundId: refundId,
+        reference,
+      });
+    }
+    throw error;
+  }
+  const { current, resolvedPaymentReference } = verified;
   let candidates = await fetchCompletedPaymentsByReference(
     supabase,
     resolvedPaymentReference

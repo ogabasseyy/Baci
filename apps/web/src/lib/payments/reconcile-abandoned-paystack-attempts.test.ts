@@ -47,7 +47,7 @@ describe('reconcileAbandonedPaystackAttempts', () => {
     });
 
     expect(summary.retired).toEqual(['attempt-1']);
-    expect(lookup.eq).toHaveBeenCalledWith('gateway', 'paystack');
+    expect(lookup.ilike).toHaveBeenCalledWith('gateway', '%paystack%');
     expect(lookup.in).toHaveBeenCalledWith('status', ['pending', 'processing']);
     expect(lookup.in).toHaveBeenCalledWith('paid_order.payment_status', [
       'paid',
@@ -86,6 +86,44 @@ describe('reconcileAbandonedPaystackAttempts', () => {
       'BAC-OLD'
     );
     expect(updateBuilder.eq).toHaveBeenCalledWith('status', 'pending');
+  });
+
+  it.each([
+    'Paystack',
+    ' paystack ',
+  ])('retires a stale attempt stored as %s', async (gateway) => {
+    const { client } = createClient([{ ...candidate, gateway }]);
+    const verify = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        reference: 'BAC-OLD',
+        status: 'abandoned',
+        amount: 10000,
+        currency: 'NGN',
+      },
+    });
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.retired).toEqual(['attempt-1']);
+    expect(verify).toHaveBeenCalledWith('BAC-OLD', expect.any(AbortSignal));
+  });
+
+  it('skips a foreign-gateway row the loose prefilter admitted', async () => {
+    const { client } = createClient([{ ...candidate, gateway: 'korapay' }]);
+    const verify = vi.fn();
+
+    const summary = await reconcileAbandonedPaystackAttempts({
+      supabase: client as never,
+      verify,
+    });
+
+    expect(summary.checked).toBe(0);
+    expect(summary.retired).toEqual([]);
+    expect(verify).not.toHaveBeenCalled();
   });
 
   it('retires a provider-confirmed processing attempt on a funded order', async () => {

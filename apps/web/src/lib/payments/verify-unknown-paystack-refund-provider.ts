@@ -38,7 +38,14 @@ export async function verifyUnknownPaystackRefundProvider(
   }
   const current = providerRefund.data;
   if (!Number.isSafeInteger(current.transaction) || current.transaction <= 0) {
-    throw new Error('paystack_refund_transaction_invalid');
+    // Carry the raw payload: the caller files it as invalid evidence
+    // before rejecting, so a malformed transaction leaves a durable
+    // trace instead of 503ing with nothing recorded.
+    const error = new Error('paystack_refund_transaction_invalid') as Error & {
+      providerRefund?: unknown;
+    };
+    error.providerRefund = current;
+    throw error;
   }
   // Always resolve the payment from the refund's own numeric transaction
   // ID: the webhook reference is only a hint and may be stale. A stale

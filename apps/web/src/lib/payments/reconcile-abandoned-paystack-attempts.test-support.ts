@@ -6,6 +6,7 @@ export const candidate = {
   id: 'attempt-1',
   order_id: 'order-1',
   merchant_id: 'merchant-1',
+  gateway: 'paystack',
   gateway_reference: 'BAC-OLD',
   metadata: {},
   paid_order: { payment_status: 'paid' },
@@ -14,7 +15,7 @@ export const candidate = {
 };
 
 const CANDIDATE_COLUMNS =
-  'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)';
+  'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)';
 
 export function createClient(
   rows = [candidate],
@@ -37,6 +38,7 @@ export function createClient(
       lookupEqCalls.push(args);
       return lookup;
     }),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     neq: vi.fn().mockReturnThis(),

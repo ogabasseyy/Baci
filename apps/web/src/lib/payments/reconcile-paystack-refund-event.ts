@@ -5,6 +5,7 @@ import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-pay
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 import { openPaystackRefundReferenceWatch } from './open-paystack-refund-reference-watch';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
@@ -134,12 +135,16 @@ async function forEachReferencePayment(
   let lastId: string | null = null;
   const handledIds = new Set<string>();
   for (;;) {
+    // Legacy rows may pad or re-case the gateway (` Paystack `):
+    // prefilter case-insensitively server-side, then exact-normalize
+    // each row below. The keyset cursor still advances over the
+    // unfiltered page.
     const filtered = supabase
       .from('transactions')
       .select(
-        'id, order_id, merchant_id, amount, currency, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status,order_number)'
+        'id, order_id, merchant_id, amount, currency, gateway, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status,order_number)'
       )
-      .eq('gateway', 'paystack')
+      .ilike('gateway', '%paystack%')
       .eq('gateway_reference', transactionReference)
       .eq('transaction_type', 'payment');
     const statusFiltered = stalled
@@ -153,6 +158,7 @@ async function forEachReferencePayment(
     if (paymentError) throw new Error('refund_event_payment_lookup_failed');
     const page = (payments ?? []) as Record<string, unknown>[];
     for (const payment of page) {
+      if (normalizePaymentGateway(payment.gateway) !== 'PAYSTACK') continue;
       if (typeof payment.id === 'string') handledIds.add(payment.id);
       await reconcileSharedReferencePayment(
         supabase,

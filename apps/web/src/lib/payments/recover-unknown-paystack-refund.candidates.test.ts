@@ -21,6 +21,7 @@ vi.mock('@/lib/logger', () => ({
 function payment(id: string, orderId: string, merchantId: string) {
   return {
     amount: 100,
+    gateway: 'paystack',
     gateway_reference: 'PSK-1',
     id,
     merchant_id: merchantId,
@@ -41,6 +42,7 @@ function cancelledOrder(id: string) {
 function selectQuery(data: unknown, error: unknown = null) {
   return {
     eq: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     is: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn().mockResolvedValue({ data, error }),

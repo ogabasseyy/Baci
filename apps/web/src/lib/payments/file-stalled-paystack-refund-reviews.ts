@@ -3,9 +3,11 @@ import { logger } from '@/lib/logger';
 import { fileCancelledPaystackRefundCandidateReviews } from './file-cancelled-paystack-refund-candidate-reviews';
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
 import { fileActiveOrderPaystackRefundCandidateReviews } from './file-provider-refund-outside-cancellation-review';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 
 export interface StalledPayment {
   amount: number;
+  gateway: string | null;
   gateway_reference: string | null;
   id: string;
   merchant_id: string;
@@ -54,10 +56,13 @@ export async function fileStalledPaystackRefundReviews(
   // refund evidence for the acknowledged webhook.
   let lastId: string | null = null;
   for (;;) {
+    // Legacy rows may pad or re-case the gateway (` Paystack `):
+    // prefilter case-insensitively server-side, then exact-normalize
+    // the page so only genuine Paystack legs file.
     const filtered = supabase
       .from('transactions')
-      .select('id, order_id, merchant_id, gateway_reference, amount')
-      .eq('gateway', 'paystack')
+      .select('id, order_id, merchant_id, gateway, gateway_reference, amount')
+      .ilike('gateway', '%paystack%')
       .eq('gateway_reference', gatewayReference)
       .eq('transaction_type', 'payment')
       .in('status', ['pending', 'processing', 'failed'])
@@ -68,7 +73,11 @@ export async function fileStalledPaystackRefundReviews(
     ).limit(STALLED_MATCH_PAGE_SIZE);
     if (stalledError) throw new Error('refund_event_payment_lookup_failed');
     const page = (stalledRows ?? []) as StalledPayment[];
-    stalled.push(...page);
+    stalled.push(
+      ...page.filter(
+        (row) => normalizePaymentGateway(row.gateway) === 'PAYSTACK'
+      )
+    );
     if (page.length < STALLED_MATCH_PAGE_SIZE) break;
     lastId = page[page.length - 1]?.id ?? null;
     if (lastId === null) break;

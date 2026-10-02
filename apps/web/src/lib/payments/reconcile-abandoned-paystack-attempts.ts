@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { verifyTransaction } from '@/lib/paystack';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 import { processAbandonedPaystackAttempt } from './reconcile-abandoned-paystack-attempts-process';
 
 const DEFAULT_LIMIT = 25;
@@ -12,6 +13,7 @@ const RECHECK_AFTER_MINUTES = 55;
 interface PendingAttempt {
   amount: number;
   currency: string;
+  gateway: string | null;
   gateway_reference: string;
   id: string;
   merchant_id: string;
@@ -67,13 +69,16 @@ export async function reconcileAbandonedPaystackAttempts({
   // would inject dots the OR parser reads as condition separators.
   const orCutoff = `${cutoff.split('.')[0]}Z`;
   const orRecheckCutoff = `${recheckCutoff.split('.')[0]}Z`;
+  // Legacy rows may pad or re-case the gateway (` Paystack `) while
+  // cancellation still treats them as in-flight captures: prefilter
+  // case-insensitively server-side, then exact-normalize below.
   const { data: mainAttempts, error: lookupError } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
     )
     .eq('transaction_type', 'payment')
-    .eq('gateway', 'paystack')
+    .ilike('gateway', '%paystack%')
     .in('status', ['pending', 'processing'])
     .in('paid_order.payment_status', ['paid', 'partially_paid'])
     .not('order_id', 'is', null)
@@ -102,10 +107,10 @@ export async function reconcileAbandonedPaystackAttempts({
   const { data: pendingRetries, error: pendingError } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
+      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status, metadata, platform_fee, paid_order:orders!transactions_order_id_fkey!inner(payment_status)'
     )
     .eq('transaction_type', 'payment')
-    .eq('gateway', 'paystack')
+    .ilike('gateway', '%paystack%')
     .eq('status', 'completed')
     .neq('paid_order.payment_status', 'partially_paid')
     .not('order_id', 'is', null)
@@ -123,7 +128,13 @@ export async function reconcileAbandonedPaystackAttempts({
     );
   }
 
-  const attempts = [...(mainAttempts ?? []), ...(pendingRetries ?? [])];
+  // The ilike prefilter is deliberately loose (casing, padding):
+  // exact-normalize here so only genuine Paystack legs verify.
+  const attempts = [...(mainAttempts ?? []), ...(pendingRetries ?? [])].filter(
+    (attempt) =>
+      normalizePaymentGateway((attempt as PendingAttempt).gateway) ===
+      'PAYSTACK'
+  );
 
   for (const attempt of attempts as PendingAttempt[]) {
     // Stop starting attempts at the pass deadline: serial provider

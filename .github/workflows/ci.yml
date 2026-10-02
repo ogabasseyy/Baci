@@ -417,6 +417,8 @@ jobs:
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs
           .github/scripts/preview-env-turbo-cache.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs.test.mjs
+          .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
           && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets

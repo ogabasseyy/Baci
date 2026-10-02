@@ -107,7 +107,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260927150200_merge_paystack_cancellation_refund_review_evidence.sql',
-    sha256: 'b07c07a9d96e11fe067bd84b3904d19213cc384d8f56a566f9e35d2e689644fb',
+    sha256: '4669f6c3b0375be4a96ba3b72348a9ef6a155c427e1f5cfd23552e180ee510dc',
   },
   {
     repositoryPath:
@@ -307,7 +307,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928182800_paystack_refund_watch_sticky_verdict.sql',
-    sha256: '7d1d459652f66b5c2451835e8db38d95db974428229dc0f7b5e18a4066fd6b4b',
+    sha256: 'dbec3f69b3b0501dee894883e516b5831d48d6196f50af8ba686db4b9f9d329f',
   },
   {
     repositoryPath:
@@ -317,7 +317,7 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
   {
     repositoryPath:
       'supabase/migrations/20260928183000_flag_over_refunds_completed_leg_only.sql',
-    sha256: '08c6f1041c7c271e10622dd5ae0f609fd4e44ba5e86db25961c3a637ae345deb',
+    sha256: '73658faa19618278bc7443f63e57f210ea9b786bb269f94ed934db81e4d9d8d1',
   },
   {
     repositoryPath:

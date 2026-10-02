@@ -26,8 +26,27 @@ export async function fileRefundEvidenceReview(
         p_reason: reason,
       }
     );
-    if (mergeError || merged !== true)
-      throw new Error('refund_evidence_review_persistence_failed');
+    if (mergeError || merged !== true) {
+      // The merge only absorbs into this order's open review: a
+      // 23505 it cannot absorb means another order owns the
+      // (issue_type, paystack_ref) slot (shared reference). Persist
+      // this order's review without occupying paystack_ref — as the
+      // candidate filers do — so the mismatch is recorded instead
+      // of throwing the worker into rotation with no review hold.
+      const { error: retryError } = await supabase
+        .from('reconciliation_review')
+        .insert({
+          issue_type: 'order_cancellation_refund_requires_review',
+          order_id: refund.order_id,
+          merchant_id: refund.merchant_id,
+          txn_id: refund.id,
+          paystack_ref: null,
+          reason: `Paystack cancellation refund evidence mismatch: ${reason}`,
+          metadata: { refund_transaction_id: refund.id, reason },
+        });
+      if (retryError)
+        throw new Error('refund_evidence_review_persistence_failed');
+    }
   } else if (error) {
     throw new Error('refund_evidence_review_persistence_failed');
   }

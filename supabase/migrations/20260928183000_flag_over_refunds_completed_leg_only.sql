@@ -90,9 +90,13 @@ BEGIN
                 AND only_payment.transaction_type = 'payment'
                 AND only_payment.status = 'completed'
                 AND only_payment.amount > 0
-                AND coalesce(only_payment.gateway, '') NOT IN (
-                  'wallet', 'savings', 'store_credit', 'cash', 'manual',
-                  'pay_on_delivery'
+                -- Legacy internal legs may pad or re-case the gateway
+                -- (`Wallet`, ` wallet `): normalize before the lookup
+                -- so they are not mistaken for external legs, as in
+                -- the final coverage RPC.
+                AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
+                  'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+                  'PAY_ON_DELIVERY'
                 )
            )
          )
@@ -101,9 +105,9 @@ BEGIN
        AND p.transaction_type = 'payment'
        AND p.status IN ('completed', 'refund_pending')
        AND p.amount > 0
-       AND coalesce(p.gateway, '') NOT IN (
-         'wallet', 'savings', 'store_credit', 'cash', 'manual',
-         'pay_on_delivery'
+       AND COALESCE(public.normalized_gateway_name_v1(p.gateway), '') NOT IN (
+         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+         'PAY_ON_DELIVERY'
        )
      GROUP BY p.id, p.gateway_reference, p.amount, p.currency
     HAVING coalesce(sum(r.amount), 0) > p.amount

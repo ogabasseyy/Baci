@@ -263,7 +263,11 @@ describe('sendSettlementNotifications', () => {
   it('counts a fresh-read failure without sending', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([], new Error('read failed'));
-    const from = vi.fn().mockReturnValueOnce(fresh);
+    const retry = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: retry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -274,6 +278,14 @@ describe('sendSettlementNotifications', () => {
 
     expect(result).toEqual({ failed: 1, sent: 0 });
     expect(sendEmail).not.toHaveBeenCalled();
+    // The throw happened before revalidation completed, so the whole
+    // merchant batch advances through retry accounting instead of
+    // pinning the bounded queue.
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
+    expect(retry.calls.in).toEqual([['id', ['set-1']]]);
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: 'merchant-a' })
     );
@@ -284,7 +296,11 @@ describe('sendSettlementNotifications', () => {
     const fresh = freshQuery([
       { id: 'set-1', settlement_notified: false, status: 'settled' },
     ]);
-    const from = vi.fn().mockReturnValueOnce(fresh);
+    const retry = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: retry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -294,7 +310,14 @@ describe('sendSettlementNotifications', () => {
     });
 
     expect(result).toEqual({ failed: 1, sent: 0 });
-    expect(from).toHaveBeenCalledTimes(1);
+    expect(from).toHaveBeenCalledTimes(2);
+    // A thrown send is pre-dispatch, so the row rejoins the retry
+    // queue with backoff instead of pinning the batch.
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
+    expect(retry.calls.in).toEqual([['id', ['set-1']]]);
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: 'merchant-a' })
     );
@@ -307,10 +330,12 @@ describe('sendSettlementNotifications', () => {
     ]);
     const mark = markQuery();
     mark.terminal.mockRejectedValueOnce(new Error('mark failed'));
+    const retry = markQuery();
     const from = vi
       .fn()
       .mockReturnValueOnce(fresh)
-      .mockReturnValueOnce({ update: mark.update });
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: retry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -321,6 +346,12 @@ describe('sendSettlementNotifications', () => {
 
     expect(result).toEqual({ failed: 1, sent: 0 });
     expect(sendEmail).toHaveBeenCalledTimes(1);
+    // The mark write threw, so the row stays unnotified and rejoins
+    // the retry queue with backoff.
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.objectContaining({ merchantId: 'merchant-a' })
     );

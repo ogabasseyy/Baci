@@ -83,7 +83,7 @@ t corrupt-sarif 1 "SARIF parse failed" corrupt.sarif "none"
 # --- scope-glob lockstep (every trusted path must trigger the job) ---
 SEC="$ROOT/.github/workflows/security.yml"
 stanza_has() {
-  if sed -n "/$1:/,/$2/p" "$SEC" | grep -qF "$3"; then echo yes; else echo no; fi
+  if sed -n "/^ *$1:\$/,/$2/p" "$SEC" | grep -qF "$3"; then echo yes; else echo no; fi
 }
 assert_eq "relevant-hyphen" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/semgrep-sarif*')"
 assert_eq "relevant-underscore" "yes" "$(stanza_has semgrep_relevant trusted_changed '.github/scripts/semgrep_sarif_*')"
@@ -494,7 +494,7 @@ t helper-git-config-parameters 1 "helper-env-poison" happy.sarif "$H${FS}set -eu
 t helper-git-config-parameters-bare 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}GIT_CONFIG_PARAMETERS=x"
 
 # --- gh field-implied POST (Codex P1: gh api -f without --method) ---
-t gh-field-post 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api \\\"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\\\" -f event=COMMENT -f body=pwned"
+t gh-field-post 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api \"repos/\${GITHUB_REPOSITORY}/pulls/\${PR_NUMBER}/reviews\" -f event=COMMENT -f body=pwned"
 t gh-rawfield-post 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api repos/x -F a=@/etc/passwd"
 t gh-get-fields-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api --method GET repos/x -f a=b"
 
@@ -502,6 +502,24 @@ t gh-get-fields-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gh api -
 t agent-bracket-token 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          LEAKED_GITHUB_TOKEN: \${{ secrets['GITHUB_TOKEN'] }}"
 t agent-bracket-github-token 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          X: \${{ github[\"token\"] }}"
 t agent-computed-secret 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          X: \${{ secrets[env.NAME] }}"
+
+# --- absolute wrapper paths (Codex P1: /usr/bin/timeout) ---
+t wrapper-timeout-abs 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/timeout 5s bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-timeout-evil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}./timeout 5s bash \"\${SCRIPT_DIR}/guard.sh\""
+
+# --- prompt transforms (Codex P1: ${var@P}) ---
+t deferred-atp 1 "helper-deferred-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}payload='\$(bash evil.sh)'${RS}$H${FS}payload='\$(bash evil.sh)'${FS}a${FS}echo \"\${payload@P}\""
+
+# --- java/run-parts loaders (Codex P1: java Evil.java, run-parts) ---
+t loader-java 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}java Evil.java"
+t loader-runparts 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}run-parts \"\${GITHUB_WORKSPACE}/evil.d\""
+
+# --- prompt_file pin (Codex P1: prompt_file rebind) ---
+t promptfile-printf 1 "helper-promptfile-rebind" happy.sarif "$PR${FS}set -euo pipefail${FS}a${FS}printf -v leak '/proc/%s/%s' self environ${RS}$PR${FS}printf -v leak '/proc/%s/%s' self environ${FS}a${FS}echo \"prompt_file=\${leak}\" >> \"\${GITHUB_OUTPUT}\""
+t promptfile-assign 1 "helper-promptfile-rebind" happy.sarif "$PR${FS}set -euo pipefail${FS}a${FS}prompt_file=/tmp/evil"
+
+# --- installer errexit tracking (CodeRabbit: set -o pipefail FP) ---
+t errexit-pipefail-fp 0 "" happy.sarif "$I${FS}set -euo pipefail${FS}r${FS}set -euo pipefail${FS}set -e -o pipefail"
 
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

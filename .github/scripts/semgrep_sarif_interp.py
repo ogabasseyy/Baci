@@ -70,7 +70,12 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "pip3", "pipx", "pkg", "pkg_add", "pnpm", "podman",
              "poetry", "remake", "rustc", "sbt", "snap", "task",
              "terraform", "tofu", "tox", "uv", "vagrant", "winget",
-             "yarn", "yum", "zypper", "composer", "conan", "pmake"}
+             "yarn", "yum", "zypper", "composer", "conan", "pmake",
+             "java", "javac", "run-parts"}
+# java runs source files, classes, and jars (all repo-
+# controlled inputs execute); javac runs annotation
+# processors off the classpath; run-parts executes every
+# eligible executable in its directory operand.
 
 
 def _check_command(argv0, rest, pre, drift, src=""):

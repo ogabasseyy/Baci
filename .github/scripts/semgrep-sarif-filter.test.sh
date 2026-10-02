@@ -24,6 +24,12 @@ t head-creds 1 "head-checkout-credentials" happy.sarif "$S${FS}persist-credentia
 t head-action 1 "head-checkout-action" happy.sarif "$S${FS}uses: actions/checkout@${FS}r${FS}@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0${FS}@v4"
 t head-shape 1 "head-checkout-shape" happy.sarif "$S${FS}persist-credentials: false${FS}a${FS}          repository: evil/x"
 
+# --- checkout ref aliases (Codex P1: env.REVIEW_REF indirection) ---
+t ref-alias-fp 0 "" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      REVIEW_REF: \${{ github.event.pull_request.head.sha }}${RS}$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ env.REVIEW_REF }}"
+t ref-alias-guard 1 "same-repo-job-guard" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      REVIEW_REF: \${{ github.event.pull_request.head.sha }}${RS}$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ env.REVIEW_REF }}${RS}$S${FS}head.repo.full_name == github.repository${FS}r${FS}==${FS}!="
+t ref-steps-output 1 "pr-ref-unresolved" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ steps.pin.outputs.ref }}"
+t ref-unknown-env 1 "pr-ref-unresolved" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ env.NOPE }}"
+
 # --- trusted checkout guards ---
 t trusted-missing 1 "trusted-scripts-checkout-missing" happy.sarif "$S${FS}path: trusted-scripts${FS}d"
 t trusted-ref 1 "trusted-scripts-default-branch" happy.sarif "$S${FS}ref: \${{ github.event.repository.default_branch }}${FS}r${FS}default_branch${FS}main"

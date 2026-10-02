@@ -76,13 +76,14 @@ def _mapfile_name(rest):
     return ""
 
 
-def _indirect_poison(argv0, rest, drift):
+def _indirect_poison(argv0, rest, drift, names=ENV_POISON,
+                     label="helper-env-poison"):
     hit = False
     if argv0 == "printf":
         hit = len(rest) > 1 and rest[0] == "-v" \
-            and _base(rest[1]) in ENV_POISON
+            and _base(rest[1]) in names
     elif argv0 == "read":
-        hit = any(_base(w) in ENV_POISON
+        hit = any(_base(w) in names
                   for w in _read_names(rest))
     elif argv0 == "getopts":
         i = 0
@@ -91,11 +92,19 @@ def _indirect_poison(argv0, rest, drift):
         elif rest and rest[0].startswith("-a"):
             i = 1
         hit = len(rest) > i + 1 \
-            and _base(rest[i + 1]) in ENV_POISON
+            and _base(rest[i + 1]) in names
     elif argv0 in ("mapfile", "readarray"):
-        hit = _base(_mapfile_name(rest)) in ENV_POISON
-    if hit and "helper-env-poison" not in drift:
-        drift.append("helper-env-poison")
+        hit = _base(_mapfile_name(rest)) in names
+    if hit and label not in drift:
+        drift.append(label)
+
+
+def audit_promptfile_rebind(argv0, rest, drift):
+    # printf -v/read/getopts/mapfile build values the audit
+    # cannot see: any indirect bind of prompt_file rebinds the
+    # model prompt path and drifts (the = forms pin above).
+    _indirect_poison(argv0, rest, drift, ("prompt_file",),
+                     "helper-promptfile-rebind")
 
 
 def _check_poison_assign(pre, argv0, rest, drift):

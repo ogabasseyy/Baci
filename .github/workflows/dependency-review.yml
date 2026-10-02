@@ -21,7 +21,9 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
+      # Read-only: the action posts no PR comments
+      # (comment-summary-in-pr is off), so no write scope.
+      pull-requests: read
 
     steps:
       - name: Checkout repository

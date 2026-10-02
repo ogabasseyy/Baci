@@ -13,7 +13,8 @@ from semgrep_sarif_heredoc import _strip_heredocs
 from semgrep_sarif_interp import _check_command
 from semgrep_sarif_pins import _is_home_write
 from semgrep_sarif_poison import _base as _varname
-from semgrep_sarif_poison import _check_poison_assign
+from semgrep_sarif_poison import (_check_poison_assign,
+                                 audit_promptfile_rebind)
 from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
                                    audit_github_cmdfile_writes)
 from semgrep_sarif_redirect import (has_socket_redirect,
@@ -35,7 +36,12 @@ DEFERRED_RE = re.compile(
     r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
     r"(PS4|PROMPT_COMMAND)\s*="
     r"|(?:^|[;&|])\s*printf\s+(?:--\s+)?-v\s*"
-    r"(PS4|PROMPT_COMMAND)\b")
+    r"(PS4|PROMPT_COMMAND)\b"
+    # ${var@P} prompt-expands its value at the USE site,
+    # running embedded $() (no PS4/PROMPT_COMMAND binding
+    # needed); the value's shape is unknowable statically, so
+    # the expansion itself drifts. @Q/@E/@A only quote.
+    r"|\$\{[^${}]*@P\}")
 XTRACE_RE = re.compile(
     r"\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace\b"
     r"|\b(?:bash|sh)\s+-[A-Za-z]*x")
@@ -158,6 +164,25 @@ def _audit_line(line, drift, src="", stale=frozenset()):
     if BARE_POISON_RE.search(line) \
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
+    # prompt_file feeds the agent's --prompt-file: the only
+    # binding is the pinned RUNNER_TEMP path (both the prompt.sh
+    # assignment and its GITHUB_OUTPUT echo carry it, the echo
+    # via the pinned variable). A constructed value (/proc/
+    # environ via printf -v) would place another process's
+    # secrets in the model prompt, so any other value drifts --
+    # as does a for/select bind of the name (no = text).
+    for m in re.finditer(
+            r"prompt_file\+?=\s*(?:\"([^\"]*)\"|'([^']*)'|"
+            r"([^\s\"']+))", line):
+        val = m.group(1) if m.group(1) is not None else (
+            m.group(2) if m.group(2) is not None else m.group(3))
+        if val not in ("${RUNNER_TEMP}/muse-prompt.md",
+                       "${prompt_file}", "$prompt_file") \
+                and "helper-promptfile-rebind" not in drift:
+            drift.append("helper-promptfile-rebind")
+    if re.search(r"\b(?:for|select)\s+prompt_file\b", line) \
+            and "helper-promptfile-rebind" not in drift:
+        drift.append("helper-promptfile-rebind")
     if SECRET_EXPAND_RE.search(nosq) \
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")
@@ -248,6 +273,7 @@ def _audit_line(line, drift, src="", stale=frozenset()):
         pre = words[:len(words) - len(rest) - 1]
         audit_github_cmdfile_writes(line, drift)
         _check_poison_assign(pre, argv0, rest, drift)
+        audit_promptfile_rebind(argv0, rest, drift)
         _check_command(argv0, list(rest), list(pre), drift,
                        src)
 

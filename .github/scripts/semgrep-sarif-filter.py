@@ -45,7 +45,7 @@ def main():
     ctx = SimpleNamespace(code_lines=code, workflow_lines=workflow,
                           workflow_raw=raw, pr_refs=[], span=(0, 0),
                           trusted=[], resolve=[], joined=[])
-    ctx.pr_refs = find_pr_refs(ctx)
+    ctx.pr_refs = find_pr_refs(ctx, drift)
     # The change signal gates even the no-checkout exit: a trusted-
     # tree edit that also removes the checkout still needs eyes.
     audit_trusted_changed(drift)

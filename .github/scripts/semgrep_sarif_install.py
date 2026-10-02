@@ -238,7 +238,10 @@ def _errexit_on_at(installer, at):
                 if tok == "--":
                     break
                 if tok == "-o" and i + 1 < len(toks):
-                    on = toks[i + 1] == "errexit"
+                    # Only errexit enables; other options
+                    # (pipefail) leave the state unchanged.
+                    if toks[i + 1] == "errexit":
+                        on = True
                     i += 2
                 elif tok == "+o" and i + 1 < len(toks):
                     if toks[i + 1] == "errexit":

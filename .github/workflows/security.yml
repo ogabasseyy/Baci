@@ -223,6 +223,16 @@ jobs:
       # auditor fails closed (bootstrap PRs stay red by design).
       # Fork-PR gap (post-merge follow-up, not more pull_request
       # YAML): forks skip this job, so they need a base-side audit.
+      # Invocation-ownership residual (accepted, post-merge
+      # follow-up): this pull_request job's YAML is PR-revision
+      # code, so a same-repo PR could delete this step, force the
+      # TRUSTED_CHANGED signal, or point filter_dir at the head
+      # copy before the base auditor runs. The backstop is human:
+      # .github/** is CODEOWNERS-gated, so weakening the ~15-line
+      # invocation needs owner approval on a loud diff, while the
+      # ~5k-line auditor (unreviewable per-PR) stays base-pinned.
+      # A base-owned pull_request_target gate would close even
+      # the loud vector; tracked post-merge.
       - name: Clear base-filter collision
         if: github.event_name == 'pull_request'
         run: rm -rf "${GITHUB_WORKSPACE}/base-filter"

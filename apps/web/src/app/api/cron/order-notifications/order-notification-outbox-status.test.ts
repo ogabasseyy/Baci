@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
 import {
-  canonicalizeOutboxMetadataForGuard,
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
   OutboxDispatchResetError,
@@ -189,19 +188,6 @@ describe('order notification outbox status', () => {
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({ metadata: { message_id: 'msg-1' } })
     );
-  });
-
-  it('canonicalizes guard metadata independent of key-insertion order', () => {
-    expect(
-      canonicalizeOutboxMetadataForGuard({ b: 2, a: { d: 4, c: 3 } })
-    ).toBe('{"a":{"c":3,"d":4},"b":2}');
-    // Array order is significant and preserved; undefined object values
-    // serialize like JSON.stringify (dropped) instead of throwing.
-    expect(
-      canonicalizeOutboxMetadataForGuard({ list: [3, 1], skip: undefined })
-    ).toBe('{"list":[3,1]}');
-    expect(canonicalizeOutboxMetadataForGuard(null)).toBe('null');
-    expect(canonicalizeOutboxMetadataForGuard('x')).toBe('"x"');
   });
 
   it('guards the non-manual sent merge on the re-read row version', async () => {

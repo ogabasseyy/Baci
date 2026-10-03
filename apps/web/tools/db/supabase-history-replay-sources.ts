@@ -221,10 +221,17 @@ const PENDING_SOURCES = [
   'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
+<<<<<<< HEAD
   '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add 20260928080000_product_discovery_embeddings.sql',
   '6c79d31a60e572d42683f2cd056b0053150a8b21eba3506574ae338db3f1eddc 20260930160000_manual_order_document_notifications.sql',
   'e970387f14b33266aa622c3cacd5a3556ce1e21abe834ba24d75feb1290eab0c 20260930160050_manual_order_document_claims.sql',
   '3a5b310d18cb5dd36f75e73dcb2778ea90a9647448d770cd04b5802e34dbaf5b 20260930160060_manual_order_document_child_invalidation.sql',
+=======
+  DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  'ea1718d96151ed7dd66b24d0572df34ef84aa527408e88462939d7a7fe9035a0 20260930160000_manual_order_document_notifications.sql',
+  '1fe2de456f32fdaf6daac276a0d1140acb701c0958547154041d8a529d40d8f8 20260930160050_manual_order_document_claims.sql',
+  '4b4d165a3199d3feb761ff5be8dd228293dc00a354e94723010191cc7605052b 20260930160060_manual_order_document_child_invalidation.sql',
+>>>>>>> c0fc82706f (fix(pr3580): repair round-46 CI fallout (pins, mocks, 300-line policy))
   'c781b0850cb6ea4883ca2b381fb460366ee1c73d1cf83beb5ad9fb77092f80d0 20260930160100_verified_receipt_claim_redemption.sql',
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   'ef7469eab56a7b2273023e2b924308e816222a1cce18af2a9b7d0e8ecd470b18 20261008230000_mcp_guest_carts.sql',

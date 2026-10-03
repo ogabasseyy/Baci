@@ -151,9 +151,11 @@ describe('send manual order document', () => {
       row: { ...row, event_type: 'manual_order_invoice' },
     });
     const attachment = sendEmail.mock.calls[0][0].attachments[0];
+    // Fixture: issue date null, transaction 28 Sept, created 30 Sept — the
+    // emailed invoice must match the download's issue ?? transaction chain.
     expect(
       Buffer.from(attachment.content, 'base64').toString('latin1')
-    ).toContain('30 Sept 2026');
+    ).toContain('28 Sept 2026');
   });
 
   it.each([

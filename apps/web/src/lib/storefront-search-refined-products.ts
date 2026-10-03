@@ -83,7 +83,9 @@ export async function getStorefrontRefinedSearchProducts(args: {
     ];
   });
   return {
-    count: matches[0].total,
+    // Total minus rows that vanished mid-read: the RPC snapshot total
+    // overcounts the visible page by exactly the skipped rows.
+    count: matches[0].total - (matches.length - products.length),
     products,
     productIds: products.map((p) => p.searchMatch.productId),
     query: args.query,

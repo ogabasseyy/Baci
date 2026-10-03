@@ -103,7 +103,7 @@ describe('refined product hydration', () => {
     expect(result.products).toHaveLength(1);
     expect(result.products[0]).toMatchObject({ price: 100 });
     expect(result.productIds).toEqual(['p1']);
-    expect(result.count).toBe(2);
+    expect(result.count).toBe(1);
   });
   it('preserves all condition metadata when sorting an unrefined search', async () => {
     rpc.mockResolvedValue({

@@ -163,16 +163,27 @@ fragment_path="$1"
 remote_dir="$2"
 cron_block_start="$3"
 cron_block_end="$4"
-expected_sha="$5"
+expected_sha="${5:-}"
 # The crontab carries this deployment's identity (the pinned remediator
 # image tag): installing it after a concurrent promote would point live
 # cron at this deployment's image under another deployment's marker.
 # The deploy lock serializes with promotes; the marker check inside it
 # refuses the stale write. Before ANY mutation (even mktemp/python).
-live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
-if [ "$live_sha" != "$expected_sha" ]; then
-  echo "Refusing crontab install: live worker ${live_sha:-<missing>} is not this deployment ($expected_sha); a concurrent promote superseded it. Rerun deploy.sh from current main." >&2
-  exit 1
+# The fifth arg is optional for the emergency rollback, which
+# anchor-extracts this block and invokes it with four args while
+# holding the deploy lock itself across the whole restore (so the
+# race this check guards cannot happen there) — and which must NOT
+# be checked anyway, since the live marker still holds the
+# pre-rollback SHA until the flip below the merge. A missing arg
+# therefore skips the check loudly instead of tripping set -u.
+if [ -z "$expected_sha" ]; then
+  echo "No expected SHA supplied; skipping the live-marker check (manual rollback mode)." >&2
+else
+  live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
+  if [ "$live_sha" != "$expected_sha" ]; then
+    echo "Refusing crontab install: live worker ${live_sha:-<missing>} is not this deployment ($expected_sha); a concurrent promote superseded it. Rerun deploy.sh from current main." >&2
+    exit 1
+  fi
 fi
 tmp_file="$(mktemp /tmp/baci-crontab.XXXXXX)"
 

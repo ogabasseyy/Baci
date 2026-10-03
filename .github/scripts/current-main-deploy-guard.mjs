@@ -36,6 +36,7 @@ const WEB_WORKFLOW_FILES = new Set([
   '.github/scripts/deploy-with-retry.sh',
   '.github/scripts/deploy-with-retry-overlap.sh',
   '.github/scripts/refuse-publish-on-promote-overlap.sh',
+  '.github/scripts/probe-gigl-hook-reload.sh',
   '.github/scripts/deferred-production-migrations.sh',
   '.github/scripts/pending-postdeploy-migrations.sh',
   '.github/scripts/assert-vercel-pulled-sensitive-env.mjs',

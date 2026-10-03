@@ -54,6 +54,53 @@ describe('gigl-dotenv', () => {
     );
   });
 
+  it('never lets a backslash run use up a quote escape, like dotenv', () => {
+    // dotenv 17.4.2: an interior quote is escaped iff immediately
+    // preceded by a backslash, however many precede it — so the
+    // region still closes at the final quote and `#ghi` stays data.
+    // Consuming `\\` as a pair would close early and hand the poller
+    // a truncated provider password.
+    assert.equal(
+      readValue("GIGL_PASSWORD='abc\\\\'def#ghi'\n", 'GIGL_PASSWORD'),
+      "abc\\\\'def#ghi"
+    );
+    assert.equal(
+      readValue("GIGL_PASSWORD='abc\\\\\\\\'def#ghi'\n", 'GIGL_PASSWORD'),
+      "abc\\\\\\\\'def#ghi"
+    );
+    assert.equal(
+      readValue('GIGL_PASSWORD=`abc\\\\`def#ghi`\n', 'GIGL_PASSWORD'),
+      'abc\\\\`def#ghi'
+    );
+    assert.equal(
+      readValue('GIGL_PASSWORD="abc\\\\"def#ghi"\n', 'GIGL_PASSWORD'),
+      'abc\\\\"def#ghi'
+    );
+  });
+
+  it('falls back to an unquoted parse when no closer fits, like dotenv', () => {
+    // dotenv 17.4.2: junk after the only usable closer (or no closer
+    // at all) re-parses the value unquoted — cut at `#`, then strip
+    // one layer of matched surrounding quotes.
+    assert.equal(readValue("K='a'b'\n", 'K'), "a'b");
+    assert.equal(readValue("K='ab\\\\' # c\n", 'K'), 'ab\\\\');
+    assert.equal(readValue("K='abc # c\n", 'K'), "'abc");
+    assert.equal(readValue('K="a"b#c\n', 'K'), '"a"b');
+  });
+
+  it('expands double-quote escapes even when unstripped, like dotenv', () => {
+    // dotenv 17.4.2 expands `\n`/`\r` whenever the trimmed value
+    // starts with `"`, including the unterminated fallback (where the
+    // opening quote stays literal).
+    assert.equal(readValue('K="a\\nb\n', 'K'), '"a\nb');
+  });
+
+  it('ends the record at a carriage return, like dotenv', () => {
+    // dotenv 17.4.2 normalizes CR to LF before parsing.
+    assert.equal(readValue("K='quoted'\r\n", 'K'), 'quoted');
+    assert.equal(readValue('K=plain\r\n', 'K'), 'plain');
+  });
+
   it('keeps `#` inside single quotes as data', () => {
     assert.equal(
       readValue("SINGLE='abc#def'\n", 'SINGLE'),

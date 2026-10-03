@@ -186,6 +186,8 @@ deploy_scripts:
   - '.github/scripts/verify-gigl-worker-final-state.test.sh'
   - '.github/scripts/smoke-gigl-worker-capability.sh'
   - '.github/scripts/smoke-gigl-worker-capability.test.mjs'
+  - '.github/scripts/refuse-publish-on-promote-overlap.sh'
+  - '.github/scripts/refuse-publish-on-promote-overlap.test.mjs'
   - '.github/scripts/deploy-vps-readiness-checkout.test.mjs'
   - '.github/scripts/preview-workflow-contract.test.mjs'
   - '.github/scripts/preview-workflow-contract-parsing.test.mjs'

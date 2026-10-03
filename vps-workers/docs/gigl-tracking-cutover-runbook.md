@@ -200,8 +200,11 @@ poller liveness manually with these three signals (in order):
 2. **Due-but-unpolled backlog** — a healthy poller claims due rows
    every 5 minutes, so rows due >15 minutes ago mean missed cycles:
    `SELECT count(*) FROM public.shipment_tracking_monitors WHERE state
-   IN ('active', 'final_poll') AND next_poll_at IS NOT NULL AND
+   IN ('active', 'final_poll', 'paused') AND next_poll_at IS NOT NULL AND
    next_poll_at < now() - interval '15 minutes';`
+   (`paused` rows re-enter the claim set once `next_poll_at` is due,
+   and pausing clears `locked_at`, so omitting them blinds this
+   signal exactly when a cooldown backlog is stuck.)
 3. **Stuck claims / repeated failures** — crashed mid-batch, or
    provider/auth breakage:
    `SELECT count(*) FROM public.shipment_tracking_monitors WHERE

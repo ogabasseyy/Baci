@@ -47,11 +47,12 @@ describe('preflight multiline dotenv assignments', () => {
   });
 
   it('matches dotenv on single-line quote edge cases (dotenv 17.4.2)', () => {
-    // A hand-rolled quote scan cannot reproduce dotenv's backtracking:
-    // single quotes are raw (a trailing backslash does not escape the
-    // closer), and an escaped closing double quote falls back to a
-    // single-line unquoted parse. Flagging any of these would block a
-    // deploy whose runtime bytes are unambiguous.
+    // dotenv's greedy match with backtracking closes at the last
+    // usable quote (`"abc\"` parses to `abc\`), and a missing closer
+    // falls back to a single-line unquoted parse — either way the
+    // line-oriented shell reader sees the same bytes, so flagging any
+    // of these would block a deploy whose runtime bytes are
+    // unambiguous.
     assert.deepEqual(
       findMultilineDotenvAssignments("GIGL_PASSWORD='abc\\'\n"),
       []
@@ -67,6 +68,34 @@ describe('preflight multiline dotenv assignments', () => {
     assert.deepEqual(
       findMultilineDotenvAssignments('GIGL_PASSWORD=`abc\\`\n'),
       []
+    );
+  });
+
+  it('accepts escape-expanded newlines on one physical line', () => {
+    // dotenv expands `\n` inside double quotes to an embedded LF, but
+    // the assignment stays on one physical line that the shell reader
+    // reproduces exactly — including a trailing escape, which the
+    // trailing-newline check (not this scan) owns.
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD="a\\nb"\n'),
+      []
+    );
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD="abc\\n"\n'),
+      []
+    );
+    assert.deepEqual(
+      findMultilineDotenvAssignments("GIGL_PASSWORD='a\\nb'\n"),
+      []
+    );
+  });
+
+  it('flags a value that starts on the next physical line', () => {
+    // dotenv's `=` separator swallows the newline, so the shell
+    // reader's empty first line diverges from dotenv's value.
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD=\n"secret"\n'),
+      ['GIGL_PASSWORD (line 1)']
     );
   });
 

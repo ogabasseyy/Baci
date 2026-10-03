@@ -92,25 +92,40 @@ function isShellReadKey(name) {
 }
 
 export function findMultilineDotenvAssignments(text) {
-  // Grounded in dotenv itself, not a hand-rolled quote scan: a hand
-  // scan cannot reproduce dotenv's backtracking (single quotes are
-  // raw, so `'abc\'` is single-line; an escaped closing quote like
-  // `"abc\"` falls back to a single-line unquoted parse). dotenv is
-  // the authority the preflight validates with, so a shell-read key
-  // is multiline exactly when dotenv's own value for it spans lines.
-  // (A span swallowing a LATER shell-read key's line surfaces as a
-  // missing key in the required-value check instead.)
-  const parsed = parse(text);
-  const offenders = [];
-  for (const [index, line] of text.split('\n').entries()) {
+  // Grounded in dotenv itself, not a hand-rolled quote scan and not
+  // the parsed value's bytes: `"a\nb"` parses to an embedded LF yet
+  // is one physical line the shell reads exactly, so byte-sniffing
+  // the value false-positives. Instead, compare dotenv's full-file
+  // value for each shell-read key against dotenv's parse of the key's
+  // last shell-effective physical line (mirroring gigl-dotenv.sh's
+  // line matching and last-wins, after its CR truncation): equal
+  // means the line-oriented reader sees what the preflight validated
+  // — given reader parity — while any difference means the value
+  // genuinely spans lines (or is shadowed by a span) and the shell
+  // would hand the poller different bytes. A span swallowing a
+  // shell-read key's line removes the key from the full parse; that
+  // stays silent here and surfaces as a missing key in the
+  // required-value check instead.
+  const full = parse(text);
+  const lastLineByKey = new Map();
+  for (const [index, rawLine] of text.split('\n').entries()) {
+    const line = rawLine.replace(/\r.*$/, '');
     const match = line.match(
-      /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*|:[ \t]+)(['"`])/
+      /^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)(?::[ \t]|[ \t]*=)/
     );
     if (match === null || !isShellReadKey(match[1])) {
       continue;
     }
-    if ((parsed[match[1]] ?? '').includes('\n')) {
-      offenders.push(`${match[1]} (line ${index + 1})`);
+    lastLineByKey.set(match[1], { index, line });
+  }
+  const offenders = [];
+  for (const [key, { index, line }] of lastLineByKey) {
+    if (!(key in full)) {
+      continue;
+    }
+    const single = parse(line);
+    if (!(key in single) || single[key] !== full[key]) {
+      offenders.push(`${key} (line ${index + 1})`);
     }
   }
   return offenders;

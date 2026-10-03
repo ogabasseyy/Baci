@@ -1,3 +1,5 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -56,7 +58,10 @@ describe('model planning CLI', () => {
     const [path, serialized] = mocks.write.mock.calls[0];
     expect(path).toBe('/tmp/evidence.json');
     expect(JSON.parse(serialized)).toMatchObject({ passed: true, provenance: { model: 'test-model', baseHead: 'test-head', worktreeDirty: true, samplesPerCase: 1, capturedAt: expect.any(String) } });
-    for (const call of mocks.git.mock.calls) expect(call[2]).toMatchObject({ cwd: expect.stringMatching(/Baci-app$/) });
+    const runnerPath = resolve(dirname(fileURLToPath(import.meta.url)), 'run-category-guidance-model-eval.ts');
+    for (const call of mocks.git.mock.calls) {
+      expect(resolve(call[2].cwd, 'apps/web/mcp-server/evals/run-category-guidance-model-eval.ts')).toBe(runnerPath);
+    }
     expect(process.exitCode).toBeUndefined();
   });
   it('writes failed model evidence and exits nonzero rather than masking a RED case', async () => {

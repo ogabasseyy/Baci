@@ -71,3 +71,7 @@ RED. Post-deployment ChatGPT first-call/browser evaluations above are still
 PENDING and required before recording; no ChatGPT live pass is claimed here.
 
 The complete search description is now shared by runtime registration and public discovery. A fresh three-case planning run against that exact shared descriptor passed; `category-guidance-model-observed-shared.json` records the actual calls and descriptor hash, and a regression checks that current guidance still matches this evidence. This remains Gemini planning evidence, not executed MCP or live ChatGPT verification. The CLI has colocated mocked boundary coverage for arguments, missing credentials, provenance, writing evidence, RED exit status and redacted provider/Git/write errors.
+
+Natural-request cases deliberately require omission of the category key: even `category: ""` counts as present and fails this guidance evaluation, although runtime filtering treats blank text as absent.
+
+The exact camera/Tecno product IDs are pinned rollout cases, verified in production merchant readback on 2026-10-03 (`pr3610-live-first-search-readback.json` under the task evidence directory). Before fresh ChatGPT captures, re-read and confirm those IDs still identify the same merchant products. If catalog identity changes, stop and reconcile the case definitions with a fresh recorded readback; do not remove product-identity checks or treat a renamed/re-seeded catalog as a guidance regression.

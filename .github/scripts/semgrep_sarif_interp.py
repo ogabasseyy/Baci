@@ -71,12 +71,23 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "poetry", "remake", "rustc", "sbt", "snap", "task",
              "terraform", "tofu", "tox", "uv", "vagrant", "winget",
              "yarn", "yum", "zypper", "composer", "conan", "pmake",
-             "java", "javac", "run-parts", "sqlite3"}
+             "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
+             "g++", "c++", "clang", "clang++"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
 # eligible executable in its directory operand; sqlite3 runs
-# .shell commands and -init files (dot-command execution).
+# .shell commands and -init files (dot-command execution);
+# the gcc/clang drivers execute subprograms (cc1, cc1plus,
+# as, ld) resolved through -B search-path directories, so a
+# workspace -B dir runs attacker code with the helper token.
+_GCC_RE = re.compile(
+    r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
+    r"clang\+\+)(?:-\d[\d.]*)?$")
+# Versioned (gcc-12, g++-13, clang-17) and cross-prefixed
+# (x86_64-linux-gnu-gcc) driver spellings share the -B
+# mechanism; only dash-joined prefixes match (mycc/acc are
+# not drivers).
 
 
 def _check_command(argv0, rest, pre, drift, src=""):
@@ -94,7 +105,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
             and not (src == "install.sh" and base == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
-    if base in LOAD_DENY \
+    if (base in LOAD_DENY or _GCC_RE.match(base)) \
             and "helper-code-loader" not in drift:
         drift.append("helper-code-loader")
     if base in COPY_TOOLS:

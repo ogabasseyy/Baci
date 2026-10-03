@@ -541,5 +541,47 @@ t arith-counter-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}n=\$(wc 
 t agent-env-alias 1 "agent-token-expression" happy.sarif "$S${FS}GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}${FS}a${FS}          LEAKED_GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}${RS}$S${FS}5:        env:${FS}r${FS}        env:${FS}        env: *agent_env${RS}$S${FS}2:        env:${FS}r${FS}        env:${FS}        env: &agent_env${RS}$S${FS}          META_API_KEY: \${{ secrets.META_API_KEY }}${FS}d${RS}$S${FS}          PROMPT_FILE: \${{ steps.diff.outputs.prompt_file }}${FS}d${RS}$S${FS}          MUSE_MODEL: \${{ env.MUSE_MODEL_RESOLVED }}${FS}d${RS}$S${FS}          MUSE_EFFORT: \${{ env.MUSE_EFFORT_RESOLVED }}${FS}d${RS}$S${FS}4:          SCRIPT_DIR: \${{ steps.scriptdir.outputs.dir }}${FS}d"
 t agent-env-alias-unresolved 1 "agent-env-alias" happy.sarif "$S${FS}5:        env:${FS}r${FS}        env:${FS}        env: *missing_anchor"
 
+# --- gcc loader (Codex P1: gcc -B executes workspace cc1) ---
+t loader-gcc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gcc -B\"\${GITHUB_WORKSPACE}/evil-bin/\" -c input.c"
+t loader-gcc-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gcc-13 --version"
+t loader-gcc-cross 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x86_64-linux-gnu-gcc --version"
+t loader-mycc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mycc --version"
+
+# --- escaped-quote comment (Codex P1: \" closes the quote) ---
+t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t helper-escaped-quote-pin 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"x\\\";y\" >/dev/null"
+
+# --- subscript builtins (Codex P1: test -v et al reparse) ---
+t helper-test-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}test -v 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]' || true"
+t helper-declare-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]=x'"
+t helper-local-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}local 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]=x'"
+t helper-readonly-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}readonly -a 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]=x'"
+t helper-printfv-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]' '%s' x"
+t helper-read-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}read 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")' <<< x"
+t helper-unset-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}unset 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")'"
+t helper-let-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}let 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]=1'"
+t helper-if-test-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}if test -v 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]'; then :; fi"
+t helper-while-read-subscript 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}while read 'arr[\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")]'; do :; done <<< x"
+t helper-declare-value-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare 'x=a[\$(date)]'"
+t helper-read-prompt-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}read -p 'pick [a] \$(date)' name"
+t helper-cond-value-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[[ -v 'x=\$(date)' ]] || true"
+
+# --- comparison-operand freeze (Codex P1: want_sha="${got_sha}") ---
+t operand-rebind-want 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}want_sha=\"\${got_sha}\""
+t operand-rebind-got 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}got_sha=\"\${want_sha}\""
+t operand-rebind-read 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}read want_sha <<< forged"
+t operand-rebind-nameref 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}declare -n ref=want_sha"
+t operand-rebind-let 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}let want_sha=0"
+t operand-rebind-arith 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}(( want_sha = 0 ))"
+t operand-rebind-mapfile 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}mapfile -t want_sha < /tmp/forged"
+t operand-rebind-getopts 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}getopts \"ab\" want_sha"
+t operand-rebind-for 1 "muse-installer-operand-rebind" happy.sarif "$I${FS}got_sha=${FS}a${FS}for want_sha in x; do :; done"
+t operand-prehash-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}b${FS}want_sha=\"\${SHA_X86_LINUX}\""
+t operand-compare-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}(( got_sha == 0 )) || true"
+
+# --- assign-prefix peel (self-found: a[0]=x prefixes commands) ---
+t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}a[0]=x muse --version"
+t runner-peel-pluseq 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}v+=x muse --version"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

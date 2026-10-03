@@ -18,7 +18,10 @@ def strip_comments(line):
     i, n = 0, len(line)
     while i < n:
         ch = line[i]
-        if quote:
+        if quote == '"' and ch == "\\" and i + 1 < n:
+            buf.append(line[i:i + 2])
+            i += 2
+        elif quote:
             buf.append(ch)
             if ch == quote:
                 quote = None
@@ -98,22 +101,32 @@ def split_commands2(text):
     # Quote-aware operator split. Yields (piece,
     # started_after_open, ended_at_close) so `a)` case patterns
     # (not after `(`) are distinguishable from `(cmd)` bodies.
+    # Backslash escapes track inside double quotes (\" never
+    # closes, or a phantom quote swallows the ; separator).
     parts = []
     buf, quote = "", None
     started_after_open = False
-    for ch in text:
-        if quote:
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if quote == '"' and ch == "\\" and i + 1 < n:
+            buf += text[i:i + 2]
+            i += 2
+        elif quote:
             buf += ch
             if ch == quote:
                 quote = None
+            i += 1
         elif ch in ("'", '"'):
-            quote, buf = ch, buf + ch
+            quote, buf, i = ch, buf + ch, i + 1
         elif ch in ";|&()":
             parts.append((buf, started_after_open, ch == ")"))
             buf = ""
             started_after_open = (ch == "(")
+            i += 1
         else:
             buf += ch
+            i += 1
     parts.append((buf, started_after_open, False))
     return parts
 
@@ -121,13 +134,18 @@ def tokenize(text):
     # Shell words: split on unquoted whitespace only. Quotes
     # group (adjacent parts concatenate: "ec""ho" is one word),
     # backslash escapes the next char (a\ b stays one word, a
-    # backslash-newline joins), and operators are NOT split
-    # (the command splitter and redirect strippers own those).
+    # backslash-newline joins, \" never closes inside doubles),
+    # and operators are NOT split (the command splitter and
+    # redirect strippers own those).
     words, buf = [], ""
     quote, started, i = None, False, 0
     while i < len(text):
         ch = text[i]
-        if quote:
+        if quote == '"' and ch == "\\" and i + 1 < len(text):
+            buf += text[i:i + 2]
+            started = True
+            i += 2
+        elif quote:
             buf += ch
             if ch == quote:
                 quote = None

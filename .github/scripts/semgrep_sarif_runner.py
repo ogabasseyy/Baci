@@ -4,13 +4,16 @@ version/checksums, verify-before-install order, pinned
 versioned URL, no pipe-to-shell).
 """
 import re
-from semgrep_sarif_install import (audit_compare_shape,
+from semgrep_sarif_install import (_nameref_edges,
+                                   _rebind_names,
+                                   audit_compare_shape,
                                    audit_install_binding,
                                    audit_tmp_aliases)
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
+from semgrep_sarif_scan import arith_command_regions
 from semgrep_sarif_shell import split_commands2, strip_comments
 
 
@@ -84,10 +87,9 @@ def _peel_env(words):
         word = _dequote(words[i])
         m = assign.match(word)
         if m:
-            # Subscript/+= assigns are pure (never prefix a
-            # command, so nothing follows); plain VAR= may.
-            if m.group(2) or m.group(3):
-                return []
+            # Assigns (plain, subscript, and += alike) prefix
+            # commands (verified: a[0]=x and v+=x both ran
+            # the command on bash 3.2), so all peel through.
             i += 1
         elif word != "env":
             break
@@ -114,6 +116,72 @@ def _peel_env(words):
                 else:
                     break
     return words[i:]
+
+_OPERANDS = ("got_sha", "want_sha")
+_OPERAND_ASSIGN_RE = re.compile(
+    r"(?:\+\+|--)\s*\b(?:got_sha|want_sha)\b"
+    r"|\b(?:got_sha|want_sha)\b\s*"
+    r"(?:\+\+|--|[-+*/%&|^]?=(?![=]))")
+# Post/pre ++/-- and assign-ops (==/!=/<=/>= excluded: the
+# = needs a non-= neighbor, so comparisons never match).
+_MAPFILE_VALUED = set("dnOsuCc")
+
+
+def _operand_hit(name):
+    base = re.sub(r"\[.*\]$", "", name)
+    return base in _OPERANDS
+
+
+_REDIR_OP = re.compile(r"^\d*(>>|>&|>|<<<|<<|<>|<&|<)")
+
+
+def _redir_stripped(toks):
+    # Drop redirect ops (glued targets ride the op word;
+    # bare ops consume the next word) so operand scans see
+    # only real operands.
+    out, i = [], 0
+    while i < len(toks):
+        m = _REDIR_OP.match(toks[i])
+        if not m:
+            out.append(toks[i])
+            i += 1
+        elif len(toks[i]) > m.end():
+            i += 1
+        else:
+            i += 2
+    return out
+
+
+def _mapfile_target(piece):
+    # Array name of a mapfile/readarray call (last operand
+    # past flags), or None. Unknown flags consume a value
+    # (fail closed: a miscounted target drifts below).
+    toks = _redir_stripped([_dequote(w)
+                            for w in _shell_words(piece)])
+    i = 0
+    while i < len(toks) and re.fullmatch(
+            r"[A-Za-z_]\w*=\S*", toks[i]):
+        i += 1
+    i += 1  # argv0
+    ops = []
+    while i < len(toks):
+        w = toks[i]
+        if w == "--":
+            ops.extend(toks[i + 1:])
+            break
+        if len(w) > 1 and w[0] == "-" and w[1] != "-":
+            k = 1
+            while k < len(w):
+                if w[k] in _MAPFILE_VALUED:
+                    if k + 1 == len(w):
+                        i += 1
+                    break
+                k += 1
+            i += 1
+        else:
+            ops.append(w)
+            i += 1
+    return ops[-1] if ops else None
 
 def audit_installer(drift):
     # install.sh determines the executable that receives META_API_KEY:
@@ -229,6 +297,69 @@ def audit_installer(drift):
                     break
             if hit:
                 drift.append("muse-installer-toctou")
+        if install_at and verify_at \
+                and "muse-installer-operand-rebind" not in drift:
+            # Comparison-operand freeze: got_sha is bound by
+            # the hash line and want_sha before it, so every
+            # post-hash rebind of either (plain/declare
+            # assign, read, printf -v, for/select, nameref
+            # edge, let, (( )), mapfile/getopts target)
+            # drifts: want_sha="${got_sha}" makes the pinned
+            # compare tautological. Both names are pinned by
+            # _is_compare_if, so the pair is exact.
+            frozen = max(verify_at)
+            hit = False
+            for i in range(frozen + 1, len(installer)):
+                line = installer[i]
+                if any(_OPERAND_ASSIGN_RE.search(body)
+                       for body in arith_command_regions(
+                               line)):
+                    # Line level: the piece splitter breaks
+                    # (( )) on its parens before regions form.
+                    hit = True
+                    break
+                for piece, _, _ in split_commands2(line):
+                    text = piece.strip()
+                    m = re.match(
+                        r"(?:export|declare|local|readonly|"
+                        r"typeset)?\s*([A-Za-z_]\w*)=(.*)$",
+                        text)
+                    if m and m.group(1) in _OPERANDS:
+                        hit = True
+                    if any(n in _OPERANDS
+                           for n in _rebind_names(piece)):
+                        hit = True
+                    if any(t in _OPERANDS
+                           for _, t in _nameref_edges(text)):
+                        hit = True
+                    fc = first_cmd(piece)
+                    if fc == "let" and _OPERAND_ASSIGN_RE.search(
+                            text):
+                        hit = True
+                    if fc in ("mapfile", "readarray") \
+                            and _operand_hit(
+                                _mapfile_target(piece) or ""):
+                        hit = True
+                    if fc == "getopts":
+                        toks = _redir_stripped(
+                            [_dequote(w)
+                             for w in _shell_words(piece)])
+                        k = 0
+                        while k < len(toks) and re.fullmatch(
+                                r"[A-Za-z_]\w*=\S*",
+                                toks[k]):
+                            k += 1
+                        # toks[k] is argv0, toks[k+1] the
+                        # optstring, toks[k+2] the name.
+                        if len(toks) > k + 2 and _operand_hit(
+                                toks[k + 2]):
+                            hit = True
+                    if hit:
+                        break
+                if hit:
+                    break
+            if hit:
+                drift.append("muse-installer-operand-rebind")
         if any(re.search(r"\|\s*(?:sudo\s+)?(?:bash|sh)\b", line)
                for line in installer):
             drift.append("muse-installer-pipe")

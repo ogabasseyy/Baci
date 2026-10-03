@@ -13,10 +13,35 @@ interface StorefrontOrderPaymentAccountOrder {
   id: string;
   payment_status?: string | null;
   order_payment_accounts?: readonly OrderPaymentAccountLike[] | null;
+  external_source?: string | null;
+  import_job_id?: string | null;
+  recorded_by_user_id?: string | null;
+  total?: number | string | null;
+  amount_paid?: number | string | null;
+}
+
+function needsCompletionTransactions(
+  order: StorefrontOrderPaymentAccountOrder
+): boolean {
+  if (order.payment_status?.trim().toLowerCase() === 'paid') return true;
+  // Receipt-substance manual orders settle under non-paid labels: a cheap
+  // superset of the archive eligibility (balance covered, staff-recorded,
+  // not imported) so their completing payment is available for dating.
+  // Over-inclusion is harmless — the date selector filters settled rows.
+  return (
+    Boolean(order.recorded_by_user_id) &&
+    !(order.external_source?.trim() || order.import_job_id) &&
+    order.total != null &&
+    order.amount_paid != null &&
+    Number.isFinite(Number(order.total)) &&
+    Number.isFinite(Number(order.amount_paid)) &&
+    Number(order.amount_paid) >= Number(order.total)
+  );
 }
 
 interface StorefrontOrderTransaction {
   order_id: string;
+  created_at: string;
   metadata: unknown;
   gateway?: string | null;
   status?: string | null;
@@ -26,18 +51,22 @@ interface StorefrontOrderTransaction {
 /**
  * Resolve receipt accounts for a customer order list in one transaction
  * lookup, preserving the receiver recorded by a successful Paystack payment.
+ * The loaded transactions are also returned so callers can date receipts
+ * from the completing payment without a second lookup. Callers that need
+ * transactions beyond paid-labeled orders pass explicit IDs.
  */
 export async function resolveStorefrontOrderPaymentAccounts(
   supabase: SupabaseClient<Database>,
   orders: readonly StorefrontOrderPaymentAccountOrder[],
-  now = new Date()
+  now = new Date(),
+  options?: { transactionOrderIds?: readonly string[] }
 ) {
-  const paidOrderIds = orders
-    .filter((order) => order.payment_status?.trim().toLowerCase() === 'paid')
-    .map((order) => order.id);
+  const transactionOrderIds =
+    options?.transactionOrderIds ??
+    orders.filter(needsCompletionTransactions).map((order) => order.id);
   const transactionsResult = await loadStorefrontCustomerTransactions(
     supabase,
-    paidOrderIds
+    transactionOrderIds
   );
   const paymentAccountsResult = await loadStorefrontCustomerPaymentAccounts(
     supabase,
@@ -89,5 +118,6 @@ export async function resolveStorefrontOrderPaymentAccounts(
     paymentAccountsByOrderId,
     paymentAccountError: paymentAccountsResult.error,
     transactionError: transactionsResult.error,
+    transactionsByOrderId,
   };
 }

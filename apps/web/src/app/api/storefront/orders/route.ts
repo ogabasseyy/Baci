@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
+import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
 import {
   getCurrentDocumentKind,
   isManualOrder,
@@ -159,8 +160,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { paymentAccountsByOrderId, paymentAccountError, transactionError } =
-      await resolveStorefrontOrderPaymentAccounts(supabase, orders ?? []);
+    const {
+      paymentAccountsByOrderId,
+      paymentAccountError,
+      transactionError,
+      transactionsByOrderId,
+    } = await resolveStorefrontOrderPaymentAccounts(supabase, orders ?? []);
     if (paymentAccountError) {
       console.error('Orders payment-account fetch error:', paymentAccountError);
       return NextResponse.json(
@@ -206,6 +211,12 @@ export async function GET(request: NextRequest) {
         created_at: order.created_at,
         transaction_date: order.transaction_date,
         invoice_issue_date: order.invoice_issue_date,
+        // Canonical paid-receipt date (newest settled payment), shared with
+        // the emailed PDF and account download; null when lookup failed.
+        receipt_completion_date:
+          selectReceiptCompletionDate(
+            transactionsByOrderId.get(order.id) ?? []
+          ) ?? null,
         total: order.total,
         subtotal: order.subtotal,
         shipping_fee: order.shipping_fee,
@@ -270,9 +281,8 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // The database pre-sort above cannot express the display-date fallback
-    // (Supabase orders by column), so file backdated invoices by the same
-    // issue → transaction → creation date the receipt list renders.
+    // Supabase cannot sort by the display-date fallback, so file backdated
+    // invoices by the same issue → transaction → creation date here.
     transformedOrders.sort(compareReceiptListDesc);
 
     return NextResponse.json({

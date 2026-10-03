@@ -112,4 +112,52 @@ describe('resolveStorefrontOrderPaymentAccounts', () => {
       '2222222222'
     );
   });
+
+  it('loads transactions for settled manual balances under non-paid labels', async () => {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'get_customer_order_payment_accounts') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({
+        data: [
+          {
+            amount: 100,
+            created_at: '2026-09-30T12:00:00Z',
+            description: 'Transfer',
+            dva_account_number: null,
+            gateway: 'paystack',
+            id: 'transaction-1',
+            order_id: 'manual-order',
+            status: 'completed',
+            transaction_type: 'payment',
+          },
+        ],
+        error: null,
+      });
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const result = await resolveStorefrontOrderPaymentAccounts(
+      supabase,
+      [
+        {
+          id: 'manual-order',
+          payment_status: 'partially_paid',
+          recorded_by_user_id: 'staff-1',
+          total: 100,
+          amount_paid: 100,
+        },
+        { id: 'unpaid-order', payment_status: 'unpaid' },
+      ],
+      new Date('2026-09-30T13:00:00Z')
+    );
+
+    expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
+      p_order_ids: ['manual-order'],
+    });
+    expect(
+      result.transactionsByOrderId.get('manual-order')?.[0]?.created_at
+    ).toBe('2026-09-30T12:00:00Z');
+    expect(result.transactionsByOrderId.has('unpaid-order')).toBe(false);
+  });
 });

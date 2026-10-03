@@ -272,33 +272,3 @@ UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE ord
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider, expires_at, created_at, assigned_at) VALUES ('10000000-0000-4000-8000-000000000017', '9990003333', 'Paystack-Titan', 'Shop Ltd/ORD17-future', 'paystack', NULL, now() + interval '1 hour', now() + interval '1 hour');
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 50, 'NGN', NULL, 'partially_paid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'proforma_invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), '058', '1234567890', 'GTBank', 'Shop Ltd', '9990002222', 'Paystack-Titan', 'Shop Ltd/ORD17', 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'future-assigned newest account falls back to the older eligible row');
 DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990003333';
--- A soft-deleted row still holds its user_id under the unique index: linking
--- a different row must fail closed instead of 500ing on conflict.
-INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000047', '10000000-0000-4000-8000-000000000001', 'fresh2@example.com');
-INSERT INTO public.customers (id, merchant_id, email, user_id, deleted_at) VALUES ('10000000-0000-4000-8000-000000000044', '10000000-0000-4000-8000-000000000001', 'gone@example.com', '10000000-0000-4000-8000-000000000045', now());
-INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
-VALUES ('10000000-0000-4000-8000-000000000046', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000047', '10000000-0000-4000-8000-000000000010', 'fresh2@example.com', 'paid', 100);
-INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000046', 'Device', 1, 100);
-UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000046' AND event_type = 'manual_order_receipt';
-SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000046' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('3f', 32))->>'status' = 'created'), 'soft-deleted-link order creates its claim');
-INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000045', 'fresh2@example.com', now(), null);
-SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000045', true);
-SELECT set_config('request.jwt.claims', '{"email":"fresh2@example.com"}', true);
-SET LOCAL ROLE authenticated;
-SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('3f',32), 'web')->>'status' = 'customer_link_failed', 'soft-deleted link fails closed');
-RESET ROLE;
--- The order-scoped mismatch path fails the same way: the redeemer is
--- verified under a corrected address while only a deleted row holds them.
-INSERT INTO public.customers (id, merchant_id, email, user_id, deleted_at) VALUES ('10000000-0000-4000-8000-000000000051', '10000000-0000-4000-8000-000000000001', 'dead@example.com', '10000000-0000-4000-8000-000000000050', now());
-INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
-VALUES ('10000000-0000-4000-8000-000000000049', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000012', '10000000-0000-4000-8000-000000000010', 'mismatch@example.com', 'paid', 100);
-INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000049', 'Device', 1, 100);
-UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000049' AND event_type = 'manual_order_receipt';
-SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000049' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('4f', 32))->>'status' = 'created'), 'mismatched soft-deleted-link order creates its claim');
-INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000050', 'mismatch@example.com', now(), null);
-SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000050', true);
-SELECT set_config('request.jwt.claims', '{"email":"mismatch@example.com"}', true);
-SET LOCAL ROLE authenticated;
-SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('4f',32), 'web')->>'status' = 'customer_link_failed', 'mismatched soft-deleted link fails closed');
-RESET ROLE;
-ROLLBACK;

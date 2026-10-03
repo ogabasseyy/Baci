@@ -73,13 +73,14 @@ export function useComparisonProducts(selected: Product[]) {
     }));
   return {
     products,
-    // Nothing is unverified until the refresh resolves: while loading, the
-    // status line already says prices are refreshing, and marking every id
-    // would flash a verified-failure state before any fetch has failed.
+    // Until the refresh resolves, every fallback id is unverified: the
+    // loading products carry price 0, and without their ids here the table
+    // would present 0 as a current price. The status line already says
+    // prices are refreshing, so this never flashes a false failure.
     unavailableIds:
       query.data
         ?.filter((item) => item.unavailable)
-        .map((item) => item.product.id) ?? [],
+        .map((item) => item.product.id) ?? products.map((p) => p.id),
     status: query.isFetching
       ? 'Refreshing prices and specifications…'
       : query.error

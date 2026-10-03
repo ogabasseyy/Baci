@@ -79,7 +79,7 @@ it('suppresses deleted products rather than reporting their saved price as curre
   expect(result.current.products[0].compare_at_price).toBeUndefined();
   expect(result.current.products[0].rating).toBeUndefined();
 });
-it('reports nothing unavailable while the refresh is still loading', () => {
+it('marks loading ids unverified so the zero fallback price is never shown as current', () => {
   mockResolve.mockReturnValue(new Promise(() => {}));
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -94,6 +94,7 @@ it('reports nothing unavailable while the refresh is still loading', () => {
         createElement(QueryClientProvider, { client }, children),
     }
   );
-  expect(result.current.unavailableIds).toEqual([]);
+  expect(result.current.products[0].price).toBe(0);
+  expect(result.current.unavailableIds).toEqual(['p1']);
   expect(result.current.status).toContain('Refreshing');
 });

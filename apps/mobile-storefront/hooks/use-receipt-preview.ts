@@ -19,7 +19,6 @@ import {
   showMerchantBankDetails,
 } from '@baci/shared';
 import { useState } from 'react';
-import { ReceiptDetailSchema } from '@/schemas/receipt';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
@@ -64,14 +63,17 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // the same order as an invoice. The balance alone never promotes: a
     // cancelled, unknown-status, or content-invalid manual row fails
     // closed like the sender, archive filter, and download routes. Content
-    // validity mirrors web isManualOrderDocumentContentValid — the detail
-    // fetch only warns on schema failure, so re-validate here and require
-    // finite money (zod numbers admit NaN). The non-manual literal-paid
-    // branch below predates this derivation and is unchanged.
+    // validity mirrors web isManualOrderDocumentContentValid: money and
+    // items only (a null customer name is sender-permitted), with web
+    // coercion — numeric strings count, null/NaN fail. The detail fetch
+    // only warns on schema failure, so check here instead of trusting it.
     const normalizeStatus = (value: string | null | undefined) =>
       value?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-    const isFiniteMoney = (value: unknown) =>
-      typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const isValidMoney = (value: unknown) =>
+      value !== null &&
+      value !== undefined &&
+      Number.isFinite(Number(value)) &&
+      Number(value) >= 0;
     const isManualOrder = Boolean(
       receiptDetail.recorded_by_user_id &&
         !receiptDetail.import_job_id &&
@@ -79,7 +81,6 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     );
     const manualPaymentStatus = normalizeStatus(receiptDetail.payment_status);
     const hasValidContent =
-      ReceiptDetailSchema.safeParse(receiptDetail).success &&
       [
         receiptDetail.total,
         receiptDetail.subtotal,
@@ -87,16 +88,19 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
         receiptDetail.tax_amount,
         receiptDetail.discount_amount,
         receiptDetail.amount_paid,
-      ].every(isFiniteMoney) &&
+      ].every(isValidMoney) &&
       (receiptDetail.currency == null ||
         /^[A-Za-z]{3}$/.test(receiptDetail.currency)) &&
+      Array.isArray(receiptDetail.items) &&
       receiptDetail.items.length > 0 &&
       receiptDetail.items.every(
         (item) =>
-          isFiniteMoney(item.price) &&
-          typeof item.quantity === 'number' &&
-          Number.isFinite(item.quantity) &&
-          item.quantity > 0
+          typeof item.product_name === 'string' &&
+          isValidMoney(item.price) &&
+          item.quantity !== null &&
+          item.quantity !== undefined &&
+          Number.isFinite(Number(item.quantity)) &&
+          Number(item.quantity) > 0
       );
     const isManualReceipt =
       isManualOrder &&
@@ -119,12 +123,30 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // beside a dollar-denominated balance. The renderer prefers the
     // order-level virtual account, so the guard must cover it — not just
     // the merchant fallback below.
+    // Paid receipts are dated by the completing payment like the emailed
+    // PDF and account download — never by a stale invoice issue date,
+    // which the generator would otherwise prefer. Settled statuses match
+    // web resolveManualDocumentReceiptDate exactly.
+    const completionDate = isPaidReceipt
+      ? (receiptDetail.transactions ?? [])
+          .filter(
+            (txn) =>
+              txn.transaction_type === 'payment' &&
+              (txn.status === 'completed' || txn.status === 'success') &&
+              txn.created_at != null
+          )
+          .map((txn) => txn.created_at as string)
+          .sort((left, right) => Date.parse(left) - Date.parse(right))
+          .pop() ?? null
+      : null;
     const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {
       order_number: receiptDetail.order_number,
       created_at: receiptDetail.created_at,
-      transaction_date: receiptDetail.transaction_date,
-      invoice_issue_date: receiptDetail.invoice_issue_date,
+      transaction_date: completionDate ?? receiptDetail.transaction_date,
+      invoice_issue_date: isPaidReceipt
+        ? null
+        : receiptDetail.invoice_issue_date,
       // Null currency displays as NGN, the generator's own default.
       currency: receiptDetail.currency ?? 'NGN',
       total: receiptDetail.total,
@@ -137,7 +159,11 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       payment_status: isPaidReceipt ? 'paid' : receiptDetail.payment_status,
       payment_method: receiptDetail.payment_method,
       is_credit_order: receiptDetail.is_credit_order,
-      customer_name: receiptDetail.customer_name,
+      // Null names are sender-permitted (email fallback there): the
+      // generator renders the name unconditionally, so fall back here too
+      // instead of crashing on the null the warn-only fetch lets through.
+      customer_name:
+        receiptDetail.customer_name || receiptDetail.customer_email || 'Customer',
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,

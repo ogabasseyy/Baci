@@ -88,6 +88,34 @@ describe('structuredDiscoveryIdentity.productTypeOf', () => {
 });
 
 describe('structuredDiscoveryIdentity.evaluateAlternativeIdentity', () => {
+  it('matches a stored model with or without its verified manufacturer prefix', () => {
+    const tecno = productOf({
+      brand: 'Tecno',
+      discovery_metadata: { model: 'TECNO SPARK 50', product_type: 'phone' },
+    });
+    expect(verdictOf(tecno, { brands: ['Tecno'], model: 'Spark 50' })).toEqual({
+      excluded: false,
+      unverified: false,
+    });
+    expect(
+      verdictOf(productOf(), {
+        brands: ['Samsung'],
+        model: 'Samsung Galaxy S25',
+      }).excluded
+    ).toBe(false);
+    for (const model of [
+      'Spark 50 5G',
+      'Spark 50 Pro',
+      'Spark 5',
+      'Samsung Spark 50',
+    ]) {
+      expect(verdictOf(tecno, { model }).excluded).toBe(true);
+    }
+    expect(
+      verdictOf({ ...tecno, brand: null }, { model: 'Spark 50' }).excluded
+    ).toBe(true);
+  });
+
   it('matches a fully verified alternative', () => {
     expect(
       verdictOf(productOf(), {

@@ -5,12 +5,31 @@
  * Types are inferred from these schemas in types/receipt.ts.
  */
 
+import {
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderItemFinancialField,
+} from '@baci/shared/receipt';
 import { z } from 'zod';
 
 // ============================================
 // SHARED SUB-SCHEMAS
 // ============================================
 
+// Validated numeric item fields derive from the shared gate field list —
+// the same list the web sender/archive schemas build from — so a new
+// validated field can never exist on web while mobile silently strips it.
+const orderItemFinancialShape: Record<
+  ManualOrderItemFinancialField,
+  z.ZodOptional<z.ZodNullable<z.ZodNumber>>
+> = Object.fromEntries(
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.map((field) => [
+    field,
+    z.number().nullable().optional(),
+  ])
+) as Record<
+  ManualOrderItemFinancialField,
+  z.ZodOptional<z.ZodNullable<z.ZodNumber>>
+>;
 const OrderItemSchema = z.object({
   id: z.string(),
   product_name: z.string(),
@@ -19,6 +38,14 @@ const OrderItemSchema = z.object({
   quantity: z.number(),
   price: z.number(),
   image_url: z.string().nullable().optional(),
+  ...orderItemFinancialShape,
+  unit_code: z.string().nullable().optional(),
+  vat_category_code: z.string().nullable().optional(),
+  // Rendered description/SKU like the emailed PDF: the detail query
+  // selects both so previews never drop lines the attachment shows.
+  item_description: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  sellers_item_id: z.string().nullable().optional(),
 });
 
 const ShippingAddressSchema = z.object({
@@ -41,6 +68,10 @@ const TransactionSchema = z.object({
   created_at: z.string(),
   description: z.string().nullable(),
   metadata: z.object({ payment_method: z.string().optional() }).nullable(),
+  // Provided by the RPC mapper for receipt dating (settled filter).
+  gateway: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  transaction_type: z.string().nullable().optional(),
 });
 
 // ============================================
@@ -51,13 +82,27 @@ export const ReceiptListItemSchema = z.object({
   id: z.string(),
   order_number: z.string(),
   payment_status: z.string(),
+  shipping_status: z.string().nullable().optional(),
   total: z.number(),
+  subtotal: z.number().nullable().optional(),
+  shipping_fee: z.number().nullable().optional(),
+  tax_amount: z.number().nullable().optional(),
+  discount_amount: z.number().nullable().optional(),
   amount_paid: z.number(),
-  currency: z.string(),
+  // Nullish like the detail schema: a null currency falls back to NGN at
+  // display instead of failing list validation.
+  currency: z.string().nullish(),
+  recorded_by_user_id: z.string().nullable().optional(),
+  import_job_id: z.string().nullable().optional(),
+  external_source: z.string().nullable().optional(),
   created_at: z.string(),
   transaction_date: z.string().nullable().optional(),
   invoice_issue_date: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
+  // Effective document kind behind the badge/action: a covered manual
+  // balance under a non-paid label opens a receipt, so the card must say
+  // receipt instead of "View Invoice".
+  document_kind: z.enum(['receipt', 'invoice']).optional(),
 });
 
 // ============================================
@@ -79,7 +124,9 @@ export const ReceiptDetailSchema = z.object({
   tax_amount: z.number(),
   amount_paid: z.number(),
   balance: z.number(),
-  currency: z.string(),
+  // Nullish like the web manual-order schema: a null currency must not
+  // fail content validity (the generator defaults display to NGN).
+  currency: z.string().nullish(),
   is_credit_order: z.boolean(),
   created_at: z.string(),
   transaction_date: z.string().nullable().optional(),
@@ -92,6 +139,9 @@ export const ReceiptDetailSchema = z.object({
   // Stored Peppol type code (orders.invoice_type_code, default 380):
   // an explicit non-default code survives the proforma derivation.
   invoice_type_code: z.string().nullable().optional(),
+  recorded_by_user_id: z.string().nullable().optional(),
+  import_job_id: z.string().nullable().optional(),
+  external_source: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
   virtual_account: VirtualAccountSchema.nullable(),
   transactions: z.array(TransactionSchema),

@@ -1,6 +1,7 @@
 import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resetTransportDispatchForFallback } from '@/lib/zeptomail-dispatch-reset';
 import {
   ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE,
   zeptoMailRequest,
@@ -545,7 +546,15 @@ export async function sendEmail({
           isRetryableError(failure.code)
         ) {
           if (resetTransportDispatch) {
-            await resetTransportDispatch();
+            try {
+              await resetTransportDispatch();
+            } catch {
+              // A failed in-loop reset must not convert this definite
+              // provider rejection into a thrown unknown: stop retrying and
+              // report the definite failure so the sender clears or reclaims
+              // the still-started marker on its bounded retry path.
+              break;
+            }
             transportDispatchMarked = false;
           }
           const delay = RETRY_CONFIG.baseDelayMs * 2 ** attempt;
@@ -577,24 +586,28 @@ export async function sendEmail({
   // lost to that, so retry once from the platform domain — mirroring the
   // auth-email hook, which also falls back to the platform sender.
   if (sender.isCustomDomain && !deliveryOutcomeUnknown) {
-    await resetTransportDispatch?.();
-    transportDispatchMarked = false;
-    const platformSender = getSenderAddress(emailType, fromName);
-    console.warn(
-      `ZeptoMail custom sender rejected (${lastError.code ?? 'unknown'}); retrying from platform sender`
+    const resetSucceeded = await resetTransportDispatchForFallback(
+      resetTransportDispatch
     );
-    // Offset the fallback attempt counter by the primary's actual tries (not a
-    // fixed maxRetries+1) so a fallback that succeeds on its first send records
-    // attempt_count as primary.attempts + 1, not an inflated 5.
-    const fallback = await dispatch(platformSender, primary.attempts);
-    if ('ok' in fallback) {
-      return fallback.ok;
+    if (resetSucceeded) {
+      transportDispatchMarked = false;
+      const platformSender = getSenderAddress(emailType, fromName);
+      console.warn(
+        `ZeptoMail custom sender rejected (${lastError.code ?? 'unknown'}); retrying from platform sender`
+      );
+      // Offset the fallback attempt counter by the primary's actual tries (not a
+      // fixed maxRetries+1) so a fallback that succeeds on its first send records
+      // attempt_count as primary.attempts + 1, not an inflated 5.
+      const fallback = await dispatch(platformSender, primary.attempts);
+      if ('ok' in fallback) {
+        return fallback.ok;
+      }
+      lastError = fallback.failed;
+      deliveryOutcomeUnknown ||=
+        lastError.code === ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE;
+      totalAttempts += fallback.attempts;
+      finalSenderAddress = platformSender.address;
     }
-    lastError = fallback.failed;
-    deliveryOutcomeUnknown ||=
-      lastError.code === ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE;
-    totalAttempts += fallback.attempts;
-    finalSenderAddress = platformSender.address;
   }
 
   console.error('ZeptoMail email error:', JSON.stringify(lastError));

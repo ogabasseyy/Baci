@@ -186,6 +186,20 @@ describe('GET /api/storefront/receipts/claims/[token]', () => {
     expect(body).toEqual({ error: 'Receipt claim link has expired' });
   });
 
+  it('returns 410 for the expired sentinel without claim details', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { expired: true },
+      error: null,
+    });
+    mockCreateClient.mockResolvedValue(supabase);
+
+    const response = await GET(getRequest(), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(410);
+    expect(body).toEqual({ error: 'Receipt claim link has expired' });
+  });
+
   it('returns a generic 500 when loading the receipt claim fails', async () => {
     const supabase = createSupabaseRpcMock({
       data: null,

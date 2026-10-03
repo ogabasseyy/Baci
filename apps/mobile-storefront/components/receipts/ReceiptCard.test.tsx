@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { ReceiptListItem } from '@/types/receipt';
-import { ReceiptCard } from './ReceiptCard';
+import { formatPrice, ReceiptCard } from './ReceiptCard';
 
 jest.mock('@react-native-vector-icons/ionicons', () => () => null);
 
@@ -55,6 +55,63 @@ const receiptItem: ReceiptListItem = {
 };
 
 describe('ReceiptCard', () => {
+  it('badges a covered manual balance as a receipt under a non-paid label', () => {
+    // The preview promotes covered manual balances to receipts, so the
+    // card must agree — never "View Invoice" into a receipt artifact.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'pending',
+          document_kind: 'receipt',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Receipt')).toBeTruthy();
+    expect(screen.getByText('View Receipt')).toBeTruthy();
+    expect(screen.getByText('Paid')).toBeTruthy();
+  });
+
+  it('falls back to the raw status when the effective kind is absent', () => {
+    render(
+      <ReceiptCard
+        item={{ ...receiptItem, payment_status: 'pending' }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+  });
+
+  it('honors an explicit invoice kind under a paid label', () => {
+    // An invalid manual row (cancelled, underfunded) keeps the paid label
+    // but opens an invoice in the preview, so the card must badge invoice
+    // instead of "View Receipt" into an invoice.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'paid',
+          document_kind: 'invoice',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+    expect(screen.getByText('View Invoice')).toBeTruthy();
+    expect(screen.queryByText('View Receipt')).toBeNull();
+    // Badge says invoice, but the ledger says paid — the money label
+    // must not misstate payment state as an unpaid Total.
+    expect(screen.getByText('Paid')).toBeTruthy();
+    expect(screen.queryByText('Total')).toBeNull();
+  });
+
   it('renders the receipt product title', () => {
     render(
       <ReceiptCard
@@ -79,7 +136,37 @@ describe('ReceiptCard', () => {
     expect(screen.getByText(/16 Jul 2026/)).toBeTruthy();
   });
 
+  it('degrades malformed currencies to NGN instead of crashing', () => {
+    // Legacy rows can carry codes the sender would skip; Intl throws
+    // RangeError for them, which must not crash the list render.
+    for (const currency of ['NAIRA', '', 'ZZZ']) {
+      const { unmount } = render(
+        <ReceiptCard
+          item={{ ...receiptItem, currency }}
+          colors={Colors.light}
+          onPress={jest.fn()}
+        />
+      );
+      expect(screen.getByText(/150,000/)).toBeTruthy();
+      unmount();
+    }
+    expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
+    expect(formatPrice(150000, '')).toBe(formatPrice(150000, 'NGN'));
+  });
+
   describe('bugfix: animated order product images on receipts', () => {
+    it('falls back to NGN pricing on null currency', () => {
+      render(
+        <ReceiptCard
+          item={{ ...receiptItem, currency: null }}
+          colors={Colors.light}
+          onPress={jest.fn()}
+        />
+      );
+
+      expect(screen.getByText(/150,000/)).toBeTruthy();
+    });
+
     it('does not autoplay product thumbnail images', () => {
       render(
         <ReceiptCard

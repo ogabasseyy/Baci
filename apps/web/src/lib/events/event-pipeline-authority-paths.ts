@@ -18,4 +18,8 @@ export const eventPipelineAdminImporters = [
   // Extracted Credit Direct failure responder (PR 3498): reaches the admin
   // client only through the audited file-inventory-confirmation-review.
   'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+  // Audited manual-order document sender (PR 3580): CRON-authenticated outbox
+  // worker dispatches receipt/invoice email only through the audited Zeptomail
+  // sender, matching repair-notifications.ts above.
+  'apps/web/src/lib/send-manual-order-document.ts',
 ] as const;

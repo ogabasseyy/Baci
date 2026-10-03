@@ -82,6 +82,7 @@ export function createSupabaseMock(input?: {
       currency: string;
       external_source?: string | null;
       import_job_id?: string | null;
+      recorded_by_user_id?: string | null;
       payment_status: string;
       shipping_status: string;
       shipping_address: Record<string, unknown> | null;
@@ -103,6 +104,13 @@ export function createSupabaseMock(input?: {
         name: string;
         quantity: number;
         price: number;
+        item_description?: string | null;
+        line_extension_amount?: number | null;
+        unit_code?: string | null;
+        vat_category_code?: string | null;
+        vat_rate?: number | null;
+        vat_amount?: number | null;
+        sellers_item_id?: string | null;
         has_assurance: boolean | null;
         products?: {
           slug?: string;

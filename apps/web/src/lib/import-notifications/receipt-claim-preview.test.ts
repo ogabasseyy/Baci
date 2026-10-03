@@ -14,6 +14,7 @@ const baseClaim = {
   customer_email: 'basseybjohn@yahoo.co.uk',
   customer_id: 'customer-1',
   customer_name: 'Bassey John',
+  document_kind: 'receipt',
   expires_at: '2099-01-01T00:00:00.000Z',
   id: 'claim-1',
   merchant_id: 'merchant-1',
@@ -71,8 +72,43 @@ describe('receipt claim preview', () => {
         claimed: false,
         customerName: 'Bassey John',
         devices: ['iPhone 16 Pro Max', '2 x AirPods Pro'],
+        documentKind: 'receipt',
         merchantName: 'Ogabassey',
       },
+      ok: true,
+    });
+  });
+
+  it('carries the proforma kind through to the claim page', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { ...baseClaim, document_kind: 'proforma_invoice' },
+      error: null,
+    });
+
+    const result = await loadReceiptClaimPreview({
+      supabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      claim: expect.objectContaining({ documentKind: 'proforma_invoice' }),
+      ok: true,
+    });
+  });
+
+  it('surfaces legacy claims without a kind as unknown, not receipt', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { ...baseClaim, document_kind: null },
+      error: null,
+    });
+
+    const result = await loadReceiptClaimPreview({
+      supabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      claim: expect.objectContaining({ documentKind: 'unknown' }),
       ok: true,
     });
   });
@@ -140,6 +176,7 @@ describe('receipt claim preview', () => {
         claimed: false,
         customerName: 'Bassey John',
         devices: ['iPhone 16 Pro Max', '2 x AirPods Pro'],
+        documentKind: 'receipt',
         merchantName: 'Ogabassey',
       },
       emailHint: 'basseybjohn@yahoo.co.uk',

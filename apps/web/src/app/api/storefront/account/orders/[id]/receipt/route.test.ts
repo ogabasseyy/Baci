@@ -72,9 +72,8 @@ function createDocumentData(
     receiptOrder: {
       order_number: order.order_number,
     } as StorefrontAccountDocumentData['receiptOrder'],
-    receiptMerchant: {
-      business_name: 'Ogabassey',
-    } as StorefrontAccountDocumentData['receiptMerchant'],
+    receiptMerchant: {} as StorefrontAccountDocumentData['receiptMerchant'],
+    receiptCompletionDate: '2026-04-02T10:00:00.000Z',
   } as StorefrontAccountDocumentData;
 }
 
@@ -208,6 +207,13 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
     );
     expect(contentDisposition).not.toContain('\r');
     expect(contentDisposition).not.toContain('\n');
+    // The route serves settled balances whose payment flag is not 'paid',
+    // so the generator must not infer the kind from that flag.
+    expect(vi.mocked(generateReceiptBlob)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { documentKind: 'receipt', documentDate: '2026-04-02T10:00:00.000Z' }
+    );
   });
 
   it('maps document access errors to API responses', async () => {

@@ -18,8 +18,11 @@ import {
   resolveInvoiceTypeCode,
   showMerchantBankDetails,
 } from '@baci/shared';
+import { isManualOrderRecord } from '@baci/shared/receipt';
 import { useState } from 'react';
-import type { ReceiptListItem } from '@/types/receipt';
+import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
+import { selectReceiptCompletionDate } from './receipt-completion-date';
+import { isPromotedManualReceipt } from './receipt-promotion-gates';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
 export interface ReceiptPreviewOptions {
@@ -29,6 +32,24 @@ export interface ReceiptPreviewOptions {
    * the "View / Download Proforma Invoice" action that opened it.
    */
   documentKind?: ReceiptDocumentKind;
+}
+
+function appendAssuranceLine(
+  items: ReceiptDetail['items']
+): ReceiptOrder['items'] {
+  const total = items.reduce((sum, item) => {
+    const fee = Number(item?.assurance_fee ?? 0);
+    return sum + (Number.isFinite(fee) && fee > 0 ? fee : 0);
+  }, 0);
+  if (total <= 0) return items as ReceiptOrder['items'];
+  return [
+    ...(items as ReceiptOrder['items']),
+    {
+      product_name: 'Ogabassey Assurance',
+      quantity: 1,
+      price: total,
+    },
+  ];
 }
 
 export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
@@ -55,18 +76,70 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   // with it.
   let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
+    // A fully-covered manual balance is a receipt in substance even under
+    // a non-paid label: the generator infers the document from
+    // payment_status, so normalize the renderer input like web does —
+    // otherwise the app link on an emailed receipt opens the same order
+    // as an invoice. Promotion details live in receipt-promotion-gates.
+    // Typeof-guarded: a corrupt numeric status must fail closed to '',
+    // never throw on .trim() (the detail fetch only warns on schema
+    // failure, so numbers can reach here at runtime).
+    const normalizeStatus = (value: unknown) =>
+      typeof value === 'string'
+        ? (value.trim().toLowerCase().replace(/\s+/g, '_') ?? '')
+        : '';
+    // Promotion comes from the single mobile gate the receipts-list
+    // fail-closed fetch consumes too: a row that previews as an invoice
+    // can never hard-fail detail load like a paid order, and a promoted
+    // row always fails closed on transaction errors instead of misdating.
+    const isManualOrder = isManualOrderRecord({
+      recordedByUserId: receiptDetail.recorded_by_user_id,
+      importJobId: receiptDetail.import_job_id,
+      externalSource: receiptDetail.external_source,
+    });
+    const isManualReceipt = isPromotedManualReceipt({
+      recordedByUserId: receiptDetail.recorded_by_user_id,
+      importJobId: receiptDetail.import_job_id,
+      externalSource: receiptDetail.external_source,
+      paymentStatus: receiptDetail.payment_status,
+      shippingStatus: receiptDetail.shipping_status,
+      total: receiptDetail.total,
+      subtotal: receiptDetail.subtotal,
+      shippingFee: receiptDetail.shipping_fee,
+      taxAmount: receiptDetail.tax_amount,
+      discountAmount: receiptDetail.discount_amount,
+      amountPaid: receiptDetail.amount_paid,
+      currency: receiptDetail.currency,
+      items: receiptDetail.items,
+      payments: receiptDetail.transactions,
+    });
+    // Legacy spellings ('Paid', ' paid ') count like web's normalized
+    // comparison, so the preview agrees with archive/download labels.
+    const isPaidReceipt =
+      (!isManualOrder &&
+        normalizeStatus(receiptDetail.payment_status) === 'paid') ||
+      isManualReceipt;
     // Same NGN-only rule as the web document builders: a
     // foreign-currency preview must not print the untyped naira account
     // beside a dollar-denominated balance. The renderer prefers the
     // order-level virtual account, so the guard must cover it — not just
     // the merchant fallback below.
+    // Paid receipts are dated by the completing payment like the emailed
+    // PDF and account download — never by a stale invoice issue date.
+    // Shared with the receipts list so both date from one selector.
+    const completionDate = isPaidReceipt
+      ? selectReceiptCompletionDate(receiptDetail.transactions)
+      : null;
     const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {
       order_number: receiptDetail.order_number,
       created_at: receiptDetail.created_at,
-      transaction_date: receiptDetail.transaction_date,
-      invoice_issue_date: receiptDetail.invoice_issue_date,
-      currency: receiptDetail.currency,
+      transaction_date: completionDate ?? receiptDetail.transaction_date,
+      invoice_issue_date: isPaidReceipt
+        ? null
+        : receiptDetail.invoice_issue_date,
+      // Null currency displays as NGN, the generator's own default.
+      currency: receiptDetail.currency ?? 'NGN',
       total: receiptDetail.total,
       subtotal: receiptDetail.subtotal,
       shipping_fee: receiptDetail.shipping_fee,
@@ -74,15 +147,31 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       discount_amount: receiptDetail.discount_amount,
       amount_paid: receiptDetail.amount_paid,
       balance: receiptDetail.balance,
-      payment_status: receiptDetail.payment_status,
+      payment_status: isPaidReceipt ? 'paid' : receiptDetail.payment_status,
       payment_method: receiptDetail.payment_method,
       is_credit_order: receiptDetail.is_credit_order,
-      customer_name: receiptDetail.customer_name,
+      // Null names are sender-permitted (email fallback there): the
+      // generator renders the name unconditionally, so fall back here too
+      // instead of crashing on the null the warn-only fetch lets through.
+      customer_name:
+        receiptDetail.customer_name ||
+        receiptDetail.customer_email ||
+        'Customer',
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,
       virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
-      items: receiptDetail.items,
+      // Null entries are dropped before generation: the generator
+      // dereferences every item, so a corrupt row must degrade to fewer
+      // lines, never crash the render. Then itemize the premium like the
+      // emailed PDF, web preview, and download so the receipt lines
+      // reconcile with the displayed total. ('Ogabassey Assurance' mirrors
+      // web ASSURANCE_LINE_NAME; mobile cannot import apps/web.)
+      items: appendAssuranceLine(
+        (Array.isArray(receiptDetail.items) ? receiptDetail.items : []).filter(
+          (item) => item != null && typeof item === 'object'
+        )
+      ),
       transactions: receiptDetail.transactions,
     };
 
@@ -122,7 +211,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // wallet/savings credited) are proforma.
     const resolvedTypeCode = resolveInvoiceTypeCode({
       paymentMethod: receiptDetail.payment_method,
-      isPaid: receiptDetail.payment_status === 'paid',
+      isPaid: isPaidReceipt,
       wasPaid: receiptDetail.payment_status === 'refunded',
       paymentStatus: receiptDetail.payment_status,
       amountPaid: receiptDetail.amount_paid,
@@ -134,7 +223,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     html = generateReceiptHtml(orderData, merchant, {
       documentKind: derivedDocumentKind,
     });
-    isPaid = receiptDetail.payment_status === 'paid';
+    isPaid = isPaidReceipt;
     documentKind = isPaid ? 'receipt' : (derivedDocumentKind ?? 'invoice');
   }
 

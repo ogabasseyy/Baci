@@ -15,6 +15,7 @@ export interface ReceiptClaimPreview {
   claimed: boolean;
   customerName: string | null;
   devices: string[];
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt' | 'unknown';
   merchantName: string;
 }
 
@@ -47,6 +48,16 @@ function buildClaimPreview(claim: ReceiptClaimRecord): ReceiptClaimPreview {
     claimed: Boolean(claim.claimed_at),
     customerName: claim.customer_name,
     devices: buildReceiptDeviceList(orders as ReceiptClaimOrderForDeviceList[]),
+    // Legacy claims predate document_kind: surface the gap instead of
+    // mislabeling a possible invoice as a receipt.
+    documentKind:
+      claim.document_kind === 'invoice'
+        ? 'invoice'
+        : claim.document_kind === 'proforma_invoice'
+          ? 'proforma_invoice'
+          : claim.document_kind === 'receipt'
+            ? 'receipt'
+            : 'unknown',
     merchantName:
       claim.merchant?.business_name ?? claim.merchant?.slug ?? 'Store',
   };
@@ -72,6 +83,17 @@ async function loadReceiptClaimRecord({
 
   if (!data) {
     return { error: 'Receipt claim link not found', ok: false, status: 404 };
+  }
+
+  // The preview RPC answers expired claims with a non-sensitive sentinel
+  // (no identity or order details) so direct RPC calls past expiry reveal
+  // nothing while the documented 410 contract survives.
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as { expired?: unknown }).expired === true
+  ) {
+    return { error: 'Receipt claim link has expired', ok: false, status: 410 };
   }
 
   const parsedClaim = receiptClaimRecordSchema.safeParse(data);

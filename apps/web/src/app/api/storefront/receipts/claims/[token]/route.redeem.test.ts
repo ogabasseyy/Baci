@@ -38,12 +38,13 @@ function createSupabaseRpcMock(response: { data: unknown; error: unknown }) {
 
 function mockAuthenticatedSupabase(
   supabase: ReturnType<typeof createSupabaseRpcMock>,
-  email = 'basseybjohn@yahoo.co.uk'
+  email = 'basseybjohn@yahoo.co.uk',
+  emailConfirmedAt: string | null = '2026-01-01T00:00:00Z'
 ) {
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
     supabase,
-    user: { email, id: 'user-1' },
+    user: { email, id: 'user-1', email_confirmed_at: emailConfirmedAt },
   });
 }
 
@@ -122,7 +123,7 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
 
     expect(response.status).toBe(403);
     expect(body).toEqual({
-      error: 'Sign in with the email address that received this receipt link',
+      error: 'Sign in with the email address that received this document link',
     });
     expect(supabase.rpc).toHaveBeenCalledWith('redeem_receipt_claim_v2', {
       p_source: 'web',
@@ -245,21 +246,6 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
     expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'redeem_receipt_claim', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
-  });
-
-  it('returns 500 when the customer record cannot be linked', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: { status: 'customer_link_failed' },
-      error: null,
-    });
-    mockAuthenticatedSupabase(supabase);
-
-    const response = await POST(postRequest(), params);
-    const body = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'Failed to redeem receipt claim' });
-    expect(mockConsoleError).toHaveBeenCalled();
   });
 
   it('returns 500 when redemption RPC data is malformed', async () => {

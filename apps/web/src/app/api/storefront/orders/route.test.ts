@@ -195,13 +195,17 @@ describe('GET /api/storefront/orders', () => {
           shipping_status: 'delivered',
           shipping_address: { city: 'Lagos' },
           tracking_number: 'TRACK-1',
+          transactions: [],
           shipping_provider: 'GIGL',
           payment_method: 'card',
           virtual_account: null,
           balance: 0,
           current_document_kind: 'receipt',
           invoice_type_code: '380',
+          receipt_completion_date: null,
           receipt_eligible: true,
+          manual_document_available: false,
+          is_manual_order: false,
           items: [
             {
               id: 'item-1',
@@ -220,78 +224,6 @@ describe('GET /api/storefront/orders', () => {
           ],
         },
       ],
-    });
-  });
-
-  it('returns 500 when the orders query fails', async () => {
-    vi.mocked(authenticateApiRequest).mockResolvedValue(
-      createAuthenticatedAuthResult(
-        createSupabaseMock({
-          orders: {
-            data: null,
-            error: { message: 'boom' },
-          },
-        })
-      )
-    );
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
-      )
-    );
-
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Failed to fetch orders',
-    });
-  });
-
-  it('returns 500 when payment accounts cannot be loaded', async () => {
-    vi.mocked(authenticateApiRequest).mockResolvedValue(
-      createAuthenticatedAuthResult(
-        createSupabaseMock({
-          orders: {
-            data: [
-              {
-                id: 'order-1',
-                order_number: 'ORD-1001',
-                created_at: '2026-03-22T10:00:00.000Z',
-                total: 150000,
-                subtotal: 150000,
-                shipping_fee: 0,
-                tax_amount: 0,
-                discount_amount: 0,
-                amount_paid: 0,
-                currency: 'NGN',
-                payment_status: 'UNPAID',
-                shipping_status: 'Pending',
-                shipping_address: null,
-                tracking_number: null,
-                shipping_provider: null,
-                payment_method: 'paystack',
-                order_items: [],
-              },
-            ],
-            error: null,
-          },
-          paymentAccounts: {
-            data: null,
-            error: { message: 'payment account RPC unavailable' },
-          },
-        })
-      )
-    );
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
-      )
-    );
-
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
-      error: 'Failed to fetch payment accounts',
     });
   });
 });

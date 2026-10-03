@@ -30,18 +30,31 @@ const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
 function getPriceFormatter(currency: string): Intl.NumberFormat {
   let formatter = PRICE_FORMATTER_CACHE.get(currency);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    });
+    try {
+      formatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+      });
+    } catch {
+      // Malformed or unknown currency codes (legacy rows the sender
+      // would skip) degrade to NGN instead of crashing the list render
+      // with RangeError. A regex alone cannot cover well-formed but
+      // unassigned codes, so construction itself is guarded. Malformed
+      // keys are deliberately not cached: every unique legacy code would
+      // otherwise add a Map entry pointing at the same NGN formatter.
+      return getPriceFormatter('NGN');
+    }
     PRICE_FORMATTER_CACHE.set(currency, formatter);
   }
   return formatter;
 }
 
-export function formatPrice(price: number, currency: string = 'NGN') {
-  return getPriceFormatter(currency).format(price);
+export function formatPrice(
+  price: number,
+  currency: string | null | undefined = 'NGN'
+) {
+  return getPriceFormatter(currency ?? 'NGN').format(price);
 }
 
 interface ReceiptCardProps {
@@ -57,7 +70,25 @@ export function ReceiptCard({
   onPress,
   onPrefetch,
 }: ReceiptCardProps) {
-  const config = getPaymentConfig(item.payment_status);
+  // Badge/action follow the effective document kind both ways: a covered
+  // manual balance under a non-paid label opens a receipt, so the card says
+  // receipt — and an explicit invoice kind never badges paid even under a
+  // paid label (invalid manual rows open invoices). Absent kind (legacy
+  // rows) falls back to the raw status.
+  let displayStatus = item.payment_status;
+  if (item.document_kind === 'receipt') {
+    displayStatus = 'paid';
+  } else if (
+    item.document_kind === 'invoice' &&
+    item.payment_status === 'paid'
+  ) {
+    displayStatus = 'unpaid';
+  }
+  // Money follows the ledger, not the badge: an invalid manual row can
+  // carry a paid label while opening an invoice — badge/action say
+  // Invoice, but the money still reads Paid, never Total.
+  const moneyPaid = displayStatus === 'paid' || item.payment_status === 'paid';
+  const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
     ? `${firstItem.product_name}${
@@ -133,12 +164,12 @@ export function ReceiptCard({
       <View style={styles.cardFooter}>
         <View>
           <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {item.payment_status === 'paid' ? 'Paid' : 'Total'}
+            {moneyPaid ? 'Paid' : 'Total'}
           </Text>
           <Text style={[styles.totalAmount, { color: colors.text }]}>
             {formatPrice(item.total, item.currency)}
           </Text>
-          {item.payment_status === 'partially_paid' && (
+          {displayStatus === 'partially_paid' && (
             <Text style={[styles.balanceLabel, { color: '#D97706' }]}>
               Balance:{' '}
               {formatPrice(item.total - item.amount_paid, item.currency)}

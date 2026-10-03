@@ -6,11 +6,13 @@ vi.mock('@/env', () => ({
   getRootDomain: vi.fn(() => 'usebaci.com'),
 }));
 
+import { isValidCustomDomain } from '@/lib/proxy/host';
 import {
   buildReceiptClaimUrl,
   buildReceiptDeviceList,
   createReceiptClaimToken,
   hashReceiptClaimToken,
+  isSafeClaimDomain,
   normalizeClaimEmail,
 } from './receipt-claim-links';
 
@@ -47,6 +49,59 @@ describe('receipt claim links', () => {
         token: 'token_abc',
       })
     ).toBe('https://future-merchant.usebaci.com/receipts/claim/token_abc');
+  });
+
+  it('normalizes a trailing-dot absolute FQDN to the branded host', () => {
+    expect(
+      buildReceiptClaimUrl({
+        merchant: { slug: 'ogabassey', custom_domain: 'Shop.Example.COM.' },
+        token: 'token_123',
+      })
+    ).toBe('https://shop.example.com/receipts/claim/token_123');
+  });
+
+  it('falls back to the slug subdomain for malformed custom domains', () => {
+    for (const custom_domain of [
+      'evil.com/attacker',
+      'user@evil.com',
+      '10.0.0.1',
+      'no-dot-hostname',
+      'bad..dots.com',
+      'shop.example.com:443',
+    ]) {
+      expect(
+        buildReceiptClaimUrl({
+          merchant: { slug: 'ogabassey', custom_domain },
+          token: 'token_123',
+        })
+      ).toBe('https://ogabassey.usebaci.com/receipts/claim/token_123');
+    }
+  });
+
+  it('throws for a host-unsafe slug instead of minting a broken link', () => {
+    for (const slug of [
+      '',
+      ' ogabassey',
+      'oga.bassey',
+      'oga_bassey',
+      '-ogabassey',
+    ]) {
+      expect(() =>
+        buildReceiptClaimUrl({
+          merchant: { slug, custom_domain: null },
+          token: 'token_123',
+        })
+      ).toThrow('Invalid merchant slug for receipt claim URL');
+    }
+  });
+
+  it('ignores an unsafe slug when the custom domain wins', () => {
+    expect(
+      buildReceiptClaimUrl({
+        merchant: { slug: 'oga.bassey', custom_domain: 'ogabassey.com' },
+        token: 'token_123',
+      })
+    ).toBe('https://ogabassey.com/receipts/claim/token_123');
   });
 
   it('does not add customer email hints to receipt claim links', () => {
@@ -154,5 +209,53 @@ describe('receipt claim links', () => {
       'Device 4',
       'and 8 more receipts',
     ]);
+  });
+
+  it('agrees with the proxy custom-domain rule on its shared core', () => {
+    // The claim validator deliberately duplicates the proxy rule instead of
+    // importing it (audited sender boundary); this pins the shared core so a
+    // future proxy change fails loudly here rather than drifting silently.
+    for (const host of [
+      'shop.example.com',
+      'store123.com',
+      'my-shop.io',
+      'a.b.c.example.co.uk',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(true);
+      expect(isValidCustomDomain(host)).toBe(true);
+    }
+    for (const host of [
+      '10.0.0.1',
+      'user@evil.com',
+      'evil.com/attacker',
+      'no-dot-hostname',
+      'bad..dots.com',
+      'has space.com',
+      '-example.com',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(false);
+      expect(isValidCustomDomain(host)).toBe(false);
+    }
+  });
+
+  it('pins the intentional claim-domain divergences from the proxy rule', () => {
+    // Token URLs fail closed where the proxy is lenient with Host headers,
+    // and normalize sloppy DB values the proxy (correctly) rejects.
+    expect(isSafeClaimDomain('shop.example.com:443')).toBe(false);
+    expect(isValidCustomDomain('shop.example.com:443')).toBe(true);
+    for (const host of [
+      'shop.example.com/',
+      'shop.example.com.',
+      '  shop.example.com  ',
+    ]) {
+      expect(isSafeClaimDomain(host)).toBe(true);
+      expect(isValidCustomDomain(host)).toBe(false);
+    }
+    // Per-label strictness the proxy lacks: hyphen-terminated labels and
+    // all-numeric TLDs fall back to the slug subdomain in token URLs.
+    for (const host of ['example-.com', 'example.123']) {
+      expect(isSafeClaimDomain(host)).toBe(false);
+      expect(isValidCustomDomain(host)).toBe(true);
+    }
   });
 });

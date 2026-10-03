@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { useReceiptPreview } from './use-receipt-preview';
+import { unpaidProformaDetail } from './use-receipt-preview.test-fixture';
 
 let mockReceiptDetail: Record<string, unknown> | null = null;
 
@@ -30,32 +31,6 @@ jest.mock('./use-receipts', () => ({
   }),
   useReceiptDetail: () => ({ data: mockReceiptDetail }),
 }));
-
-function unpaidProformaDetail(currency: string): Record<string, unknown> {
-  return {
-    id: 'order-1',
-    order_number: 'ORD-1',
-    created_at: '2026-09-01T10:00:00.000Z',
-    currency,
-    total: 500,
-    subtotal: 500,
-    shipping_fee: 0,
-    tax_amount: 0,
-    discount_amount: 0,
-    amount_paid: 0,
-    balance: 500,
-    payment_status: 'unpaid',
-    payment_method: 'invoice',
-    is_credit_order: false,
-    customer_name: 'Ada Buyer',
-    customer_email: 'ada@example.com',
-    customer_phone: null,
-    shipping_address: null,
-    virtual_account: null,
-    items: [],
-    transactions: [],
-  };
-}
 
 describe('useReceiptPreview foreign-currency bank details', () => {
   it('omits the NGN merchant account from USD previews', () => {
@@ -208,6 +183,18 @@ describe('useReceiptPreview document kind', () => {
     expect(result.current.html).toContain(
       '<div class="doc-title">Receipt</div>'
     );
+  });
+
+  it('counts legacy paid spellings on non-manual orders like web', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: ' Paid ',
+    };
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).toBe('receipt');
   });
 
   it('reports the effective kind the artifact was built with', () => {

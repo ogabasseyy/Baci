@@ -2,6 +2,13 @@ export { getBankNameFromCode } from './bank-codes';
 export { escapeHtml, escapeJsString } from './escape-html';
 export { generateReceiptHtml } from './generate-receipt-html';
 export {
+  isDecimalMoney,
+  isManualOrderRecord,
+  isSettledManualBalance,
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderItemFinancialField,
+} from './manual-order-document-gates';
+export {
   appendReceiptFulfillmentDescription,
   getReceiptFulfillmentRows,
   getReceiptFulfillmentRowsFromDetails,
@@ -14,7 +21,11 @@ export {
 } from './receipt-fulfillment';
 export {
   getReceiptDisplaySubtotal,
+  getReceiptItemDetailLines,
+  getReceiptItemLineTotal,
+  getReceiptItemVatLines,
   getReceiptVatRate,
+  type ReceiptLineItemLike,
   shouldShowVatLine,
   type VatBreakdownMerchant,
   type VatBreakdownOrder,

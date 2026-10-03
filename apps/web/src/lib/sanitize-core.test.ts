@@ -4,7 +4,11 @@
  * This .ts file exists to satisfy the quality gate matcher.
  */
 import { describe, expect, it } from 'vitest';
-import { escapeHtml, sanitizeUrl } from './sanitize-core';
+import {
+  escapeHtml,
+  sanitizeEmailDisplayName,
+  sanitizeUrl,
+} from './sanitize-core';
 
 describe('sanitize-core (ts)', () => {
   it('escapeHtml escapes angle brackets', () => {
@@ -21,5 +25,11 @@ describe('sanitize-core (ts)', () => {
 
   it('sanitizeUrl accepts https URLs', () => {
     expect(sanitizeUrl('https://example.com')).toBe('https://example.com/');
+  });
+
+  it('sanitizeEmailDisplayName strips line breaks and caps length', () => {
+    expect(sanitizeEmailDisplayName('Oga\r\nBcc: x@y.z')).toBe('OgaBcc: x@y.z');
+    expect(sanitizeEmailDisplayName('  Oga Bassey  ')).toBe('Oga Bassey');
+    expect(sanitizeEmailDisplayName('a'.repeat(200))).toHaveLength(128);
   });
 });

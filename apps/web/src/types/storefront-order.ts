@@ -4,6 +4,7 @@ import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types'
 
 export interface StorefrontOrderItem {
   id: string;
+  line_id?: number | null;
   product_id: string;
   product_slug?: string;
   category?: string;
@@ -16,6 +17,7 @@ export interface StorefrontOrderItem {
   product_name?: string;
   quantity: number;
   price: number;
+  item_description?: string | null;
   line_extension_amount?: number;
   unit_code?: string | null;
   vat_category_code?: string | null;
@@ -31,6 +33,7 @@ export interface StorefrontOrderItem {
   image_url?: string | null;
   image?: string;
   has_assurance?: boolean;
+  assurance_fee?: number | null;
   /**
    * @deprecated Prefer `fulfillment_details` for new payloads.
    */
@@ -155,6 +158,8 @@ export interface StorefrontOrder {
    */
   invoice_type_code?: string;
   receipt_eligible?: boolean;
+  manual_document_available?: boolean;
+  is_manual_order?: boolean;
   /**
    * Server-derived gate for the customer "Cancel Order" CTA. Authoritative
    * because it is computed by the `customer_order_can_cancel` RPC (the

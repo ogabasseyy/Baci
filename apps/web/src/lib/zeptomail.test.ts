@@ -348,6 +348,45 @@ describe('zeptomail audit logging', () => {
     });
   });
 
+  it('reports the definite rejection when an in-loop marker reset fails', async () => {
+    const beforeTransportDispatch = vi.fn().mockResolvedValue(undefined);
+    const resetTransportDispatch = vi
+      .fn()
+      .mockRejectedValue(new Error('marker clear failed'));
+    sendMailMock.mockRejectedValue({
+      error: { message: 'Server overloaded', code: 'TM_5001', details: null },
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Reset failure test',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      beforeTransportDispatch,
+      resetTransportDispatch,
+      auditContext: {
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+      },
+    });
+
+    // The reset throw must not convert the definite provider rejection
+    // into an unknown outcome: no retry storm, no throw, no unknown flag.
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TM_5001');
+    expect('deliveryOutcome' in result).toBe(false);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    expect(resetTransportDispatch).toHaveBeenCalledTimes(1);
+    expect(auditState.updates[0]).toMatchObject({
+      patch: {
+        status: 'failed',
+        attempt_count: 1,
+        provider_error_code: 'TM_5001',
+      },
+    });
+  });
+
   it('marks transport failures as having an unknown delivery outcome', async () => {
     const transportError = Object.assign(new Error('socket closed'), {
       code: 'ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN',
@@ -512,6 +551,37 @@ describe('zeptomail audit logging', () => {
         attempt_count: 2,
       },
     });
+  });
+
+  it('skips the platform fallback when the dispatch reset fails after a definite rejection', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    sendMailMock.mockRejectedValue({
+      error: { code: 'TM_3201', message: 'Invalid sender domain' },
+    });
+    const { sendEmail } = await import('./zeptomail');
+    const resetTransportDispatch = vi
+      .fn()
+      .mockRejectedValue(new Error('supabase unavailable'));
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      resetTransportDispatch,
+    });
+
+    // The primary rejection stays definite (no deliveryOutcome: unknown)
+    // so the caller retries; only the custom sender was attempted.
+    expect(result).toMatchObject({
+      success: false,
+      error: 'Invalid sender domain',
+    });
+    expect(result).not.toHaveProperty('deliveryOutcome');
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+    ]);
   });
 
   it('does not try a platform fallback after an ambiguous custom-domain send', async () => {

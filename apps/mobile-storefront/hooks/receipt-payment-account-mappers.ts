@@ -6,6 +6,7 @@ interface CustomerPaymentAccountRpcRow {
   bank_name: string | null;
   created_at: string | null;
   expires_at: string | null;
+  id: string;
   provider: string | null;
 }
 
@@ -20,6 +21,7 @@ export function mapCustomerPaymentAccountRpcRows(accountRows: unknown) {
       bank_name: account.bank_name,
       created_at: account.created_at,
       expires_at: account.expires_at,
+      id: account.id,
       provider: account.provider,
     })
   );

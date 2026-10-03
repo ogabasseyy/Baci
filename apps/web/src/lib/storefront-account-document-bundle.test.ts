@@ -144,6 +144,8 @@ describe('buildStorefrontAccountDocumentBundle', () => {
 
     expect(result.order.current_document_kind).toBe('receipt');
     expect(result.order.receipt_eligible).toBe(true);
+    expect(result.order.is_manual_order).toBe(false);
+    expect(result.order.manual_document_available).toBe(false);
     expect(result.order.customer_name).toBe('Oga Bassey');
     expect(result.order.shipping_rate_id).toBe('rate-1');
     expect(result.order.shipping_rate_name).toBe('Express Delivery');

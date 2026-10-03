@@ -108,9 +108,9 @@ describe('GET /api/storefront/orders order-list cases', () => {
                 shipping_fee: 0,
                 tax_amount: 0,
                 discount_amount: 0,
-                amount_paid: 150000,
+                amount_paid: 0,
                 currency: 'NGN',
-                payment_status: 'paid',
+                payment_status: 'unpaid',
                 shipping_status: 'Delivered',
                 shipping_address: null,
                 tracking_number: null,
@@ -140,6 +140,54 @@ describe('GET /api/storefront/orders order-list cases', () => {
       'order-backdated',
       'order-april',
     ]);
+  });
+
+  it('hides itemless manual orders from the archive until the item batch lands', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(
+        createSupabaseMock({
+          orders: {
+            data: [
+              {
+                id: 'manual-itemless',
+                order_number: 'MANUAL-2',
+                created_at: '2026-09-30T09:00:00Z',
+                total: 100,
+                subtotal: 100,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 100,
+                currency: 'NGN',
+                payment_status: 'paid',
+                shipping_status: 'pending',
+                recorded_by_user_id: 'staff-1',
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'bank_transfer',
+                order_items: [],
+              },
+            ],
+            error: null,
+          },
+        })
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.orders[0]).toMatchObject({
+      manual_document_available: false,
+      receipt_eligible: false,
+      current_document_kind: 'invoice',
+    });
   });
 
   it('falls back to joined product images when imported order items have no snapshot image', async () => {
@@ -177,6 +225,13 @@ describe('GET /api/storefront/orders order-list cases', () => {
                     name: 'Samsung Galaxy S26',
                     quantity: 1,
                     price: 1283968.38,
+                    item_description: 'Unlocked device',
+                    line_extension_amount: 1200000,
+                    unit_code: 'EA',
+                    vat_category_code: 'S',
+                    vat_rate: 7.5,
+                    vat_amount: 90000,
+                    sellers_item_id: 'SKU-1',
                     has_assurance: false,
                     products: {
                       slug: 'samsung-galaxy-s26',
@@ -212,6 +267,13 @@ describe('GET /api/storefront/orders order-list cases', () => {
           'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s25-navy.avif',
         condition: 'used',
         variant_name: 'Used',
+        item_description: 'Unlocked device',
+        line_extension_amount: 1200000,
+        unit_code: 'EA',
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+        vat_amount: 90000,
+        sellers_item_id: 'SKU-1',
         product_images: [
           'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s25-navy.avif',
         ],

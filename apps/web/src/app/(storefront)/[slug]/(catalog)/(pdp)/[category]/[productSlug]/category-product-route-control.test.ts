@@ -56,6 +56,24 @@ afterEach(() => {
 });
 
 describe('getProductRouteControl', () => {
+  it('returns null when the storefront merchant cannot be resolved', async () => {
+    getRequestScopedMerchant.mockResolvedValue(null);
+
+    await expect(
+      getProductRouteControl(
+        'unknown-merchant-store',
+        'category',
+        'unknown-product'
+      )
+    ).resolves.toBeNull();
+
+    expect(getRequestScopedMerchant).toHaveBeenCalledWith(
+      'unknown-merchant-store'
+    );
+    expect(getCachedProductLcpHint).not.toHaveBeenCalled();
+    expect(resolveFullProduct).not.toHaveBeenCalled();
+  });
+
   it('rejects unsafe product slugs before merchant or cached-product lookups', async () => {
     await expect(
       getProductRouteControl('store', 'category', 'x'.repeat(4000))
@@ -132,6 +150,32 @@ describe('getProductRouteControl', () => {
       (routeControl as CategoryProductRouteControl).loadProductResult()
     ).resolves.toBe(legacyResult);
     expect(resolveFullProduct).toHaveBeenCalledTimes(1);
+    expect(mapCachedHint).not.toHaveBeenCalled();
+  });
+
+  it('returns null when neither the compact hint nor detail resolver finds a product', async () => {
+    getRequestScopedMerchant.mockResolvedValue(merchant);
+    getCachedProductLcpHint.mockResolvedValue(null);
+    resolveFullProduct.mockResolvedValue(null);
+
+    await expect(
+      getProductRouteControl(
+        'missing-product-store',
+        'category',
+        'missing-product'
+      )
+    ).resolves.toBeNull();
+
+    expect(getCachedProductLcpHint).toHaveBeenCalledWith(
+      'merchant-1',
+      'missing-product',
+      { includeVariants: true }
+    );
+    expect(resolveFullProduct).toHaveBeenCalledWith(
+      merchant,
+      'category',
+      'missing-product'
+    );
     expect(mapCachedHint).not.toHaveBeenCalled();
   });
 });

@@ -131,6 +131,40 @@ describe('buildMcpProductDetail', () => {
     });
   });
 
+  it('does not infer selectable color from a Midnight Black product image filename', async () => {
+    const supabase = { rpc: vi.fn(async () => ({
+      data: [{
+        attributes: { ram: '4GB', storage: '128GB' },
+        price_override: null,
+        stock_quantity: 2,
+        condition: 'new',
+        images: [],
+      }],
+      error: null,
+    })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: {
+        ...product,
+        name: 'Redmi 15C 5G',
+        images: ['https://cdn.example/redmi-15-midnight-black.avif'],
+      },
+      supabase,
+      formatPrice: String,
+      getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain(
+      'A selectable color is confirmed only by a returned variant attributes.color value.'
+    );
+    expect(result.content[0].text).not.toContain('**Available Colors:**');
+    expect(result.content[0].text).not.toContain('Midnight Black');
+    expect(result.structuredContent).toMatchObject({
+      products: [{ image: 'https://cdn.example/redmi-15-midnight-black.avif' }],
+      variants: [{ attributes: { ram: '4GB', storage: '128GB' } }],
+    });
+    expect(result.structuredContent?.variants?.[0]).not.toHaveProperty('attributes.color');
+  });
+
   it('does not claim option availability when the public variant lookup fails', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })) } as unknown as SupabaseClient;

@@ -105,7 +105,7 @@ describe('MCP policy and widget responses', () => {
           params: {},
         })
       );
-      const shipping = tools.find((tool) => tool.name === 'get_shipping_quote');
+      const shipping = tools.find((tool) => tool.name === 'get_delivery_fee_info');
       expect(shipping?.description).toContain('cannot provide a numeric quote');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('address');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('estimated_weight');
@@ -115,7 +115,7 @@ describe('MCP policy and widget responses', () => {
           id: 2,
           method: 'tools/call',
           params: {
-            name: 'get_shipping_quote',
+            name: 'get_delivery_fee_info',
             arguments: { state: 'Lagos' },
           },
         })

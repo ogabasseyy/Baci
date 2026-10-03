@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -128,7 +129,7 @@ export async function loadMcpProductVariants({
     };
   }
 
-  let text = `**Variants for ${product.name}:**\n\n`;
+  let text = `**Variants for ${product.name}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
   if (variantLookupFailed) text += 'Variant options are temporarily unavailable.\n';
   if (offerLookupFailed) text += 'Condition offers are temporarily unavailable.\n';
 

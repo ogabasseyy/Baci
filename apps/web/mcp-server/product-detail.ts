@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
 interface ProductDetailSource {
   id: string;
@@ -128,7 +129,7 @@ export async function buildMcpProductDetail({
   };
 
   // Build detailed text response
-  let text = `**${product.name}**\n\n`;
+  let text = `**${product.name}**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n`;
   text += `**Price:** ${formatPrice(displayPrice)}`;
   if (
     displayCompareAtPrice &&

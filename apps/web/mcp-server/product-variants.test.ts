@@ -142,6 +142,34 @@ describe('loadMcpProductVariants', () => {
     expect(supabase.rpc).not.toHaveBeenCalledWith('get_product_offers', expect.anything());
   });
 
+  it('warns that an image filename cannot supply missing selectable color data', async () => {
+    const supabase = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: [{
+        attributes: { ram: '4GB', storage: '128GB' },
+        price_override: null,
+        stock_quantity: 2,
+      }],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' },
+      merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value,
+      formatPrice: String,
+    });
+
+    expect(result.content[0].text).toContain(
+      'A selectable color is confirmed only by a returned variant attributes.color value.'
+    );
+    expect(result.content[0].text).not.toContain('**Colors:**');
+    expect(result.structuredContent).toMatchObject({
+      variants: [{ attributes: { ram: '4GB', storage: '128GB' } }],
+    });
+    expect(result.structuredContent?.variants?.[0]).not.toHaveProperty('attributes.color');
+  });
+
   it('does not claim availability when the public variant RPC fails', async () => {
     const supabase = createSupabase();
     supabase.rpc.mockResolvedValue({ data: null, error: { message: 'unavailable' } });

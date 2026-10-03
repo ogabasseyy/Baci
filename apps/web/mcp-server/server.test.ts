@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mcpServerTestSupport } from './server-test-support';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { PUBLIC_MCP_TOOLS } from '../src/config/mcp-server-card-tools';
 
 const testFileDirectory = dirname(fileURLToPath(import.meta.url));
 const serverSource = readFileSync(join(testFileDirectory, 'server.ts'), 'utf8');
@@ -24,7 +26,7 @@ if (snippetStart === -1 || snippetEnd === -1) {
 }
 
 const escapeHtmlSnippet = serverSource.slice(snippetStart, snippetEnd);
-const { getResultTools, postMcpJsonRpc, startMcpServer, stopMcpServer } =
+const { getResultRecord, getResultTools, postMcpJsonRpc, startMcpServer, stopMcpServer } =
   mcpServerTestSupport;
 
 function runEmbeddedEscapeHtml(input: unknown) {
@@ -207,9 +209,9 @@ describe('MCP streamable HTTP probe compatibility', () => {
       'add_to_cart',
       'browse_categories',
       'get_brands',
+      'get_delivery_fee_info',
       'get_product',
       'get_product_variants',
-      'get_shipping_quote',
       'get_store_info',
       'search_products',
     ]);
@@ -218,5 +220,46 @@ describe('MCP streamable HTTP probe compatibility', () => {
     expect(toolNames).not.toContain('create_agentic_checkout_session');
     expect(toolNames).not.toContain('generate_payment_account');
     expect(toolNames).not.toContain('search_ucp_catalog');
+  });
+
+  it('keeps colour evidence guidance aligned across runtime and server-card tools', async () => {
+    const payload = await postMcpJsonRpc(serverBaseUrl, {
+      id: 3,
+      method: 'tools/list',
+      params: {},
+    });
+    const runtimeTools = getResultTools(payload);
+    const optionTools = ['search_products', 'get_product', 'get_product_variants'];
+
+    for (const name of optionTools) {
+      const runtimeDescription = runtimeTools.find((tool) => tool.name === name)?.description;
+      const cardDescription = PUBLIC_MCP_TOOLS.find((tool) => tool.name === name)?.description;
+      expect(runtimeDescription).toContain(MCP_OPTION_COLOR_EVIDENCE_GUIDANCE);
+      expect(cardDescription).toContain(MCP_OPTION_COLOR_EVIDENCE_GUIDANCE);
+    }
+  });
+
+  it('returns checkout-only delivery fee information without inventing a quote', async () => {
+    const result = getResultRecord(await postMcpJsonRpc(serverBaseUrl, {
+      id: 4,
+      method: 'tools/call',
+      params: {
+        name: 'get_delivery_fee_info',
+        arguments: { state: 'Lagos', city: 'Ikeja' },
+      },
+    }));
+
+    expect(result.structuredContent).toMatchObject({
+      city: 'Ikeja',
+      fee: null,
+      policy_url: 'https://ogabassey.com/shipping',
+      quote_available: false,
+      state: 'Lagos',
+      status: 'requires_checkout',
+    });
+    expect(result.content).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('confirm the fee') }),
+    ]));
+    expect(JSON.stringify(result.content)).not.toMatch(/₦\s*[\d,]+/);
   });
 });

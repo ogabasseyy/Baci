@@ -6,14 +6,13 @@ const DEFAULT_HEALTH_URL = 'https://mcp.ogabassey.com/health';
 const DEFAULT_MCP_URL = 'https://mcp.ogabassey.com/mcp';
 const FETCH_ATTEMPTS = 5;
 const FETCH_RETRY_DELAY_MS = 2000;
-const DEFAULT_REQUIRED_TOOLS = [
+export const DEFAULT_REQUIRED_TOOLS = [
   'add_to_cart',
   'browse_categories',
   'get_brands',
   'get_product',
   'get_product_variants',
-  'get_recommendations',
-  'get_shipping_quote',
+  'get_delivery_fee_info',
   'get_store_info',
   'search_products',
 ];

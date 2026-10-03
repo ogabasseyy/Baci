@@ -59,6 +59,7 @@ import { loadMcpProductVariants } from './product-variants';
 import { serveProductImage } from './product-image-proxy';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
 // =============================================================================
 // CONFIGURATION
@@ -1225,7 +1226,7 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.',
+        `Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE} When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.`,
       inputSchema: {
         // Optional at the transport layer so a missing intent reaches the friendly
         // invalidIntentMessage branch instead of a generic schema validation error.
@@ -1680,7 +1681,7 @@ function createOgabasseyServer() {
       title: 'Get Product Details',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/outputTemplate': STORE_WIDGET_URI,
@@ -1923,7 +1924,7 @@ function createOgabasseyServer() {
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        'Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+        `Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       inputSchema: productLookupInputSchema,
       _meta: {
         'openai/toolInvocation/invoking': 'Loading variants...',
@@ -2036,7 +2037,7 @@ function createOgabasseyServer() {
 
   // The public shipping policy does not publish a fixed fee schedule.
   server.registerTool(
-    'get_shipping_quote',
+    'get_delivery_fee_info',
     {
       title: 'Check Delivery Fee Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },

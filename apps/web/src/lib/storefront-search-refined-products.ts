@@ -56,30 +56,36 @@ export async function getStorefrontRefinedSearchProducts(args: {
     );
   if (readError) throw new Error('Search results unavailable');
   const rows = new Map((raw ?? []).map((row) => [row.id, row]));
-  const products = matches.map((match) => {
+  // A matched row can vanish between the RPC snapshot and this read
+  // (deactivated, unpublished, or RLS-filtered mid-request). Skip it and
+  // render the surviving matches: failing the whole page over one stale
+  // id is worse than a self-healing off-by-one count.
+  const products = matches.flatMap((match) => {
     const row = rows.get(match.productId);
-    if (!row) throw new Error('Search results changed; try again');
+    if (!row) return [];
     const product = normalizeProduct(row as never);
     // Keep price and option identity aligned with global SQL price sorting;
     // unconstrained browsing still advertises every available condition.
-    return {
-      ...product,
-      price: match.price ?? product.price,
-      condition: match.condition ?? product.condition,
-      available_conditions:
-        match.condition &&
-        (args.refinements.condition !== undefined ||
-          args.refinements.minPrice !== undefined ||
-          args.refinements.maxPrice !== undefined)
-          ? [match.condition]
-          : product.available_conditions,
-      searchMatch: match,
-    };
+    return [
+      {
+        ...product,
+        price: match.price ?? product.price,
+        condition: match.condition ?? product.condition,
+        available_conditions:
+          match.condition &&
+          (args.refinements.condition !== undefined ||
+            args.refinements.minPrice !== undefined ||
+            args.refinements.maxPrice !== undefined)
+            ? [match.condition]
+            : product.available_conditions,
+        searchMatch: match,
+      },
+    ];
   });
   return {
     count: matches[0].total,
     products,
-    productIds: matches.map((r) => r.productId),
+    productIds: products.map((p) => p.searchMatch.productId),
     query: args.query,
     didYouMean: null,
   };

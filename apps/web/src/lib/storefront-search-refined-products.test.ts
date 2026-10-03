@@ -82,6 +82,29 @@ describe('refined product hydration', () => {
     });
     expect(result.count).toBe(1);
   });
+  it('skips matches whose rows vanished instead of failing the page', async () => {
+    rpc.mockResolvedValue({
+      data: [
+        { product_id: 'p1', total_count: 2 },
+        { product_id: 'p2', total_count: 2 },
+      ],
+      error: null,
+    });
+    read.mockResolvedValue({
+      data: [{ id: 'p1', price: 100 }],
+      error: null,
+    });
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'phone',
+      limit: 20,
+      refinements: { brands: [], sort: 'relevance' },
+    });
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0]).toMatchObject({ price: 100 });
+    expect(result.productIds).toEqual(['p1']);
+    expect(result.count).toBe(2);
+  });
   it('preserves all condition metadata when sorting an unrefined search', async () => {
     rpc.mockResolvedValue({
       data: [

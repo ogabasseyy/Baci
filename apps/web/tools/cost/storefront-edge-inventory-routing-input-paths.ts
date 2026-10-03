@@ -132,6 +132,7 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/components/storefront/ogabassey/components/chat/use-ogabassey-chat.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout-page.tsx',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/components/CheckoutScreen.tsx',
+  'apps/web/src/components/storefront/ogabassey/pages/checkout/derive-checkout-screen-model.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/complete-checkout-order.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/initialize-checkout-dva.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/initialize-checkout-gateway.ts',

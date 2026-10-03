@@ -64,4 +64,10 @@ describe('product request intake', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain('private database detail');
   });
+  it('fails closed with 503 when the intake helper throws', async () => {
+    mocks.submit.mockRejectedValueOnce(new Error('intake key missing'));
+    const response = await POST(request(input));
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain('intake key missing');
+  });
 });

@@ -9,8 +9,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 // callers get only this narrow function. The backend key inherently
 // bypasses RLS; this brand confines the approved call graph, not that
 // capability. Provision SUPABASE_STOREFRONT_INTAKE_KEY (EXECUTE on the
-// submit RPC only) to shrink the credential; until then the service key
-// applies as a compatibility fallback.
+// submit RPC only); the client fails closed without it and never falls
+// back to the full service key.
 
 interface SubmitProductRequestRpc {
   rpc(

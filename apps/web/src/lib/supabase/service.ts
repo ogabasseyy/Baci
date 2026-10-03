@@ -172,8 +172,7 @@ export function createServiceClient(
       : sentinel === 'jumia-credentials'
         ? process.env.SUPABASE_JUMIA_CREDENTIAL_KEY
         : sentinel === 'storefront-public-intake'
-          ? process.env.SUPABASE_STOREFRONT_INTAKE_KEY ||
-            process.env.SUPABASE_SERVICE_ROLE_KEY
+          ? process.env.SUPABASE_STOREFRONT_INTAKE_KEY
           : process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url) {
@@ -189,7 +188,7 @@ export function createServiceClient(
         : sentinel === 'jumia-credentials'
           ? 'SUPABASE_JUMIA_CREDENTIAL_KEY is missing. This is required for Jumia credential handlers.'
           : sentinel === 'storefront-public-intake'
-            ? 'SUPABASE_STOREFRONT_INTAKE_KEY or SUPABASE_SERVICE_ROLE_KEY is missing. This is required for product-request intake.'
+            ? 'SUPABASE_STOREFRONT_INTAKE_KEY is missing. This is required for product-request intake.'
             : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
     );
   }

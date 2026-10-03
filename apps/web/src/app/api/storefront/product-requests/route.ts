@@ -19,12 +19,20 @@ export async function POST(request: Request) {
   const parsed = productRequestSchema.safeParse(input);
   if (!parsed.success)
     return Response.json({ error: 'Invalid request' }, { status: 400 });
-  const { error } = await submitStorefrontProductRequest({
-    p_query: parsed.data.query,
-    p_contact: parsed.data.contact,
-    p_merchant_slug: parsed.data.merchantSlug,
-    p_request_id: parsed.data.requestId,
-  });
+  let result: Awaited<ReturnType<typeof submitStorefrontProductRequest>>;
+  try {
+    result = await submitStorefrontProductRequest({
+      p_query: parsed.data.query,
+      p_contact: parsed.data.contact,
+      p_merchant_slug: parsed.data.merchantSlug,
+      p_request_id: parsed.data.requestId,
+    });
+  } catch {
+    // Fail closed (e.g. narrow intake key unprovisioned): never serve
+    // intake on a degraded credential path, and leak nothing about why.
+    return Response.json({ error: 'Intake unavailable' }, { status: 503 });
+  }
+  const { error } = result;
   if (!error) return Response.json({ ok: true });
   const info = error as { code?: string; message?: string };
   if (info.code === '54000' || info.message?.includes('Request limit reached'))

@@ -173,14 +173,10 @@ describe('service Supabase client factory', () => {
     );
   });
 
-  it('falls back to the service-role key until intake key migration', () => {
-    const client = createServiceClient('storefront-public-intake');
-
-    expect(Reflect.ownKeys(client)).toContainEqual(expect.any(Symbol));
-    expect(mockCreateClient).toHaveBeenCalledWith(
-      'https://example.supabase.co',
-      'service-role-key',
-      expect.any(Object)
+  it('fails closed without falling back to the service-role key', () => {
+    expect(() => createServiceClient('storefront-public-intake')).toThrow(
+      'SUPABASE_STOREFRONT_INTAKE_KEY is missing'
     );
+    expect(mockCreateClient).not.toHaveBeenCalled();
   });
 });

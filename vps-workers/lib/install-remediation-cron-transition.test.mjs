@@ -20,6 +20,15 @@ describe('remediation cron transition', () => {
     assert.equal(outcome.crontab, '');
   });
 
+  it('refuses the transition when a concurrent promote superseded this deployment', () => {
+    const outcome = runTransition('superseded-marker');
+
+    assert.notEqual(outcome.result.status, 0);
+    assert.match(outcome.result.stderr, /concurrent promote superseded/i);
+    assert.equal(outcome.crontab, '');
+    assert.equal(outcome.barrierFiles, false);
+  });
+
   it('blocks a new direct entrypoint while preserving its legacy worker contract', () => {
     const outcome = runTransition('launch-race');
 

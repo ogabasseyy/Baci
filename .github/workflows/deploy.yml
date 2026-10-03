@@ -148,7 +148,7 @@ jobs:
         # current main.
         if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
         run: >-
-          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed until deploy.sh converges from current main.'
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed — production deploys stay gated until deploy.sh converges from current main plus a tracking push or dispatch re-smokes.'
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via

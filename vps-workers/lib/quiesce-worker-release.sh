@@ -74,10 +74,16 @@ quiesce_worker_release() {
   fi
   # Basename deferral only covers locks/*.lock (the crontab grep and
   # file scan below cannot see any other path). A global lock outside
-  # locks/ defers nothing by name; it is held exactly, after the loop.
+  # locks/ — or a suffixless basename inside it, which the .lock-only
+  # scanners likewise never emit — defers nothing by name; it is held
+  # exactly, after the loop. Deferring an undiscoverable name would
+  # skip BOTH holds (the loop never sees it, the exact fallback is
+  # gated on an empty deferral), leaving the promote unquiesced.
   local gigl_defer_name=""
   if [ "$gigl_global_path" = "$remote_dir/locks/$gigl_global_lock" ]; then
-    gigl_defer_name="$gigl_global_lock"
+    case "$gigl_global_lock" in
+      *.lock) gigl_defer_name="$gigl_global_lock" ;;
+    esac
   fi
 
   # Stop the persistent systemd user services before quiescing: their

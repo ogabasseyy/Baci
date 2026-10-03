@@ -46,6 +46,10 @@ const dotenvSource = join(
   'scripts',
   'gigl-dotenv.sh'
 );
+// The deploy's own SHA (matches the live marker unless the scenario
+// simulates a concurrent promote landing first).
+const deploySha = 'f'.repeat(40);
+const supersedingSha = 'e'.repeat(40);
 export function runTransition(scenario) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-cron-transition-'));
   const binDirectory = join(directory, 'bin');
@@ -66,6 +70,11 @@ export function runTransition(scenario) {
   mkdirSync(join(remoteDirectory, 'lib'), { recursive: true });
   mkdirSync(procRoot);
   mkdirSync(transitionTmpDirectory);
+  // Mirror the post-promote live marker the transition gates on.
+  writeFileSync(
+    join(remoteDirectory, 'app-checkout.sha'),
+    scenario === 'superseded-marker' ? supersedingSha : deploySha
+  );
   const customLockEnv = {
     'custom-global-lock':
       '  BACI_REMEDIATION_GLOBAL_LOCK_PATH = "locks/custom-global.lock" # comment\n',
@@ -192,6 +201,7 @@ bash -c "$1"
               : procRoot,
           TEST_SCENARIO: scenario,
           VPS: 'test-vps',
+          APP_SHA: deploySha,
         },
       }
     );

@@ -336,6 +336,39 @@ describe('processCancellationDrain', () => {
     expect(mocks.loggerError).not.toHaveBeenCalled();
   });
 
+  it('warns on the success path when notifications are uncertain', async () => {
+    mocks.drainPaystackRefundNotifications.mockResolvedValueOnce({
+      claimed: 1,
+      exhausted: 0,
+      failed: 0,
+      sent: 0,
+      uncertain: 3,
+    });
+    const response = await processCancellationDrain(
+      supabase,
+      mocks.sendEmail,
+      mocks.notifyMerchant
+    );
+    const payload = await response.json();
+
+    // Uncertain rows need manual review like dead letters: a 200
+    // without a log signal would be visible only to payload
+    // parsers, so the success path warns for them too.
+    expect(response.status).toBe(200);
+    expect(payload).toEqual(
+      expect.objectContaining({
+        success: true,
+        paystackRefundNotifications: expect.objectContaining({
+          uncertain: 3,
+        }),
+      })
+    );
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationUncertain: 3 })
+    );
+    expect(mocks.loggerError).not.toHaveBeenCalled();
+  });
+
   it('logs a missing exhausted count as zero on the failure path', async () => {
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValueOnce({
       drained: [],

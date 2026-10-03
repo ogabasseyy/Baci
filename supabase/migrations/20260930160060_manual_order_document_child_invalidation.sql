@@ -248,10 +248,9 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-  -- Same-order UPDATE: the OLD state is evaluated against the current
-  -- sibling rows, so an update that unselects the account still resets.
-  IF private.manual_document_renders_payment_account(NEW.order_id, OLD)
-    OR private.manual_document_renders_payment_account(NEW.order_id, NEW) THEN
+  -- Same-order UPDATE: reset only when the rendered output moves; a
+  -- no-op or non-rendered-column touch keeps the same card.
+  IF private.manual_document_payment_account_output_changed(NEW.order_id, OLD, NEW) THEN
     PERFORM private.lock_manual_document_gate('order', NEW.order_id);
     PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
   END IF;

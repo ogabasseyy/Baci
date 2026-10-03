@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareReceiptListDesc } from './receipt-sort';
+import { compareReceiptListDesc, selectReceiptDisplayDate } from './receipt-sort';
 
 describe('compareReceiptListDesc', () => {
   it('files a backdated invoice by its issue date, not its transaction date', () => {
@@ -55,5 +55,28 @@ describe('compareReceiptListDesc', () => {
       dateOnly,
       latePriorDay,
     ]);
+  });
+});
+
+describe('selectReceiptDisplayDate', () => {
+  it('prefers the issue date, then the transaction date, then creation', () => {
+    expect(
+      selectReceiptDisplayDate({
+        invoice_issue_date: '2026-03-12',
+        transaction_date: '2026-03-05T10:00:00.000Z',
+        created_at: '2026-03-05T10:00:00.000Z',
+      })
+    ).toBe('2026-03-12');
+    expect(
+      selectReceiptDisplayDate({
+        invoice_issue_date: null,
+        transaction_date: '2026-04-02T10:00:00.000Z',
+        created_at: '2026-03-05T10:00:00.000Z',
+      })
+    ).toBe('2026-04-02T10:00:00.000Z');
+    expect(
+      selectReceiptDisplayDate({ created_at: '2026-03-05T10:00:00.000Z' })
+    ).toBe('2026-03-05T10:00:00.000Z');
+    expect(selectReceiptDisplayDate({})).toBeNull();
   });
 });

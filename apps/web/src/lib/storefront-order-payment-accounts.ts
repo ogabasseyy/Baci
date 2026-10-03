@@ -48,15 +48,15 @@ function needsCompletionTransactions(
     Number.isFinite(Number(order.amount_paid)) &&
     Number(order.amount_paid) >= Number(order.total);
   if (manualCovered) return true;
-  // Partially paid manual invoices render their settled payments in the
-  // emailed Payment table: load the same history so the archive preview
-  // does not omit the payments behind its nonzero amount_paid.
-  if (
-    !order.recorded_by_user_id ||
-    order.amount_paid == null ||
-    !Number.isFinite(Number(order.amount_paid)) ||
-    Number(order.amount_paid) <= 0
-  ) {
+  // Manual invoices render their settled payments in the emailed
+  // Payment table: load the same history so the archive preview neither
+  // omits the payments behind a nonzero amount_paid nor advertises a
+  // document the sender rejects. Zero-paid candidates load too: the
+  // transactions table does not reconcile with orders.amount_paid, so a
+  // settled row the sender rejects as payment_history_invalid can hide
+  // behind a zero balance. The availability gate below still excludes
+  // garbage-money and ineligible rows from the lookup.
+  if (!order.recorded_by_user_id) {
     return false;
   }
   return isManualOrderDocumentAvailable({

@@ -122,15 +122,15 @@ export async function POST(
       .eq('order_id', orderId);
 
     // 5. Get virtual account if exists
+    // The shared selector breaks ties by row id, so the database order
+    // only needs to be stable — full ties never reach input order.
     const { data: paymentAccounts } = await supabase
       .from('order_payment_accounts')
       .select(
         'id, account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
       )
       .eq('order_id', orderId)
-      .order('created_at', { ascending: false })
-      .order('account_number', { ascending: false })
-      .order('id', { ascending: false });
+      .order('created_at', { ascending: false });
     const virtualAccount = selectPreferredOrderPaymentAccount(paymentAccounts);
 
     // 6. Generate payment link: the emailed CTA must resolve to a served

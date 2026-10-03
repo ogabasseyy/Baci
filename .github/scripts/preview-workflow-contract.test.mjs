@@ -48,12 +48,12 @@ test('preview deploy stays prebuilt with the required archive flag', () => {
 });
 
 test('only the preview deploy job moves to the turbo-capable CLI', () => {
-  // 60.1.3 is the oldest CLI whose `deploy` accepts --turbo. The build
-  // stays on 57 so preview output uses the same builder as production;
-  // only the upload client moves.
+  // 59.26.0 is the latest 59.x whose `deploy` accepts --turbo: the
+  // smallest major jump from 57. The build stays on 57 so preview output
+  // uses the same builder as production; only the upload client moves.
   assert.match(
     jobBlock('deploy'),
-    /VERCEL_CLI_VERSION:\s*"60\.1\.3"/
+    /VERCEL_CLI_VERSION:\s*"59\.26\.0"/
   );
   assert.match(
     jobBlock('build'),

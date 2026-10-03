@@ -100,8 +100,13 @@ describe('Paystack cancellation refund mismatch evidence', () => {
       })
     );
     // Two holds plus the trailing atomic open-and-rescan, which runs
-    // even when the passes handled matches.
-    expect(rpc).toHaveBeenCalledTimes(3);
+    // even when the passes handled matches — then the handled
+    // matches retain the watch for future completions.
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
     expect(rpc).toHaveBeenCalledWith(
       'hold_paystack_cancellation_refund_for_review_v1',
       { p_refund_id: 'refund-1', p_reason: 'paystack_refund_evidence_mismatch' }
@@ -232,31 +237,44 @@ describe('Paystack cancellation refund mismatch evidence', () => {
     );
   });
 
-  it('stays silent for payments with no order at all', async () => {
+  it('files orderless payments into the order-independent queue', async () => {
     const paymentCandidates = buildPaymentCandidates([
       cancelledPaymentRow({ order_id: null }),
     ]);
     const stalledCandidates = buildPaymentCandidates([]);
+    const review = buildReviewInsert();
     const from = vi
       .fn()
       // Default empty page: the trailing stalled-states pass runs after
       // every completed pass; staged pages take precedence.
       .mockReturnValue(buildPaymentCandidates([]))
       .mockReturnValueOnce(paymentCandidates)
+      .mockReturnValueOnce(review)
       .mockReturnValueOnce(stalledCandidates);
     const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
 
-    // Orderless completed rows file nothing, so the stalled scan
-    // still runs — a stalled payment with an order must not be
-    // missed behind an orderless completed row. Nothing actionable
-    // in either pass opens the reference watch for the handoff.
-    expect(from).toHaveBeenCalledTimes(2);
-    expect(rpc).toHaveBeenCalledTimes(1);
+    // The orderless completed row files a generic review instead of
+    // staying silent: the signed refund is real evidence even
+    // detached, and the rescan match would otherwise be discarded
+    // while the watch closed. The handled match then retains the
+    // watch for future completions.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+      })
+    );
+    expect(rpc).toHaveBeenCalledTimes(2);
     expect(rpc).toHaveBeenCalledWith(
       'open_paystack_refund_reference_watch_v1',
       expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
     );
   });
 

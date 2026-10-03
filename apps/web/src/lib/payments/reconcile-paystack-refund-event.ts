@@ -1,15 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
+import { fileDetachedReferenceOnlyPaystackRefundReview } from './file-detached-reference-only-paystack-refund-review';
 import { fileReferenceOnlyPaystackRefundOutsideCancellationReview } from './file-reference-only-paystack-refund-outside-cancellation-review';
 import { fileReferenceOnlyPaystackRefundReview } from './file-reference-only-paystack-refund-review';
 import { fileRefundEvidenceReview } from './file-refund-evidence-review';
 import { holdPaystackRefundForReview } from './hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from './is-deterministic-paystack-refund-error';
+import { markPaystackRefundReferenceWatchClaimed } from './mark-paystack-refund-reference-watch-claimed';
 import { normalizePaymentGateway } from './normalize-payment-gateway';
 import { openPaystackRefundReferenceWatch } from './open-paystack-refund-reference-watch';
 import type { RefundRow } from './paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from './reconcile-paystack-cancellation-refund';
-import { resolvePaystackRefundReferenceWatch } from './resolve-paystack-refund-reference-watch';
 
 const SHARED_REFERENCE_PAGE_SIZE = 10;
 const REFUND_PAGE_SIZE = 10;
@@ -20,7 +21,21 @@ async function reconcileSharedReferencePayment(
   payment: Record<string, unknown>,
   providerRefundStatus: string
 ): Promise<void> {
-  if (!payment.order_id) return;
+  if (!payment.order_id) {
+    // Detached (or deleted-order) match: the signed refund is still
+    // real provider evidence, so retain it in the order-independent
+    // queue instead of discarding the match while the caller closes
+    // the watch. Mirrors the ID-based recovery path's detached
+    // filing; redeliveries merge under the payment key.
+    if (typeof payment.id === 'string') {
+      await fileDetachedReferenceOnlyPaystackRefundReview(supabase, {
+        paymentId: payment.id,
+        paymentReference: transactionReference,
+        providerRefundStatus,
+      });
+    }
+    return;
+  }
   // Mirror the ID handler's cancellation gate: a reference-only event
   // for a non-cancelled order must not reach the cancellation-only
   // reconciler, which would reject it and file an unrelated review.
@@ -237,7 +252,22 @@ export async function reconcilePaystackRefundEvent(
     reference: transactionReference,
   });
   const fresh = late.filter((payment) => !handledIds.has(payment.id));
-  if (fresh.length === 0) return;
+  if (fresh.length === 0) {
+    // Nothing new — but matches handled above must retire the sweep
+    // handoff: the retire RPC refuses any watch whose reference has
+    // a completed payment, so leaving it open re-drives this event
+    // forever in the bounded sweep. Claim (never resolve): claimed
+    // stays invisible to the sweep yet visible to the completion
+    // claim, so a later payment sharing the reference still files.
+    // With nothing handled at all the open watch stays: it is the
+    // only handoff a future completion can claim.
+    if (handledIds.size > 0) {
+      await markPaystackRefundReferenceWatchClaimed(supabase, {
+        reference: transactionReference,
+      });
+    }
+    return;
+  }
   for (const payment of fresh) {
     await reconcileSharedReferencePayment(
       supabase,
@@ -246,7 +276,9 @@ export async function reconcilePaystackRefundEvent(
       providerRefundStatus
     );
   }
-  await resolvePaystackRefundReferenceWatch(supabase, {
+  // The current matches are durably handled: retain the watch for
+  // future matching completions instead of resolving it away.
+  await markPaystackRefundReferenceWatchClaimed(supabase, {
     reference: transactionReference,
   });
 }

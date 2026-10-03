@@ -404,4 +404,14 @@ export const EXPECTED_PAYSTACK_PENDING_SOURCES_TAIL = [
       'supabase/migrations/20260928184600_cancel_gate_ignores_reviewed_abandoned_attempts.sql',
     sha256: '245342088b24f5678cefc72cd7bd37e53b5b5f8afbcf761a2ab3e7fb0d44c2a4',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928184700_mark_handled_reference_watch_claimed.sql',
+    sha256: '4953a48279a152ecadb1f6e325955f93078e2fa8441a40b02c49140f1b55a3f9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928184800_transition_captured_abandoned_legs_for_cancellation.sql',
+    sha256: 'f4219d1c02344a9d8cdd1cc979772dc5d0519f445db7dc272940e60bf421b2f8',
+  },
 ];

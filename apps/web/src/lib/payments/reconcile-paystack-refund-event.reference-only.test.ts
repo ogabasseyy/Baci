@@ -135,7 +135,7 @@ describe('Paystack reference-only refund events', () => {
     );
   });
 
-  it('files late rows from the confirming rescan and resolves the watch', async () => {
+  it('files late rows from the confirming rescan and retains the watch', async () => {
     const review = buildReviewInsert();
     const rpc = vi
       .fn()
@@ -155,8 +155,9 @@ describe('Paystack reference-only refund events', () => {
     await reconcilePaystackRefundEvent(supabase, 'PSK-1', 'processed');
 
     // The payment completed between the passes: the confirming
-    // rescan caught it, its evidence is filed, and the watch
-    // resolves so a later completion cannot claim it.
+    // rescan caught it, its evidence is filed, and the watch is
+    // retained (claimed) so a later completion sharing the
+    // reference can still file its own per-payment evidence.
     expect(review.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'order_cancellation_refund_requires_review',
@@ -164,8 +165,12 @@ describe('Paystack reference-only refund events', () => {
       })
     );
     expect(rpc).toHaveBeenCalledWith(
-      'resolve_paystack_refund_reference_watch_v1',
+      'mark_paystack_refund_reference_watch_claimed_v1',
       { p_paystack_ref: 'PSK-1' }
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'resolve_paystack_refund_reference_watch_v1',
+      expect.anything()
     );
   });
 
@@ -198,7 +203,8 @@ describe('Paystack reference-only refund events', () => {
 
     // The completed pass handled payment-1, but a second payment may
     // have completed between the passes: the locked rescan still
-    // runs, skips the handled row, files the fresh one, and resolves.
+    // runs, skips the handled row, files the fresh one, and retains
+    // the watch for future completions.
     expect(rpc).toHaveBeenCalledWith(
       'open_paystack_refund_reference_watch_v1',
       expect.objectContaining({ p_paystack_ref: 'PSK-1' })
@@ -208,7 +214,39 @@ describe('Paystack reference-only refund events', () => {
       expect.objectContaining({ order_id: 'order-9' })
     );
     expect(rpc).toHaveBeenCalledWith(
-      'resolve_paystack_refund_reference_watch_v1',
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
+  });
+
+  it('files the rescan match when only a detached payment carries the reference', async () => {
+    const detached = cancelledPaymentRow({ order_id: null });
+    const review = buildReviewInsert();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(buildPaymentCandidates([]))
+      .mockReturnValueOnce(buildPaymentCandidates([]))
+      .mockReturnValueOnce(review);
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [detached], error: null })
+      .mockResolvedValue({ data: true, error: null });
+
+    await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
+
+    // The locked rescan is the only durable trace of the provider
+    // refund: discarding the detached match while closing the watch
+    // would lose the evidence permanently.
+    expect(review.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+        reason: expect.stringContaining('detached from any order'),
+      })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
       { p_paystack_ref: 'PSK-1' }
     );
   });
@@ -283,8 +321,9 @@ describe('Paystack reference-only refund events', () => {
   });
 
   it('paginates past the first page of payments sharing a reference', async () => {
-    // Orderless rows stay silent (nothing to file against); active
-    // orders now file non-cancellation evidence instead of skipping.
+    // Orderless rows file into the order-independent queue (a signed
+    // refund is real evidence even detached); the attached row on
+    // page 2 still files its cancellation review.
     const skipped = Array.from({ length: 10 }, (_, index) =>
       cancelledPaymentRow({
         id: `payment-skip-${index}`,
@@ -293,17 +332,19 @@ describe('Paystack reference-only refund events', () => {
     );
     const page1 = buildPaymentCandidates(skipped);
     const page2 = buildPaymentCandidates([cancelledPaymentRow()]);
-    const refunds = buildRefundCandidates([]);
-    const review = buildReviewInsert();
-    const from = vi
-      .fn()
-      // Default empty page: the trailing stalled-states pass runs after
-      // every completed pass; staged pages take precedence.
-      .mockReturnValue(buildPaymentCandidates([]))
-      .mockReturnValueOnce(page1)
-      .mockReturnValueOnce(page2)
-      .mockReturnValueOnce(refunds)
-      .mockReturnValueOnce(review);
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const pages = [page1, page2];
+    const from = vi.fn((table: string) => {
+      // Table-aware routing: the detached filings interleave with
+      // pagination, so a positional queue cannot stage them.
+      if (table === 'transactions') {
+        return pages.shift() ?? buildPaymentCandidates([]);
+      }
+      if (table === 'reconciliation_review') {
+        return { insert: reviewInsert };
+      }
+      return buildRefundCandidates([]);
+    });
     const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
     await reconcilePaystackRefundEvent({ from, rpc } as never, 'PSK-1');
@@ -312,17 +353,26 @@ describe('Paystack reference-only refund events', () => {
     expect(page2.gt).toHaveBeenCalledWith('id', 'payment-skip-9');
     // The cancelled payment on page 2 was reached, not truncated away
     // before the caller acknowledged the event.
-    expect(refunds.eq).toHaveBeenCalledWith(
-      'metadata->>payment_transaction_id',
-      'payment-1'
-    );
-    expect(review.insert).toHaveBeenCalledWith(
+    expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'order_cancellation_refund_requires_review',
         order_id: 'order-1',
       })
     );
-    expect(from).toHaveBeenCalledTimes(5);
+    // Each detached row retained its evidence instead of being
+    // discarded while the watch closed.
+    const detachedCalls = reviewInsert.mock.calls.filter(
+      ([payload]) => (payload as { order_id: unknown }).order_id === null
+    );
+    expect(detachedCalls).toHaveLength(10);
+    expect(detachedCalls[0][0]).toEqual(
+      expect.objectContaining({
+        issue_type: 'paystack_refund_evidence_invalid',
+        order_id: null,
+        paystack_ref: 'PSK-1',
+      })
+    );
+    expect(reviewInsert).toHaveBeenCalledTimes(11);
   });
 
   it('reconciles a legacy-cased refund row and skips foreign rows', async () => {
@@ -433,8 +483,13 @@ describe('Paystack reference-only refund events', () => {
     // second page keys off the last seen id instead of an offset.
     expect(refundsPage2.gt).toHaveBeenCalledWith('id', 'refund-9');
     // Ten verifications plus the trailing atomic open-and-rescan,
-    // which runs even when the passes handled matches.
-    expect(rpc).toHaveBeenCalledTimes(12);
+    // which runs even when the passes handled matches — then the
+    // handled matches retain the watch for future completions.
+    expect(rpc).toHaveBeenCalledTimes(13);
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_paystack_refund_reference_watch_claimed_v1',
+      { p_paystack_ref: 'PSK-1' }
+    );
     expect(rpc).toHaveBeenCalledWith(
       'record_verified_paystack_cancellation_refund_v1',
       expect.objectContaining({ p_refund_id: 'refund-10' })

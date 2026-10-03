@@ -1028,7 +1028,7 @@
 .ogabassey-navbar-search .ogabassey-navbar-search__input,
 .ogabassey-navbar-search input {
   background: var(--ogabassey-surface);
-  border: 0;
+  border: 2px solid #dc2626;
   border-radius: 0.875rem;
   box-sizing: border-box;
   color: var(--store-foreground, var(--ogabassey-surface-text));

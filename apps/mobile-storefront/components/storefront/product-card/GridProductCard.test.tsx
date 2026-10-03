@@ -222,3 +222,8 @@ describe('GridProductCard', () => {
     expect(cartStyle.shadowColor).toBeUndefined();
   });
 });
+it('renders name and price before any image load completes', () => {
+  renderCard();
+  expect(screen.getByText(baseProduct.name)).toBeTruthy();
+  expect(screen.getByText(formatPrice(baseProduct.price))).toBeTruthy();
+});

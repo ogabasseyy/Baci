@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CartProvider, useCart } from './use-cart';
 
@@ -47,6 +48,33 @@ describe('useCart - Validation', () => {
   beforeEach(() => {
     localStorageMock.clear();
     vi.clearAllMocks();
+  });
+
+  it.each([
+    'ogabassey',
+    'another-store',
+  ])('defaults assurance only for Ogabassey and preserves opt-out: %s', async (merchantSlug) => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <CartProvider merchantSlug={merchantSlug} enableSmartCartPro>
+        {children}
+      </CartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct));
+    expect(result.current.cart[0].hasAssurance).toBe(
+      merchantSlug === 'ogabassey'
+    );
+    if (merchantSlug === 'ogabassey') {
+      expect(result.current.cartTotal).toBe(105);
+      act(() =>
+        result.current.toggleAssurance?.(result.current.cart[0].cartItemId)
+      );
+      expect(result.current.cartTotal).toBe(100);
+      act(() => result.current.addToCart(mockProduct));
+      expect(result.current.cart[0].hasAssurance).toBe(false);
+      expect(result.current.cartTotal).toBe(200);
+    }
   });
 
   const mockProduct = {

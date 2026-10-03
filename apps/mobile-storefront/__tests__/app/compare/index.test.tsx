@@ -88,6 +88,13 @@ jest.mock('@/stores/cart-store', () => ({
   ) => selector({ addItem: mockAddItem }),
 }));
 
+jest.mock('@/hooks/use-comparison-products', () => ({
+  useComparisonProducts: (products: unknown[]) => ({
+    products,
+    status: 'Current product prices. Select options on the product page.',
+  }),
+}));
+
 import CompareScreen from '@/app/compare';
 
 describe('CompareScreen', () => {
@@ -110,7 +117,7 @@ describe('CompareScreen', () => {
 
     expect(screen.getByText('Test Product')).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Clear All'));
+    fireEvent.press(screen.getByRole('button', { name: 'Clear comparison' }));
     expect(mockClearComparison).toHaveBeenCalledTimes(1);
   });
 
@@ -139,13 +146,16 @@ describe('CompareScreen', () => {
 
     render(<CompareScreen />);
 
-    fireEvent.press(screen.getByText('Add'));
+    fireEvent.press(screen.getByText('View options'));
 
-    expect(mockPush).toHaveBeenCalledWith('/product/iphone-15');
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15' },
+    });
     expect(mockAddItem).not.toHaveBeenCalled();
   });
 
-  it('adds simple comparison products directly when no selection is required', () => {
+  it('routes persisted simple products to current details without adding stale prices', () => {
     mockComparisonState.products = [
       {
         id: 'product-1',
@@ -161,15 +171,12 @@ describe('CompareScreen', () => {
 
     render(<CompareScreen />);
 
-    fireEvent.press(screen.getByText('Add'));
+    fireEvent.press(screen.getByText('View options'));
 
-    expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        product_id: 'product-1',
-        slug: 'test-product',
-        quantity: 1,
-      })
-    );
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockAddItem).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'test-product' },
+    });
   });
 });

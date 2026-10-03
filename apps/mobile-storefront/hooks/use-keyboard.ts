@@ -61,7 +61,17 @@ export function useKeyboard(): UseKeyboardResult {
       setKeyboardTop(null);
     });
 
+    const frameSubscription = Keyboard.addListener(
+      'keyboardWillChangeFrame',
+      (event) => {
+        if (event.endCoordinates.height > 0) {
+          setKeyboardHeight(event.endCoordinates.height);
+          setKeyboardTop(event.endCoordinates.screenY);
+        }
+      }
+    );
     return () => {
+      frameSubscription.remove();
       showSubscription.remove();
       hideSubscription.remove();
     };

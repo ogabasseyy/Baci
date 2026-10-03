@@ -15,6 +15,8 @@ interface V2ComparisonContextType {
 const V2ComparisonContext = createContext<V2ComparisonContextType | undefined>(
   undefined
 );
+// Tab-session storage preserves navigation/reloads without carrying selections into a new session.
+// Legacy localStorage selections are intentionally ignored.
 const COMPARISON_STORAGE_KEY = 'ogabassey_v2_compare';
 const STORAGE_HYDRATION_TIMEOUT_MS = 1200;
 
@@ -58,7 +60,7 @@ export const V2ComparisonProvider: React.FC<{
     }
 
     let nextComparisonItems: Product[] = [];
-    const stored = localStorage.getItem(storageKey);
+    const stored = sessionStorage.getItem(storageKey);
     if (stored) {
       try {
         nextComparisonItems = JSON.parse(stored);
@@ -130,7 +132,7 @@ export const V2ComparisonProvider: React.FC<{
       hasHydratedStorage &&
       hydratedStorageKeyRef.current === storageKey
     ) {
-      localStorage.setItem(storageKey, JSON.stringify(compareItems));
+      sessionStorage.setItem(storageKey, JSON.stringify(compareItems));
     }
   }, [compareItems, hasHydratedStorage, storageKey]);
 

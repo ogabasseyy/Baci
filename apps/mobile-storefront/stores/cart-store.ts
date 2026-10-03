@@ -93,7 +93,11 @@ export const useCartStore = create<CartState>()(
             lineSequence = state.lineSequence + 1;
             items = [
               ...state.items,
-              { ...itemToAdd, id: createCartLineId(itemToAdd, lineSequence) },
+              {
+                ...itemToAdd,
+                hasAssurance: itemToAdd.hasAssurance ?? true,
+                id: createCartLineId(itemToAdd, lineSequence),
+              },
             ];
           }
 

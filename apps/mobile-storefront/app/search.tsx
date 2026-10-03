@@ -1,6 +1,13 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import {
+  emptySearchRefinements,
+  mergeAssistedRefinements,
+  parseSearchRefinements,
+  type RefinementParams,
+  resetRefinementsForQuery,
+} from '@baci/shared/lib';
+import { router, Stack, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { Keyboard } from 'react-native';
+import { Alert, Keyboard } from 'react-native';
 import SearchScreenView from '@/components/search/SearchScreenView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -8,22 +15,35 @@ import {
   MAX_SEARCH_QUERY_LENGTH,
   MIN_SEARCH_QUERY_LENGTH,
 } from '@/constants/search';
-import { useCategories, useProductBrands, useProducts } from '@/hooks';
+import { useCategories, useProducts } from '@/hooks';
 import { isSearchableQuery } from '@/hooks/is-searchable-query';
 import { parseRouteSearchQuery } from '@/hooks/parse-route-search-query';
 import { useNetworkState } from '@/hooks/use-network-state';
+import { useSearchFacetOptions } from '@/hooks/use-search-facet-options';
 import { useSearchMinLengthHint } from '@/hooks/use-search-min-length-hint';
+import { useSearchRefinements } from '@/hooks/use-search-refinements';
 import { useSearchRouteQuerySync } from '@/hooks/use-search-route-query-sync';
 import { useSearchStorage } from '@/hooks/use-search-storage';
-import { resolveSelectedCategoryId } from '@/lib/product-filter-options';
+import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
 import type { Product } from '@/types/product';
 
 export default function SearchScreen() {
+  const isFocused = useIsFocused();
   const colors = Colors[useColorScheme() ?? 'light'];
   const { isOnline } = useNetworkState();
-  const { q: routeQueryParam } = useLocalSearchParams<{
+  const routeParams = useLocalSearchParams<{
     q?: string | string[];
+    focus?: string;
+    brand?: string | string[];
+    category?: string;
+    condition?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    minRating?: string;
+    processor?: string;
+    sort?: string;
   }>();
+  const routeQueryParam = routeParams.q;
   const routeQuery = parseRouteSearchQuery(routeQueryParam);
   const [query, setQuery] = useState(routeQuery ?? '');
   const activeQuery = query.trim();
@@ -37,12 +57,22 @@ export default function SearchScreen() {
   const hasSearchQuery =
     debouncedQuery.length >= MIN_SEARCH_QUERY_LENGTH &&
     isSearchableQuery(debouncedQuery);
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [minPrice, setMinPrice] = useState(0);
-  const [maxPrice, setMaxPrice] = useState(0);
-  const [selectedBrand, setSelectedBrand] = useState('All');
-  const [selectedCondition, setSelectedCondition] = useState('All');
-  const [minRating, setMinRating] = useState(0);
+  const {
+    criteria: refinements,
+    commit: commitRefinements,
+    setCriteria: setRefinements,
+    invalidFilters,
+    isRestoring,
+  } = useSearchRefinements(
+    debouncedQuery,
+    routeParams as RefinementParams,
+    (params) => router.setParams?.(params)
+  );
+  const minPrice = refinements.minPrice ?? 0;
+  const maxPrice = refinements.maxPrice ?? 0;
+  const minRating = refinements.minRating ?? 0;
+  const selectedBrand = refinements.brands[0] ?? 'All';
+  const selectedCondition = refinements.condition ?? 'All';
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const {
     showSearchMinLengthHint,
@@ -55,8 +85,11 @@ export default function SearchScreen() {
   const { recentSearches, saveSearch: saveToHistory } = useSearchStorage();
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const appliedRouteQuery = useRef(false);
   useEffect(() => {
+    if (!isFocused) return;
     debounceTimerRef.current = setTimeout(() => {
+      appliedRouteQuery.current = true;
       setDebouncedQuery(activeQuery);
       debounceTimerRef.current = null;
     }, 250);
@@ -67,7 +100,7 @@ export default function SearchScreen() {
         debounceTimerRef.current = null;
       }
     };
-  }, [activeQuery]);
+  }, [activeQuery, isFocused]);
 
   // Route-owned query application: each submitted route query lands in
   // history exactly once, and starts from unrefined results — refinements
@@ -75,18 +108,16 @@ export default function SearchScreen() {
   // hook below drives these callbacks. (The display-only view mode is not
   // a refinement and is preserved.)
   const applyRouteQuery = useEffectEvent((nextQuery: string) => {
+    if (nextQuery === debouncedQuery && appliedRouteQuery.current) return;
+    appliedRouteQuery.current = true;
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
     setQuery(nextQuery);
     setDebouncedQuery(nextQuery);
-    setSelectedCategory('All');
-    setMinPrice(0);
-    setMaxPrice(0);
-    setSelectedBrand('All');
-    setSelectedCondition('All');
-    setMinRating(0);
+    const parsed = parseSearchRefinements(routeParams as RefinementParams);
+    setRefinements(parsed.success ? parsed.data : emptySearchRefinements());
     clearHint();
     saveToHistory(nextQuery);
   });
@@ -97,12 +128,7 @@ export default function SearchScreen() {
     }
     setQuery('');
     setDebouncedQuery('');
-    setSelectedCategory('All');
-    setMinPrice(0);
-    setMaxPrice(0);
-    setSelectedBrand('All');
-    setSelectedCondition('All');
-    setMinRating(0);
+    setRefinements(emptySearchRefinements());
     clearHint();
   });
   useSearchRouteQuerySync({
@@ -119,7 +145,8 @@ export default function SearchScreen() {
     noteQueryChange(boundedValue);
   };
 
-  const commitSearchQuery = (value: string) => {
+  const commitSearchQuery = (value: string, recordHistory = true) => {
+    appliedRouteQuery.current = true;
     const trimmedValue = value.trim().slice(0, MAX_SEARCH_QUERY_LENGTH);
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -128,17 +155,17 @@ export default function SearchScreen() {
 
     setQuery(trimmedValue);
     setDebouncedQuery(trimmedValue);
-    if (evaluateCommit(trimmedValue)) {
+    if (evaluateCommit(trimmedValue) && recordHistory) {
       saveToHistory(trimmedValue);
     }
     Keyboard.dismiss();
   };
 
   const { data: categories = [] } = useCategories();
-  const selectedCategoryId = resolveSelectedCategoryId(
-    selectedCategory,
-    categories
-  );
+  const selectedCategory =
+    categories.find((category) => category.id === refinements.categoryId)
+      ?.name ?? 'All';
+  const selectedCategoryId = refinements.categoryId;
   // The product query stays disabled until a valid search is committed so the
   // idle recent-search screen never fetches an unseen product page.
   const {
@@ -161,17 +188,17 @@ export default function SearchScreen() {
     minPrice: minPrice > 0 ? minPrice : undefined,
     maxPrice: maxPrice > 0 ? maxPrice : undefined,
     minRating: minRating > 0 ? minRating : undefined,
-    enabled: hasSearchQuery,
+    refinements,
+    enabled: hasSearchQuery && !invalidFilters && !isRestoring,
   });
-  const { brands: brandNames } = useProductBrands({
-    search: hasSearchQuery ? debouncedQuery : undefined,
-    category: selectedCategoryId,
-    condition: selectedCondition !== 'All' ? selectedCondition : undefined,
-    minPrice: minPrice > 0 ? minPrice : undefined,
-    maxPrice: maxPrice > 0 ? maxPrice : undefined,
-    minRating: minRating > 0 ? minRating : undefined,
-    enabled: hasSearchQuery,
-  });
+  const availableFacets = useSearchFacetOptions(
+    debouncedQuery,
+    hasSearchQuery && !invalidFilters && !isRestoring,
+    refinements.categoryId
+  );
+  const brandNames = availableFacets.data?.brands ?? [];
+  const facetError = availableFacets.error?.message ?? null;
+  const retryFacets = availableFacets.refetch;
 
   // Guards the list end event against duplicate fetches; the hook queues a
   // bottom-reached signal that arrives mid-refetch instead of dropping it.
@@ -209,32 +236,89 @@ export default function SearchScreen() {
   };
   const categoryNames = ['All', ...categories.map((category) => category.name)];
 
-  // Adjust state inline during render (guarded, converges after one pass) so
-  // an invalid brand filter never commits a stale frame.
-  if (selectedBrand !== 'All' && !brandNames.includes(selectedBrand)) {
-    setSelectedBrand('All');
-  }
-
-  const handleCategorySelect = (category: string) => {
-    setSelectedCategory(category);
-    setMinPrice(0);
-    setMaxPrice(0);
-    setSelectedBrand('All');
-    setSelectedCondition('All');
-    setMinRating(0);
-  };
-
+  const handleCategorySelect = (category: string) =>
+    commitRefinements({
+      ...refinements,
+      categoryId: categories.find((item) => item.name === category)?.id,
+    });
   const handleProductPress = (product: Product) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setQuery(debouncedQuery);
     if (hasSearchQuery) {
       saveToHistory(debouncedQuery);
     }
-    router.push(`/product/${product.slug}`);
+    router.push({
+      pathname: '/product/[slug]',
+      params: {
+        slug: product.slug,
+        ...(product.searchMatch?.variantId
+          ? { variant_id: product.searchMatch.variantId }
+          : {}),
+        ...(product.searchMatch?.offerId
+          ? { offer_id: product.searchMatch.offerId }
+          : {}),
+        ...(product.searchMatch?.condition
+          ? { condition: product.searchMatch.condition }
+          : {}),
+      },
+    });
   };
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <SearchScreenView
+        autoFocus={routeParams.focus === '1' && isFocused}
+        onApplyAssistance={(proposal) => {
+          try {
+            const next = mergeAssistedRefinements(refinements, proposal);
+            if (debounceTimerRef.current)
+              clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+            router.setParams({
+              q: proposal.query,
+              brand: next.brands,
+              category: next.categoryId,
+              condition: next.condition,
+              minPrice: next.minPrice?.toString(),
+              maxPrice: next.maxPrice?.toString(),
+              minRating: next.minRating?.toString(),
+              processor: next.processor,
+              sort: next.sort,
+            });
+            Keyboard.dismiss();
+          } catch {
+            Alert.alert(
+              'Check your filters',
+              'These suggestions conflict with your current price range. Edit your filters and try again.'
+            );
+          }
+        }}
+        refinements={refinements}
+        onRefinementsChange={commitRefinements}
+        invalidFilters={invalidFilters}
+        filterCategories={availableFacets.data?.categories ?? []}
+        availableConditions={availableFacets.data?.conditions ?? []}
+        processors={availableFacets.data?.processors ?? []}
+        facetError={facetError}
+        onRetryFacets={() => void retryFacets?.()}
+        onPrepareRefinements={() => {
+          if (
+            !isSearchableQuery(query.trim()) ||
+            query.trim().length < MIN_SEARCH_QUERY_LENGTH
+          )
+            return null;
+          const next = resetRefinementsForQuery(
+            debouncedQuery,
+            query,
+            refinements
+          );
+          commitSearchQuery(query, false);
+          return next;
+        }}
         brandNames={brandNames}
         categories={categories}
         categoryNames={categoryNames}
@@ -262,10 +346,13 @@ export default function SearchScreen() {
           clearHint();
         }}
         onEndReached={handleEndReached}
-        onPriceChange={(minimum, maximum) => {
-          setMinPrice(minimum);
-          setMaxPrice(maximum);
-        }}
+        onPriceChange={(minimum, maximum) =>
+          commitRefinements({
+            ...refinements,
+            minPrice: minimum || undefined,
+            maxPrice: maximum || undefined,
+          })
+        }
         onProductPress={handleProductPress}
         onQueryChange={handleResultsQueryChange}
         onRecentSearch={(search) => {
@@ -278,9 +365,23 @@ export default function SearchScreen() {
         }}
         onRetry={handleRetry}
         onRetryNextPage={handleRetryNextPage}
-        onSelectBrand={setSelectedBrand}
-        onSelectCondition={setSelectedCondition}
-        onSelectRating={setMinRating}
+        onSelectBrand={(brand) =>
+          commitRefinements({
+            ...refinements,
+            brands: brand === 'All' ? [] : [brand],
+          })
+        }
+        onSelectCondition={(condition) =>
+          commitRefinements({
+            ...refinements,
+            condition: normalizeProductConditionFilterValue(
+              condition
+            ) as typeof refinements.condition,
+          })
+        }
+        onSelectRating={(rating) =>
+          commitRefinements({ ...refinements, minRating: rating || undefined })
+        }
         onSubmitQuery={() => commitSearchQuery(query)}
         onViewModeChange={setViewMode}
         products={products}

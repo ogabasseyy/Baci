@@ -435,7 +435,7 @@ export const CartProvider = ({
             | 'refurbished'
             | undefined,
           negotiationStatus: 'none',
-          hasAssurance: false,
+          hasAssurance: enableSmartCartPro && merchantSlug === 'ogabassey',
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];

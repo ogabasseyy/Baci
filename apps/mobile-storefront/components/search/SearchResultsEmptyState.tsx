@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { Category } from '@/types/product';
+import ProductRequest from './ProductRequest';
 import styles from './search-screen.styles';
 
 interface SearchResultsEmptyStateProps {
@@ -28,6 +29,13 @@ export default function SearchResultsEmptyState({
           ? `No products match “${committedQuery}”. Try a different spelling or browse a category.`
           : 'Try searching for something else'}
       </Text>
+      {committedQuery.trim().length >= 2 && (
+        <ProductRequest
+          key={committedQuery}
+          query={committedQuery}
+          colors={colors}
+        />
+      )}
       {categories.length > 0 && (
         <View style={styles.browseChipsRow}>
           {categories.slice(0, 4).map((category) => (

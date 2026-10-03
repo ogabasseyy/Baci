@@ -99,6 +99,27 @@ describe('preflight multiline dotenv assignments', () => {
     );
   });
 
+  it('flags separators that span physical lines', () => {
+    // dotenv accepts whitespace across `=`/`:` (dotenv 17.4.2), so a
+    // bare `KEY` or `KEY:` line still parses — but no physical line
+    // assigns the key in shell form, so the line reader misses a
+    // credential the required-value check passes.
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD:\nsecret\n'),
+      ['GIGL_PASSWORD (line 1)']
+    );
+    assert.deepEqual(
+      findMultilineDotenvAssignments('GIGL_PASSWORD\n=secret\n'),
+      ['GIGL_PASSWORD (line 1)']
+    );
+    // A spanning separator with an empty value agrees (shell-empty is
+    // dotenv-empty); the required-value check reports it missing.
+    assert.deepEqual(findMultilineDotenvAssignments('GIGL_PASSWORD\n=\n'), []);
+    // dotenv's dotted/dashed keys are unreadable at the shell
+    // boundary (identifier enumerator), so they cannot diverge.
+    assert.deepEqual(findMultilineDotenvAssignments('GIGL_X-Y:\nsecret\n'), []);
+  });
+
   it('leaves swallowed keys to the required-value check', () => {
     // A non-shell span swallowing a GIGL line removes the key from
     // dotenv's output; the required-value check reports it missing.

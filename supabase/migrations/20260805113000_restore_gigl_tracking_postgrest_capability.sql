@@ -39,6 +39,19 @@ DECLARE
   request_method text := current_setting('request.method', true);
   request_path text := current_setting('request.path', true);
 BEGIN
+  -- Reload canary, observed by probe-gigl-hook-reload.sh BEFORE the
+  -- isolate migration grants membership: an anonymous POST to a path
+  -- that matches no real RPC proves PostgREST loaded this hook when
+  -- it answers 42501 instead of 404, so the grant can never commit
+  -- ahead of an unloaded hook. Never create a real RPC at this path:
+  -- the hook would shadow it for anonymous callers.
+  IF auth.role() = 'anon'
+    AND request_method = 'POST'
+    AND request_path = '/rpc/__gigl_hook_reload_canary__' THEN
+    RAISE EXCEPTION 'GIGL hook reload canary observed'
+      USING ERRCODE = '42501';
+  END IF;
+
   IF auth.role() IS DISTINCT FROM 'gigl_tracking_worker' THEN
     RETURN;
   END IF;

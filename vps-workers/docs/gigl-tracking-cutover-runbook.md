@@ -152,7 +152,13 @@ fail) — this is announced and intentional:
    needed or wanted — `deploy.sh` provisions the immutable checkout
    itself; pulling the live path in place would run unverified code.
 3. Re-run failed workflow jobs: readiness passes, migrations apply,
-   the smoke writes the latch, the deploy lands.
+   the smoke writes the latch, the deploy lands. Migration apply is
+   split around a hook-reload probe: if the `Probe GIGL hook reload
+   acknowledgement` step fails, PostgREST never served the hook's
+   reload canary and the isolate grant is NOT applied — check
+   PostgREST health/config reload, then re-run the deploy (the probe
+   skips fast once the isolate migration is recorded; never grant the
+   membership by hand to clear it).
 
 Later tracking changes follow the same deploy.sh-then-rerun rhythm.
 Web-only commits skip the exact-SHA/smoke verification once the latch

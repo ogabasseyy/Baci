@@ -436,6 +436,7 @@ jobs:
           .github/scripts/verify-gigl-fallback-token.test.mjs
           .github/scripts/smoke-gigl-worker-capability.test.mjs
           .github/scripts/refuse-publish-on-promote-overlap.test.mjs
+          .github/scripts/probe-gigl-hook-reload.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs

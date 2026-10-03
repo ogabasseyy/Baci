@@ -149,6 +149,15 @@ describe('GIGL tracking worker capability migration', () => {
     // No slashless twin may linger: it would read as a sixth allowed
     // path while matching nothing.
     expect(postgrestRepairMigration).not.toMatch(/'rpc\/gigl_worker_/);
+    // Reload canary for the pre-grant acknowledgement: an anonymous
+    // POST to a path matching no real RPC must raise 42501 (the probe
+    // treats anything else as hook-not-loaded and blocks the grant).
+    expect(postgrestRepairMigration).toMatch(
+      /auth\.role\(\) = 'anon'[\s\S]*request_path = '\/rpc\/__gigl_hook_reload_canary__'/
+    );
+    expect(postgrestRepairMigration).toMatch(
+      /GIGL hook reload canary observed/
+    );
     expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE authenticator\s+SET pgrst\.db_pre_request = 'public\.enforce_gigl_tracking_worker_request_scope'/
     );

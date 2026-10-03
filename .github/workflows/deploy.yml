@@ -188,6 +188,14 @@ jobs:
   # same query payload as the SQL run; migrations that opt into
   # `-- disable-transaction` are split into top-level statements first so
   # CREATE INDEX CONCURRENTLY can run without blocking production writes.
+  #
+  # The apply runs in TWO passes around a hook-reload probe: the first pass
+  # caps at the GIGL hook restore, the probe requires PostgREST to actually
+  # serve the hook's reload canary, and only then does the second pass apply
+  # the isolate grant. PostgreSQL exposes membership at commit while
+  # PostgREST reloads asynchronously, so an unwitnessed grant could commit
+  # while PostgREST still serves the pre-hook config; the probe makes that
+  # state unreachable instead of merely unlikely.
   db-migrations:
     needs: [vps-drain-readiness]
     if: github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success'
@@ -202,7 +210,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Apply pending migrations via Management API
+      - name: Apply pending migrations through the GIGL hook restore
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20260805113000
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe GIGL hook reload acknowledgement
+        # No grant without a witness (see the job comment): fails while
+        # the isolate migration is still unapplied when PostgREST never
+        # serves the hook, so the grant can never commit unconfined.
+        # Skips fast once the isolate migration is recorded.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-gigl-hook-reload.sh
+      - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh

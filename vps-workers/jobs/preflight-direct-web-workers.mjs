@@ -105,10 +105,17 @@ export function findMultilineDotenvAssignments(text) {
   // would hand the poller different bytes. A span swallowing a
   // shell-read key's line removes the key from the full parse; that
   // stays silent here and surfaces as a missing key in the
-  // required-value check instead.
+  // required-value check instead. Separators also span: dotenv
+  // accepts whitespace across `=`/`:` (`KEY:` or a bare `KEY` line
+  // followed by the value), which no physical line assigns in shell
+  // form — the shell reader then misses a key the required check
+  // passes, so keys dotenv parsed without any shell-effective line
+  // are offenders too (blank values excepted: shell-empty and
+  // dotenv-empty agree, and the required check reports them missing).
   const full = parse(text);
+  const lines = text.split('\n');
   const lastLineByKey = new Map();
-  for (const [index, rawLine] of text.split('\n').entries()) {
+  for (const [index, rawLine] of lines.entries()) {
     const line = rawLine.replace(/\r.*$/, '');
     const match = line.match(
       /^[ \t]*(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)(?::[ \t]|[ \t]*=)/
@@ -128,7 +135,41 @@ export function findMultilineDotenvAssignments(text) {
       offenders.push(`${key} (line ${index + 1})`);
     }
   }
+  for (const key of Object.keys(full)) {
+    // The shell boundary only ever addresses identifier keys (the
+    // scoped-env enumerator matches GIGL_[A-Za-z0-9_]*); dotenv's
+    // dotted/dashed keys are unreadable there, so they cannot diverge.
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+    if (!isShellReadKey(key) || lastLineByKey.has(key)) {
+      continue;
+    }
+    if ((full[key] ?? '').trim() === '') {
+      continue;
+    }
+    const blame = lastKeyMentionIndex(lines, key);
+    offenders.push(blame >= 0 ? `${key} (line ${blame + 1})` : key);
+  }
   return offenders;
+}
+
+function lastKeyMentionIndex(lines, key) {
+  // Locate dotenv's match for blame: unlike the shell matcher above,
+  // dotenv's line anchor and export prefix accept any whitespace.
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const text = lines[index]
+      .replace(/\r.*$/, '')
+      .replace(/^\s*/, '')
+      .replace(/^export\s+/, '');
+    if (
+      text === key ||
+      (text.startsWith(key) && !/[\w.-]/.test(text[key.length] ?? ''))
+    ) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 // dotenv expands `\n` inside double quotes, but the shell boundary

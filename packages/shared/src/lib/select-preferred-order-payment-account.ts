@@ -6,6 +6,7 @@ export interface OrderPaymentAccountLike {
   bank_name: string | null;
   created_at?: string | null;
   expires_at?: string | null;
+  id?: string | null;
   provider?: string | null;
 }
 
@@ -186,7 +187,18 @@ export function selectPreferredOrderPaymentAccount<
       // transaction-stable): break them by account number descending,
       // exactly like the emailed-invoice selector and the atomic dispatch
       // recheck, so every surface embeds the same account.
-      return right.account_number.localeCompare(left.account_number);
+      const accountNumberTie = right.account_number.localeCompare(
+        left.account_number
+      );
+      if (accountNumberTie !== 0) {
+        return accountNumberTie;
+      }
+      // Duplicate account numbers with divergent metadata are
+      // database-permitted: break the tie by row id descending, exactly
+      // like the atomic dispatch recheck, so independently ordered
+      // result sets never pick different rows. Rows without an id sort
+      // last; surfaces must select id for full determinism.
+      return String(right.id ?? '').localeCompare(String(left.id ?? ''));
     })[0] ?? null
   );
 }

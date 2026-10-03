@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
 type InvoicePaymentAccountRow = {
+  id: string;
   account_number: string;
   assignment_customer_email_source?: string | null;
   bank_name: string | null;
@@ -17,7 +18,7 @@ type InvoicePaymentAccountRow = {
 };
 
 const PAYMENT_ACCOUNT_COLUMNS =
-  'account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at';
+  'id, account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at';
 
 /**
  * Load the account that should be printed on an invoice while keeping the
@@ -77,14 +78,16 @@ export async function resolveInvoicePaymentAccount(
   }
 
   // created_at ties when accounts share a transaction (now() is
-  // transaction-stable): break them by account number, exactly like the
-  // atomic dispatch recheck, so renderer and recheck never pick apart.
-  // No LIMIT: the shared selector ranks an eligible Paystack row above a
-  // newer non-Paystack row, so it must see every eligible row — LIMIT 1
-  // newest could return a Korapay row the selector would not pick.
+  // transaction-stable): break them by account number, then row id,
+  // exactly like the atomic dispatch recheck, so renderer and recheck
+  // never pick apart. No LIMIT: the shared selector ranks an eligible
+  // Paystack row above a newer non-Paystack row, so it must see every
+  // eligible row — LIMIT 1 newest could return a Korapay row the
+  // selector would not pick.
   const orderedPaymentAccountQuery = paymentAccountQuery
     .order('created_at', { ascending: false, nullsFirst: false })
-    .order('account_number', { ascending: false });
+    .order('account_number', { ascending: false })
+    .order('id', { ascending: false });
   const { data, error } = await orderedPaymentAccountQuery;
 
   const rows = Array.isArray(data)

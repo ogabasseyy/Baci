@@ -111,6 +111,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       amountPaid: receiptDetail.amount_paid,
       currency: receiptDetail.currency,
       items: receiptDetail.items,
+      payments: receiptDetail.transactions,
     });
     // Legacy spellings ('Paid', ' paid ') count like web's normalized
     // comparison, so the preview agrees with archive/download labels.

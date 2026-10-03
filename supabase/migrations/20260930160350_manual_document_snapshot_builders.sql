@@ -90,7 +90,7 @@ AS $$
     AND (COALESCE(opa.assigned_at, opa.created_at) IS NULL
       OR COALESCE(opa.assigned_at, opa.created_at) <= now())
   ORDER BY (opa.provider = 'paystack') DESC,
-    opa.created_at DESC NULLS LAST, opa.account_number DESC
+    opa.created_at DESC NULLS LAST, opa.account_number DESC, opa.id DESC
   LIMIT 1;
 $$;
 REVOKE ALL ON FUNCTION private.manual_document_payment_account_snapshot(uuid)
@@ -148,6 +148,12 @@ BEGIN
               (o.created_at = p_acct.created_at
                 OR (o.created_at IS NULL AND p_acct.created_at IS NULL))
               AND o.account_number > p_acct.account_number
+            )
+            OR (
+              (o.created_at = p_acct.created_at
+                OR (o.created_at IS NULL AND p_acct.created_at IS NULL))
+              AND o.account_number = p_acct.account_number
+              AND o.id > p_acct.id
             )
           )
         )

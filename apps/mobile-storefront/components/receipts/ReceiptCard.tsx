@@ -84,6 +84,10 @@ export function ReceiptCard({
   ) {
     displayStatus = 'unpaid';
   }
+  // Money follows the ledger, not the badge: an invalid manual row can
+  // carry a paid label while opening an invoice — badge/action say
+  // Invoice, but the money still reads Paid, never Total.
+  const moneyPaid = displayStatus === 'paid' || item.payment_status === 'paid';
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
@@ -160,7 +164,7 @@ export function ReceiptCard({
       <View style={styles.cardFooter}>
         <View>
           <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {displayStatus === 'paid' ? 'Paid' : 'Total'}
+            {moneyPaid ? 'Paid' : 'Total'}
           </Text>
           <Text style={[styles.totalAmount, { color: colors.text }]}>
             {formatPrice(item.total, item.currency)}

@@ -26,6 +26,31 @@ export interface ManualReceiptPromotionInput {
   amountPaid?: unknown;
   currency?: unknown;
   items?: unknown;
+  payments?: unknown;
+}
+
+// Sender's settled-payment filter, mirrored exactly like the web
+// archive gate: transaction_type 'payment' with status completed/success,
+// each amount coerced with Number(amount ?? 0). Callers without child
+// data pass nothing and keep the order/item verdict.
+export function hasValidSettledPayments(payments: unknown): boolean {
+  if (payments == null) return true;
+  if (!Array.isArray(payments)) return false;
+  return payments
+    .filter((row) => {
+      if (row == null || typeof row !== 'object') return false;
+      const txn = row as { transaction_type?: unknown; status?: unknown };
+      return (
+        txn.transaction_type === 'payment' &&
+        (txn.status === 'completed' || txn.status === 'success')
+      );
+    })
+    .every((row) => {
+      const amount = Number(
+        (row as { amount?: number | string | null }).amount ?? 0
+      );
+      return Number.isFinite(amount) && amount >= 0;
+    });
 }
 
 const TERMINAL_SHIPPING_STATUSES = new Set([
@@ -137,6 +162,12 @@ export function isPromotableManualDocument(
     return false;
   }
   if (!PROMOTABLE_PAYMENT_STATUSES.has(normalizeStatus(input.paymentStatus))) {
+    return false;
+  }
+  // A settled payment the sender rejects hides the receipt everywhere,
+  // not just in the email: the list demotes with history the completion
+  // lookup already fetched, and the preview gates on detail transactions.
+  if (!hasValidSettledPayments(input.payments)) {
     return false;
   }
   return hasValidContent(input);

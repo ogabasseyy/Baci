@@ -131,6 +131,7 @@ export interface StorefrontAccountDocumentPaymentAccountRow {
   account_name: string | null;
   created_at?: string | null;
   expires_at?: string | null;
+  id?: string | null;
   provider?: string | null;
 }
 

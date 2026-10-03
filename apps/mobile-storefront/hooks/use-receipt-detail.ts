@@ -88,6 +88,7 @@ async function fetchReceiptDetail(
             image_url,
             assurance_fee,
             line_extension_amount,
+            line_id,
             unit_code,
             vat_category_code,
             vat_rate,

@@ -1,7 +1,7 @@
 -- Atomically validate the rendered snapshot and mark dispatch start for a
 -- manual-order document. A check-then-mark in application code leaves a
 -- millisecond race between the re-read and the marker; this function locks
--- items/transactions, parent, merchant, tax, then takes the per-order and
+-- items/transactions, parents, tax, then takes the per-order and
 -- per-merchant advisory gates. Items and transactions go first because
 -- their row triggers enter holding those locks, while tax goes after the
 -- parent to match the historical tax-rebuild trigger's parent-to-child
@@ -159,6 +159,10 @@ BEGIN
     v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug,
     v_merchant_email_sender_name, v_merchant_logo_url, v_merchant_brand_colors
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
+  -- Customer with the parents: FOR SHARE blocks a concurrent
+  -- soft-delete until commit (its trigger then resets the marker).
+  PERFORM 1 FROM public.customers AS c
+  WHERE c.id = v_order.customer_id FOR SHARE OF c;
   -- Tax locks AFTER the parent: the historical tax-rebuild trigger runs
   -- parent-to-child, so tax-first here deadlocks against a concurrent
   -- item insert. Items/transactions stay child-first to match the row
@@ -186,8 +190,7 @@ BEGIN
     AND d.status = 'active'
   ORDER BY d.updated_at DESC NULLS LAST, d.created_at DESC NULLS LAST, d.id
   LIMIT 1;
-  -- Preferred virtual account, always selected (presence gates which
-  -- instructions render): the shared selector in 60350.
+  -- Preferred VA, always selected: presence gates which instructions render.
   SELECT s.account_number, s.bank_name, s.account_name
   INTO v_va_account_number, v_va_bank_name, v_va_account_name
   FROM private.manual_document_payment_account_snapshot(v_order.id) AS s;
@@ -254,11 +257,9 @@ BEGIN
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
     OR v_merchant_brand_colors IS DISTINCT FROM p_merchant_brand_colors
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
-    -- Rendered payment instructions only (email/jsPDF semantics): non-NGN
-    -- prints no bank details; a selected virtual account prints VA-only;
-    -- otherwise the merchant-bank card. Either-side presence catches
-    -- assignment and removal both ways; unrendered bank writes must not
-    -- abort (or duplicate) the send.
+    -- Rendered instructions only (non-NGN none, VA-only when
+    -- selected, else merchant-bank card); either-side presence
+    -- catches assignment and removal both ways.
     OR (v_compare_invoice_only
       AND upper(trim(COALESCE(v_order.currency, 'NGN'))) = 'NGN'
       AND ((v_va_account_number IS NOT NULL OR p_va_account_number IS NOT NULL)
@@ -275,10 +276,9 @@ BEGIN
       OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
-    -- Customer liveness at mark time: a soft-delete landing between the
-    -- claim lock and this mark aborts instead of emailing a claim whose
-    -- redemption immediately fails. No row lock needed — the deletion
-    -- trigger resets the marker and the claim gate makes the retry skip.
+    -- Customer liveness under the row lock above: a delete committed
+    -- before the mark aborts; one racing the mark blocks, then its
+    -- trigger resets the marker.
     OR EXISTS (SELECT 1 FROM public.customers AS c
       WHERE c.id = v_order.customer_id AND c.deleted_at IS NOT NULL)
   THEN

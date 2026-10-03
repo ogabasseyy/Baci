@@ -27,3 +27,22 @@ describe('natural request category argument eval', () => {
     expect(gradeCategoryGuidance('camera', [wrongBrand]).passed).toBe(false);
   });
 });
+
+// Synthetic controls validate the scorer, not live model behavior.
+describe('category and model identity controls', () => {
+  function trace(model: string, category?: string, brand = 'Xiaomi') {
+    return [{ result: { type: 'string', value: JSON.stringify({
+      toolInput: { ...(category === undefined ? {} : { category }), intent: { alternatives: [{ product_type: brand === 'Tecno' ? 'phone' : 'security_camera', brands: [brand], model }] } },
+      toolOutput: { status: 'success', products: [{ name: model }] },
+    }) } }];
+  }
+  it('accepts category casing allowed by the runtime', () => {
+    expect(gradeCategoryGuidance('explicitCategory', trace('C300', 'cameras')).passed).toBe(true);
+  });
+  it('rejects model suffixes while accepting the stored manufacturer prefix', () => {
+    expect(gradeCategoryGuidance('camera', trace('C300 Pro')).passed).toBe(false);
+    expect(gradeCategoryGuidance('tecno', trace('Spark 50 5G', undefined, 'Tecno')).passed).toBe(false);
+    expect(gradeCategoryGuidance('camera', trace('Xiaomi C300')).passed).toBe(true);
+    expect(gradeCategoryGuidance('tecno', trace('Tecno Spark 50', undefined, 'Tecno')).passed).toBe(true);
+  });
+});

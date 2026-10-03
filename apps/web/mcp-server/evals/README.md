@@ -10,11 +10,11 @@ rejects it. Scorer unit tests are not proof that revised guidance works.
 1. After deploying the reviewed guidance, refresh the existing QA connection's
    tools through its supported Manage UI. Do not create another connection.
 2. In a fresh chat with that connection selected, send each prompt from
-   `categoryGuidanceCases` verbatim. Use a separate fresh chat for each case.
+   `categoryGuidanceCases` in `category-guidance-cases.ts` verbatim. Use a separate fresh chat for each case.
 3. Capture the FIRST Search Products widget's `window.openai.toolInput` and
    `window.openai.toolOutput` using supported browser CDP `Runtime.evaluate`.
    Save the native responses as an ordered JSON array (the same shape as the
-   observed fixture's `traces`). Keep the first empty call even if ChatGPT retries.
+   observed fixture's `traces`; the runner also accepts the whole fixture wrapper). Keep the first empty call even if ChatGPT retries.
    Record the conversation, exact prompt, deployed SHA and tools refresh alongside
    the capture. Do not reconstruct arguments from the assistant's answer.
 4. From `apps/web`, run:

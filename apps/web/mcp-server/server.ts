@@ -60,6 +60,7 @@ import { serveProductImage } from './product-image-proxy';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { MCP_SEARCH_CATEGORY_GUIDANCE } from './search-category-guidance';
 import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
 
 // =============================================================================
@@ -1245,7 +1246,7 @@ function createOgabasseyServer() {
           .string()
           .max(50)
           .optional()
-          .describe('Optional catalog category filter (case-insensitive substring matching). Use only a category explicitly requested by the shopper; otherwise omit this field and use intent.alternatives[].product_type. Do not guess Accessories for cameras.'),
+          .describe(MCP_SEARCH_CATEGORY_GUIDANCE),
         brand: z.string().max(50).optional().describe('Brand name'),
         min_price: z.number().min(0).optional(),
         max_price: z.number().min(0).optional(),

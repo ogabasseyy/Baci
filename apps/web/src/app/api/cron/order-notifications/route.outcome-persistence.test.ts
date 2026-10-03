@@ -226,16 +226,23 @@ describe('GET /api/cron/order-notifications outcome persistence', () => {
       error: null,
     });
     const builder = createUpdateBuilder();
-    builder.maybeSingle.mockResolvedValueOnce({
-      data: {
-        id: 'outbox-manual',
-        metadata: {
-          source: 'manual_order_document',
-          sent_document_kind: 'proforma_invoice',
+    // The worker reclaims a clear-failed marker before dispatching, so the
+    // first read is the reclaim probe (clean here), then the live row.
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: 'outbox-manual' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'outbox-manual',
+          metadata: {
+            source: 'manual_order_document',
+            sent_document_kind: 'proforma_invoice',
+          },
         },
-      },
-      error: null,
-    });
+        error: null,
+      });
     mockSupabase.from.mockReturnValue(builder);
 
     const response = await GET(cronRequest());

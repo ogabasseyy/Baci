@@ -1,3 +1,5 @@
+import { resolveProductVariantMedia } from '@baci/shared/lib';
+
 /** Product-level color labels surfaced by the storefront catalog. */
 export function getMcpProductCatalogColors({
   color,
@@ -14,23 +16,35 @@ export function getMcpProductCatalogColors({
 } {
   const isPlainObject = typeof colorImages === 'object' && colorImages !== null && !Array.isArray(colorImages) &&
     (Object.getPrototypeOf(colorImages) === Object.prototype || Object.getPrototypeOf(colorImages) === null);
-  const storedLabels = isPlainObject
-    ? Object.keys(colorImages).filter((label) => label.trim().length > 0)
+  const storedEntries = isPlainObject
+    ? Object.entries(colorImages).filter(([label]) => label.trim().length > 0)
     : [];
-  const scalarColors = typeof color === 'string' ? color.split(',').map((label) => label.trim()).filter(Boolean) : [];
-  const labels = [...scalarColors, ...storedLabels.map((label) => label.trim())];
-  const colors = labels.filter((label, index) => labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index);
+  const storedImageEntries = storedEntries.flatMap(([label, value]) =>
+    Array.isArray(value)
+      ? [[label, value.filter((image): image is string => typeof image === 'string')] as const]
+      : [],
+  );
+  const scalarColors = typeof color === 'string'
+    ? color.split(',').map((label) => label.trim()).filter(Boolean)
+    : [];
+  const normalizedScalars = resolveProductVariantMedia({
+    productColors: scalarColors,
+    variants: [],
+  }).colors ?? [];
+  const media = resolveProductVariantMedia({
+    productColors: storedEntries.map(([label]) => label),
+    colorImages: Object.fromEntries(storedImageEntries),
+    variants: [],
+  });
+  const colors = [...normalizedScalars, ...(media.colors ?? [])]
+    .filter((label, index, labels) => labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index);
   const imagesByColor = Object.fromEntries(colors.map((label) => {
-    const images = isPlainObject
-      ? storedLabels.filter((mappingLabel) => mappingLabel.trim().toLowerCase() === label.toLowerCase())
-        .flatMap((mappingLabel) => {
-          const value = (colorImages as Record<string, unknown>)[mappingLabel];
-          return Array.isArray(value) ? value.filter((image): image is string => typeof image === 'string') : [];
-        })
-      : [];
+    const matchingColor = Object.keys(media.colorImages ?? {}).find(
+      (candidate) => candidate.toLowerCase() === label.toLowerCase(),
+    );
+    const normalizedImages = matchingColor ? media.colorImages?.[matchingColor] ?? [] : [];
     const safeImages = getSafeCatalogImageUrl
-      ? images.flatMap((image) => {
-        if (typeof image !== 'string') return [];
+      ? normalizedImages.flatMap((image) => {
         const safeUrl = getSafeCatalogImageUrl(image);
         return safeUrl ? [safeUrl] : [];
       })
@@ -39,9 +53,9 @@ export function getMcpProductCatalogColors({
   }));
   return {
     colors,
-    source: colors.length === 0 ? null : scalarColors.length > 0 && storedLabels.length > 0
+    source: colors.length === 0 ? null : normalizedScalars.length > 0 && (media.colors?.length ?? 0) > 0
       ? 'product.color+color_images'
-      : scalarColors.length > 0 ? 'product.color' : 'product.color_images',
+      : normalizedScalars.length > 0 ? 'product.color' : 'product.color_images',
     imagesByColor,
   };
 }

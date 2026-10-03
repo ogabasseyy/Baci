@@ -175,6 +175,10 @@ export async function GET(request: NextRequest) {
     }
     if (transactionError) {
       console.error('Orders transaction fetch error:', transactionError);
+      return NextResponse.json(
+        { error: 'Failed to fetch order transactions' },
+        { status: 500 }
+      );
     }
 
     // Transform to expected format
@@ -212,7 +216,8 @@ export async function GET(request: NextRequest) {
         transaction_date: order.transaction_date,
         invoice_issue_date: order.invoice_issue_date,
         // Canonical paid-receipt date (newest settled payment), shared with
-        // the emailed PDF and account download; null when lookup failed.
+        // the emailed PDF and account download; null when the order has no
+        // completion transaction (lookup failures 500 above, never null).
         receipt_completion_date:
           selectReceiptCompletionDate(
             transactionsByOrderId.get(order.id) ?? []

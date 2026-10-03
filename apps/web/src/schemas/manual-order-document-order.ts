@@ -22,6 +22,7 @@ const manualDocumentOrderItemSchema = z.object({
   variant_name: nullableText,
   condition: nullableText,
   item_description: nullableText,
+  assurance_fee: number.nullish(),
 });
 
 export const manualDocumentOrderSchema = z.object({

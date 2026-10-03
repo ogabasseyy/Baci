@@ -96,6 +96,32 @@ describe('buildManualOrderDocumentPdfInput', () => {
     expect(receiptMerchant.bank_account_number).toBe('1234567890');
   });
 
+  it('itemizes the assurance premium so emailed lines reconcile with totals', () => {
+    const { receiptOrder } = buildManualOrderDocumentPdfInput({
+      order: manualDocumentOrderSchema.parse({
+        ...orderRow,
+        order_items: [
+          {
+            ...orderRow.order_items[0],
+            assurance_fee: 15000,
+          },
+        ],
+      }),
+      merchant: manualDocumentMerchantSchema.parse(merchantRow),
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: paymentAccount,
+    });
+
+    expect(receiptOrder.items).toHaveLength(2);
+    expect(receiptOrder.items[1]).toMatchObject({
+      product_name: 'Ogabassey Assurance',
+      quantity: 1,
+      price: 15000,
+      vat_category_code: 'O',
+      vat_amount: 0,
+    });
+  });
+
   it('hides naira bank details on foreign-currency documents', () => {
     const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
       order: manualDocumentOrderSchema.parse({

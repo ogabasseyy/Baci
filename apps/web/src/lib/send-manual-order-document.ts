@@ -55,7 +55,7 @@ export async function sendManualOrderDocument({
     supabase
       .from('orders')
       .select(
-        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, notes, order_items(id, name, quantity, price, variant_name, condition, item_description)'
+        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, notes, order_items(id, name, quantity, price, variant_name, condition, item_description, assurance_fee)'
       )
       .eq('id', row.order_id)
       .eq('merchant_id', row.merchant_id)

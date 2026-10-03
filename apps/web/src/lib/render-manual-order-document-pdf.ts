@@ -114,7 +114,8 @@ export async function renderManualOrderDocumentPdf({
     documentDate:
       (isPaid
         ? (receiptDate ?? order.transaction_date)
-        : order.invoice_issue_date) || order.created_at,
+        : (order.invoice_issue_date ?? order.transaction_date)) ||
+      order.created_at,
     logoDataUri,
     invoiceNotes: order.invoice_note || order.notes || undefined,
     taxSubtotals: taxSubtotals.map(({ id: _id, ...breakdown }) => breakdown),

@@ -102,6 +102,20 @@ describe('GET /api/cron/order-notifications worker dispatch', () => {
       });
   });
 
+  it('claims with a unique worker id per invocation', async () => {
+    mockSupabase.rpc.mockResolvedValueOnce({ data: [], error: null });
+
+    const response = await GET(cronRequest());
+
+    expect(response.status).toBe(200);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'claim_order_notification_outbox',
+      expect.objectContaining({
+        p_worker_id: expect.stringMatching(/^web-cron-\d+-[0-9a-f-]{36}$/),
+      })
+    );
+  });
+
   it('dispatches manual documents through the authenticated cron worker', async () => {
     const row = {
       claim_owner: 'web-cron-test',

@@ -109,6 +109,9 @@ async function deadLetterCorruptOutboxRow(
 }
 
 const DEFAULT_BATCH_SIZE = 1;
+// Manual PDF sends fully buffer the PDF plus a ~33% larger base64 copy in
+// memory per row (see send-manual-order-document.ts), inside a 60s tick:
+// keep the manual batch ceiling conservative and the default at 1.
 const MAX_BATCH_SIZE = 10;
 const batchSizeSchema = createCronBatchSizeSchema({
   defaultSize: DEFAULT_BATCH_SIZE,
@@ -129,7 +132,11 @@ export async function GET(request: Request) {
   }
   const batchSize = parsedBatchSize.data;
   const supabase = createServiceClient();
-  const workerId = `web-cron-${Date.now()}`;
+  // Random suffix: overlapping Vercel invocations, retries, or clock-equal
+  // starts within one millisecond would otherwise share a claim owner, and
+  // claims match on locked_by = claim_owner. Collision would let one
+  // worker match, release, or dead-letter another worker's rows.
+  const workerId = `web-cron-${Date.now()}-${crypto.randomUUID()}`;
   const { data, error } = await supabase.rpc(
     'claim_order_notification_outbox',
     {

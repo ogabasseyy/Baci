@@ -136,6 +136,11 @@ run_promote_command() {
   fi
 
   if ! _run_vercel_promote "$last_deployment_target"; then
+    # Ambiguous failure (server-side effect with a client-side error):
+    # resolve the alias and verify/roll back before returning.
+    if [ "$overlap_bound" = "1" ] && recover_ambiguous_promote "$last_deployment_target" "$captured_previous_production_target"; then
+      return 0
+    fi
     return 1
   fi
 

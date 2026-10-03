@@ -162,3 +162,72 @@ test('fails loud without rollback when the first deploy overlaps post-promote', 
     rmSync(fakeCommand.tempDir, { recursive: true, force: true });
   }
 });
+
+// The alias serving the just-staged candidate (second capture): the
+// promote "failed" client-side but took effect server-side.
+const CANDIDATE_SERVING_BODY =
+  '{"alias":"ogabassey.com","deploymentId":"dpl_success999","deployment":{"id":"dpl_success999","url":"baci-success.vercel.app"},"projectId":"prj_test"}';
+
+test('rolls back on overlap when an ambiguous promote took effect', () => {
+  const fakeCommand = makeFakeCommand('success-promote-fails');
+  const { checkPath, callsPath } = writeCountingOverlapCheck(
+    fakeCommand.tempDir,
+    'if [ "$calls" -ge 1 ]; then exit 1; fi\nexit 0'
+  );
+  writeFakeCurl(fakeCommand.binDir, fakeCommand.tempDir);
+
+  try {
+    const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
+      PROMOTE_ATTEMPTS: '2',
+      ...vercelEnv,
+      CURL_CODE: '200',
+      CURL_BODY_1: prevProdEnv.CURL_BODY,
+      CURL_BODY_2: CANDIDATE_SERVING_BODY,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /failed ambiguously/);
+    assert.match(result.stderr, /Rolled production back to dpl_previous123/);
+    assert.equal(
+      readFileSync(fakeCommand.rollbackFile, 'utf8').trim(),
+      'dpl_previous123'
+    );
+    // Pre-allow, recovery-verify-refuse (+rollback), retry pre-refuse.
+    assert.equal(readFileSync(callsPath, 'utf8').trim(), '3');
+  } finally {
+    rmSync(fakeCommand.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('recovers success when an ambiguous promote took effect cleanly', () => {
+  const fakeCommand = makeFakeCommand('success-promote-fails');
+  const { checkPath, callsPath } = writeCountingOverlapCheck(
+    fakeCommand.tempDir,
+    'exit 0'
+  );
+  writeFakeCurl(fakeCommand.binDir, fakeCommand.tempDir);
+
+  try {
+    const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
+      PROMOTE_ATTEMPTS: '2',
+      ...vercelEnv,
+      CURL_CODE: '200',
+      CURL_BODY_1: prevProdEnv.CURL_BODY,
+      CURL_BODY_2: CANDIDATE_SERVING_BODY,
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /failed ambiguously/);
+    assert.match(
+      result.stdout,
+      /Promoted https:\/\/baci-success\.vercel\.app to production/
+    );
+    assert.throws(() => readFileSync(fakeCommand.rollbackFile, 'utf8'));
+    // Pre-allow, recovery-verify-allow: no retry, no rollback.
+    assert.equal(readFileSync(callsPath, 'utf8').trim(), '2');
+  } finally {
+    rmSync(fakeCommand.tempDir, { recursive: true, force: true });
+  }
+});

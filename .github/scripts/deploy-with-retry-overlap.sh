@@ -96,6 +96,40 @@ capture_previous_production_deployment() {
   return 0
 }
 
+# Ambiguous-failure recovery for run_promote_command. A promote that
+# took effect server-side while the client timed out or lost the
+# response returns nonzero here — but skipping overlap verification
+# then strands a stale-read publication with no rollback, because the
+# next retry refuses at the pre-check (the record now lists this run)
+# while the candidate stays current. Resolve the production alias: if
+# OUR candidate is serving, verify exactly as on the success path
+# (rolling back on overlap). Returns 0 (recovered success) only when
+# the candidate is serving AND no overlap is recorded; 1 otherwise
+# (genuinely failed, unresolvable, or overlapped-and-rolled-back).
+# Fail-closed on unknowable: assuming effectiveness without proof
+# would report success for a deploy that never promoted.
+recover_ambiguous_promote() {
+  local ambiguous_target="$1"
+  local previous_capture="$2"
+  local serving_capture
+  local serving_uid
+  local serving_url
+
+  if ! serving_capture="$(capture_previous_production_deployment)"; then
+    return 1
+  fi
+  if [ -z "$serving_capture" ]; then
+    return 1
+  fi
+  serving_uid="${serving_capture%%|*}"
+  serving_url="${serving_capture#*|}"
+  if [ "$serving_uid" != "$ambiguous_target" ] && [ "$ambiguous_target" != "https://${serving_url}" ]; then
+    return 1
+  fi
+  echo "Promote of ${ambiguous_target} failed ambiguously but the candidate is serving production; verifying overlap." >&2
+  verify_post_promote_overlap "$ambiguous_target" "$previous_capture"
+}
+
 # Durable half of the overlap exclusion. Runs AFTER a successful
 # promote: a worker flip recorded DURING the promote (after the last
 # pre-check) publishes off stale latch/SHA reads unless it is rolled

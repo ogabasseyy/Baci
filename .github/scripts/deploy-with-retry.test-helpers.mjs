@@ -134,6 +134,14 @@ case "${mode}" in
     echo "fake deploy ok"
     exit 0
     ;;
+  success-promote-fails)
+    # Succeeds and stages like success, but every promote fails (see
+    # the promote branch): models the ambiguous failure where the
+    # candidate may still be serving (the alias stub decides).
+    echo "Production: https://baci-success.vercel.app"
+    echo "fake deploy ok"
+    exit 0
+    ;;
   hang-until-killed)
     # A genuinely hanging deploy that only run_with_timeout's real timeout can
     # stop -- the actual CLI-57 failure. The URL is emitted from a subshell whose
@@ -211,6 +219,8 @@ ${behavior}
 // Fake curl answering the previous-production capture: writes
 // CURL_BODY to the -o file and prints CURL_CODE (no trailing
 // newline, like curl -w). CURL_EXIT nonzero fails without output.
+// CURL_BODY_<n> overrides the body for the nth call (1-based), for
+// tests where the alias resolves differently across captures.
 export function writeFakeCurl(binDir, tempDir) {
   const callsPath = `${tempDir}/curl-calls`;
   writeFileSync(
@@ -226,7 +236,8 @@ for arg in "$@"; do
   if [ "$prev" = "-o" ]; then out="$arg"; fi
   prev="$arg"
 done
-printf '%s' "\${CURL_BODY:-}" > "$out"
+per_call="CURL_BODY_$((calls + 1))"
+printf '%s' "\${!per_call:-\${CURL_BODY:-}}" > "$out"
 printf '%s' "\${CURL_CODE:-200}"
 `,
     { mode: 0o755 }

@@ -1,8 +1,31 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+
+const mockResultsEvents: {
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+} = {};
+
 import Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
 import SearchScreenView from './SearchScreenView';
+
+const mockKeyboard = {
+  isKeyboardVisible: false,
+  keyboardTop: null as number | null,
+  keyboardHeight: 0,
+  dismissKeyboard: jest.fn(),
+};
+jest.mock('@/hooks/use-keyboard', () => ({ useKeyboard: () => mockKeyboard }));
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: require('react-native').View,
+  useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }),
+}));
+afterEach(() => {
+  mockKeyboard.isKeyboardVisible = false;
+  mockKeyboard.keyboardTop = null;
+  mockKeyboard.keyboardHeight = 0;
+});
 
 jest.mock('./SearchResultsEmptyState', () => ({
   __esModule: true,
@@ -19,10 +42,13 @@ jest.mock('./SearchResultsList', () => {
     default: function MockSearchResultsList({
       listError,
       resultsKey,
+      onScroll,
     }: {
+      onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
       listError?: string | null;
       resultsKey?: string;
     }) {
+      mockResultsEvents.onScroll = onScroll;
       return (
         <View testID="mock-results-list">
           <Text>{listError ?? 'no-list-error'}</Text>
@@ -204,4 +230,102 @@ describe('SearchScreenView', () => {
       beforeKey
     );
   });
+});
+
+it('places the bottom composer flush above the keyboard without subtracting the top inset', () => {
+  mockKeyboard.isKeyboardVisible = true;
+  mockKeyboard.keyboardTop = 500;
+  mockKeyboard.keyboardHeight = 300;
+  renderView();
+  const dock = screen.getByTestId('keyboard-dock');
+  expect(dock.props.offset.opened - mockKeyboard.keyboardHeight + 72).toBe(500);
+  expect(screen.getByPlaceholderText('Search or ask a question…')).toBeTruthy();
+});
+
+it('keeps one back action at the top, separate from the keyboard search surface', () => {
+  renderView();
+  const back = screen.getByRole('button', { name: 'Go back' });
+  const dock = screen.getByTestId('keyboard-dock-space');
+  expect(screen.getAllByRole('button', { name: 'Go back' })).toHaveLength(1);
+  let parent = back.parent;
+  while (parent) {
+    expect(parent).not.toBe(dock);
+    parent = parent.parent;
+  }
+});
+
+it('puts tappable suggestions inside the keyboard dock and applies one without an extra step', () => {
+  mockKeyboard.isKeyboardVisible = true;
+  mockKeyboard.keyboardTop = 500;
+  mockKeyboard.keyboardHeight = 300;
+  const apply = jest.fn();
+  renderView({
+    query: 'iphone',
+    committedQuery: 'iphone',
+    onApplyAssistance: apply,
+    products: [{ id: 'p1', price: 250000, condition: 'used' } as Product],
+  });
+  const suggestion = screen.getByRole('button', {
+    name: 'Search suggestion: Used iphone',
+  });
+  const dock = screen.getByTestId('keyboard-dock-space');
+  let parent = suggestion.parent;
+  let inside = false;
+  while (parent) {
+    if (parent === dock) inside = true;
+    parent = parent.parent;
+  }
+  expect(inside).toBe(true);
+  expect(screen.queryByText('✦ Find for me')).toBeNull();
+  fireEvent.press(suggestion);
+  expect(apply).toHaveBeenCalledWith(
+    expect.objectContaining({ query: 'iphone', filters: { condition: 'used' } })
+  );
+});
+it('hides the suggestion row when the keyboard closes', () => {
+  renderView({
+    query: 'iphone',
+    committedQuery: 'iphone',
+    onApplyAssistance: jest.fn(),
+    products: [{ id: 'p1', price: 250000, condition: 'used' } as Product],
+  });
+  expect(screen.queryByTestId('search-suggestion-row')).toBeNull();
+});
+
+it('routes result scrolling to the toolbar and keeps filter sheets visible', () => {
+  renderView({
+    hasSearchQuery: true,
+    query: 'iphone',
+    committedQuery: 'iphone',
+    refinements: { brands: [], sort: 'relevance' },
+    onRefinementsChange: jest.fn(),
+    products: [{ id: 'p1', name: 'iPhone', price: 100 } as Product],
+  });
+  const scroll = (y: number) =>
+    act(() =>
+      mockResultsEvents.onScroll?.({
+        nativeEvent: {
+          contentOffset: { y },
+          contentSize: { height: 1000 },
+          layoutMeasurement: { height: 500 },
+        },
+      } as NativeSyntheticEvent<NativeScrollEvent>)
+    );
+  scroll(120);
+  expect(
+    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
+      .props.pointerEvents
+  ).toBe('none');
+  scroll(80);
+  expect(
+    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
+      .props.pointerEvents
+  ).toBe('auto');
+  fireEvent.press(screen.getByLabelText('Filters'));
+  scroll(160);
+  expect(
+    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
+      .props.pointerEvents
+  ).toBe('auto');
+  expect(screen.getByLabelText('Apply filters')).toBeTruthy();
 });

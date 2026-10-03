@@ -40,6 +40,7 @@ function ComparisonConsumer() {
 describe('V2ComparisonProvider', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    sessionStorage.clear();
     localStorage.clear();
   });
 
@@ -49,7 +50,32 @@ describe('V2ComparisonProvider', () => {
     vi.restoreAllMocks();
   });
 
-  it('defers comparison storage hydration until idle timeout', () => {
+  it('ignores legacy selections from a previous browser session', () => {
+    localStorage.setItem('ogabassey_v2_compare', JSON.stringify([baseProduct]));
+    localStorage.setItem('ogabassey_v2_compare:merchant-a', JSON.stringify([baseProduct]));
+    render(<V2ComparisonProvider storageNamespace="merchant-a"><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', {name: 'Add to compare'}));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    expect(JSON.parse(sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]')).toHaveLength(1);
+  });
+
+  it('starts empty in a new browser session while retaining same-session selections', () => {
+    const first = render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    fireEvent.click(screen.getByRole('button', {name: 'Add to compare'}));
+    first.unmount();
+    const same = render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    same.unmount();
+    sessionStorage.clear();
+    render(<V2ComparisonProvider><ComparisonConsumer /></V2ComparisonProvider>);
+    act(() => vi.advanceTimersByTime(1200));
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+  });
+
+  it('defers tab-session comparison hydration until idle timeout', () => {
     const getItemSpy = vi
       .spyOn(Storage.prototype, 'getItem')
       .mockReturnValue(JSON.stringify([baseProduct]));
@@ -109,7 +135,7 @@ describe('V2ComparisonProvider', () => {
   });
 
   it('keeps persisted comparison items isolated by merchant namespace', () => {
-    localStorage.setItem(
+    sessionStorage.setItem(
       'ogabassey_v2_compare',
       JSON.stringify([baseProduct])
     );
@@ -129,11 +155,11 @@ describe('V2ComparisonProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
 
     expect(
-      JSON.parse(localStorage.getItem('ogabassey_v2_compare') ?? '[]')
+      JSON.parse(sessionStorage.getItem('ogabassey_v2_compare') ?? '[]')
     ).toHaveLength(1);
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
   });
@@ -155,7 +181,7 @@ describe('V2ComparisonProvider', () => {
 
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-a') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
 
@@ -167,7 +193,7 @@ describe('V2ComparisonProvider', () => {
       </V2ComparisonProvider>
     );
 
-    expect(localStorage.getItem('ogabassey_v2_compare:merchant-b')).toBeNull();
+    expect(sessionStorage.getItem('ogabassey_v2_compare:merchant-b')).toBeNull();
     expect(setItemSpy).not.toHaveBeenCalledWith(
       'ogabassey_v2_compare:merchant-b',
       expect.any(String)
@@ -180,7 +206,7 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
     expect(
       JSON.parse(
-        localStorage.getItem('ogabassey_v2_compare:merchant-b') ?? '[]'
+        sessionStorage.getItem('ogabassey_v2_compare:merchant-b') ?? '[]'
       )
     ).toEqual([expect.objectContaining({ id: baseProduct.id })]);
     expect(setItemSpy).toHaveBeenCalledWith(

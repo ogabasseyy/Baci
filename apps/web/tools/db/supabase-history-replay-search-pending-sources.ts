@@ -1,2 +1,3 @@
-// Frozen replay row for the search_products_v2 NULL-status compatibility repair.
-export const SEARCH_PENDING_REPLAY_SOURCE_ROWS = `7d64c0b78fe68d3ce5d996c616769efd26cd4a6fbc56beebefc7e65fec1d620d 20260827100000_fix_search_products_not_archived_nulls.sql`;
+// Frozen replay row for the search_products_v2 NULL-status compatibility repair and additive refinements.
+export const SEARCH_PENDING_REPLAY_SOURCE_ROWS = `7d64c0b78fe68d3ce5d996c616769efd26cd4a6fbc56beebefc7e65fec1d620d 20260827100000_fix_search_products_not_archived_nulls.sql
+a5630e150bde08b7f0450ed847b0ec8888f359b6968bdec9bc015a7f35d1c703 20261002090046_storefront_search_refinements.sql`;

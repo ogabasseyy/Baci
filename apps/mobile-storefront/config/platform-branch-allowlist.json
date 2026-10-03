@@ -316,6 +316,10 @@
     {
       "path": "services/savings-reminder-native.ts",
       "justification": "Reviewed web guard and Android notification channel setup for savings reminders."
+    },
+    {
+      "path": "constants/scroll-momentum.ts",
+      "justification": "Shared search scroll tuning accounts for React Native normal deceleration differences: iOS 0.998 and Android 0.985. Each native platform receives about 5 percent less damping; web retains browser scrolling."
     }
   ],
   "knownForbiddenPatterns": []

@@ -105,6 +105,21 @@ describe('product-transform', () => {
     expect(product?.variants?.[0]?.attributes).not.toHaveProperty('preorder');
   });
 
+  it('keeps listing text and images usable before variant details arrive', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      variants: undefined,
+      images: ['https://example.com/phone.jpg'],
+    });
+    expect(product).toMatchObject({
+      name: variantProductRow.name,
+      price: 50000,
+      has_variants: true,
+      image: 'https://example.com/phone.jpg',
+      variants: [],
+    });
+  });
+
   it('treats sku_matrix products as variant-bearing when has_variants has drifted false', () => {
     const product = transformProduct({
       ...variantProductRow,

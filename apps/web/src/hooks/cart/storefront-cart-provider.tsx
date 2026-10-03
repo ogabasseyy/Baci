@@ -421,7 +421,7 @@ export function StorefrontCartProvider({
             quizAwardId: normalizedOptions?.quizAwardId,
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',
-            hasAssurance: false,
+            hasAssurance: enableSmartCartPro && merchantSlug === 'ogabassey',
             assuranceRate: DEFAULT_ASSURANCE_RATE,
           },
         ];

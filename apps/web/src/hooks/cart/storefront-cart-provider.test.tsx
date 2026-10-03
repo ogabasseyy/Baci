@@ -48,6 +48,33 @@ function buildVoucherToken(expiresAt: string): string {
 }
 
 describe('StorefrontCartProvider', () => {
+  it.each([
+    'ogabassey',
+    'another-store',
+  ])('defaults assurance only for Ogabassey and preserves opt-out: %s', async (merchantSlug) => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug={merchantSlug} enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct));
+    expect(result.current.cart[0].hasAssurance).toBe(
+      merchantSlug === 'ogabassey'
+    );
+    if (merchantSlug === 'ogabassey') {
+      expect(result.current.cartTotal).toBe(105);
+      act(() =>
+        result.current.toggleAssurance?.(result.current.cart[0].cartItemId)
+      );
+      expect(result.current.cartTotal).toBe(100);
+      act(() => result.current.addToCart(mockProduct));
+      expect(result.current.cart[0].hasAssurance).toBe(false);
+      expect(result.current.cartTotal).toBe(200);
+    }
+  });
+
   const mockProduct = {
     id: 'prod-1',
     merchant_id: 'merch-1',

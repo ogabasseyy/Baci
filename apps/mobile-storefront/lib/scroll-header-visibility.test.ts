@@ -49,7 +49,30 @@ describe('resolveScrollHeaderVisibility', () => {
       })
     ).toEqual({
       isVisible: false,
-      previousOffsetY: 104,
+      previousOffsetY: 99,
     });
   });
+});
+
+it('accumulates slow scrolling instead of treating every small event as jitter', () => {
+  let state = { isVisible: true, previousOffsetY: 40 };
+  for (const currentOffsetY of [44, 48, 52])
+    state = resolveScrollHeaderVisibility({ ...state, currentOffsetY });
+  expect(state.isVisible).toBe(false);
+  for (const currentOffsetY of [48, 44, 40])
+    state = resolveScrollHeaderVisibility({ ...state, currentOffsetY });
+  expect(state.isVisible).toBe(true);
+});
+it('ignores rubber-band overscroll at either edge', () => {
+  const state = { isVisible: false, previousOffsetY: 200 };
+  expect(
+    resolveScrollHeaderVisibility({
+      ...state,
+      currentOffsetY: 250,
+      maximumOffsetY: 200,
+    })
+  ).toEqual(state);
+  expect(
+    resolveScrollHeaderVisibility({ ...state, currentOffsetY: -10 })
+  ).toEqual(state);
 });

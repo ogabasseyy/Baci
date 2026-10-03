@@ -4,8 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { BRAND } from '@/constants/Colors';
 import { useTheme } from '@/hooks/useTheme';
-import { formatPrice } from '@/types/product';
 import styles from '../ProductCard.styles';
+import { formatSearchCardPrice } from './search-price';
 import type { EditorialProductCardProps } from './types';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -36,7 +36,7 @@ export default function EditorialProductCard({
         { width: screenWidth - 32 },
         animatedStyle,
       ]}
-      accessibilityLabel={`${product.name}, ${formatPrice(product.price)}`}
+      accessibilityLabel={`${product.name}, ${formatSearchCardPrice(product)}`}
       accessibilityRole="button"
     >
       {showLocalPlaceholder ? (
@@ -65,7 +65,7 @@ export default function EditorialProductCard({
           {product.name}
         </Text>
         <Text style={[styles.editorialPrice, { color: BRAND.primary }]}>
-          {formatPrice(product.price)}
+          {formatSearchCardPrice(product)}
         </Text>
       </View>
     </AnimatedPressable>

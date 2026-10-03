@@ -13,6 +13,7 @@ import type { Product } from '@/types/product';
 import { PRODUCT_SELECT } from './product-select';
 import { transformProduct } from './product-transform';
 import type { ProductsPage, UseProductsOptions } from './product-utils.types';
+import { fetchRefinedProductsPage } from './refined-product-pages';
 
 const log = createLogger('Products');
 
@@ -34,6 +35,16 @@ export async function fetchProductsPage(
   // the entire catalog as matches for the query.
   if (options.search && !normalizedSearch) {
     return { nextOffset: null, products: [], total: 0 };
+  }
+
+  if (normalizedSearch && options.refinements) {
+    return fetchRefinedProductsPage(
+      merchantId,
+      normalizedSearch,
+      options.refinements,
+      limit,
+      offset
+    );
   }
 
   if (normalizedSearch) {

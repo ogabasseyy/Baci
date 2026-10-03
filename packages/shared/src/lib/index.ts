@@ -40,10 +40,19 @@ export { formatPiggyvestPurchaseMoney } from './piggyvest-purchase-money';
 export { createPiggyvestScheduleClient } from './piggyvest-schedule-client';
 export { createPiggyvestScheduleClientBinding } from './piggyvest-schedule-client-binding';
 export { createPiggyvestScheduleController } from './piggyvest-schedule-controller';
+export {
+  buildComparisonRows,
+  type ComparisonFacts,
+} from './product-comparison';
 export * from './product-condition';
 export * from './product-default-variant';
 export * from './product-image-alt';
 export * from './product-inventory';
+export {
+  type ProductRequest,
+  productRequestSchema,
+  sendProductRequest,
+} from './product-request';
 export * from './product-search';
 export * from './product-selection-param-resolution';
 export * from './product-selection-params';
@@ -55,11 +64,36 @@ export * from './receipt-claim-url';
 export * from './redvault-eligibility';
 export * from './redvault-pricing';
 export * from './redvault-refund-allocations';
+export * from './refined-search-rpc';
 export * from './resumable-wallet-return-to';
 export * from './sanitize-html-text';
 export * from './sanitize-wallet-return-to';
 export * from './santa-granted-price';
+export {
+  getSearchQuickFilterGroups,
+  getSearchRefinementChips,
+  type SearchRefinementChip,
+} from './search-refinement-chips';
+export * from './search-refinements';
+export {
+  buildCatalogSearchSuggestions,
+  type SearchSuggestion,
+  type SearchSuggestionProduct,
+} from './search-suggestions';
 export * from './select-preferred-order-payment-account';
+export {
+  mergeAssistedRefinements,
+  parseSearchAssistanceProposal,
+  type SearchAssistanceProposal,
+  searchAssistanceProposalSchema,
+} from './shopping-assistance';
+export {
+  createAssistanceDecoder,
+  describeAssistedFilters,
+  encodeAssistanceFrame,
+  readAssistanceStream,
+  type SearchAssistanceFrame,
+} from './shopping-assistance-stream';
 export * from './string-values';
 export * from './supabase-error-log';
 export * from './to-ascii-lower-case';

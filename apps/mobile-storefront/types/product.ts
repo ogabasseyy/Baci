@@ -102,6 +102,7 @@ export interface ProductConditionOffer {
 }
 
 export interface Product {
+  searchMatch?: import('@baci/shared/lib').RefinedSearchRow;
   id: string;
   merchant_id?: string;
   name: string;

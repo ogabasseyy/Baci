@@ -1,13 +1,15 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { categoryGuidanceCases } from './category-guidance-cases';
 import observedFailure from './camera-category-observed-failure.json';
 
 const directory = mkdtempSync(join(tmpdir(), 'category-guidance-cli-'));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
-const runner = resolve('mcp-server/evals/run-category-guidance-eval.ts');
+const runner = resolve(dirname(fileURLToPath(import.meta.url)), 'run-category-guidance-eval.ts');
 function runTrace(contents: unknown) {
   const path = join(directory, 'trace.json');
   writeFileSync(path, JSON.stringify(contents));
@@ -15,6 +17,19 @@ function runTrace(contents: unknown) {
 }
 
 describe('category guidance CLI evidence format', () => {
+  it('exits zero and emits a passing result for valid synthetic first-call evidence', () => {
+    // Synthetic CLI control, not a real model/browser capture.
+    const traces = [{ result: { type: 'string', value: JSON.stringify({
+      toolInput: { intent: { alternatives: [{ product_type: 'security_camera', brands: ['Xiaomi'], model: 'C300' }] } },
+      toolOutput: { status: 'success', products: [{ id: categoryGuidanceCases.camera.productId }] },
+    }) } }];
+    for (const contents of [traces, { traces }]) {
+      const result = runTrace(contents);
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ caseId: 'camera', passed: true, failures: [] });
+      expect(result.stderr).toBe('');
+    }
+  });
   it('grades actual observed evidence identically in bare and wrapped formats', () => {
     const bare = runTrace(observedFailure.traces);
     const wrapped = runTrace(observedFailure);

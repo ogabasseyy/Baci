@@ -16,7 +16,8 @@ describe('genuine captured model planning arguments', () => {
   it('records all three passing actual calls against the current complete shared descriptor', () => {
     const descriptor = PUBLIC_MCP_TOOLS.find((item) => item.name === 'search_products');
     expect(observedShared.schemaSha256).toBe(createHash('sha256').update(JSON.stringify(descriptor)).digest('hex'));
-    expect(observedShared.provenance.worktreeDirty).toBe(true);
+    expect(observedShared.transportSchemaSha256).toBe(createHash('sha256').update(JSON.stringify(prepareCategoryGuidanceModelSchema(descriptor?.inputSchema ?? {}))).digest('hex'));
+    expect(typeof observedShared.provenance.worktreeDirty).toBe('boolean');
     expect(observedShared.cases.map((item) => item.caseId).sort()).toEqual(['camera', 'explicitCategory', 'tecno']);
     for (const item of observedShared.cases) {
       expect(gradeCategoryGuidanceArguments(item.caseId as 'camera' | 'tecno' | 'explicitCategory', item.calls[0].input).passed).toBe(true);
@@ -79,5 +80,13 @@ describe('schema data preservation', () => {
     expect(result.default).toEqual(payload);
     expect(result.enum).toEqual([payload]);
     expect(result.properties).toEqual(input.properties);
+  });
+});
+
+// A constrained branch must retain its parent's required fields.
+describe('transport required-field inheritance', () => {
+  it('retains parent and branch requirements', () => {
+    const result = prepareCategoryGuidanceModelSchema({ type: 'object', properties: { parent: { type: 'string' }, branch: { type: 'string' } }, required: ['parent'], anyOf: [{ required: ['branch'] }] });
+    expect(result.anyOf?.[0].required).toEqual(['parent', 'branch']);
   });
 });

@@ -9,6 +9,9 @@ function record(value: unknown): Record<string, unknown> {
 
 function merge(base: Record<string, unknown>, override: Record<string, unknown>) {
   const merged = { ...base, ...override };
+  if (Array.isArray(base.required) && Array.isArray(override.required)) {
+    merged.required = [...new Set([...base.required, ...override.required])];
+  }
   if (base.properties || override.properties) {
     const properties = { ...record(base.properties) };
     for (const [key, child] of Object.entries(record(override.properties))) {

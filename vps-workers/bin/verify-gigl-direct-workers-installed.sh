@@ -136,7 +136,7 @@ tracking_counts="$(
     BEGIN {
       quote = sprintf("%c", 39)
       expected_command = "flock -n " remote_dir "/locks/gigl-tracking.lock bash -lc " quote \
-        "export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && cd " remote_dir \
+        "export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd " remote_dir \
         " && timeout --signal=TERM --kill-after=30s 2m " remote_dir "/bin/process-gigl-tracking.sh" quote \
         " >> " remote_dir "/logs/gigl-tracking.log 2>&1"
     }

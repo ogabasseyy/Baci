@@ -131,6 +131,12 @@ tracking:
   # exports, resolved through this map: redirecting an export swaps
   # the executed module without touching the importer.
   - 'packages/shared/package.json'
+  # The tsx poller resolves @/* and @baci/shared/* through the app
+  # tsconfig paths map: redirecting an alias swaps the executed module
+  # without touching the importer, so the map is tracked like the
+  # exports map above. (The app tsconfig has no extends, so the root
+  # tsconfig cannot affect poller resolution.)
+  - 'apps/web/tsconfig.json'
   - 'apps/web/src/scripts/process-gigl-tracking.ts'
   - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
   - 'supabase/migrations/*gigl*'

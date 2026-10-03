@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import {
   GiglWorkerTokenError,
+  GiglWorkerTokenRoleError,
   createGiglTrackingWorkerClient,
   createGiglTrackingWorkerScopeProbeClient,
 } from '@/lib/gigl-tracking-worker-client';
@@ -87,9 +88,15 @@ export async function runGiglTrackingCapabilityVerification({
       client = createGiglTrackingWorkerClient(env);
     } catch (error) {
       // Only an independently verified absent/expired/mis-issued token
-      // is vacuous. Any other construction failure (malformed URL,
-      // plaintext scheme, missing anon key) fails closed: a valid JWT
-      // may still be usable against the correct endpoint, unprobed.
+      // is vacuous. Any other construction failure fails closed: a
+      // usable non-worker JWT (or a valid JWT against a misconfigured
+      // endpoint) may still be abusable, unprobed.
+      if (error instanceof GiglWorkerTokenRoleError) {
+        logger.error(
+          '[gigl-capability] worker token is a usable non-worker JWT while GIGL is disabled; replace it with a worker-role token or remove it and re-run'
+        );
+        return 1;
+      }
       if (!(error instanceof GiglWorkerTokenError)) {
         logger.error(
           '[gigl-capability] worker client misconfigured while GIGL is disabled; fix the Supabase URL/anon key and re-run'

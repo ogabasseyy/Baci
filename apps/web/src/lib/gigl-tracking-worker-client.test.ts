@@ -4,6 +4,7 @@ import {
   createGiglTrackingWorkerClient,
   createGiglTrackingWorkerScopeProbeClient,
   GiglWorkerTokenError,
+  GiglWorkerTokenRoleError,
 } from './gigl-tracking-worker-client';
 
 const rpc = vi.fn();
@@ -64,7 +65,9 @@ describe('createGiglTrackingWorkerClient', () => {
         ...configuredEnv,
         GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
       })
-    ).toThrow('GIGL tracking worker database capability is invalid');
+    ).toThrow(
+      'GIGL tracking worker token is a usable non-worker JWT; refusing to scope a privileged credential to the poller'
+    );
     expect(createClient).not.toHaveBeenCalled();
   });
 
@@ -187,7 +190,8 @@ describe('createGiglTrackingWorkerClient', () => {
       throw new Error('expected construction to throw');
     };
 
-    // Absent/expired/mis-issued tokens: the only vacuous class.
+    // Absent/expired/mis-issued tokens: the only vacuous class. An
+    // expired non-worker JWT is unusable, so it stays vacuous too.
     expect(
       capture(() =>
         createGiglTrackingWorkerClient({
@@ -208,6 +212,29 @@ describe('createGiglTrackingWorkerClient', () => {
         })
       )
     ).toBeInstanceOf(GiglWorkerTokenError);
+    expect(
+      capture(() =>
+        createGiglTrackingWorkerClient({
+          ...configuredEnv,
+          GIGL_TRACKING_WORKER_TOKEN: token(
+            'service_role',
+            'ES256',
+            Math.floor(Date.now() / 1000) - 60
+          ),
+        })
+      )
+    ).toBeInstanceOf(GiglWorkerTokenError);
+    // A usable (unexpired, acceptably signed) non-worker JWT is a live
+    // credential, never vacuous: it must fail closed under its own
+    // class so the disabled smoke cannot latch it as "missing".
+    const roleError = capture(() =>
+      createGiglTrackingWorkerClient({
+        ...configuredEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
+      })
+    );
+    expect(roleError).toBeInstanceOf(GiglWorkerTokenRoleError);
+    expect(roleError).not.toBeInstanceOf(GiglWorkerTokenError);
     // URL/anon failures fail closed, never vacuous.
     expect(
       capture(() =>
@@ -284,7 +311,9 @@ describe('createGiglTrackingWorkerScopeProbeClient', () => {
         ...configuredEnv,
         GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
       })
-    ).toThrow('GIGL tracking worker database capability is invalid');
+    ).toThrow(
+      'GIGL tracking worker token is a usable non-worker JWT; refusing to scope a privileged credential to the poller'
+    );
     expect(() =>
       createGiglTrackingWorkerScopeProbeClient({
         ...configuredEnv,

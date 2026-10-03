@@ -30,13 +30,13 @@ const commonEnv = {
   ZEPTOMAIL_TOKEN: 'zeptomail-token',
 };
 
-function token(role, alg = 'ES256') {
+function token(role, alg = 'ES256', exp = 4_102_444_800) {
   const header = Buffer.from(JSON.stringify({ alg, typ: 'JWT' })).toString(
     'base64url'
   );
-  const payload = Buffer.from(
-    JSON.stringify({ exp: 4_102_444_800, role })
-  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ exp, role })).toString(
+    'base64url'
+  );
   return `${header}.${payload}.signature`;
 }
 
@@ -103,6 +103,37 @@ describe('direct worker environment preflight', () => {
         GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
       }),
       ['GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token']
+    );
+  });
+
+  it('rejects a usable non-worker token when GIGL is disabled', () => {
+    // A valid service_role JWT is a live credential, not a missing
+    // one: the disabled preflight must not pass it silently.
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_ENABLED: 'off',
+        GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
+      }),
+      [
+        'GIGL_TRACKING_WORKER_TOKEN must not be a usable non-worker token while GIGL is disabled',
+      ]
+    );
+  });
+
+  it('accepts an expired non-worker token when GIGL is disabled', () => {
+    // Unusable credentials stay vacuous: nothing to abuse.
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_ENABLED: 'off',
+        GIGL_TRACKING_WORKER_TOKEN: token(
+          'service_role',
+          'ES256',
+          Math.floor(Date.now() / 1000) - 60
+        ),
+      }),
+      []
     );
   });
 

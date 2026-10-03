@@ -224,6 +224,119 @@ describe('quiesce-worker-release', () => {
     assert.ok(!lockExists(fixture, 'error-remediator-global.lock'));
   });
 
+  it('holds an absolute global lock path exactly and last', () => {
+    const fixture = setup();
+    // NOTE: the directory is deliberately not *-locks: the crontab
+    // grep matches any "locks/<name>.lock" substring, so a *-locks
+    // custom dir would ALSO leak its basename into the name loop (a
+    // harmless extra hold, but noise for this test).
+    const customDir = join(fixture.root, 'custom');
+    mkdirSync(customDir, { recursive: true });
+    const customPath = join(customDir, 'remediation.lock');
+    mkdirSync(join(fixture.remote, 'bin'), { recursive: true });
+    writeFileSync(
+      join(fixture.remote, 'bin', 'gigl-dotenv.sh'),
+      readFileSync(
+        join(directory, '..', '..', '.github', 'scripts', 'gigl-dotenv.sh'),
+        'utf8'
+      )
+    );
+    writeFileSync(
+      join(fixture.remote, '.env'),
+      `BACI_REMEDIATION_GLOBAL_LOCK_PATH=${customPath}\n`
+    );
+    // The transition writes the absolute path into the entries; the
+    // locks/ grep cannot see it, so the loop holds only per-job locks.
+    writeFileSync(
+      fixture.crontabFixture,
+      [
+        `* * * * * flock -n ${customPath} true`,
+        '* * * * * flock -n $REMOTE_DIR/locks/aaa.lock true',
+        '*/5 * * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock true',
+        '* * * * * flock -n $REMOTE_DIR/locks/zzz.lock true',
+        '',
+      ].join('\n')
+    );
+    // Fail on the 3rd take: the loop holds aaa, zzz, mmm first and the
+    // exact path is never reached (its file is created by the hold).
+    const failing = runDriver(fixture, { FLOCK_FAIL_ON_CALL: '3' });
+    assert.equal(failing.status, 3);
+    for (const name of ['aaa.lock', 'zzz.lock', 'mmm.lock']) {
+      assert.ok(lockExists(fixture, name), `expected ${name} to be held`);
+    }
+    assert.equal(flockTakes(fixture).length, 3);
+    assert.ok(!existsSync(customPath));
+    assert.ok(!lockExists(fixture, 'remediation.lock'));
+
+    const passing = setup();
+    mkdirSync(join(passing.root, 'custom'), { recursive: true });
+    const passingPath = join(passing.root, 'custom', 'remediation.lock');
+    mkdirSync(join(passing.remote, 'bin'), { recursive: true });
+    writeFileSync(
+      join(passing.remote, 'bin', 'gigl-dotenv.sh'),
+      readFileSync(
+        join(directory, '..', '..', '.github', 'scripts', 'gigl-dotenv.sh'),
+        'utf8'
+      )
+    );
+    writeFileSync(
+      join(passing.remote, '.env'),
+      `BACI_REMEDIATION_GLOBAL_LOCK_PATH=${passingPath}\n`
+    );
+    writeFileSync(
+      passing.crontabFixture,
+      readFileSync(fixture.crontabFixture, 'utf8').replaceAll(
+        customPath,
+        passingPath
+      )
+    );
+    const result = runDriver(passing);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /QUIESCE-OK/);
+    assert.equal(flockTakes(passing).length, 4);
+    // The exact hold created the file (append-open); the basename was
+    // never held through locks/.
+    assert.ok(existsSync(passingPath));
+    assert.ok(!lockExists(passing, 'remediation.lock'));
+  });
+
+  it('treats a same-inode locks/ spelling as the standard case', () => {
+    const fixture = setup();
+    // locks/../locks/x.lock resolves to the locks/ file the loop
+    // already holds: without normalization the exact hold would take
+    // the same inode on a second fd and self-deadlock (flock locks
+    // are per open-file-description).
+    writeFileSync(join(fixture.remote, 'locks', 'baci-global.lock'), '');
+    mkdirSync(join(fixture.remote, 'bin'), { recursive: true });
+    writeFileSync(
+      join(fixture.remote, 'bin', 'gigl-dotenv.sh'),
+      readFileSync(
+        join(directory, '..', '..', '.github', 'scripts', 'gigl-dotenv.sh'),
+        'utf8'
+      )
+    );
+    writeFileSync(
+      join(fixture.remote, '.env'),
+      'BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/../locks/baci-global.lock\n'
+    );
+    writeFileSync(
+      fixture.crontabFixture,
+      [
+        '* * * * * flock -n $REMOTE_DIR/locks/baci-global.lock true',
+        '* * * * * flock -n $REMOTE_DIR/locks/aaa.lock true',
+        '*/5 * * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock true',
+        '* * * * * flock -n $REMOTE_DIR/locks/zzz.lock true',
+        '',
+      ].join('\n')
+    );
+    const result = runDriver(fixture);
+    assert.equal(result.status, 0, result.stderr);
+    // aaa, zzz, mmm, then the deferred basename: 4 takes, no second
+    // exact fd on the same inode.
+    assert.equal(flockTakes(fixture).length, 4);
+    assert.ok(lockExists(fixture, 'baci-global.lock'));
+  });
+
   it('falls back to the default global lock without a dotenv reader', () => {
     const fixture = setup();
     // A custom value the quiesce cannot read (first install, legacy

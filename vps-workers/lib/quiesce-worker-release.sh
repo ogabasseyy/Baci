@@ -23,21 +23,21 @@ quiesce_worker_release() {
   fi
   gigl_quiesced=1
 
-  # The remediation global lock name is configurable
+  # The remediation global lock PATH is configurable
   # (BACI_REMEDIATION_GLOBAL_LOCK_PATH in the live .env; the transition
-  # installer honors a custom path such as locks/custom-global.lock). A
-  # hardcoded default here would order a renamed global lock by
-  # first-appearance and deadlock promotion against a canary tick the
-  # same way an unordered default would, so resolve it exactly the way
-  # the transition installer does: the LIVE .env (the running entries
-  # hold the current name, not the staged revision's) through the
-  # shared reader every promote installs at bin/. A missing reader
-  # (first install, legacy tree) falls back to the default — which is
-  # also what the transition would use there. Only the basename
-  # participates: the hold loop below only opens locks/*.lock, so an
-  # absolute custom path outside locks/ is out of scope for the
-  # quiesce (pre-existing limitation, shared with the hold loop).
+  # installer honors absolute paths and relatives outside locks/, and
+  # the remediator flocks the resolved path). A hardcoded default here
+  # would order a renamed global lock by first-appearance and deadlock
+  # promotion against a canary tick the same way an unordered default
+  # would — and holding locks/<basename> instead of the real path
+  # would let a directly launched remediator execute mid-promote — so
+  # resolve it exactly the way the transition installer does: the LIVE
+  # .env (the running entries hold the current path, not the staged
+  # revision's) through the shared reader every promote installs at
+  # bin/. A missing reader (first install, legacy tree) falls back to
+  # the default — which is also what the transition would use there.
   local gigl_global_lock="error-remediator-global.lock"
+  local gigl_global_path="$remote_dir/locks/error-remediator-global.lock"
   local gigl_dotenv_reader="$remote_dir/bin/gigl-dotenv.sh"
   if [ -f "$gigl_dotenv_reader" ]; then
     # shellcheck disable=SC1090
@@ -45,8 +45,27 @@ quiesce_worker_release() {
     local gigl_global_value
     gigl_global_value="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REMEDIATION_GLOBAL_LOCK_PATH' 2>/dev/null || true)"
     if [ -n "$gigl_global_value" ]; then
+      if [[ "$gigl_global_value" = /* ]]; then
+        gigl_global_path="$gigl_global_value"
+      else
+        gigl_global_path="$remote_dir/$gigl_global_value"
+      fi
       gigl_global_lock="$(basename "$gigl_global_value")"
     fi
+  fi
+  # A same-inode spelling of the locks/ path (locks/../locks/x.lock, a
+  # symlink) is the standard case, not a second lock: holding both
+  # spellings would self-deadlock (same inode on two fds, and flock
+  # locks are per open-file-description).
+  if [ -e "$gigl_global_path" ] && [ "$gigl_global_path" -ef "$remote_dir/locks/$gigl_global_lock" ]; then
+    gigl_global_path="$remote_dir/locks/$gigl_global_lock"
+  fi
+  # Basename deferral only covers locks/*.lock (the crontab grep and
+  # file scan below cannot see any other path). A global lock outside
+  # locks/ defers nothing by name; it is held exactly, after the loop.
+  local gigl_defer_name=""
+  if [ "$gigl_global_path" = "$remote_dir/locks/$gigl_global_lock" ]; then
+    gigl_defer_name="$gigl_global_lock"
   fi
 
   # Stop the persistent systemd user services before quiescing: their
@@ -91,7 +110,7 @@ quiesce_worker_release() {
         [ -e "$gigl_quiesce_path" ] || continue
         basename "$gigl_quiesce_path"
       done
-    } | awk '!seen[$0]++' | awk -v gigl_global="$gigl_global_lock" '
+    } | awk '!seen[$0]++' | awk -v gigl_global="$gigl_defer_name" '
       # The remediation cron lines nest flock per-job (outer) -> global
       # (inner), but first-appearance lists the global lock -- first seen
       # on the vercel line -- before the later per-job locks. The canary
@@ -101,8 +120,9 @@ quiesce_worker_release() {
       # global lock until every lock that can outer it is already held.
       # Nothing else nests global-outer except the deploy-lock-serialized
       # transition, so trailing it cannot open a new cycle. The deferred
-      # name is the configured global lock resolved above, not the
-      # default: a renamed global lock nests the same way.
+      # name is the configured locks/ global lock resolved above, not
+      # the default: a renamed global lock nests the same way. (Empty
+      # for an outside-locks/ path, which is held exactly below.)
       $0 == gigl_global { hold_global = 1; next }
       { print }
       END { if (hold_global) print gigl_global }
@@ -130,6 +150,25 @@ quiesce_worker_release() {
   done <<EOF
 $gigl_quiesce_names
 EOF
+  # A global lock outside locks/ (absolute, or relative elsewhere) is
+  # invisible to the name loop above, so hold the exact configured path
+  # on its own fd AFTER every per-job lock: deferred-last by
+  # construction, under the same deadlock argument as the name
+  # deferral. The transition installer created the parent and file; a
+  # missing parent fails the deploy loudly (the remediator itself
+  # could not flock it either), while a missing file is recreated by
+  # the append-open and held like any other.
+  if [ -z "$gigl_defer_name" ]; then
+    # Unlike the loop names (charset-restricted), the exact path is
+    # operator-configured and may contain spaces: %q-escape it for the
+    # eval (bash 3.2 compatible, like the numeric-fd form above).
+    local gigl_global_path_q
+    printf -v gigl_global_path_q '%q' "$gigl_global_path"
+    # shellcheck disable=SC2094
+    eval "exec ${gigl_quiesce_fd}>>$gigl_global_path_q" || return 1
+    flock -w 600 -x "$gigl_quiesce_fd" || return 1
+    gigl_quiesce_fd=$((gigl_quiesce_fd + 1))
+  fi
 }
 
 gigl_restart_services() {

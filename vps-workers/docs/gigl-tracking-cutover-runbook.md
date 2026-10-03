@@ -58,24 +58,63 @@ unless `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` — emergency only, then
 re-run the smoke/latch sequence). For an emergency manual rollback,
 restore the COMPLETE old worker release — not just the checkout
 symlink: repointing `app-live` alone leaves the newer `bin/`, `jobs/`,
-`lib/`, and `node_modules/` installed, so cron executes a mixed
-release while the SHA marker claims the old revision, and neither
-readiness nor the latch can detect the wrapper or dependency skew.
-The old worktree is a full repo checkout, so it carries the old
-`vps-workers/` tree; if it was already retired, re-create it first
-(`git -C <base>/app-live worktree add --detach <base>/app-<sha>
-<sha>`), or use the `deploy.sh` path instead.
+`lib/`, `node_modules/`, and crontab installed, so cron executes a
+mixed release while the SHA marker claims the old revision, and
+neither readiness nor the latch can detect the wrapper, dependency,
+or schedule skew. The old worktree is a full repo checkout, so it
+carries the old `vps-workers/` tree; if it was already retired,
+re-create it first (`git -C <base>/app-live worktree add --detach
+<base>/app-<sha> <sha>`), or use the `deploy.sh` path instead.
 
-Rebuild the old dependency tree BEFORE taking locks: a registry
+Rebuild the old dependency trees BEFORE taking locks: a registry
 fetch under the quiesce would hold every worker lock for the whole
 install, while the retired worktree runs nothing until the flip, so
 building there is contention-free (node_modules/ is git-ignored, so
 the "immutable" worktree stays git-clean — provision does the same
-`pnpm install` inside per-SHA worktrees):
+`pnpm install` inside per-SHA worktrees). Both trees: the
+`vps-workers` prod tree synced to `$REMOTE_DIR/node_modules`, AND the
+app-checkout tree the restored wrappers execute (a re-created
+worktree has no `tsx`, so without this the poller fails with
+"Missing executable tsx" right after the flip):
 
 ```sh
 (cd <base>/app-<sha>/vps-workers && CI=true pnpm install --frozen-lockfile --prod)
+if [ ! -x <base>/app-<sha>/apps/web/node_modules/.bin/tsx ] && [ ! -x <base>/app-<sha>/node_modules/.bin/tsx ]; then
+  (cd <base>/app-<sha> && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile)
+  printf '%s\n' "<sha>" > <base>/app-<sha>/node_modules/.baci-deps-installed
+fi
 ```
+
+Render the target revision's crontab fragment BEFORE taking locks
+(pure computation, contention-free): the old worktree carries the
+old `deploy.sh`, whose unquoted heredoc expands these same variables
+at deploy time — replicate exactly, then refuse unexpanded lines:
+
+```sh
+old_deploy=<base>/app-<sha>/vps-workers/deploy.sh
+eval "$(grep -E '^CRON_BLOCK_(START|END)=' "$old_deploy")"
+node_bin=$(command -v node || echo /usr/bin/node)
+codex_bin=$(find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit)
+[ -n "$codex_bin" ] || { echo "Cannot resolve the native Codex binary; aborting." >&2; exit 1; }
+{
+  echo "REMOTE_DIR='$REMOTE_DIR'"
+  echo "NODE_BIN='$node_bin'"
+  echo "CODEX_REMEDIATOR_IMAGE='baci-codex-remediator:<sha>'"
+  echo "CODEX_CONTAINER_BIN='$codex_bin'"
+  echo "CODEX_READONLY_SECCOMP_PROFILE='$REMOTE_DIR/config/codex-readonly-seccomp.json'"
+  echo "CRON_BLOCK_START='$CRON_BLOCK_START'"
+  echo "CRON_BLOCK_END='$CRON_BLOCK_END'"
+  echo 'cat <<EOF'
+  sed -n '/^\$CRON_BLOCK_START$/,/^\$CRON_BLOCK_END$/p' "$old_deploy"
+  echo 'EOF'
+} > /tmp/baci-old-cron-render.sh
+bash /tmp/baci-old-cron-render.sh > "$REMOTE_DIR/crontab.fragment.rollback"
+! grep -E '\$[A-Za-z_]' "$REMOTE_DIR/crontab.fragment.rollback"
+```
+
+(The remediator image tag is the target SHA: it exists if the old
+deploy's image was never pruned. If it was, rebuild it or take the
+`deploy.sh` path instead of this manual procedure.)
 
 Refuse the rollback while a production deploy is in flight, through
 the same GitHub-side protocol as `deploy.sh` — run from a checkout
@@ -120,15 +159,27 @@ flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$remote_dir/lib/"
   rsync -a --delete <base>/app-<sha>/vps-workers/node_modules/ "$remote_dir/node_modules/"
   cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$remote_dir/bin/gigl-dotenv.sh"
+  # Restore the target revision's crontab while ticks are still
+  # blocked: the merge is the old rev's own script (anchor-extracted,
+  # so deploy.sh rev skew cannot desync it), run against the
+  # pre-rendered old fragment — the same idempotent splice as
+  # deploy.sh (block replace plus stray-line cleanup). Markers come
+  # from the fragment's own first/last lines (the template expands
+  # them), so no marker values cross the shell boundary.
+  sed -n "/<<'REMOTE_SH'/,/^REMOTE_SH\$/p" <base>/app-<sha>/vps-workers/deploy.sh | sed '1d;$d' > /tmp/baci-old-cron-merge.sh
+  bash /tmp/baci-old-cron-merge.sh "$remote_dir/crontab.fragment.rollback" "$remote_dir" "$(head -n 1 "$remote_dir/crontab.fragment.rollback")" "$(tail -n 1 "$remote_dir/crontab.fragment.rollback")"
   ln -sfn <base>/app-<sha> <base>/app-live
   printf "<sha>" > "$remote_dir/app-checkout.sha"
   rm -f "$remote_dir/.gigl-capability-smoke-ok"
 ' "$REMOTE_DIR"
 ```
 
-Files (including the rebuilt dependency tree) restore BEFORE the
-symlink/marker flip, so the marker never claims the old revision
-while newer wrappers are still installed. Deleting the latch is
+Files (including the rebuilt dependency trees and the restored
+schedule) converge BEFORE the symlink/marker flip, so the marker
+never claims the old revision while newer wrappers are still
+installed. Every step is idempotent: re-running the block after a
+failure is safe, except the merge consumes the fragment — re-render
+it first if re-running past that point. Deleting the latch is
 required — it certified the newer revision, and without this a later
 non-tracking push would bypass on a stale proof while cron runs the
 old code. Record the rollback afterwards so the workflow's
@@ -143,9 +194,10 @@ bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && record_deploy_wo
 ```
 
 Re-smoke afterwards for immediate confidence; the next tracking push
-re-latches. The crontab stays at the newer release: follow with a
-full `deploy.sh` from the old SHA at the first opportunity to
-converge it.
+re-latches. Follow with a full `deploy.sh` from the old SHA at the
+first opportunity anyway: it re-converges the user services and the
+remediation transition, which this file-and-schedule restore does
+not touch.
 
 Known residual window: promote lands new code before the workflow's
 `db-migrations` apply, so a tracking change that needs a new migration

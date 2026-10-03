@@ -5,12 +5,20 @@ import type { Database } from '@/types/supabase';
 
 type GiglTrackingRpcClient = Pick<SupabaseClient<Database>, 'rpc'>;
 
-// The worker token is absent, expired, mis-roled, or mis-signed: there
-// is no usable JWT to abuse. The disabled-branch smoke treats ONLY this
-// class as vacuous; every other construction failure (malformed URL,
-// plaintext scheme, missing anon key) fails closed, because a valid JWT
-// may still be usable against the correct endpoint unprobed.
+// The worker token is absent, expired, or mis-signed: there is no
+// usable JWT to abuse. The disabled-branch smoke treats ONLY this class
+// as vacuous; every other construction failure fails closed, because a
+// valid JWT may still be usable against the correct endpoint unprobed.
 export class GiglWorkerTokenError extends Error {}
+
+// The token is present, well-formed, unexpired, and acceptably signed,
+// but its role is not the worker role (including a missing role claim).
+// This is a LIVE credential — PostgREST would accept it outside the
+// worker hook — so it must never be mistaken for the vacuous class
+// above: a disabled setup holding a service_role JWT latches nothing.
+// Deliberately NOT a GiglWorkerTokenError subclass, so the disabled
+// smoke's instanceof check fails closed on it.
+export class GiglWorkerTokenRoleError extends Error {}
 
 const EXPECTED_WORKER_ROLE = 'gigl_tracking_worker';
 // Production Supabase project (public: NEXT_PUBLIC_* values ship in
@@ -69,6 +77,28 @@ function hasCurrentWorkerCapability(token: string): boolean {
   }
 }
 
+// Same usability bar as hasCurrentWorkerCapability (well-formed,
+// acceptably signed, unexpired) but WITHOUT the worker role: true
+// exactly when the token is a live credential PostgREST would accept
+// outside the worker hook. Expired, malformed, and mis-signed tokens
+// are unusable and stay in the vacuous class.
+function hasUsableNonWorkerCapability(token: string): boolean {
+  try {
+    if (token.split('.').length !== 3) return false;
+    const header = parseJwtPart(token, 0);
+    const claims = parseJwtPart(token, 1);
+    return (
+      typeof header.alg === 'string' &&
+      SUPPORTED_SIGNING_ALGORITHMS.has(header.alg) &&
+      claims.role !== EXPECTED_WORKER_ROLE &&
+      typeof claims.exp === 'number' &&
+      claims.exp * 1000 > Date.now()
+    );
+  } catch {
+    return false;
+  }
+}
+
 function createValidatedPostgrestClient(
   env: Readonly<Record<string, string | undefined>>
 ) {
@@ -76,8 +106,16 @@ function createValidatedPostgrestClient(
   const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const workerToken = env.GIGL_TRACKING_WORKER_TOKEN?.trim();
   // Token first: a missing/expired token is vacuous even when the URL
-  // is also misconfigured (nothing usable to abuse either way).
+  // is also misconfigured (nothing usable to abuse either way). A
+  // usable non-worker JWT is NOT vacuous — it is a distinct fail-closed
+  // class, so the disabled smoke cannot latch it as "missing". The
+  // role claim is never echoed: it is attacker-influenced log bytes.
   if (!workerToken || !hasCurrentWorkerCapability(workerToken)) {
+    if (workerToken && hasUsableNonWorkerCapability(workerToken)) {
+      throw new GiglWorkerTokenRoleError(
+        'GIGL tracking worker token is a usable non-worker JWT; refusing to scope a privileged credential to the poller'
+      );
+    }
     throw new GiglWorkerTokenError(
       'GIGL tracking worker database capability is invalid'
     );

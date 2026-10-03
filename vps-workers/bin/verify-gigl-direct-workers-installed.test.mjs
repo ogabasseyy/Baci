@@ -75,7 +75,7 @@ function fixture({
 
   const trackingCommand = staleTrackingCommand
     ? `${remote}/bin/process-gigl-tracking.sh`
-    : `flock -n ${remote}/locks/gigl-tracking.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && cd ${remote} && timeout --signal=TERM --kill-after=30s 2m ${remote}/bin/process-gigl-tracking.sh'`;
+    : `flock -n ${remote}/locks/gigl-tracking.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd ${remote} && timeout --signal=TERM --kill-after=30s 2m ${remote}/bin/process-gigl-tracking.sh'`;
   const lines = [
     `*/5 * * * * ${trackingCommand} >> ${remote}/logs/gigl-tracking.log 2>&1`,
   ];

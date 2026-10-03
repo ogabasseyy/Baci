@@ -182,6 +182,27 @@ describe('deploy tracking import graph', () => {
     }
   });
 
+  it('keeps the runtime tsconfig paths map in the tracking filter', () => {
+    // tsx resolves the poller's @/* imports through
+    // apps/web/tsconfig.json paths: an alias redirect swaps the
+    // executed module without touching any importer, so the map needs
+    // the same tracking as the package.json exports map. The import
+    // walker cannot see it (it is not an import), so this pins the
+    // filter entry directly instead of going through reachability.
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(
+      filter.indexOf('tracking:'),
+      filter.indexOf('migrations:')
+    );
+    assert.ok(
+      tracking.includes("  - 'apps/web/tsconfig.json'"),
+      'expected apps/web/tsconfig.json in the tracking filter: alias redirects change the executed modules'
+    );
+  });
+
   it('keeps every runtime-reachable worker file in the tracking filter', () => {
     // The cron directory has no recursive glob (notification-only fixes
     // must not demand a poller rollout), and shared files have no

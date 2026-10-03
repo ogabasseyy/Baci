@@ -35,6 +35,15 @@ PROMOTE_ATTEMPTS=${PROMOTE_ATTEMPTS:-2}
 # Optional exact-main authority check. The production workflow binds this to a
 # fail-closed GitHub ref verifier. Tests and non-production callers may omit it.
 DEPLOY_CURRENT_MAIN_GUARD=${DEPLOY_CURRENT_MAIN_GUARD:-}
+# Optional worker-promote overlap check. The production workflow binds this
+# to the publish-side overlap refusal: the pre-publish step is only a
+# point-in-time check before a deployment step that may run ~55 minutes,
+# and a promote recorded after that step would otherwise publish off a
+# stale latch/SHA read. Re-checked immediately before EVERY promote
+# attempt, so a record written during the deploy, a backoff, or an
+# earlier promote attempt blocks the promotion. Tests and non-production
+# callers may omit it.
+DEPLOY_PROMOTE_OVERLAP_CHECK=${DEPLOY_PROMOTE_OVERLAP_CHECK:-}
 deploy_command=("$@")
 last_deployment_target=""
 
@@ -104,6 +113,13 @@ run_promote_command() {
   if ! run_current_main_guard; then
     echo "The current-main deployment guard refused to promote ${last_deployment_target}." >&2
     return 1
+  fi
+
+  if [ -n "$DEPLOY_PROMOTE_OVERLAP_CHECK" ]; then
+    if ! "$DEPLOY_PROMOTE_OVERLAP_CHECK"; then
+      echo "The worker-promote overlap check refused to promote ${last_deployment_target}." >&2
+      return 1
+    fi
   fi
 
   if [ "$first_command" = "pnpm" ] && [ "$second_command" = "exec" ] && [ "$third_command" = "vercel" ]; then

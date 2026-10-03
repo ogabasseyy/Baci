@@ -20,6 +20,7 @@ vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
     await importOriginal<typeof import('@/lib/gigl-tracking-worker-client')>();
   return {
     GiglWorkerTokenError: original.GiglWorkerTokenError,
+    GiglWorkerTokenRoleError: original.GiglWorkerTokenRoleError,
     createGiglTrackingWorkerClient: createClient,
     createGiglTrackingWorkerScopeProbeClient: createScopeProbeClient,
   };
@@ -236,6 +237,32 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] worker token missing or expired; provision it before re-enabling GIGL'
+    );
+    expect(verifyScopeProbe).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when disabled with a usable non-worker token', async () => {
+    // A valid service_role JWT is a live credential, not a missing
+    // one: the disabled smoke must not latch it vacuously.
+    const { GiglWorkerTokenRoleError } = await import(
+      '@/lib/gigl-tracking-worker-client'
+    );
+    createClient.mockImplementationOnce(() => {
+      throw new GiglWorkerTokenRoleError(
+        'GIGL tracking worker token is a usable non-worker JWT; refusing to scope a privileged credential to the poller'
+      );
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { GIGL_ENABLED: 'off', NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] worker token is a usable non-worker JWT while GIGL is disabled; replace it with a worker-role token or remove it and re-run'
     );
     expect(verifyScopeProbe).not.toHaveBeenCalled();
   });

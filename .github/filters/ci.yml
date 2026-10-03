@@ -149,6 +149,7 @@ deploy_scripts:
   - '.github/scripts/deploy-mcp-server.test.mjs'
   - '.github/scripts/deploy-with-retry.sh'
   - '.github/scripts/deploy-with-retry-current-main.test.mjs'
+  - '.github/scripts/deploy-with-retry-overlap.test.mjs'
   - '.github/scripts/deploy-with-retry.test.mjs'
   - '.github/scripts/deploy-with-retry.test-helpers.mjs'
   - '.github/scripts/deploy-with-retry.run-script.mjs'

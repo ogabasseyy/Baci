@@ -73,6 +73,29 @@ function isRestrictedGiglWorkerToken(value, now = Date.now()) {
   }
 }
 
+// Same usability bar as the worker client's non-worker check
+// (well-formed, acceptably signed, unexpired) but WITHOUT the worker
+// role and WITHOUT the 24-hour rotation runway: true exactly when the
+// token is a live credential PostgREST would accept outside the worker
+// hook. The disabled preflight must reject it — otherwise a valid
+// service_role JWT passes silently and the disabled smoke would latch
+// the setup vacuously.
+function isUsableNonWorkerGiglToken(value, now = Date.now()) {
+  try {
+    if (value.split('.').length !== 3) return false;
+    const header = parseJwtPart(value, 0);
+    const claims = parseJwtPart(value, 1);
+    return (
+      SUPPORTED_GIGL_TOKEN_ALGORITHMS.has(header.alg) &&
+      claims.role !== 'gigl_tracking_worker' &&
+      typeof claims.exp === 'number' &&
+      claims.exp * 1000 > now
+    );
+  } catch {
+    return false;
+  }
+}
+
 // dotenv accepts multiline quoted values, but the shell reader
 // (gigl-dotenv.sh) is line-oriented: it would hand the poller the
 // first line while dotenv-based checks validated the whole value (or
@@ -256,6 +279,15 @@ export function getDirectWorkerPreflightProblems(env) {
   ) {
     problems.push(
       'GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token'
+    );
+  }
+  if (
+    isGiglDisabled &&
+    isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN') &&
+    isUsableNonWorkerGiglToken(env.GIGL_TRACKING_WORKER_TOKEN)
+  ) {
+    problems.push(
+      'GIGL_TRACKING_WORKER_TOKEN must not be a usable non-worker token while GIGL is disabled'
     );
   }
 

@@ -21,9 +21,11 @@
 # boundary even though BACI_WORKER_ENV=/dev/null only stops further
 # FILE loads. GIGL_ENV_FILE_AUTHORITATIVE=1 inverts the precedence for
 # allowlisted names (the file always wins; file-absent caller values
-# are dropped): the smoke entry sets it because a smoke certifies the
-# installed dotenv, while the poller keeps caller-wins for manual runs
-# (cron's minimal env makes it a no-op there).
+# are dropped): the smoke entry and the scheduled poller both set it,
+# because both must run the installed dotenv — the cron line uses
+# bash -lc, so a login-shell profile could otherwise override the
+# file with a stale token the smoke never saw. Only explicit manual
+# runs keep caller-wins.
 # Threat model: this boundary contains ACCIDENTAL exposure — secrets
 # dumped via errors/logs, inherited by child processes, or auto-loaded
 # from the shared file by dotenv tooling (hence BACI_WORKER_ENV and

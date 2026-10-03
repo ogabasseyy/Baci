@@ -214,6 +214,22 @@ describe('gigl-tracking-scoped-env', () => {
     assert.ok(modeIndex < callIndex);
   });
 
+  it('runs the scheduled poller in file-authoritative mode', () => {
+    // The cron line uses bash -lc: without the file-authoritative
+    // export, a login-shell profile could override the installed
+    // dotenv with a stale token the smoke never saw.
+    const deploySource = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const trackingLine = deploySource
+      .split('\n')
+      .find((line) => line.includes('locks/gigl-tracking.lock bash -lc'));
+
+    assert.ok(trackingLine, 'expected a gigl-tracking cron line');
+    assert.ok(
+      trackingLine.includes('export GIGL_ENV_FILE_AUTHORITATIVE=1'),
+      'expected the gigl-tracking cron line to set GIGL_ENV_FILE_AUTHORITATIVE=1'
+    );
+  });
+
   it('ships the shared dotenv reader to the VPS next to the filter', () => {
     const releaseHelper = readFileSync(
       join(workerRoot, 'lib', 'prepare-worker-release.sh'),

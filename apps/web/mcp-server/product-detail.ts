@@ -4,7 +4,9 @@ import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
-import { buildMcpCatalogColorsPayload, formatMcpCatalogColors, getMcpProductCatalogColors } from './product-catalog-colors';
+import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
+import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
 
 interface ProductDetailSource {
   id: string;

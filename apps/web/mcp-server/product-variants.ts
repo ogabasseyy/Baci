@@ -2,7 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
-import { buildMcpCatalogColorsPayload, formatMcpCatalogColors, getMcpProductCatalogColors } from './product-catalog-colors';
+import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
+import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({

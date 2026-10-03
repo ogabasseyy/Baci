@@ -45,20 +45,3 @@ export function getMcpProductCatalogColors({
     imagesByColor,
   };
 }
-
-
-type CatalogColors = ReturnType<typeof getMcpProductCatalogColors>;
-
-/** Shared catalog-choice wording; availability remains tied to returned variants. */
-export function formatMcpCatalogColors(colors: CatalogColors): string {
-  return `**Catalog Colors:** ${colors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed)`;
-}
-
-export function buildMcpCatalogColorsPayload(colors: CatalogColors, meaning: string) {
-  return {
-    labels: colors.colors,
-    source: colors.source,
-    images_by_color: colors.imagesByColor,
-    meaning,
-  };
-}

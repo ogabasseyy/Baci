@@ -40,8 +40,11 @@ function getPriceFormatter(currency: string): Intl.NumberFormat {
   return formatter;
 }
 
-export function formatPrice(price: number, currency: string = 'NGN') {
-  return getPriceFormatter(currency).format(price);
+export function formatPrice(
+  price: number,
+  currency: string | null | undefined = 'NGN'
+) {
+  return getPriceFormatter(currency ?? 'NGN').format(price);
 }
 
 interface ReceiptCardProps {

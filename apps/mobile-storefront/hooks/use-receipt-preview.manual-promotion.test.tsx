@@ -104,6 +104,85 @@ describe('useReceiptPreview manual promotion', () => {
     expect(preview.result.current.documentKind).toBe('receipt');
   });
 
+  it.each([
+    ['null item entry', { items: [null] }],
+    ['numeric provenance marker', { external_source: 7 }],
+    ['numeric import marker', { import_job_id: 42 }],
+  ])('fails closed without crashing on %s', (_label, override) => {
+    // The warn-only fetch can hand back unvalidated shapes; corrupt rows
+    // must preview as invoices, never crash the render.
+    mockReceiptDetail = coveredManualDetail(override);
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).not.toBe('receipt');
+  });
+
+  it('skips unparseable timestamps when dating a promoted receipt', () => {
+    mockReceiptDetail = coveredManualDetail({
+      transactions: [
+        {
+          amount: 500,
+          created_at: 'not-a-timestamp',
+          description: null,
+          metadata: null,
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+        {
+          amount: 500,
+          created_at: '2026-09-30T09:00:00.000Z',
+          description: null,
+          metadata: null,
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+      ],
+    });
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    const expected = new Date('2026-09-30T09:00:00.000Z').toLocaleDateString(
+      'en-GB',
+      {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos',
+      }
+    );
+    expect(preview.result.current.documentKind).toBe('receipt');
+    expect(preview.result.current.html).toContain(expected);
+  });
+
+  it('itemizes the assurance premium on a promoted receipt', () => {
+    // The premium rolls into the total: without its own line the visible
+    // lines would not reconcile, unlike the emailed PDF and download.
+    mockReceiptDetail = coveredManualDetail({
+      total: 550,
+      amount_paid: 550,
+      subtotal: 550,
+      items: [
+        {
+          id: 'item-1',
+          name: 'Device',
+          product_name: 'Device',
+          quantity: 1,
+          price: 500,
+          assurance_fee: 50,
+        },
+      ],
+    });
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).toBe('receipt');
+    expect(preview.result.current.html).toContain('Ogabassey Assurance');
+  });
+
   it('dates a promoted receipt from the completing payment', () => {
     // The emailed PDF and account download date receipts by the latest
     // settled payment; a stale invoice issue date must not win here, and

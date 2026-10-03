@@ -160,4 +160,46 @@ describe('resolveStorefrontOrderPaymentAccounts', () => {
     ).toBe('2026-09-30T12:00:00Z');
     expect(result.transactionsByOrderId.has('unpaid-order')).toBe(false);
   });
+
+  it('loads transactions for partially paid available manual invoices', async () => {
+    const rpc = vi.fn((fn: string) => {
+      if (fn === 'get_customer_order_payment_accounts') {
+        return Promise.resolve({ data: [], error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+    const manualRow = {
+      payment_status: 'partially_paid',
+      shipping_status: 'pending',
+      recorded_by_user_id: 'staff-1',
+      total: 100,
+      subtotal: 100,
+      shipping_fee: 0,
+      tax_amount: 0,
+      discount_amount: 0,
+      amount_paid: 40,
+      currency: 'NGN',
+      order_items: [{ name: 'Device', quantity: 1, price: 100 }],
+    };
+
+    const result = await resolveStorefrontOrderPaymentAccounts(
+      supabase,
+      [
+        { id: 'partial-manual', ...manualRow },
+        // Cancelled rows are unavailable: no history to preview.
+        {
+          id: 'cancelled-manual',
+          ...manualRow,
+          shipping_status: 'cancelled',
+        },
+      ],
+      new Date('2026-09-30T13:00:00Z')
+    );
+
+    expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
+      p_order_ids: ['partial-manual'],
+    });
+    expect(result.transactionsByOrderId.has('cancelled-manual')).toBe(false);
+  });
 });

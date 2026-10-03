@@ -19,7 +19,7 @@ import {
   showMerchantBankDetails,
 } from '@baci/shared';
 import { useState } from 'react';
-import type { ReceiptListItem } from '@/types/receipt';
+import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
 export interface ReceiptPreviewOptions {
@@ -29,6 +29,24 @@ export interface ReceiptPreviewOptions {
    * the "View / Download Proforma Invoice" action that opened it.
    */
   documentKind?: ReceiptDocumentKind;
+}
+
+function appendAssuranceLine(
+  items: ReceiptDetail['items']
+): ReceiptOrder['items'] {
+  const total = items.reduce((sum, item) => {
+    const fee = Number(item?.assurance_fee ?? 0);
+    return sum + (Number.isFinite(fee) && fee > 0 ? fee : 0);
+  }, 0);
+  if (total <= 0) return items as ReceiptOrder['items'];
+  return [
+    ...(items as ReceiptOrder['items']),
+    {
+      product_name: 'Ogabassey Assurance',
+      quantity: 1,
+      price: total,
+    },
+  ];
 }
 
 export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
@@ -74,10 +92,16 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       value !== undefined &&
       Number.isFinite(Number(value)) &&
       Number(value) >= 0;
+    // Blank check without dereference: a present-but-malformed provenance
+    // marker (non-string) disqualifies manual status instead of crashing.
+    const isBlankProvenance = (value: unknown) =>
+      value === null ||
+      value === undefined ||
+      (typeof value === 'string' && value.trim() === '');
     const isManualOrder = Boolean(
       receiptDetail.recorded_by_user_id &&
-        !receiptDetail.import_job_id &&
-        !receiptDetail.external_source?.trim()
+        isBlankProvenance(receiptDetail.import_job_id) &&
+        isBlankProvenance(receiptDetail.external_source)
     );
     const manualPaymentStatus = normalizeStatus(receiptDetail.payment_status);
     const hasValidContent =
@@ -95,6 +119,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       receiptDetail.items.length > 0 &&
       receiptDetail.items.every(
         (item) =>
+          item != null &&
+          typeof item === 'object' &&
           typeof item.product_name === 'string' &&
           isValidMoney(item.price) &&
           item.quantity !== null &&
@@ -127,13 +153,19 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // PDF and account download — never by a stale invoice issue date,
     // which the generator would otherwise prefer. Settled statuses match
     // web resolveManualDocumentReceiptDate exactly.
+    // Unparseable timestamps are dropped before sorting (a NaN comparator
+    // is implementation-defined); mirrors web selectReceiptCompletionDate.
+    // Null entries fail closed: corrupt rows must not crash the render.
     const completionDate = isPaidReceipt
       ? ((receiptDetail.transactions ?? [])
           .filter(
             (txn) =>
+              txn != null &&
+              typeof txn === 'object' &&
               txn.transaction_type === 'payment' &&
               (txn.status === 'completed' || txn.status === 'success') &&
-              txn.created_at != null
+              typeof txn.created_at === 'string' &&
+              Number.isFinite(Date.parse(txn.created_at))
           )
           .map((txn) => txn.created_at as string)
           .sort((left, right) => Date.parse(left) - Date.parse(right))
@@ -170,7 +202,17 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,
       virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
-      items: receiptDetail.items,
+      // Null entries are dropped before generation: the generator
+      // dereferences every item, so a corrupt row must degrade to fewer
+      // lines, never crash the render. Then itemize the premium like the
+      // emailed PDF, web preview, and download so the receipt lines
+      // reconcile with the displayed total. ('Ogabassey Assurance' mirrors
+      // web ASSURANCE_LINE_NAME; mobile cannot import apps/web.)
+      items: appendAssuranceLine(
+        (Array.isArray(receiptDetail.items) ? receiptDetail.items : []).filter(
+          (item) => item != null && typeof item === 'object'
+        )
+      ),
       transactions: receiptDetail.transactions,
     };
 

@@ -1,9 +1,6 @@
 import type { OrderPaymentAccountLike } from '@baci/shared';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
-import {
-  type ReceiptCompletionCandidate,
-  selectReceiptCompletionDate,
-} from '@/lib/resolve-manual-document-receipt-date';
+import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
 import {
   getCurrentDocumentKind,
   isManualOrder,
@@ -12,6 +9,7 @@ import {
   normalizePaymentStatus,
   normalizeShippingStatus,
 } from '@/lib/storefront-account-document-eligibility';
+import type { StorefrontCustomerTransaction } from '@/lib/storefront-customer-transactions';
 
 export interface StorefrontOrderListItemInput {
   id: string;
@@ -60,7 +58,7 @@ export interface StorefrontOrderListRowInput {
 export interface StorefrontOrderListLookups {
   transactionsByOrderId: ReadonlyMap<
     string,
-    readonly ReceiptCompletionCandidate[]
+    readonly StorefrontCustomerTransaction[]
   >;
   paymentAccountsByOrderId: ReadonlyMap<string, OrderPaymentAccountLike | null>;
 }
@@ -138,6 +136,23 @@ export function transformStorefrontOrdersForDisplay(
       receipt_completion_date: selectReceiptCompletionDate(
         lookups.transactionsByOrderId.get(order.id)
       ),
+      // Settled payment history for the preview Payment table: mirrors the
+      // sender filter so partial manual invoices show the same payments as
+      // the emailed document. The RPC exposes no payment_method, so rows
+      // render by description like the generator fallback.
+      transactions: (lookups.transactionsByOrderId.get(order.id) ?? [])
+        .filter(
+          (transaction) =>
+            transaction.transaction_type === 'payment' &&
+            (transaction.status === 'completed' ||
+              transaction.status === 'success')
+        )
+        .map((transaction) => ({
+          amount: Number(transaction.amount ?? 0),
+          created_at: transaction.created_at,
+          description: transaction.description,
+          metadata: null,
+        })),
       total: order.total,
       subtotal: order.subtotal,
       shipping_fee: order.shipping_fee,

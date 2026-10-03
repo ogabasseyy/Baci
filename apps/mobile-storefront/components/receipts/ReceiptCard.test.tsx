@@ -80,6 +80,18 @@ describe('ReceiptCard', () => {
   });
 
   describe('bugfix: animated order product images on receipts', () => {
+    it('falls back to NGN pricing on null currency', () => {
+      render(
+        <ReceiptCard
+          item={{ ...receiptItem, currency: null }}
+          colors={Colors.light}
+          onPress={jest.fn()}
+        />
+      );
+
+      expect(screen.getByText(/150,000/)).toBeTruthy();
+    });
+
     it('does not autoplay product thumbnail images', () => {
       render(
         <ReceiptCard

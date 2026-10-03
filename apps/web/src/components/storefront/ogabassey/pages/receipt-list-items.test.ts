@@ -171,6 +171,36 @@ describe('fetchReceiptListItems', () => {
     expect(item.date).toBe('4/3/2026');
   });
 
+  it('carries settled payment history into the preview model', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        payment_status: 'partially_paid',
+        is_manual_order: true,
+        manual_document_available: true,
+        transactions: [
+          {
+            amount: 40,
+            created_at: '2026-04-02T10:00:00.000Z',
+            description: 'Transfer',
+            metadata: null,
+          },
+        ],
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    // The preview Payment table shows the same settled history as the
+    // emailed invoice instead of omitting it behind amount_paid.
+    expect(item.rawOrder.transactions).toEqual([
+      {
+        amount: 40,
+        created_at: '2026-04-02T10:00:00.000Z',
+        description: 'Transfer',
+        metadata: null,
+      },
+    ]);
+  });
+
   it('keeps order dates for unpaid previews', async () => {
     mockOrdersResponse([
       baseOrder({

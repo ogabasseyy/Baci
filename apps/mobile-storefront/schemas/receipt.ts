@@ -19,6 +19,12 @@ const OrderItemSchema = z.object({
   quantity: z.number(),
   price: z.number(),
   image_url: z.string().nullable().optional(),
+  assurance_fee: z.number().nullable().optional(),
+  line_extension_amount: z.number().nullable().optional(),
+  unit_code: z.string().nullable().optional(),
+  vat_category_code: z.string().nullable().optional(),
+  vat_rate: z.number().nullable().optional(),
+  vat_amount: z.number().nullable().optional(),
 });
 
 const ShippingAddressSchema = z.object({
@@ -57,7 +63,9 @@ export const ReceiptListItemSchema = z.object({
   payment_status: z.string(),
   total: z.number(),
   amount_paid: z.number(),
-  currency: z.string(),
+  // Nullish like the detail schema: a null currency falls back to NGN at
+  // display instead of failing list validation.
+  currency: z.string().nullish(),
   created_at: z.string(),
   transaction_date: z.string().nullable().optional(),
   invoice_issue_date: z.string().nullable().optional(),

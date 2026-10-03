@@ -4,20 +4,31 @@ import {
   selectPreferredOrderPaymentAccount,
 } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isManualOrderDocumentAvailable } from '@/lib/storefront-account-document-eligibility';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
-import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
+import {
+  loadStorefrontCustomerTransactions,
+  type StorefrontCustomerTransaction,
+} from '@/lib/storefront-customer-transactions';
 import type { Database } from '@/types/supabase';
 
 interface StorefrontOrderPaymentAccountOrder {
   id: string;
   payment_status?: string | null;
+  shipping_status?: string | null;
   order_payment_accounts?: readonly OrderPaymentAccountLike[] | null;
   external_source?: string | null;
   import_job_id?: string | null;
   recorded_by_user_id?: string | null;
   total?: number | string | null;
+  subtotal?: number | string | null;
+  shipping_fee?: number | string | null;
+  tax_amount?: number | string | null;
+  discount_amount?: number | string | null;
   amount_paid?: number | string | null;
+  currency?: string | null;
+  order_items?: readonly unknown[] | null;
 }
 
 function needsCompletionTransactions(
@@ -28,24 +39,47 @@ function needsCompletionTransactions(
   // superset of the archive eligibility (balance covered, staff-recorded,
   // not imported) so their completing payment is available for dating.
   // Over-inclusion is harmless — the date selector filters settled rows.
-  return (
+  const manualCovered =
     Boolean(order.recorded_by_user_id) &&
     !(order.external_source?.trim() || order.import_job_id) &&
     order.total != null &&
     order.amount_paid != null &&
     Number.isFinite(Number(order.total)) &&
     Number.isFinite(Number(order.amount_paid)) &&
-    Number(order.amount_paid) >= Number(order.total)
-  );
-}
-
-interface StorefrontOrderTransaction {
-  order_id: string;
-  created_at: string;
-  metadata: unknown;
-  gateway?: string | null;
-  status?: string | null;
-  transaction_type?: string | null;
+    Number(order.amount_paid) >= Number(order.total);
+  if (manualCovered) return true;
+  // Partially paid manual invoices render their settled payments in the
+  // emailed Payment table: load the same history so the archive preview
+  // does not omit the payments behind its nonzero amount_paid.
+  if (
+    !order.recorded_by_user_id ||
+    order.amount_paid == null ||
+    !Number.isFinite(Number(order.amount_paid)) ||
+    Number(order.amount_paid) <= 0
+  ) {
+    return false;
+  }
+  return isManualOrderDocumentAvailable({
+    paymentStatus: order.payment_status,
+    shippingStatus: order.shipping_status,
+    externalSource: order.external_source,
+    importJobId: order.import_job_id,
+    recordedByUserId: order.recorded_by_user_id,
+    total: order.total,
+    amountPaid: order.amount_paid,
+    money: {
+      total: order.total,
+      subtotal: order.subtotal,
+      shipping_fee: order.shipping_fee,
+      tax_amount: order.tax_amount,
+      discount_amount: order.discount_amount,
+      amount_paid: order.amount_paid,
+      currency: order.currency,
+    },
+    items: (order.order_items ?? []) as Parameters<
+      typeof isManualOrderDocumentAvailable
+    >[0]['items'],
+  });
 }
 
 /**
@@ -73,7 +107,10 @@ export async function resolveStorefrontOrderPaymentAccounts(
     orders.map((order) => order.id)
   );
 
-  const transactionsByOrderId = new Map<string, StorefrontOrderTransaction[]>();
+  const transactionsByOrderId = new Map<
+    string,
+    StorefrontCustomerTransaction[]
+  >();
   for (const transaction of transactionsResult.data ?? []) {
     const orderTransactions =
       transactionsByOrderId.get(transaction.order_id) ?? [];

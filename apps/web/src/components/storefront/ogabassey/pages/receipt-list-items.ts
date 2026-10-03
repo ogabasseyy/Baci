@@ -165,13 +165,24 @@ export async function fetchReceiptListItems(
           ? 'proforma'
           : null;
 
+      // A paid receipt is dated by its completing payment like the emailed
+      // PDF and account download, never by the untouched order dates; a
+      // stale invoice issue date would otherwise win in the renderer.
+      const isPaidRenderer = rendererPaymentStatus === 'paid';
+      const completionDate = getStringValue(order.receipt_completion_date);
+
       const rawOrder: ReceiptOrder = {
         order_number:
           (order.order_number as string) ||
           String(order.id).slice(0, 8).toUpperCase(),
         created_at: order.created_at as string,
-        transaction_date: order.transaction_date as string | null | undefined,
-        invoice_issue_date: order.invoice_issue_date as string | null | undefined,
+        transaction_date: isPaidRenderer
+          ? (completionDate ??
+            (order.transaction_date as string | null | undefined))
+          : (order.transaction_date as string | null | undefined),
+        invoice_issue_date: isPaidRenderer
+          ? undefined
+          : (order.invoice_issue_date as string | null | undefined),
         currency,
         total,
         subtotal: Number(order.subtotal ?? total),

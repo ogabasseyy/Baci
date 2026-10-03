@@ -36,12 +36,13 @@ function createSupabaseRpcMock(response: { data: unknown; error: unknown }) {
 }
 
 function mockAuthenticatedSupabase(
-  supabase: ReturnType<typeof createSupabaseRpcMock>
+  supabase: ReturnType<typeof createSupabaseRpcMock>,
+  user: { email_confirmed_at?: string | null } = {}
 ) {
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
     supabase,
-    user: { email: 'basseybjohn@yahoo.co.uk', id: 'user-1' },
+    user: { email: 'basseybjohn@yahoo.co.uk', id: 'user-1', ...user },
   });
 }
 
@@ -126,6 +127,56 @@ describe('POST /api/storefront/receipts/claims/[token] status mapping', () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('fails closed for unverified users when v2 is not deployed yet', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find redeem_receipt_claim_v2',
+      },
+    });
+    mockAuthenticatedSupabase(supabase, { email_confirmed_at: null });
+
+    const response = await POST(postRequest(), params);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: 'Verify your email address before claiming this receipt',
+      code: 'EMAIL_UNVERIFIED',
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'redeem_receipt_claim_v2',
+      expect.anything()
+    );
+  });
+
+  it('falls back to legacy redemption for verified users during rollout', async () => {
+    const supabase = createSupabaseRpcMock({ data: null, error: null });
+    supabase.rpc
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '42883', message: 'function does not exist' },
+      })
+      .mockResolvedValueOnce({
+        data: { redirectPath: '/receipts', status: 'ok' },
+        error: null,
+      });
+    mockAuthenticatedSupabase(supabase, {
+      email_confirmed_at: '2026-01-01T00:00:00Z',
+    });
+
+    const response = await POST(postRequest(), params);
+
+    expect(response.status).toBe(200);
+    expect(supabase.rpc).toHaveBeenCalledTimes(2);
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      'redeem_receipt_claim',
+      expect.anything()
+    );
   });
 
   it('returns 500 when the redemption RPC itself fails', async () => {

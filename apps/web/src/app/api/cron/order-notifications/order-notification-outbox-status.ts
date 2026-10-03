@@ -68,10 +68,10 @@ export async function updateOutboxStatus(
   }
 }
 
-async function readLiveOutboxMetadata(
+async function readLiveOutboxMetadataForMerge(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow
-): Promise<Record<string, unknown>> {
+): Promise<{ base: Record<string, unknown>; raw: unknown }> {
   try {
     const { data: current, error: readError } = await supabase
       .from('order_notification_outbox')
@@ -81,11 +81,15 @@ async function readLiveOutboxMetadata(
     if (readError || !current) {
       throw readError ?? new Error('order notification claim was lost');
     }
-    return current.metadata &&
-      typeof current.metadata === 'object' &&
-      !Array.isArray(current.metadata)
-      ? (current.metadata as Record<string, unknown>)
-      : {};
+    return {
+      base:
+        current.metadata &&
+        typeof current.metadata === 'object' &&
+        !Array.isArray(current.metadata)
+          ? (current.metadata as Record<string, unknown>)
+          : {},
+      raw: current.metadata ?? null,
+    };
   } catch (error) {
     // Normalize like the status writes: the email was already sent, so a
     // failed re-read must terminalize as outcome-unknown, never retry into
@@ -97,6 +101,13 @@ async function readLiveOutboxMetadata(
     });
     throw new OutboxStatusUpdateError(row.id, { cause: error });
   }
+}
+
+async function readLiveOutboxMetadata(
+  supabase: SupabaseClientLike,
+  row: OutboxStatusRow
+): Promise<Record<string, unknown>> {
+  return (await readLiveOutboxMetadataForMerge(supabase, row)).base;
 }
 
 export async function markOutboxNotificationSent(
@@ -120,6 +131,8 @@ export async function markOutboxNotificationSent(
   });
 }
 
+const MANUAL_SENT_METADATA_RACE_RETRIES = 3;
+
 export async function markManualOutboxNotificationSent(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
@@ -130,11 +143,11 @@ export async function markManualOutboxNotificationSent(
   // transition, or a data change landing between the two records a stale
   // PDF as cleanly sent. A reset row retries with fresh data; only a
   // genuinely lost claim terminalizes as outcome-unknown.
-  const liveMetadata = await readLiveOutboxMetadata(supabase, row);
-  try {
-    const { data, error } = await supabase
-      .from('order_notification_outbox')
-      .update({
+  for (let attempt = 0; ; attempt++) {
+    const { base: liveMetadata, raw: liveRaw } =
+      await readLiveOutboxMetadataForMerge(supabase, row);
+    try {
+      const updater = supabase.from('order_notification_outbox').update({
         last_error: null,
         metadata: {
           ...liveMetadata,
@@ -145,54 +158,80 @@ export async function markManualOutboxNotificationSent(
         locked_at: null,
         locked_by: null,
         updated_at: new Date().toISOString(),
-      })
-      .match({
-        id: row.id,
-        locked_by: row.claim_owner,
-        status: 'processing',
-      })
-      .not('dispatch_started_at', 'is', null)
-      .select('id')
-      .maybeSingle();
-    if (!error && data?.id === row.id) return;
-    const { data: current, error: classifyError } = await supabase
-      .from('order_notification_outbox')
-      .select('dispatch_started_at, locked_by, status')
-      .match({ id: row.id })
-      .maybeSingle();
-    if (classifyError) {
-      // A failed classify read is neither a confirmed reset (retry would
-      // risk a double send) nor a confirmed loss: terminalize unknown
-      // with a distinct reason instead of the generic claim-lost path.
+      });
+      // Optimistic guard: a metadata write landing between the re-read
+      // and this update must abort the merge instead of being clobbered
+      // by the stale copy. jsonb equality is order-insensitive, so the
+      // re-serialized read matches exactly what is stored.
+      const { data, error } = await (liveRaw === null
+        ? updater.is('metadata', null)
+        : updater.eq('metadata', JSON.stringify(liveRaw))
+      )
+        .match({
+          id: row.id,
+          locked_by: row.claim_owner,
+          status: 'processing',
+        })
+        .not('dispatch_started_at', 'is', null)
+        .select('id')
+        .maybeSingle();
+      if (!error && data?.id === row.id) return;
+      const { data: current, error: classifyError } = await supabase
+        .from('order_notification_outbox')
+        .select('dispatch_started_at, locked_by, status')
+        .match({ id: row.id })
+        .maybeSingle();
+      if (classifyError) {
+        // A failed classify read is neither a confirmed reset (retry would
+        // risk a double send) nor a confirmed loss: terminalize unknown
+        // with a distinct reason instead of the generic claim-lost path.
+        logger.error({
+          message: 'Failed to classify zero-row manual sent update',
+          outboxId: row.id,
+          error: classifyError,
+        });
+        throw new OutboxStatusUpdateError(row.id, {
+          cause: classifyError,
+          reason: 'sent_outcome_classify_failed',
+        });
+      }
+      if (
+        current?.status === 'processing' &&
+        current.locked_by === row.claim_owner &&
+        current.dispatch_started_at == null
+      ) {
+        throw new OutboxDispatchResetError(row.id);
+      }
+      if (
+        !error &&
+        current?.status === 'processing' &&
+        current.locked_by === row.claim_owner &&
+        current.dispatch_started_at != null
+      ) {
+        // The row is intact but the metadata moved under the guard: retry
+        // the read-merge with the fresh value instead of clobbering it.
+        // Bounded like every retry here; exhaustion terminalizes unknown.
+        if (attempt >= MANUAL_SENT_METADATA_RACE_RETRIES) {
+          throw new OutboxStatusUpdateError(row.id, {
+            cause: new Error('metadata changed during sent transition'),
+            reason: 'sent_metadata_race_exhausted',
+          });
+        }
+        continue;
+      }
+      throw error ?? new Error('order notification claim was lost');
+    } catch (error) {
+      if (
+        error instanceof OutboxDispatchResetError ||
+        error instanceof OutboxStatusUpdateError
+      )
+        throw error;
       logger.error({
-        message: 'Failed to classify zero-row manual sent update',
+        message: 'Failed to update order notification outbox row',
         outboxId: row.id,
-        error: classifyError,
+        error,
       });
-      throw new OutboxStatusUpdateError(row.id, {
-        cause: classifyError,
-        reason: 'sent_outcome_classify_failed',
-      });
+      throw new OutboxStatusUpdateError(row.id, { cause: error });
     }
-    if (
-      current?.status === 'processing' &&
-      current.locked_by === row.claim_owner &&
-      current.dispatch_started_at == null
-    ) {
-      throw new OutboxDispatchResetError(row.id);
-    }
-    throw error ?? new Error('order notification claim was lost');
-  } catch (error) {
-    if (
-      error instanceof OutboxDispatchResetError ||
-      error instanceof OutboxStatusUpdateError
-    )
-      throw error;
-    logger.error({
-      message: 'Failed to update order notification outbox row',
-      outboxId: row.id,
-      error,
-    });
-    throw new OutboxStatusUpdateError(row.id, { cause: error });
   }
 }

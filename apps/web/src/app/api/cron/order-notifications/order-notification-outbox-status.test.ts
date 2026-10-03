@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
 import {
+  markManualOutboxNotificationSent,
   markOutboxNotificationSent,
+  OutboxDispatchResetError,
   OutboxStatusUpdateError,
   updateOutboxStatus,
 } from './order-notification-outbox-status';
@@ -14,8 +16,11 @@ function createBuilder() {
   const maybeSingle = vi.fn();
   const select = vi.fn();
   const builder = {
+    eq: vi.fn(() => builder),
+    is: vi.fn(() => builder),
     match: vi.fn(() => builder),
     maybeSingle,
+    not: vi.fn(() => builder),
     select,
     update: vi.fn(() => builder),
   };
@@ -66,6 +71,110 @@ describe('order notification outbox status', () => {
       markOutboxNotificationSent(supabase as never, row, 'message-1')
     ).rejects.toBeInstanceOf(OutboxStatusUpdateError);
     expect(builder.update).not.toHaveBeenCalled();
+  });
+
+  it('guards the manual sent merge on the re-read metadata value', async () => {
+    const { builder } = createBuilder();
+    const live = { sent_document_kind: 'receipt' };
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: live },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await markManualOutboxNotificationSent(supabase as never, row, 'msg-1');
+
+    expect(builder.eq).toHaveBeenCalledWith('metadata', JSON.stringify(live));
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: { sent_document_kind: 'receipt', message_id: 'msg-1' },
+      })
+    );
+  });
+
+  it('retries the merge when metadata moves under the guard', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: { sent_document_kind: 'receipt' } },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          status: 'processing',
+          locked_by: 'worker-1',
+          dispatch_started_at: '2026-10-03T00:00:00Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: row.id,
+          metadata: { sent_document_kind: 'receipt', late: 'key' },
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await markManualOutboxNotificationSent(supabase as never, row, 'msg-1');
+
+    expect(builder.update).toHaveBeenCalledTimes(2);
+    expect(builder.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: {
+          sent_document_kind: 'receipt',
+          late: 'key',
+          message_id: 'msg-1',
+        },
+      })
+    );
+  });
+
+  it('still surfaces a dispatch reset instead of retrying the merge', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: {} },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          status: 'processing',
+          locked_by: 'worker-1',
+          dispatch_started_at: null,
+        },
+        error: null,
+      });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await expect(
+      markManualOutboxNotificationSent(supabase as never, row, 'msg-1')
+    ).rejects.toBeInstanceOf(OutboxDispatchResetError);
+    expect(builder.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('matches null metadata with an is-null guard', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: null },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await markManualOutboxNotificationSent(supabase as never, row, 'msg-1');
+
+    expect(builder.is).toHaveBeenCalledWith('metadata', null);
+    expect(builder.eq).not.toHaveBeenCalled();
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { message_id: 'msg-1' } })
+    );
   });
 
   it('wraps a failed status write with the outbox id', async () => {

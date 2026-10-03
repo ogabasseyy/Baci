@@ -201,6 +201,7 @@ describe('GET /api/storefront/orders', () => {
           balance: 0,
           current_document_kind: 'receipt',
           invoice_type_code: '380',
+          receipt_completion_date: null,
           receipt_eligible: true,
           manual_document_available: false,
           is_manual_order: false,

@@ -115,6 +115,38 @@ describe('fetchReceiptListItems', () => {
     expect(item.rawOrder.payment_status).toBe('paid');
   });
 
+  it('dates paid previews by the completing payment, not stale order dates', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        transaction_date: '2026-04-01T10:00:00.000Z',
+        invoice_issue_date: '2026-04-01',
+        receipt_completion_date: '2026-04-03T12:00:00.000Z',
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder.transaction_date).toBe('2026-04-03T12:00:00.000Z');
+    expect(item.rawOrder.invoice_issue_date).toBeUndefined();
+  });
+
+  it('keeps order dates for unpaid previews', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        amount_paid: 0,
+        payment_status: 'unpaid',
+        payment_method: 'invoice',
+        current_document_kind: 'invoice',
+        transaction_date: '2026-04-01T10:00:00.000Z',
+        invoice_issue_date: '2026-04-01',
+        receipt_completion_date: '2026-04-03T12:00:00.000Z',
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder.transaction_date).toBe('2026-04-01T10:00:00.000Z');
+    expect(item.rawOrder.invoice_issue_date).toBe('2026-04-01');
+  });
+
   it('falls back to NGN display for a malformed currency code', async () => {
     mockOrdersResponse([baseOrder({ currency: 'naira' })]);
 

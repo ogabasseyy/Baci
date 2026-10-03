@@ -142,6 +142,45 @@ describe('order notification outbox worker manual documents', () => {
     );
   });
 
+  it('reserves a fresh corrective attempt past the provider-failure ceiling', async () => {
+    const { client, builder } = createSupabase(
+      ['zero-rows', null],
+      {},
+      {
+        dispatch_started_at: null,
+        locked_by: row.claim_owner,
+        status: 'processing',
+      }
+    );
+    sendDocument.mockResolvedValue({
+      status: 'sent',
+      messageId: 'document-message',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [
+        {
+          ...row,
+          event_type: 'manual_order_invoice',
+          attempt_count: 5,
+          max_attempts: 5,
+        },
+      ],
+      summary
+    );
+    // The customer holds a stale attachment and no further event
+    // requeues the correction: the row must retry, never fail.
+    expect(summary).toMatchObject({ failed: 0, sent: 0, retried: 1 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt_count: 0,
+        last_error: 'document_changed_during_send',
+        status: 'pending',
+      })
+    );
+  });
+
   it('terminalizes an unclassifiable manual send instead of retrying blind', async () => {
     const { client, builder } = createSupabase(
       ['zero-rows', null],

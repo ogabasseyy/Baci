@@ -22,4 +22,12 @@ describe('isSafeClaimSlug', () => {
       expect(isSafeClaimSlug(slug)).toBe(false);
     }
   });
+
+  it('enforces the 63-octet DNS label limit', () => {
+    expect(isSafeClaimSlug('a'.repeat(63))).toBe(true);
+    // A 64-octet label cannot resolve: the sender schema fails closed
+    // before dispatch and the URL builder throws instead of emailing an
+    // unusable claim link.
+    expect(isSafeClaimSlug('a'.repeat(64))).toBe(false);
+  });
 });

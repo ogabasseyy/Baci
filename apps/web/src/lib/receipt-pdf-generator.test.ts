@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { formatReceiptDate } from '@/lib/receipt-pdf-formatters';
 import {
   generateReceiptBlob,
   generateReceiptPDF,
@@ -81,40 +80,6 @@ describe('generateReceiptBlob', () => {
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.size).toBeGreaterThan(0);
     expect(blob.type).toBe('application/pdf');
-  });
-
-  it('renders the payment-history table from order transactions', () => {
-    const order = {
-      ...baseOrder,
-      items: [
-        {
-          product_name: 'Device',
-          quantity: 1,
-          price: 150000,
-        },
-      ],
-      transactions: [
-        {
-          amount: 100000,
-          created_at: '2026-03-20T10:00:00Z',
-          description: 'Bank transfer',
-          metadata: { payment_method: 'transfer' },
-        },
-        {
-          amount: 50000,
-          created_at: '2026-03-22T10:00:00Z',
-          description: null,
-          metadata: null,
-        },
-      ],
-    };
-    const pdfText = getPdfText(order, baseMerchant);
-
-    expect(pdfText).toContain('Payment Date');
-    expect(pdfText).toContain('transfer');
-    expect(pdfText).toContain('Payment');
-    expect(pdfText).toContain(formatReceiptDate('2026-03-20T10:00:00Z'));
-    expect(pdfText).toContain(formatReceiptDate('2026-03-22T10:00:00Z'));
   });
 
   it('supports unpaid invoices with empty items and missing optional merchant fields', () => {

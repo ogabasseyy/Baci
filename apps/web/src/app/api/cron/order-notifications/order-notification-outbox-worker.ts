@@ -8,6 +8,10 @@ import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-noti
 import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
 import {
+  markCorrectiveRetry,
+  retryDelayMs,
+} from './order-notification-outbox-corrective-retry';
+import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
   type OrderNotificationOutboxStatus,
@@ -17,8 +21,6 @@ import {
   updateOutboxStatus,
 } from './order-notification-outbox-status';
 
-const RETRY_BASE_DELAY_MS = 5 * 60 * 1000;
-const RETRY_MAX_DELAY_MS = 60 * 60 * 1000;
 const PROCESS_CONCURRENCY = 5;
 
 export const claimedOrderNotificationOutboxRowSchema = z.object({
@@ -67,11 +69,6 @@ export function createOrderNotificationCronSummary(
 ): OrderNotificationCronSummary {
   // biome-ignore format: compact literal preserves the 300-line gate.
   return { claimed, failed: 0, retried: 0, sent: 0, skipped: 0, unparseable: 0, success: true };
-}
-
-function retryDelayMs(attemptCount: number): number {
-  const exponent = Math.max(0, attemptCount - 1);
-  return Math.min(RETRY_BASE_DELAY_MS * 2 ** exponent, RETRY_MAX_DELAY_MS);
 }
 
 async function markSkipped(
@@ -197,12 +194,7 @@ async function processClaimedRow(
         }
       } catch (error) {
         if (error instanceof OutboxDispatchResetError) {
-          await markFailedOrRetry(
-            supabase,
-            row,
-            'document_changed_during_send',
-            summary
-          );
+          await markCorrectiveRetry(supabase, row, summary);
           return;
         }
         if (!(error instanceof OutboxStatusUpdateError)) throw error;

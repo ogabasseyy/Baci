@@ -46,5 +46,6 @@ psql -X -h "$task_pg_dir" -p "$task_pg_port" -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_repo/supabase/tests/manual_order_documents_rearm.sql" \
   -f "$task_repo/supabase/tests/manual_order_documents_redemption.sql" \
   -f "$task_repo/supabase/tests/manual_order_documents_dispatch.sql" \
+  -f "$task_repo/supabase/tests/manual_order_documents_dispatch_guards.sql" \
   -f "$task_repo/supabase/tests/manual_order_documents_soft_deleted_linking.sql"
 echo 'Manual-order document SQL/RLS regression checks passed.'

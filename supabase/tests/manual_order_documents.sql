@@ -98,6 +98,14 @@ SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'document_kind' = 'invoice'), 'reset preview follows the live rule the retry will send');
 RESET ROLE;
+-- Legacy 'Partially Paid' (internal space) normalizes like the sender: a
+-- zero-amount invoice-method order previews as invoice, not proforma.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid, payment_method, created_at)
+VALUES ('10000000-0000-4000-8000-000000000054', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'Partially Paid', 0, 'invoice', '2026-09-30T10:00:00Z');
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000054', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000054' AND event_type = 'manual_order_invoice';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000054' AND event_type = 'manual_order_invoice'), 'm2-worker', repeat('c', 64))->>'status' = 'created'), 'spaced-status order creates its claim');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('c', 64))->>'document_kind' = 'invoice'), 'spaced Partially Paid previews as invoice');
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 50, 'NGN', NULL, 'partially_paid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'retry marks the fresh invoice snapshot');
 -- A virtual account expiring inside the 15-minute delivery buffer is
 -- excluded from the snapshot exactly like an expired one: the sender

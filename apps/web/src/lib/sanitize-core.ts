@@ -85,6 +85,17 @@ export function sanitizeEmail(email: string): string {
 }
 
 /**
+ * Sanitize a header-adjacent display name: strip line breaks that could
+ * smuggle extra headers, then cap the length.
+ */
+export function sanitizeEmailDisplayName(name: string): string {
+  return name
+    .replace(/[\r\n]/g, '')
+    .trim()
+    .slice(0, 128);
+}
+
+/**
  * Sanitize phone number (remove non-numeric characters except +)
  */
 export function sanitizePhone(phone: string): string {

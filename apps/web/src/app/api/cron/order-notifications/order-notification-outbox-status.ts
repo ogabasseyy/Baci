@@ -71,11 +71,15 @@ export async function updateOutboxStatus(
 async function readLiveOutboxMetadataForMerge(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow
-): Promise<{ base: Record<string, unknown>; raw: unknown }> {
+): Promise<{
+  base: Record<string, unknown>;
+  raw: unknown;
+  updatedAt: string | null;
+}> {
   try {
     const { data: current, error: readError } = await supabase
       .from('order_notification_outbox')
-      .select('metadata')
+      .select('metadata, updated_at')
       .match({ id: row.id, locked_by: row.claim_owner, status: 'processing' })
       .maybeSingle();
     if (readError || !current) {
@@ -89,6 +93,8 @@ async function readLiveOutboxMetadataForMerge(
           ? (current.metadata as Record<string, unknown>)
           : {},
       raw: current.metadata ?? null,
+      updatedAt:
+        typeof current.updated_at === 'string' ? current.updated_at : null,
     };
   } catch (error) {
     // Normalize like the status writes: the email was already sent, so a
@@ -144,8 +150,11 @@ export async function markManualOutboxNotificationSent(
   // PDF as cleanly sent. A reset row retries with fresh data; only a
   // genuinely lost claim terminalizes as outcome-unknown.
   for (let attempt = 0; ; attempt++) {
-    const { base: liveMetadata, raw: liveRaw } =
-      await readLiveOutboxMetadataForMerge(supabase, row);
+    const {
+      base: liveMetadata,
+      raw: liveRaw,
+      updatedAt: liveUpdatedAt,
+    } = await readLiveOutboxMetadataForMerge(supabase, row);
     try {
       const updater = supabase.from('order_notification_outbox').update({
         last_error: null,
@@ -159,13 +168,19 @@ export async function markManualOutboxNotificationSent(
         locked_by: null,
         updated_at: new Date().toISOString(),
       });
-      // Optimistic guard: a metadata write landing between the re-read
-      // and this update must abort the merge instead of being clobbered
-      // by the stale copy. jsonb equality is order-insensitive, so the
-      // re-serialized read matches exactly what is stored.
-      const { data, error } = await (liveRaw === null
-        ? updater.is('metadata', null)
-        : updater.eq('metadata', JSON.stringify(liveRaw))
+      // Optimistic guard: a write landing between the re-read and this
+      // update must abort the merge instead of being clobbered by the
+      // stale copy. updated_at is the primary version: every outbox
+      // writer bumps it, and the timestamp round-trips exactly. The
+      // metadata equality pins the merged value itself (jsonb equality
+      // is order-insensitive, so the re-serialized read matches).
+      const guarded =
+        liveRaw === null
+          ? updater.is('metadata', null)
+          : updater.eq('metadata', JSON.stringify(liveRaw));
+      const { data, error } = await (liveUpdatedAt === null
+        ? guarded.is('updated_at', null)
+        : guarded.eq('updated_at', liveUpdatedAt)
       )
         .match({
           id: row.id,
@@ -208,8 +223,8 @@ export async function markManualOutboxNotificationSent(
         current.locked_by === row.claim_owner &&
         current.dispatch_started_at != null
       ) {
-        // The row is intact but the metadata moved under the guard: retry
-        // the read-merge with the fresh value instead of clobbering it.
+        // The row is intact but moved under the guard: retry the
+        // read-merge with the fresh value instead of clobbering it.
         // Bounded like every retry here; exhaustion terminalizes unknown.
         if (attempt >= MANUAL_SENT_METADATA_RACE_RETRIES) {
           throw new OutboxStatusUpdateError(row.id, {

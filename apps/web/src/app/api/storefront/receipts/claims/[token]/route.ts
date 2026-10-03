@@ -68,12 +68,10 @@ async function redeemReceiptClaim({
   source,
   supabase,
   tokenHash,
-  emailVerified,
 }: {
   source: 'app' | 'web';
   supabase: Pick<SupabaseClient, 'rpc'>;
   tokenHash: string;
-  emailVerified: boolean;
 }) {
   const response = await supabase.rpc('redeem_receipt_claim_v2', {
     p_source: source,
@@ -82,14 +80,6 @@ async function redeemReceiptClaim({
 
   if (!isMissingRedeemReceiptClaimV2Function(response.error)) {
     return response;
-  }
-
-  // The legacy fallback predates verified-email enforcement, and the v2
-  // migration lands post-deploy: during the rollout window an unverified
-  // user would otherwise redeem through this path. Fail closed for them
-  // while verified users keep zero-downtime redemption.
-  if (!emailVerified) {
-    return { data: { status: 'email_unverified' }, error: null };
   }
 
   return await supabase.rpc('redeem_receipt_claim', {
@@ -154,12 +144,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // Verified-email is enforced before either RPC: the pre-deploy v2
+  // implementation validates only the JWT email, so gating on the missing
+  // function alone would let unverified accounts redeem during the rollout
+  // window. The hardened RPC re-checks as defense in depth.
+  if (!auth.user.email_confirmed_at) {
+    return NextResponse.json(
+      {
+        error: 'Verify your email address before claiming this receipt',
+        code: 'EMAIL_UNVERIFIED',
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const { data, error } = await redeemReceiptClaim({
       source: hasBearerAuthorization(request) ? 'app' : 'web',
       supabase: auth.supabase,
       tokenHash: hashReceiptClaimToken(token),
-      emailVerified: Boolean(auth.user.email_confirmed_at),
     });
 
     if (error) {

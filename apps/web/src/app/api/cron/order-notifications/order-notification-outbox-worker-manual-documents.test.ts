@@ -37,8 +37,18 @@ function createSupabase(
   // clear-failed marker before dispatching.
   const maybeSingle = vi.fn(async () => {
     const lastSelect = select.mock.calls[select.mock.calls.length - 1]?.[0];
-    if (lastSelect === 'metadata') {
-      return { data: { id: row.id, metadata: liveMetadata }, error: null };
+    if (
+      lastSelect === 'metadata' ||
+      lastSelect === 'metadata, updated_at'
+    ) {
+      return {
+        data: {
+          id: row.id,
+          metadata: liveMetadata,
+          updated_at: '2026-10-03T00:00:00Z',
+        },
+        error: null,
+      };
     }
     if (lastSelect === 'dispatch_started_at, last_error') {
       return { data: reclaimRow, error: null };

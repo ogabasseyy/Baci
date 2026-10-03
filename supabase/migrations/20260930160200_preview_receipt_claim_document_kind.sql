@@ -84,8 +84,12 @@ BEGIN
           THEN n.metadata->>'sent_document_kind'
           WHEN n.event_type = 'manual_order_invoice'
             AND lower(btrim(o.payment_method)) = 'invoice'
-            AND o.payment_status IS DISTINCT FROM 'paid'
-            AND lower(btrim(o.payment_status)) IS DISTINCT FROM 'partially_paid'
+            -- The status column is unconstrained: normalize exactly like
+            -- the enqueue trigger and sender (trim, lowercase, fold
+            -- internal whitespace) or 'Partially Paid' previews as
+            -- proforma while the sender renders an invoice.
+            AND regexp_replace(lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g') IS DISTINCT FROM 'paid'
+            AND regexp_replace(lower(btrim(COALESCE(o.payment_status, ''))), '\s+', '_', 'g') IS DISTINCT FROM 'partially_paid'
             AND COALESCE(o.amount_paid, 0) <= 0
             AND COALESCE(nullif(btrim(o.invoice_type_code), ''), '380') = '380'
           THEN 'proforma_invoice'

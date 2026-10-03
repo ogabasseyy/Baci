@@ -194,6 +194,18 @@ describe('send manual order document', () => {
     expect(message.toName).toBe('there');
   });
 
+  it('strips line breaks from header-adjacent display names', async () => {
+    const db = database(
+      { customer_name: 'Oga\r\nBcc: smuggled@example.com' },
+      { merchantOverride: { email_sender_name: 'Shop\r\nBcc: x@y.z' } }
+    );
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result.status).toBe('sent');
+    const message = sendEmail.mock.calls[0][0];
+    expect(message.toName).toBe('OgaBcc: smuggled@example.com');
+    expect(message.fromName).toBe('ShopBcc: x@y.z');
+  });
+
   it('keeps the private merchant email out of customer-visible copy', async () => {
     const db = database({}, { merchantOverride: { support_email: null } });
     await sendManualOrderDocument({ supabase: db.client, row });

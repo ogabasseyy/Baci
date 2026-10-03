@@ -134,6 +134,30 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
   });
 
+  it('drops corrupt or foreign entries when hydrating stored items', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
+      JSON.stringify([
+        baseProduct,
+        null,
+        'not-an-object',
+        { name: 'No id here' },
+        { id: 42, name: 'Numeric id is usable' },
+      ])
+    );
+
+    render(
+      <V2ComparisonProvider>
+        <ComparisonConsumer />
+      </V2ComparisonProvider>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
+
+    // baseProduct hydrates (deduped against the added copy) plus the
+    // numeric-id entry; the three corrupt rows never enter the tray.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
+  });
+
   it('keeps persisted comparison items isolated by merchant namespace', () => {
     sessionStorage.setItem(
       'ogabassey_v2_compare',

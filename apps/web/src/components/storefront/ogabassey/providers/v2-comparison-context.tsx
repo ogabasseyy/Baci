@@ -63,7 +63,19 @@ export const V2ComparisonProvider: React.FC<{
     const stored = sessionStorage.getItem(storageKey);
     if (stored) {
       try {
-        nextComparisonItems = JSON.parse(stored);
+        const parsed: unknown = JSON.parse(stored);
+        // Drop corrupt or foreign entries: only objects with a usable id
+        // can hydrate the tray, so stale-schema or tampered rows never
+        // render as comparison facts.
+        if (Array.isArray(parsed)) {
+          nextComparisonItems = parsed.filter(
+            (entry): entry is Product =>
+              typeof entry === 'object' &&
+              entry !== null &&
+              (typeof (entry as { id?: unknown }).id === 'string' ||
+                typeof (entry as { id?: unknown }).id === 'number')
+          );
+        }
       } catch (error) {
         console.error('Failed to parse comparison items', error);
       }

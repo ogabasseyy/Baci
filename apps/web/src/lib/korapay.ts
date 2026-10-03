@@ -328,7 +328,8 @@ export async function initializePayment(
  * Verify payment status (with Result type)
  */
 export async function verifyPayment(
-  reference: string
+  reference: string,
+  signal?: AbortSignal
 ): Promise<KorapayResult<PaymentVerificationResponse>> {
   // Validate reference format
   if (!reference || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
@@ -341,7 +342,7 @@ export async function verifyPayment(
 
   const result = await korapayRequest<PaymentVerificationResponse>(
     `/charges/${encodeURIComponent(reference)}/verify`,
-    { method: 'GET' }
+    { method: 'GET', signal }
   );
 
   if (!result.success) {

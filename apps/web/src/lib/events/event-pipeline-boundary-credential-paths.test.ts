@@ -3,8 +3,11 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
+import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
@@ -244,51 +247,7 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/agentic/request-integrity.ts',
         'apps/web/src/env.ts',
       ],
-      [
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/generate-dva/generate-dva-test-support.ts',
-        'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/route.ts',
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/route.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/payments/initialize/route.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
+      ...eventPipelineDvaCredentialPaths,
       [
         'apps/web/src/app/api/chat/route.ts',
         'apps/web/src/app/api/chat/ollama-chat-tool-runtime.ts',
@@ -324,6 +283,8 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
+      ...eventPipelinePaystackRefundCredentialPaths,
+      ...eventPipelineGatewayCronCredentialPaths,
     ]);
   });
 });

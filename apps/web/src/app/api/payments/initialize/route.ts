@@ -38,6 +38,7 @@ import {
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
+import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
@@ -1748,18 +1749,11 @@ export async function POST(request: NextRequest) {
     // NGN order total. Persist the expected settlement amount + locked FX rate
     // inside the initial transaction insert so a fast webhook can never observe
     // a transaction row without the strict validation metadata.
-    const juicywayCrypto = paymentResult.crypto_payment;
-    const transactionMetadata =
-      gateway === 'juicyway' && juicywayCrypto?.expected_session_amount != null
-        ? {
-            // Stablecoin minor units (cents), incl. Juicyway fee.
-            juicyway_expected_amount: juicywayCrypto.expected_session_amount,
-            juicyway_expected_currency:
-              juicywayCrypto.expected_session_currency ??
-              juicywayCrypto.currency,
-            juicyway_fx_rate: juicywayCrypto.conversion_rate ?? null,
-          }
-        : {};
+    const transactionMetadata = initializeTransactionMetadata({
+      gateway,
+      paymentType: data.payment_type,
+      cryptoPayment: paymentResult.crypto_payment,
+    });
 
     // Create transaction record (via RPC) and update order status
     const { error: transactionError } = await paymentDataClient.rpc(

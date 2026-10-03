@@ -87,6 +87,7 @@ export function useInvoiceGeneratedCapture({
     budgetOrderRef.current = orderId;
     attemptsRef.current = 0;
   }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primitive deps intentionally avoid identity restarts; the budget ref bounds attempts across restarts.
   useEffect(() => {
     if (!orderId || !order || !isUnpaidInvoiceOrder(order)) {
       return;

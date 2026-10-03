@@ -50,17 +50,20 @@ export async function POST(request: NextRequest) {
   }
 
   const status =
-    result.sent > 0 && result.failed > 0
+    result.sent > 0 && (result.failed > 0 || result.uncertain > 0)
       ? 'partial_failure'
       : result.sent > 0
         ? 'sent'
-        : result.failed > 0
-          ? 'failed'
-          : 'skipped_no_tokens';
+        : result.uncertain > 0
+          ? 'uncertain'
+          : result.failed > 0
+            ? 'failed'
+            : 'skipped_no_tokens';
 
   return NextResponse.json({
     status,
     sent: result.sent,
     failed: result.failed,
+    uncertain: result.uncertain,
   });
 }

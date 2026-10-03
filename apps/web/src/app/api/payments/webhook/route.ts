@@ -44,6 +44,7 @@ import { confirmPaystackMerchantWalletDva } from '@/lib/payments/confirm-paystac
 import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-wallet-dva-top-up';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
@@ -52,6 +53,7 @@ import {
   calculatePlatformFee,
   verifyTransaction as verifyPaystackPayment,
 } from '@/lib/paystack';
+import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
@@ -70,6 +72,7 @@ import {
   paystackZeroCandidateReviewGatewayResponseSchema,
   referenceSchema,
 } from '@/schemas/payments';
+import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
 
 type PaymentGateway = 'paystack' | 'korapay';
 
@@ -656,6 +659,28 @@ export async function POST(request: NextRequest) {
       return handlePaystackMerchantWalletAssignmentSuccess(
         createServiceClient(),
         body as unknown as Record<string, unknown>
+      );
+    }
+
+    if (
+      gateway === 'paystack' &&
+      typeof body.event === 'string' &&
+      body.event.startsWith('refund.')
+    ) {
+      const parsed = paystackRefundEventSchema.safeParse(body);
+      if (!parsed.success) {
+        logger.error({
+          message: 'Invalid Paystack refund webhook payload',
+          error: parsed.error.message,
+        });
+        return NextResponse.json(
+          { error: 'Invalid refund event payload' },
+          { status: 400 }
+        );
+      }
+      return handlePaystackCancellationRefundEvent(
+        createServiceClient(),
+        parsed.data as unknown as Record<string, unknown>
       );
     }
 
@@ -1340,7 +1365,8 @@ export async function POST(request: NextRequest) {
       if (
         expectedCurrency &&
         verifiedAmount.currency &&
-        expectedCurrency.toUpperCase() !== verifiedAmount.currency.toUpperCase()
+        normalizeCurrencyCode(expectedCurrency) !==
+          normalizeCurrencyCode(verifiedAmount.currency)
       ) {
         logger.error({
           message: 'Payment currency mismatch',

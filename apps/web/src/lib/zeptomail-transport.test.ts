@@ -113,6 +113,26 @@ describe('zeptoMailRequest', () => {
     });
   });
 
+  it('forwards the worker deadline into an in-flight request', async () => {
+    fetchMock.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        })
+    );
+    const controller = new AbortController();
+    const request = zeptoMailRequest('email', {}, 'token', controller.signal);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({
+      code: ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE,
+    });
+  });
+
   it('merges the undici cause into network failure messages', async () => {
     const failure = new TypeError('fetch failed');
     (failure as TypeError & { cause?: Error }).cause = Object.assign(

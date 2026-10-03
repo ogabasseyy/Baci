@@ -1,21 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 import { hasSettledPaystackOrderPaymentReference } from './has-settled-paystack-order-payment-reference';
 
+function database(pages: unknown[][]) {
+  const builders = pages.map((rows) => {
+    const builder: Record<string, unknown> = {};
+    for (const key of ['select', 'ilike', 'eq', 'order', 'limit', 'gt']) {
+      builder[key] = vi.fn().mockReturnValue(builder);
+    }
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
+    builder.then = (resolve: (value: unknown) => unknown) =>
+      Promise.resolve({ data: rows, error: null }).then(resolve);
+    return builder;
+  });
+  const from = vi.fn();
+  for (const builder of builders) from.mockReturnValueOnce(builder);
+  from.mockReturnValue(builders[builders.length - 1]);
+  const supabase = { from } as unknown as Parameters<
+    typeof hasSettledPaystackOrderPaymentReference
+  >[0]['supabase'];
+  return { from, supabase };
+}
+
 describe('hasSettledPaystackOrderPaymentReference', () => {
-  it('returns true when a completed Paystack order transaction already owns the reference', async () => {
-    const limit = vi.fn().mockResolvedValue({
-      data: [{ id: 'tx-1' }],
-      error: null,
-    });
-    const not = vi.fn(() => ({ limit }));
-    const eq3 = vi.fn(() => ({ not }));
-    const eq2 = vi.fn(() => ({ eq: eq3 }));
-    const eq1 = vi.fn(() => ({ eq: eq2 }));
-    const select = vi.fn(() => ({ eq: eq1 }));
-    const from = vi.fn(() => ({ select }));
-    const supabase = { from } as unknown as Parameters<
-      typeof hasSettledPaystackOrderPaymentReference
-    >[0]['supabase'];
+  it('returns true when a completed Paystack order payment owns the reference', async () => {
+    const { supabase } = database([
+      [{ gateway: 'paystack', id: 'tx-1', order_id: 'order-1' }],
+    ]);
 
     await expect(
       hasSettledPaystackOrderPaymentReference({
@@ -23,23 +33,10 @@ describe('hasSettledPaystackOrderPaymentReference', () => {
         supabase,
       })
     ).resolves.toBe(true);
-    expect(from).toHaveBeenCalledWith('transactions');
-    expect(eq1).toHaveBeenCalledWith('gateway', 'paystack');
-    expect(eq2).toHaveBeenCalledWith('gateway_reference', 'R1');
-    expect(eq3).toHaveBeenCalledWith('status', 'completed');
   });
 
-  it('returns false when no completed Paystack order transaction matches', async () => {
-    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-    const not = vi.fn(() => ({ limit }));
-    const eq3 = vi.fn(() => ({ not }));
-    const eq2 = vi.fn(() => ({ eq: eq3 }));
-    const eq1 = vi.fn(() => ({ eq: eq2 }));
-    const select = vi.fn(() => ({ eq: eq1 }));
-    const from = vi.fn(() => ({ select }));
-    const supabase = { from } as unknown as Parameters<
-      typeof hasSettledPaystackOrderPaymentReference
-    >[0]['supabase'];
+  it('returns false when no completed Paystack order payment matches', async () => {
+    const { supabase } = database([[]]);
 
     await expect(
       hasSettledPaystackOrderPaymentReference({
@@ -47,28 +44,55 @@ describe('hasSettledPaystackOrderPaymentReference', () => {
         supabase,
       })
     ).resolves.toBe(false);
-    expect(eq1).toHaveBeenCalledWith('gateway', 'paystack');
   });
 
-  it('bugfix: does not treat a same-reference Korapay order payment as Paystack replay', async () => {
-    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-    const not = vi.fn(() => ({ limit }));
-    const eq3 = vi.fn(() => ({ not }));
-    const eq2 = vi.fn(() => ({ eq: eq3 }));
-    const eq1 = vi.fn(() => ({ eq: eq2 }));
-    const select = vi.fn(() => ({ eq: eq1 }));
-    const from = vi.fn(() => ({ select }));
-    const supabase = { from } as unknown as Parameters<
-      typeof hasSettledPaystackOrderPaymentReference
-    >[0]['supabase'];
+  it.each([
+    'Paystack',
+    ' paystack ',
+  ])('returns true for a legacy payment stored as %s', async (gateway) => {
+    const { supabase } = database([
+      [{ gateway, id: 'tx-1', order_id: 'order-1' }],
+    ]);
 
     await expect(
       hasSettledPaystackOrderPaymentReference({
-        gatewayReference: 'SHARED-REF',
+        gatewayReference: 'R1',
+        supabase,
+      })
+    ).resolves.toBe(true);
+  });
+
+  it('ignores order-less completed payments', async () => {
+    const { supabase } = database([
+      [{ gateway: 'paystack', id: 'tx-1', order_id: null }],
+    ]);
+
+    await expect(
+      hasSettledPaystackOrderPaymentReference({
+        gatewayReference: 'R1',
         supabase,
       })
     ).resolves.toBe(false);
-    expect(eq1).toHaveBeenCalledWith('gateway', 'paystack');
-    expect(eq1).not.toHaveBeenCalledWith('gateway_reference', 'SHARED-REF');
+  });
+
+  it('finds the genuine leg past corrupt prefilter matches', async () => {
+    // A limit(1) ilike read can return only `notpaystack` and miss
+    // the completed leg; the full normalized scan must not.
+    const corrupt = Array.from({ length: 10 }, (_, index) => ({
+      gateway: 'notpaystack',
+      id: `tx-corrupt-${index}`,
+      order_id: 'order-9',
+    }));
+    const { supabase } = database([
+      corrupt,
+      [{ gateway: 'paystack', id: 'tx-1', order_id: 'order-1' }],
+    ]);
+
+    await expect(
+      hasSettledPaystackOrderPaymentReference({
+        gatewayReference: 'R1',
+        supabase,
+      })
+    ).resolves.toBe(true);
   });
 });

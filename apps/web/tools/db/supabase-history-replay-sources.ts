@@ -10,6 +10,8 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
+import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
 import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
@@ -218,6 +220,8 @@ const PENDING_SOURCES = [
   'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,

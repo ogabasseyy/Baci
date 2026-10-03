@@ -10,12 +10,24 @@ export type DeliveryStartOptions = {
   requiredShipmentUpdateCapability?: number;
 };
 
+export interface PushChunkDelivery {
+  tickets: ExpoPushTicket[];
+  /**
+   * True when a provider request threw without a definitive response:
+   * delivery may still have happened, so callers must treat the
+   * outcome as unknown rather than failed. Carried explicitly —
+   * Expo's own `ExpoError` tickets are definitive rejections and must
+   * not be inferred as uncertain from their public error code.
+   */
+  deliveryUncertain: boolean;
+}
+
 export async function sendPushNotificationChunks(
   expo: Expo,
   messages: ExpoPushMessage[],
   options?: DeliveryStartOptions
-): Promise<ExpoPushTicket[]> {
-  if (messages.length === 0) return [];
+): Promise<PushChunkDelivery> {
+  if (messages.length === 0) return { deliveryUncertain: false, tickets: [] };
 
   const validMessages: ExpoPushMessage[] = [];
   const resultMap: { index: number; ticket?: ExpoPushTicket }[] = [];
@@ -42,12 +54,16 @@ export async function sendPushNotificationChunks(
   }
 
   if (validMessages.length === 0) {
-    return resultMap.map((entry) => entry.ticket as ExpoPushTicket);
+    // Locally rejected tokens never reached the provider: definitive.
+    return {
+      deliveryUncertain: false,
+      tickets: resultMap.map((entry) => entry.ticket as ExpoPushTicket),
+    };
   }
 
   const chunks = expo.chunkPushNotifications(validMessages);
   const sdkTickets: ExpoPushTicket[] = [];
-  const markDeliveryStarted = createDeliveryStartBoundary(
+  const { markDeliveryStarted } = createDeliveryStartBoundary(
     options?.onDeliveryStart
   );
   let allProviderResponsesDefinitive = true;
@@ -76,6 +92,9 @@ export async function sendPushNotificationChunks(
 
       allProviderResponsesDefinitive = false;
       for (const _ of chunk) {
+        // The `ExpoError` code keeps token handling report-only (never
+        // deactivates); uncertainty itself travels on
+        // `deliveryUncertain`, never inferred from this public code.
         sdkTickets.push({
           status: 'error',
           message: error instanceof Error ? error.message : 'Unknown error',
@@ -98,10 +117,13 @@ export async function sendPushNotificationChunks(
   }
 
   let sdkIndex = 0;
-  return resultMap.map((entry) => {
-    if (entry.ticket) return entry.ticket;
-    return sdkTickets[sdkIndex++];
-  });
+  return {
+    deliveryUncertain: !allProviderResponsesDefinitive,
+    tickets: resultMap.map((entry) => {
+      if (entry.ticket) return entry.ticket;
+      return sdkTickets[sdkIndex++];
+    }),
+  };
 }
 
 function isMixedProjectPushError(error: unknown): boolean {
@@ -128,6 +150,8 @@ async function sendChunkIndividually(
       tickets.push(ticket);
     } catch (error) {
       allProviderResponsesDefinitive = false;
+      // See the chunk-level catch above: the code stays report-only
+      // for token handling; uncertainty travels on the return flag.
       tickets.push({
         status: 'error',
         message: error instanceof Error ? error.message : 'Unknown error',

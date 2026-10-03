@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-links';
+import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-slug';
 
 const number = z.coerce.number().finite().nonnegative();
 const nullableText = z.string().nullable();

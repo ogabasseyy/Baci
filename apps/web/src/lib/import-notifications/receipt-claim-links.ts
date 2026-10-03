@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { sanitizeCustomerLoginEmailHint } from '@baci/shared/schemas';
 import { getRootDomain } from '@/env';
+import { isSafeClaimSlug } from './receipt-claim-slug';
 
 export interface ReceiptClaimMerchantUrlContext {
   slug: string;
@@ -74,16 +75,6 @@ export function isSafeClaimDomain(domain: string): boolean {
     labels.every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) &&
     !/^\d+$/.test(topLabel)
   );
-}
-
-// The slug becomes a claim-URL subdomain label, so it must be a single
-// host-safe label: empty, whitespace-padded, dotted, or underscored values
-// would mint unclaimable token links. Case-insensitive (unlike the
-// lowercased custom-domain check above) because DNS resolves the wire host
-// case-insensitively — rejecting uppercase slugs would fail merchants whose
-// links work. Shared with the manual sender schema so both paths agree.
-export function isSafeClaimSlug(slug: string): boolean {
-  return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/.test(slug);
 }
 
 export function buildReceiptClaimUrl({

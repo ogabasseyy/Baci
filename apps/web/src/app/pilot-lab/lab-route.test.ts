@@ -135,7 +135,16 @@ describe('getLabConfig', () => {
     vi.unstubAllEnvs();
   });
 
+  it('refuses to load with the lab flag off, before any disk I/O', async () => {
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    await expect(getLabConfig()).rejects.toThrow(/outside lab mode/);
+  });
+
   it('requires the lab roots before reading anything', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '');
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', '');
     await expect(getLabConfig()).rejects.toThrow(/INPUT_ROOT/);

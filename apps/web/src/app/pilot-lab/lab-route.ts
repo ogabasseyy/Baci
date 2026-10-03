@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  isPilotLabEnabled,
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
@@ -221,6 +222,12 @@ export function stageLabConfigFromText(input: {
 }
 
 export async function getLabConfig(): Promise<PilotLabConfig> {
+  // Fail fast before any disk I/O: every caller gates on the flag today,
+  // but a future caller of this shared loader must not read operator
+  // roots with lab mode off.
+  if (!isPilotLabEnabled()) {
+    throw new Error('merchant image pilot: refusing to load outside lab mode');
+  }
   const inputRoot = process.env.BACI_IMAGE_PILOT_INPUT_ROOT;
   const outputRoot = process.env.BACI_IMAGE_PILOT_OUTPUT_ROOT;
   if (!inputRoot || !outputRoot) {

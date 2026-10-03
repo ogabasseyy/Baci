@@ -33,6 +33,26 @@ INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('100000
 UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed', sent_at = NULL, dispatch_started_at = NULL, skip_reason = NULL WHERE order_id = '10000000-0000-4000-8000-000000000015';
 DELETE FROM public.order_items WHERE order_id = '10000000-0000-4000-8000-000000000015' AND name = 'Bad line';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'failed row re-arms on invalid line removal');
+-- Moving a line between orders re-enqueues both sides: the source loses a
+-- rendered line and the destination gains one.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000060', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000061', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000060', 'Device', 1, 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000060', 'Widget', 1, 25);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000061', 'Accessory', 1, 50);
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed' WHERE order_id IN ('10000000-0000-4000-8000-000000000060', '10000000-0000-4000-8000-000000000061');
+UPDATE public.order_items SET order_id = '10000000-0000-4000-8000-000000000061' WHERE order_id = '10000000-0000-4000-8000-000000000060' AND name = 'Device';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000060'), 'moved line re-enqueues the source order');
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000061'), 'moved line re-enqueues the destination order');
+-- A move that empties the source still invalidates its in-flight send; the
+-- itemless source just does not re-queue until its item batch lands.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = now(), attempt_count = 1, last_error = NULL WHERE order_id = '10000000-0000-4000-8000-000000000060';
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed' WHERE order_id = '10000000-0000-4000-8000-000000000061';
+UPDATE public.order_items SET order_id = '10000000-0000-4000-8000-000000000061' WHERE order_id = '10000000-0000-4000-8000-000000000060' AND name = 'Widget';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000060'), 'emptying move invalidates the source send without re-queueing');
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000061'), 'emptying move still re-enqueues the destination order');
 
 -- Completing a merchant profile re-arms rows skipped as merchant_validation_failed.
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)

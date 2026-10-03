@@ -41,6 +41,11 @@ const OrderItemSchema = z.object({
   ...orderItemFinancialShape,
   unit_code: z.string().nullable().optional(),
   vat_category_code: z.string().nullable().optional(),
+  // Rendered description/SKU like the emailed PDF: the detail query
+  // selects both so previews never drop lines the attachment shows.
+  item_description: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  sellers_item_id: z.string().nullable().optional(),
 });
 
 const ShippingAddressSchema = z.object({

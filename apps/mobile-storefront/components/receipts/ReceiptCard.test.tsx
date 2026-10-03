@@ -87,6 +87,27 @@ describe('ReceiptCard', () => {
     expect(screen.getByText('Invoice')).toBeTruthy();
   });
 
+  it('honors an explicit invoice kind under a paid label', () => {
+    // An invalid manual row (cancelled, underfunded) keeps the paid label
+    // but opens an invoice in the preview, so the card must badge invoice
+    // instead of "View Receipt" into an invoice.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'paid',
+          document_kind: 'invoice',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+    expect(screen.getByText('View Invoice')).toBeTruthy();
+    expect(screen.queryByText('View Receipt')).toBeNull();
+  });
+
   it('renders the receipt product title', () => {
     render(
       <ReceiptCard

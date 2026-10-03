@@ -14,6 +14,22 @@ import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-docume
 import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
 /**
+ * Deterministic shape failure in the rendered child rows (negative VAT or
+ * payment amounts the database permits but no document may print). The
+ * sender converts these to skipped — later triggers re-arm — instead of
+ * throwing into max_attempts retries like transient lookup failures.
+ */
+export class ManualDocumentValidationError extends Error {
+  readonly reason: 'payment_history_invalid' | 'tax_breakdown_invalid';
+
+  constructor(reason: 'payment_history_invalid' | 'tax_breakdown_invalid') {
+    super(`Manual document ${reason}`);
+    this.name = 'ManualDocumentValidationError';
+    this.reason = reason;
+  }
+}
+
+/**
  * Renders the emailed PDF from the canonical document data: the payment
  * history behind the receipt's Payment table, the VAT subtotal rows behind
  * the invoice's tax breakdown, and the merchant's invoice notes. A failed
@@ -90,17 +106,36 @@ export async function renderManualOrderDocumentPdf({
       metadata: (row.metadata as Record<string, unknown> | null) ?? null,
     })
   );
+  const renderTransactions = (historyResult.data ?? []).map((row) => ({
+    amount: Number(row.amount ?? 0),
+    created_at: String(row.created_at ?? ''),
+    description: (row.description as string | null) ?? null,
+    metadata: (row.metadata as { payment_method?: string } | null) ?? null,
+  }));
+  // Fail corrupt money closed before rendering: the database permits
+  // negative VAT and payment amounts, but no emailed document may print
+  // them. Receipts render no tax breakdown, so tax rows gate invoices
+  // only; settled payments render on every kind.
+  if (!isPaid) {
+    for (const row of taxSubtotals) {
+      const valid = [row.vat_rate, row.taxable_amount, row.tax_amount].every(
+        (value) => Number.isFinite(value) && value >= 0
+      );
+      if (!valid)
+        throw new ManualDocumentValidationError('tax_breakdown_invalid');
+    }
+  }
+  for (const txn of renderTransactions) {
+    if (!Number.isFinite(txn.amount) || txn.amount < 0) {
+      throw new ManualDocumentValidationError('payment_history_invalid');
+    }
+  }
   const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
     order,
     merchant,
     recipientEmail,
     preferredPaymentAccount,
-    transactions: (historyResult.data ?? []).map((row) => ({
-      amount: Number(row.amount ?? 0),
-      created_at: String(row.created_at ?? ''),
-      description: (row.description as string | null) ?? null,
-      metadata: (row.metadata as { payment_method?: string } | null) ?? null,
-    })),
+    transactions: renderTransactions,
   });
   const receiptDate = await resolveManualDocumentReceiptDate(
     supabase,

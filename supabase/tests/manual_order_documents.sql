@@ -77,13 +77,15 @@ SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SE
 SELECT pg_temp.assert_true((SELECT customer_email = 'final@example.com' AND token_hash = repeat('5', 64) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt')), 'adopted claim rotates token and email');
 -- A stale-rejected send marks its claim notified before the worker
 -- rejects it; the corrective retry must rotate the claim (storing the
--- new token its email embeds), not terminally skip. Claimed links
--- still never rotate.
+-- new token its email embeds), not terminally skip — even when the
+-- customer already redeemed the stale link, since redemption serves
+-- live data and the corrected PDF must still go out.
 UPDATE public.receipt_claims SET notification_sent_at = now() WHERE id = (SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'));
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'), 'worker-2', repeat('ab', 32))->>'status' = 'created'), 'notified retry rotates the stale claim');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('ab', 32) FROM public.receipt_claims WHERE id = (SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'))), 'rotation stores the retry token');
 UPDATE public.receipt_claims SET claimed_at = now() WHERE id = (SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'));
-SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'), 'worker-2', repeat('ba', 32))->>'status' = 'skipped'), 'claimed link never rotates');
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'), 'worker-2', repeat('ba', 32))->>'status' = 'created'), 'redeemed retry rotates to the fresh token');
+SELECT pg_temp.assert_true((SELECT token_hash = repeat('ba', 32) AND claimed_at IS NOT NULL FROM public.receipt_claims WHERE id = (SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'))), 'redeemed rotation preserves claimed_at');
 -- An unpaid invoice-method order previews as the proforma the customer
 -- received, not a commercial invoice.
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid, payment_method, created_at)

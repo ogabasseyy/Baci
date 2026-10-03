@@ -4,10 +4,7 @@ import {
   buildDispatchPaymentSnapshot,
 } from '@/lib/build-manual-order-document-dispatch-snapshot';
 import { checkManualDocumentDispatchLease } from '@/lib/check-manual-document-dispatch-lease';
-import {
-  buildReceiptClaimUrl,
-  createReceiptClaimToken,
-} from '@/lib/import-notifications/receipt-claim-links';
+import { buildReceiptClaimUrl } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
@@ -15,15 +12,14 @@ import {
   resolveNotificationReplyTo,
   resolveOrderNotificationRecipient,
 } from '@/lib/order-notification-recipient';
-import { renderManualOrderDocumentPdf } from '@/lib/render-manual-order-document-pdf';
+import { prepareManualDocumentClaim } from '@/lib/prepare-manual-document-claim';
+import {
+  ManualDocumentValidationError,
+  renderManualOrderDocumentPdf,
+} from '@/lib/render-manual-order-document-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
-import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
 import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
-import {
-  assertManualDocumentClaimMatchesOrder,
-  manualDocumentClaimSchema,
-} from '@/schemas/manual-order-document-claim';
 import { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
 import { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
@@ -147,8 +143,9 @@ export async function sendManualOrderDocument({
   const displayCustomerName = sanitizeEmailDisplayName(
     order.customer_name || 'there'
   );
-  const { pdf, taxSubtotals, transactions } =
-    await renderManualOrderDocumentPdf({
+  let rendered: Awaited<ReturnType<typeof renderManualOrderDocumentPdf>>;
+  try {
+    rendered = await renderManualOrderDocumentPdf({
       supabase,
       order,
       merchant,
@@ -158,27 +155,24 @@ export async function sendManualOrderDocument({
       pdfDocumentKind,
       invoiceTypeCode,
     });
-  const claim = createReceiptClaimToken();
-  const { data, error } = await supabase.rpc(
-    'create_manual_order_document_claim',
-    {
-      p_outbox_id: row.id,
-      p_claim_owner: row.claim_owner,
-      p_token_hash: claim.tokenHash,
+  } catch (error) {
+    // Deterministic shape failures skip (later triggers re-arm) instead of
+    // throwing into max_attempts retries — same contract as the order and
+    // merchant schema failures above.
+    if (error instanceof ManualDocumentValidationError) {
+      return { status: 'skipped', reason: error.reason };
     }
-  );
-  if (error) throw new Error('Could not prepare manual document access');
-  const preparedParsed = manualDocumentClaimSchema.safeParse(data);
-  if (!preparedParsed.success)
-    return { status: 'skipped', reason: 'claim_validation_failed' };
-  const prepared = preparedParsed.data;
-  if (prepared.status !== 'created')
-    return { status: 'skipped', reason: 'document_claim_unavailable' };
-  assertManualDocumentClaimMatchesOrder(prepared, order, recipient.email);
-  const customDomain = await resolveManualDocumentClaimDomain(
+    throw error;
+  }
+  const { pdf, taxSubtotals, transactions } = rendered;
+  const claimStep = await prepareManualDocumentClaim({
     supabase,
-    row.merchant_id
-  );
+    row,
+    order,
+    recipientEmail: recipient.email,
+  });
+  if (claimStep.status === 'skipped') return claimStep;
+  const { prepared, claim, customDomain } = claimStep;
   const content = buildManualOrderDocumentEmailContent({
     order,
     merchant,

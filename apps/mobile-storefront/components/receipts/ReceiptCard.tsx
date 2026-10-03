@@ -40,8 +40,10 @@ function getPriceFormatter(currency: string): Intl.NumberFormat {
       // Malformed or unknown currency codes (legacy rows the sender
       // would skip) degrade to NGN instead of crashing the list render
       // with RangeError. A regex alone cannot cover well-formed but
-      // unassigned codes, so construction itself is guarded.
-      formatter = getPriceFormatter('NGN');
+      // unassigned codes, so construction itself is guarded. Malformed
+      // keys are deliberately not cached: every unique legacy code would
+      // otherwise add a Map entry pointing at the same NGN formatter.
+      return getPriceFormatter('NGN');
     }
     PRICE_FORMATTER_CACHE.set(currency, formatter);
   }
@@ -68,11 +70,20 @@ export function ReceiptCard({
   onPress,
   onPrefetch,
 }: ReceiptCardProps) {
-  // Badge/action follow the effective document kind: a covered manual
-  // balance under a non-paid label opens a receipt, so the card says
-  // receipt. Absent kind (legacy rows) falls back to the raw status.
-  const displayStatus =
-    item.document_kind === 'receipt' ? 'paid' : item.payment_status;
+  // Badge/action follow the effective document kind both ways: a covered
+  // manual balance under a non-paid label opens a receipt, so the card says
+  // receipt — and an explicit invoice kind never badges paid even under a
+  // paid label (invalid manual rows open invoices). Absent kind (legacy
+  // rows) falls back to the raw status.
+  let displayStatus = item.payment_status;
+  if (item.document_kind === 'receipt') {
+    displayStatus = 'paid';
+  } else if (
+    item.document_kind === 'invoice' &&
+    item.payment_status === 'paid'
+  ) {
+    displayStatus = 'unpaid';
+  }
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem

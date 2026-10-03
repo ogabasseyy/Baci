@@ -145,10 +145,17 @@ BEGIN
   -- duplicate with a rotated link. order_id stays compared so lines moving
   -- between orders re-enqueue both sides.
   FOR v_order_id IN (
-    SELECT DISTINCT COALESCE(n.order_id, o.order_id) AS order_id
+    SELECT DISTINCT ids.order_id AS order_id
     FROM inserted_items AS n
     FULL JOIN removed_items AS o ON o.id = n.id
-    WHERE n.order_id IS DISTINCT FROM o.order_id
+    -- A line moving between orders emits BOTH sides: the source loses a
+    -- rendered line and the destination gains one, so each order's
+    -- dispatch must be re-evaluated. Same-order edits dedup to one id.
+    CROSS JOIN LATERAL (
+      VALUES (n.order_id), (o.order_id)
+    ) AS ids(order_id)
+    WHERE ids.order_id IS NOT NULL
+      AND (n.order_id IS DISTINCT FROM o.order_id
       OR n.name IS DISTINCT FROM o.name
       OR n.quantity IS DISTINCT FROM o.quantity
       OR n.price IS DISTINCT FROM o.price
@@ -163,6 +170,7 @@ BEGIN
       OR n.vat_rate IS DISTINCT FROM o.vat_rate
       OR n.vat_amount IS DISTINCT FROM o.vat_amount
       OR n.sellers_item_id IS DISTINCT FROM o.sellers_item_id
+      )
     ORDER BY order_id
   ) LOOP
     PERFORM private.enqueue_manual_order_document(v_order_id);

@@ -13,6 +13,8 @@ source "$WORKER_ROOT/lib/check-deploy-workflow-inflight.sh"
 source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
 # shellcheck source=lib/print-worker-env-reminder.sh
 source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
+# shellcheck source=lib/install-worker-services.sh
+source "$WORKER_ROOT/lib/install-worker-services.sh"
 
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
@@ -98,59 +100,7 @@ install_remediation_cron_transition
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
-echo "==> Installing Vercel drain receiver user service"
-cat <<EOF | ssh "$VPS" "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/baci-vercel-log-drain-receiver.service"
-[Unit]
-Description=Baci Vercel log drain receiver
-After=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$REMOTE_DIR
-ExecStart=$NODE_BIN $REMOTE_DIR/jobs/vercel-log-drain-receiver.mjs
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-EOF
-ssh "$VPS" "systemctl --user daemon-reload && systemctl --user enable --now baci-vercel-log-drain-receiver.service && systemctl --user restart baci-vercel-log-drain-receiver.service"
-
-echo "==> Installing AI storefront trigger user service"
-cat <<EOF | ssh "$VPS" "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/baci-ai-storefront-trigger.service"
-[Unit]
-Description=Baci AI storefront trigger server
-After=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$REMOTE_DIR
-ExecStart=$NODE_BIN $REMOTE_DIR/jobs/ai-storefront-trigger-server.mjs
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-EOF
-ssh "$VPS" "systemctl --user daemon-reload && systemctl --user enable --now baci-ai-storefront-trigger.service"
-
-echo "==> Installing import job trigger user service"
-cat <<EOF | ssh "$VPS" "mkdir -p ~/.config/systemd/user && cat > ~/.config/systemd/user/baci-import-job-trigger.service"
-[Unit]
-Description=Baci import job trigger server
-After=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$REMOTE_DIR
-ExecStart=$NODE_BIN $REMOTE_DIR/jobs/import-job-trigger-server.mjs
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=default.target
-EOF
-ssh "$VPS" "systemctl --user daemon-reload && systemctl --user enable --now baci-import-job-trigger.service"
+install_worker_services
 
 echo "==> Installing durable event-pipeline user services"
 ssh "$VPS" "bash $REMOTE_DIR/install-event-pipeline-services.sh $REMOTE_DIR"

@@ -13,20 +13,24 @@ const releaseHelper = readFileSync(
 describe('deploy crontab', () => {
   it('uses the resolved Node binary for systemd services', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const servicesScript = readFileSync(
+      join(workerRoot, 'lib', 'install-worker-services.sh'),
+      'utf8'
+    );
     const releasePreparationIndex = deployScript.indexOf(
       'prepare_worker_release'
     );
     const triggerServiceIndex = deployScript.indexOf(
-      'Installing AI storefront trigger user service'
+      'install_worker_services'
     );
 
     assert.match(releaseHelper, /NODE_BIN=\$\(ssh/);
     assert.notEqual(releasePreparationIndex, -1);
     assert.notEqual(triggerServiceIndex, -1);
     assert.ok(releasePreparationIndex < triggerServiceIndex);
-    assert.doesNotMatch(deployScript, /ExecStart=\/usr\/bin\/node/);
+    assert.doesNotMatch(servicesScript, /ExecStart=\/usr\/bin\/node/);
     assert.match(
-      deployScript,
+      servicesScript,
       /ExecStart=\$NODE_BIN \$REMOTE_DIR\/jobs\/ai-storefront-trigger-server\.mjs/
     );
   });

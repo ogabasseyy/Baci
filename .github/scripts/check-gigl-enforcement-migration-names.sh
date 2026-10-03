@@ -15,12 +15,13 @@ migrations_dir="${1:-supabase/migrations}"
 # and SET ROLE target), the wrapper RPC prefix, the five underlying RPCs
 # the wrappers delegate to via spoofed service_role (a semantics-widening
 # body edit there must re-prove worker capability just like a wrapper
-# edit), and the pgrst.db_pre_request setting that ACTIVATES the hook (a
-# generically-named ALTER ROLE/DATABASE ... RESET without the hook name
-# would otherwise commit unsmoked; the final-state check fails too late
-# to roll it back). Table-only changes (monitors, notifications) are out
-# of scope: they cannot move the boundary the smoke proves.
-pattern='enforce_gigl_tracking_worker_request_scope|gigl_tracking_worker|gigl_worker_|claim_due_gigl_tracking_monitors|apply_gigl_tracking_result|record_gigl_tracking_failure|release_gigl_tracking_claim|pause_gigl_tracking_monitor|db_pre_request'
+# edit), the pgrst.db_pre_request setting that ACTIVATES the hook, and
+# bare RESET ALL (which names no setting or role yet silently clears
+# the hook activation; a generically-named ALTER without the hook name
+# would otherwise commit unsmoked, and the final-state check fails too
+# late to roll it back). Table-only changes (monitors, notifications)
+# are out of scope: they cannot move the boundary the smoke proves.
+pattern='enforce_gigl_tracking_worker_request_scope|gigl_tracking_worker|gigl_worker_|claim_due_gigl_tracking_monitors|apply_gigl_tracking_result|record_gigl_tracking_failure|release_gigl_tracking_claim|pause_gigl_tracking_monitor|db_pre_request|RESET[[:space:]]+ALL'
 fail=0
 while IFS= read -r file; do
   case "$(basename "$file")" in

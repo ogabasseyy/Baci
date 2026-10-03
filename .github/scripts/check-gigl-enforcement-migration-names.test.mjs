@@ -94,6 +94,16 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.match(result.stderr, /20260107600000_auth_tune\.sql/);
   });
 
+  it('fails a bare RESET ALL without gigl in the filename', () => {
+    const result = runCheck({
+      '20260107650000_auth_reset.sql':
+        'ALTER ROLE authenticator RESET ALL;\n',
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /20260107650000_auth_reset\.sql/);
+  });
+
   it('matches SQL object names case-insensitively (unquoted identifiers fold)', () => {
     const result = runCheck({
       '20260107700000_hook_body.sql':

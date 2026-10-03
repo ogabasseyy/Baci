@@ -136,6 +136,10 @@ describe('GIGL direct worker cost contract', () => {
       /needs\.changes\.outputs\.manifests == 'true' && needs\.changes\.outputs\.tracking != 'true'/
     );
     assert.match(step, /::warning::/);
+    // Warn-never-blocks scopes to this CI step: the warning must not
+    // fail the build. Enforcement lives in the latch bypass term
+    // (deploy.yml requires manifest_drift == 'false'), which closes
+    // the smoke bypass until deploy.sh converges the worker.
     assert.doesNotMatch(step, /::error::/);
   });
 

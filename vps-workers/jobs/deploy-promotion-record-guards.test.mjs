@@ -72,7 +72,7 @@ describe('deploy promotion record guards', () => {
     );
     assert.match(
       rollbackSlice,
-      /quiesce_worker_release "\$remote_dir" \|\| exit 1/
+      /quiesce_worker_release "\$remote_dir" "\$staging_dir\/bin\/gigl-dotenv\.sh" \|\| exit 1/
     );
     assert.match(
       rollbackSlice,
@@ -93,18 +93,12 @@ describe('deploy promotion record guards', () => {
       /cp -a "\$remote_dir\/\.env" "\$pre_promote_backup\/\.env"/
     );
     assert.match(releaseSource, /app-live-target/);
-    // First-deploy rollback restores the .env snapshot, then removes
-    // the migration-created symlink (NOSYMLINK case, guarded -L so a
-    // real directory is never deleted) or re-points a pre-existing one
-    // to its pre-flip target.
+    // First-deploy rollback reverses the checkout pointer through the
+    // flip's shared restore mode (same call as promote's flip-failure
+    // handler: the flip can fail after repointing anywhere).
     assert.match(
       rollbackSlice,
-      /cp "\$pre_promote_backup\/\.env" "\$remote_dir\/\.env"/
-    );
-    assert.match(rollbackSlice, /if \[ -L "\$rollback_link" \]; then rm -f/);
-    assert.match(
-      rollbackSlice,
-      /ln -sfn "\$\(cat "\$pre_promote_backup\/app-live-target"\)"/
+      /flip-immutable-checkout\.sh" --restore-pointer/
     );
     // The promote snapshot survives success for exactly this path;
     // deploy.sh removes it once the refresh lands.

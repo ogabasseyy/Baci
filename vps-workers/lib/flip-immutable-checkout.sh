@@ -4,10 +4,8 @@
 # the deploy lock (with the file promote), so wrappers, SHA marker, and
 # executed code change together. Also directly executable for testing.
 # Usage: flip-immutable-checkout.sh <remote-dir> <expected-sha>
+#    or: flip-immutable-checkout.sh --restore-pointer <remote-dir> <snapshot-dir>
 set -euo pipefail
-
-remote_dir="${1:?remote dir is required}"
-expected_sha="${2:?expected SHA is required}"
 
 # Single dotenv reader, shared with the provisioner and the cron
 # entrypoints: every BACI_REPO_DIR spelling the preflight accepts
@@ -30,6 +28,37 @@ fi
 # Last assignment wins inside the shared reader, matching dotenv and
 # the scoped-environment reader: an operator override appended below a
 # stale line must flip the same checkout the poller executes.
+#
+# Pointer-restore mode: reverses the checkout pointer (.env + app-live
+# symlink) from a promote snapshot. The flip can fail AFTER repointing
+# (killed mid-flight, failed verification), so every flip-failure
+# restore — not just the first-deploy rollback — must reverse the
+# pointer, not only the tree. No-op when the flip never mutated the
+# pointer; shared by promote's flip-failure handler and rollback.
+if [ "${1:-}" = "--restore-pointer" ]; then
+  restore_remote_dir="${2:?remote dir is required}"
+  restore_backup_dir="${3:?snapshot dir is required}"
+  # The link path comes from the CURRENT .env (the flip's canonical
+  # line is the created symlink in the migration case, the untouched
+  # original in the pre-existing-symlink case), read BEFORE the .env
+  # restore below.
+  restore_link="$(gigl_dotenv_value "$restore_remote_dir/.env" 'BACI_REPO_DIR' 2>/dev/null || true)"
+  if [ -e "$restore_backup_dir/.env" ]; then
+    cp "$restore_backup_dir/.env" "$restore_remote_dir/.env"
+  fi
+  if [ "$(cat "$restore_backup_dir/app-live-target" 2>/dev/null)" = "NOSYMLINK" ]; then
+    # Migration ran: remove ONLY the created symlink (guarded -L —
+    # never a real directory).
+    if [ -L "$restore_link" ]; then rm -f "$restore_link"; fi
+  elif [ -n "$restore_link" ] && [ -e "$restore_backup_dir/app-live-target" ]; then
+    # Pre-existing symlink: re-point to its pre-flip target.
+    ln -sfn "$(cat "$restore_backup_dir/app-live-target")" "$restore_link"
+  fi
+  exit 0
+fi
+
+remote_dir="${1:?remote dir is required}"
+expected_sha="${2:?expected SHA is required}"
 repo_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
 case "$repo_link" in
   /*) ;;

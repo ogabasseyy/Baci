@@ -49,7 +49,7 @@ describe('deploy promotion guards', () => {
       /\.\s"\$staging_dir\/lib\/quiesce-worker-release\.sh"/
     );
     const callIndex = promotionSource.indexOf(
-      'quiesce_worker_release "$remote_dir"'
+      'quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh"'
     );
     assert.notEqual(callIndex, -1);
     assert.ok(callIndex < promotionSource.indexOf('rsync -a --delete'));
@@ -198,6 +198,14 @@ describe('deploy promotion guards', () => {
     assert.ok(
       restoreIndex > promotionSource.indexOf('flip-immutable-checkout.sh'),
       'expected the restore on the flip-failure path'
+    );
+    // The flip can fail AFTER repointing (killed mid-flight, failed
+    // verification): the handler reverses the checkout pointer from
+    // the snapshot too, or the trap restarts old wrappers against
+    // the candidate checkout.
+    assert.match(
+      promotionSource,
+      /flip-immutable-checkout\.sh" --restore-pointer/
     );
     // The backup is removed after a flip-failure restore, survives a
     // successful promote (rollback_worker_release needs it if the

@@ -6,7 +6,7 @@
 #
 # Usage (call ONCE per shell, BEFORE the first rsync):
 #   . "<tree>/lib/quiesce-worker-release.sh"
-#   quiesce_worker_release "$REMOTE_DIR" || exit 1
+#   quiesce_worker_release "$REMOTE_DIR" ["$STAGING_DIR/bin/gigl-dotenv.sh"] || exit 1
 # Promote sources this from the STAGING tree (the revision being
 # installed, so newly added services are covered); emergency rollback
 # sources it from the LIVE tree (the revision actually running, so
@@ -14,6 +14,13 @@
 # caller's EXIT trap (service restart) and file descriptors from 10 up.
 quiesce_worker_release() {
   local remote_dir="$1"
+  # Optional staged dotenv reader (promote and rollback pass their
+  # staging copy): preferred over the live one because it matches the
+  # revision the transition installer parses with, and because the
+  # live copy does not exist yet on first rollout (quiesce runs
+  # before the rsync). Manual rollback callers without staging omit
+  # it and keep the live-reader behavior.
+  local gigl_dotenv_reader_override="${2:-}"
 
   # Re-entry would reopen already-held locks on fresh descriptors and
   # self-deadlock (flock locks are per open-file-description), so the
@@ -33,12 +40,17 @@ quiesce_worker_release() {
   # would let a directly launched remediator execute mid-promote — so
   # resolve it exactly the way the transition installer does: the LIVE
   # .env (the running entries hold the current path, not the staged
-  # revision's) through the shared reader every promote installs at
-  # bin/. A missing reader (first install, legacy tree) falls back to
-  # the default — which is also what the transition would use there.
+  # revision's) through the shared reader. The staged override wins
+  # when provided (it matches the transition installer's revision and
+  # exists on first rollout, when the live copy is not installed
+  # yet); otherwise the live bin/ copy; otherwise the default — which
+  # is also what the transition would use on a readerless tree.
   local gigl_global_lock="error-remediator-global.lock"
   local gigl_global_path="$remote_dir/locks/error-remediator-global.lock"
   local gigl_dotenv_reader="$remote_dir/bin/gigl-dotenv.sh"
+  if [ -n "$gigl_dotenv_reader_override" ] && [ -f "$gigl_dotenv_reader_override" ]; then
+    gigl_dotenv_reader="$gigl_dotenv_reader_override"
+  fi
   if [ -f "$gigl_dotenv_reader" ]; then
     # shellcheck disable=SC1090
     . "$gigl_dotenv_reader"

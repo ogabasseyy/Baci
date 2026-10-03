@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync, execSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   cleanupImmutableCheckoutFixtures,
+  git,
   immutableCheckoutFixture,
   runCheckoutScript,
 } from './immutable-checkout.test-fixtures.mjs';
@@ -78,5 +87,80 @@ describe('immutable checkout garbage collection', () => {
     assert.equal(existsSync(dirA), true);
     assert.equal(existsSync(join(base, `app-${shaB}`)), true);
     assert.equal(existsSync(join(base, `app-${shaC}`)), true);
+  });
+
+  it('reverses the one-time migration from a snapshot', () => {
+    const { base, legacy, remote, root, shas, staging } =
+      immutableCheckoutFixture({ commits: [{}, {}] });
+    const live = join(base, 'app-live');
+    // Mirror promote's pre-flip pointer snapshot: legacy layout has no
+    // symlink yet.
+    const snapshot = join(root, 'snapshot');
+    mkdirSync(snapshot, { recursive: true });
+    const originalEnv = readFileSync(join(remote, '.env'), 'utf8');
+    assert.ok(originalEnv.includes(legacy));
+    writeFileSync(join(snapshot, '.env'), originalEnv);
+    writeFileSync(join(snapshot, 'app-live-target'), 'NOSYMLINK\n');
+
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[1]]).status,
+      0
+    );
+    assert.equal(runCheckoutScript(flipScript, [remote, shas[1]]).status, 0);
+    assert.equal(lstatSync(live).isSymbolicLink(), true);
+
+    const restored = runCheckoutScript(flipScript, [
+      '--restore-pointer',
+      remote,
+      snapshot,
+    ]);
+
+    assert.equal(restored.status, 0, restored.stderr);
+    // .env names the legacy dir again; the created symlink is gone
+    // (guarded -L: a real directory would never be deleted); the
+    // legacy clone itself is untouched throughout.
+    assert.equal(readFileSync(join(remote, '.env'), 'utf8'), originalEnv);
+    assert.equal(existsSync(live), false);
+    assert.equal(
+      git(['rev-parse', '--is-inside-work-tree'], legacy).trim(),
+      'true'
+    );
+  });
+
+  it('re-points a pre-existing symlink to its pre-flip target', () => {
+    const { base, remote, root, shas, staging } = immutableCheckoutFixture({
+      commits: [{}, {}],
+    });
+    const live = join(base, 'app-live');
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[0]]).status,
+      0
+    );
+    assert.equal(runCheckoutScript(flipScript, [remote, shas[0]]).status, 0);
+    // Mirror promote's snapshot after a normal-path flip: symlink
+    // present, target recorded.
+    const snapshot = join(root, 'snapshot');
+    mkdirSync(snapshot, { recursive: true });
+    writeFileSync(
+      join(snapshot, '.env'),
+      readFileSync(join(remote, '.env'), 'utf8')
+    );
+    writeFileSync(join(snapshot, 'app-live-target'), `${readlinkSync(live)}\n`);
+
+    assert.equal(
+      runCheckoutScript(provisionScript, [staging, shas[1]]).status,
+      0
+    );
+    assert.equal(runCheckoutScript(flipScript, [remote, shas[1]]).status, 0);
+    assert.equal(readlinkSync(live), join(base, `app-${shas[1]}`));
+
+    const restored = runCheckoutScript(flipScript, [
+      '--restore-pointer',
+      remote,
+      snapshot,
+    ]);
+
+    assert.equal(restored.status, 0, restored.stderr);
+    assert.equal(readlinkSync(live), join(base, `app-${shas[0]}`));
   });
 });

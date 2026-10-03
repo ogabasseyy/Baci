@@ -146,7 +146,7 @@ mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 # shell's memory, so the rsync below cannot disturb them.
 # shellcheck source=quiesce-worker-release.sh
 . "$staging_dir/lib/quiesce-worker-release.sh"
-quiesce_worker_release "$remote_dir" || exit 1
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
 
 # Snapshot the pre-promote live tree BEFORE the rsync below mutates
 # it: if the checkout flip then refuses (the per-SHA checkout went
@@ -209,6 +209,10 @@ if ! bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected
   else
     rm -f "$remote_dir/app-checkout.sha"
   fi
+  # The flip can fail AFTER repointing (killed mid-flight, failed
+  # verification): reverse the checkout pointer from the snapshot too,
+  # or the trap restarts old wrappers against the candidate checkout.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" --restore-pointer "$remote_dir" "$pre_promote_backup"
   rm -rf "$pre_promote_backup"
   exit 1
 fi
@@ -245,7 +249,7 @@ fi
 # the old tree is back — never against a half-restored mix.
 # shellcheck source=quiesce-worker-release.sh
 . "$staging_dir/lib/quiesce-worker-release.sh"
-quiesce_worker_release "$remote_dir" || exit 1
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
 
 for entry in bin jobs lib config node_modules; do
   if [ -e "$pre_promote_backup/$entry" ]; then
@@ -272,18 +276,9 @@ else
   # created symlink in the migration case, the untouched original in
   # the pre-existing-symlink case), read BEFORE the .env restore.
   # A pre-existing symlink (markerless manual state) is re-pointed to
-  # its pre-flip target instead of removed.
-  # shellcheck source=../bin/gigl-dotenv.sh
-  . "$staging_dir/bin/gigl-dotenv.sh"
-  rollback_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
-  if [ -e "$pre_promote_backup/.env" ]; then
-    cp "$pre_promote_backup/.env" "$remote_dir/.env"
-  fi
-  if [ "$(cat "$pre_promote_backup/app-live-target" 2>/dev/null)" = "NOSYMLINK" ]; then
-    if [ -L "$rollback_link" ]; then rm -f "$rollback_link"; fi
-  elif [ -e "$pre_promote_backup/app-live-target" ]; then
-    ln -sfn "$(cat "$pre_promote_backup/app-live-target")" "$rollback_link"
-  fi
+  # its pre-flip target instead of removed. Shared with promote's
+  # flip-failure handler: the flip can fail after repointing anywhere.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" --restore-pointer "$remote_dir" "$pre_promote_backup"
   rm -f "$remote_dir/app-checkout.sha"
 fi
 rm -rf "$pre_promote_backup"

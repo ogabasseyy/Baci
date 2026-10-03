@@ -82,8 +82,8 @@ echo QUIESCE-OK
   return { root, bin, remote, flockLog, systemctlLog, driver, crontabFixture };
 }
 
-export function runDriver(fixture, env = {}) {
-  return spawnSync('bash', [fixture.driver], {
+export function runDriver(fixture, env = {}, driver = fixture.driver) {
+  return spawnSync('bash', [driver], {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -96,6 +96,20 @@ export function runDriver(fixture, env = {}) {
       ...env,
     },
   });
+}
+
+export function writeReaderDriver(fixture, reader) {
+  const driver = join(fixture.root, 'driver-staged-reader.sh');
+  writeExecutable(
+    driver,
+    `#!/usr/bin/env bash
+set -euo pipefail
+. "${QUIESCE_LIB}"
+quiesce_worker_release "${fixture.remote}" "${reader}" || { echo QUIESCE-FAILED; exit 3; }
+echo QUIESCE-OK
+`
+  );
+  return driver;
 }
 
 export function lockExists(fixture, name) {

@@ -1,5 +1,8 @@
 import {
   formatOrderItemDisplayName,
+  getReceiptItemLineTotal,
+  getReceiptItemVatLines,
+  getReceiptItemDetailLines as getSharedReceiptItemDetailLines,
   type ReceiptMerchant,
   type ReceiptOrder,
 } from '@baci/shared';
@@ -125,34 +128,20 @@ function getReceiptItemDescription(item: ReceiptOrder['items'][number]) {
   return description.length > 0 ? description : null;
 }
 
-function getReceiptItemLineTotal(item: ReceiptOrder['items'][number]) {
-  return typeof item.line_extension_amount === 'number' &&
-    Number.isFinite(item.line_extension_amount)
-    ? item.line_extension_amount
-    : item.quantity * item.price;
-}
-
 function getReceiptItemTaxLabel(
   item: ReceiptOrder['items'][number],
   currency: string
 ) {
-  const lines: string[] = [];
-
-  if (typeof item.vat_rate === 'number' && Number.isFinite(item.vat_rate)) {
-    lines.push(`VAT: ${item.vat_rate.toFixed(2)}%`);
-  }
-
-  if (typeof item.vat_amount === 'number' && Number.isFinite(item.vat_amount)) {
-    lines.push(formatReceiptCurrency(item.vat_amount, currency));
-  }
+  const lines = getReceiptItemVatLines(item, (amount) =>
+    formatReceiptCurrency(amount, currency)
+  );
 
   return lines.length > 0 ? lines.join('\n') : '-';
 }
 
 function getReceiptItemDetailLines(item: ReceiptOrder['items'][number]) {
   return [
-    item.sellers_item_id ? `SKU: ${item.sellers_item_id}` : null,
-    item.unit_code ? `Unit: ${item.unit_code}` : null,
+    ...getSharedReceiptItemDetailLines(item),
     getReceiptItemDescription(item),
   ].filter(Boolean) as string[];
 }

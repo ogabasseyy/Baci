@@ -1,5 +1,14 @@
 import type { ReceiptOrder } from '@baci/shared';
-import { formatCanonicalProductConditionLabel } from '@baci/shared/lib';
+import {
+  getAdditionalDeviceCount,
+  getOptionalReceiptItemNumber,
+  getReceiptItemDisplayName,
+  getReceiptItemImage,
+  getReceiptItemName,
+  getReceiptItemQuantity,
+  getReceiptItemVariantName,
+  getReceiptListItemStringValue,
+} from './receipt-list-item-fields';
 import { isArchiveOrder } from '@/app/(storefront)/[slug]/(customer)/receipts/archive-order-filter';
 import {
   buildAssuranceReceiptItem,
@@ -49,76 +58,6 @@ export interface ReceiptCustomerInfo {
   last_name?: string | null;
   email?: string | null;
   phone?: string | null;
-}
-
-function getStringValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function getReceiptItemImage(item: Record<string, unknown> | undefined) {
-  if (!item) {
-    return null;
-  }
-
-  return (
-    getStringValue(item.product_image) ||
-    getStringValue(item.image) ||
-    getStringValue(item.image_url) ||
-    (Array.isArray(item.product_images)
-      ? getStringValue(item.product_images[0])
-      : null)
-  );
-}
-
-function getReceiptItemName(item: Record<string, unknown> | undefined) {
-  if (!item) {
-    return 'Unknown item';
-  }
-
-  return (
-    getStringValue(item.product_name) ||
-    getStringValue(item.name) ||
-    'Unknown item'
-  );
-}
-
-function getReceiptItemVariantName(item: Record<string, unknown> | undefined) {
-  return (
-    getStringValue(item?.variant_name) ||
-    formatCanonicalProductConditionLabel(getStringValue(item?.condition))
-  );
-}
-
-function getReceiptItemDisplayName(item: Record<string, unknown> | undefined) {
-  const baseName = getReceiptItemName(item);
-  const variantName = getReceiptItemVariantName(item);
-  return variantName && !baseName.includes(`(${variantName})`)
-    ? `${baseName} (${variantName})`
-    : baseName;
-}
-
-function getReceiptItemQuantity(item: Record<string, unknown>) {
-  const quantity = Number(item.quantity);
-  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
-}
-
-function getOptionalReceiptItemNumber(
-  item: Record<string, unknown>,
-  key: string
-): number | undefined {
-  const value = item[key];
-  if (value === null || value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function getAdditionalDeviceCount(items: Array<Record<string, unknown>>) {
-  const totalDeviceCount = items.reduce(
-    (count, item) => count + getReceiptItemQuantity(item),
-    0
-  );
-
-  return Math.max(0, totalDeviceCount - 1);
 }
 
 // Module-scope helper keeps async fetch/mapping logic out of the component
@@ -183,7 +122,7 @@ export async function fetchReceiptListItems(
       // PDF and account download, never by the untouched order dates; a
       // stale invoice issue date would otherwise win in the renderer.
       const isPaidRenderer = rendererPaymentStatus === 'paid';
-      const completionDate = getStringValue(order.receipt_completion_date);
+      const completionDate = getReceiptListItemStringValue(order.receipt_completion_date);
 
       // Project the line details the emailed PDF renders: without them
       // the preview computes quantity x price and drops VAT/SKU/unit, so it
@@ -205,16 +144,16 @@ export async function fetchReceiptListItems(
         variant_name: getReceiptItemVariantName(item) || undefined,
         quantity: getReceiptItemQuantity(item),
         price: Number(item.price) || 0,
-        description: getStringValue(item.item_description) ?? undefined,
+        description: getReceiptListItemStringValue(item.item_description) ?? undefined,
         line_extension_amount: getOptionalReceiptItemNumber(
           item,
           'line_extension_amount'
         ),
-        unit_code: getStringValue(item.unit_code),
-        vat_category_code: getStringValue(item.vat_category_code),
+        unit_code: getReceiptListItemStringValue(item.unit_code),
+        vat_category_code: getReceiptListItemStringValue(item.vat_category_code),
         vat_rate: getOptionalReceiptItemNumber(item, 'vat_rate') ?? null,
         vat_amount: getOptionalReceiptItemNumber(item, 'vat_amount') ?? null,
-        sellers_item_id: getStringValue(item.sellers_item_id),
+        sellers_item_id: getReceiptListItemStringValue(item.sellers_item_id),
       }));
       // Itemize the premium like the emailed PDF and download so the
       // preview lines reconcile with the displayed total.

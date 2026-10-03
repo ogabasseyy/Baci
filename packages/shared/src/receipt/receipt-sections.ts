@@ -11,6 +11,9 @@ import {
 } from './receipt-fulfillment';
 import {
   getReceiptDisplaySubtotal,
+  getReceiptItemDetailLines,
+  getReceiptItemLineTotal,
+  getReceiptItemVatLines,
   getReceiptVatRate,
   type MoneyFormatter,
   shouldShowVatLine,
@@ -42,30 +45,17 @@ export function renderLogoHtml(
   return `<div class="logo-fallback">${safeStoreName}</div>`;
 }
 
-// Mirror the emailed/downloaded PDF line math exactly: an explicit
-// extension wins over quantity x price, and the same SKU/Unit/VAT
-// detail lines render under the item so the modal/print preview can
-// never disagree with the sent document.
-function getReceiptItemLineTotal(item: ReceiptOrder['items'][number]): number {
-  return typeof item.line_extension_amount === 'number' &&
-    Number.isFinite(item.line_extension_amount)
-    ? item.line_extension_amount
-    : item.price * item.quantity;
-}
-
 function renderReceiptItemMetaHtml(
   item: ReceiptOrder['items'][number],
   formatMoney: MoneyFormatter
 ): string {
-  const lines: string[] = [];
-  if (item.sellers_item_id) lines.push(`SKU: ${item.sellers_item_id}`);
-  if (item.unit_code) lines.push(`Unit: ${item.unit_code}`);
-  if (typeof item.vat_rate === 'number' && Number.isFinite(item.vat_rate)) {
-    lines.push(`VAT: ${item.vat_rate.toFixed(2)}%`);
-  }
-  if (typeof item.vat_amount === 'number' && Number.isFinite(item.vat_amount)) {
-    lines.push(formatMoney(item.vat_amount));
-  }
+  // Line math and labels come from the shared receipt-money helpers the
+  // emailed PDF consumes too, so the preview can never disagree with the
+  // sent document.
+  const lines = [
+    ...getReceiptItemDetailLines(item),
+    ...getReceiptItemVatLines(item, formatMoney),
+  ];
   if (lines.length === 0) return '';
   return `<div class="cell-line-meta">${lines
     .map((line) => `<div>${escapeHtml(line)}</div>`)

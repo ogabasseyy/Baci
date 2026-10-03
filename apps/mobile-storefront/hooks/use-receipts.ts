@@ -1,4 +1,8 @@
 import { compareReceiptListDesc } from '@baci/shared';
+import {
+  isManualOrderRecord,
+  isSettledManualBalance,
+} from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
@@ -184,12 +188,15 @@ async function fetchReceiptDetail(
   // transactions: a transaction-fetch failure must fail the whole detail
   // load like a paid order, never render a misdated receipt.
   const isCoveredManualOrder =
-    Boolean(order.recorded_by_user_id) &&
-    !order.import_job_id &&
-    !order.external_source?.trim() &&
-    Number.isFinite(Number(order.total)) &&
-    Number.isFinite(Number(order.amount_paid)) &&
-    Number(order.amount_paid) >= Number(order.total);
+    isManualOrderRecord({
+      recordedByUserId: order.recorded_by_user_id,
+      importJobId: order.import_job_id,
+      externalSource: order.external_source,
+    }) &&
+    isSettledManualBalance({
+      total: order.total,
+      amountPaid: order.amount_paid,
+    });
   const isPaidOrder =
     order.payment_status?.trim().toLowerCase() === 'paid' ||
     isCoveredManualOrder;

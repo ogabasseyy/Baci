@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getReceiptDisplaySubtotal, shouldShowVatLine } from './receipt-money';
+import {
+  getReceiptDisplaySubtotal,
+  getReceiptItemDetailLines,
+  getReceiptItemLineTotal,
+  getReceiptItemVatLines,
+  shouldShowVatLine,
+} from './receipt-money';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 function createReceiptOrder(
@@ -108,5 +114,50 @@ describe('receipt VAT visibility', () => {
     expect(getReceiptDisplaySubtotal(order, createReceiptMerchant())).toBe(
       935000
     );
+  });
+});
+
+describe('receipt line helpers', () => {
+  it('prefers an explicit extension over quantity x price', () => {
+    expect(
+      getReceiptItemLineTotal({ price: 1000, quantity: 2 })
+    ).toBe(2000);
+    expect(
+      getReceiptItemLineTotal({
+        price: 1000,
+        quantity: 2,
+        line_extension_amount: 1500,
+      })
+    ).toBe(1500);
+    expect(
+      getReceiptItemLineTotal({
+        price: 1000,
+        quantity: 2,
+        line_extension_amount: Number.NaN,
+      })
+    ).toBe(2000);
+  });
+
+  it('builds the shared SKU/Unit/VAT detail labels', () => {
+    const item = {
+      price: 1000,
+      quantity: 2,
+      sellers_item_id: 'SKU-1',
+      unit_code: 'EA',
+      vat_rate: 7.5,
+      vat_amount: 112.5,
+    };
+    expect(getReceiptItemDetailLines(item)).toEqual([
+      'SKU: SKU-1',
+      'Unit: EA',
+    ]);
+    expect(getReceiptItemVatLines(item, (n) => `NGN ${n}`)).toEqual([
+      'VAT: 7.50%',
+      'NGN 112.5',
+    ]);
+    expect(getReceiptItemDetailLines({ price: 1, quantity: 1 })).toEqual([]);
+    expect(
+      getReceiptItemVatLines({ price: 1, quantity: 1 }, (n) => `NGN ${n}`)
+    ).toEqual([]);
   });
 });

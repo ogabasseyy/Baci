@@ -5,12 +5,31 @@
  * Types are inferred from these schemas in types/receipt.ts.
  */
 
+import {
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderItemFinancialField,
+} from '@baci/shared/receipt';
 import { z } from 'zod';
 
 // ============================================
 // SHARED SUB-SCHEMAS
 // ============================================
 
+// Validated numeric item fields derive from the shared gate field list —
+// the same list the web sender/archive schemas build from — so a new
+// validated field can never exist on web while mobile silently strips it.
+const orderItemFinancialShape: Record<
+  ManualOrderItemFinancialField,
+  z.ZodOptional<z.ZodNullable<z.ZodNumber>>
+> = Object.fromEntries(
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.map((field) => [
+    field,
+    z.number().nullable().optional(),
+  ])
+) as Record<
+  ManualOrderItemFinancialField,
+  z.ZodOptional<z.ZodNullable<z.ZodNumber>>
+>;
 const OrderItemSchema = z.object({
   id: z.string(),
   product_name: z.string(),
@@ -19,12 +38,9 @@ const OrderItemSchema = z.object({
   quantity: z.number(),
   price: z.number(),
   image_url: z.string().nullable().optional(),
-  assurance_fee: z.number().nullable().optional(),
-  line_extension_amount: z.number().nullable().optional(),
+  ...orderItemFinancialShape,
   unit_code: z.string().nullable().optional(),
   vat_category_code: z.string().nullable().optional(),
-  vat_rate: z.number().nullable().optional(),
-  vat_amount: z.number().nullable().optional(),
 });
 
 const ShippingAddressSchema = z.object({

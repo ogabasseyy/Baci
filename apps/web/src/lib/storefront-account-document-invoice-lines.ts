@@ -182,7 +182,7 @@ export function buildInvoiceContent({
     });
 
     return {
-      line_id: index + 1,
+      line_id: item.line_id ?? index + 1,
       product_id: item.product_id || undefined,
       name: itemName,
       description: appendReceiptFulfillmentDescription({

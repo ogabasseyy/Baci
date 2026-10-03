@@ -73,6 +73,8 @@ SELECT pg_temp.assert_true((SELECT t.claim->>'order_total' = '100' AND t.claim->
 -- A correction after an unsent claim must adopt the new recipient, not
 -- terminally skip: nothing went out and nobody linked yet.
 UPDATE public.orders SET customer_email = 'final@example.com' WHERE id = '10000000-0000-4000-8000-000000000008';
+-- The correction re-armed the processing row; the retry worker re-claims it.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'worker-2', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt'), 'worker-2', repeat('5', 64))->>'status' = 'created'), 'unsent claim adopts the corrected recipient');
 SELECT pg_temp.assert_true((SELECT customer_email = 'final@example.com' AND token_hash = repeat('5', 64) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000008' AND event_type = 'manual_order_receipt')), 'adopted claim rotates token and email');
 -- A stale-rejected send marks its claim notified before the worker
@@ -97,6 +99,7 @@ SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 0, 'NGN', NULL, 'unpaid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'proforma_invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description, 'assurance_fee', oi.assurance_fee, 'line_id', oi.line_id, 'unit_code', oi.unit_code, 'line_extension_amount', oi.line_extension_amount, 'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate, 'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'proforma dispatch marks with kind');
 UPDATE public.orders SET payment_status = 'partially_paid', amount_paid = 50 WHERE id = '10000000-0000-4000-8000-000000000017';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'mid-flight payment resets the dispatch marker');
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('9', 64))->>'document_kind' = 'invoice'), 'reset preview follows the live rule the retry will send');
 RESET ROLE;
@@ -126,6 +129,7 @@ RESET ROLE;
 -- a processing row with the partial-payment snapshot.
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 UPDATE public.orders SET amount_paid = 50 WHERE id = '10000000-0000-4000-8000-000000000017';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 
 SELECT pg_temp.assert_true(NOT has_function_privilege('authenticated', 'public.claim_order_notification_outbox(integer,text)', 'EXECUTE'), 'customers cannot drain queue');
 SELECT pg_temp.assert_true(NOT has_function_privilege('anon', 'public.create_manual_order_document_claim(uuid,text,text)', 'EXECUTE'), 'public cannot generate claims');

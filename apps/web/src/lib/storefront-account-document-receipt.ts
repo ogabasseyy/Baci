@@ -112,7 +112,7 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
       : null,
     items: input.orderItems.map((item, index) => ({
       id: item.id,
-      line_id: index + 1,
+      line_id: item.line_id ?? index + 1,
       product_id: item.product_id || null,
       product_name: item.product_name || item.name,
       condition: item.condition || null,

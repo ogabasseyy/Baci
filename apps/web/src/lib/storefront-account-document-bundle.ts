@@ -104,6 +104,8 @@ export function buildStorefrontAccountDocumentBundle({
       amountPaid: order.amount_paid,
       money: order,
       items: itemRows,
+      payments: transactions,
+      taxSubtotals: taxRows,
     });
   // Same proforma rule as the order invoice route: the stored 380 default
   // must not win over 325 for unpaid invoice-method orders. Shared by the

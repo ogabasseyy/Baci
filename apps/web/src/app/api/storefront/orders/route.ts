@@ -116,6 +116,11 @@ export async function GET(request: NextRequest) {
               slug
             )
           )
+        ),
+        order_tax_subtotals (
+          vat_rate,
+          taxable_amount,
+          tax_amount
         )
       `)
       .eq('customer_id', customer.id)

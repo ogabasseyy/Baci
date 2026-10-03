@@ -1,4 +1,8 @@
-import { isManualOrderRecord } from '@baci/shared/receipt';
+import {
+  isDecimalMoney,
+  isManualOrderRecord,
+  isSettledManualBalance,
+} from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
@@ -8,7 +12,10 @@ import { ReceiptDetailSchema } from '@/schemas/receipt';
 import { useAuthStore } from '@/stores/auth-store';
 import type { ReceiptDetail } from '@/types/receipt';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
-import { isPromotedManualReceipt } from './receipt-promotion-gates';
+import {
+  isPromotableManualDocument,
+  isPromotedManualReceipt,
+} from './receipt-promotion-gates';
 import { mapCustomerTransactionRpcRows } from './receipt-transaction-mappers';
 import { resolveReceiptPaymentAccount } from './resolve-receipt-payment-account';
 
@@ -118,26 +125,44 @@ async function fetchReceiptDetail(
     importJobId: order.import_job_id,
     externalSource: order.external_source,
   });
+  const paidLabel =
+    typeof order.payment_status === 'string' &&
+    order.payment_status.trim().toLowerCase() === 'paid';
+  const promotionInput = {
+    recordedByUserId: order.recorded_by_user_id,
+    importJobId: order.import_job_id,
+    externalSource: order.external_source,
+    paymentStatus: order.payment_status,
+    shippingStatus: order.shipping_status,
+    total: order.total,
+    subtotal: order.subtotal,
+    shippingFee: order.shipping_fee,
+    taxAmount: order.tax_amount,
+    discountAmount: order.discount_amount,
+    amountPaid: order.amount_paid,
+    currency: order.currency,
+    items: order.order_items,
+  };
   const isPaidOrder =
-    (!manualOrder &&
-      typeof order.payment_status === 'string' &&
-      order.payment_status.trim().toLowerCase() === 'paid') ||
-    (manualOrder &&
-      isPromotedManualReceipt({
-        recordedByUserId: order.recorded_by_user_id,
-        importJobId: order.import_job_id,
-        externalSource: order.external_source,
-        paymentStatus: order.payment_status,
-        shippingStatus: order.shipping_status,
-        total: order.total,
-        subtotal: order.subtotal,
-        shippingFee: order.shipping_fee,
-        taxAmount: order.tax_amount,
-        discountAmount: order.discount_amount,
-        amountPaid: order.amount_paid,
-        currency: order.currency,
-        items: order.order_items,
-      }));
+    (!manualOrder && paidLabel) ||
+    (manualOrder && isPromotedManualReceipt(promotionInput));
+  // A deliverable manual invoice with payment progress renders its
+  // settled payments: without history the preview shows amount_paid with
+  // an empty Payment table, while the sender fails the same lookup
+  // closed. Zero-progress invoices correctly render empty and stay
+  // tolerant, as do invalid rows (paid-label-but-unsettled included)
+  // that render as invoices without ever being emailed.
+  const settledBalance = isSettledManualBalance({
+    total: order.total as number | string | null | undefined,
+    amountPaid: order.amount_paid as number | string | null | undefined,
+  });
+  const requiresPaymentHistory =
+    manualOrder &&
+    isPromotableManualDocument(promotionInput) &&
+    !paidLabel &&
+    !settledBalance &&
+    isDecimalMoney(order.amount_paid) &&
+    Number(order.amount_paid) > 0;
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {
@@ -160,7 +185,7 @@ async function fetchReceiptDetail(
   );
   if (txError) {
     log.warn('Failed to fetch transactions:', txError.message);
-    if (isPaidOrder) {
+    if (isPaidOrder || requiresPaymentHistory) {
       throw txError;
     }
   }

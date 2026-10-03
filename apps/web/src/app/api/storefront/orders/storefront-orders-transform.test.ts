@@ -147,4 +147,62 @@ describe('transformStorefrontOrdersForDisplay', () => {
     expect(entry.virtual_account).toBeNull();
     expect(entry.balance).toBe(5000);
   });
+
+  it('hides manual documents whose child rows the sender rejects', () => {
+    const base = {
+      total: 100,
+      subtotal: 100,
+      shipping_fee: 0,
+      tax_amount: 0,
+      discount_amount: 0,
+      amount_paid: 0,
+      currency: 'NGN',
+      recorded_by_user_id: 'staff-1',
+      payment_status: 'unpaid',
+      shipping_status: 'pending',
+      order_items: [{ id: 'item-1', name: 'Device', quantity: 1, price: 100 }],
+    };
+    const emptyLookups = {
+      transactionsByOrderId: new Map(),
+      paymentAccountsByOrderId: new Map(),
+    };
+    const [badTax] = transformStorefrontOrdersForDisplay(
+      [
+        {
+          ...base,
+          id: 'order-tax',
+          order_tax_subtotals: [
+            { vat_rate: 7.5, taxable_amount: 100, tax_amount: -7.5 },
+          ],
+        },
+      ],
+      emptyLookups
+    );
+    expect(badTax.manual_document_available).toBe(false);
+    const [badPayment] = transformStorefrontOrdersForDisplay(
+      [{ ...base, id: 'order-pay' }],
+      {
+        transactionsByOrderId: new Map([
+          [
+            'order-pay',
+            [
+              {
+                id: 'txn-9',
+                order_id: 'order-pay',
+                amount: -100,
+                created_at: '2026-09-30T12:00:00Z',
+                description: null,
+                metadata: null,
+                gateway: null,
+                status: 'completed',
+                transaction_type: 'payment',
+              },
+            ],
+          ],
+        ]),
+        paymentAccountsByOrderId: new Map(),
+      }
+    );
+    expect(badPayment.manual_document_available).toBe(false);
+  });
 });

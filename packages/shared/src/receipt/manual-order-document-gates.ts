@@ -42,27 +42,32 @@ export function isManualOrderRecord(input: {
   );
 }
 
+// Decimal money only: plain numbers and canonical decimal strings count.
+// Hex, exponent, and whitespace-padded strings coerce through Number()
+// ('0x10' -> 16, '1e3' -> 1000, ' 100' -> 100) but money columns never
+// produce them, so a row carrying them fails closed instead of settling
+// or promoting. Sign-agnostic: callers apply their own >= 0.
+const DECIMAL_MONEY_PATTERN = /^-?\d+(\.\d+)?$/;
+
+export function isDecimalMoney(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  return typeof value === 'string' && DECIMAL_MONEY_PATTERN.test(value);
+}
+
 // A manual balance is settled when finite payments cover a non-negative
 // total. Nulls fail closed (never coerced to zero through Number(null)),
 // and a negative total is data corruption, never a covered receipt.
-// Booleans and blank strings likewise fail closed: they coerce through
-// Number() (true -> 1, '' -> 0), but the database never produces them for
-// money columns, so only genuine money settles — like the mobile gate.
+// Booleans, blank strings, and non-decimal numeric strings likewise fail
+// closed through isDecimalMoney — like the mobile gate, which shares it.
 export function isSettledManualBalance(input: {
   total?: number | string | null;
   amountPaid?: number | string | null;
 }): boolean {
   if (input.total == null || input.amountPaid == null) return false;
-  for (const value of [input.total, input.amountPaid]) {
-    if (typeof value === 'boolean') return false;
-    if (typeof value === 'string' && value.trim() === '') return false;
+  if (!isDecimalMoney(input.total) || !isDecimalMoney(input.amountPaid)) {
+    return false;
   }
   const total = Number(input.total);
   const amountPaid = Number(input.amountPaid);
-  return (
-    Number.isFinite(total) &&
-    total >= 0 &&
-    Number.isFinite(amountPaid) &&
-    amountPaid >= total
-  );
+  return total >= 0 && amountPaid >= total;
 }

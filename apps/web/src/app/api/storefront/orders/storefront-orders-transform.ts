@@ -60,6 +60,13 @@ export interface StorefrontOrderListRowInput {
   customer_email?: string | null;
   customer_phone?: string | null;
   order_items?: readonly StorefrontOrderListItemInput[] | null;
+  order_tax_subtotals?:
+    | readonly {
+        vat_rate?: number | string | null;
+        taxable_amount?: number | string | null;
+        tax_amount?: number | string | null;
+      }[]
+    | null;
 }
 
 export interface StorefrontOrderListLookups {
@@ -127,6 +134,8 @@ export function transformStorefrontOrdersForDisplay(
         currency: order.currency,
       },
       items: order.order_items ?? [],
+      payments: lookups.transactionsByOrderId.get(order.id) ?? [],
+      taxSubtotals: order.order_tax_subtotals ?? [],
     };
     // A fully-covered manual balance is a receipt in substance even under
     // a non-paid label; resolve the type code from the same boolean so a

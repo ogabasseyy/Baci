@@ -26,10 +26,12 @@ export interface PilotLabConfig {
     merchantId: string;
     slotId: string;
   }) => string | null;
-  // Absolute staged file paths (tiers + originals). The route layer
-  // re-verifies their existence on the cached-config path so deleted or
-  // never-staged bytes fail closed instead of serving URLs for 404s.
-  stagedPaths: readonly string[];
+  // Absolute staged file paths (tiers + originals) with their verified
+  // hashes. The route layer re-verifies bytes on the cached-config path so
+  // deleted or drifted files fail closed instead of serving URLs for 404s
+  // or swapped bytes. Staged files are small and page-cached; the per-load
+  // re-hash is negligible next to a route render.
+  stagedPaths: readonly { path: string; sha256: string }[];
   statuses: PilotBindingStatus[];
 }
 
@@ -124,16 +126,22 @@ async function destMatches(destPath: string, bytes: Buffer): Promise<boolean> {
   );
 }
 
-export async function loadLabConfig(input: {
-  acceptances: readonly unknown[];
-  inputRoot: string;
-  inventoryRecords: readonly InventoryRecord[];
-  outputRoot: string;
-  publicDir: string;
-}): Promise<PilotLabConfig> {
+export async function loadLabConfig(
+  input: {
+    acceptances: readonly unknown[];
+    inputRoot: string;
+    inventoryRecords: readonly InventoryRecord[];
+    outputRoot: string;
+    publicDir: string;
+  },
+  options?: { stage?: boolean }
+): Promise<PilotLabConfig> {
   if (!isPilotLabEnabled()) {
     throw new Error('merchant image pilot: refusing to load outside lab mode');
   }
+  // Request-time loads are read-only (stage: false): staging runs
+  // exclusively in the pre-start CLI, so a GET never writes to disk. The
+  // route layer fails closed when staged bytes are missing or drifted.
   const baseUrl = PILOT_LAB_BASE_URL;
   const parsed = parsePilotInventory(
     input.inventoryRecords.map((record) => ({
@@ -166,7 +174,7 @@ export async function loadLabConfig(input: {
   // closed when staged bytes go missing instead of serving URLs for 404s,
   // and preflight's served-byte checks verify servability end to end.
   const stagedOriginals = new Map<string, string>();
-  const stagedPaths: string[] = [];
+  const stagedPaths: { path: string; sha256: string }[] = [];
   for (const status of statuses) {
     if (status.status !== 'accepted' || !status.generationId) {
       continue;
@@ -184,7 +192,12 @@ export async function loadLabConfig(input: {
       '__pilot',
       status.generationId
     );
-    await mkdir(generationStage, { recursive: true });
+    // Read-only loads still validate every input (manifests, hashes,
+    // snapshots) but write nothing; stagedPaths lets the caller verify.
+    const shouldStage = options?.stage !== false;
+    if (shouldStage) {
+      await mkdir(generationStage, { recursive: true });
+    }
     const tiers = lookupPilotTiers(index, {
       assetId: status.binding.assetId,
       merchantId: status.binding.merchantId,
@@ -193,21 +206,25 @@ export async function loadLabConfig(input: {
     });
     for (const tier of tiers ?? []) {
       const tierDest = join(generationStage, tier.fileName);
-      await stageVerifiedTier({
-        destPath: tierDest,
-        expectedBytes: tier.bytes,
-        expectedSha256: tier.sha256,
-        sourcePath: join(
-          input.outputRoot,
-          'generations',
-          status.generationId,
-          tier.fileName
-        ),
-      });
-      stagedPaths.push(tierDest);
+      if (shouldStage) {
+        await stageVerifiedTier({
+          destPath: tierDest,
+          expectedBytes: tier.bytes,
+          expectedSha256: tier.sha256,
+          sourcePath: join(
+            input.outputRoot,
+            'generations',
+            status.generationId,
+            tier.fileName
+          ),
+        });
+      }
+      stagedPaths.push({ path: tierDest, sha256: tier.sha256 });
     }
     const originalsStage = join(input.publicDir, '__pilot', 'originals');
-    await mkdir(originalsStage, { recursive: true });
+    if (shouldStage) {
+      await mkdir(originalsStage, { recursive: true });
+    }
     const fileName = originalFileName(status.binding, record.sourcePath);
     const snapshot = await readVerifiedSnapshot(
       input.inputRoot,
@@ -215,10 +232,13 @@ export async function loadLabConfig(input: {
       status.binding.sourceSha256
     );
     const originalDest = join(originalsStage, fileName);
-    if (!(await destMatches(originalDest, snapshot))) {
+    if (shouldStage && !(await destMatches(originalDest, snapshot))) {
       await writeFile(originalDest, snapshot);
     }
-    stagedPaths.push(originalDest);
+    stagedPaths.push({
+      path: originalDest,
+      sha256: status.binding.sourceSha256,
+    });
     stagedOriginals.set(
       `${status.binding.merchantId}/${status.binding.slotId}`,
       `${baseUrl}/originals/${fileName}`

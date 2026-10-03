@@ -1,11 +1,12 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { verifyStagedBytes } from './lab-staged-verify';
 
 // Shared loader for the lab-only pilot routes (gallery + per-store pages).
 // Reads the operator's gitignored inventory/acceptances, validates the raw
@@ -156,13 +157,16 @@ let cachedConfig: { config: PilotLabConfig; key: string } | null = null;
 let inflightLoad: { key: string; promise: Promise<PilotLabConfig> } | null =
   null;
 
-function loadLabConfigFromText(input: {
-  acceptancesText: string;
-  inputRoot: string;
-  inventoryText: string;
-  outputRoot: string;
-  publicDir: string;
-}): Promise<PilotLabConfig> {
+function loadLabConfigFromText(
+  input: {
+    acceptancesText: string;
+    inputRoot: string;
+    inventoryText: string;
+    outputRoot: string;
+    publicDir: string;
+  },
+  options?: { stage?: boolean }
+): Promise<PilotLabConfig> {
   let inventoryRecords: unknown;
   let acceptances: unknown;
   try {
@@ -175,33 +179,32 @@ function loadLabConfigFromText(input: {
   } catch {
     throw new Error('merchant image pilot: acceptances.json is not valid JSON');
   }
-  return loadLabConfig({
-    acceptances: parseRawAcceptances(acceptances),
-    inputRoot: input.inputRoot,
-    inventoryRecords: parseRawInventoryRecords(inventoryRecords),
-    outputRoot: input.outputRoot,
-    publicDir: input.publicDir,
-  });
+  // Read-only by default: staging runs exclusively in the pre-start CLI,
+  // so request rendering never writes to disk. Staged bytes are verified
+  // by the caller (getLabConfig fails closed when they drift or vanish).
+  return loadLabConfig(
+    {
+      acceptances: parseRawAcceptances(acceptances),
+      inputRoot: input.inputRoot,
+      inventoryRecords: parseRawInventoryRecords(inventoryRecords),
+      outputRoot: input.outputRoot,
+      publicDir: input.publicDir,
+    },
+    { stage: options?.stage ?? false }
+  );
 }
 
-// Existence check over the staged tier/original paths. Hash verification
-// stays in the staging step (per-request re-hashing would be pure waste);
-// drift without deletion resolves on the next input change or restart.
-export async function verifyStagedPaths(
-  paths: readonly string[]
-): Promise<void> {
-  const missing = (
-    await Promise.all(
-      paths.map(async (path) =>
-        (await stat(path).catch(() => null)) === null ? path : null
-      )
-    )
-  ).filter((path): path is string => path !== null);
-  if (missing.length > 0) {
-    throw new Error(
-      `merchant image pilot: ${missing.length} staged lab asset(s) missing (e.g. ${missing[0]}); re-run pnpm pilot:stage and restart the origin`
-    );
-  }
+// Pre-start staging entry for the pilot:stage CLI. Uses the exact same
+// validated loader as the routes, but WITH writes enabled — the only
+// sanctioned writer of public/__pilot bytes.
+export function stageLabConfigFromText(input: {
+  acceptancesText: string;
+  inputRoot: string;
+  inventoryText: string;
+  outputRoot: string;
+  publicDir: string;
+}): Promise<PilotLabConfig> {
+  return loadLabConfigFromText(input, { stage: true });
 }
 
 export async function getLabConfig(): Promise<PilotLabConfig> {
@@ -238,12 +241,10 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
     )
     .digest('hex');
   if (cachedConfig?.key === key) {
-    // The cache key commits to input bytes, not staged bytes: deleted or
-    // never-staged public/__pilot files would otherwise keep serving URLs
-    // for 404s. Fail closed with the operator fix instead. (Re-staging
-    // here cannot help: files written after `next start` are not served,
-    // so only re-stage + restart restores the lab.)
-    await verifyStagedPaths(cachedConfig.config.stagedPaths);
+    // The cache key commits to input bytes, not staged bytes: deleted,
+    // never-staged, or drifted public/__pilot files would otherwise keep
+    // serving bad URLs. Fail closed with the operator fix instead.
+    await verifyStagedBytes(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
   if (inflightLoad?.key === key) {
@@ -256,12 +257,22 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
     outputRoot,
     publicDir,
   }).then(
-    (config) => {
-      cachedConfig = { config, key };
-      if (inflightLoad?.key === key) {
-        inflightLoad = null;
+    async (config) => {
+      // Fresh loads verify too: the loader is read-only, so missing or
+      // drifted staged bytes (forgotten pre-start stage) fail here with
+      // the operator fix instead of rendering broken images. The finally
+      // clears poisoned in-flight loads: a verify throw must not pin the
+      // rejected promise, or every later request with the same key would
+      // replay the stale failure instead of retrying.
+      try {
+        await verifyStagedBytes(config.stagedPaths);
+        cachedConfig = { config, key };
+        return config;
+      } finally {
+        if (inflightLoad?.key === key) {
+          inflightLoad = null;
+        }
       }
-      return config;
     },
     (error: unknown) => {
       if (inflightLoad?.key === key) {

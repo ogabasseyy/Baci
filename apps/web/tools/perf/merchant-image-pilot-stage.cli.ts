@@ -14,7 +14,9 @@
 // pins a CLI-only tsconfig that stubs `server-only` (which throws outside
 // React Server Components) so this file can reuse the exact request-time
 // staging loader instead of duplicating its validation.
-import { getLabConfig } from '@/app/pilot-lab/lab-route';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { stageLabConfigFromText } from '@/app/pilot-lab/lab-route';
 
 export function parseStageArgs(argv: readonly string[]): {
   inputRoot?: string;
@@ -52,7 +54,28 @@ export async function main(): Promise<void> {
   if (flags.publicDir !== undefined) {
     process.env.BACI_IMAGE_PILOT_PUBLIC_DIR = flags.publicDir;
   }
-  const config = await getLabConfig();
+  const inputRoot = process.env.BACI_IMAGE_PILOT_INPUT_ROOT;
+  const outputRoot = process.env.BACI_IMAGE_PILOT_OUTPUT_ROOT;
+  if (!inputRoot || !outputRoot) {
+    throw new Error(
+      'merchant image pilot: set BACI_IMAGE_PILOT_INPUT_ROOT and BACI_IMAGE_PILOT_OUTPUT_ROOT to stage the lab routes'
+    );
+  }
+  const publicDir =
+    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR ?? join(process.cwd(), 'public');
+  // The sanctioned writer: same validated loader as the routes, with
+  // staging enabled. Request-time loads stay read-only and fail closed
+  // when these bytes are missing or drifted.
+  const config = await stageLabConfigFromText({
+    acceptancesText: await readFile(
+      join(outputRoot, 'acceptances.json'),
+      'utf8'
+    ),
+    inputRoot,
+    inventoryText: await readFile(join(inputRoot, 'inventory.json'), 'utf8'),
+    outputRoot,
+    publicDir,
+  });
   const accepted = config.statuses.filter(
     (status) => status.status === 'accepted' && status.generationId
   );

@@ -3,15 +3,19 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
 
 // Shared lab-roots builder for the pilot-lab route tests (gallery + store
 // pages). Stages a gitignored input root (inventory.json + source bytes),
 // an output root (generation dirs with manifests + acceptances.json), and
-// an empty public dir. `accepted` assets get acceptances; `unreviewed`
+// a staged public dir. `accepted` assets get acceptances; `unreviewed`
 // assets are staged on disk but never reviewed (the reported
 // not-optimized path). All hashes are computed over the staged bytes, so
-// the lab-config verifier exercises its real hash checks.
+// the lab-config verifier exercises its real hash checks. Fixtures run the
+// same pre-start staging step operators run (request-time loads are
+// read-only), with the lab flag save/restored around it.
 
 export interface LabTestAsset {
   assetId: string;
@@ -172,5 +176,30 @@ export async function setupLabRoots(input: {
     join(outputRoot, 'acceptances.json'),
     JSON.stringify(acceptances)
   );
+  const flagWas = process.env.BACI_IMAGE_PILOT_LAB;
+  process.env.BACI_IMAGE_PILOT_LAB = '1';
+  try {
+    const inventoryText = await readFile(
+      join(inputRoot, 'inventory.json'),
+      'utf8'
+    );
+    const acceptancesText = await readFile(
+      join(outputRoot, 'acceptances.json'),
+      'utf8'
+    );
+    await loadLabConfig({
+      acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
+      inputRoot,
+      inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
+      outputRoot,
+      publicDir,
+    });
+  } finally {
+    if (flagWas === undefined) {
+      delete process.env.BACI_IMAGE_PILOT_LAB;
+    } else {
+      process.env.BACI_IMAGE_PILOT_LAB = flagWas;
+    }
+  }
   return { inputRoot, outputRoot, publicDir };
 }

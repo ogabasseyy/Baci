@@ -4,13 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import {
   getLabConfig,
-  labRequestOrigin,
   parseRawAcceptances,
   parseRawInventoryRecords,
-  verifyStagedPaths,
 } from './lab-route';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -89,22 +88,6 @@ describe('parseRawAcceptances', () => {
   });
 });
 
-describe('verifyStagedPaths', () => {
-  it('passes when every staged path exists', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-ok-'));
-    const file = join(dir, 'tier.avif');
-    await writeFile(file, 'bytes');
-    await expect(verifyStagedPaths([file])).resolves.toBeUndefined();
-  });
-
-  it('fails closed naming the operator fix when files go missing', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-missing-'));
-    await expect(verifyStagedPaths([join(dir, 'gone.avif')])).rejects.toThrow(
-      /pilot:stage and restart/
-    );
-  });
-});
-
 describe('getLabConfig', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -116,12 +99,31 @@ describe('getLabConfig', () => {
     await expect(getLabConfig()).rejects.toThrow(/INPUT_ROOT/);
   });
 
-  it('fails the cached path when staged bytes go missing', async () => {
+  it('fails closed on unstaged bytes, then serves once staged', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    // Fresh load with nothing staged: the read-only loader refuses to
+    // write and fails with the operator fix (stage + restart).
+    await expect(getLabConfig()).rejects.toThrow(/pilot:stage and restart/);
+    // The pre-start step stages (default load stages); routes then serve.
+    const inventoryText = await readFile(
+      join(lab.inputRoot, 'inventory.json'),
+      'utf8'
+    );
+    const acceptancesText = await readFile(
+      join(lab.outputRoot, 'acceptances.json'),
+      'utf8'
+    );
+    await loadLabConfig({
+      acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
+      inputRoot: lab.inputRoot,
+      inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
+      outputRoot: lab.outputRoot,
+      publicDir: lab.publicDir,
+    });
     const first = await getLabConfig();
     expect(first.stagedPaths.length).toBeGreaterThan(0);
     // Same frozen inputs: the second load takes the cached path.
@@ -129,7 +131,8 @@ describe('getLabConfig', () => {
     expect(second).toBe(first);
     // Delete one staged tier: the cache must fail closed instead of
     // serving URLs for 404 bytes.
-    await rm(first.stagedPaths[0] as string);
+    const [deleted] = first.stagedPaths;
+    await rm(deleted?.path as string);
     await expect(getLabConfig()).rejects.toThrow(/pilot:stage and restart/);
   });
 });
@@ -233,59 +236,3 @@ async function setupRouteFiles() {
   );
   return { inputRoot, outputRoot, publicDir };
 }
-
-describe('labRequestOrigin', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('reflects loopback hosts with the first proto token', () => {
-    expect(labRequestOrigin({ host: 'localhost:3122', proto: 'http' })).toBe(
-      'http://localhost:3122'
-    );
-    expect(
-      labRequestOrigin({ host: '127.0.0.1:3122', proto: 'HTTPS, http' })
-    ).toBe('https://127.0.0.1:3122');
-    expect(labRequestOrigin({ host: 'LOCALHOST', proto: null })).toBe(
-      'http://localhost'
-    );
-  });
-
-  it('never reflects non-loopback hosts', () => {
-    // Attacker-controlled Host must not reach rendered image URLs, even
-    // normalized: untrusted hosts fall back to loopback.
-    for (const host of [
-      'shop.example:3101',
-      'shop.example',
-      'Shop.Example/evil',
-      'evil.com',
-      'localhost.evil.com',
-    ]) {
-      expect(labRequestOrigin({ host, proto: 'https' })).toBe(
-        'http://localhost:3000'
-      );
-    }
-    expect(labRequestOrigin({ host: null, proto: 'https' })).toBe(
-      'http://localhost:3000'
-    );
-    expect(labRequestOrigin({ host: 'not a host!!', proto: 'https' })).toBe(
-      'http://localhost:3000'
-    );
-  });
-
-  it('prefers the operator origin override when valid', () => {
-    vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', 'https://lab-assets.example/cdn');
-    expect(labRequestOrigin({ host: 'evil.com', proto: 'http' })).toBe(
-      'https://lab-assets.example'
-    );
-  });
-
-  it('ignores a malformed origin override', () => {
-    for (const override of ['notaurl', 'ftp://lab.example', '']) {
-      vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', override);
-      expect(labRequestOrigin({ host: 'evil.com', proto: 'http' })).toBe(
-        'http://localhost:3000'
-      );
-    }
-  });
-});

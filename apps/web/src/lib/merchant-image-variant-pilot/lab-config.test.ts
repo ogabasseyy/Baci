@@ -186,6 +186,16 @@ describe('loadLabConfig', () => {
     ).toBeNull();
   });
 
+  it('loads read-only with stage:false: validates, writes nothing', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const config = await loadLabConfig({ ...lab }, { stage: false });
+    expect(config.statuses[0]?.status).toBe('accepted');
+    expect(config.stagedPaths.length).toBeGreaterThan(0);
+    // No __pilot tree was created: request rendering never writes.
+    await expect(stat(join(lab.publicDir, '__pilot'))).rejects.toThrow();
+  });
+
   it('confines snapshots to the input root and verifies frozen bytes', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();

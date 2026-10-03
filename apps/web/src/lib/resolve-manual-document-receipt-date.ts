@@ -19,7 +19,9 @@ export async function resolveManualDocumentReceiptDate(
     // Paystack-backed payments settle as 'success', manual ones as
     // 'completed': the DVA reservation paths treat both as settled.
     .in('status', ['completed', 'success'])
-    .order('created_at', { ascending: false })
+    // Nulls sort first on descending order: a null-created payment would
+    // shadow the newest dated one and mis-date the receipt.
+    .order('created_at', { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
   // A failed lookup must retry through the outbox path, not silently fall

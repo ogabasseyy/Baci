@@ -163,6 +163,46 @@ describe('OgabasseyV2Receipts document kind', () => {
     expect(modalProps.orderData.payment_status).toBe('paid');
   });
 
+  it('labels outstanding manual balances as invoices, not receipts', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      createJsonResponse({
+        orders: [
+          {
+            id: 'order-pending',
+            order_number: 'ORD-PENDING',
+            created_at: '2026-04-03T10:00:00.000Z',
+            total: 100,
+            amount_paid: 0,
+            currency: 'NGN',
+            payment_status: 'pending',
+            is_manual_order: true,
+            manual_document_available: true,
+            items: [
+              {
+                id: 'item-1',
+                name: 'Samsung Galaxy S26',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render(<OgabasseyV2Receipts />);
+
+    // The modal renders an invoice for anything unpaid, so the action
+    // must agree with it instead of offering a receipt.
+    fireEvent.click(await screen.findByRole('button', { name: 'View Invoice' }));
+    const modalProps = mockReceiptModal.mock.calls.at(-1)?.[0] as {
+      documentKind: 'proforma' | null;
+      orderData: { payment_status: string };
+    };
+    expect(modalProps.documentKind).toBeNull();
+    expect(modalProps.orderData.payment_status).toBe('pending');
+  });
+
   it('opens settled manual balances as receipts while keeping the partial badge', async () => {
     vi.mocked(fetch).mockResolvedValue(
       createJsonResponse({

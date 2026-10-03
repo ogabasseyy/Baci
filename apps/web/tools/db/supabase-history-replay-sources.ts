@@ -223,10 +223,14 @@ const PENDING_SOURCES = [
   'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
   '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add 20260928080000_product_discovery_embeddings.sql',
   'd09aa5d624a0e177821d47f92bfc5e2f73353a8ec9a4ec3b7cd3dbd8c280efe4 20260930160000_manual_order_document_notifications.sql',
+<<<<<<< HEAD
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   'c5dd040586c163e6d2ae30cb5877bb2d1b9a95b88648e7f0025d8ccad2b6ca23 20260930160050_manual_order_document_claims.sql',
+=======
+  'e970387f14b33266aa622c3cacd5a3556ce1e21abe834ba24d75feb1290eab0c 20260930160050_manual_order_document_claims.sql',
+>>>>>>> 9217ba530c (fix(pr3580): address round-42 review findings (transport retry, claim pre-lock, date order, labels, copy, credential split))
   '3a5b310d18cb5dd36f75e73dcb2778ea90a9647448d770cd04b5802e34dbaf5b 20260930160060_manual_order_document_child_invalidation.sql',
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,

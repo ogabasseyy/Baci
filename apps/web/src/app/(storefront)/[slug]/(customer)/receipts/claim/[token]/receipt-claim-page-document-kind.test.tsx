@@ -132,6 +132,24 @@ describe('ReceiptClaimPageClient document kind', () => {
     expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
   });
 
+  it('keeps fallback copy kind-neutral for legacy claims', async () => {
+    mockUseCustomerAuth.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+    mockFetchWithCsrf.mockResolvedValue(createJsonResponse({ success: false }));
+    renderClient({
+      initialClaim: { ...preview, documentKind: 'unknown' as const },
+    });
+
+    expect(
+      await screen.findByText('Unable to claim document')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Unable to claim receipt')
+    ).not.toBeInTheDocument();
+  });
+
   it('surfaces the verify-email guidance when the account is unverified', async () => {
     mockUseCustomerAuth.mockReturnValue({
       isAuthenticated: true,

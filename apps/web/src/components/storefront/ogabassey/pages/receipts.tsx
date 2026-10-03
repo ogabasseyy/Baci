@@ -241,11 +241,17 @@ export const OgabasseyV2Receipts: React.FC = () => {
                           className="group-hover/btn:scale-110 transition-transform"
                         />
                         View{' '}
-                        {receipt.documentKind === 'proforma'
-                          ? 'Proforma'
-                          : receipt.paymentStatus === 'unpaid'
-                            ? 'Invoice'
-                            : 'Receipt'}
+                        {/*
+                          Mirror the modal exactly (paid renders the receipt,
+                          otherwise proforma, otherwise invoice): the raw list
+                          status misses pending/partial balances that open an
+                          invoice. Uses the modal's own renderer input.
+                        */}
+                        {receipt.rawOrder.payment_status === 'paid'
+                          ? 'Receipt'
+                          : receipt.documentKind === 'proforma'
+                            ? 'Proforma'
+                            : 'Invoice'}
                       </button>
                     </div>
                   </div>

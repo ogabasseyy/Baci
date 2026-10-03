@@ -1,0 +1,63 @@
+-- Re-arm scenarios: terminal skipped/failed rows return to pending when a
+-- later correction re-triggers the queue; sent and possibly-dispatched
+-- rows never do. Runs after manual_order_documents.sql in the same
+-- database (see run-manual-order-document-tests.sh).
+
+-- Terminal skipped/failed rows re-arm when a later correction re-triggers the
+-- queue; sent and possibly-dispatched rows never do.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000015', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000015', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'paid_balance_outstanding', skipped_at = now(), attempt_count = 3 WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 250 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'skipped row re-arms on correction');
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'boom' WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 260 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'failed row re-arms on correction');
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'delivery_outcome_unknown', dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 270 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'unknown-outcome row never re-arms');
+UPDATE public.order_notification_outbox SET status = 'sent', sent_at = now(), dispatch_started_at = NULL, skip_reason = NULL WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.orders SET total = 280 WHERE id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'sent' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'sent row never re-arms');
+
+-- Item corrections re-arm like order corrections: an UPDATE unblocks a
+-- stale/failed dispatch, while sent rows stay terminal.
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'stale items', sent_at = NULL, dispatch_started_at = NULL, skip_reason = NULL WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.order_items SET price = 101 WHERE order_id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'failed row re-arms on item correction');
+UPDATE public.order_notification_outbox SET status = 'sent', sent_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000015';
+UPDATE public.order_items SET price = 102 WHERE order_id = '10000000-0000-4000-8000-000000000015';
+SELECT pg_temp.assert_true((SELECT status = 'sent' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'sent row ignores item edits');
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000015', 'Bad line', 0, 50);
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed', sent_at = NULL, dispatch_started_at = NULL, skip_reason = NULL WHERE order_id = '10000000-0000-4000-8000-000000000015';
+DELETE FROM public.order_items WHERE order_id = '10000000-0000-4000-8000-000000000015' AND name = 'Bad line';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000015'), 'failed row re-arms on invalid line removal');
+
+-- Completing a merchant profile re-arms rows skipped as merchant_validation_failed.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000025', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000025', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'merchant_validation_failed', skipped_at = now(), attempt_count = 2 WHERE order_id = '10000000-0000-4000-8000-000000000025';
+UPDATE public.merchants SET business_name = 'Fixture Fixed' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000025'), 'merchant correction re-arms the skipped row');
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'ineligible_manual_order', skipped_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000025';
+UPDATE public.merchants SET business_name = 'Fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000025'), 'merchant update leaves other skip reasons alone');
+-- A monetary or order-number correction alone re-arms a terminal row the worker gave up on.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000026', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000026', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed' WHERE order_id = '10000000-0000-4000-8000-000000000026';
+UPDATE public.orders SET shipping_fee = -5 WHERE id = '10000000-0000-4000-8000-000000000026';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000026'), 'monetary correction re-arms the failed row');
+UPDATE public.order_notification_outbox SET status = 'failed', attempt_count = 5, last_error = 'order_validation_failed' WHERE order_id = '10000000-0000-4000-8000-000000000026';
+UPDATE public.orders SET order_number = 'ORD-FIXED' WHERE id = '10000000-0000-4000-8000-000000000026';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND last_error IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000026'), 'order number correction re-arms the failed row');
+-- A creation-date correction re-arms a row skipped as order_validation_failed: the schema rejects a missing date, so without this the corrected document is permanently lost.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid, created_at)
+VALUES ('10000000-0000-4000-8000-000000000053', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0, NULL);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000053', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'order_validation_failed', skipped_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000053';
+UPDATE public.orders SET created_at = '2026-09-30T11:00:00Z' WHERE id = '10000000-0000-4000-8000-000000000053';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000053'), 'creation-date correction re-arms the skipped row');

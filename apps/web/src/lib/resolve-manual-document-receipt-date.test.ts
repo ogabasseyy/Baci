@@ -26,6 +26,12 @@ describe('resolveManualDocumentReceiptDate', () => {
     ).resolves.toBe('2026-09-29T12:00:00Z');
     expect(from).toHaveBeenCalledWith('transactions');
     expect(chain.in).toHaveBeenCalledWith('status', ['completed', 'success']);
+    // Nulls sort first on descending order: push them last so a
+    // null-created payment cannot shadow the newest dated one.
+    expect(chain.order).toHaveBeenCalledWith('created_at', {
+      ascending: false,
+      nullsFirst: false,
+    });
   });
 
   it('returns null without querying for unpaid orders', async () => {

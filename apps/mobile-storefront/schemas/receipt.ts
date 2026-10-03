@@ -79,7 +79,9 @@ export const ReceiptDetailSchema = z.object({
   tax_amount: z.number(),
   amount_paid: z.number(),
   balance: z.number(),
-  currency: z.string(),
+  // Nullish like the web manual-order schema: a null currency must not
+  // fail content validity (the generator defaults display to NGN).
+  currency: z.string().nullish(),
   is_credit_order: z.boolean(),
   created_at: z.string(),
   transaction_date: z.string().nullable().optional(),

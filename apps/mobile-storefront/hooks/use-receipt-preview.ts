@@ -88,7 +88,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
         receiptDetail.discount_amount,
         receiptDetail.amount_paid,
       ].every(isFiniteMoney) &&
-      /^[A-Za-z]{3}$/.test(receiptDetail.currency ?? '') &&
+      (receiptDetail.currency == null ||
+        /^[A-Za-z]{3}$/.test(receiptDetail.currency)) &&
       receiptDetail.items.length > 0 &&
       receiptDetail.items.every(
         (item) =>
@@ -107,8 +108,11 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       ) &&
       Number(receiptDetail.amount_paid) >= Number(receiptDetail.total) &&
       hasValidContent;
+    // Legacy spellings ('Paid', ' paid ') count like web's normalized
+    // comparison, so the preview agrees with archive/download labels.
     const isPaidReceipt =
-      (!isManualOrder && receiptDetail.payment_status === 'paid') ||
+      (!isManualOrder &&
+        normalizeStatus(receiptDetail.payment_status) === 'paid') ||
       isManualReceipt;
     // Same NGN-only rule as the web document builders: a
     // foreign-currency preview must not print the untyped naira account
@@ -121,7 +125,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       created_at: receiptDetail.created_at,
       transaction_date: receiptDetail.transaction_date,
       invoice_issue_date: receiptDetail.invoice_issue_date,
-      currency: receiptDetail.currency,
+      // Null currency displays as NGN, the generator's own default.
+      currency: receiptDetail.currency ?? 'NGN',
       total: receiptDetail.total,
       subtotal: receiptDetail.subtotal,
       shipping_fee: receiptDetail.shipping_fee,

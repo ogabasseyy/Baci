@@ -279,6 +279,47 @@ describe('useReceiptPreview document kind', () => {
     expect(preview.result.current.documentKind).not.toBe('receipt');
   });
 
+  it('opens a null-currency covered manual balance as the emailed receipt', () => {
+    // Web content validity allows nullish currency, so the sender emails
+    // a receipt; the app link must open the same kind, not an invoice.
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      currency: null,
+      payment_status: 'pending',
+      total: 500,
+      amount_paid: 500,
+      recorded_by_user_id: 'staff-1',
+      import_job_id: null,
+      external_source: null,
+      items: [
+        {
+          id: 'item-1',
+          name: 'Device',
+          product_name: 'Device',
+          quantity: 1,
+          price: 500,
+        },
+      ],
+    };
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).toBe('receipt');
+  });
+
+  it('counts legacy paid spellings on non-manual orders like web', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: ' Paid ',
+    };
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).toBe('receipt');
+  });
+
   it('reports the effective kind the artifact was built with', () => {
     // Derived proforma: modal chrome must read proforma, not commercial.
     mockReceiptDetail = unpaidProformaDetail('NGN');

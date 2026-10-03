@@ -209,6 +209,8 @@ describe('processCancellationDrain', () => {
             failed: [],
             skipped: [],
           },
+          notificationSkippedDueToBudget: true,
+          sideEffectSkippedDueToBudget: true,
           skippedDueToBudget: true,
           success: true,
         })

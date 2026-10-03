@@ -191,9 +191,13 @@ export async function processCancellationDrain(
     success: true,
     // A skipped drain is deferred work, not an idle system: pollers
     // must distinguish 'nothing to do' from 'no time to do it'.
-    // Mirrors the full settlement path's flag.
+    // Mirrors the full settlement path's flag. The per-drain flags
+    // name which sub-result is synthetic (empty summary), so a
+    // partially skipped run does not read as fully idle.
     skippedDueToBudget:
       sideEffectSkippedDueToBudget || notificationSkippedDueToBudget,
+    sideEffectSkippedDueToBudget,
+    notificationSkippedDueToBudget,
     cancellationSideEffectDrain: cancellationResult.value,
     paystackRefunds: refundResult.value,
     legacyPaystackRefunds: legacyRefundResult.value,

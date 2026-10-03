@@ -19,6 +19,7 @@ import {
   showMerchantBankDetails,
 } from '@baci/shared';
 import { useState } from 'react';
+import { ReceiptDetailSchema } from '@/schemas/receipt';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
@@ -61,20 +62,41 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // the document from payment_status, so normalize the renderer input
     // like web does — otherwise the app link on an emailed receipt opens
     // the same order as an invoice. The balance alone never promotes: a
-    // cancelled, unknown-status, negative-total, or itemless manual row
-    // fails closed like the sender, archive filter, and download routes.
-    // Content validity is approximated by the non-empty items gate (the
-    // detail fetch only warns on schema failure, so web's strict money
-    // schemas are not enforced here); the non-manual literal-paid branch
-    // below predates this derivation and is unchanged.
+    // cancelled, unknown-status, or content-invalid manual row fails
+    // closed like the sender, archive filter, and download routes. Content
+    // validity mirrors web isManualOrderDocumentContentValid — the detail
+    // fetch only warns on schema failure, so re-validate here and require
+    // finite money (zod numbers admit NaN). The non-manual literal-paid
+    // branch below predates this derivation and is unchanged.
     const normalizeStatus = (value: string | null | undefined) =>
       value?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
+    const isFiniteMoney = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0;
     const isManualOrder = Boolean(
       receiptDetail.recorded_by_user_id &&
         !receiptDetail.import_job_id &&
         !receiptDetail.external_source?.trim()
     );
     const manualPaymentStatus = normalizeStatus(receiptDetail.payment_status);
+    const hasValidContent =
+      ReceiptDetailSchema.safeParse(receiptDetail).success &&
+      [
+        receiptDetail.total,
+        receiptDetail.subtotal,
+        receiptDetail.shipping_fee,
+        receiptDetail.tax_amount,
+        receiptDetail.discount_amount,
+        receiptDetail.amount_paid,
+      ].every(isFiniteMoney) &&
+      /^[A-Za-z]{3}$/.test(receiptDetail.currency ?? '') &&
+      receiptDetail.items.length > 0 &&
+      receiptDetail.items.every(
+        (item) =>
+          isFiniteMoney(item.price) &&
+          typeof item.quantity === 'number' &&
+          Number.isFinite(item.quantity) &&
+          item.quantity > 0
+      );
     const isManualReceipt =
       isManualOrder &&
       !['cancelled', 'canceled', 'returned', 'failed'].includes(
@@ -83,12 +105,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
         manualPaymentStatus
       ) &&
-      Number.isFinite(Number(receiptDetail.total)) &&
-      Number(receiptDetail.total) >= 0 &&
-      Number.isFinite(Number(receiptDetail.amount_paid)) &&
       Number(receiptDetail.amount_paid) >= Number(receiptDetail.total) &&
-      Array.isArray(receiptDetail.items) &&
-      receiptDetail.items.length > 0;
+      hasValidContent;
     const isPaidReceipt =
       (!isManualOrder && receiptDetail.payment_status === 'paid') ||
       isManualReceipt;

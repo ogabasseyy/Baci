@@ -29,7 +29,7 @@ if [ -n "$(git ls-files --others --exclude-standard)" ]; then
 fi
 
 # Fail fast when a production deploy is already in flight; the check
-# runs again immediately before promote to close the staging window.
+# runs again after the image build, before live cron is touched.
 check_deploy_workflow_inflight
 
 prepare_worker_release
@@ -45,12 +45,17 @@ fi
 echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
 
-install_remediation_cron_transition
-
-# Re-check immediately before the live SHA flips: staging, the image
-# build, and the transition above take minutes, and a workflow that
-# started in that window publishes off the pre-promote latch/SHA.
+# Final refusal BEFORE the transition below mutates live cron: staging
+# and the image build take minutes, and a workflow that started in that
+# window publishes off the pre-promote latch/SHA. Refusing here leaves
+# live cron untouched (refusing after the transition would strand
+# candidate jobs against the old unsynchronized tree until an operator
+# retries). A workflow that starts during the transition/promote itself
+# is still covered in the other direction: the post-promote record makes
+# its pre-publish overlap check refuse.
 check_deploy_workflow_inflight
+
+install_remediation_cron_transition
 
 promote_worker_release
 

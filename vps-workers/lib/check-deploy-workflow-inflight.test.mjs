@@ -1,76 +1,20 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-
-const scriptDir = dirname(fileURLToPath(import.meta.url));
-const libPath = join(scriptDir, 'check-deploy-workflow-inflight.sh');
-const deployPath = join(scriptDir, '..', 'deploy.sh');
-const systemBash = existsSync('/bin/bash') ? '/bin/bash' : 'bash';
-
-function writeStub(binDir, name, body) {
-  const path = join(binDir, name);
-  writeFileSync(path, `#!/usr/bin/env bash\n${body}\n`);
-  chmodSync(path, 0o755);
-  return path;
-}
+import {
+  libPath,
+  RECORD_ARGS,
+  runCheck,
+  systemBash,
+} from './check-deploy-workflow-inflight.test-fixtures.mjs';
 
 // Promote-record coverage lives in record-deploy-workflow-promote.test.mjs
 // (extracted to keep both suites under the 300-line limit).
-
-function runCheck({
-  ghBody,
-  gitBody = 'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo.git\'; else exit 1; fi',
-  env = {},
-  path = null,
-}) {
-  const workDir = mkdtempSync(join(tmpdir(), 'baci-inflight-'));
-  const binDir = join(workDir, 'bin');
-  mkdirSync(binDir, { recursive: true });
-  const argsFile = join(workDir, 'gh-args.txt');
-  writeStub(binDir, 'gh', ghBody.replaceAll('__ARGS_FILE__', argsFile));
-  if (gitBody !== null) {
-    writeStub(binDir, 'git', gitBody);
-  }
-  const result = spawnSync(
-    systemBash,
-    [
-      '-c',
-      'set -euo pipefail; source "$CHECK_LIB"; check_deploy_workflow_inflight',
-    ],
-    {
-      cwd: workDir,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        // Deterministic control env: a real BACI_DEPLOY_* export on the
-        // dev machine must not flip these cases (per-test env wins).
-        BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
-        BACI_DEPLOY_WORKFLOW_REPO: '',
-        ...env,
-        CHECK_LIB: libPath,
-        GH_ARGS_FILE: argsFile,
-        PATH: path ?? `${binDir}:${process.env.PATH}`,
-      },
-    }
-  );
-  return {
-    result,
-    ghArgs: existsSync(argsFile) ? readFileSync(argsFile, 'utf8').trim() : '',
-  };
-}
-
-const RECORD_ARGS = 'echo "$@" > "$GH_ARGS_FILE"';
+// Repo-resolution, shell-compat, and deploy.sh-order coverage lives in
+// check-deploy-workflow-inflight-repo.test.mjs (same reason).
 
 test('passes when no production deploy run is in flight', () => {
   const { result, ghArgs } = runCheck({ ghBody: RECORD_ARGS });
@@ -237,100 +181,4 @@ test('bypass override proceeds with a loud warning', () => {
     /WARNING: skipping the pre-promote in-flight deploy check/
   );
   assert.match(result.stderr, /re-run the GIGL smoke\/latch sequence/);
-});
-
-test('queries the origin repo explicitly so fork checkouts cannot pass vacuously', () => {
-  const { result, ghArgs } = runCheck({
-    ghBody: RECORD_ARGS,
-    gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'git@github.com:example-owner/example-repo.git\'; else exit 1; fi',
-  });
-
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
-  );
-});
-
-test('fails closed when the repo cannot be resolved from origin', () => {
-  // No silent fallback to gh default resolution: a fork-clone deploy
-  // would query the fork (no runs) and pass vacuously while production
-  // deploys fly.
-  const { result, ghArgs } = runCheck({
-    ghBody: RECORD_ARGS,
-    gitBody: 'exit 1',
-  });
-
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /cannot resolve the deploy repo/);
-  assert.match(result.stderr, /BACI_DEPLOY_WORKFLOW_REPO/);
-  assert.equal(ghArgs, '');
-});
-
-test('honors the explicit repo override for exotic remotes', () => {
-  const { result, ghArgs } = runCheck({
-    ghBody: RECORD_ARGS,
-    gitBody: 'exit 1',
-    env: { BACI_DEPLOY_WORKFLOW_REPO: 'override-owner/override-repo' },
-  });
-
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    ghArgs,
-    /repos\/override-owner\/override-repo\/actions\/workflows/
-  );
-});
-
-test('rejects a malformed repo override', () => {
-  const { result } = runCheck({
-    ghBody: RECORD_ARGS,
-    env: { BACI_DEPLOY_WORKFLOW_REPO: 'not-a-repo' },
-  });
-
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /must be 'owner\/repo'/);
-});
-
-test('runs under the system shell with strict mode (bash 3.2 compatible)', () => {
-  // The guard runs on operator machines where /bin/bash may be 3.2:
-  // every expansion here must survive `set -u` there.
-  const { result } = runCheck({ ghBody: RECORD_ARGS });
-
-  assert.equal(result.status, 0, result.stderr);
-  const version = spawnSync(systemBash, ['-c', 'echo "$BASH_VERSION"'], {
-    encoding: 'utf8',
-  });
-  assert.match(version.stdout, /^\d+\./);
-});
-
-test('deploy.sh checks for in-flight deploys before staging and before promote', () => {
-  const deploy = readFileSync(deployPath, 'utf8');
-  assert.match(
-    deploy,
-    /source "\$WORKER_ROOT\/lib\/check-deploy-workflow-inflight\.sh"/
-  );
-  const calls = deploy.match(/^check_deploy_workflow_inflight$/gm) ?? [];
-  assert.equal(calls.length, 2);
-  const [first, second] = [
-    deploy.indexOf('check_deploy_workflow_inflight'),
-    deploy.lastIndexOf('check_deploy_workflow_inflight'),
-  ];
-  // Fail fast before the minutes-long staging, then re-check in the
-  // narrowest window before the live SHA flips.
-  assert.ok(first < deploy.indexOf('prepare_worker_release'));
-  assert.ok(second > deploy.indexOf('install_remediation_cron_transition'));
-  assert.ok(second < deploy.indexOf('promote_worker_release'));
-  // The promote is recorded for the workflow pre-publish overlap
-  // check immediately after the live SHA flips — with the status
-  // captured, so a failed record completes the installs below before
-  // failing the deploy instead of exiting under set -e.
-  assert.match(
-    deploy,
-    /^record_deploy_workflow_promote "\$APP_SHA" \|\| record_status=\$\?$/m
-  );
-  assert.ok(
-    deploy.indexOf('record_deploy_workflow_promote') >
-      deploy.indexOf('promote_worker_release')
-  );
 });

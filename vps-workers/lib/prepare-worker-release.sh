@@ -148,6 +148,28 @@ mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 . "$staging_dir/lib/quiesce-worker-release.sh"
 quiesce_worker_release "$remote_dir" || exit 1
 
+# Snapshot the pre-promote live tree BEFORE the rsync below mutates
+# it: if the checkout flip then refuses (the per-SHA checkout went
+# missing or invalid between prepare and promote), the rsync has
+# already replaced bin/, jobs/, lib/, config/, dependencies, and the
+# SHA marker while app-live still points at the previous checkout.
+# Restoring the snapshot keeps the quiesce EXIT trap from restarting
+# services against that mixed release. Entries that do not exist yet
+# (first deploy) are skipped on both legs; a snapshot failure refuses
+# the promote before anything is mutated. The backup sits BESIDE the
+# live dir (never inside the synced tree) and is removed on both the
+# success and the restore paths; a crashed run's residue is cleared
+# by the next promote before snapshotting (the deploy lock above
+# serializes promotes, so no live backup is ever clobbered).
+pre_promote_backup="${remote_dir}.pre-promote-backup"
+rm -rf "$pre_promote_backup"
+mkdir -p "$pre_promote_backup"
+for entry in bin jobs lib config node_modules app-checkout.sha; do
+  if [ -e "$remote_dir/$entry" ]; then
+    cp -a "$remote_dir/$entry" "$pre_promote_backup/$entry" || exit 1
+  fi
+done
+
 rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
 
@@ -156,6 +178,23 @@ rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude
 # marker, and executed code change together: cron resolves BACI_REPO_DIR
 # once per invocation, so no poll can run unverified code or straddle
 # two revisions mid-run.
-bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected_sha"
+if ! bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected_sha"; then
+  echo "Checkout flip failed; restoring the pre-promote live tree." >&2
+  for entry in bin jobs lib config node_modules; do
+    if [ -e "$pre_promote_backup/$entry" ]; then
+      rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
+    else
+      rm -rf "$remote_dir/$entry"
+    fi
+  done
+  if [ -e "$pre_promote_backup/app-checkout.sha" ]; then
+    cp "$pre_promote_backup/app-checkout.sha" "$remote_dir/app-checkout.sha"
+  else
+    rm -f "$remote_dir/app-checkout.sha"
+  fi
+  rm -rf "$pre_promote_backup"
+  exit 1
+fi
+rm -rf "$pre_promote_backup"
 REMOTE_SH
 }

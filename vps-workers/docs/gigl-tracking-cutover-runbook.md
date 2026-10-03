@@ -166,7 +166,16 @@ flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
     rsync -a --delete <base>/app-<sha>/vps-workers/config/ "$remote_dir/config/"
   fi
   rsync -a --delete <base>/app-<sha>/vps-workers/node_modules/ "$remote_dir/node_modules/"
-  cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$remote_dir/bin/gigl-dotenv.sh"
+  # The dotenv reader ships with this cutover: targets that predate it
+  # have no copy to restore (and their old lib/ cannot reference it
+  # either — the reader did not exist), so copy only when the target
+  # carries it. An unconditional copy aborts mid-rollback under set -e,
+  # after the trees are synced but before crontab, symlink, SHA marker,
+  # and latch converge, and the quiesce trap then restarts services
+  # against that mixed release.
+  if [ -f <base>/app-<sha>/.github/scripts/gigl-dotenv.sh ]; then
+    cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$remote_dir/bin/gigl-dotenv.sh"
+  fi
   # Restore the target revision's crontab while ticks are still
   # blocked: the merge is the old rev's own script (anchor-extracted,
   # so deploy.sh rev skew cannot desync it), run against the
@@ -223,8 +232,9 @@ production deploy workflow are mutually exclusive across the GitHub
 API, in both directions:
 
 - `deploy.sh` refuses to promote while any main-branch deploy run is
-  in flight (checked before staging for fail-fast, and again
-  immediately before the flip). Override: set
+  in flight (checked before staging for fail-fast, and again after
+  the image build, before the cron transition mutates live schedule —
+  a refusal there leaves live cron untouched). Override: set
   `BACI_DEPLOY_WORKFLOW_REPO=owner/repo` when origin is unresolvable,
   or `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` in an emergency (then re-run
   the smoke/latch sequence and confirm the published revision).

@@ -1,13 +1,9 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   PILOT_LAB_STORES,
   pilotLabStoreBasePath,
   pilotLabStoreBySlug,
-} from './lab-store-page';
+} from './lab-store-registry';
 
 describe('pilot lab store table', () => {
   it('covers the four sample stores with their selected slots', () => {
@@ -43,27 +39,5 @@ describe('pilot lab store table', () => {
       throw new Error('omnimart store is missing from the lab table');
     }
     expect(pilotLabStoreBasePath(store)).toBe('/pilot-lab/store/omnimart');
-  });
-
-  it('freezes the grid filler bytes (hash-pinned, separate from any selected original)', () => {
-    // Grid fillers render this committed synthetic asset — never a copy of
-    // the selected binding's original — identically in both arms, so the
-    // byte comparison isolates the selected slot.
-    const here = dirname(fileURLToPath(import.meta.url));
-    const fillerPath = join(
-      here,
-      '..',
-      '..',
-      '..',
-      'public',
-      '__pilot',
-      'fillers',
-      'grid-filler-600x400.png'
-    );
-    const bytes = readFileSync(fillerPath);
-    expect(bytes.length).toBe(1312);
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe(
-      '91b03b97f2218feedf29edb7daa828ce0770d1aac6ba7d947a17c1bf6c5e415a'
-    );
   });
 });

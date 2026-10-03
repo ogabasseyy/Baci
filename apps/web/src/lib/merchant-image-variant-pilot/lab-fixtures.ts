@@ -15,7 +15,8 @@ import type { OgabasseyMobileSlot } from './ogabassey-mobile-adapter';
 // (lab-server-boundary.test.ts guards this). The clone modules re-export
 // them so parity tests keep importing from the clone surface.
 
-// Frozen grid-filler image (committed, hash-pinned in lab-store-page.test.ts).
+// Frozen grid-filler image (committed, hash-pinned in
+// lab-store-grid-section.test.tsx).
 // Grid fillers render this synthetic asset — never a copy of the selected
 // binding's original — identically in both arms, so the byte comparison
 // isolates the selected slot instead of re-downloading its original in the

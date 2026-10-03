@@ -175,6 +175,21 @@ done
 rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
   "$staging_dir/" "$remote_dir/"
 
+# Snapshot the checkout pointer for rollback: the flip's one-time
+# legacy migration lossily rewrites .env (deletes every `=`-spelling)
+# and creates the app-live sibling symlink. The target file records
+# the pre-flip link (or NOSYMLINK) so first-deploy rollback removes
+# or re-points exactly that — no invented defaults: like the flip,
+# an unset BACI_REPO_DIR resolves empty (and the flip then fails
+# before mutating, so this snapshot goes unconsumed).
+if [ -e "$remote_dir/.env" ]; then
+  cp -a "$remote_dir/.env" "$pre_promote_backup/.env"
+  # shellcheck source=../bin/gigl-dotenv.sh
+  . "$staging_dir/bin/gigl-dotenv.sh"
+  snapshot_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
+  if [ -L "$snapshot_link" ]; then readlink "$snapshot_link"; else echo "NOSYMLINK"; fi > "$pre_promote_backup/app-live-target"
+fi
+
 # Atomically switch the delegated checkout to this release's immutable
 # per-SHA worktree inside this same deploy lock, so wrappers, SHA
 # marker, and executed code change together: cron resolves BACI_REPO_DIR
@@ -248,10 +263,27 @@ if [ -e "$pre_promote_backup/app-checkout.sha" ]; then
   # keeps the just-replaced target too); only new ticks see old code.
   bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$(cat "$remote_dir/app-checkout.sha")"
 else
-  # First deploy (no previous tree): nothing to flip back to. Leave
-  # the .env and checkouts alone (the flip's one-time migration may
-  # have created app-live; the next deploy re-flips normally) — the
-  # worker is simply not installed, as before.
+  # First deploy (no previous tree): the flip may have run its
+  # one-time legacy migration (created the app-live sibling symlink
+  # and lossily re-pointed .env at it). Reverse exactly that from the
+  # pointer snapshot — otherwise the restarted legacy wrappers would
+  # execute candidate code through the leftover symlink. The link
+  # path comes from the REWRITTEN .env (its canonical line is the
+  # created symlink in the migration case, the untouched original in
+  # the pre-existing-symlink case), read BEFORE the .env restore.
+  # A pre-existing symlink (markerless manual state) is re-pointed to
+  # its pre-flip target instead of removed.
+  # shellcheck source=../bin/gigl-dotenv.sh
+  . "$staging_dir/bin/gigl-dotenv.sh"
+  rollback_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
+  if [ -e "$pre_promote_backup/.env" ]; then
+    cp "$pre_promote_backup/.env" "$remote_dir/.env"
+  fi
+  if [ "$(cat "$pre_promote_backup/app-live-target" 2>/dev/null)" = "NOSYMLINK" ]; then
+    if [ -L "$rollback_link" ]; then rm -f "$rollback_link"; fi
+  elif [ -e "$pre_promote_backup/app-live-target" ]; then
+    ln -sfn "$(cat "$pre_promote_backup/app-live-target")" "$rollback_link"
+  fi
   rm -f "$remote_dir/app-checkout.sha"
 fi
 rm -rf "$pre_promote_backup"

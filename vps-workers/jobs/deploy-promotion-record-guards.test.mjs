@@ -83,6 +83,29 @@ describe('deploy promotion record guards', () => {
       /flip-immutable-checkout\.sh" "\$remote_dir" "\$\(cat/
     );
     assert.match(rollbackSlice, /rm -rf "\$pre_promote_backup"/);
+    // The promote snapshots the checkout pointer (.env + pre-flip link
+    // target) so first-deploy rollback reverses the flip's one-time
+    // legacy migration instead of stranding the rewritten .env and the
+    // candidate symlink (legacy wrappers would execute candidate code
+    // through it).
+    assert.match(
+      releaseSource,
+      /cp -a "\$remote_dir\/\.env" "\$pre_promote_backup\/\.env"/
+    );
+    assert.match(releaseSource, /app-live-target/);
+    // First-deploy rollback restores the .env snapshot, then removes
+    // the migration-created symlink (NOSYMLINK case, guarded -L so a
+    // real directory is never deleted) or re-points a pre-existing one
+    // to its pre-flip target.
+    assert.match(
+      rollbackSlice,
+      /cp "\$pre_promote_backup\/\.env" "\$remote_dir\/\.env"/
+    );
+    assert.match(rollbackSlice, /if \[ -L "\$rollback_link" \]; then rm -f/);
+    assert.match(
+      rollbackSlice,
+      /ln -sfn "\$\(cat "\$pre_promote_backup\/app-live-target"\)"/
+    );
     // The promote snapshot survives success for exactly this path;
     // deploy.sh removes it once the refresh lands.
     assert.match(deploySource, /rm -rf '\$REMOTE_DIR\.pre-promote-backup'/);

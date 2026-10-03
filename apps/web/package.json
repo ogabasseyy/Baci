@@ -28,6 +28,7 @@
     "perf:ogabassey-cache-probe": "node tools/perf/measure-ogabassey-cache-hit-rate.mjs",
     "perf:ogabassey-css-budget": "node tools/perf/assert-ogabassey-css-budget.mjs",
     "perf:ogabassey-pdp-lcp": "node tools/perf/measure-ogabassey-pdp-lcp.mjs",
+    "pilot:stage": "tsx --tsconfig tools/perf/merchant-image-pilot-stage.tsconfig.json tools/perf/merchant-image-pilot-stage.cli.ts",
     "perf:storefront:validate": "node tools/perf/assert-lighthouse-report.mjs",
     "test:storefront-report": "vitest run tools/perf/assert-lighthouse-report.test.mjs",
     "cost:storefront-origin-budget": "tsx tools/cost/storefront-origin-budget.ts",

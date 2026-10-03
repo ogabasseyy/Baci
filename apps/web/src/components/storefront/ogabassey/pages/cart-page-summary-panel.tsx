@@ -1,5 +1,6 @@
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import type React from 'react';
+import styles from './cart-page-summary-panel.module.css';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';
 
 interface CartPageSummaryPanelProps {
@@ -38,7 +39,7 @@ export function CartPageSummaryPanel({
           <button
             type="button"
             onClick={onCheckoutClick}
-            className="w-full bg-black hover:bg-gray-900 text-white font-bold py-3.5 px-4 rounded-xl items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98] active:shadow-none relative z-10 hidden md:flex"
+            className={`w-full bg-black hover:bg-gray-900 text-white font-bold py-3.5 px-4 rounded-xl items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.98] active:shadow-none relative z-10 ${styles.checkoutAction}`}
           >
             Proceed to Checkout
             <span className="opacity-50 mx-1">•</span>

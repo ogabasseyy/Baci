@@ -1,0 +1,9 @@
+.checkoutAction {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .checkoutAction {
+    display: flex;
+  }
+}

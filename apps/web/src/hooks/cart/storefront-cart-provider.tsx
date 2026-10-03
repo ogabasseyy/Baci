@@ -421,7 +421,9 @@ export function StorefrontCartProvider({
             quizAwardId: normalizedOptions?.quizAwardId,
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',
-            hasAssurance: enableSmartCartPro && merchantSlug === 'ogabassey',
+            hasAssurance:
+              normalizedOptions?.hasAssurance ??
+              (enableSmartCartPro && merchantSlug === 'ogabassey'),
             assuranceRate: DEFAULT_ASSURANCE_RATE,
           },
         ];

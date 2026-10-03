@@ -60,5 +60,10 @@ export async function submitProductRequest(
       429,
       'Too many requests. Please try again later.'
     );
+  if (response.status === 409)
+    throw new ProductRequestSubmitError(
+      409,
+      'This request conflicts with an earlier submission. Please try again.'
+    );
   throw new Error('Couldn’t send your request. Please try again.');
 }

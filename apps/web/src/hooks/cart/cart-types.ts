@@ -32,7 +32,8 @@ export interface AddToCartOptions {
   quizAwardId?: string;
   quizVoucherToken?: string;
   platform?: string;
-  [key: string]: string | Record<string, string> | undefined;
+  hasAssurance?: boolean;
+  [key: string]: string | boolean | Record<string, string> | undefined;
 }
 
 export interface CartContextType {

@@ -62,6 +62,13 @@ describe('product request intake', () => {
     );
     expect(limited).toBeInstanceOf(ProductRequestSubmitError);
     expect((limited as ProductRequestSubmitError).status).toBe(429);
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(409));
+    const conflicted = await submitProductRequest(endpoint, request).then(
+      () => null,
+      (error: unknown) => error
+    );
+    expect(conflicted).toBeInstanceOf(ProductRequestSubmitError);
+    expect((conflicted as ProductRequestSubmitError).status).toBe(409);
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(500));
     await expect(submitProductRequest(endpoint, request)).rejects.toThrow(
       'Couldn’t send your request. Please try again.'

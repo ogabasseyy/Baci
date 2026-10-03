@@ -61,7 +61,9 @@ export default function ProductRequest({
       setError(
         error instanceof ProductRequestSubmitError && error.status === 429
           ? 'Too many requests. Please try again later.'
-          : 'Couldn’t send. Check the product name and email or phone number, then try again.'
+          : error instanceof ProductRequestSubmitError && error.status === 409
+            ? 'This request conflicts with an earlier one. Please try again.'
+            : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {
       sending.current = false;

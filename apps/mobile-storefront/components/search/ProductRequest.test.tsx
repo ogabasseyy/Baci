@@ -1,4 +1,7 @@
-import { submitProductRequest } from '@baci/shared/lib';
+import {
+  ProductRequestSubmitError,
+  submitProductRequest,
+} from '@baci/shared/lib';
 import {
   fireEvent,
   render,
@@ -60,5 +63,20 @@ it('retains the form and request identity after a failed submission', async () =
   await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
   expect(jest.mocked(submitProductRequest).mock.calls[0][1].requestId).toBe(
     jest.mocked(submitProductRequest).mock.calls[1][1].requestId
+  );
+});
+it('shows a retry signal instead of a validation error on idempotency conflict', async () => {
+  jest
+    .mocked(submitProductRequest)
+    .mockRejectedValue(new ProductRequestSubmitError(409, 'conflict'));
+  render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.changeText(
+    screen.getByLabelText('Email or phone number'),
+    'shopper@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() =>
+    expect(screen.getByText(/conflicts with an earlier one/)).toBeTruthy()
   );
 });

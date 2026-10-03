@@ -64,6 +64,18 @@ describe('product request intake', () => {
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain('private database detail');
   });
+  it('maps idempotency conflicts to 409 instead of a validation error', async () => {
+    mocks.submit.mockResolvedValueOnce({
+      error: { code: '22023', message: 'Request conflict' },
+    });
+    const response = await POST(request(input));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'Request conflict' });
+    mocks.submit.mockResolvedValueOnce({
+      error: { code: '22023', message: 'Invalid product request' },
+    });
+    expect((await POST(request(input))).status).toBe(400);
+  });
   it('fails closed with 503 when the intake helper throws', async () => {
     mocks.submit.mockRejectedValueOnce(new Error('intake key missing'));
     const response = await POST(request(input));

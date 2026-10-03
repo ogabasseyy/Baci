@@ -77,6 +77,21 @@ describe('useCart - Validation', () => {
     }
   });
 
+  it('respects an explicit assurance opt-out passed to addToCart', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <CartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </CartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() =>
+      result.current.addToCart(mockProduct, 1, { hasAssurance: false })
+    );
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+    expect(result.current.cartTotal).toBe(100);
+  });
+
   const mockProduct = {
     id: 'prod-1',
     merchant_id: 'merch-1',

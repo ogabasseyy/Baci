@@ -39,6 +39,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Request limit reached' }, { status: 429 });
   if (info.message?.includes('Store unavailable'))
     return Response.json({ error: 'Store unavailable' }, { status: 404 });
+  if (info.message?.includes('Request conflict'))
+    return Response.json({ error: 'Request conflict' }, { status: 409 });
   if (info.code === '22023')
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   logger.warn({

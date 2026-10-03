@@ -15,7 +15,7 @@ const SAFETY_MARGIN_MS = 30_000;
 // and skip the push unless both phases fit (see
 // deliver-claimed-refund-notification), keeping every row inside this
 // worst case. The per-row deadline still stops a slower send.
-const PER_SEND_WORST_MS = 150_000;
+export const PER_SEND_WORST_MS = 150_000;
 const MAX_DRAIN_LIMIT = 20;
 
 /** How many serial notification sends fit in the remaining cron budget. */

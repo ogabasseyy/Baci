@@ -52,7 +52,6 @@ describe('legacy cancellation refund preflight', () => {
   it.each([
     ['completed', {}],
     ['refund_pending', {}],
-    ['completed', { payment_transaction_id: 'another-payment' }],
   ])('does not initiate again when an unlinked refund is %s', async (status, metadata) => {
     mocks.initiateRefund.mockReset();
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
@@ -94,6 +93,64 @@ describe('legacy cancellation refund preflight', () => {
       expect.objectContaining({
         issue_type: 'order_cancellation_refund_requires_review',
         reason: expect.stringContaining('cannot be linked'),
+      })
+    );
+  });
+
+  it('names the claimed target when a refund links outside the order legs', async () => {
+    mocks.initiateRefund.mockReset();
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            amount: 100,
+            currency: 'NGN',
+            gateway: 'paystack',
+            gateway_reference: 'paystack-ref',
+            id: 'payment-1',
+          },
+        ])
+      )
+      .mockReturnValueOnce(
+        transactionQuery([
+          {
+            gateway_reference: '42',
+            metadata: { payment_transaction_id: 'another-payment' },
+            status: 'completed',
+          },
+        ])
+      )
+      .mockReturnValueOnce(auditReviewsQuery([]))
+      .mockReturnValueOnce({ insert: reviewInsert });
+
+    await expect(
+      executeOrderCancellationSideEffect({
+        merchant,
+        order,
+        step: 'refund',
+        supabase: { from } as never,
+      })
+    ).rejects.toBeInstanceOf(DeliveryUncertainError);
+    expect(mocks.initiateRefund).not.toHaveBeenCalled();
+    // A link naming a payment id outside this order's legs is
+    // corruption, not a legacy unlinked refund: quarantine with the
+    // claimed target named so operations verify the right row.
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'order_cancellation_refund_requires_review',
+        reason: expect.stringContaining(
+          'links to payment legs outside this order (another-payment)'
+        ),
+      })
+    );
+    expect(reviewInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          invalid_link_claimed_payment_ids: ['another-payment'],
+          invalid_link_refund_count: 1,
+        }),
       })
     );
   });

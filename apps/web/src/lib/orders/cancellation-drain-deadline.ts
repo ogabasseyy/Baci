@@ -43,13 +43,13 @@ export function cancellationDrainDeadlineMs(startedAtMs: number): number {
 // full reconcile phase, excluding every email on each backlog run.
 // Emails get their own cutoff past a full reconcile phase plus the
 // admission budget plus the claim-write allowance the post-lookup
-// guard requires on top of the send budget: without it the guard
-// (48s + 8s) can never pass after a full 60s reconcile, skipping
-// every email unclaimed on each backlog run. The email send aborts
-// 10s before its cutoff, and refund row-starts still gate on the 90s
-// deadline, so the phase's worst-case end (a 30s refund tail at 120s)
-// is unchanged and the notification reserve holds:
-// 116s + 150s + 30s = 296s of 300s.
+// guard requires on top of the send budget plus the order/merchant
+// lookup allowance: without it the guard (48s + 8s) can never pass
+// after a full 60s reconcile, skipping every email unclaimed on each
+// backlog run. The email send aborts 10s before its cutoff, and
+// refund row-starts still gate on the 90s deadline, so the phase's
+// worst-case end (a 30s refund tail at 120s) is unchanged and the
+// notification reserve holds: 120s + 150s + 30s = 300s of 300s.
 // Shared with reconcile-worker-deadline WORKER_BUDGET_MS and
 // zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER): keep
 // identical, and keep the invariant test below in lockstep.
@@ -60,6 +60,14 @@ const EMAIL_ADMISSION_MS = 48_000;
 // audit-write margin for a single database write. Imported by the
 // drain's post-lookup guard so the cutoff and the guard share it.
 export const CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS = 8_000;
+// Allowance for the order/merchant reads ahead of the post-lookup
+// guard: without it the 116s cutoff leaves exactly the 48s + 8s the
+// guard requires after a full reconcile, so any nonzero lookup time
+// fails the guard and every email skips unclaimed on each backlog
+// run. Sized to the remaining invocation slack (120s + 150s + 30s =
+// 300s); the email send still aborts 10s before its cutoff, so the
+// phase worst case stays the 120s refund tail and the reserve holds.
+const CANCELLATION_EMAIL_LOOKUP_ALLOWANCE_MS = 4_000;
 
 /**
  * Absolute epoch-ms cutoff for customer-email admission and sends for
@@ -74,6 +82,7 @@ export function cancellationEmailDrainDeadlineMs(startedAtMs: number): number {
     startedAtMs +
     RECONCILE_PHASE_MS +
     EMAIL_ADMISSION_MS +
-    CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS
+    CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS +
+    CANCELLATION_EMAIL_LOOKUP_ALLOWANCE_MS
   );
 }

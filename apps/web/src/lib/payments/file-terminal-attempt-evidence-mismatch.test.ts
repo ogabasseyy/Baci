@@ -78,7 +78,27 @@ describe('fileTerminalAttemptEvidenceMismatch', () => {
     );
   });
 
-  it('returns false without stamping when the merge fails', async () => {
+  it('refiles without the reference and stamps on a cross-order collision', async () => {
+    insert
+      .mockResolvedValueOnce({ error: { code: '23505' } })
+      .mockResolvedValueOnce({ error: null });
+    rpc.mockResolvedValueOnce({ data: false, error: null });
+
+    await expect(
+      fileTerminalAttemptEvidenceMismatch({ attempt, evidence, supabase })
+    ).resolves.toBe(true);
+    // Another order owns the global slot: the retry must not occupy
+    // paystack_ref, or it collides again and the row reselects forever.
+    expect(insert).toHaveBeenLastCalledWith(
+      expect.objectContaining({ order_id: 'order-1', paystack_ref: null })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'stamp_abandoned_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'terminal_evidence_mismatch' })
+    );
+  });
+
+  it('returns false without stamping when the refil fails', async () => {
     insert.mockResolvedValue({ error: { code: '23505' } });
     rpc.mockResolvedValueOnce({ data: false, error: null });
 

@@ -189,14 +189,16 @@ export async function recoverUnknownPaystackRefund(
         },
         refundId,
       });
-      if (stalledFiled > 0) return;
-      // Both scans empty: a payment pending during the first read may
-      // have completed before the stalled scan ran. Open the recovery
-      // watch and re-scan atomically under the reference lock the
-      // completion path claims under: rows returned mean the payment
-      // landed first and loop around to handle them; an empty set
-      // leaves the watch open so the completion files the evidence
-      // instead of acknowledging silently.
+      // A payment completing after the first scan but before the
+      // stalled scan appears in neither result: returning on stalled
+      // evidence alone would acknowledge without a watch for that
+      // newly completed payment to claim. Open the recovery watch and
+      // re-scan atomically under the reference lock the completion
+      // path claims under even when stalled evidence was filed: rows
+      // returned loop around to be handled, while an empty set
+      // returns with the evidence filed and the watch open so a later
+      // completion files its evidence instead of acknowledging
+      // silently.
       candidates = await openPaystackRefundRecoveryWatch(supabase, {
         evidence: {
           amount_minor: current.amount,
@@ -207,6 +209,7 @@ export async function recoverUnknownPaystackRefund(
         providerRefundId: refundId,
         reference: resolvedPaymentReference,
       });
+      if (stalledFiled > 0 && candidates.length === 0) return;
       continue;
     }
     if (pass === 0) {

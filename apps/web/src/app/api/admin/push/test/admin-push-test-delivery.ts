@@ -57,14 +57,28 @@ export async function deliverAdminPushTest(
       messages,
       { onDeliveryStart: deliveryBoundary.markDeliveryStarted }
     );
-    const failed = tickets.filter((ticket) => ticket.status === 'error').length;
-    // A provider throw yields synthetic error tickets plus
-    // deliveryUncertain: report them as uncertain instead of
-    // definitive failures so a test push is never misreported.
-    if (deliveryUncertain) {
-      return { failed: 0, sent: tickets.length - failed, uncertain: failed };
-    }
-    return { failed, sent: tickets.length - failed, uncertain: 0 };
+    const errorTickets = tickets.filter((ticket) => ticket.status === 'error');
+    // A provider throw yields synthetic ExpoError tickets plus
+    // deliveryUncertain: report those as uncertain instead of
+    // definitive failures so a test push is never misreported. But
+    // DeviceNotRegistered tickets are definitive either way — a
+    // throw-synthetic never carries that code (local validation and
+    // real provider rejections do) — so partition them out instead of
+    // converting the aggregate failure count wholesale, or an invalid
+    // token hides behind another message's uncertain throw.
+    const uncertainTickets = deliveryUncertain
+      ? errorTickets.filter(
+          (ticket) =>
+            (ticket.details as { error?: unknown } | undefined)?.error !==
+            'DeviceNotRegistered'
+        )
+      : [];
+    const failed = errorTickets.length - uncertainTickets.length;
+    return {
+      failed,
+      sent: tickets.length - errorTickets.length,
+      uncertain: uncertainTickets.length,
+    };
   } catch {
     // A throw before dispatch (chunking, client setup) definitely
     // sent nothing; a throw after dispatch started (e.g. the

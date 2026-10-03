@@ -54,8 +54,10 @@ export async function fetchRefinedProductsPage(
   const products = matches.flatMap((match) => {
     const row = rows.get(match.productId);
     if (!row) return [];
+    // Unparseable rows are logged inside transformProduct; skip them like
+    // missing rows so one malformed product cannot fail the whole page.
     const product = transformProduct(row);
-    if (!product) throw new Error('Search results unavailable');
+    if (!product) return [];
     return [
       {
         ...product,

@@ -3,6 +3,7 @@ import { fetchRefinedProductsPage } from './refined-product-pages';
 const mockRpc = jest.fn();
 const mockRead = jest.fn();
 const mockHydrate = jest.fn();
+const mockTransform = jest.fn();
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     rpc: (...args: unknown[]) => mockRpc(...args),
@@ -18,12 +19,13 @@ jest.mock('./product-hydration', () => ({
   hydrateRowsNeedingStorefrontVariants: (rows: unknown) => mockHydrate(rows),
 }));
 jest.mock('./product-transform', () => ({
-  transformProduct: (row: unknown) => row,
+  transformProduct: (...args: unknown[]) => mockTransform(...args),
 }));
 describe('refined native pages', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockHydrate.mockImplementation((rows: unknown) => rows);
+    mockTransform.mockImplementation((row: unknown) => row);
   });
   it('uses the matching option price and keeps ranked ordering and offset', async () => {
     mockRpc.mockResolvedValue({
@@ -114,6 +116,32 @@ describe('refined native pages', () => {
     expect(result.products.map((p) => p.id)).toEqual(['p1']);
     expect(result.total).toBe(1);
     expect(result.nextOffset).toBeNull();
+  });
+  it('skips rows that fail validation instead of failing the page', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        { product_id: 'p1', total_count: 2 },
+        { product_id: 'p2', total_count: 2 },
+      ],
+      error: null,
+    });
+    mockRead.mockResolvedValue({
+      data: [
+        { id: 'p1', price: 500 },
+        { id: 'p2', price: 700 },
+      ],
+      error: null,
+    });
+    mockTransform.mockReturnValueOnce(null);
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      20,
+      0
+    );
+    expect(result.products.map((p) => p.id)).toEqual(['p2']);
+    expect(result.total).toBe(1);
   });
   it('does not silently fall back when the new contract fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });

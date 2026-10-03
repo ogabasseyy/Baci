@@ -94,19 +94,21 @@ CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- Tax writes are rebuilds: any of them can change the snapshotted rows.
+  -- Receipts render no subtotal breakdown (isInvoice only), so tax writes
+  -- reset invoice markers alone; in-flight receipt snapshots stay valid.
   IF TG_OP = 'DELETE' THEN
     PERFORM private.lock_manual_document_gate('order', OLD.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
     PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
     RETURN NEW;
   END IF;
   PERFORM private.lock_manual_document_gate('order', NEW.order_id);
-  PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+  PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
 $$;

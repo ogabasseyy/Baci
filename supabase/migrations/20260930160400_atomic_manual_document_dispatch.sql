@@ -104,7 +104,7 @@ DECLARE
   v_va_account_number text;
   v_va_bank_name text;
   v_va_account_name text;
-  v_compare_payment boolean;
+  v_compare_invoice_only boolean;
   v_tax_count bigint;
   v_tax_subtotals jsonb;
   v_txn_count bigint;
@@ -127,8 +127,9 @@ BEGIN
   IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
     RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
   END IF;
-  -- Receipts render no payment instructions: payment compares for invoices only.
-  v_compare_payment := p_document_kind <> 'receipt';
+  -- Receipts render no payment instructions and no subtotal breakdown:
+  -- bank, virtual-account, and tax compares run for invoices only.
+  v_compare_invoice_only := p_document_kind <> 'receipt';
   -- Lock order (child rows, parent, advisory): tax follows the parent to
   -- match the historical rebuild trigger. The outbox seed is re-validated below.
   SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
@@ -144,8 +145,9 @@ BEGIN
   SELECT o.* INTO v_order FROM public.orders AS o
   WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
   FOR SHARE;
-  -- Preferred virtual account mirrors the sender (latest eligible
-  -- unexpired non-legacy paystack row); NULLs match null.
+  -- Preferred virtual account mirrors the sender and the shared
+  -- selector: Paystack ranks first, then newest, over every eligible
+  -- unexpired non-legacy provider row; NULLs match null.
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.cac_rc_number, m.tax_identification_number,
     m.vat_registration_status, m.vat_rate, m.support_email, m.support_phone,
@@ -187,19 +189,21 @@ BEGIN
     AND d.status = 'active'
   ORDER BY d.updated_at DESC NULLS LAST, d.created_at DESC NULLS LAST, d.id
   LIMIT 1;
-  IF v_compare_payment THEN
+  IF v_compare_invoice_only THEN
     SELECT opa.account_number, opa.bank_name, opa.account_name
     INTO v_va_account_number, v_va_bank_name, v_va_account_name
     FROM public.order_payment_accounts AS opa
-    WHERE opa.order_id = v_order.id AND opa.provider = 'paystack'
+    WHERE opa.order_id = v_order.id
       AND (opa.assignment_customer_email_source IS NULL
         OR opa.assignment_customer_email_source <> 'legacy_untrusted')
       AND (opa.expires_at IS NULL OR opa.expires_at > now() + interval '15 minutes')
       -- The sender's selector rejects future assignments; skip them too.
       AND (COALESCE(opa.assigned_at, opa.created_at) IS NULL OR COALESCE(opa.assigned_at, opa.created_at) <= now())
-    -- NULLS LAST mirrors the sender and shared selector (missing
-    -- created_at sorts last): a null-created row never beats a dated one.
-    ORDER BY opa.created_at DESC NULLS LAST, opa.account_number DESC LIMIT 1;
+    -- Paystack-first, then newest, like the shared selector: only
+    -- Paystack DVA rows match the webhook. NULLS LAST mirrors the sender
+    -- (missing created_at sorts last): a null-created row never beats a
+    -- dated one.
+    ORDER BY (opa.provider = 'paystack') DESC, opa.created_at DESC NULLS LAST, opa.account_number DESC LIMIT 1;
   END IF;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
@@ -264,16 +268,16 @@ BEGIN
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
     OR v_merchant_brand_colors IS DISTINCT FROM p_merchant_brand_colors
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
-    OR (v_compare_payment AND (
+    OR (v_compare_invoice_only AND (
       v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
       OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
       OR v_merchant_bank_name IS DISTINCT FROM p_merchant_bank_name
       OR v_merchant_bank_account_name IS DISTINCT FROM p_merchant_bank_account_name
       OR v_va_account_number IS DISTINCT FROM p_va_account_number
       OR v_va_bank_name IS DISTINCT FROM p_va_bank_name
-      OR v_va_account_name IS DISTINCT FROM p_va_account_name))
-    OR v_tax_count IS DISTINCT FROM p_tax_count::bigint
-    OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals
+      OR v_va_account_name IS DISTINCT FROM p_va_account_name
+      OR v_tax_count IS DISTINCT FROM p_tax_count::bigint
+      OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
   THEN

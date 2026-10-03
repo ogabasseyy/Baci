@@ -43,6 +43,45 @@ describe('isPromotedManualReceipt', () => {
     ).toBe(true);
   });
 
+  it('promotes rows with valid sender financial fields present', () => {
+    expect(
+      isPromotedManualReceipt(
+        coveredRow({
+          items: [
+            {
+              name: 'Phone',
+              quantity: 1,
+              price: 500,
+              line_extension_amount: 500,
+              assurance_fee: 0,
+              vat_rate: 7.5,
+              vat_amount: 37.5,
+              line_id: 1,
+            },
+          ],
+        })
+      )
+    ).toBe(true);
+  });
+
+  it.each([
+    ['negative extension', { line_extension_amount: -50 }],
+    ['negative assurance fee', { assurance_fee: -10 }],
+    ['negative vat rate', { vat_rate: -7.5 }],
+    ['negative vat amount', { vat_amount: -1 }],
+    ['negative line id', { line_id: -2 }],
+    ['non-numeric vat amount', { vat_amount: 'abc' }],
+    ['infinite extension', { line_extension_amount: Number.POSITIVE_INFINITY }],
+  ])('rejects invalid financial fields: %s', (_label, financial) => {
+    expect(
+      isPromotedManualReceipt(
+        coveredRow({
+          items: [{ name: 'Phone', quantity: 1, price: 500, ...financial }],
+        })
+      )
+    ).toBe(false);
+  });
+
   it.each([
     ['imported', { importJobId: 'job-1' }],
     ['non-manual', { recordedByUserId: null }],

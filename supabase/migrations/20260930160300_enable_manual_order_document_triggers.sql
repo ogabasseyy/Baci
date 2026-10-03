@@ -20,6 +20,14 @@ ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after
 ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
 ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
 ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
+-- Backfill bound: the eligible set is staff-recorded orders created while
+-- the triggers were disabled (manual volume only — imports and marketplace
+-- rows never set the flag), each a single enqueue call that early-returns
+-- for ineligible rows. Cap the statement well under the 305s deploy drain
+-- so a pathological backlog fails fast instead of stalling postdeploy.
+-- Session SET (not LOCAL): the applier may run statements outside an
+-- explicit transaction, and RESET restores the default either way.
+SET statement_timeout = '120s';
 SELECT count(*) FROM (
   SELECT private.enqueue_manual_order_document(o.id)
   FROM public.orders AS o
@@ -30,3 +38,4 @@ SELECT count(*) FROM (
         AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     )
 ) AS scanned;
+RESET statement_timeout;

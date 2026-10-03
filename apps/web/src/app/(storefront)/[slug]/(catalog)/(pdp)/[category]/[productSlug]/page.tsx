@@ -61,11 +61,8 @@ import type { Product, ProductCondition } from '@/lib/products';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
   buildStorefrontAcceptedPaymentMethods,
-  generateBreadcrumbSchema,
-  generateProductSchema,
   generateSlug,
   getProductUrl,
-  getValidatedProductUrl,
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
@@ -77,6 +74,7 @@ import {
   isValidMerchantIdentifier,
 } from '@/lib/validation';
 import { buildCategoryProductMetadata } from './category-product-metadata';
+import { buildCategoryProductStructuredData } from './category-product-structured-data';
 import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
@@ -1142,57 +1140,19 @@ async function CategoryProductPageContent({
       </Suspense>
     </SemanticSectionsErrorBoundary>
   );
-  const derivedSpecData = buildOgabasseyProductSpecData(renderableProduct);
-  const schemaProduct =
-    derivedSpecData.detailedSpecs.length > 0
-      ? {
-          ...renderableProduct,
-          specifications: derivedSpecData.detailedSpecs,
-        }
-      : renderableProduct;
-
-  const productUrl = getValidatedProductUrl(
-    renderableProduct,
-    baseUrl,
-    merchant.slug
-  );
-
-  // Generate product schema (now handles merging custom schema_markup internally)
-  const productSchema = generateProductSchema(
-    schemaProduct,
-    merchant?.business_name || 'Baci Store',
-    currency,
-    merchant?.country || 'NG',
-    merchant?.logo_url,
-    trustProfile,
-    {
+  const { derivedSpecData, productSchema, breadcrumbSchema } =
+    buildCategoryProductStructuredData({
+      product: renderableProduct,
+      merchant,
+      baseUrl,
+      currency,
+      trustProfile,
       acceptedPaymentMethods: buildStorefrontAcceptedPaymentMethods(merchant, {
         korapayConfigured: isKorapayConfigured(),
         paystackConfigured: isPaystackConfigured(),
         currency,
       }),
-      productUrl,
-    }
-  );
-
-  // Generate breadcrumb schema with category
-  // Use category_slug from product if available, otherwise generate from TEXT field
-  const categorySlugForUrl =
-    product.categories?.slug ||
-    product.category_slug ||
-    (product.category ? generateSlug(product.category) : null);
-
-  const categoryUrl = categorySlugForUrl
-    ? `${baseUrl}/${categorySlugForUrl}`
-    : `${baseUrl}/products`;
-
-  const breadcrumbItems = [
-    { name: merchant?.business_name || 'Home', url: baseUrl },
-    { name: renderableProduct.category || 'All Products', url: categoryUrl },
-    { name: renderableProduct.name, url: productUrl },
-  ];
-
-  const breadcrumbSchema = generateBreadcrumbSchema(breadcrumbItems);
+    });
   const productPage = await renderTemplateProductPage({
     currency: currencyConfig,
     product: renderableProduct,

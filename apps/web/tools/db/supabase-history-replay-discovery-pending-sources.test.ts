@@ -7,6 +7,8 @@ import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 const DISCOVERY_MIGRATIONS = [
+  '20261003170000_discovery_model_alias_facts.sql',
+  '20261003163000_variant_recall_manufacturer_prefix.sql',
   '20261002090720_public_variant_option_projection.sql',
   '20261002090721_fact_option_projection.sql',
   '20261002090722_browse_public_option_projection.sql',

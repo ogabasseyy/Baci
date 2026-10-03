@@ -2,6 +2,7 @@
   display: none;
 }
 
+/* Match the lg visibility gate on the enclosing summary panel. */
 @media (min-width: 64rem) {
   .checkoutAction {
     display: flex;

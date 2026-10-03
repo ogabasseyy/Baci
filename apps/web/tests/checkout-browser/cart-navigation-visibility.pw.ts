@@ -76,5 +76,6 @@ test('cart summary checkout action remains hidden on mobile', async ({
     name: /^Checkout • ₦100,000$/,
   });
   await expect(mobileCheckout).toBeVisible();
-  await mobileCheckout.click({ trial: true });
+  await mobileCheckout.click();
+  await expect(page).toHaveURL(/\/checkout$/);
 });

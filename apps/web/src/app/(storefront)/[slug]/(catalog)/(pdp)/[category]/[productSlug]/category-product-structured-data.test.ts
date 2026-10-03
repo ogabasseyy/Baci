@@ -60,6 +60,33 @@ describe('category PDP structured data assembly', () => {
     );
   });
 
+  it('includes description-derived key specs in the generated product schema', () => {
+    const { derivedSpecData, productSchema } = build({
+      description:
+        '<h2>Key Specs</h2><table><tr><th>Display Type</th><td>OLED</td></tr></table>',
+    });
+
+    expect(derivedSpecData.detailedSpecs).toContainEqual(
+      expect.objectContaining({
+        items: [{ label: 'Display Type', value: 'OLED' }],
+      })
+    );
+    expect(productSchema.additionalProperty).toContainEqual(
+      expect.objectContaining({ name: 'Display Type', value: 'OLED' })
+    );
+  });
+
+  it('does not add description-derived specs when the description has no key specs table', () => {
+    const { productSchema } = build({
+      description: 'A phone with a bright, responsive screen.',
+    });
+
+    expect(productSchema.name).toBe('Test Product');
+    expect(productSchema.additionalProperty).not.toContainEqual(
+      expect.objectContaining({ name: 'Display Type' })
+    );
+  });
+
   it('retains individual variant prices, stock and conditions in ProductGroup offers', () => {
     const { productSchema } = build({
       variants: [

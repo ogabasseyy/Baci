@@ -227,7 +227,7 @@ describe('order notification outbox worker', () => {
     const { client, builder } = createSupabase([]);
     builder.maybeSingle
       .mockResolvedValueOnce({
-        data: { id: row.id, metadata: {} },
+        data: { id: row.id, metadata: {}, updated_at: '2026-10-03T00:00:00Z' },
         error: null,
       })
       .mockRejectedValueOnce(new Error('database connection reset'))

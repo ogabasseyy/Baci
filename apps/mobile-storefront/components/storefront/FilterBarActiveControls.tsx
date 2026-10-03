@@ -1,3 +1,4 @@
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import Feather from '@react-native-vector-icons/feather';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
@@ -9,7 +10,9 @@ import { getFilterBarStyles } from './FilterBar.styles';
 type FilterType = 'price' | 'brand' | 'condition' | 'rating';
 const MAX_PRICE_CEILING = 3_000_000;
 
-interface FilterBarActiveControlsProps {
+export interface FilterBarActiveControlsProps {
+  inSheet?: boolean;
+  onDone?: () => void;
   activeFilterType: FilterType;
   minPrice: number;
   maxPrice: number;
@@ -59,6 +62,8 @@ function getBrandOptions(brands: string[]) {
 }
 
 export function FilterBarActiveControls({
+  inSheet = false,
+  onDone,
   activeFilterType,
   minPrice,
   maxPrice,
@@ -100,49 +105,87 @@ export function FilterBarActiveControls({
     onPriceChange(nextMinPrice, nextMaxPrice);
   };
   const brandOptions = getBrandOptions(brands);
+  const PriceInput = inSheet ? BottomSheetTextInput : TextInput;
+  const BrandContainer = inSheet ? View : ScrollView;
 
   switch (activeFilterType) {
     case 'price':
       return (
-        <View style={styles.priceRow}>
-          <View style={styles.priceField}>
-            <Text style={styles.currency}>₦</Text>
-            <TextInput
-              style={styles.priceInput}
-              value={tempMinPrice}
-              onChangeText={setTempMinPrice}
-              role="spinbutton"
-              accessibilityLabel="Min"
-              placeholder="0"
-              keyboardType="numeric"
-              onBlur={handlePriceBlur}
-              placeholderTextColor={colors.placeholder}
-            />
+        <View>
+          <View style={styles.priceRow}>
+            <View style={styles.priceField}>
+              <Text style={styles.currency}>₦</Text>
+              <PriceInput
+                style={styles.priceInput}
+                value={tempMinPrice}
+                onChangeText={setTempMinPrice}
+                role="spinbutton"
+                accessibilityLabel="Min"
+                placeholder="0"
+                keyboardType="numeric"
+                onBlur={handlePriceBlur}
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+            <Text style={styles.dash}>-</Text>
+            <View style={styles.priceField}>
+              <Text style={styles.currency}>₦</Text>
+              <PriceInput
+                style={styles.priceInput}
+                value={tempMaxPrice}
+                onChangeText={setTempMaxPrice}
+                role="spinbutton"
+                accessibilityLabel="Max"
+                placeholder="Max"
+                keyboardType="numeric"
+                onBlur={handlePriceBlur}
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
           </View>
-          <Text style={styles.dash}>-</Text>
-          <View style={styles.priceField}>
-            <Text style={styles.currency}>₦</Text>
-            <TextInput
-              style={styles.priceInput}
-              value={tempMaxPrice}
-              onChangeText={setTempMaxPrice}
-              role="spinbutton"
-              accessibilityLabel="Max"
-              placeholder="Max"
-              keyboardType="numeric"
-              onBlur={handlePriceBlur}
-              placeholderTextColor={colors.placeholder}
-            />
-          </View>
+          {inSheet && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+              onPress={() => {
+                handlePriceBlur();
+                onDone?.();
+              }}
+              style={{
+                marginTop: 24,
+                minHeight: 48,
+                borderRadius: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.primary,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.primaryForeground,
+                  fontSize: 15,
+                  fontWeight: '600',
+                }}
+              >
+                Done
+              </Text>
+            </Pressable>
+          )}
         </View>
       );
     case 'brand':
       return (
-        <ScrollView
-          horizontal
+        <BrandContainer
+          horizontal={!inSheet}
           showsHorizontalScrollIndicator={false}
-          style={styles.brandScroll}
-          contentContainerStyle={styles.brandScrollContent}
+          style={
+            inSheet
+              ? { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }
+              : styles.brandScroll
+          }
+          contentContainerStyle={
+            inSheet ? undefined : styles.brandScrollContent
+          }
         >
           {brandOptions.map((brand) => {
             const isActive = selectedBrand === brand;
@@ -180,7 +223,7 @@ export function FilterBarActiveControls({
               </Pressable>
             );
           })}
-        </ScrollView>
+        </BrandContainer>
       );
     case 'condition':
       return (

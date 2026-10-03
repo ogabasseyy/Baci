@@ -183,6 +183,61 @@ describe('buildMcpProductDetail', () => {
     expect(result.structuredContent?.variants?.[0]).not.toHaveProperty('attributes.color');
   });
 
+  it('returns stored color image labels with safe images without asserting a color variant', async () => {
+    const result = await buildMcpProductDetail({
+      product: {
+        ...product,
+        has_variants: false,
+        color_images: { Graphite: ['https://cdn.example/graphite.jpg'] },
+      },
+      supabase: { rpc: vi.fn() } as unknown as SupabaseClient,
+      formatPrice: String,
+      getSafeCatalogImageUrl: (url) => url?.startsWith('https://') ? url : undefined,
+    });
+
+    expect(result.content[0].text).toContain('**Catalog Colors:** Graphite');
+    expect(result.content[0].text).toContain('stored catalog color choices');
+    expect(result.structuredContent).toMatchObject({
+      catalog_colors: {
+        labels: ['Graphite'], source: 'product.color_images',
+        images_by_color: { Graphite: ['https://cdn.example/graphite.jpg'] },
+      },
+      variants: [],
+    });
+  });
+
+  it('keeps catalog colors distinct from stock when variants expose storage only', async () => {
+    const supabase = { rpc: vi.fn(async () => ({ data: [
+      { attributes: { storage: '128GB' }, price_override: null, stock_quantity: 2, condition: 'new', images: [] },
+    ], error: null })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product: { ...product, color_images: { Silver: ['https://cdn.example/silver.jpg'] } },
+      supabase, formatPrice: String, getSafeCatalogImageUrl: (url) => url ?? undefined,
+    });
+
+    expect(result.content[0].text).toContain('**Catalog Colors:** Silver');
+    expect(result.content[0].text).toContain('**Storage Options:** 128GB');
+    expect(result.content[0].text).not.toContain('Available Colors:');
+    expect(result.structuredContent).toMatchObject({
+      catalog_colors: { labels: ['Silver'] },
+      variants: [{ attributes: { storage: '128GB' }, availability: 'in_stock' }],
+    });
+  });
+
+  it('keeps malformed and empty color mappings unknown', async () => {
+    for (const color_images of [null, [], 'bad', {}]) {
+      const result = await buildMcpProductDetail({
+        product: { ...product, has_variants: false, color_images },
+        supabase: { rpc: vi.fn() } as unknown as SupabaseClient,
+        formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+      });
+      expect(result.structuredContent).toMatchObject({
+        catalog_colors: { labels: [], source: null, images_by_color: {} },
+      });
+      expect(result.content[0].text).not.toContain('**Catalog Colors:**');
+    }
+  });
+
   it('does not claim option availability when the public variant lookup fails', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = { rpc: vi.fn(async () => ({ data: null, error: { message: 'unavailable' } })) } as unknown as SupabaseClient;

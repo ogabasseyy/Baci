@@ -4,6 +4,7 @@ import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
+import { getMcpProductCatalogColors } from './product-catalog-colors';
 
 interface ProductDetailSource {
   id: string;
@@ -21,6 +22,8 @@ interface ProductDetailSource {
   category: string | null;
   has_variants: boolean | null;
   has_condition_offers: boolean | null;
+  color?: string | null;
+  color_images?: unknown;
   schema_markup: { aggregateRating?: { ratingValue?: number; reviewCount?: number } } | null;
 }
 
@@ -87,6 +90,11 @@ export async function buildMcpProductDetail({
   // Get rating from schema_markup if available
   const rating = product.schema_markup?.aggregateRating?.ratingValue;
   const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
+  const catalogColors = getMcpProductCatalogColors({
+    color: product.color,
+    colorImages: product.color_images,
+    getSafeCatalogImageUrl,
+  });
 
   const stockSummary = getMcpProductStockSummary(
     product,
@@ -151,6 +159,9 @@ export async function buildMcpProductDetail({
   // Brand & Category
   if (product.brand) text += `**Brand:** ${product.brand}\n`;
   if (product.category) text += `**Category:** ${product.category}\n`;
+  if (catalogColors.colors.length > 0) {
+    text += `**Catalog Colors:** ${catalogColors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed)\n`;
+  }
 
   // Rating
   if (rating) {
@@ -205,6 +216,12 @@ export async function buildMcpProductDetail({
     content: [{ type: 'text', text }],
     structuredContent: {
       products: [formatted],
+      catalog_colors: {
+        labels: catalogColors.colors,
+        source: catalogColors.source,
+        images_by_color: catalogColors.imagesByColor,
+        meaning: 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.',
+      },
       variants: variants.map((v) => ({
         attributes: v.attributes,
         price: v.price_override,

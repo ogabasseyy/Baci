@@ -62,6 +62,19 @@ export function assertJobDeadline(deadlineMs, phase) {
   }
 }
 
+// Pre-commit guards: the deadline AND the disk floor are rechecked
+// immediately before publication. Encoding can run up to the 120s job
+// budget, and another process may consume disk meanwhile — the pre-claim
+// floor check alone cannot prove 2 GiB are still free at commit time.
+export async function assertPreCommitGuards({
+  deadlineMs,
+  minFreeBytes,
+  outputRoot,
+}) {
+  assertJobDeadline(deadlineMs, 'pre-commit');
+  await assertMinFreeBytes(outputRoot, minFreeBytes);
+}
+
 async function findPnpmPin() {
   let dir = here;
   for (let depth = 0; depth < 6; depth += 1) {
@@ -222,7 +235,7 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
           : tier.path;
       files.push({ from, name });
     }
-    assertJobDeadline(deadlineMs, 'pre-commit');
+    await assertPreCommitGuards({ deadlineMs, minFreeBytes, outputRoot });
     const committed = await commitGeneration({
       files,
       generationId,
@@ -294,6 +307,14 @@ export async function runPilotGeneration({
   const jobs = await readInventoryJobs(inventoryPath).catch((error) => {
     throw new PilotGenerateError('inventory-invalid', error.message);
   });
+  // An empty inventory must never report green: zero jobs would summarize
+  // as failed:0/ok:0 and exit 0 with no generation artifacts.
+  if (jobs.length === 0) {
+    throw new PilotGenerateError(
+      'inventory-empty',
+      'inventory contains no jobs; refusing to report an empty generation as success'
+    );
+  }
   await mkdir(join(outputRoot, 'generations'), { recursive: true });
   await mkdir(join(outputRoot, 'reports'), { recursive: true });
   const results = [];

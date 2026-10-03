@@ -241,15 +241,21 @@ function replaceHeroSection(html, replacement) {
   );
 }
 
+function contentTypeFor(base) {
+  const extension = (base.split('.').pop() ?? '').toLowerCase();
+  return (
+    { avif: 'image/avif', png: 'image/png', webp: 'image/webp' }[extension] ??
+    'application/octet-stream'
+  );
+}
+
 async function serveStaged(res, publicDir, urlPath) {
   // Static serving ignores the query: original-renderer ?w&q URLs hash
   // against the query-stripped staged file.
   const base = urlPath.split('?')[0];
   try {
     const bytes = await readFile(join(publicDir, base));
-    res
-      .writeHead(200, { 'content-type': 'application/octet-stream' })
-      .end(bytes);
+    res.writeHead(200, { 'content-type': contentTypeFor(base) }).end(bytes);
   } catch {
     res.writeHead(404).end('missing');
   }
@@ -280,6 +286,33 @@ describe('preflight entry orchestration', () => {
     const offlineOnly = await runPreflight(offlineOptions(fixture));
     expect(offlineOnly.ok).toBe(true);
     expect(offlineOnly.served).toBeNull();
+  });
+
+  it('writes the accepted mounts only when the offline gate passes', async () => {
+    const fixture = await setupOffline();
+    const mountsPath = join(fixture.publicDir, 'mounts.json');
+    const report = await runPreflight(
+      offlineOptions(fixture, { writeMounts: mountsPath })
+    );
+    expect(report.ok).toBe(true);
+    expect(JSON.parse(await readFile(mountsPath, 'utf8'))).toEqual(
+      report.accepted
+    );
+    expect(report.accepted).toHaveLength(1);
+  });
+
+  it('refuses to write mounts when the offline gate fails', async () => {
+    const fixture = await setupOffline();
+    const mountsPath = join(fixture.publicDir, 'mounts.json');
+    const report = await runPreflight(
+      offlineOptions(fixture, {
+        inventory: join(fixture.publicDir, 'missing.json'),
+        writeMounts: mountsPath,
+      })
+    );
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(/mounts not written/);
+    await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
   });
 
   it('fails closed when a merchant has no store slug', async () => {

@@ -113,12 +113,21 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
       }
       seenTiers.get(tier.requestedWidth).push(tier);
     }
+    // The visual comparison must be size-matched: each derivative renders
+    // at its encoded width capped to twice the slot CSS width (the DPR
+    // matrix ceiling), so the original renders at exactly that width —
+    // never at a raw requested width the derivatives cannot reach
+    // (capped rungs and narrow sources encode below their request).
     const rows = [...seenTiers.entries()]
-      .map(
-        ([requestedWidth, tiers]) => `<tr><td>${requestedWidth}px tier</td>
-<td><figure><img src="${originalUri}" style="width:${requestedWidth}px" alt="original scaled to ${requestedWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${record.width}x${record.height}</figcaption></figure></td>
-${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).join('\n')}</tr>`
-      )
+      .map(([requestedWidth, tiers]) => {
+        const compareWidth = Math.min(
+          geometry.cssWidth * 2,
+          ...tiers.map((tier) => tier.width)
+        );
+        return `<tr><td>${requestedWidth}px tier</td>
+<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${record.width}x${record.height}</figcaption></figure></td>
+${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).join('\n')}</tr>`;
+      })
       .join('\n');
     sections.push(`<section><h2>${escapeHtml(record.assetId)} · ${escapeHtml(record.role)} · slot ${escapeHtml(record.slot)}</h2>
 <p>merchant <code>${escapeHtml(record.merchantId)}</code> · source <code>${escapeHtml(record.sha256.slice(0, 16))}…</code> · generation <code>${escapeHtml(generationId.slice(0, 16))}…</code> · recipe <code>${escapeHtml(manifest.recipeId)}</code> · slot CSS width ${geometry.cssWidth}px</p>

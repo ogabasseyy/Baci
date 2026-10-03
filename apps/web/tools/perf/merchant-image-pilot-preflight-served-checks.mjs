@@ -18,6 +18,20 @@ import {
 } from './merchant-image-pilot-preflight-html.mjs';
 import { sha256Hex } from './merchant-image-pilot-preflight-shared.mjs';
 
+// Staged lab bytes are images: the served gate pins the response MIME to
+// the staged file's image type. Typed <picture> sources and preloads can
+// fail to decode (or to be reused) under stricter MIME handling even when
+// the bytes hash identically, so octet-stream/wrong-type responses fail.
+const CONTENT_TYPE_FOR_EXTENSION = {
+  avif: 'image/avif',
+  gif: 'image/gif',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  svg: 'image/svg+xml',
+  webp: 'image/webp',
+};
+
 export async function assertServedDescriptors(
   html,
   { arm, origin, publicDir }
@@ -207,6 +221,24 @@ export async function assertServedResponseBytes(
     if (!response.ok) {
       failures.push(
         `served:${arm}:response-bytes: GET "${urlPath}" -> ${response.status}`
+      );
+      continue;
+    }
+    const extension = (stagedPath.split('.').pop() ?? '').toLowerCase();
+    const expectedType = CONTENT_TYPE_FOR_EXTENSION[extension];
+    if (!expectedType) {
+      failures.push(
+        `served:${arm}:response-bytes: no known image content type for staged file "${stagedPath}"`
+      );
+      continue;
+    }
+    const servedType = (response.headers.get('content-type') ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (servedType !== expectedType) {
+      failures.push(
+        `served:${arm}:response-bytes: GET "${urlPath}" served content-type "${servedType || 'missing'}", expected "${expectedType}" for staged "${stagedPath}"`
       );
       continue;
     }

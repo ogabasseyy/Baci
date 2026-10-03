@@ -390,9 +390,12 @@ node pilot/acquire.mjs --url <https-url> --merchant <uuid> --asset <id> \
 node pilot/generate.mjs --inventory .pilot-input/inventory.json \
   --input-root .pilot-input --output-root .pilot-output
 
-# Quality sheet (verified files only; inspection aid, not acceptance)
-node pilot/quality-sheet.mjs --output-root .pilot-output \
-  --acceptance .pilot-output/acceptance.json --out /tmp/pilot-sheet.html
+# Quality sheet (verified files only; inspection aid, not acceptance).
+# --slots is operator JSON mapping slot ids to {cssWidth}; all five flags
+# are required.
+node pilot/quality-sheet.mjs --input-root .pilot-input \
+  --inventory .pilot-input/inventory.json --output-root .pilot-output \
+  --slots slots.json --out /tmp/pilot-sheet.html
 
 # Lab serving (from apps/web; stage BEFORE starting Next — files added to
 # public/ after start are not served, verified 2026-10-03 on next start)

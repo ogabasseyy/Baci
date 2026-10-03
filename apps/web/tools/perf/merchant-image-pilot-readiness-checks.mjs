@@ -17,29 +17,156 @@ export function pilotImageUrlsOk(urls) {
   return urls.every((url) => !url.includes('/originals/'));
 }
 
-// Pure verdict on the collected selected-image state: the element must have
+// Shared staged-image rules, labelled per surface: the element must have
 // decoded (complete + nonzero natural width) from a staged URL of the
 // expected arm. A network failure or an HTML error page leaves the element
 // in place, so geometry alone cannot prove the image loaded.
-export function selectedImageProblems(image, arm) {
+function stagedImageProblems(image, arm, label) {
   if (!image) {
-    return ['selected image absent'];
+    return [`${label} absent`];
   }
   if (!image.complete || (image.naturalWidth ?? 0) < 1) {
-    return ['selected image did not decode'];
+    return [`${label} did not decode`];
   }
   if (!image.currentSrc) {
-    return ['selected image has no source'];
+    return [`${label} has no source`];
   }
   if (arm === 'pilot') {
     if (
       image.currentSrc.includes('/originals/') ||
       !image.currentSrc.includes('/__pilot/')
     ) {
-      return ['pilot selected a non-staged image URL'];
+      return [`pilot ${label} is a non-staged image URL`];
     }
   } else if (!image.currentSrc.includes('/originals/')) {
-    return ['control selected no staged original'];
+    return [`control ${label} is no staged original`];
   }
   return [];
+}
+
+// Pure verdict on the collected selected-image state.
+export function selectedImageProblems(image, arm) {
+  return stagedImageProblems(image, arm, 'selected image').map((problem) =>
+    problem
+      .replace(
+        'pilot selected image is a non-staged image URL',
+        'pilot selected a non-staged image URL'
+      )
+      .replace(
+        'control selected image is no staged original',
+        'control selected no staged original'
+      )
+  );
+}
+
+// Per-slot mount verdict: every expected bound slot must render its bound
+// section (a reporting status is not a mount), occupy a visible box inside
+// the viewport, and decode its arm-correct staged image. `slot` is the
+// collected [data-pilot-lab-slot] section for the mount's binding, or
+// nullish when that binding rendered nothing.
+export function slotMountProblems(slot, mount, { arm, viewportWidth }) {
+  const label = `slot "${mount.slotId}" image`;
+  if (!slot) {
+    return [`slot "${mount.slotId}" mount is absent`];
+  }
+  if (slot.status) {
+    return [`slot "${mount.slotId}" renders only "${slot.status}"`];
+  }
+  const rect = slot.rect ?? {};
+  if ((rect.width ?? 0) < 1 || (rect.height ?? 0) < 1) {
+    return [`slot "${mount.slotId}" has no visible box`];
+  }
+  if ((rect.x ?? 0) + (rect.width ?? 0) > (viewportWidth ?? 0) + 1) {
+    return [`slot "${mount.slotId}" overflows the viewport`];
+  }
+  return stagedImageProblems(slot.img, arm, label);
+}
+
+// Pure verdict on one collected surface: console/request hygiene, style
+// delivery, heading invisibility, the primary selected slot, arm URL
+// purity, and — for every expected bound slot — mount coverage. Moving
+// this out of the Playwright driver keeps the gate unit-testable and the
+// driver under the repo line ceiling.
+export function surfaceProblems(
+  collected,
+  { arm, expectedFit, expectedMounts, surface }
+) {
+  const problems = [];
+  if (collected.consoleErrors.length > 0) {
+    problems.push(`console errors: ${collected.consoleErrors.join(' | ')}`);
+  }
+  if (collected.failedRequests.length > 0) {
+    problems.push(`failed requests: ${collected.failedRequests.join(' | ')}`);
+  }
+  const g = collected.geometry;
+  if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {
+    problems.push('no stylesheet delivered');
+  }
+  if (!g.heading || g.heading.width > 1 || g.heading.height > 1) {
+    problems.push('sr-only heading occupies visible space');
+  }
+  if (!g.selected) {
+    problems.push('selected slot absent');
+  } else if (g.selected.x + g.selected.width > g.viewportWidth + 1) {
+    problems.push('selected slot overflows the viewport');
+  }
+  if (surface === 'grid' && g.gridDisplay !== 'grid') {
+    problems.push(`grid display is ${g.gridDisplay ?? 'missing'}`);
+  }
+  if (g.imgObjectFit !== expectedFit) {
+    problems.push(
+      `selected image object-fit is ${g.imgObjectFit ?? 'missing'}, expected ${expectedFit}`
+    );
+  }
+  problems.push(...selectedImageProblems(g.selectedImg, arm));
+  if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
+    problems.push('pilot requested a selected original');
+  }
+  if (
+    arm === 'control' &&
+    !collected.imageUrls.some((url) => url.includes('/originals/'))
+  ) {
+    problems.push('control requested no staged original');
+  }
+  for (const mount of expectedMounts) {
+    const slot = (g.slots ?? []).find(
+      (entry) => entry.binding === mount.binding
+    );
+    problems.push(
+      ...slotMountProblems(slot, mount, { arm, viewportWidth: g.viewportWidth })
+    );
+  }
+  return problems;
+}
+
+// Cross-arm verdict: the primary selected slot must lay out identically,
+// and so must every expected bound slot — a logo that shifts between arms
+// is a layout mismatch even when the product card matches.
+export function crossArmProblems(left, right, expectedMounts) {
+  if (!left || !right || !left.selected || !right.selected) {
+    return ['missing geometry for cross-arm comparison'];
+  }
+  const problems = [];
+  if (
+    !boxesMatch(left.selected, right.selected) ||
+    (left.heading && right.heading && !boxesMatch(left.heading, right.heading))
+  ) {
+    problems.push('selected-slot boxes differ between arms');
+  }
+  for (const mount of expectedMounts) {
+    const l = (left.slots ?? []).find(
+      (entry) => entry.binding === mount.binding
+    );
+    const r = (right.slots ?? []).find(
+      (entry) => entry.binding === mount.binding
+    );
+    if (!l?.rect || !r?.rect) {
+      problems.push(
+        `slot "${mount.slotId}" missing geometry for cross-arm comparison`
+      );
+    } else if (!boxesMatch(l.rect, r.rect)) {
+      problems.push(`slot "${mount.slotId}" boxes differ between arms`);
+    }
+  }
+  return problems;
 }

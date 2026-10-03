@@ -48,6 +48,7 @@ export function parsePreflightArgs(argv) {
     recipe: options.recipe ?? RECIPE_ID,
     storeMap: options['store-map'] ?? null,
     timeoutMs,
+    writeMounts: options['write-mounts'] ?? null,
   };
 }
 

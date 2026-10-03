@@ -14,7 +14,12 @@
 //   node merchant-image-pilot-preflight.mjs --inventory <path> \
 //     --acceptances <path> --input-root <dir> --output-root <dir> \
 //     --public-dir <dir> [--recipe <recipe-id>] [--origin <url> \
-//     --store-map <merchantId=slug,...>]
+//     --store-map <merchantId=slug,...>] [--write-mounts <path>]
+//
+// --write-mounts persists the offline accepted list for downstream gates
+// (the browser readiness gate consumes it as --mounts): written only when
+// the offline gate passes, so a failing offline run never hands a partial
+// expectation downstream.
 //
 // The recipe and role ladders are pinned to the generator constants (the
 // same values the lab route enforces): --recipe only declares the operator's
@@ -38,6 +43,7 @@
 //   preflight-mounts.mjs        mount coverage by role kind
 //   preflight-served-checks.mjs descriptors, purity, response bytes
 //   preflight-served.mjs        served gate orchestration
+import { writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
   parsePreflightArgs,
@@ -64,6 +70,34 @@ export { fetchServedAgreement } from './merchant-image-pilot-preflight-served.mj
 
 export async function runPreflight(options) {
   const offline = await runOfflinePreflight(options);
+  if (options.writeMounts) {
+    if (!offline.ok) {
+      return {
+        ...offline,
+        failures: [
+          ...offline.failures,
+          'mounts not written: offline gate failed',
+        ],
+        served: null,
+      };
+    }
+    try {
+      await writeFile(
+        options.writeMounts,
+        `${JSON.stringify(offline.accepted, null, 2)}\n`
+      );
+    } catch (error) {
+      return {
+        ...offline,
+        failures: [
+          ...offline.failures,
+          `mounts not written: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+        ok: false,
+        served: null,
+      };
+    }
+  }
   if (!options.origin) {
     return { ...offline, served: null };
   }

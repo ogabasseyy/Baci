@@ -11,16 +11,23 @@
 // Usage:
 //   node merchant-image-pilot-readiness.mjs --origin=http://localhost:3122 \
 //     --store-map='merchant-uuid=slug,...' --hero-stores='ogabassey' \
-//     --chrome='/path/to/Chrome' [--profiles=mobile-dpr2,desktop-dpr1]
+//     --mounts=<preflight-accepted.json> --chrome='/path/to/Chrome' \
+//     [--profiles=mobile-dpr2,desktop-dpr1]
 // Exits 0 with a JSON report on stdout when ready; exit 1 otherwise.
+//
+// --mounts is the offline preflight accepted list (preflight
+// --write-mounts): every expected bound slot per store is validated in the
+// browser — visibility, decode, arm-correct staged URL, cross-arm layout —
+// not just the primary surface.
+import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import {
-  boxesMatch,
-  pilotImageUrlsOk,
-  selectedImageProblems,
+  crossArmProblems,
+  surfaceProblems,
 } from './merchant-image-pilot-readiness-checks.mjs';
 import {
   parseArgs,
+  parseMountsJson,
   parseProfiles,
   parseStoreMap,
   READINESS_CLI_OPTIONS,
@@ -89,6 +96,27 @@ async function collectSurface(page, url, surface) {
     const selectedImg =
       surface === 'hero' ? selected : (selected?.querySelector('img') ?? null);
     const grid = surface === 'hero' ? null : (selected?.parentElement ?? null);
+    // Every bound slot on the page — reporting rows included, so a slot
+    // that renders only a status marker fails as "not a mount" instead of
+    // escaping the gate silently.
+    const slots = [...document.querySelectorAll('[data-pilot-lab-slot]')].map(
+      (section) => {
+        const img = section.querySelector('img');
+        return {
+          binding: section.getAttribute('data-pilot-lab-binding'),
+          img: img
+            ? {
+                complete: img.complete,
+                currentSrc: img.currentSrc,
+                naturalWidth: img.naturalWidth,
+              }
+            : null,
+          rect: rectOf(section),
+          slotId: section.getAttribute('data-pilot-lab-slot'),
+          status: section.getAttribute('data-pilot-lab-status'),
+        };
+      }
+    );
     const sheets = performance
       .getEntriesByType('resource')
       .filter(
@@ -108,6 +136,7 @@ async function collectSurface(page, url, surface) {
             naturalWidth: selectedImg.naturalWidth,
           }
         : null,
+      slots,
       stylesheetBytes: sheets.reduce(
         (sum, entry) => sum + (entry.encodedBodySize ?? 0),
         0
@@ -134,13 +163,20 @@ async function run() {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false };
   }
-  if (!args.origin || !args['store-map'] || !args.chrome) {
-    fail('usage', 'need --origin, --store-map and --chrome');
+  if (!args.origin || !args['store-map'] || !args.chrome || !args.mounts) {
+    fail('usage', 'need --origin, --store-map, --mounts and --chrome');
     return { checks, failures, ok: false };
   }
   let stores;
   try {
     stores = parseStoreMap(args['store-map']);
+  } catch (error) {
+    fail('usage', error instanceof Error ? error.message : String(error));
+    return { checks, failures, ok: false };
+  }
+  let expectedMounts;
+  try {
+    expectedMounts = parseMountsJson(await readFile(args.mounts, 'utf8'));
   } catch (error) {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false };
@@ -175,6 +211,16 @@ async function run() {
     for (const store of stores) {
       const surface = heroStores.has(store.slug) ? 'hero' : 'grid';
       const expectedFit = surface === 'hero' ? 'contain' : 'cover';
+      const mounts = expectedMounts.filter(
+        (mount) => mount.merchantId === store.merchantId
+      );
+      if (mounts.length === 0) {
+        fail(
+          `store:${store.slug}:mounts`,
+          `no expected mounts for merchant "${store.merchantId}"`
+        );
+        continue;
+      }
       for (const profile of profiles) {
         const surfaces = {};
         const device = READINESS_PROFILES[profile];
@@ -194,47 +240,12 @@ async function run() {
               surface
             );
             surfaces[arm] = collected;
-            const problems = [];
-            if (collected.consoleErrors.length > 0) {
-              problems.push(
-                `console errors: ${collected.consoleErrors.join(' | ')}`
-              );
-            }
-            if (collected.failedRequests.length > 0) {
-              problems.push(
-                `failed requests: ${collected.failedRequests.join(' | ')}`
-              );
-            }
-            const g = collected.geometry;
-            if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {
-              problems.push('no stylesheet delivered');
-            }
-            if (!g.heading || g.heading.width > 1 || g.heading.height > 1) {
-              problems.push('sr-only heading occupies visible space');
-            }
-            if (!g.selected) {
-              problems.push('selected slot absent');
-            } else if (g.selected.x + g.selected.width > g.viewportWidth + 1) {
-              problems.push('selected slot overflows the viewport');
-            }
-            if (surface === 'grid' && g.gridDisplay !== 'grid') {
-              problems.push(`grid display is ${g.gridDisplay ?? 'missing'}`);
-            }
-            if (g.imgObjectFit !== expectedFit) {
-              problems.push(
-                `selected image object-fit is ${g.imgObjectFit ?? 'missing'}, expected ${expectedFit}`
-              );
-            }
-            problems.push(...selectedImageProblems(g.selectedImg, arm));
-            if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
-              problems.push('pilot requested a selected original');
-            }
-            if (
-              arm === 'control' &&
-              !collected.imageUrls.some((url) => url.includes('/originals/'))
-            ) {
-              problems.push('control requested no staged original');
-            }
+            const problems = surfaceProblems(collected, {
+              arm,
+              expectedFit,
+              expectedMounts: mounts,
+              surface,
+            });
             if (problems.length > 0) {
               fail(name, problems.join('; '));
             } else {
@@ -245,17 +256,13 @@ async function run() {
           }
         }
         const pair = `store:${store.slug}:cross-arm-layout:${profile}`;
-        const left = surfaces.control?.geometry;
-        const right = surfaces.pilot?.geometry;
-        if (!left || !right || !left.selected || !right.selected) {
-          fail(pair, 'missing geometry for cross-arm comparison');
-        } else if (
-          !boxesMatch(left.selected, right.selected) ||
-          (left.heading &&
-            right.heading &&
-            !boxesMatch(left.heading, right.heading))
-        ) {
-          fail(pair, 'selected-slot boxes differ between arms');
+        const pairProblems = crossArmProblems(
+          surfaces.control?.geometry,
+          surfaces.pilot?.geometry,
+          mounts
+        );
+        if (pairProblems.length > 0) {
+          fail(pair, pairProblems.join('; '));
         } else {
           pass(pair);
         }

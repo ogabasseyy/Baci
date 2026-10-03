@@ -238,15 +238,21 @@ function replaceHeroSection(html, replacement) {
   );
 }
 
+function contentTypeFor(base) {
+  const extension = (base.split('.').pop() ?? '').toLowerCase();
+  return (
+    { avif: 'image/avif', png: 'image/png', webp: 'image/webp' }[extension] ??
+    'application/octet-stream'
+  );
+}
+
 async function serveStaged(res, publicDir, urlPath) {
   // Static serving ignores the query: original-renderer ?w&q URLs hash
   // against the query-stripped staged file.
   const base = urlPath.split('?')[0];
   try {
     const bytes = await readFile(join(publicDir, base));
-    res
-      .writeHead(200, { 'content-type': 'application/octet-stream' })
-      .end(bytes);
+    res.writeHead(200, { 'content-type': contentTypeFor(base) }).end(bytes);
   } catch {
     res.writeHead(404).end('missing');
   }
@@ -267,7 +273,9 @@ describe('preflight served gate', () => {
       try {
         const bytes = await readFile(join(fixture.publicDir, urlPath));
         res
-          .writeHead(200, { 'content-type': 'application/octet-stream' })
+          .writeHead(200, {
+            'content-type': contentTypeFor(urlPath.split('?')[0]),
+          })
           .end(bytes);
       } catch {
         res.writeHead(404).end('missing');
@@ -380,7 +388,13 @@ describe('preflight served gate', () => {
       }
       if (urlPath.startsWith('/__pilot/')) {
         readFile(join(fixture.publicDir, urlPath))
-          .then((bytes) => res.writeHead(200).end(bytes))
+          .then((bytes) =>
+            res
+              .writeHead(200, {
+                'content-type': contentTypeFor(urlPath.split('?')[0]),
+              })
+              .end(bytes)
+          )
           .catch(() => res.writeHead(404).end('missing'));
         return;
       }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_READINESS_PROFILES,
   parseArgs,
+  parseMountsJson,
   parseProfiles,
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
@@ -80,5 +81,39 @@ describe('merchant-image-pilot-readiness CLI parsing', () => {
     expect(() =>
       parseArgs(['--origin=https://x'], SETTINGS_CLI_OPTIONS)
     ).toThrow(/unknown option --origin/);
+  });
+});
+
+describe('merchant-image-pilot-readiness expected mounts', () => {
+  it('accepts --mounts and parses the offline accepted shape', () => {
+    expect(
+      parseArgs(['--mounts=/tmp/mounts.json'], READINESS_CLI_OPTIONS)
+    ).toEqual({ mounts: '/tmp/mounts.json' });
+    expect(
+      parseMountsJson(
+        JSON.stringify([
+          {
+            assetId: 'logo-a',
+            binding: 'm/logo-a',
+            generationId: 'g',
+            merchantId: 'm',
+            role: 'logo',
+            slotId: 'header-logo',
+            stagedOriginal: '/__pilot/originals/x.png',
+          },
+        ])
+      )
+    ).toEqual([
+      { binding: 'm/logo-a', merchantId: 'm', slotId: 'header-logo' },
+    ]);
+  });
+
+  it('rejects malformed mounts files instead of gating nothing', () => {
+    expect(() => parseMountsJson('not json')).toThrow(/not valid JSON/);
+    expect(() => parseMountsJson('{}')).toThrow(/non-empty JSON array/);
+    expect(() => parseMountsJson('[]')).toThrow(/non-empty JSON array/);
+    expect(() => parseMountsJson('[{}]')).toThrow(
+      /binding, merchantId, and slotId/
+    );
   });
 });

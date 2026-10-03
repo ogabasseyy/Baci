@@ -31,6 +31,7 @@ describe('preflight args', () => {
       inventory: 'inv.json',
       origin: 'http://localhost:3000',
       recipe: RECIPE_ID,
+      writeMounts: null,
     });
     const explicit = parsePreflightArgs([
       '--inventory',
@@ -45,8 +46,11 @@ describe('preflight args', () => {
       'pub',
       '--recipe',
       'pilot/other',
+      '--write-mounts',
+      'mounts.json',
     ]);
     expect(explicit.recipe).toBe('pilot/other');
+    expect(explicit.writeMounts).toBe('mounts.json');
   });
 
   it('defaults the fetch timeout and rejects non-positive values', () => {

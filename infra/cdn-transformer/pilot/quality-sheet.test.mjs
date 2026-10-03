@@ -13,18 +13,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
-async function setupPilot() {
+async function setupPilot(source = { fixture: 'tiny-48x48.png', height: 48, width: 48 }) {
   const base = join(tmpdir(), `pilot-sheet-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   await mkdir(inputRoot, { recursive: true });
-  await copyFile(fixture('tiny-48x48.png'), join(inputRoot, 'tiny-a.png'));
+  await copyFile(fixture(source.fixture), join(inputRoot, 'tiny-a.png'));
   const bytes = await readFile(join(inputRoot, 'tiny-a.png'));
   const record = {
     assetId: 'tiny-a',
     capturedAt: '2026-10-01T20:00:00.000Z',
     contentType: 'image/png',
-    height: 48,
+    height: source.height,
     merchantId: MERCHANT,
     role: 'logo',
     schemaVersion: 1,
@@ -32,8 +32,8 @@ async function setupPilot() {
     size: bytes.length,
     slot: 'header-logo',
     sourcePath: 'tiny-a.png',
-    url: 'https://example.com/tiny-a.png',
-    width: 48,
+    url: `https://example.com/tiny-a.png`,
+    width: source.width,
   };
   const inventoryPath = join(inputRoot, 'inventory.json');
   await writeFile(inventoryPath, JSON.stringify([record]));
@@ -56,6 +56,40 @@ test('builds a side-by-side sheet from verified files', async () => {
   assert.match(html, /data:image\/webp;base64,/);
   assert.match(html, /inspection aid/i);
   assert.match(html, /not.*acceptance/i);
+});
+
+test('renders the original at the same capped width as the derivatives', async () => {
+  // Full-size tiers (2000px source): the logo ladder tops at 384w, and a
+  // 40px slot caps the comparison at 80px — the 384-tier row must not
+  // compare a 384px original against 80px derivatives.
+  const full = await setupPilot({ fixture: 'wide-2000x500.png', height: 500, width: 2000 });
+  const capped = await buildQualitySheet({
+    inputRoot: full.inputRoot,
+    inventoryPath: full.inventoryPath,
+    outputRoot: full.outputRoot,
+    slots: { 'header-logo': { cssWidth: 40 } },
+  });
+  assert.doesNotMatch(capped, /<img src="data:image\/png[^>]*style="width:384px"/);
+  assert.match(capped, /<img src="data:image\/png[^>]*style="width:80px"/);
+  // A wide slot leaves full rungs uncapped: the 96-tier row compares at
+  // the rung's own width on both sides.
+  const wide = await buildQualitySheet({
+    inputRoot: full.inputRoot,
+    inventoryPath: full.inventoryPath,
+    outputRoot: full.outputRoot,
+    slots: { 'header-logo': { cssWidth: 500 } },
+  });
+  assert.match(wide, /<img src="data:image\/png[^>]*style="width:96px"/);
+  // Narrow sources encode below their request (48px source, 96w rung), so
+  // the original follows the encoded width — not the request — there too.
+  const narrow = await setupPilot();
+  const narrowSheet = await buildQualitySheet({
+    inputRoot: narrow.inputRoot,
+    inventoryPath: narrow.inventoryPath,
+    outputRoot: narrow.outputRoot,
+    slots: { 'header-logo': { cssWidth: 500 } },
+  });
+  assert.match(narrowSheet, /<img src="data:image\/png[^>]*style="width:48px"/);
 });
 
 test('ignores unrelated corrupt generations when locating assets', async () => {

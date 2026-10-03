@@ -10,6 +10,7 @@
 export const READINESS_CLI_OPTIONS = [
   'chrome',
   'hero-stores',
+  'mounts',
   'origin',
   'profiles',
   'store-map',
@@ -103,6 +104,39 @@ export const READINESS_PROFILES = {
 };
 
 export const DEFAULT_READINESS_PROFILES = Object.keys(READINESS_PROFILES);
+
+// Expected-mounts file: JSON array in the offline preflight `accepted`
+// shape (write it with preflight --write-mounts). The browser gate must
+// validate every bound slot per store — not just the primary surface — so
+// it consumes the offline verdict rather than re-deriving acceptance.
+export function parseMountsJson(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(text));
+  } catch {
+    throw new Error('bad --mounts: not valid JSON');
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('bad --mounts: expected a non-empty JSON array');
+  }
+  for (const mount of parsed) {
+    if (
+      !mount ||
+      typeof mount.binding !== 'string' ||
+      typeof mount.merchantId !== 'string' ||
+      typeof mount.slotId !== 'string'
+    ) {
+      throw new Error(
+        'bad --mounts: every mount needs binding, merchantId, and slotId strings'
+      );
+    }
+  }
+  return parsed.map((mount) => ({
+    binding: mount.binding,
+    merchantId: mount.merchantId,
+    slotId: mount.slotId,
+  }));
+}
 
 export function parseProfiles(value) {
   if (value === undefined || String(value).trim() === '') {

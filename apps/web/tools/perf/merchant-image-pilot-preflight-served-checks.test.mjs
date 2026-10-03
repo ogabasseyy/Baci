@@ -1,4 +1,5 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -87,5 +88,70 @@ describe('assertServedResponseBytes', () => {
     expect(failures).toEqual([
       'served:pilot:response-bytes: no lab image URLs found to verify',
     ]);
+  });
+
+  it('rejects hash-identical bytes served under the wrong MIME type', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-mime-'));
+    const staged = `/__pilot/${GEN}/${'f'.repeat(64)}.avif`;
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    const bytes = Buffer.from('fake-avif-bytes');
+    await writeFile(join(publicDir, staged), bytes);
+    const server = createServer((_req, res) => {
+      res
+        .writeHead(200, { 'content-type': 'application/octet-stream' })
+        .end(bytes);
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const html = section({
+        binding: `${MERCHANT}/logo-a`,
+        inner: `<picture><source srcSet="${origin}${staged} 96w" type="image/avif"/><img src="${origin}${staged}" alt="logo"/></picture>`,
+        slot: 'header-logo',
+      });
+      const failures = await assertServedResponseBytes(html, {
+        arm: 'pilot',
+        origin,
+        publicDir,
+        timeoutMs: 2000,
+      });
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatch(
+        /served content-type "application\/octet-stream", expected "image\/avif"/
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it('accepts hash-identical bytes served under the staged MIME type', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-mime-'));
+    const staged = `/__pilot/${GEN}/${'f'.repeat(64)}.avif`;
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    const bytes = Buffer.from('fake-avif-bytes');
+    await writeFile(join(publicDir, staged), bytes);
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'image/avif' }).end(bytes);
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const html = section({
+        binding: `${MERCHANT}/logo-a`,
+        inner: `<picture><source srcSet="${origin}${staged} 96w" type="image/avif"/><img src="${origin}${staged}" alt="logo"/></picture>`,
+        slot: 'header-logo',
+      });
+      const failures = await assertServedResponseBytes(html, {
+        arm: 'pilot',
+        origin,
+        publicDir,
+        timeoutMs: 2000,
+      });
+      expect(failures).toEqual([]);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });

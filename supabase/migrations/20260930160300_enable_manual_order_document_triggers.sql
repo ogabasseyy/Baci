@@ -7,7 +7,9 @@
 -- Enabling is not retroactive, so the same transaction backfills eligible
 -- orders created while the triggers were disabled. Re-runnable: orders that
 -- already have a manual row are skipped, and the enqueue function
--- re-validates all eligibility.
+-- re-validates all eligibility. The reported count is scanned orders, not
+-- enqueued rows: the void function early-returns for ineligible orders but
+-- SELECT still emits one row per scanned order.
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_items;
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_updates;
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_deletes;
@@ -22,4 +24,4 @@ SELECT count(*) FROM (
       WHERE n.order_id = o.id
         AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     )
-) AS backfilled;
+) AS scanned;

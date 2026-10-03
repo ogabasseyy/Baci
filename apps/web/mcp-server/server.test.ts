@@ -54,6 +54,82 @@ describe('MCP widget HTML escaping', () => {
   });
 });
 
+const purchaseUrlSnippetStartMatch =
+  /^\s*const\s+cartUrl\s*=/m.exec(serverSource);
+const purchaseUrlSnippetStart = purchaseUrlSnippetStartMatch?.index ?? -1;
+const purchaseUrlSnippetEndMatch =
+  purchaseUrlSnippetStart === -1
+    ? null
+    : /^\s*const\s+renderProducts\s*=/m.exec(
+        serverSource.slice(purchaseUrlSnippetStart)
+      );
+const purchaseUrlSnippetEnd =
+  purchaseUrlSnippetStart === -1 || purchaseUrlSnippetEndMatch === null
+    ? -1
+    : purchaseUrlSnippetStart + purchaseUrlSnippetEndMatch.index;
+
+if (purchaseUrlSnippetStart === -1 || purchaseUrlSnippetEnd === -1) {
+  throw new Error(
+    'Embedded purchaseUrl snippet not found in MCP server widget'
+  );
+}
+
+const purchaseUrlSnippet = serverSource.slice(
+  purchaseUrlSnippetStart,
+  purchaseUrlSnippetEnd
+);
+
+function runEmbeddedPurchaseUrl(p: unknown) {
+  const context: { URL: typeof URL; p: unknown; result?: string } = {
+    URL,
+    p,
+  };
+  runInNewContext(
+    `${purchaseUrlSnippet}\nglobalThis.result = purchaseUrl(globalThis.p);`,
+    context
+  );
+  return context.result;
+}
+
+describe('MCP widget purchase routing', () => {
+  it('opens the option-aware product URL for option-bearing results', () => {
+    expect(
+      runEmbeddedPurchaseUrl({
+        id: 'product-1',
+        url: 'https://ogabassey.com/products/phone?condition=used&variantId=variant-9',
+      })
+    ).toBe(
+      'https://ogabassey.com/products/phone?condition=used&variantId=variant-9'
+    );
+    expect(
+      runEmbeddedPurchaseUrl({
+        id: 'product-2',
+        url: 'https://ogabassey.com/products/phone?condition=new',
+      })
+    ).toBe('https://ogabassey.com/products/phone?condition=new');
+  });
+
+  it('keeps the cart handoff for results without option params', () => {
+    expect(
+      runEmbeddedPurchaseUrl({
+        id: 'product-3',
+        url: 'https://ogabassey.com/products/phone',
+      })
+    ).toBe('https://ogabassey.com/cart?item_id=product-3');
+    expect(runEmbeddedPurchaseUrl({ id: 'product-4' })).toBe(
+      'https://ogabassey.com/cart?item_id=product-4'
+    );
+    expect(runEmbeddedPurchaseUrl({ id: 'product-5', url: 'not a url' })).toBe(
+      'https://ogabassey.com/cart?item_id=product-5'
+    );
+  });
+
+  it('routes both purchase buttons through the option-aware URL', () => {
+    const matches = serverSource.match(/openLink\(purchaseUrl\(p\)\)/g) ?? [];
+    expect(matches).toHaveLength(2);
+  });
+});
+
 describe('MCP streamable HTTP probe compatibility', () => {
   let serverProcess: ChildProcess | undefined;
   let serverBaseUrl: string;

@@ -1227,7 +1227,7 @@ function createOgabasseyServer() {
       title: 'Search Products',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
-        `Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE} When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.`,
+        `Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Category is an optional additional catalog filter, not a product-type inference. Set category only when the buyer explicitly requests a catalog category; otherwise omit it and use intent.product_type. Never guess Accessories for cameras or other products. A security camera product type does not imply the Accessories category. Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE} When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.`,
       inputSchema: {
         // Optional at the transport layer so a missing intent reaches the friendly
         // invalidIntentMessage branch instead of a generic schema validation error.
@@ -1245,7 +1245,7 @@ function createOgabasseyServer() {
           .string()
           .max(50)
           .optional()
-          .describe('Catalog category. Use Smartphones for phone requests, Tablets for tablet requests, and Laptops for laptop requests.'),
+          .describe('Optional exact catalog category filter. Use only a category explicitly requested by the shopper; otherwise omit this field and use intent.product_type. Do not guess Accessories for cameras.'),
         brand: z.string().max(50).optional().describe('Brand name'),
         min_price: z.number().min(0).optional(),
         max_price: z.number().min(0).optional(),

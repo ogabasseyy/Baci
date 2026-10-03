@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { describe, it } from 'node:test';
 import { dirname, join } from 'node:path';
@@ -9,7 +10,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const PROBE = join(scriptDir, 'probe-gigl-hook-reload.sh');
 
 function startStub({ mgmt, canary }) {
-  const hits = { mgmt: 0, canary: 0 };
+  const hits = { mgmt: 0, canary: 0, notify: 0 };
   let lastCanaryHeaders = null;
   const server = createServer((req, res) => {
     let body = '';
@@ -22,7 +23,11 @@ function startStub({ mgmt, canary }) {
         req.url === '/v1/projects/test/database/query'
       ) {
         hits.mgmt += 1;
-        const [status, payload] = mgmt(JSON.parse(body), hits.mgmt);
+        const parsed = JSON.parse(body);
+        if (String(parsed.query || '').startsWith('NOTIFY')) {
+          hits.notify += 1;
+        }
+        const [status, payload] = mgmt(parsed, hits.mgmt);
         res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(payload));
       } else if (
@@ -108,7 +113,7 @@ describe('probe-gigl-hook-reload', () => {
     });
   }
 
-  it('acknowledges once PostgREST serves the canary', async () => {
+  it('acknowledges after a unanimous window of canary acks', async () => {
     const stub = await startStub({
       mgmt: () => [200, [{ applied: '0' }]],
       canary: (_body, hit) => {
@@ -120,12 +125,59 @@ describe('probe-gigl-hook-reload', () => {
     });
     try {
       const result = await runProbe(
-        baseEnv(stub.port, { GIGL_HOOK_PROBE_DEADLINE_S: '30' })
+        baseEnv(stub.port, {
+          GIGL_HOOK_PROBE_DEADLINE_S: '30',
+          GIGL_HOOK_PROBE_UNANIMITY_S: '2',
+        })
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /acknowledged after 4 attempt/);
-      assert.equal(stub.hits.canary, 4);
+      assert.match(result.stdout, /acknowledged fleet-wide: 2s unanimous/);
+      assert.ok(stub.hits.canary >= 4);
       assert.equal(stub.canaryHeaders().apikey, 'test-anon-key');
+      assert.equal(stub.hits.notify, 1);
+    } finally {
+      stub.server.close();
+    }
+  });
+
+  it('resets the unanimity clock on a stale answer', async () => {
+    const stub = await startStub({
+      mgmt: () => [200, [{ applied: '0' }]],
+      canary: (_body, hit) => {
+        if (hit === 4) return [404, NOT_LOADED];
+        return [403, ACK];
+      },
+    });
+    try {
+      const result = await runProbe(
+        baseEnv(stub.port, {
+          GIGL_HOOK_PROBE_DEADLINE_S: '30',
+          GIGL_HOOK_PROBE_UNANIMITY_S: '5',
+        })
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /unanimity clock reset/);
+      assert.match(result.stdout, /acknowledged fleet-wide/);
+    } finally {
+      stub.server.close();
+    }
+  });
+
+  it('fails closed when acks never reach unanimity', async () => {
+    const stub = await startStub({
+      mgmt: () => [200, [{ applied: '0' }]],
+      canary: (_body, hit) => (hit % 2 === 0 ? [404, NOT_LOADED] : [403, ACK]),
+    });
+    try {
+      const result = await runProbe(
+        baseEnv(stub.port, {
+          GIGL_HOOK_PROBE_DEADLINE_S: '3',
+          GIGL_HOOK_PROBE_UNANIMITY_S: '30',
+        })
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /never reached 30s unanimous/);
+      assert.match(result.stderr, /isolate grant is NOT applied/);
     } finally {
       stub.server.close();
     }
@@ -197,5 +249,13 @@ describe('probe-gigl-hook-reload', () => {
     } finally {
       stub.server.close();
     }
+  });
+
+  it('pins the fleet-convergence defaults against silent weakening', () => {
+    const script = readFileSync(PROBE, 'utf8');
+    assert.match(script, /GIGL_HOOK_PROBE_DEADLINE_S:-900}/);
+    assert.match(script, /GIGL_HOOK_PROBE_INTERVAL_S:-2}/);
+    assert.match(script, /GIGL_HOOK_PROBE_UNANIMITY_S:-300}/);
+    assert.match(script, /GIGL_HOOK_PROBE_RENOTIFY_S:-60}/);
   });
 });

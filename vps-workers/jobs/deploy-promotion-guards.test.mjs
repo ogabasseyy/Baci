@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseHelper = join(workerRoot, 'lib', 'prepare-worker-release.sh');
+const quiesceHelper = join(workerRoot, 'lib', 'quiesce-worker-release.sh');
 
 function readPromotionSource() {
   const source = readFileSync(releaseHelper, 'utf8');
@@ -50,31 +51,42 @@ describe('deploy promotion guards', () => {
 
   it('quiesces every scheduled worker lock across the sync and flip', () => {
     const { promotionSource } = readPromotionSource();
+    // The quiesce logic lives in the shared helper (also used by
+    // emergency rollback); promote sources it from staging (the
+    // revision being installed, so newly added services are covered)
+    // and calls it before the sync.
+    const quiesceSource = readFileSync(quiesceHelper, 'utf8');
+    assert.match(
+      promotionSource,
+      /\.\s"\$staging_dir\/lib\/quiesce-worker-release\.sh"/
+    );
+    const callIndex = promotionSource.indexOf(
+      'quiesce_worker_release "$remote_dir"'
+    );
+    assert.notEqual(callIndex, -1);
+    assert.ok(callIndex < promotionSource.indexOf('rsync -a --delete'));
 
     // Lock names come from the installed crontab (promote runs before
     // the crontab install, so these are exactly the entries that can
     // tick) plus any lock file already present: no enumerated list to
     // drift when workers are added.
-    assert.match(
-      promotionSource,
-      /crontab -l.*locks\/\[A-Za-z0-9_.-\]\+\\.lock/
-    );
-    assert.match(promotionSource, /locks\/\*\.lock/);
+    assert.match(quiesceSource, /crontab -l.*locks\/\[A-Za-z0-9_.-\]\+\\.lock/);
+    assert.match(quiesceSource, /locks\/\*\.lock/);
     // Acquisition order is crontab first-appearance (order-preserving
     // dedup), matching the ollama-first nesting shared by the cron
     // lines and the AI trigger server, so no deadlock cycle forms.
-    assert.match(promotionSource, /awk '!seen\[\$0\]\+\+'/);
+    assert.match(quiesceSource, /awk '!seen\[\$0\]\+\+'/);
     // Each lock is held exclusive on an open fd (released only when
     // the remote shell exits after the flip), acquired before the sync,
     // with a bounded wait so a wedged tick fails loudly.
-    const quiesceIndex = promotionSource.indexOf(
+    const quiesceIndex = quiesceSource.indexOf(
       'flock -w 600 -x "$gigl_quiesce_fd"'
     );
     assert.notEqual(quiesceIndex, -1);
     // The outer command already holds the GIGL lock: reopening it would
     // self-deadlock (flock is per open-file-description, not recursive).
     assert.match(
-      promotionSource,
+      quiesceSource,
       /\[\s*"\$gigl_quiesce_name"\s*=\s*"gigl-tracking\.lock"\s*\] && continue/
     );
     // Persistent `--loop` systemd services hold their locks for life,
@@ -86,15 +98,14 @@ describe('deploy promotion guards', () => {
       'baci-quiz-finalization',
     ]) {
       assert.ok(
-        promotionSource.includes(service),
+        quiesceSource.includes(service),
         `expected promote to manage ${service}`
       );
     }
-    assert.match(promotionSource, /trap gigl_restart_services EXIT/);
-    assert.match(promotionSource, /is-active -q "\$gigl_service"/);
-    const stopIndex = promotionSource.indexOf('systemctl --user stop');
+    assert.match(quiesceSource, /trap gigl_restart_services EXIT/);
+    assert.match(quiesceSource, /is-active -q "\$gigl_service"/);
+    const stopIndex = quiesceSource.indexOf('systemctl --user stop');
     assert.ok(stopIndex !== -1 && stopIndex < quiesceIndex);
-    assert.ok(quiesceIndex < promotionSource.indexOf('rsync -a --delete'));
     assert.ok(
       promotionSource.indexOf('rsync -a --delete') <
         promotionSource.indexOf('flip-immutable-checkout.sh')
@@ -102,7 +113,8 @@ describe('deploy promotion guards', () => {
   });
 
   it('acquires remediation per-job locks before their shared global lock', () => {
-    const { promotionSource } = readPromotionSource();
+    // Lives in the shared quiesce helper (see above).
+    const quiesceSource = readFileSync(quiesceHelper, 'utf8');
 
     // The remediation cron lines nest flock per-job (outer) -> global
     // (inner), but crontab first-appearance lists the global lock
@@ -110,8 +122,8 @@ describe('deploy promotion guards', () => {
     // The canary waits up to 600s on its inner global take, so
     // promotion must defer the global lock past every per-job lock or
     // it deadlocks against a canary tick for the full timeout.
-    const dedupIndex = promotionSource.indexOf("awk '!seen[$0]++'");
-    const deferIndex = promotionSource.indexOf(
+    const dedupIndex = quiesceSource.indexOf("awk '!seen[$0]++'");
+    const deferIndex = quiesceSource.indexOf(
       '$0 == "error-remediator-global.lock"'
     );
     assert.ok(dedupIndex !== -1 && deferIndex !== -1);
@@ -120,11 +132,11 @@ describe('deploy promotion guards', () => {
       'expected the global-lock deferral to run after first-appearance dedup'
     );
     assert.match(
-      promotionSource,
+      quiesceSource,
       /\$0 == "error-remediator-global\.lock" \{ hold_global = 1; next \}/
     );
     assert.match(
-      promotionSource,
+      quiesceSource,
       /END \{ if \(hold_global\) print "error-remediator-global\.lock" \}/
     );
   });

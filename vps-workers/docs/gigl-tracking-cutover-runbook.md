@@ -65,12 +65,27 @@ so it carries the old `vps-workers/` tree; if it was already retired,
 re-create it first (`git -C <base>/app-live worktree add --detach
 <base>/app-<sha> <sha>`), or use the `deploy.sh` path instead. Then,
 under the deploy lock with the GIGL runtime lock nested inside
-(promote's order, so a tick that would straddle the restore skips):
+(promote's order), quiesce EVERY worker via the shared helper before
+touching the shared trees — this restore replaces `bin/`/`jobs/`/`lib/`
+for all workers, not just GIGL, so a non-GIGL tick that lands mid-restore
+would otherwise run mixed-release code:
 
 ```sh
 flock -x /tmp/baci-workers-deploy.lock \
 flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   set -euo pipefail
+  # Full quiesce (same helper as promote): stops the persistent
+  # services (auto-restarted on shell exit, even on abort) and holds
+  # every scheduled worker lock, so other ticks skip instead of
+  # straddling. Sourced from LIVE (the revision actually running). If
+  # the helper itself is absent, lib/ is destroyed and the other
+  # workers are already down — proceed with the two locks.
+  if [ -f "$REMOTE_DIR/lib/quiesce-worker-release.sh" ]; then
+    . "$REMOTE_DIR/lib/quiesce-worker-release.sh"
+    quiesce_worker_release "$REMOTE_DIR" || exit 1
+  else
+    echo "WARNING: quiesce helper missing; continuing with deploy+GIGL locks only." >&2
+  fi
   rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$REMOTE_DIR/bin/"
   rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$REMOTE_DIR/jobs/"
   rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$REMOTE_DIR/lib/"
@@ -154,11 +169,12 @@ fail) — this is announced and intentional:
 3. Re-run failed workflow jobs: readiness passes, migrations apply,
    the smoke writes the latch, the deploy lands. Migration apply is
    split around a hook-reload probe: if the `Probe GIGL hook reload
-   acknowledgement` step fails, PostgREST never served the hook's
-   reload canary and the isolate grant is NOT applied — check
-   PostgREST health/config reload, then re-run the deploy (the probe
-   skips fast once the isolate migration is recorded; never grant the
-   membership by hand to clear it).
+   acknowledgement` step fails, PostgREST never served a unanimous
+   window of the hook's reload canary (either nothing acked, or a stale
+   replica kept answering) and the isolate grant is NOT applied — check
+   PostgREST fleet health/config reload, then re-run the deploy (the
+   probe skips fast once the isolate migration is recorded; never grant
+   the membership by hand to clear it).
 
 Later tracking changes follow the same deploy.sh-then-rerun rhythm.
 Web-only commits skip the exact-SHA/smoke verification once the latch

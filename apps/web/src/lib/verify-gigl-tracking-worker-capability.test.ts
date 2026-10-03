@@ -145,9 +145,11 @@ describe('verifyGiglTrackingWorkerScopeProbe', () => {
     });
 
     // The probe only passes when the SQL message matches its expectation;
-    // extract the migration's literal and require the probe to accept it.
+    // extract the migration's scope-denial literal (the reload canary
+    // shares the 42501 errcode, so match by message, not position) and
+    // require the probe to accept it.
     const raised = restoreMigration.match(
-      /RAISE EXCEPTION '([^']+)'\s+USING ERRCODE = '42501'/
+      /RAISE EXCEPTION '([^']*capability scope[^']*)'\s+USING ERRCODE = '42501'/
     );
     expect(raised?.[1]).toBe(
       'GIGL worker request is outside its capability scope'

@@ -202,7 +202,10 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-    timeout-minutes: 10
+    # 20 minutes covers the hook-reload probe's unanimity window on the
+    # first deploy (later deploys skip the probe in seconds once the
+    # isolate migration is recorded).
+    timeout-minutes: 20
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

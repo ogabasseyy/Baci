@@ -18,6 +18,8 @@ GET deliberately rejects unknown parameters; clients must use the documented cur
 
 Writes no longer echo arbitrary JSON snapshots or recursively validate them. Drafts are deep-cloned so research edits cannot mutate the source context. Opaque revisions are bounded, strictly validated hexadecimal strings.
 
-Research concurrency uses the shared private immutable revision function in additive migration 20261002233000. All three guarded migrations must apply before deploying this API; the final reader/writer use only the lossless revision contract. The latest migration is retry-safe (conditional old-overload removal and CREATE OR REPLACE). Earlier immutable migrations retain their required predecessor assertions and must run in order, transactionally.
+Research concurrency uses the shared private immutable revision function in additive migration 20261002233000. All three guarded migrations plus 20261003021500 must apply before deploying this API; the final reader/writer use only the lossless revision contract. The latest migration is retry-safe (conditional old-overload removal and CREATE OR REPLACE). Earlier immutable migrations retain their required predecessor assertions and must run in order, transactionally.
 
 PUT retains the 96 KiB whole-body cap. With no JSON snapshot echoes, the request consists of a 64-character revision, UUIDs and the existing 16 KiB validated facts document. Stored source fields remain research context; unsupported numeric facts are never copied automatically. GET deliberately returns currentMetadata for research and expectedRevision for writes.
+
+The research reader additionally requires the authenticated merchant owner or products/edit staff permission at the SQL boundary. Published catalog SELECT policies deliberately permit other shoppers; those public row policies alone cannot authorize merchant research RPCs. The additive reader authorization preserves storefront publication policies and normal invoker RLS.

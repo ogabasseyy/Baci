@@ -1,18 +1,26 @@
 -- Assertion-specific SQLSTATEs survive replay log sanitization without exposing row data.
--- P1001..P1012 identify fixed assertions; P1031..P1036 identify stale source fields.
+-- P1001..P1014 identify fixed assertions; P1031..P1036 identify stale source fields.
 BEGIN;
-INSERT INTO auth.users(id) VALUES('ab120000-0000-4000-8000-000000000001');
+INSERT INTO auth.users(id) VALUES
+ ('ab120000-0000-4000-8000-000000000001'),
+ ('ab120000-0000-4000-8000-000000000006'),
+ ('ab120000-0000-4000-8000-000000000007');
 -- Privileged fixture setup has an audit actor; JWT identity starts only after both tenants exist.
 SELECT set_config('app.audit_actor_user_id','ab120000-0000-4000-8000-000000000001',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug,is_published) VALUES
  ('ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000001','guard@example.test','Guard','guard-test',true),
  ('ab120000-0000-4000-8000-000000000003',NULL,'other-guard@example.test','Other','other-guard',true);
+INSERT INTO public.staff_members(merchant_id,user_id,email,status,permissions) VALUES
+ ('ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000006','edit@example.test','active','{"products":{"edit":true}}'),
+ ('ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000007','read@example.test','active','{"products":{"edit":false}}');
 INSERT INTO public.products(id,merchant_id,name,slug,price,status,metadata,specifications,discovery_metadata) VALUES
  ('ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','Guarded','guarded-test',1,'active',
   '{"serial":9007199254740993,"ratio":0.123456789012345678901}', '{"serial":9007199254740993}',NULL),
  ('ab120000-0000-4000-8000-000000000005','ab120000-0000-4000-8000-000000000003','Other','other-test',1,'active','{}','{}',NULL);
-SELECT set_config('app.test_other_revision',revision,true)
- FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000003',NULL);
+-- Database-principal fixture setup captures the victim revision before JWT identity.
+SELECT set_config('app.test_other_revision',discovery_review_private.research_revision(
+ name,category,metadata,specifications,mpn,color,discovery_metadata),true)
+ FROM public.products WHERE id='ab120000-0000-4000-8000-000000000005';
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000001',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
@@ -62,6 +70,16 @@ BEGIN
  SELECT count(*) INTO n FROM public.update_product_discovery_metadata_guarded(
   'ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','{}',revision);
  IF n<>1 THEN RAISE EXCEPTION USING ERRCODE = 'P1010', MESSAGE = 'refreshed revision could not save'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000006',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000002',NULL))<>1
+ THEN RAISE EXCEPTION USING ERRCODE='P1013',MESSAGE='editable staff denied research'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000007',true);
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000002',NULL))
+ THEN RAISE EXCEPTION USING ERRCODE='P1014',MESSAGE='staff without edit read research'; END IF;
 END $$;
 RESET ROLE;
 DO $$ BEGIN

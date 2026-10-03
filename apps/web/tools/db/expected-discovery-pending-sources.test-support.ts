@@ -319,4 +319,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261002233000_lossless_discovery_research_revision.sql',
     sha256: 'f40235da51a6df7218841429fa0057c2ac2d5b24170b1b78f3ce77d4797ee09d',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003021500_authorize_discovery_research_reader.sql',
+    sha256: '779e9985b8e9d53c72c08e146919b67a8437ab871167e1d9e2aa3b1815dcc437',
+  },
 ] as const;

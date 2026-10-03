@@ -4,7 +4,10 @@ import {
   buildDispatchPaymentSnapshot,
 } from '@/lib/build-manual-order-document-dispatch-snapshot';
 import { checkManualDocumentDispatchLease } from '@/lib/check-manual-document-dispatch-lease';
-import { buildReceiptClaimUrl } from '@/lib/import-notifications/receipt-claim-links';
+import {
+  buildReceiptClaimUrl,
+  createReceiptClaimToken,
+} from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
@@ -170,6 +173,7 @@ export async function sendManualOrderDocument({
     row,
     order,
     recipientEmail: recipient.email,
+    claim: createReceiptClaimToken(),
   });
   if (claimStep.status === 'skipped') return claimStep;
   const { prepared, claim, customDomain } = claimStep;

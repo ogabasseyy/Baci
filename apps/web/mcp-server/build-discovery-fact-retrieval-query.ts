@@ -149,8 +149,26 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     if (brandBranches.length === 1) terms.push(brandBranches[0]);
     else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
     if (alternative.model) {
-      const key = identityKey('model', alternative.model);
-      if (key) terms.push(key);
+      const models = new Set([alternative.model]);
+      for (const brand of alternative.brands ?? []) {
+        const bare = structuredDiscoveryIdentity.modelWithoutBrand(
+          alternative.model,
+          brand
+        );
+        if (bare) {
+          models.add(bare);
+          models.add(`${brand} ${bare}`);
+        }
+      }
+      const keys = [
+        ...new Set(
+          [...models]
+            .map((model) => identityKey('model', model))
+            .filter((key): key is string => key !== undefined)
+        ),
+      ];
+      if (keys.length === 1) terms.push(keys[0]);
+      else if (keys.length > 1) terms.push(`(${keys.join(' | ')})`);
     }
     if (alternative.compatible_with) {
       const key = identityKey('compat', alternative.compatible_with);

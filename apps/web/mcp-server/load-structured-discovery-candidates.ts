@@ -192,7 +192,28 @@ export async function loadStructuredDiscoveryCandidates({
     return { products: result.products, truncated: result.truncated, semanticUnavailable: false };
   }
 
-  const lexicalPromise = query ? loadLexicalIds(query, merchantId, supabase) : Promise.resolve({ ids: [], truncated: false });
+  // Model-only callers may omit both retrieval keywords and manufacturer.
+  // Recall their literal model text instead of inventing manufacturer keys.
+  // The existing lexical/window caps and verified identity matcher still apply.
+  const lexicalQueries = query
+    ? [query]
+    : [
+        ...new Set(
+          (intent?.alternatives ?? [])
+            .filter(
+              (alternative) => !alternative.brands?.length && alternative.model
+            )
+            .map((alternative) => alternative.model as string)
+        ),
+      ];
+  const lexicalPromise = Promise.all(
+    lexicalQueries.map((keywords) =>
+      loadLexicalIds(keywords, merchantId, supabase)
+    )
+  ).then((results) => ({
+    ids: [...new Set(results.flatMap((result) => result.ids))],
+    truncated: results.some((result) => result.truncated),
+  }));
   const semanticPromise = query && semanticSearch
     ? loadSemanticIds(query, semanticSearch).then(
       (value) => ({ value, unavailable: value.probeFailed }),

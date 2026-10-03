@@ -136,9 +136,12 @@ describe('production cache-invalidation drain rollout gate', () => {
     // The tracking=false bypass additionally requires the cutover latch
     // (proven smoke function) at a revision that still covers the tree,
     // so a web push cannot carry unsmoked tracking changes to production.
+    // It also requires manifest_drift == 'false': the poller executes
+    // the manifests-group dependency tree, so a manifest-only push must
+    // not bypass while the installed tree predates HEAD's manifests.
     assert.match(
       deployment,
-      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true' && needs\.vps-drain-readiness\.outputs\.tracking_stale == 'false'\)/
+      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true' && needs\.vps-drain-readiness\.outputs\.tracking_stale == 'false' && needs\.vps-drain-readiness\.outputs\.manifest_drift == 'false'\)/
     );
     assert.doesNotMatch(
       deployment,

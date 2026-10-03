@@ -122,6 +122,8 @@ describe('GIGL direct worker cost contract', () => {
       .split(/^\w[\w-]*:\s*$/m)[0];
     assert.match(group, /^\s+- 'package\.json'\s*$/m);
     assert.match(group, /^\s+- 'pnpm-lock\.yaml'\s*$/m);
+    assert.match(group, /^\s+- 'pnpm-workspace\.yaml'\s*$/m);
+    assert.match(group, /^\s+- '\.npmrc'\s*$/m);
     assert.match(group, /^\s+- 'apps\/web\/package\.json'\s*$/m);
 
     const deploy = readFileSync(

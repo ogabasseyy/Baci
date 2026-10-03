@@ -74,6 +74,8 @@ export function fixture() {
     'select 1;\n'
   );
   writeFileSync(join(origin, 'docs-notes.md'), 'v1\n');
+  writeFileSync(join(origin, 'pnpm-lock.yaml'), 'lockfileVersion: v1\n');
+  writeFileSync(join(origin, 'package.json'), '{"name":"baci"}\n');
   git(origin, 'add', '-A');
   commit('base');
   const base = git(origin, 'rev-parse', 'HEAD');
@@ -89,12 +91,20 @@ export function fixture() {
   commit('tracking change');
   const tracking = git(origin, 'rev-parse', 'HEAD');
 
+  // Manifest-only change: the drift signal keys off installed-vs-HEAD
+  // over the manifests group, so the history needs a commit that moves
+  // manifests without touching tracking paths.
+  writeFileSync(join(origin, 'pnpm-lock.yaml'), 'lockfileVersion: v2\n');
+  git(origin, 'add', '-A');
+  commit('manifest change');
+  const manifest = git(origin, 'rev-parse', 'HEAD');
+
   writeFileSync(join(origin, 'docs-notes.md'), 'v2\n');
   git(origin, 'add', '-A');
   commit('non-tracking change');
   const tip = git(origin, 'rev-parse', 'HEAD');
 
-  return { base, origin, remote, root, tip, tracking, trap };
+  return { base, manifest, origin, remote, root, tip, tracking, trap };
 }
 
 export function checkoutAt(origin, root, name, sha) {
@@ -104,12 +114,23 @@ export function checkoutAt(origin, root, name, sha) {
   return checkout;
 }
 
-export function tokenFingerprintOf(token, url = '', anon = '') {
+export function tokenFingerprintOf(
+  token,
+  url = '',
+  anon = '',
+  base = '',
+  email = '',
+  password = ''
+) {
   // Mirrors resolve-gigl-latch-identity.sh: the credential fingerprint
-  // binds URL + anon + token, and a missing token hashes to the
-  // well-known empty value (vacuous) regardless of endpoint.
+  // binds URL + anon + provider triple + token (newline-joined, no
+  // trailing newline), and a missing token hashes to the well-known
+  // empty value (vacuous) regardless of endpoint or provider.
   return createHash('sha256')
-    .update(token === '' ? '' : `${url}\n${anon}\n${token}`, 'utf8')
+    .update(
+      token === '' ? '' : `${url}\n${anon}\n${base}\n${email}\n${password}\n${token}`,
+      'utf8'
+    )
     .digest('hex');
 }
 
@@ -137,6 +158,11 @@ export function check({
   scope = 'enabled',
   envFile = null,
   token = undefined,
+  url = '',
+  anon = '',
+  providerBase = '',
+  providerEmail = '',
+  providerPassword = '',
   installed = undefined,
   omitOutput = false,
   githubToken = '',
@@ -154,11 +180,12 @@ export function check({
   } else if (latch !== null) {
     // Default: the latch records the token the fixture .env currently
     // holds (the steady state). Pass an explicit token to simulate a
-    // rotation/removal since the smoke.
+    // rotation/removal since the smoke; pass url/anon/provider* to
+    // record the non-token credential set the smoke observed.
     const recorded = token === undefined ? tokenInEnvFile(envFile) : token;
     writeFileSync(
       join(remote, '.gigl-capability-smoke-ok'),
-      `${scope}:${latch}:${tokenFingerprintOf(recorded)}`
+      `${scope}:${latch}:${tokenFingerprintOf(recorded, url, anon, providerBase, providerEmail, providerPassword)}`
     );
   }
   // Default: installed == latch (the bound steady state). Pass an explicit

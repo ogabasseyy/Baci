@@ -17,7 +17,10 @@ only poller. Three gates protect the cutover, in run order:
    for the environment the smoke observed and is re-validated on every
    read: the installed SHA, the enablement scope, and the proven token
    fingerprint must all still match, or the bypass closes until
-   re-smoked. Fingerprint binding is scope-agnostic: a disabled latch
+   re-smoked. The bypass additionally requires `manifest_drift ==
+   'false'`: the installed dependency manifests must match HEAD, or a
+   manifest-only push blocks until `deploy.sh` converges (see
+   "Manifest-only drift triage" below). Fingerprint binding is scope-agnostic: a disabled latch
    written with no usable token latches WITHOUT the live hook probe, so
    a token that appears afterwards forces a re-smoke. The latch also
    binds the token actually smoked: the persist step re-resolves the
@@ -143,19 +146,21 @@ full smoke live and re-latches on success).
 
 ## Manifest-only drift triage (worker-stale-first)
 
-The monorepo manifests are deliberately outside the tracking filter
-(see `.github/filters/deploy.yml`): a manifest-only push deploys to
-Vercel with a CI warning while the VPS poller keeps its installed
-dependency tree until the next tracking-code push or manual
-`deploy.sh`. Gating manifests would freeze main on every lockfile PR
-while the poller runs its older code + tree self-consistently, so the
-drift is an accepted residual — with one on-call rule: **a
-manifest-only push followed by a VPS incident triages as
-worker-stale-first**. Confirm with the installed SHA
-(`cat $REMOTE_DIR/app-checkout.sha`) versus HEAD, then converge with
-`deploy.sh` from current main. For a time-sensitive dependency fix
-(transitive security patch the poller executes), do not wait for the
-next tracking push — run `deploy.sh` immediately after the merge.
+The monorepo manifests are deliberately outside the tracking smoke
+(see `.github/filters/deploy.yml`), but drift is ENFORCED: the latch
+check diffs the installed tree against HEAD over the manifests group,
+and the bypass term requires `manifest_drift == 'false'`. A
+manifest-only push therefore blocks the bypass (with a CI warning
+explaining the skip) until `deploy.sh` from current main converges
+the worker — plus a tracking push or dispatch to re-smoke, since the
+converge promote moves the installed SHA and invalidates the latch
+binding until the new tree is re-proven. For a time-sensitive
+dependency fix (transitive security patch the poller executes), run
+that sequence immediately after the merge instead of waiting. And one
+on-call rule survives the enforcement: **a manifest-only push
+followed by a VPS incident still triages as worker-stale-first** —
+confirm with the installed SHA (`cat
+$REMOTE_DIR/app-checkout.sha`) versus HEAD, then converge.
 
 ## Poller dead-man signals (no pager)
 

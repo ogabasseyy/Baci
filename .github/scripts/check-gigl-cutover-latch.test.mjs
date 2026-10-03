@@ -49,6 +49,36 @@ describe('GIGL cutover latch check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'true');
     assert.equal(values.tracking_stale, 'false');
+    assert.equal(values.manifest_drift, 'false');
+  });
+
+  it('reports no manifest drift when installed manifests match HEAD', () => {
+    const { origin, root, tip, manifest } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Installed at the manifest commit: only docs changed since, so
+    // both the tracking diff and the manifests diff are empty.
+    const { result, values } = check({ checkout, latch: manifest });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+    assert.equal(values.manifest_drift, 'false');
+  });
+
+  it('closes the bypass on manifest drift despite a valid latch', () => {
+    const { origin, root, tip, tracking } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // Installed before the lockfile change: the latch still validates
+    // (no tracking diff to HEAD) but the poller executes the older
+    // tree, so drift alone must close the bypass until deploy.sh.
+    const { result, values } = check({ checkout, latch: tracking });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+    assert.equal(values.manifest_drift, 'true');
   });
 
   it('reports stale when tracking paths changed since the latch', () => {
@@ -89,6 +119,7 @@ describe('GIGL cutover latch check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'true');
     assert.equal(values.tracking_stale, 'true');
+    assert.equal(values.manifest_drift, 'true');
   });
 
   it('never passes the job token on the git command line', () => {
@@ -164,6 +195,7 @@ describe('GIGL cutover latch check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'false');
     assert.equal(values.tracking_stale, 'true');
+    assert.equal(values.manifest_drift, 'true');
   });
 
   it('reports unlatched when the installed SHA marker is corrupt', () => {
@@ -179,6 +211,7 @@ describe('GIGL cutover latch check', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(values.latched, 'false');
     assert.equal(values.tracking_stale, 'true');
+    assert.equal(values.manifest_drift, 'true');
   });
 
   it('emits the signal on stdout when GITHUB_OUTPUT is unset', () => {

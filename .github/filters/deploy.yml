@@ -45,6 +45,8 @@ web:
 manifests:
   - 'package.json'
   - 'pnpm-lock.yaml'
+  - 'pnpm-workspace.yaml'
+  - '.npmrc'
   - 'apps/web/package.json'
 tracking:
   - 'vercel.json'
@@ -56,17 +58,18 @@ tracking:
   # capability chain, and the manifests feed the VPS preflight. The
   # provision/flip helpers are the checkout half of
   # prepare-worker-release.sh: they decide which revision cron executes.
-  # The monorepo manifests (apps/web/package.json, root package.json,
-  # pnpm-lock.yaml) are excluded ON PURPOSE: the VPS poller runs its own
-  # older code + dependency tree self-consistently, so a manifest-only
-  # push changes nothing about what the poller executes; any tracking
-  # code change triggers through the paths above. Gating manifests would
-  # freeze main on every lockfile PR for no cutover benefit.
-  # Accepted drift window: a manifest-only change (e.g. a transitive
-  # security fix the poller executes) reaches the VPS only at the next
-  # tracking-code push or manual deploy.sh run. Manifest-only pushes
-  # intentionally bypass the worker gates, so follow a time-sensitive
-  # dependency fix with a manual deploy.sh instead of assuming rollout.
+  # The monorepo manifests (the manifests group below) are excluded
+  # from the tracking SMOKE on purpose: the VPS poller runs its own
+  # older code + dependency tree self-consistently, so demanding a
+  # capability smoke per lockfile PR would freeze main for no cutover
+  # benefit; any tracking code change triggers through the paths above.
+  # But manifest drift is still ENFORCED, not warned: the latch check
+  # diffs the installed tree against HEAD over the manifests group and
+  # the bypass term requires manifest_drift == 'false', so a
+  # manifest-only push blocks the bypass until deploy.sh from current
+  # main converges the worker (plus a tracking push or dispatch to
+  # re-smoke the new tree). A transitive security fix the poller
+  # executes therefore cannot sit undeployed silently.
   # On-call triage for this window: the cutover runbook's
   # "Manifest-only drift triage (worker-stale-first)" section.
   # Deliberately untracked: apps/web/src/env.ts and

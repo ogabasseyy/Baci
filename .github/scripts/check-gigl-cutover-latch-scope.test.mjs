@@ -188,4 +188,48 @@ describe('GIGL cutover latch scope and token binding', () => {
     assert.equal(values.latched, 'false');
     assert.equal(values.tracking_stale, 'true');
   });
+
+  it('accepts a latch while provider credentials are unchanged', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.test\nGIGL_EMAIL=bot@test\nGIGL_PASSWORD=pw\nGIGL_TRACKING_WORKER_TOKEN=same-token\n',
+      token: 'same-token',
+      providerBase: 'https://api.gigl.test',
+      providerEmail: 'bot@test',
+      providerPassword: 'pw',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'true');
+    assert.equal(values.tracking_stale, 'false');
+  });
+
+  it('invalidates a latch when the provider password rotates', () => {
+    const { origin, root, tip } = fixture();
+    const checkout = checkoutAt(origin, root, 'checkout', tip);
+
+    // The smoke probed the provider login, so a rotation afterwards
+    // must force a re-smoke even though the worker token is unchanged.
+    const { result, values } = check({
+      checkout,
+      latch: tip,
+      scope: 'enabled',
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.test\nGIGL_EMAIL=bot@test\nGIGL_PASSWORD=new-pw\nGIGL_TRACKING_WORKER_TOKEN=same-token\n',
+      token: 'same-token',
+      providerBase: 'https://api.gigl.test',
+      providerEmail: 'bot@test',
+      providerPassword: 'old-pw',
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(values.latched, 'false');
+    assert.equal(values.tracking_stale, 'true');
+  });
 });

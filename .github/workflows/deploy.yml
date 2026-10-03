@@ -69,6 +69,7 @@ jobs:
     outputs:
       cutover_latched: ${{ steps.gigl-cutover-latch.outputs.latched }}
       tracking_stale: ${{ steps.gigl-cutover-latch.outputs.tracking_stale }}
+      manifest_drift: ${{ steps.gigl-cutover-latch.outputs.manifest_drift }}
     runs-on: baci-deploy
     timeout-minutes: 10
     permissions:
@@ -123,8 +124,12 @@ jobs:
         # tree invalidates it until a fresh smoke re-latches. It also
         # records the enablement scope and credential fingerprint the smoke
         # observed: flips, rotations, and endpoint moves invalidate until
-        # re-smoked. This
-        # step never fails: every error reports latched=false / stale=true.
+        # re-smoked. The third signal, manifest_drift, diffs the installed
+        # tree against HEAD over the manifests group: the poller executes
+        # that dependency tree, so a manifest-only push must not bypass
+        # while the installed tree predates HEAD's manifests. This
+        # step never fails: every error reports latched=false / stale=true
+        # / drift=true.
         # Tracking pushes don't need the signal (they run the smoke).
         # GITHUB_TOKEN is the auto-provided read-scoped job token (fetch
         # only), not a production credential.
@@ -133,15 +138,17 @@ jobs:
           VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
         run: .readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout
       - name: Warn on manifest-only worker dependency drift
-        # Signal, not gate: manifests are deliberately outside the
-        # tracking filter, so a manifest-only push (e.g. a transitive
-        # security fix the VPS poller executes) deploys without
-        # refreshing the worker. Make that drift loud instead of
-        # silent; the operator follows urgent fixes with a manual
-        # deploy.sh. This step never fails.
+        # Signal, not gate (this step never fails): manifests are
+        # deliberately outside the tracking filter, so a manifest-only
+        # push (e.g. a transitive security fix the VPS poller executes)
+        # would deploy without refreshing the worker. The enforcement
+        # lives in the bypass term (manifest_drift closes it until
+        # deploy.sh converges); this warning explains the resulting
+        # skip. The operator converges with a manual deploy.sh from
+        # current main.
         if: needs.changes.outputs.manifests == 'true' && needs.changes.outputs.tracking != 'true'
         run: >-
-          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree until the next tracking-code push or manual deploy.sh run.'
+          echo '::warning::Dependency manifests changed without tracking changes: the VPS GIGL poller keeps its installed dependency tree and the cutover bypass stays closed until deploy.sh converges from current main.'
       - name: Verify production GIGL direct-worker installation
         # The verifier requires the VPS worker's exact checkout SHA to equal
         # the pushed commit, and the worker is deployed manually via
@@ -302,15 +309,25 @@ jobs:
     # the latch — and the latch revision must still cover the tree, so
     # tracking changes since the last successful smoke also block the
     # bypass (recover with deploy.sh plus a tracking push or dispatch,
-    # which re-smokes at HEAD). Steady-state drift still doesn't freeze
-    # web deploys — the latch persists once proven — but the cron removal
-    # can never land before the first proven-function smoke. Manual
+    # which re-smokes at HEAD). The bypass also requires manifest_drift
+    # == 'false': manifests are deliberately outside the tracking smoke,
+    # but the poller executes that dependency tree, so a manifest-only
+    # push must not bypass while the installed tree predates HEAD's
+    # manifests. Recover the same way (deploy.sh from current main plus
+    # a tracking push or dispatch): the converge promote moves the
+    # installed SHA, which invalidates the latch binding until a fresh
+    # smoke re-proves the new tree — so manifest changes end up
+    # smoke-verified too, just outside the tracking gate. Steady-state
+    # drift still
+    # doesn't freeze web deploys — the latch persists once proven — but
+    # the cron removal can never land before the first proven-function
+    # smoke. Manual
     # dispatches are NOT exempt: the changes outputs are unset there, so
     # `tracking == 'false'` is false and the smoke result is required — a
     # dispatch can never land the cron removal unverified. (The trailing
     # dispatch term only keeps the pre-existing "dispatch always deploys"
     # scope behavior.)
-    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true' && needs.vps-drain-readiness.outputs.tracking_stale == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
+    if: always() && github.ref == 'refs/heads/main' && needs.db-migrations.result == 'success' && (needs.gigl-worker-capability.result == 'success' || (needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.cutover_latched == 'true' && needs.vps-drain-readiness.outputs.tracking_stale == 'false' && needs.vps-drain-readiness.outputs.manifest_drift == 'false')) && (needs.cwv-runner-contracts.result == 'success' || needs.cwv-runner-contracts.result == 'skipped') && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || needs.changes.outputs.migrations == 'true')
     # Run production prebuilt deploys on GitHub-hosted runners while the VPS
     # provider is returning sustained CPU steal. This still uses a local
     # `vercel build --prod` followed by `vercel deploy --prebuilt --prod`, so

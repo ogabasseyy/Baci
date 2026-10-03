@@ -28,6 +28,13 @@
 # EXPIRY is enforced at runtime instead: the VPS poller fails loud every
 # 5 minutes on a bad token, so expiry can stall polling but never pass
 # silently.
+#
+# The manifest_drift output diffs the INSTALLED tree against HEAD over
+# the manifests filter group: the poller executes that dependency tree,
+# so a manifest-only push must not bypass on a latch while the
+# installed tree predates HEAD's manifests. Any difference closes the
+# bypass until deploy.sh converges. Like the other outputs it fails
+# closed (true) on every error path.
 set -euo pipefail
 
 remote_dir="${1:?remote dir is required}"
@@ -64,11 +71,12 @@ invalidate_latch() {
   latch_fingerprint=""
 }
 
+installed_sha=""
+if [ -f "$remote_dir/app-checkout.sha" ]; then
+  installed_sha="$(tr -d '\r\n' < "$remote_dir/app-checkout.sha")"
+fi
+
 if [ "$latched" = true ]; then
-  installed_sha=""
-  if [ -f "$remote_dir/app-checkout.sha" ]; then
-    installed_sha="$(tr -d '\r\n' < "$remote_dir/app-checkout.sha")"
-  fi
   if [ "$installed_sha" != "$latch_sha" ]; then
     invalidate_latch
   fi
@@ -90,23 +98,24 @@ if [ "$latched" = true ]; then
 fi
 
 tracking_stale=true
-if [ "$latched" = true ]; then
-  # The job token must never appear in a process argument vector (visible
-  # via `ps` on the shared runner): hand it to git through a 0600 config
-  # file instead of `-c http.extraHeader=...`. Any failure here falls
-  # back to unauthenticated git; the fetch then fails and the gate
-  # fails closed via tracking_stale=true.
-  fetch_env=(git)
-  auth_config=""
-  if [ -n "${GITHUB_TOKEN:-}" ]; then
-    auth_config="$(mktemp 2>/dev/null)" || auth_config=""
-    if [ -n "$auth_config" ] && printf '[http]\n\textraHeader = AUTHORIZATION: bearer %s\n' "$GITHUB_TOKEN" > "$auth_config"; then
-      fetch_env=(git -c "include.path=$auth_config")
-    else
-      [ -n "$auth_config" ] && rm -f "$auth_config"
-      auth_config=""
-    fi
+# The job token must never appear in a process argument vector (visible
+# via `ps` on the shared runner): hand it to git through a 0600 config
+# file instead of `-c http.extraHeader=...`. Any failure here falls
+# back to unauthenticated git; the fetches then fail and both signals
+# fail closed. One auth setup serves the latch fetch and the installed
+# fetch below.
+fetch_env=(git)
+auth_config=""
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  auth_config="$(mktemp 2>/dev/null)" || auth_config=""
+  if [ -n "$auth_config" ] && printf '[http]\n\textraHeader = AUTHORIZATION: bearer %s\n' "$GITHUB_TOKEN" > "$auth_config"; then
+    fetch_env=(git -c "include.path=$auth_config")
+  else
+    [ -n "$auth_config" ] && rm -f "$auth_config"
+    auth_config=""
   fi
+fi
+if [ "$latched" = true ]; then
   if "${fetch_env[@]}" -C "$checkout_dir" fetch --quiet --depth 1 origin "$latch_sha" 2>/dev/null; then
     tracking_paths="$(awk '/^tracking:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
     if [ -n "$tracking_paths" ]; then
@@ -123,8 +132,35 @@ if [ "$latched" = true ]; then
       fi
     fi
   fi
-  if [ -n "$auth_config" ]; then rm -f "$auth_config"; fi
 fi
+manifest_drift=true
+if [[ "$installed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+  # The manifests group is deliberately outside the tracking gate (a
+  # smoke per lockfile PR would freeze main), but the poller EXECUTES
+  # that dependency tree: a manifest-only push must not bypass on a
+  # latch while the installed tree predates HEAD's manifests. Diff the
+  # installed tree cron actually executes against HEAD over the
+  # manifests group; any difference closes the bypass until deploy.sh
+  # converges. Independent of latch validity on purpose: a
+  # missing/invalid latch already closes the bypass, but a VALID latch
+  # over a drifted tree must still block.
+  if "${fetch_env[@]}" -C "$checkout_dir" fetch --quiet --depth 1 origin "$installed_sha" 2>/dev/null; then
+    manifest_paths="$(awk '/^manifests:/ { in_group=1; next } /^[^ #]/ { in_group=0 } in_group && $1 == "-" { gsub(/'\''/, "", $2); print $2 }' "$checkout_dir/.github/filters/deploy.yml" 2>/dev/null || true)"
+    if [ -n "$manifest_paths" ]; then
+      # Same noglob discipline as the tracking diff above: the
+      # manifests group is literal paths today, but a future glob must
+      # not silently drop files from this diff either.
+      set -f
+      # shellcheck disable=SC2086
+      manifest_diff_output="$(git -C "$checkout_dir" diff --name-only "$installed_sha" HEAD -- $manifest_paths 2>/dev/null || echo "drifted")"
+      set +f
+      if [ -z "$manifest_diff_output" ]; then
+        manifest_drift=false
+      fi
+    fi
+  fi
+fi
+if [ -n "$auth_config" ]; then rm -f "$auth_config"; fi
 
 # Outside the workflow (local debugging, VPS shell) GITHUB_OUTPUT is
 # unset: write plain stdout lines. Do NOT reopen /dev/stdout for
@@ -133,7 +169,9 @@ fi
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "latched=$latched" >> "$GITHUB_OUTPUT"
   echo "tracking_stale=$tracking_stale" >> "$GITHUB_OUTPUT"
+  echo "manifest_drift=$manifest_drift" >> "$GITHUB_OUTPUT"
 else
   echo "latched=$latched"
   echo "tracking_stale=$tracking_stale"
+  echo "manifest_drift=$manifest_drift"
 fi

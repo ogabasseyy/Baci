@@ -68,6 +68,10 @@ test('reports the cutover latch as a readiness output signal', async () => {
     readiness.outputs.tracking_stale,
     '${{ steps.gigl-cutover-latch.outputs.tracking_stale }}'
   );
+  assert.equal(
+    readiness.outputs.manifest_drift,
+    '${{ steps.gigl-cutover-latch.outputs.manifest_drift }}'
+  );
   // Signal, not gate: no changeset condition, never fails (fail-closed
   // latched=false / stale=true), so tracking pushes proceed to their own
   // smoke. The script diffs the latched revision against HEAD over the

@@ -211,3 +211,17 @@ orphaned_images_sample/
 
 # Local native gtest bootstrap/build artifacts (never commit)
 tools/**/.work/
+
+# Merchant image variant pilot: local snapshots, generations, and lab staging
+# (real merchant bytes stay out of git; hashes travel in the review packet)
+/infra/cdn-transformer/.pilot-input/
+/infra/cdn-transformer/.pilot-output/
+/apps/web/public/__pilot/*
+# ...except the frozen lab filler bytes (synthetic, hash-pinned in tests).
+# Contents (`*`), not the directory itself: git cannot re-include paths under
+# an excluded directory.
+!/apps/web/public/__pilot/fillers/
+
+# Generated Python bytecode (never commit; produced by local test runs).
+__pycache__/
+*.py[cod]

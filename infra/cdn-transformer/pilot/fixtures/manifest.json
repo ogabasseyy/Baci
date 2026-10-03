@@ -1,0 +1,192 @@
+{
+  "fixtures": [
+    {
+      "bytes": 11986,
+      "metadata": {
+        "channels": 4,
+        "format": "png",
+        "hasAlpha": true,
+        "height": 512,
+        "orientation": null,
+        "pages": null,
+        "space": "rgb16",
+        "width": 512
+      },
+      "name": "alpha-512x512.png",
+      "sha256": "a1d5b571457e3c46b395e77d225b80e843bcc1e457ca75798be57316639122a5"
+    },
+    {
+      "bytes": 225,
+      "metadata": {
+        "channels": 3,
+        "format": "gif",
+        "hasAlpha": false,
+        "height": 64,
+        "orientation": null,
+        "pages": 2,
+        "space": "srgb",
+        "width": 64
+      },
+      "name": "anim-2frame.gif",
+      "sha256": "5dcd8ff1b5f50b22e905997e06e8495175b529e8ffc8f5ddea5823b4922cd193"
+    },
+    {
+      "bytes": 152,
+      "metadata": {
+        "channels": 3,
+        "format": "webp",
+        "hasAlpha": false,
+        "height": 64,
+        "orientation": null,
+        "pages": 2,
+        "space": "srgb",
+        "width": 64
+      },
+      "name": "anim-2frame.webp",
+      "sha256": "1e0ce63c2f5d149ecb30cdb93741447e5096258e9c8da271e05afa9abeba588b"
+    },
+    {
+      "bytes": 11120,
+      "metadata": {
+        "channels": 4,
+        "format": "jpeg",
+        "hasAlpha": false,
+        "height": 400,
+        "orientation": null,
+        "pages": null,
+        "space": "cmyk",
+        "width": 400
+      },
+      "name": "cmyk-400x400.jpg",
+      "sha256": "be427c61e84e1421f6bce1f7539ad245a93816dd8c07920b7735378ef239c20d"
+    },
+    {
+      "bytes": 1024,
+      "metadata": {
+        "channels": 3,
+        "format": "jpeg",
+        "hasAlpha": false,
+        "height": 1254,
+        "orientation": null,
+        "pages": null,
+        "space": "srgb",
+        "width": 1254
+      },
+      "name": "corrupt-truncated.jpg",
+      "sha256": "d91f170e47b167a4aac85b244d1308fd54c3c5b52a62207c4fae523538fb329f"
+    },
+    {
+      "bytes": 3807,
+      "metadata": {
+        "channels": 3,
+        "format": "jpeg",
+        "hasAlpha": false,
+        "height": 800,
+        "orientation": 6,
+        "pages": null,
+        "space": "srgb",
+        "width": 600
+      },
+      "name": "exif-rotated-600x800.jpg",
+      "sha256": "e757c839136afd16dd375c6466c0a5eb791d007a9e58a0f25017740013a1f206"
+    },
+    {
+      "bytes": 264,
+      "metadata": {
+        "unreadable": true
+      },
+      "name": "garbage-not-an-image.bin",
+      "sha256": "46511f10565178abfb5fbcd481aff89b1dea74e41e2291b9369daa73d89d378c"
+    },
+    {
+      "bytes": 1077449,
+      "metadata": {
+        "channels": 3,
+        "format": "jpeg",
+        "hasAlpha": false,
+        "height": 1254,
+        "orientation": null,
+        "pages": null,
+        "space": "srgb",
+        "width": 1254
+      },
+      "name": "photo-1254x1254.jpg",
+      "sha256": "b8ebabfbd19766924701ed62dfcd4ad88d5735d0c4ded58c0e87410426d08680"
+    },
+    {
+      "bytes": 1937,
+      "metadata": {
+        "channels": 4,
+        "format": "heif",
+        "hasAlpha": true,
+        "height": 192,
+        "orientation": null,
+        "pages": 1,
+        "space": "srgb",
+        "width": 256
+      },
+      "name": "still-256x256.avif",
+      "sha256": "0cf419ccbfd79d65690db7b376d66a75fd0df4ae42dc206bcc2d191ddee7c064"
+    },
+    {
+      "bytes": 23837,
+      "metadata": {
+        "channels": 4,
+        "format": "png",
+        "hasAlpha": true,
+        "height": 600,
+        "orientation": null,
+        "pages": null,
+        "space": "rgb16",
+        "width": 800
+      },
+      "name": "text-800x600.png",
+      "sha256": "0118be85f6711fe6141f49fd3875c8c8e07add53444dd720a44627fc95df4c65"
+    },
+    {
+      "bytes": 85,
+      "metadata": {
+        "channels": 3,
+        "format": "png",
+        "hasAlpha": false,
+        "height": 48,
+        "orientation": null,
+        "pages": null,
+        "space": "srgb",
+        "width": 48
+      },
+      "name": "tiny-48x48.png",
+      "sha256": "06406178022a366ff775ea084b1c9df97b2f35a017ee0c3bac32cb323c5016bc"
+    },
+    {
+      "bytes": 111,
+      "metadata": {
+        "channels": 4,
+        "format": "svg",
+        "hasAlpha": true,
+        "height": 64,
+        "orientation": null,
+        "pages": null,
+        "space": "srgb",
+        "width": 64
+      },
+      "name": "vector-image.svg",
+      "sha256": "8b6ecbcaa617fcb2c663f45fd63f1140cd3c5850d2baab893a784a6daeebfb4a"
+    },
+    {
+      "bytes": 8347,
+      "metadata": {
+        "channels": 3,
+        "format": "png",
+        "hasAlpha": false,
+        "height": 500,
+        "orientation": null,
+        "pages": null,
+        "space": "rgb16",
+        "width": 2000
+      },
+      "name": "wide-2000x500.png",
+      "sha256": "307d55a56d720306de490ba5f99aecd9babfb1affa0de3995082302ad318cbb0"
+    }
+  ]
+}

@@ -1,0 +1,3848 @@
+{
+  "pinned": {
+    "policyVersion": 1,
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "schemaVersion": 1
+  },
+  "invalidAcceptanceSchemas": {
+    "badHash": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "not-a-hash"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "badVerdict": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "maybe"
+    },
+    "emptyHashes": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "longNote": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "unknownField": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted",
+      "extra": true
+    }
+  },
+  "invalidManifests": {
+    "assetIdTooLong": {
+      "assetId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badContentType": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/jpeg",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badCreatedAt": {
+      "assetId": "logo-contract",
+      "createdAt": "not-a-date",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badEncoderExtra": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4",
+        "extra": true
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badEncoderName": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "imagemagick",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badEncoderShape": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badMerchant": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "not-a-uuid",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badPolicyVersion": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 2,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badQuality": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 35,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badRole": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "banner",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badSchemaVersion": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 2,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "contentTypeFormatMismatch": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "deliveryNull": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": null,
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "emptyTiers": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": []
+    },
+    "generatedAboveSource": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 5001,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "generatedWithoutQuality": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": null,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "overSourceWithoutCause": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 4000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "passthroughByteMismatch": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 4999,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "passthroughWithQuality": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "passthroughWrongCodec": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 5000,
+        "format": "avif",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "delivery": "generated",
+          "format": "avif",
+          "height": 72,
+          "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1210,
+          "contentType": "image/webp",
+          "delivery": "generated",
+          "format": "webp",
+          "height": 72,
+          "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+          "width": 96
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/webp",
+          "delivery": "original-passthrough",
+          "format": "webp",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.webp",
+          "quality": null,
+          "requestedWidth": 192,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 6000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 144,
+          "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+          "width": 192
+        },
+        {
+          "actualWidth": 800,
+          "bytes": 5000,
+          "contentType": "image/avif",
+          "delivery": "original-passthrough",
+          "format": "avif",
+          "height": 600,
+          "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+          "quality": null,
+          "requestedWidth": 384,
+          "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+          "width": 800
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 9000,
+          "contentType": "image/webp",
+          "delivery": "generated-over-source",
+          "format": "webp",
+          "height": 288,
+          "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+          "quality": 65,
+          "requestedWidth": 384,
+          "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+          "width": 384
+        }
+      ]
+    },
+    "qualityZero": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 0,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "sourceExtraField": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+        "extra": true
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "tierBytesZero": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 0,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "tierExtraField": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96,
+          "extra": true
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "widthActualMismatch": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 48,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "duplicateTier": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        }
+      ]
+    },
+    "hashPathMismatch": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "missingTier": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        }
+      ]
+    },
+    "remoteUrlPath": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "https://example.com/x.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "tooManyTiers": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        }
+      ]
+    },
+    "traversalPath": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "../escape.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "unknownField": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ],
+      "extra": true
+    },
+    "wrongLadder": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 768,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    }
+  },
+  "matcherRejections": {
+    "changedOutput": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "changedRecipe": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r1-other",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "changedSource": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "verdict": "accepted"
+    },
+    "rejectedVerdict": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "rejected"
+    }
+  },
+  "validAcceptance": {
+    "assetId": "logo-contract",
+    "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "note": "Contract review: text legible, colors preserved.",
+    "outputHashes": [
+      "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+      "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+      "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+      "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+      "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+      "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+    ],
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "reviewedAt": "2026-10-01T21:00:00.000Z",
+    "reviewer": "pilot-owner",
+    "schemaVersion": 1,
+    "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+    "verdict": "accepted"
+  },
+  "validAcceptanceOffset": {
+    "assetId": "logo-contract",
+    "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "note": "Contract review: text legible, colors preserved.",
+    "outputHashes": [
+      "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+      "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+      "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+      "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+      "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+      "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+    ],
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "reviewedAt": "2026-10-01T22:00:00+01:00",
+    "reviewer": "pilot-owner",
+    "schemaVersion": 1,
+    "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+    "verdict": "accepted"
+  },
+  "validManifest": {
+    "assetId": "logo-contract",
+    "createdAt": "2026-10-01T20:00:00.000Z",
+    "encoder": {
+      "libvipsVersion": "8.18.6",
+      "name": "sharp",
+      "sharpVersion": "0.35.4"
+    },
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "policyVersion": 1,
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "role": "logo",
+    "schemaVersion": 1,
+    "source": {
+      "bytes": 23837,
+      "format": "png",
+      "orientedHeight": 600,
+      "orientedWidth": 800,
+      "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+    },
+    "tiers": [
+      {
+        "actualWidth": 96,
+        "bytes": 1096,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 72,
+        "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "width": 96
+      },
+      {
+        "actualWidth": 96,
+        "bytes": 1096,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 72,
+        "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "width": 96
+      },
+      {
+        "actualWidth": 192,
+        "bytes": 1192,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 144,
+        "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+        "quality": 70,
+        "requestedWidth": 192,
+        "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "width": 192
+      },
+      {
+        "actualWidth": 192,
+        "bytes": 1192,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 144,
+        "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+        "quality": 70,
+        "requestedWidth": 192,
+        "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "width": 192
+      },
+      {
+        "actualWidth": 384,
+        "bytes": 1384,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 288,
+        "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+        "quality": 70,
+        "requestedWidth": 384,
+        "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "width": 384
+      },
+      {
+        "actualWidth": 384,
+        "bytes": 1384,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 288,
+        "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+        "quality": 70,
+        "requestedWidth": 384,
+        "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+        "width": 384
+      }
+    ]
+  },
+  "validManifestGuarded": {
+    "assetId": "logo-contract",
+    "createdAt": "2026-10-01T20:00:00.000Z",
+    "encoder": {
+      "libvipsVersion": "8.18.6",
+      "name": "sharp",
+      "sharpVersion": "0.35.4"
+    },
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "policyVersion": 1,
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "role": "logo",
+    "schemaVersion": 1,
+    "source": {
+      "bytes": 5000,
+      "format": "avif",
+      "orientedHeight": 600,
+      "orientedWidth": 800,
+      "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392"
+    },
+    "tiers": [
+      {
+        "actualWidth": 96,
+        "bytes": 1096,
+        "contentType": "image/avif",
+        "delivery": "generated",
+        "format": "avif",
+        "height": 72,
+        "path": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2.avif",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "3d0361638c23691711901897ba8293d1b7656cb5440b8bb26a5a40dcd66df3f2",
+        "width": 96
+      },
+      {
+        "actualWidth": 96,
+        "bytes": 1210,
+        "contentType": "image/webp",
+        "delivery": "generated",
+        "format": "webp",
+        "height": 72,
+        "path": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a.webp",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "cc4d0bee7878bbec9f758e88c2c6fdd40aa9af3eee3ed31168d5b070adc1f58a",
+        "width": 96
+      },
+      {
+        "actualWidth": 800,
+        "bytes": 5000,
+        "contentType": "image/avif",
+        "delivery": "original-passthrough",
+        "format": "avif",
+        "height": 600,
+        "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+        "quality": null,
+        "requestedWidth": 192,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+        "width": 800
+      },
+      {
+        "actualWidth": 192,
+        "bytes": 6000,
+        "contentType": "image/webp",
+        "delivery": "generated-over-source",
+        "format": "webp",
+        "height": 144,
+        "path": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47.webp",
+        "quality": 70,
+        "requestedWidth": 192,
+        "sha256": "791581c294fb94ab1885e1814878cad2940d2d9d8675f5683f59f262d77f0d47",
+        "width": 192
+      },
+      {
+        "actualWidth": 800,
+        "bytes": 5000,
+        "contentType": "image/avif",
+        "delivery": "original-passthrough",
+        "format": "avif",
+        "height": 600,
+        "path": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392.avif",
+        "quality": null,
+        "requestedWidth": 384,
+        "sha256": "6ac12440a364ea66367a40535ad81f22cc766e0894bdd9e085968d9b5d4ad392",
+        "width": 800
+      },
+      {
+        "actualWidth": 384,
+        "bytes": 9000,
+        "contentType": "image/webp",
+        "delivery": "generated-over-source",
+        "format": "webp",
+        "height": 288,
+        "path": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f.webp",
+        "quality": 65,
+        "requestedWidth": 384,
+        "sha256": "6c873ef67c13e8a5d81b343169891058ef13f7c98ea9df69eb7c068654b2f39f",
+        "width": 384
+      }
+    ]
+  },
+  "validManifestOffset": {
+    "assetId": "logo-contract",
+    "createdAt": "2026-10-01T21:00:00+01:00",
+    "encoder": {
+      "libvipsVersion": "8.18.6",
+      "name": "sharp",
+      "sharpVersion": "0.35.4"
+    },
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "policyVersion": 1,
+    "recipeId": "pilot-r2-a1323f0dc00f1ecb",
+    "role": "logo",
+    "schemaVersion": 1,
+    "source": {
+      "bytes": 23837,
+      "format": "png",
+      "orientedHeight": 600,
+      "orientedWidth": 800,
+      "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+    },
+    "tiers": [
+      {
+        "actualWidth": 96,
+        "bytes": 1096,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 72,
+        "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "width": 96
+      },
+      {
+        "actualWidth": 96,
+        "bytes": 1096,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 72,
+        "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+        "quality": 70,
+        "requestedWidth": 96,
+        "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "width": 96
+      },
+      {
+        "actualWidth": 192,
+        "bytes": 1192,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 144,
+        "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+        "quality": 70,
+        "requestedWidth": 192,
+        "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "width": 192
+      },
+      {
+        "actualWidth": 192,
+        "bytes": 1192,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 144,
+        "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+        "quality": 70,
+        "requestedWidth": 192,
+        "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "width": 192
+      },
+      {
+        "actualWidth": 384,
+        "bytes": 1384,
+        "contentType": "image/avif",
+        "format": "avif",
+        "height": 288,
+        "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+        "quality": 70,
+        "requestedWidth": 384,
+        "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "width": 384
+      },
+      {
+        "actualWidth": 384,
+        "bytes": 1384,
+        "contentType": "image/webp",
+        "format": "webp",
+        "height": 288,
+        "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+        "quality": 70,
+        "requestedWidth": 384,
+        "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+        "width": 384
+      }
+    ]
+  }
+}

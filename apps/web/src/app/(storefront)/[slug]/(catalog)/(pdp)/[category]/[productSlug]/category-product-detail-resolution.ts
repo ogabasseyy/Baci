@@ -9,11 +9,11 @@ import {
   getCachedLegacyProductRedirectTarget,
   getCachedProductWithDetails,
 } from '@/lib/cached-data';
-import { normalizeStorefrontCategorySlug } from '@/lib/normalize-storefront-category-slug';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
 import { generateSlug } from '@/lib/seo-utils';
 import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
+import { evaluateCategoryProductCanonicalRoute } from './category-product-canonicalization';
 
 export type CategoryProductResult =
   | {
@@ -27,39 +27,6 @@ export type CategoryProductResult =
       legacyRedirectTarget: CachedLegacyProductRedirectTarget;
     }
   | null;
-
-export function hasCategoryMismatch(
-  productCategorySlug: string | null | undefined,
-  urlCategorySlug: string
-) {
-  const normalizedProductCategorySlug =
-    normalizeStorefrontCategorySlug(productCategorySlug);
-  const normalizedUrlCategorySlug =
-    normalizeStorefrontCategorySlug(urlCategorySlug);
-
-  return Boolean(
-    normalizedProductCategorySlug &&
-      normalizedProductCategorySlug !== normalizedUrlCategorySlug
-  );
-}
-
-function isUuidProductRouteValue(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value
-  );
-}
-
-export function shouldRedirectResolvedProductSlugValue(
-  productSlug: string,
-  resolvedSlug: string | null | undefined
-) {
-  return (
-    !isUuidProductRouteValue(productSlug) &&
-    Boolean(resolvedSlug) &&
-    resolvedSlug !== productSlug &&
-    resolvedSlug?.toLowerCase() === productSlug.toLowerCase()
-  );
-}
 
 export async function resolveCategoryProductForMerchant(
   merchant: CachedMerchant,
@@ -79,10 +46,6 @@ export async function resolveCategoryProductForMerchant(
     return legacyRedirectTarget ? { merchant, legacyRedirectTarget } : null;
   }
 
-  const needsValuesRedirect = shouldRedirectResolvedProductSlugValue(
-    productSlug,
-    product.slug
-  );
   const productWithCat = product as unknown as {
     categories?: {
       id: string;
@@ -158,11 +121,16 @@ export async function resolveCategoryProductForMerchant(
   const productCategorySlug =
     dbCategorySlug ||
     (product.category ? generateSlug(product.category) : null);
+  const canonicalRoute = evaluateCategoryProductCanonicalRoute({
+    requestedCategorySlug: categorySlug,
+    requestedProductSlug: productSlug,
+    resolvedCategorySlug: productCategorySlug,
+    resolvedProductSlug: product.slug,
+  });
 
   return {
     product: productWithCategorySlug,
-    categoryMismatch: hasCategoryMismatch(productCategorySlug, categorySlug),
+    ...canonicalRoute,
     merchant,
-    needsValuesRedirect,
   };
 }

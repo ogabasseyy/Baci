@@ -56,11 +56,10 @@ import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
+import { evaluateCategoryProductCanonicalRoute } from './category-product-canonicalization';
 import {
   type CategoryProductResult,
-  hasCategoryMismatch,
   resolveCategoryProductForMerchant,
-  shouldRedirectResolvedProductSlugValue,
 } from './category-product-detail-resolution';
 import {
   buildCriticalCommerceRouteProduct,
@@ -380,10 +379,12 @@ const getProductRouteControl = cache(
     }
 
     const product = mapCachedProductLcpHintToRouteProduct(cachedProduct);
-    const needsValuesRedirect = shouldRedirectResolvedProductSlugValue(
-      productSlug,
-      product.slug
-    );
+    const canonicalRoute = evaluateCategoryProductCanonicalRoute({
+      requestedCategorySlug: categorySlug,
+      requestedProductSlug: productSlug,
+      resolvedCategorySlug: getMappedProductCategorySlug(product),
+      resolvedProductSlug: product.slug,
+    });
     const loadProductResult = () =>
       resolveCategoryProductForMerchant(merchant, categorySlug, productSlug);
 
@@ -391,11 +392,7 @@ const getProductRouteControl = cache(
       result: {
         product,
         merchant,
-        categoryMismatch: hasCategoryMismatch(
-          getMappedProductCategorySlug(product),
-          categorySlug
-        ),
-        needsValuesRedirect,
+        ...canonicalRoute,
       },
       loadProductResult,
     };

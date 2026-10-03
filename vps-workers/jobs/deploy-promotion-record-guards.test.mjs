@@ -236,6 +236,39 @@ describe('deploy promotion record guards', () => {
     assert.match(rollbackSlice, /moved past this promote/);
   });
 
+  it('defers exit 42 only on proven capability-boundary changes', () => {
+    // After a proven latch, exit 42 (missing wrapper/grant) defers
+    // only with proof: the latch revision must resolve (fetched
+    // first — a shallow/GC'd checkout must not read as "unknown,
+    // defer"), and the *gigl* diff since it must touch the
+    // capability boundary (wrappers, worker role, scope hook) in
+    // added/removed lines. An unrelated GIGL table migration, or an
+    // unresolvable latch SHA, refuses instead of promoting a worker
+    // that cannot claim work.
+    const releaseSource = readFileSync(
+      join(workerRoot, 'lib', 'prepare-worker-release.sh'),
+      'utf8'
+    );
+    const resolved = releaseSource.match(
+      /cat-file -e "\$gigl_latch_sha\^\{commit\}"/g
+    );
+    assert.equal(resolved?.length, 2, 'expected fetch-then-resolve');
+    assert.match(releaseSource, /fetch --quiet origin "\$gigl_latch_sha"/);
+    assert.match(
+      releaseSource,
+      /gigl_worker_\|gigl_tracking_worker\|enforce_gigl_tracking_worker_request_scope/
+    );
+    assert.match(
+      releaseSource,
+      /candidate changes the GIGL worker capability boundary/
+    );
+    assert.doesNotMatch(
+      releaseSource,
+      /gigl_migration_diff/,
+      'expected no proximity-based deferral'
+    );
+  });
+
   it('records the rollback overlap before and after the restore', () => {
     // The manual rollback mirrors deploy.sh: a pre-restore record gate
     // (failure stops the operator before anything is mutated) plus a

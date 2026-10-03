@@ -22,7 +22,8 @@ BACKOFF_SECONDS=${BACKOFF_SECONDS:-15}
 # attempt so a hung deploy is terminated and its created deployment promoted.
 # Set to 0 to disable the cap.
 DEPLOY_ATTEMPT_TIMEOUT_SECONDS=${DEPLOY_ATTEMPT_TIMEOUT_SECONDS:-1200}
-# Cap for the promote command so a hung `vercel promote` cannot run forever.
+# Cap for promote-shaped commands so a hung `vercel promote` (or the
+# overlap `vercel rollback`, which reuses this budget) cannot run forever.
 PROMOTE_TIMEOUT_SECONDS=${PROMOTE_TIMEOUT_SECONDS:-120}
 # How many times to (re)try promoting a captured deployment before giving up on
 # it. Retrying the SAME target absorbs a transient promote failure (network blip

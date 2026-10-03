@@ -15,12 +15,29 @@ export function makeFakeCommand(mode) {
 
   const fakeVercelPath = join(binDir, 'fake-vercel');
   const vercelPath = join(binDir, 'vercel');
+  const rollbackFile = join(tempDir, 'rollback');
+  const rollbackCountFile = join(tempDir, 'rollback-count');
 
   writeFileSync(
     fakeVercelPath,
     `#!/usr/bin/env bash
 set -euo pipefail
 command="\${1:-}"
+if [ "$command" = "rollback" ]; then
+  rcount=0
+  if [ -f "${rollbackCountFile}" ]; then rcount="$(cat "${rollbackCountFile}")"; fi
+  rcount=$((rcount + 1))
+  echo "$rcount" > "${rollbackCountFile}"
+  case "${mode}" in
+    *rollback-fails*)
+      echo "rollback failed for \${2:-}" >&2
+      exit 1
+      ;;
+  esac
+  echo "\${2:-}" > "${rollbackFile}"
+  echo "rolled back to \${2:-}"
+  exit 0
+fi
 if [ "$command" = "promote" ]; then
   case "${mode}" in
     *promote-flaky*)
@@ -109,6 +126,14 @@ case "${mode}" in
     echo "Production: https://baci-hang.vercel.app"
     exit 137
     ;;
+  success-rollback-fails)
+    # Succeeds and stages like success, but every rollback fails (see
+    # the rollback branch): the overlap recovery must fail loud with
+    # a manual-reconcile directive after exhausting its retries.
+    echo "Production: https://baci-success.vercel.app"
+    echo "fake deploy ok"
+    exit 0
+    ;;
   hang-until-killed)
     # A genuinely hanging deploy that only run_with_timeout's real timeout can
     # stop -- the actual CLI-57 failure. The URL is emitted from a subshell whose
@@ -156,7 +181,31 @@ exec "$@"
     { mode: 0o755 }
   );
 
-  return { attemptsFile, binDir, promotedFile, tempDir };
+  return {
+    attemptsFile,
+    binDir,
+    promotedFile,
+    rollbackCountFile,
+    rollbackFile,
+    tempDir,
+  };
+}
+
+export function writeCountingOverlapCheck(tempDir, behavior) {
+  const checkPath = `${tempDir}/overlap-check`;
+  const callsPath = `${tempDir}/overlap-calls`;
+  writeFileSync(
+    checkPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+calls=0
+if [ -f "${callsPath}" ]; then calls="$(cat "${callsPath}")"; fi
+printf '%s\\n' "$((calls + 1))" >"${callsPath}"
+${behavior}
+`,
+    { mode: 0o755 }
+  );
+  return { checkPath, callsPath };
 }
 
 // Fake curl answering the previous-production capture: writes
@@ -189,11 +238,14 @@ export const vercelEnv = {
   VERCEL_TOKEN: 'test-token',
   VERCEL_PROJECT_ID: 'prj_test',
   VERCEL_ORG_ID: 'team_test',
+  OVERLAP_PRODUCTION_ALIAS: 'ogabassey.com',
 };
 
+// Alias-resolution response shape (`GET /v4/aliases/{alias}`): the
+// REQUIRED deploymentId is the deployment serving production.
 export const prevProdEnv = {
   ...vercelEnv,
   CURL_BODY:
-    '{"deployments":[{"uid":"dpl_previous123","url":"baci-previous.vercel.app"}]}',
+    '{"alias":"ogabassey.com","deploymentId":"dpl_previous123","deployment":{"id":"dpl_previous123","url":"baci-previous.vercel.app"},"projectId":"prj_test"}',
   CURL_CODE: '200',
 };

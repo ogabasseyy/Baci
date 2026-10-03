@@ -48,17 +48,14 @@ prepare_worker_release() {
   ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
   if [ "$gigl_capability_status" -eq 42 ]; then
     # Exit 42 means the wrapper RPCs or the worker grant are missing.
-    # Deferrable ONLY before the isolation migrations land (initial
-    # rollout: the RPCs land via db-migrations minutes later, so
-    # install now and let the post-migration smoke verify), after a
-    # PROVEN latch (non-vacuous) UNLESS the candidate adds GIGL
-    # migrations since the latched revision (schema-behind-code from
-    # a coordinated wrapper migration — refusing here would deadlock
-    # it, since readiness needs the new worker before db-migrations),
-    # or on a vacuous latch (disabled scope, empty-sha256
-    # fingerprint: no token ever functioned). Otherwise the 42 means
-    # the grant/membership/schema regressed: refuse to promote over
-    # the previously-proven worker. (Latch: scope:sha:fingerprint.)
+    # Deferrable on a missing/vacuous latch (nothing proven yet), on
+    # initial rollout (RPCs land via db-migrations minutes later), or
+    # after a PROVEN latch only with boundary proof below (a
+    # coordinated wrapper migration would deadlock on refusal, since
+    # readiness needs the new worker before db-migrations). Otherwise
+    # the 42 means the grant/membership/schema regressed: refuse to
+    # promote over the previously-proven worker. (Latch:
+    # scope:sha:fingerprint.)
     gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
     gigl_latch_scope="${gigl_latch%%:*}"
     gigl_latch_fp="${gigl_latch##*:}"
@@ -73,22 +70,32 @@ prepare_worker_release() {
       gigl_defer_ok=1
     fi
     if [ -z "$gigl_defer_ok" ] && [[ "$gigl_latch_sha" =~ ^[0-9a-f]{40}$ ]]; then
-      # Completeness: the enforcement-migration naming check forces any
-      # migration that could cause a 42 into a gigl-named file, so
-      # diffing supabase/migrations/*gigl* cannot miss an explanation.
-      # An unresolvable latch SHA defers (old behavior): refusal must
-      # only fire when no migration PROVABLY explains the 42. (A
-      # malformed latch skips this branch and refuses below.)
-      gigl_migration_diff="$(git -C "$WORKER_ROOT/.." diff --name-only "$gigl_latch_sha" "$APP_SHA" -- 'supabase/migrations/*gigl*' 2>/dev/null)" || gigl_migration_diff="unknown"
-      if [ "$gigl_migration_diff" = "unknown" ] || [ -n "$gigl_migration_diff" ]; then
+      # Proof, not proximity: defer ONLY when the candidate changes the
+      # worker capability boundary (wrappers, worker role, scope hook)
+      # since the latched revision. An unrelated GIGL table migration,
+      # or a latch SHA this checkout cannot resolve (shallow/GC'd —
+      # fetched first), must NOT explain the 42: a revoked grant or a
+      # missing wrapper then defers instead of failing closed. The
+      # enforcement-migration naming check keeps any boundary change
+      # inside gigl-named files, so scoping the diff there cannot miss
+      # one; added/removed lines only (context mentions prove nothing,
+      # and a malformed latch skips this branch and refuses below).
+      git -C "$WORKER_ROOT/.." cat-file -e "$gigl_latch_sha^{commit}" 2>/dev/null \
+        || git -C "$WORKER_ROOT/.." fetch --quiet origin "$gigl_latch_sha" 2>/dev/null \
+        || true
+      gigl_capability_proof=""
+      if git -C "$WORKER_ROOT/.." cat-file -e "$gigl_latch_sha^{commit}" 2>/dev/null; then
+        gigl_capability_proof="$(git -C "$WORKER_ROOT/.." diff "$gigl_latch_sha" "$APP_SHA" -- 'supabase/migrations/*gigl*' 2>/dev/null | grep -E '^[+-][^+-].*(gigl_worker_|gigl_tracking_worker|enforce_gigl_tracking_worker_request_scope)' || true)"
+      fi
+      if [ -n "$gigl_capability_proof" ]; then
         gigl_defer_ok=1
-        gigl_defer_reason="candidate adds GIGL migrations since the latched revision"
+        gigl_defer_reason="candidate changes the GIGL worker capability boundary since the latched revision"
       fi
     fi
     if [ -n "$gigl_defer_ok" ]; then
       echo "GIGL $gigl_defer_reason; deferring capability verification to the post-migration smoke." >&2
     else
-      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope) and no new GIGL migrations since the latched revision explain it; refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
+      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope) and no capability-boundary migration since the latched revision explains it; refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
       exit 1
     fi
   elif [ "$gigl_capability_status" -ne 0 ]; then

@@ -308,6 +308,7 @@ jobs:
           --sql-check supabase/migrations/tests/persist_quiz_award_amount_snapshot.sql
           --sql-check supabase/tests/search_products_not_archived_nulls.sql
           --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
+          --sql-check supabase/tests/product_discovery_guarded_metadata_update.sql
           --sql-check supabase/tests/product_discovery_combined_search.sql
           --sql-check supabase/tests/product_discovery_search_document_units.sql
           --sql-check supabase/tests/product_discovery_variant_recall.sql

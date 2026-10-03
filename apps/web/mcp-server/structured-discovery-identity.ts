@@ -14,6 +14,18 @@ function normalizeText(value: unknown): string | undefined {
   return result || undefined;
 }
 
+/** Only an explicit manufacturer prefix is optional; model suffixes stay exact. */
+function modelWithoutBrand(
+  value: unknown,
+  brandValue: unknown
+): string | undefined {
+  const model = normalizeText(value);
+  const brand = normalizeText(brandValue);
+  return model && brand && model.startsWith(`${brand} `)
+    ? model.slice(brand.length + 1)
+    : model;
+}
+
 function metadataOf(product: Record<string, unknown>) {
   const parsed = productDiscoveryMetadataSchema.safeParse(product.discovery_metadata);
   return parsed.success ? parsed.data : {};
@@ -70,7 +82,12 @@ function evaluateAlternativeIdentity(
     const expected = normalizeText(alternative.model);
     if (!expected) return { excluded: true, unverified };
     if (!model) unverified = true;
-    else if (model !== expected) return { excluded: true, unverified };
+    else if (
+      modelWithoutBrand(model, product.brand) !==
+      modelWithoutBrand(expected, product.brand)
+    ) {
+      return { excluded: true, unverified };
+    }
   }
   if (alternative.compatible_with !== undefined) {
     const compatibility = Array.isArray(discovery.compatible_with)
@@ -118,6 +135,7 @@ export const structuredDiscoveryIdentity = {
   isRowExcludedByIdentity,
   metadataOf,
   normalizeText,
+  modelWithoutBrand,
   productTypeOf,
   variantsOwnConditionAxis,
 };

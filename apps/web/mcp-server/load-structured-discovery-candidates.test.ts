@@ -7,6 +7,32 @@ import { structuredCandidateTestSupport } from './structured-candidate-test-supp
 const { setup, ranked, productRows } = structuredCandidateTestSupport;
 
 describe('loadStructuredDiscoveryCandidates', () => {
+  it.each([
+    'Spark 50',
+    'TECNO SPARK 50',
+  ])('recalls literal model-only keywords without inventing a manufacturer: %s', async (model) => {
+    const fixture = setup({
+      lexicalPages: [ranked(['tecno'])],
+      products: productRows(['tecno']),
+    });
+    const result = await loadStructuredDiscoveryCandidates({
+      merchantId: 'merchant-1',
+      supabase: fixture.supabase,
+      factQuery: '(exact-model-fact)',
+      intent: { alternatives: [{ product_type: 'phone', model }] },
+    });
+    expect(result.products.map(({ id }) => id)).toEqual(['tecno']);
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      'search_products_v2',
+      expect.objectContaining({
+        search_query: model,
+        merchant_id_param: 'merchant-1',
+        result_limit: 100,
+      })
+    );
+    expect(result.truncated).toBe(false);
+  });
+
   it('preserves collected semantic candidates when the final coverage probe fails', async () => {
     const ids = Array.from({length: 200}, (_, index) => `s-${index}`);
     const fixture = setup({lexicalPages: [[]], products: productRows(ids)});

@@ -37,6 +37,7 @@ declare global {
         args: Record<string, unknown>
       ) => Promise<unknown>;
       openExternal?: (options: { href: string }) => void;
+      notifyIntrinsicHeight?: (height: number) => void;
       setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
       requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 
 import {
+  canonicalizeOutboxMetadataForGuard,
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
   OutboxDispatchResetError,
@@ -188,6 +189,59 @@ describe('order notification outbox status', () => {
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({ metadata: { message_id: 'msg-1' } })
     );
+  });
+
+  it('canonicalizes guard metadata independent of key-insertion order', () => {
+    expect(
+      canonicalizeOutboxMetadataForGuard({ b: 2, a: { d: 4, c: 3 } })
+    ).toBe('{"a":{"c":3,"d":4},"b":2}');
+    // Array order is significant and preserved; undefined object values
+    // serialize like JSON.stringify (dropped) instead of throwing.
+    expect(
+      canonicalizeOutboxMetadataForGuard({ list: [3, 1], skip: undefined })
+    ).toBe('{"list":[3,1]}');
+    expect(canonicalizeOutboxMetadataForGuard(null)).toBe('null');
+    expect(canonicalizeOutboxMetadataForGuard('x')).toBe('"x"');
+  });
+
+  it('guards the non-manual sent merge on the re-read row version', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: {
+          id: row.id,
+          metadata: { b_key: 'late', a_key: 'early' },
+          updated_at: '2026-10-03T00:00:00Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await markOutboxNotificationSent(supabase as never, row, 'message-1');
+
+    expect(builder.eq).toHaveBeenCalledWith(
+      'metadata',
+      '{"a_key":"early","b_key":"late"}'
+    );
+    expect(builder.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-10-03T00:00:00Z'
+    );
+  });
+
+  it('leaves terminal writes unguarded: they set full scalar values', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle.mockResolvedValueOnce({
+      data: { id: row.id },
+      error: null,
+    });
+    const supabase = { from: vi.fn(() => builder) };
+
+    await updateOutboxStatus(supabase as never, row, { status: 'skipped' });
+
+    expect(builder.eq).not.toHaveBeenCalled();
+    expect(builder.is).not.toHaveBeenCalled();
   });
 
   it('wraps a failed status write with the outbox id', async () => {

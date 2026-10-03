@@ -1,4 +1,8 @@
 -- Existing orders are deliberately excluded: this rollout sends no historical mail.
+-- Safe predeploy: the event-type CHECK only widens (old values still valid), the
+-- new column defaults new rows to eligible while every trigger below ships
+-- DISABLED (60300 enables them post-deploy), and the partial unique index
+-- matches no pre-existing rows.
 ALTER TABLE public.orders
   ADD COLUMN manual_document_notification_eligible boolean NOT NULL DEFAULT false;
 ALTER TABLE public.orders

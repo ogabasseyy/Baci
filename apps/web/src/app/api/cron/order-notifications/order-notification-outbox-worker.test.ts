@@ -44,6 +44,8 @@ function createSupabase(
     return { data: error ? null : { id: row.id }, error: error ?? null };
   });
   const builder = {
+    eq: vi.fn(() => builder),
+    is: vi.fn(() => builder),
     match: vi.fn(() => builder),
     maybeSingle,
     select,

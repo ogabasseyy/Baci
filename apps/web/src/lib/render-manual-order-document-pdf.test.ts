@@ -120,6 +120,33 @@ describe('render manual order document pdf', () => {
     ]);
   });
 
+  it('dates an unpaid emailed invoice from the transaction date like the download', async () => {
+    const db = database({}, { paymentHistory: [], taxSubtotals: [] });
+    const order = manualDocumentOrderSchema.parse({
+      ...orderFixture,
+      invoice_issue_date: null,
+      payment_status: 'unpaid',
+      amount_paid: 0,
+    });
+    const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
+
+    await renderManualOrderDocumentPdf({
+      supabase: db.client,
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: false,
+      pdfDocumentKind: 'invoice',
+      invoiceTypeCode: null,
+    });
+
+    const [, , options] = mockedPdf.mock.calls[0];
+    // Matches receipt-pdf-generator's invoice_issue_date ?? transaction_date
+    // ?? created_at chain: transaction_date wins over created_at.
+    expect(options?.documentDate).toBe('2026-09-28T09:00:00Z');
+  });
+
   it('prefers the explicit invoice note over staff order notes', async () => {
     const db = database();
     const order = manualDocumentOrderSchema.parse({

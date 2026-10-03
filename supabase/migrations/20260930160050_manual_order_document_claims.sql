@@ -2,6 +2,9 @@
 -- 20260930160000_manual_order_document_notifications.sql (300-line rule).
 -- Applies after it: extends receipt_claims with the manual-notification
 -- source and adds the claim-creation RPC the worker calls before dispatch.
+-- Safe predeploy: DROP NOT NULL only relaxes, the new column is nullable,
+-- every existing row satisfies the XOR source CHECK via its import_job_id,
+-- and the claim RPC is additive (no live signature changes).
 ALTER TABLE public.receipt_claims ALTER COLUMN import_job_id DROP NOT NULL;
 ALTER TABLE public.receipt_claims
   ADD COLUMN manual_notification_id uuid

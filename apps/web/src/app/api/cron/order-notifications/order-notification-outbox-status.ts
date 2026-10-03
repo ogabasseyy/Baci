@@ -35,20 +35,69 @@ export class OutboxDispatchResetError extends Error {
   }
 }
 
+export interface OutboxMergeGuard {
+  metadataRaw: unknown;
+  updatedAt: string | null;
+}
+
+/**
+ * Canonical JSON for the sent-merge optimistic guard: object keys sorted
+ * recursively, array order preserved. PostgREST casts `eq` operands to the
+ * column type, so `jsonb = jsonb` already compares order-insensitively;
+ * canonical bytes make the match independent of serialization order even
+ * so, and keep the guard byte-stable across re-reads.
+ */
+export function canonicalizeOutboxMetadataForGuard(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalizeOutboxMetadataForGuard).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+    const body = entries
+      .map(
+        ([key, entry]) =>
+          `${JSON.stringify(key)}:${canonicalizeOutboxMetadataForGuard(entry)}`
+      )
+      .join(',');
+    return `{${body}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
 export async function updateOutboxStatus(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
-  values: Record<string, unknown>
+  values: Record<string, unknown>,
+  guard?: OutboxMergeGuard
 ) {
   try {
-    const { data, error } = await supabase
-      .from('order_notification_outbox')
-      .update({
-        ...values,
-        locked_at: null,
-        locked_by: null,
-        updated_at: new Date().toISOString(),
-      })
+    const updater = supabase.from('order_notification_outbox').update({
+      ...values,
+      locked_at: null,
+      locked_by: null,
+      updated_at: new Date().toISOString(),
+    });
+    // Optional optimistic guard for read-merge-write sent transitions: a
+    // write landing between the live re-read and this update must abort
+    // (zero rows) instead of being clobbered by the stale merged copy.
+    // Terminal writes pass no guard; they set full scalar values.
+    let guarded = updater;
+    if (guard) {
+      guarded =
+        guard.metadataRaw === null
+          ? guarded.is('metadata', null)
+          : guarded.eq(
+              'metadata',
+              canonicalizeOutboxMetadataForGuard(guard.metadataRaw)
+            );
+      guarded =
+        guard.updatedAt === null
+          ? guarded.is('updated_at', null)
+          : guarded.eq('updated_at', guard.updatedAt);
+    }
+    const { data, error } = await guarded
       .match({
         id: row.id,
         locked_by: row.claim_owner,
@@ -109,13 +158,6 @@ async function readLiveOutboxMetadataForMerge(
   }
 }
 
-async function readLiveOutboxMetadata(
-  supabase: SupabaseClientLike,
-  row: OutboxStatusRow
-): Promise<Record<string, unknown>> {
-  return (await readLiveOutboxMetadataForMerge(supabase, row)).base;
-}
-
 export async function markOutboxNotificationSent(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
@@ -124,17 +166,29 @@ export async function markOutboxNotificationSent(
   // Re-read: the sender may have snapshotted dispatch metadata (e.g. the
   // sent document kind) after this row was claimed; merging the message ID
   // into the live value preserves it instead of clobbering the row with
-  // the stale claim-time copy.
-  const liveMetadata = await readLiveOutboxMetadata(supabase, row);
-  await updateOutboxStatus(supabase, row, {
-    last_error: null,
-    metadata: {
-      ...liveMetadata,
-      ...(messageId ? { message_id: messageId } : {}),
+  // the stale claim-time copy. The merge carries the same optimistic
+  // guard as the manual path: a concurrent metadata write aborts into
+  // outcome-unknown instead of losing keys (single attempt — races here
+  // are exceptional, unlike the manual sender's mid-flight writes).
+  const {
+    base: liveMetadata,
+    raw: liveRaw,
+    updatedAt: liveUpdatedAt,
+  } = await readLiveOutboxMetadataForMerge(supabase, row);
+  await updateOutboxStatus(
+    supabase,
+    row,
+    {
+      last_error: null,
+      metadata: {
+        ...liveMetadata,
+        ...(messageId ? { message_id: messageId } : {}),
+      },
+      sent_at: new Date().toISOString(),
+      status: 'sent' satisfies OrderNotificationOutboxStatus,
     },
-    sent_at: new Date().toISOString(),
-    status: 'sent' satisfies OrderNotificationOutboxStatus,
-  });
+    { metadataRaw: liveRaw, updatedAt: liveUpdatedAt }
+  );
 }
 
 const MANUAL_SENT_METADATA_RACE_RETRIES = 3;
@@ -172,12 +226,13 @@ export async function markManualOutboxNotificationSent(
       // update must abort the merge instead of being clobbered by the
       // stale copy. updated_at is the primary version: every outbox
       // writer bumps it, and the timestamp round-trips exactly. The
-      // metadata equality pins the merged value itself (jsonb equality
-      // is order-insensitive, so the re-serialized read matches).
+      // metadata equality pins the merged value itself; canonical bytes
+      // keep the match independent of JS key-insertion order (jsonb
+      // equality is order-insensitive regardless).
       const guarded =
         liveRaw === null
           ? updater.is('metadata', null)
-          : updater.eq('metadata', JSON.stringify(liveRaw));
+          : updater.eq('metadata', canonicalizeOutboxMetadataForGuard(liveRaw));
       const { data, error } = await (liveUpdatedAt === null
         ? guarded.is('updated_at', null)
         : guarded.eq('updated_at', liveUpdatedAt)

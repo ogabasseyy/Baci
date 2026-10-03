@@ -4,6 +4,10 @@ import {
   showMerchantBankDetails,
 } from '@baci/shared';
 import type { z } from 'zod';
+import {
+  buildAssuranceReceiptItem,
+  sumAssuranceFees,
+} from '@/lib/insurance-assurance-line';
 import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
 import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
@@ -69,6 +73,10 @@ export function buildManualOrderDocumentPdfInput({
       description: item.item_description || undefined,
     })),
   };
+  const assuranceTotal = sumAssuranceFees(order.order_items);
+  if (assuranceTotal > 0) {
+    receiptOrder.items.push(buildAssuranceReceiptItem(assuranceTotal));
+  }
   const receiptMerchant = {
     ...merchant,
     brand_colors: merchant.brand_colors ?? undefined,

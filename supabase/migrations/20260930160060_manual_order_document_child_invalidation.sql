@@ -8,6 +8,8 @@
 -- (multi-event is legal without transition tables); the transaction gate
 -- skips writes that cannot affect the settled-payment snapshot so hot
 -- payment webhooks stay cheap.
+-- Safe predeploy: new private functions plus triggers that ship DISABLED
+-- (60300 enables them post-deploy); no live contract changes.
 -- Serialization uses a per-order (or per-merchant) advisory lock taken
 -- before the marker-qualified reset: it exists regardless of outbox
 -- status, so a write that begins while the row is pending (or before

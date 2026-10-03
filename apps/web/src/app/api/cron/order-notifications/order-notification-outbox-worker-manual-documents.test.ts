@@ -23,17 +23,25 @@ function createSupabase(
   errors: unknown[],
   liveMetadata: Record<string, unknown> = {},
   classifyRow: Record<string, unknown> | null = null,
-  classifyError: unknown = null
+  classifyError: unknown = null,
+  reclaimRow: Record<string, unknown> | null = {
+    dispatch_started_at: null,
+    last_error: null,
+  }
 ) {
   const updateErrors = [...errors];
   const select = vi.fn();
   // The sent path re-reads the live row (select metadata) before the status
   // update (select id); resolve each from its own source. The manual path
-  // classifies a 0-row sent update with a second read.
+  // classifies a 0-row sent update with a second read, and reclaims a
+  // clear-failed marker before dispatching.
   const maybeSingle = vi.fn(async () => {
     const lastSelect = select.mock.calls[select.mock.calls.length - 1]?.[0];
     if (lastSelect === 'metadata') {
       return { data: { id: row.id, metadata: liveMetadata }, error: null };
+    }
+    if (lastSelect === 'dispatch_started_at, last_error') {
+      return { data: reclaimRow, error: null };
     }
     if (typeof lastSelect === 'string' && lastSelect.includes('locked_by')) {
       return { data: classifyError ? null : classifyRow, error: classifyError };
@@ -172,5 +180,24 @@ describe('order notification outbox worker manual documents', () => {
         status: 'skipped',
       })
     );
+  });
+
+  it('reclaims a clear-failed marker before redispatching the manual retry', async () => {
+    const { client, builder } = createSupabase([null, null], {}, null, null, {
+      dispatch_started_at: '2026-09-30T10:00:00Z',
+      last_error: 'dispatch_marker_clear_failed',
+    });
+    sendDocument.mockResolvedValue({ status: 'failed', error: 'rejected' });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_invoice' }],
+      summary
+    );
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({ dispatch_started_at: null })
+    );
+    expect(sendDocument).toHaveBeenCalledTimes(1);
+    expect(summary).toMatchObject({ retried: 1 });
   });
 });

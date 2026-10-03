@@ -242,9 +242,9 @@ export async function sendManualOrderDocument({
       // forever on a stale marker. Unknown outcomes keep the marker to
       // preserve at-most-once delivery.
       if (result.deliveryOutcome !== 'unknown') {
-        // The rejection is definite but the marker clear can fail
-        // transiently: stay on the bounded retry path (later attempts
-        // re-clear before sending) instead of terminalizing unknown.
+        // The rejection is definite but the clear retries inline and the
+        // worker reclaims a still-stranded marker before the next claim,
+        // so the bounded retry re-sends instead of skipping at the claim.
         try {
           await persistDispatch(false);
         } catch {

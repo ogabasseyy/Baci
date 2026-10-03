@@ -120,6 +120,18 @@ describe('ReceiptClaimPageClient document kind', () => {
     expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
   });
 
+  it('labels legacy claims without a kind neutrally, not as receipts', () => {
+    renderClient({
+      initialClaim: { ...preview, documentKind: 'unknown' as const },
+    });
+
+    expect(screen.getByText('Device documents')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Sign in to claim document' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Device receipts')).not.toBeInTheDocument();
+  });
+
   it('surfaces the verify-email guidance when the account is unverified', async () => {
     mockUseCustomerAuth.mockReturnValue({
       isAuthenticated: true,

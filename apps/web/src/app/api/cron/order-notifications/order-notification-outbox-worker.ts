@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { reclaimStaleManualDocumentDispatchMarker } from '@/lib/check-manual-document-dispatch-lease';
 import { logger } from '@/lib/logger';
 import { sendOrderFulfillmentNotification } from '@/lib/order-fulfillment-notification';
 import { beginOrderNotificationOutboxDispatch } from '@/lib/order-notification-outbox-dispatch';
@@ -141,6 +142,11 @@ async function processClaimedRow(
       row.metadata
     );
     const eventType = row.event_type;
+    // A prior attempt may have stranded its marker after a definite
+    // rejection (clear failed): reclaim before the claim RPC, which
+    // skips on a set marker, or the retry is permanently lost.
+    if (isManualOutboxEvent(eventType))
+      await reclaimStaleManualDocumentDispatchMarker(supabase, row);
     const result = isManualOutboxEvent(eventType)
       ? await sendManualOrderDocument({
           supabase,

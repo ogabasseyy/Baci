@@ -123,6 +123,7 @@ describe('storefront account document data fetching', () => {
         select: () => query,
         eq: () => query,
         maybeSingle: async () => ({ data, error: null }),
+        // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are awaitable.
         then: (resolve: (value: unknown) => unknown) =>
           resolve({ data, error: null }),
       };

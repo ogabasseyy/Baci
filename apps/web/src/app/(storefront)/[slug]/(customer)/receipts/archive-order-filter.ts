@@ -19,16 +19,12 @@ export function isArchiveOrder(order: StorefrontOrder): boolean {
       Boolean(order.manual_document_available)
     );
   }
-  // A manual document on a row whose manual flag is missing is
-  // inconsistent producer data (the API always projects both together):
-  // fail closed instead of letting the legacy branches below advertise a
-  // download the document routes may not be able to serve.
-  if (order.manual_document_available) {
-    return false;
-  }
   // manual_document_available is intentionally absent here: the API only
-  // sets it for manual orders (handled above), so honoring it for
-  // non-manual rows would advertise a download on inconsistent data.
+  // sets it for manual orders (handled above). A stray flag on a
+  // non-manual row is inconsistent producer data, but it grants nothing —
+  // the legacy branches below never read it — so the row still falls
+  // through: hiding it would conceal a receipt the download route (which
+  // gates only on receipt_eligible) can serve.
   // The payment-method column is not constrained to lowercase (legacy
   // spellings exist), so normalize exactly like shipping status: an
   // 'Invoice' order still serves an invoice download from the archive.

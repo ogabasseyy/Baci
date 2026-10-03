@@ -12,6 +12,7 @@ import type {
   StorefrontAccountDocumentTaxSubtotalRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
+import { manualDocumentAvailabilityFlags } from '@/lib/storefront-account-document-eligibility';
 import { buildInvoiceContent } from '@/lib/storefront-account-document-invoice-lines';
 import {
   buildOrderProjection,
@@ -89,6 +90,21 @@ export function buildStorefrontAccountDocumentBundle({
   const customerPhone =
     asString(order.customer_phone) || customer.phone || null;
   const receiptEligible = currentDocumentKind === 'receipt';
+  // Manual availability for the invoice download gate: the sender refuses
+  // invalid/cancelled manual rows, so the direct URL must not serve what
+  // the sender and archive treat as unservable.
+  const { isManualOrderRow, manualDocumentAvailable } =
+    manualDocumentAvailabilityFlags({
+      paymentStatus: order.payment_status,
+      shippingStatus: order.shipping_status,
+      externalSource: order.external_source,
+      importJobId: order.import_job_id,
+      recordedByUserId: order.recorded_by_user_id,
+      total: order.total,
+      amountPaid: order.amount_paid,
+      money: order,
+      items: itemRows,
+    });
   // Same proforma rule as the order invoice route: the stored 380 default
   // must not win over 325 for unpaid invoice-method orders. Shared by the
   // generated invoiceData and the customer-facing order projection so the
@@ -172,6 +188,8 @@ export function buildStorefrontAccountDocumentBundle({
     customerPhone,
     invoiceTypeCode,
     receiptEligible,
+    isManualOrderRow,
+    manualDocumentAvailable,
     canCancel,
     currentDocumentKind,
     confirmedTransactions,

@@ -3,6 +3,7 @@ import {
   getCurrentDocumentKind,
   isManualOrderDocumentAvailable,
   isReceiptEligible,
+  manualDocumentAvailabilityFlags,
   normalizePaymentStatus,
   normalizeShippingStatus,
 } from '@/lib/storefront-account-document-eligibility';
@@ -27,6 +28,10 @@ describe('storefront account document status helpers', () => {
     };
     expect(isReceiptEligible(input)).toBe(true);
     expect(getCurrentDocumentKind(input)).toBe('receipt');
+    expect(manualDocumentAvailabilityFlags(input)).toEqual({
+      isManualOrderRow: true,
+      manualDocumentAvailable: true,
+    });
     expect(isReceiptEligible({ ...input, amountPaid: 50 })).toBe(false);
     expect(isReceiptEligible({ ...input, shippingStatus: 'cancelled' })).toBe(
       false

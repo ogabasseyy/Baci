@@ -107,3 +107,14 @@ export function isReceiptEligible(input: DocumentEligibilityInput) {
 export function getCurrentDocumentKind(input: DocumentEligibilityInput) {
   return isReceiptEligible(input) ? 'receipt' : 'invoice';
 }
+
+// Manual-order flags for download gates and projections, derived from the
+// same inputs as the document-kind derivation so every surface agrees.
+export function manualDocumentAvailabilityFlags(
+  input: DocumentEligibilityInput
+) {
+  return {
+    isManualOrderRow: isManualOrder(input),
+    manualDocumentAvailable: isManualOrderDocumentAvailable(input),
+  };
+}

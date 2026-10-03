@@ -215,13 +215,10 @@ export async function GET(request: NextRequest) {
         created_at: order.created_at,
         transaction_date: order.transaction_date,
         invoice_issue_date: order.invoice_issue_date,
-        // Canonical paid-receipt date (newest settled payment), shared with
-        // the emailed PDF and account download; null when the order has no
-        // completion transaction (lookup failures 500 above, never null).
-        receipt_completion_date:
-          selectReceiptCompletionDate(
-            transactionsByOrderId.get(order.id) ?? []
-          ) ?? null,
+        // Canonical paid-receipt date (null only when no completion transaction).
+        receipt_completion_date: selectReceiptCompletionDate(
+          transactionsByOrderId.get(order.id)
+        ),
         total: order.total,
         subtotal: order.subtotal,
         shipping_fee: order.shipping_fee,

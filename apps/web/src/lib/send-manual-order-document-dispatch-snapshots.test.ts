@@ -30,6 +30,17 @@ describe('send manual order document dispatch snapshots', () => {
     expect(markCall?.[1]).toMatchObject({ p_document_kind: 'receipt' });
   });
 
+  it('snapshots the resolved claim-link host in the dispatch marker', async () => {
+    const db = database({}, { primaryDomain: 'shop.example.com' });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_claim_domain: 'shop.example.com',
+    });
+  });
+
   it('snapshots the rendered payment instructions in the dispatch marker', async () => {
     const db = database(
       { payment_status: 'partially_paid', amount_paid: 100000 },

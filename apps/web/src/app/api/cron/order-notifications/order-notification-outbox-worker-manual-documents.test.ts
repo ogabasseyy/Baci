@@ -21,23 +21,32 @@ import {
 
 function createSupabase(
   errors: unknown[],
-  liveMetadata: Record<string, unknown> = {}
+  liveMetadata: Record<string, unknown> = {},
+  classifyRow: Record<string, unknown> | null = null
 ) {
   const updateErrors = [...errors];
   const select = vi.fn();
   // The sent path re-reads the live row (select metadata) before the status
-  // update (select id); resolve each from its own source.
+  // update (select id); resolve each from its own source. The manual path
+  // classifies a 0-row sent update with a second read.
   const maybeSingle = vi.fn(async () => {
-    const calls = select.mock.calls;
-    if (calls[calls.length - 1]?.[0] === 'metadata') {
+    const lastSelect = select.mock.calls[select.mock.calls.length - 1]?.[0];
+    if (lastSelect === 'metadata') {
       return { data: { id: row.id, metadata: liveMetadata }, error: null };
     }
+    if (typeof lastSelect === 'string' && lastSelect.includes('locked_by')) {
+      return { data: classifyRow, error: null };
+    }
     const error = updateErrors.shift();
+    if (error === 'zero-rows') {
+      return { data: null, error: null };
+    }
     return { data: error ? null : { id: row.id }, error: error ?? null };
   });
   const builder = {
     match: vi.fn(() => builder),
     maybeSingle,
+    not: vi.fn(() => builder),
     select,
     update: vi.fn(() => builder),
   };
@@ -80,8 +89,38 @@ describe('order notification outbox worker manual documents', () => {
     );
     expect(sendNotification).not.toHaveBeenCalled();
     expect(summary.sent).toBe(1);
+    expect(builder.not).toHaveBeenCalledWith('dispatch_started_at', 'is', null);
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'sent' })
+    );
+  });
+
+  it('retries a manual document reset between send and status persistence', async () => {
+    const { client, builder } = createSupabase(
+      ['zero-rows', null],
+      {},
+      {
+        dispatch_started_at: null,
+        locked_by: row.claim_owner,
+        status: 'processing',
+      }
+    );
+    sendDocument.mockResolvedValue({
+      status: 'sent',
+      messageId: 'document-message',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_invoice' }],
+      summary
+    );
+    expect(summary).toMatchObject({ failed: 0, sent: 0, retried: 1 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: 'document_changed_during_send',
+        status: 'pending',
+      })
     );
   });
 

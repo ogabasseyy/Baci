@@ -7,8 +7,10 @@ import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-noti
 import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
 import {
+  markManualOutboxNotificationSent,
   markOutboxNotificationSent,
   type OrderNotificationOutboxStatus,
+  OutboxDispatchResetError,
   OutboxStatusUpdateError,
   updateOutboxStatus,
 } from './order-notification-outbox-status';
@@ -37,6 +39,14 @@ export const claimedOrderNotificationOutboxRowSchema = z.object({
 export type ClaimedOrderNotificationOutboxRow = z.infer<
   typeof claimedOrderNotificationOutboxRowSchema
 >;
+
+function isManualOutboxEvent(
+  eventType: ClaimedOrderNotificationOutboxRow['event_type']
+): eventType is 'manual_order_receipt' | 'manual_order_invoice' {
+  return (
+    eventType === 'manual_order_receipt' || eventType === 'manual_order_invoice'
+  );
+}
 
 type SupabaseClientLike = ReturnType<typeof createServiceClient>;
 
@@ -131,46 +141,61 @@ async function processClaimedRow(
       row.metadata
     );
     const eventType = row.event_type;
-    const result =
-      eventType === 'manual_order_receipt' ||
-      eventType === 'manual_order_invoice'
-        ? await sendManualOrderDocument({
-            supabase,
-            row: { ...row, event_type: eventType },
-          })
-        : await sendOrderFulfillmentNotification({
-            beforeProviderDispatch: () =>
-              beginOrderNotificationOutboxDispatch({
-                claimId: row.id,
-                claimOwner: row.claim_owner,
-                eventType,
-                merchantId: row.merchant_id,
-                orderId: row.order_id,
-                supabase,
-              }),
-            resetProviderDispatch: () =>
-              resetOrderNotificationOutboxDispatch({
-                claimId: row.id,
-                claimOwner: row.claim_owner,
-                eventType,
-                merchantId: row.merchant_id,
-                orderId: row.order_id,
-                supabase,
-              }),
-            courierName: shipmentMetadata.courierName,
-            estimatedDelivery: shipmentMetadata.estimatedDelivery,
-            eventType,
-            merchantId: row.merchant_id,
-            orderId: row.order_id,
-            supabase,
-            trackingNumber: shipmentMetadata.trackingNumber,
-            trackingToken: shipmentMetadata.trackingToken,
-          });
+    const result = isManualOutboxEvent(eventType)
+      ? await sendManualOrderDocument({
+          supabase,
+          row: { ...row, event_type: eventType },
+        })
+      : await sendOrderFulfillmentNotification({
+          beforeProviderDispatch: () =>
+            beginOrderNotificationOutboxDispatch({
+              claimId: row.id,
+              claimOwner: row.claim_owner,
+              eventType,
+              merchantId: row.merchant_id,
+              orderId: row.order_id,
+              supabase,
+            }),
+          resetProviderDispatch: () =>
+            resetOrderNotificationOutboxDispatch({
+              claimId: row.id,
+              claimOwner: row.claim_owner,
+              eventType,
+              merchantId: row.merchant_id,
+              orderId: row.order_id,
+              supabase,
+            }),
+          courierName: shipmentMetadata.courierName,
+          estimatedDelivery: shipmentMetadata.estimatedDelivery,
+          eventType,
+          merchantId: row.merchant_id,
+          orderId: row.order_id,
+          supabase,
+          trackingNumber: shipmentMetadata.trackingNumber,
+          trackingToken: shipmentMetadata.trackingToken,
+        });
 
     if (result.status === 'sent') {
       try {
-        await markOutboxNotificationSent(supabase, row, result.messageId);
+        if (isManualOutboxEvent(eventType)) {
+          await markManualOutboxNotificationSent(
+            supabase,
+            row,
+            result.messageId
+          );
+        } else {
+          await markOutboxNotificationSent(supabase, row, result.messageId);
+        }
       } catch (error) {
+        if (error instanceof OutboxDispatchResetError) {
+          await markFailedOrRetry(
+            supabase,
+            row,
+            'document_changed_during_send',
+            summary
+          );
+          return;
+        }
         if (!(error instanceof OutboxStatusUpdateError)) throw error;
         await markDeliveryOutcomeUnknown(
           supabase,

@@ -105,9 +105,11 @@ export interface DispatchTransaction {
  * a same-total category correction would otherwise email a stale tax
  * breakdown, as is the rendered payment history: a payment inserted or
  * corrected mid-dispatch must abort rather than email a stale Payment
- * table. The rendered kind is passed explicitly so the RPC can snapshot
- * exactly what is being sent. Callers must pass the exact values the PDF
- * was rendered from.
+ * table. The claim-link host is covered too: a primary-domain deactivation
+ * between the sender's resolve and the mark must abort rather than email a
+ * CTA that no longer routes. The rendered kind is passed explicitly so the
+ * RPC can snapshot exactly what is being sent. Callers must pass the exact
+ * values the PDF was rendered from.
  */
 export async function markManualDocumentDispatchStarted(
   supabase: SupabaseClient,
@@ -117,7 +119,8 @@ export async function markManualDocumentDispatchStarted(
   payment: DispatchPaymentSnapshot,
   taxSubtotals: readonly DispatchTaxSubtotal[],
   transactions: readonly DispatchTransaction[],
-  merchant: DispatchMerchantIdentitySnapshot
+  merchant: DispatchMerchantIdentitySnapshot,
+  claimDomain: string | null
 ): Promise<void> {
   const { data, error } = await supabase.rpc(
     'mark_manual_document_dispatch_started',
@@ -195,6 +198,7 @@ export async function markManualDocumentDispatchStarted(
       p_merchant_tax_identification_number: merchant.taxIdentificationNumber,
       p_merchant_vat_registration_status: merchant.vatRegistrationStatus,
       p_merchant_vat_rate: merchant.vatRate,
+      p_claim_domain: claimDomain,
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');
@@ -229,6 +233,7 @@ export async function persistManualDocumentDispatch(
   taxSubtotals: readonly DispatchTaxSubtotal[],
   transactions: readonly DispatchTransaction[],
   merchant: DispatchMerchantRow,
+  claimDomain: string | null,
   started: boolean
 ): Promise<void> {
   if (started) {
@@ -249,7 +254,8 @@ export async function persistManualDocumentDispatch(
         taxIdentificationNumber: merchant.tax_identification_number,
         vatRegistrationStatus: merchant.vat_registration_status,
         vatRate: merchant.vat_rate,
-      }
+      },
+      claimDomain
     );
     return;
   }

@@ -20,6 +20,7 @@ CREATE OR REPLACE FUNCTION private.enqueue_manual_order_document(p_order_id uuid
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
+  v_order_found boolean;
   v_event text;
   v_payment_status text;
 BEGIN
@@ -29,7 +30,23 @@ BEGIN
   -- concurrent item batches cannot deadlock against each other here.
   SELECT o.* INTO v_order FROM public.orders AS o
   WHERE o.id = p_order_id FOR NO KEY UPDATE;
-  IF NOT FOUND OR NOT v_order.manual_document_notification_eligible
+  -- FOUND is set by every SQL statement, so capture the lock result
+  -- before the reset below overwrites it.
+  v_order_found := FOUND;
+  -- Reset in-flight markers BEFORE any eligibility exit: an edit that
+  -- flips the order ineligible (cancel, import attach, contact clear,
+  -- last-item delete, unsupported status) must still invalidate the
+  -- marked send, or the lease check records a now-invalid document as
+  -- sent. Every processing manual event resets, not just the newly
+  -- derived one: a payment arriving mid-invoice-send flips the kind,
+  -- and leaving the old invoice marker intact would record the stale
+  -- invoice as sent.
+  UPDATE public.order_notification_outbox AS n
+  SET dispatch_started_at = NULL, updated_at = now()
+  WHERE n.order_id = p_order_id
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+  IF NOT v_order_found OR NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
     OR v_order.import_job_id IS NOT NULL
     -- A blank staff-entered source is absent, not imported: the sender and
@@ -58,18 +75,6 @@ BEGIN
     v_event := 'manual_order_invoice';
   ELSE RETURN; END IF;
 
-  -- A data change landing after the dispatch marker but before transport
-  -- would otherwise send stale: reset the marker (keeping the worker's
-  -- status and lock) so the post-transport lease check aborts the stale
-  -- send for a bounded retry with fresh data. Every processing manual
-  -- event resets, not just the newly derived one: a payment arriving
-  -- mid-invoice-send flips v_event to receipt, and leaving the old
-  -- invoice marker intact would record the stale invoice as sent.
-  UPDATE public.order_notification_outbox AS n
-  SET dispatch_started_at = NULL, updated_at = now()
-  WHERE n.order_id = v_order.id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   -- A later correction re-arms a terminal row the worker gave up on so the
   -- customer gets the corrected document without staff deleting rows: only
   -- skipped/failed rows that never started dispatch come back to pending.
@@ -168,12 +173,13 @@ BEGIN
   -- late customer-contact corrections all re-evaluate eligibility; an order
   -- created without an email/customer still sends once staff fix the contact
   -- details, and a touched total re-queues a document that a correction
-  -- invalidated. Every other order field the sender strictly validates
-  -- (money breakdown, currency, order number, shipping address) re-arms the
-  -- same way when staff repair a database-permitted invalid value; the
-  -- remaining snapshot fields are either immutable (ids),
-  -- unvalidated-nullable (names, notes, dates, method), or covered by the
-  -- item triggers.
+  -- invalidated. Every other order field the dispatch snapshot compares
+  -- (money breakdown, currency, order number, shipping address, recipient
+  -- names, payment method, invoice type/note, notes, transaction and issue
+  -- dates) re-arms the same way when staff repair a database-permitted
+  -- invalid value, and — equally important — invalidates an in-flight
+  -- send when staff edit a rendered field the snapshot already covered;
+  -- only immutable ids and item-owned fields stay outside this list.
   -- Re-evaluation is idempotent, so shipping transitions that change
   -- nothing simply re-confirm the existing row.
   IF NEW.payment_status IS DISTINCT FROM OLD.payment_status
@@ -187,6 +193,14 @@ BEGIN
     OR NEW.shipping_address IS DISTINCT FROM OLD.shipping_address
     OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
+    OR NEW.customer_name IS DISTINCT FROM OLD.customer_name
+    OR NEW.customer_phone IS DISTINCT FROM OLD.customer_phone
+    OR NEW.payment_method IS DISTINCT FROM OLD.payment_method
+    OR NEW.invoice_type_code IS DISTINCT FROM OLD.invoice_type_code
+    OR NEW.invoice_note IS DISTINCT FROM OLD.invoice_note
+    OR NEW.notes IS DISTINCT FROM OLD.notes
+    OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
+    OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
     OR NEW.currency IS DISTINCT FROM OLD.currency
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
     OR NEW.import_job_id IS DISTINCT FROM OLD.import_job_id
@@ -200,7 +214,7 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_document_after_order_update()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER enqueue_manual_document_after_order_update
-  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
+  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()

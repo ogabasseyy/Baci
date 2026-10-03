@@ -121,23 +121,38 @@ describe('deploy promotion guards', () => {
     // (first seen on the vercel line) before the later per-job locks.
     // The canary waits up to 600s on its inner global take, so
     // promotion must defer the global lock past every per-job lock or
-    // it deadlocks against a canary tick for the full timeout.
+    // it deadlocks against a canary tick for the full timeout. The
+    // deferred name is the CONFIGURED global lock (resolvable to a
+    // custom path), not the hardcoded default: a renamed global lock
+    // nests the same way and would deadlock the same way unordered.
+    const resolveIndex = quiesceSource.indexOf(
+      "'BACI_REMEDIATION_GLOBAL_LOCK_PATH'"
+    );
+    assert.ok(
+      resolveIndex !== -1,
+      'expected the configured global lock to be resolved from the live .env'
+    );
+    assert.match(
+      quiesceSource,
+      /gigl_global_lock="error-remediator-global\.lock"/
+    );
     const dedupIndex = quiesceSource.indexOf("awk '!seen[$0]++'");
     const deferIndex = quiesceSource.indexOf(
-      '$0 == "error-remediator-global.lock"'
+      '$0 == gigl_global { hold_global = 1; next }'
     );
     assert.ok(dedupIndex !== -1 && deferIndex !== -1);
     assert.ok(
-      dedupIndex < deferIndex,
-      'expected the global-lock deferral to run after first-appearance dedup'
+      resolveIndex < dedupIndex &&
+        dedupIndex < deferIndex,
+      'expected global-lock resolution, then first-appearance dedup, then the deferral'
     );
     assert.match(
       quiesceSource,
-      /\$0 == "error-remediator-global\.lock" \{ hold_global = 1; next \}/
+      /awk -v gigl_global="\$gigl_global_lock"/
     );
     assert.match(
       quiesceSource,
-      /END \{ if \(hold_global\) print "error-remediator-global\.lock" \}/
+      /END \{ if \(hold_global\) print gigl_global \}/
     );
   });
 

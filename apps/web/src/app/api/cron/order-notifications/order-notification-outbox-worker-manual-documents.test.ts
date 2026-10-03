@@ -37,10 +37,7 @@ function createSupabase(
   // clear-failed marker before dispatching.
   const maybeSingle = vi.fn(async () => {
     const lastSelect = select.mock.calls[select.mock.calls.length - 1]?.[0];
-    if (
-      lastSelect === 'metadata' ||
-      lastSelect === 'metadata, updated_at'
-    ) {
+    if (lastSelect === 'metadata' || lastSelect === 'metadata, updated_at') {
       return {
         data: {
           id: row.id,

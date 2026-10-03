@@ -92,28 +92,24 @@ function isShellReadKey(name) {
 }
 
 export function findMultilineDotenvAssignments(text) {
+  // Grounded in dotenv itself, not a hand-rolled quote scan: a hand
+  // scan cannot reproduce dotenv's backtracking (single quotes are
+  // raw, so `'abc\'` is single-line; an escaped closing quote like
+  // `"abc\"` falls back to a single-line unquoted parse). dotenv is
+  // the authority the preflight validates with, so a shell-read key
+  // is multiline exactly when dotenv's own value for it spans lines.
+  // (A span swallowing a LATER shell-read key's line surfaces as a
+  // missing key in the required-value check instead.)
+  const parsed = parse(text);
   const offenders = [];
   for (const [index, line] of text.split('\n').entries()) {
     const match = line.match(
-      /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(['"`])/
+      /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*=\s*|:[ \t]+)(['"`])/
     );
     if (match === null || !isShellReadKey(match[1])) {
       continue;
     }
-    const quote = match[2];
-    let escaped = false;
-    let closed = false;
-    for (const char of line.slice(match[0].length)) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === quote) {
-        closed = true;
-        break;
-      }
-    }
-    if (!closed) {
+    if ((parsed[match[1]] ?? '').includes('\n')) {
       offenders.push(`${match[1]} (line ${index + 1})`);
     }
   }

@@ -103,10 +103,13 @@ export async function verifyGiglTrackingWorkerScopeProbe(
  * Proves the hook enforces the PATH allowlist, not just the POST
  * method. POSTs the inner claim RPC — a real, schema-typed function
  * outside the five wrapper paths — and requires the hook's own
- * denial. A hook weakened to method-only lets this through, but the
- * inner function raises before any write (it demands service_role),
- * so the probe is harmless either way and only the intact hook
- * satisfies it.
+ * denial. Callers MUST pass the unmapped scope-probe client: the
+ * restricted client remaps this inner name to its approved wrapper,
+ * which the hook permits, so the probe could never observe the
+ * denial through it. A hook weakened to method-only lets this
+ * through, but the inner function raises before any write (it
+ * demands service_role), so the probe is harmless either way and
+ * only the intact hook satisfies it.
  *
  * No schema-missing deferral, unlike the probes above: this runs
  * strictly after a schema-proving probe (the wrapper check, or the

@@ -20,11 +20,15 @@ env_file="$staging_dir/.env"
 
 repo_link="$(
   awk '
+    # Last assignment wins, matching dotenv, the scoped-environment
+    # reader, and the flip: a stale line above the live one must not
+    # provision the checkout under a directory promotion ignores.
     /^BACI_REPO_DIR=/ {
-      sub(/^BACI_REPO_DIR=/, "")
-      print
-      exit
+      value = $0
+      sub(/^BACI_REPO_DIR=/, "", value)
+      have_value = 1
     }
+    END { if (have_value) print value }
   ' "$env_file"
 )"
 repo_link="${repo_link%\"}"
@@ -135,8 +139,9 @@ fi
 # candidate revision. The live .env keeps pointing at the release
 # symlink until promote flips it. Portable rewrite (no sed -i): the
 # consumers match strict `^BACI_REPO_DIR=`, so delete every spelling
-# and append one canonical line.
-tmp_env="$(mktemp)" || exit 1
+# and append one canonical line. The temp file lives beside its
+# destination so the final mv is an atomic same-device rename.
+tmp_env="$(mktemp "${env_file}.XXXXXX")" || exit 1
 grep -v -E '^[[:space:]]*(export[[:space:]]+)?BACI_REPO_DIR=' "$env_file" > "$tmp_env" || true
 printf 'BACI_REPO_DIR=%s\n' "$repo_dir" >> "$tmp_env"
 mv "$tmp_env" "$env_file"

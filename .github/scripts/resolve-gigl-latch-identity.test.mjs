@@ -17,9 +17,21 @@ afterEach(() => {
   }
 });
 
-const fingerprintOf = (token, url = '', anon = '') =>
+const fingerprintOf = (
+  token,
+  url = '',
+  anon = '',
+  baseUrl = '',
+  email = '',
+  password = ''
+) =>
   createHash('sha256')
-    .update(token === '' ? '' : `${url}\n${anon}\n${token}`, 'utf8')
+    .update(
+      token === ''
+        ? ''
+        : `${url}\n${anon}\n${baseUrl}\n${email}\n${password}\n${token}`,
+      'utf8'
+    )
     .digest('hex');
 
 function resolve({ envFile = null, processEnv = {} }) {
@@ -29,7 +41,10 @@ function resolve({ envFile = null, processEnv = {} }) {
     writeFileSync(join(remote, '.env'), envFile);
   }
   const env = { ...process.env };
+  delete env.GIGL_BASE_URL;
+  delete env.GIGL_EMAIL;
   delete env.GIGL_ENABLED;
+  delete env.GIGL_PASSWORD;
   delete env.GIGL_TRACKING_WORKER_TOKEN;
   delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   delete env.NEXT_PUBLIC_SUPABASE_URL;
@@ -136,6 +151,52 @@ describe('GIGL latch identity resolver', () => {
     }).fingerprint;
 
     assert.notEqual(before, after);
+  });
+
+  it('binds the provider credential triple into the fingerprint', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    });
+    assert.equal(
+      fingerprint,
+      fingerprintOf(
+        'aaa.bbb.ccc',
+        '',
+        '',
+        'https://api.gigl.example',
+        'ops@example.com',
+        's3cret'
+      )
+    );
+  });
+
+  it('invalidates the latch when any provider credential rotates', () => {
+    // The smoke probes the provider login: without the triple, a
+    // rotation would keep the old latch and drop the Vercel schedule
+    // on unprobed values.
+    const base =
+      'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n';
+    const before = resolve({ envFile: base }).fingerprint;
+
+    for (const rotated of [
+      base.replace('s3cret', 'n3w-secret'),
+      base.replace('ops@example.com', 'rotation@example.com'),
+      base.replace('https://api.gigl.example', 'https://gigl.example'),
+    ]) {
+      assert.notEqual(
+        resolve({ envFile: rotated }).fingerprint,
+        before
+      );
+    }
+  });
+
+  it('ignores provider values when the token is absent (vacuous)', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\n',
+    });
+    assert.equal(fingerprint, fingerprintOf(''));
   });
 
   it('fingerprints the empty string when the token is absent', () => {

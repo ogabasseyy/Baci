@@ -64,6 +64,23 @@ describe('gigl-tracking-scoped-env', () => {
     assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
   });
 
+  it('ignores a mode-flag line in the file (caller owns the mode)', () => {
+    // A `GIGL_ENV_FILE_AUTHORITATIVE=0` file line must not flip the
+    // mode mid-loop: candidates sorted after it (like GIGL_PASSWORD)
+    // would otherwise read caller exports instead of the file, and
+    // the smoke would certify runner-injected values.
+    const result = runFilterProbe({
+      sharedEnv: `${SHARED_ENV_FIXTURE}\nGIGL_ENV_FILE_AUTHORITATIVE=0\n`,
+      extraEnv: {
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+        GIGL_PASSWORD: 'caller-override-password',
+      },
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(parseChildEnv(result.stdout), expectedChildEnv());
+  });
+
   it('passes caller-only GIGL knobs in default mode', () => {
     const result = runFilterProbe({
       sharedEnv: SHARED_ENV_FIXTURE,

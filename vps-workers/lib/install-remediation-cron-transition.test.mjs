@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { runTransition } from './install-remediation-cron-transition.test-helper.mjs';
 
@@ -248,5 +249,16 @@ describe('remediation cron transition', () => {
 
     assert.equal(outcome.result.status, 0, outcome.result.stderr);
     assert.match(outcome.crontab, /&& \.\/node /);
+  });
+
+  it('resolves a duplicate global-lock path to the last assignment', () => {
+    // An appended override must beat a stale line above it, matching
+    // dotenv and every other checkout reader.
+    const source = readFileSync(
+      new URL('./install-remediation-cron-transition.sh', import.meta.url),
+      'utf8'
+    );
+    assert.match(source, /END \{ if \(have_value\) print value \}/);
+    assert.doesNotMatch(source, /print line\n {4}exit/);
   });
 });

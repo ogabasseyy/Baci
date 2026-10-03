@@ -58,10 +58,14 @@ else
   # Portable rewrite (no sed -i): consumers match strict
   # `^BACI_REPO_DIR=`, so delete every spelling and append one
   # canonical line. mktemp is 0600, the safe direction for a secrets
-  # file if the live .env was more permissive.
+  # file if the live .env was more permissive. The temp file lives
+  # beside its destination so the final mv is an atomic same-device
+  # rename: a /tmp temp on another filesystem would silently degrade
+  # to copy+unlink, exposing a half-written .env to concurrent
+  # readers.
   repo_link="$checkout_base/app-live"
   ln -sfn "$immutable_dir" "$repo_link"
-  tmp_env="$(mktemp)" || exit 1
+  tmp_env="$(mktemp "$remote_dir/.env.XXXXXX")" || exit 1
   grep -v -E '^[[:space:]]*(export[[:space:]]+)?BACI_REPO_DIR=' "$remote_dir/.env" > "$tmp_env" || true
   printf 'BACI_REPO_DIR=%s\n' "$repo_link" >> "$tmp_env"
   mv "$tmp_env" "$remote_dir/.env"

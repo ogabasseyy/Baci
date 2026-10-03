@@ -67,6 +67,8 @@ tracking:
   # tracking-code push or manual deploy.sh run. Manifest-only pushes
   # intentionally bypass the worker gates, so follow a time-sensitive
   # dependency fix with a manual deploy.sh instead of assuming rollout.
+  # On-call triage for this window: the cutover runbook's
+  # "Manifest-only drift triage (worker-stale-first)" section.
   # Deliberately untracked: apps/web/src/env.ts and
   # apps/web/src/lib/is-non-agentic-worker-profile.ts are never loaded
   # by the worker graph (pinned by deploy-tracking-graph.test.mjs), so

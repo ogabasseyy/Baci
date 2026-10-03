@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCapabilityVerification } from './verify-gigl-tracking-worker-capability';
 
-const { createClient, verifyCapability, verifyPathProbe, verifyScopeProbe } =
-  vi.hoisted(() => ({
-    createClient: vi.fn(() => ({ rpc: vi.fn() })),
-    verifyCapability: vi.fn(),
-    verifyPathProbe: vi.fn(),
-    verifyScopeProbe: vi.fn(),
-  }));
+const {
+  createClient,
+  createScopeProbeClient,
+  verifyCapability,
+  verifyPathProbe,
+  verifyScopeProbe,
+} = vi.hoisted(() => ({
+  createClient: vi.fn(() => ({ rpc: vi.fn() })),
+  createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
+  verifyCapability: vi.fn(),
+  verifyPathProbe: vi.fn(),
+  verifyScopeProbe: vi.fn(),
+}));
 
 vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   const original =
@@ -15,6 +21,7 @@ vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   return {
     GiglWorkerTokenError: original.GiglWorkerTokenError,
     createGiglTrackingWorkerClient: createClient,
+    createGiglTrackingWorkerScopeProbeClient: createScopeProbeClient,
   };
 });
 vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) => {

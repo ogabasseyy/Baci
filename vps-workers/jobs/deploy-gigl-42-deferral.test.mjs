@@ -62,6 +62,14 @@ esac
 `
     );
     writeExecutable(
+      join(binDirectory, 'gh'),
+      `#!/usr/bin/env bash
+# deploy.sh refuses promotion while a production run is in flight;
+# the harness answers "none" so no test depends on the network.
+exit 0
+`
+    );
+    writeExecutable(
       join(binDirectory, 'rsync'),
       `#!/usr/bin/env bash
 touch "\${TEST_RSYNC_MARKER}"

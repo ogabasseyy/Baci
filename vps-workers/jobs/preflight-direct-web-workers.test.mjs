@@ -5,10 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import {
-  findMultilineDotenvAssignments,
-  getDirectWorkerPreflightProblems,
-} from './preflight-direct-web-workers.mjs';
+import { getDirectWorkerPreflightProblems } from './preflight-direct-web-workers.mjs';
 
 const commonEnv = {
   BACI_REPO_DIR: fileURLToPath(new URL('../..', import.meta.url)),
@@ -236,41 +233,6 @@ describe('direct worker environment preflight', () => {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
-
-  it('rejects multiline values for keys the shell boundary reads', () => {
-    // dotenv joins `"line1` with a later line, while the line-oriented
-    // shell reader hands the poller the first line only.
-    assert.deepEqual(
-      findMultilineDotenvAssignments('GIGL_PASSWORD="line1\nline2"\n'),
-      ['GIGL_PASSWORD (line 1)']
-    );
-    assert.deepEqual(
-      findMultilineDotenvAssignments("GIGL_PASSWORD='abc\ndef'\n"),
-      ['GIGL_PASSWORD (line 1)']
-    );
-    assert.deepEqual(
-      findMultilineDotenvAssignments(
-        'NEXT_PUBLIC_SUPABASE_URL="https://x\n"\n'
-      ),
-      ['NEXT_PUBLIC_SUPABASE_URL (line 1)']
-    );
-    // Terminated quotes (escapes honored), unquoted values, comments,
-    // and other workers' keys are not flagged.
-    assert.deepEqual(
-      findMultilineDotenvAssignments(
-        [
-          'GIGL_PASSWORD="abc\\"#def"',
-          "GIGL_EMAIL='a#b'",
-          'GIGL_BASE_URL=https://x#y',
-          '# GIGL_PASSWORD="unterminated',
-          'OTHER_WORKER_KEY="line1',
-          'line2"',
-          '',
-        ].join('\n')
-      ),
-      []
-    );
   });
 
   it('fails the staged-file preflight on a multiline GIGL value', () => {

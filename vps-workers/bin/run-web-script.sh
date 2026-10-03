@@ -58,11 +58,14 @@ esac
 if [ -z "${BACI_REPO_DIR:-}" ] && [ -f "$ENV_FILE" ]; then
   ENV_REPO_DIR="$(
     awk '
+      # Last assignment wins, matching dotenv and every other
+      # checkout reader: duplicates resolve to the live line.
       /^BACI_REPO_DIR=/ {
-        sub(/^BACI_REPO_DIR=/, "")
-        print
-        exit
+        value = $0
+        sub(/^BACI_REPO_DIR=/, "", value)
+        have_value = 1
       }
+      END { if (have_value) print value }
     ' "$ENV_FILE"
   )"
   ENV_REPO_DIR="${ENV_REPO_DIR%\"}"

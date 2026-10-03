@@ -169,7 +169,10 @@ done
 # (then alphabetical leftovers), NOT alphabetical: nested acquirers
 # (cron lines, AI trigger server) all take ollama-workload before
 # ai-storefront-jobs/agentic-commerce-health, and sharing that global
-# order is what keeps promote out of a deadlock cycle with them.
+# order is what keeps promote out of a deadlock cycle with them. One
+# exception is applied below: the remediation global lock is deferred
+# past every per-job lock, because first-appearance would otherwise
+# order it before its outers (see below).
 # Single-lock cron takes are non-blocking, so ticks skip instead of
 # queueing. Each fd stays open (hence held) until this remote shell
 # exits, which is after the flip below.
@@ -180,7 +183,20 @@ gigl_quiesce_names="$(
       [ -e "$gigl_quiesce_path" ] || continue
       basename "$gigl_quiesce_path"
     done
-  } | awk '!seen[$0]++'
+  } | awk '!seen[$0]++' | awk '
+    # The remediation cron lines nest flock per-job (outer) -> global
+    # (inner), but first-appearance lists the global lock -- first seen
+    # on the vercel line -- before the later per-job locks. The canary
+    # waits up to 600s on its inner global take, so holding the global
+    # first would deadlock promotion against a canary tick (each holding
+    # one lock, waiting on the other) for the full timeout. Defer the
+    # global lock until every lock that can outer it is already held.
+    # Nothing else nests global-outer except the deploy-lock-serialized
+    # transition, so trailing it cannot open a new cycle.
+    $0 == "error-remediator-global.lock" { hold_global = 1; next }
+    { print }
+    END { if (hold_global) print "error-remediator-global.lock" }
+  '
 )"
 gigl_quiesce_fd=10
 while IFS= read -r gigl_quiesce_name; do

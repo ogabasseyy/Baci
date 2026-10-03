@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGiglTrackingCapabilityVerification } from './verify-gigl-tracking-worker-capability';
 
-const { createClient, verifyCapability, verifyPathProbe, verifyScopeProbe } =
-  vi.hoisted(() => ({
-    createClient: vi.fn(() => ({ rpc: vi.fn() })),
-    verifyCapability: vi.fn(),
-    verifyPathProbe: vi.fn(),
-    verifyScopeProbe: vi.fn(),
-  }));
+const {
+  createClient,
+  createScopeProbeClient,
+  verifyCapability,
+  verifyPathProbe,
+  verifyScopeProbe,
+} = vi.hoisted(() => ({
+  createClient: vi.fn(() => ({ rpc: vi.fn() })),
+  createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
+  verifyCapability: vi.fn(),
+  verifyPathProbe: vi.fn(),
+  verifyScopeProbe: vi.fn(),
+}));
 
 vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   const original =
@@ -15,6 +21,7 @@ vi.mock('@/lib/gigl-tracking-worker-client', async (importOriginal) => {
   return {
     GiglWorkerTokenError: original.GiglWorkerTokenError,
     createGiglTrackingWorkerClient: createClient,
+    createGiglTrackingWorkerScopeProbeClient: createScopeProbeClient,
   };
 });
 vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) => {
@@ -52,6 +59,18 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(verifyCapability).toHaveBeenCalledOnce();
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
     expect(verifyPathProbe).toHaveBeenCalledOnce();
+    // The path probe must receive the UNMAPPED client: the restricted
+    // client would remap its inner RPC name to the approved wrapper
+    // and the hook denial would be unobservable.
+    expect(createScopeProbeClient).toHaveBeenCalledWith({
+      NODE_ENV: 'test',
+    });
+    expect(verifyPathProbe).toHaveBeenCalledWith(
+      createScopeProbeClient.mock.results[0].value
+    );
+    expect(verifyPathProbe.mock.calls[0][0]).not.toBe(
+      createClient.mock.results[0].value
+    );
     expect(verifyProviderAuth).toHaveBeenCalledOnce();
     expect(logger.info).toHaveBeenCalledWith(
       '[gigl-capability] restricted wrapper verified'
@@ -155,6 +174,9 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(verifyCapability).not.toHaveBeenCalled();
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
     expect(verifyPathProbe).toHaveBeenCalledOnce();
+    expect(verifyPathProbe).toHaveBeenCalledWith(
+      createScopeProbeClient.mock.results[0].value
+    );
   });
 
   it('fails closed when disabled with an unenforced path allowlist', async () => {

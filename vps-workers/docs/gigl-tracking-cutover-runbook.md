@@ -50,14 +50,43 @@ checkout stays frozen as the object source for future worktrees, the
 release symlink takes the `app-live` sibling name, and the live `.env`
 is re-pointed to it. Never pull the legacy path again. Roll back by
 re-running `deploy.sh` from the older SHA (missing worktrees are
-re-created from fetch); for an emergency manual rollback,
-`ln -sfn <base>/app-<sha> <base>/app-live` under
-`flock -x /tmp/baci-workers-deploy.lock`, then re-point the SHA marker
-(`printf '<sha>' > $REMOTE_DIR/app-checkout.sha`) and delete the latch
-(`rm -f $REMOTE_DIR/.gigl-capability-smoke-ok` — it certified the newer
-revision, and without this a later non-tracking push would bypass on a
-stale proof while cron runs the old code). Re-smoke afterwards for
-immediate confidence; the next tracking push re-latches.
+re-created from fetch; refuses while a production deploy is in flight
+unless `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` — emergency only, then
+re-run the smoke/latch sequence). For an emergency manual rollback,
+restore the COMPLETE old worker release — not just the checkout
+symlink: repointing `app-live` alone leaves the newer `bin/`, `jobs/`,
+and `lib/` installed, so cron executes a mixed release while the SHA
+marker claims the old revision, and neither readiness nor the latch
+can detect the wrapper skew. The old worktree is a full repo checkout,
+so it carries the old `vps-workers/` tree; if it was already retired,
+re-create it first (`git -C <base>/app-live worktree add --detach
+<base>/app-<sha> <sha>`), or use the `deploy.sh` path instead. Then,
+under the deploy lock with the GIGL runtime lock nested inside
+(promote's order, so a tick that would straddle the restore skips):
+
+```sh
+flock -x /tmp/baci-workers-deploy.lock \
+flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
+  set -euo pipefail
+  rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$REMOTE_DIR/bin/"
+  rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$REMOTE_DIR/jobs/"
+  rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$REMOTE_DIR/lib/"
+  cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$REMOTE_DIR/bin/gigl-dotenv.sh"
+  ln -sfn <base>/app-<sha> <base>/app-live
+  printf "<sha>" > "$REMOTE_DIR/app-checkout.sha"
+  rm -f "$REMOTE_DIR/.gigl-capability-smoke-ok"
+'
+```
+
+Files restore BEFORE the symlink/marker flip, so the marker never
+claims the old revision while newer wrappers are still installed.
+Deleting the latch is required — it certified the newer revision, and
+without this a later non-tracking push would bypass on a stale proof
+while cron runs the old code. Re-smoke afterwards for immediate
+confidence; the next tracking push re-latches. Installed dependencies
+(`$REMOTE_DIR/node_modules`) and the crontab stay at the newer
+release: follow with a full `deploy.sh` from the old SHA at the first
+opportunity to converge them.
 
 Known residual window: promote lands new code before the workflow's
 `db-migrations` apply, so a tracking change that needs a new migration
@@ -111,6 +140,52 @@ pushes until the tree is re-smoked. Recover with `deploy.sh` from
 current main, then either push any tracking change (its smoke
 re-latches at HEAD) or dispatch the workflow (dispatch always runs the
 full smoke live and re-latches on success).
+
+## Manifest-only drift triage (worker-stale-first)
+
+The monorepo manifests are deliberately outside the tracking filter
+(see `.github/filters/deploy.yml`): a manifest-only push deploys to
+Vercel with a CI warning while the VPS poller keeps its installed
+dependency tree until the next tracking-code push or manual
+`deploy.sh`. Gating manifests would freeze main on every lockfile PR
+while the poller runs its older code + tree self-consistently, so the
+drift is an accepted residual — with one on-call rule: **a
+manifest-only push followed by a VPS incident triages as
+worker-stale-first**. Confirm with the installed SHA
+(`cat $REMOTE_DIR/app-checkout.sha`) versus HEAD, then converge with
+`deploy.sh` from current main. For a time-sensitive dependency fix
+(transitive security patch the poller executes), do not wait for the
+next tracking push — run `deploy.sh` immediately after the merge.
+
+## Poller dead-man signals (no pager)
+
+A failing poller pages nobody: the `*/5` cron appends to a persistent
+VPS log, the poller redacts provider/customer/database detail by
+design, and no pager transport is wired yet. Until one is, confirm
+poller liveness manually with these three signals (in order):
+
+1. **Cron log tail** — `tail -n 50 $REMOTE_DIR/logs/gigl-tracking.log`:
+   look for `[gigl-tracking] failed` lines and check the last lines
+   are minutes old. The log is redacted by construction, so it proves
+   liveness, not cause.
+2. **Due-but-unpolled backlog** — a healthy poller claims due rows
+   every 5 minutes, so rows due >15 minutes ago mean missed cycles:
+   `SELECT count(*) FROM public.shipment_tracking_monitors WHERE state
+   IN ('active', 'final_poll') AND next_poll_at IS NOT NULL AND
+   next_poll_at < now() - interval '15 minutes';`
+3. **Stuck claims / repeated failures** — crashed mid-batch, or
+   provider/auth breakage:
+   `SELECT count(*) FROM public.shipment_tracking_monitors WHERE
+   locked_at IS NOT NULL AND locked_at < now() - interval '30
+   minutes';`
+   `SELECT count(*) FROM public.shipment_tracking_monitors WHERE state
+   IN ('active', 'final_poll') AND consecutive_failures > 3;`
+
+The latch mtime (`stat $REMOTE_DIR/.gigl-capability-smoke-ok`) is NOT
+a liveness signal — it records the last passing smoke, and goes stale
+by design between tracking pushes. If the signals above show a dead
+poller, fix forward with `deploy.sh` from current main (which
+re-smokes the candidate) rather than hand-editing the live tree.
 
 ## Re-enabling GIGL after a disabled period
 

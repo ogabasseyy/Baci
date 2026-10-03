@@ -100,4 +100,56 @@ describe('deploy promotion guards', () => {
         promotionSource.indexOf('flip-immutable-checkout.sh')
     );
   });
+
+  it('acquires remediation per-job locks before their shared global lock', () => {
+    const { promotionSource } = readPromotionSource();
+
+    // The remediation cron lines nest flock per-job (outer) -> global
+    // (inner), but crontab first-appearance lists the global lock
+    // (first seen on the vercel line) before the later per-job locks.
+    // The canary waits up to 600s on its inner global take, so
+    // promotion must defer the global lock past every per-job lock or
+    // it deadlocks against a canary tick for the full timeout.
+    const dedupIndex = promotionSource.indexOf("awk '!seen[$0]++'");
+    const deferIndex = promotionSource.indexOf(
+      '$0 == "error-remediator-global.lock"'
+    );
+    assert.ok(dedupIndex !== -1 && deferIndex !== -1);
+    assert.ok(
+      dedupIndex < deferIndex,
+      'expected the global-lock deferral to run after first-appearance dedup'
+    );
+    assert.match(
+      promotionSource,
+      /\$0 == "error-remediator-global\.lock" \{ hold_global = 1; next \}/
+    );
+    assert.match(
+      promotionSource,
+      /END \{ if \(hold_global\) print "error-remediator-global\.lock" \}/
+    );
+  });
+
+  it('rewrites dotenv files via same-directory temp files', () => {
+    // The flip and provisioner rewrite .env files holding secrets: a
+    // /tmp temp on another filesystem would silently degrade the
+    // final mv to copy+unlink, exposing a half-written .env to
+    // concurrent readers. Same-directory temps keep it an atomic
+    // rename.
+    for (const [script, template] of [
+      ['lib/flip-immutable-checkout.sh', '"$remote_dir/.env.XXXXXX"'],
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell expansion compared verbatim.
+      ['lib/provision-immutable-checkout.sh', '"${env_file}.XXXXXX"'],
+    ]) {
+      const source = readFileSync(join(workerRoot, script), 'utf8');
+      assert.ok(
+        source.includes(`mktemp ${template}`),
+        `expected ${script} to mktemp beside its destination`
+      );
+      assert.doesNotMatch(
+        source,
+        /\$\(mktemp\)/,
+        `expected no bare mktemp in ${script}`
+      );
+    }
+  });
 });

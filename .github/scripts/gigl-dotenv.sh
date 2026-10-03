@@ -5,13 +5,15 @@
 # gigl_dotenv_value <file> <key> prints the dotenv value for KEY in FILE
 # (last assignment wins). Subset, verified against dotenv 17.4.2 (which
 # the capability smoke loads): optional leading whitespace, optional
-# `export` prefix, spaces around `=`, one layer of matched surrounding
-# quotes stripped, otherwise a quote-aware trailing `#` comment stripped.
-# Prints nothing when the file or key is absent. Inside double quotes
-# an escape never ends the quoted region (so a `#` after `\"` stays
-# data), and `\n` / `\r` expand exactly as dotenv parses them; every
-# other escape stays literal, as do single-quoted and unquoted values.
-# Multiline values are out of subset.
+# `export` prefix, `=` (spaces around) or `:` (no space before, blank
+# after) separator, one layer of matched surrounding quotes
+# (single/double/backtick) stripped, otherwise a quote-aware trailing
+# `#` comment stripped. Prints nothing when the file or key is absent.
+# Inside double quotes an escape never ends the quoted region (so a
+# `#` after `\"` stays data), and `\n` / `\r` expand exactly as dotenv
+# parses them; every other escape stays literal, as do single-quoted,
+# backtick-quoted, and unquoted values. Multiline values are out of
+# subset.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-dotenv.sh must be sourced, not executed' >&2
   exit 2
@@ -20,16 +22,23 @@ fi
 gigl_dotenv_value() {
   local file="$1" key="$2"
   [ -f "$file" ] || return 0
-  awk -v key="$key" -v dq='"' -v sq="'" '
+  awk -v key="$key" -v dq='"' -v sq="'" -v bq='`' '
     {
       line = $0
       sub(/^[ \t]+/, "", line)
       sub(/^export[ \t]+/, "", line)
       if (substr(line, 1, length(key)) != key) next
       rest = substr(line, length(key) + 1)
-      sub(/^[ \t]+/, "", rest)
-      if (substr(rest, 1, 1) != "=") next
-      value = substr(rest, 2)
+      if (substr(rest, 1, 1) == ":" && substr(rest, 2, 1) ~ /[ \t\r]/) {
+        # dotenv colon separator: no blank before the colon, blank
+        # after (`KEY: value`; `KEY : v` and `KEY:v` are ignored
+        # lines, matched by falling through to the `=` check below).
+        value = substr(rest, 2)
+      } else {
+        sub(/^[ \t]+/, "", rest)
+        if (substr(rest, 1, 1) != "=") next
+        value = substr(rest, 2)
+      }
       # Strip a trailing `#` comment, honoring single/double quotes the
       # way dotenv does (a `#` inside quotes is data, not a comment).
       uncommented = ""
@@ -51,7 +60,10 @@ gigl_dotenv_value() {
           # (abc"def#ghi parses to abc"def, comment stripped), so
           # opening mid-value would preserve a `#` dotenv drops and
           # hand the poller different bytes than the preflight saw.
-          if (char == dq || char == sq) {
+          # Backtick joins single/double here (the third dotenv
+          # quoted form); like single quotes it is raw below (escapes
+          # are honored inside double quotes only).
+          if (char == dq || char == sq || char == bq) {
             if (!seen_data) quote = char
           } else if (char != " " && char != "\t" && char != "\r") {
             seen_data = 1
@@ -71,7 +83,7 @@ gigl_dotenv_value() {
       # quotes (a double-quote opener with a single-quote closer stays
       # literal), so stripping them would hand the poller different
       # bytes than the preflight validated.
-      if (length(value) >= 2 && (first == dq || first == sq) && last == first) {
+      if (length(value) >= 2 && (first == dq || first == sq || first == bq) && last == first) {
         double_quoted = (first == dq)
         value = substr(value, 2, length(value) - 2)
         if (double_quoted) {

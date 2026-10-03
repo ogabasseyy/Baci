@@ -69,10 +69,9 @@ function hasCurrentWorkerCapability(token: string): boolean {
   }
 }
 
-/** Creates the five-operation PostgREST capability used by the VPS poller. */
-export function createGiglTrackingWorkerClient(
+function createValidatedPostgrestClient(
   env: Readonly<Record<string, string | undefined>>
-): GiglTrackingRpcClient {
+) {
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const workerToken = env.GIGL_TRACKING_WORKER_TOKEN?.trim();
@@ -89,9 +88,9 @@ export function createGiglTrackingWorkerClient(
   // The worker JWT travels in the Authorization header on every call, so
   // an http: misconfiguration would expose it over plaintext transport
   // (neither this check's predecessors nor the VPS preflight constrained
-  // the scheme). This constructor is the single choke point for the
-  // poller, the smoke, and the fallback route: refuse to build a client
-  // that would send the token anywhere but a credential-free https: URL.
+  // the scheme). This helper is the single validation choke point behind
+  // both constructors below: refuse to build a client that would send
+  // the token anywhere but a credential-free https: URL.
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -139,6 +138,14 @@ export function createGiglTrackingWorkerClient(
       ) => unknown;
     }
   ).rpc.bind(client);
+  return rpc;
+}
+
+/** Creates the five-operation PostgREST capability used by the VPS poller. */
+export function createGiglTrackingWorkerClient(
+  env: Readonly<Record<string, string | undefined>>
+): GiglTrackingRpcClient {
+  const rpc = createValidatedPostgrestClient(env);
   return {
     rpc: ((
       functionName: string,
@@ -155,5 +162,37 @@ export function createGiglTrackingWorkerClient(
       }
       return rpc(restrictedName as never, args as never, options);
     }) as unknown as GiglTrackingRpcClient['rpc'],
+  };
+}
+
+/**
+ * Smoke-only raw client for the scope path probe: identical
+ * validation, origin pin, and worker-JWT authorization, but NO RPC
+ * name remapping, so the probe can POST an out-of-allowlist path and
+ * require the hook's denial. The restricted client above remaps every
+ * known name to an approved wrapper (or throws), which makes hook
+ * path enforcement unobservable through it. Never used by the
+ * poller or fallback route — they must stay mapped; the PostgREST
+ * scope hook still confines whatever this client sends.
+ */
+export function createGiglTrackingWorkerScopeProbeClient(
+  env: Readonly<Record<string, string | undefined>>
+): GiglTrackingRpcClient {
+  const rpc = createValidatedPostgrestClient(env);
+  return {
+    rpc: ((
+      functionName: string,
+      args?: Record<string, unknown>,
+      options?: {
+        count?: 'exact' | 'planned' | 'estimated';
+        get?: boolean;
+        head?: boolean;
+      }
+    ) =>
+      rpc(
+        functionName as never,
+        args as never,
+        options
+      )) as unknown as GiglTrackingRpcClient['rpc'],
   };
 }

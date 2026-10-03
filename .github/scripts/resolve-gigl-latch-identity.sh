@@ -2,12 +2,16 @@
 # Prints the GIGL latch identity for a worker directory as one line:
 #   <scope> <credential-fingerprint>
 # scope is `disabled` or `enabled`; fingerprint is the sha256 of the
-# effective Supabase URL, anon key, and worker token (newline-joined).
-# Binding all three database credentials -- not just the token --
-# forces a fresh smoke when the poller is repointed at an unverified
-# endpoint. When the token is absent the fingerprint is the sha256 of
-# the empty string regardless of URL/anon: nothing authenticates without
-# the token, and the well-known empty value preserves vacuity detection
+# effective Supabase URL, anon key, GIGL provider base/email/password,
+# and worker token (newline-joined). Binding the database credentials
+# AND the provider triple -- not just the token -- forces a fresh
+# smoke when the poller is repointed at an unverified endpoint or its
+# provider credentials rotate: the smoke probes the provider login, so
+# without the triple a rotation would keep the old latch and let
+# vercel.json drop the Vercel schedule on unprobed values. When the
+# token is absent the fingerprint is the sha256 of the empty string
+# regardless of URL/anon/provider: nothing authenticates without the
+# token, and the well-known empty value preserves vacuity detection
 # (prepare defers exit-42 on a vacuous disabled latch). Exits nonzero
 # when the fingerprint cannot be computed; callers fail closed.
 # Usage:
@@ -65,7 +69,7 @@ identity_token="$(effective GIGL_TRACKING_WORKER_TOKEN)"
 if [ -z "$identity_token" ]; then
   fingerprint="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 else
-  fingerprint="$({ effective NEXT_PUBLIC_SUPABASE_URL; echo; effective NEXT_PUBLIC_SUPABASE_ANON_KEY; echo; printf '%s' "$identity_token"; } | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest())')"
+  fingerprint="$({ effective NEXT_PUBLIC_SUPABASE_URL; echo; effective NEXT_PUBLIC_SUPABASE_ANON_KEY; echo; effective GIGL_BASE_URL; echo; effective GIGL_EMAIL; echo; effective GIGL_PASSWORD; echo; printf '%s' "$identity_token"; } | python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest())')"
 fi
 if [[ ! "$fingerprint" =~ ^[0-9a-f]{64}$ ]]; then
   echo "resolve-gigl-latch-identity: fingerprint failed" >&2

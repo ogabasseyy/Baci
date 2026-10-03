@@ -17,6 +17,8 @@ proc_root="$8"
 lock_dir="$remote_dir/locks"
 
 global_lock_value="$(awk '
+  # Last assignment wins, matching dotenv and every other checkout
+  # reader: an appended override must beat a stale line above it.
   {
     line = $0
     sub(/^[[:space:]]*/, "", line)
@@ -31,9 +33,10 @@ global_lock_value="$(awk '
       sub(/[[:space:]]+#.*$/, "", line)
       sub(/[[:space:]]+$/, "", line)
     }
-    print line
-    exit
+    value = line
+    have_value = 1
   }
+  END { if (have_value) print value }
 ' "$remote_dir/.env" 2>/dev/null || true)"
 global_lock_value="${global_lock_value%\"}"
 global_lock_value="${global_lock_value#\"}"

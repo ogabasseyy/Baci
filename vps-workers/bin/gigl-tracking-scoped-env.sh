@@ -102,6 +102,12 @@ gigl_tracking_scope_env() {
   # assignment wins inside the reader, not here).
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
+    # The mode flag is caller-owned, never file-owned: a
+    # `GIGL_ENV_FILE_AUTHORITATIVE=0` line would otherwise flip the
+    # mode mid-loop (sorted candidates after it would read caller
+    # exports instead of the file). The caller loop below skips it
+    # for the same reason.
+    [ "$candidate" = "GIGL_ENV_FILE_AUTHORITATIVE" ] && continue
     gigl_tracking_export_from_file "$candidate"
   done <<EOF
 $(grep -o -E '^[[:space:]]*(export[[:space:]]+)?GIGL_[A-Za-z0-9_]*' "$shared_env" 2>/dev/null | grep -o -E 'GIGL_[A-Za-z0-9_]*' | sort -u || true)

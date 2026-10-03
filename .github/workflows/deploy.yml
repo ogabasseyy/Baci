@@ -379,7 +379,16 @@ jobs:
       # Bumping the pin requires re-checking that the new CLI's bundled
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
-      - name: Verify GIGL fallback token presence in Vercel Production
+      - name: Verify GIGL fallback token presence (defined, not validity) in Vercel Production
+        # Presence-only: Vercel pulls sensitive values blank, so this
+        # proves the Production key is DEFINED and injects a build-time
+        # stand-in; it cannot prove the value is real or unexpired. An
+        # expired or mismatched token passes this gate and surfaces
+        # only at runtime (500 from the retained manual fallback
+        # route). The real gate is the pre-merge decode/match checklist
+        # (`role` claim `gigl_tracking_worker`, >=14 days runway, same
+        # JWT in Vercel Production and the VPS worker .env); rotation
+        # procedure: vps-workers/docs/gigl-tracking-worker-token-rotation.md.
         run: .github/scripts/verify-gigl-fallback-token.sh .vercel/.env.production.local
       - name: Ensure wallet recovery HMAC Production configuration exists
         # `vercel pull` omits undefined keys and writes blank placeholders for

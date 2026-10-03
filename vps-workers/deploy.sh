@@ -7,6 +7,8 @@ set -euo pipefail
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/prepare-worker-release.sh
 source "$WORKER_ROOT/lib/prepare-worker-release.sh"
+# shellcheck source=lib/check-deploy-workflow-inflight.sh
+source "$WORKER_ROOT/lib/check-deploy-workflow-inflight.sh"
 # shellcheck source=lib/install-remediation-cron-transition.sh
 source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
 # shellcheck source=lib/print-worker-env-reminder.sh
@@ -26,6 +28,10 @@ if [ -n "$(git ls-files --others --exclude-standard)" ]; then
   exit 1
 fi
 
+# Fail fast when a production deploy is already in flight; the check
+# runs again immediately before promote to close the staging window.
+check_deploy_workflow_inflight
+
 prepare_worker_release
 
 CODEX_CONTAINER_BIN=$(ssh "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
@@ -40,6 +46,11 @@ echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
 
 install_remediation_cron_transition
+
+# Re-check immediately before the live SHA flips: staging, the image
+# build, and the transition above take minutes, and a workflow that
+# started in that window publishes off the pre-promote latch/SHA.
+check_deploy_workflow_inflight
 
 promote_worker_release
 

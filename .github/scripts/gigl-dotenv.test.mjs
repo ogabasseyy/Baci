@@ -68,6 +68,30 @@ describe('gigl-dotenv', () => {
     assert.equal(readValue('SPACED=abc # def\n', 'SPACED'), 'abc');
   });
 
+  it('parses dotenv colon assignments, like dotenv', () => {
+    // dotenv 17.4.2: `KEY:` (no blank before, blank after) is a
+    // separator; `KEY : v` and `KEY:v` are ignored lines.
+    assert.equal(readValue('K1: secret\n', 'K1'), 'secret');
+    assert.equal(readValue('K2:  spaced\n', 'K2'), 'spaced');
+    assert.equal(readValue('export K3: v\n', 'K3'), 'v');
+    assert.equal(readValue('K4 :v\n', 'K4'), '');
+    assert.equal(readValue('K5:secret\n', 'K5'), '');
+    assert.equal(readValue('K6::v\n', 'K6'), '');
+    assert.equal(readValue('K7: "quoted" # tail\n', 'K7'), 'quoted');
+    assert.equal(readValue("K8: 'sq' # tail\n", 'K8'), 'sq');
+    assert.equal(readValue('K9: a#b\n', 'K9'), 'a');
+  });
+
+  it('parses backtick-quoted values raw, like dotenv', () => {
+    // dotenv 17.4.2: backtick is the third quoted form; escapes do
+    // not expand inside it (unlike double quotes).
+    assert.equal(readValue('K1=`abc#def`\n', 'K1'), 'abc#def');
+    assert.equal(readValue('K2=`a\\nb`\n', 'K2'), 'a\\nb');
+    assert.equal(readValue('K3=`a"b` # tail\n', 'K3'), 'a"b');
+    assert.equal(readValue('K4=ab`cd#ef\n', 'K4'), 'ab`cd');
+    assert.equal(readValue('K5=`abc"\n', 'K5'), '`abc"');
+  });
+
   it('treats only a leading quote as a quoted region, like dotenv', () => {
     // dotenv 17.4.2: a quote past the first non-whitespace character
     // is data, so the `#` still starts a comment. Opening quote mode

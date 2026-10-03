@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import {
   GiglWorkerTokenError,
   createGiglTrackingWorkerClient,
+  createGiglTrackingWorkerScopeProbeClient,
 } from '@/lib/gigl-tracking-worker-client';
 import { GiglApiClient } from '@/lib/shipping/providers/gigl.auth';
 import type { GiglFetchOptions } from '@/lib/shipping/providers/gigl.constants';
@@ -109,7 +110,11 @@ export async function runGiglTrackingCapabilityVerification({
     // disabled latch must not certify that broader authority.
     try {
       if (await verifyGiglTrackingWorkerScopeProbe(client)) {
-        if (await verifyGiglTrackingWorkerScopePathProbe(client)) {
+        // Unmapped client: the restricted client above would remap
+        // this probe's inner RPC name to its approved wrapper.
+        const scopeProbeClient =
+          createGiglTrackingWorkerScopeProbeClient(env);
+        if (await verifyGiglTrackingWorkerScopePathProbe(scopeProbeClient)) {
           logger.info('[gigl-capability] scope hook verified active');
           return 0;
         }
@@ -140,7 +145,13 @@ export async function runGiglTrackingCapabilityVerification({
         // A method-only hook passes the GET probe above while letting
         // POST reach any PUBLIC RPC: prove path enforcement before
         // the latch below can authorize dropping the Vercel schedule.
-        if (await verifyGiglTrackingWorkerScopePathProbe(client)) {
+        // Unmapped client: the restricted client would remap this
+        // probe's inner RPC name to its approved wrapper.
+        const scopeProbeClient =
+          createGiglTrackingWorkerScopeProbeClient(env);
+        if (
+          await verifyGiglTrackingWorkerScopePathProbe(scopeProbeClient)
+        ) {
           // Last: the wrapper checks prove the database capability but
           // never authenticate to the provider. Probe the login before
           // latching.

@@ -59,6 +59,17 @@ esac
 `
     );
     writeExecutable(
+      join(binDirectory, 'gh'),
+      `#!/usr/bin/env bash
+# deploy.sh refuses promotion while a production run is in flight;
+# the harness owns this answer so no test depends on the network.
+if [ "\${TEST_SCENARIO:-}" = "inflight-deploy" ]; then
+  echo '184400111 in_progress abc12345 push https://example.invalid/runs/184400111'
+fi
+exit 0
+`
+    );
+    writeExecutable(
       join(binDirectory, 'rsync'),
       `#!/usr/bin/env bash
 touch "\${TEST_RSYNC_MARKER}"
@@ -170,6 +181,16 @@ describe('deploy source guards', () => {
     assert.equal(outcome.sshCalled, true);
   });
 
+  it('refuses clean source while a production deploy is in flight', () => {
+    const outcome = runDeployGuardScenario('inflight-deploy');
+
+    assert.equal(outcome.result.status, 1);
+    assert.match(outcome.result.stderr, /Refusing worker promotion/);
+    assert.match(outcome.result.stderr, /184400111/);
+    assert.equal(outcome.rsyncCalled, false);
+    assert.equal(outcome.sshCalled, false);
+  });
+
   it('does not replace live workers when the staged preflight fails', () => {
     const outcome = runDeployGuardScenario('remote-preflight-failure');
 
@@ -234,5 +255,4 @@ describe('deploy source guards', () => {
     assert.match(provisioner, /worktree add --detach/);
     assert.match(provisioner, /pnpm install --frozen-lockfile/);
   });
-
 });

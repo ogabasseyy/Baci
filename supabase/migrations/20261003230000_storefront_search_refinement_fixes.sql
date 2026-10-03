@@ -1,12 +1,12 @@
--- Additive public refinement contract. Existing search_products_v2 callers remain supported.
--- Ranking is SECURITY INVOKER under product RLS. Only published active products
--- have public offer-price projections; protected inventory/cost columns never leave SQL.
+-- Review-fix follow-up to 20261002090046 (append-only: base file keeps its frozen replay pin).
+-- Resolves variant anchor inventory policy and applies the manage_stock IS FALSE canon.
+
 CREATE OR REPLACE FUNCTION public.get_storefront_search_price_options(p_merchant_id uuid, p_product_id uuid)
 RETURNS TABLE(variant_id uuid, offer_id uuid, condition text, effective_price numeric)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   WITH parent AS MATERIALIZED (
     SELECT p.id, p.merchant_id, p.price, p.condition, p.manage_stock,
-      p.stock, p.stock_quantity, p.inventory_tracking_policy, p.has_condition_offers
+      p.stock, p.stock_quantity, p.inventory_tracking_policy, p.has_condition_offers, p.has_variants
     FROM public.products p JOIN public.merchants m ON m.id = p.merchant_id
     WHERE p.id = p_product_id AND p.merchant_id = p_merchant_id
       AND p.status = 'active' AND m.is_published IS TRUE
@@ -14,12 +14,25 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     SELECT v.id, v.product_id, v.condition, v.price_override, v.stock_quantity,
       COALESCE(v.inventory_tracking_policy, p.inventory_tracking_policy, 'legacy') AS tracking
     FROM parent p JOIN public.product_variants v ON v.product_id = p.id AND v.merchant_id = p.merchant_id
-    WHERE v.is_inventory_anchor IS NOT TRUE
+    WHERE v.is_inventory_anchor IS NOT TRUE AND p.has_variants IS TRUE
+  ), anchor_policy AS MATERIALIZED (
+    SELECT p.id AS product_id,
+      COALESCE(
+        (SELECT CASE
+           WHEN av.inventory_tracking_policy IN ('off', 'serialized_strict', 'serialized_then_unlimited')
+           THEN av.inventory_tracking_policy END
+         FROM public.product_variants av
+         WHERE av.product_id = p.id AND av.merchant_id = p.merchant_id
+           AND av.is_inventory_anchor IS TRUE
+         ORDER BY av.id LIMIT 1),
+        p.inventory_tracking_policy, 'legacy') AS effective_policy
+    FROM parent p
   ), serialized AS MATERIALIZED (
     SELECT s.variant_id, s.public_available_units FROM parent p
     CROSS JOIN LATERAL public.get_public_serialized_variant_availability_counts(p.merchant_id, ARRAY[p.id]) s
     WHERE p.inventory_tracking_policy IN ('serialized_strict', 'serialized_then_unlimited')
        OR EXISTS (SELECT 1 FROM variants v WHERE v.tracking IN ('serialized_strict', 'serialized_then_unlimited'))
+       OR EXISTS (SELECT 1 FROM anchor_policy a WHERE a.product_id = p.id AND a.effective_policy IN ('serialized_strict', 'serialized_then_unlimited'))
   ), offers AS MATERIALIZED (
     SELECT o.id, o.condition, o.price, o.stock_quantity
     FROM parent p JOIN public.product_offers o ON o.product_id = p.id AND o.merchant_id = p.merchant_id
@@ -30,17 +43,17 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   WHERE v.tracking = 'serialized_then_unlimited'
      OR (v.tracking = 'serialized_strict' AND EXISTS (SELECT 1 FROM serialized s WHERE s.variant_id = v.id AND s.public_available_units > 0))
      OR (v.tracking NOT IN ('serialized_strict', 'serialized_then_unlimited')
-         AND (p.manage_stock IS NOT TRUE OR COALESCE(v.stock_quantity, CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END) > 0))
+         AND (p.manage_stock IS FALSE OR COALESCE(v.stock_quantity, CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END) > 0))
   UNION ALL
   SELECT NULL::uuid, o.id, o.condition, o.price FROM parent p CROSS JOIN offers o
-  WHERE NOT EXISTS (SELECT 1 FROM variants) AND (p.manage_stock IS NOT TRUE OR o.stock_quantity > 0)
+  WHERE NOT EXISTS (SELECT 1 FROM variants) AND (p.manage_stock IS FALSE OR COALESCE(o.stock_quantity, 0) > 0)
   UNION ALL
-  SELECT NULL::uuid, NULL::uuid, COALESCE(p.condition, 'new'), p.price FROM parent p
+  SELECT NULL::uuid, NULL::uuid, COALESCE(p.condition, 'new'), p.price FROM parent p JOIN anchor_policy a ON a.product_id = p.id
   WHERE NOT EXISTS (SELECT 1 FROM variants) AND p.has_condition_offers IS NOT TRUE
-    AND (p.inventory_tracking_policy = 'serialized_then_unlimited'
-      OR (p.inventory_tracking_policy = 'serialized_strict' AND EXISTS (SELECT 1 FROM serialized s WHERE s.variant_id IS NULL AND s.public_available_units > 0))
-      OR (COALESCE(p.inventory_tracking_policy, 'legacy') NOT IN ('serialized_strict', 'serialized_then_unlimited')
-        AND (p.manage_stock IS NOT TRUE OR CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END > 0)));
+    AND (a.effective_policy = 'serialized_then_unlimited'
+      OR (a.effective_policy = 'serialized_strict' AND EXISTS (SELECT 1 FROM serialized s WHERE s.variant_id IS NULL AND s.public_available_units > 0))
+      OR (a.effective_policy NOT IN ('serialized_strict', 'serialized_then_unlimited')
+        AND (p.manage_stock IS FALSE OR CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END > 0)));
 $$;
 REVOKE ALL ON FUNCTION public.get_storefront_search_price_options(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_storefront_search_price_options(uuid, uuid) TO anon, authenticated;
@@ -139,7 +152,7 @@ BEGIN
         END
         + coalesce(ts_rank_cd(fp.search_vector, search_terms), 0) * 4.0
         + CASE
-          WHEN coalesce(fp.manage_stock, false) = false
+          WHEN fp.manage_stock IS FALSE
             OR coalesce(fp.stock_quantity, 0) > 0 THEN 0.12
           ELSE 0
         END
@@ -154,35 +167,3 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.storefront_search_refined_candidates(text,uuid,text[],uuid,text,numeric,numeric,double precision) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.storefront_search_refined_candidates(text,uuid,text[],uuid,text,numeric,numeric,double precision) TO anon,authenticated;
-
-CREATE OR REPLACE FUNCTION public.search_storefront_products_refined(
-  search_query text, merchant_id_param uuid, brands_filter text[] DEFAULT NULL,
-  category_id_filter uuid DEFAULT NULL, condition_filter text DEFAULT NULL,
-  min_price_filter numeric DEFAULT NULL, max_price_filter numeric DEFAULT NULL,
-  min_rating_filter double precision DEFAULT NULL, sort_by text DEFAULT 'relevance',
-  result_limit integer DEFAULT 20, result_offset integer DEFAULT 0
-) RETURNS TABLE(product_id uuid,relevance real,total_count bigint,effective_price numeric,matched_variant_id uuid,matched_offer_id uuid,matched_condition text)
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
-  SELECT c.product_id,c.relevance,count(*) OVER (),c.effective_price,c.matched_variant_id,c.matched_offer_id,c.matched_condition
-  FROM public.storefront_search_refined_candidates(search_query,merchant_id_param,brands_filter,category_id_filter,condition_filter,min_price_filter,max_price_filter,min_rating_filter) c
-  ORDER BY CASE WHEN sort_by='price_asc' THEN c.effective_price END ASC NULLS LAST,
-    CASE WHEN sort_by='price_desc' THEN c.effective_price END DESC NULLS LAST,
-    CASE WHEN sort_by='popular' THEN c.view_count END DESC NULLS LAST,
-    CASE WHEN sort_by='newest' THEN c.created_at END DESC NULLS LAST,
-    c.relevance DESC,c.created_at DESC,c.product_id
-  LIMIT LEAST(GREATEST(COALESCE(result_limit,20),1),100) OFFSET GREATEST(COALESCE(result_offset,0),0);
-$$;
-REVOKE ALL ON FUNCTION public.search_storefront_products_refined(text,uuid,text[],uuid,text,numeric,numeric,double precision,text,integer,integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.search_storefront_products_refined(text,uuid,text[],uuid,text,numeric,numeric,double precision,text,integer,integer) TO anon,authenticated;
-
-CREATE OR REPLACE FUNCTION public.get_storefront_search_brands(
-  search_query text, merchant_id_param uuid, category_id_filter uuid DEFAULT NULL,
-  condition_filter text DEFAULT NULL, min_price_filter numeric DEFAULT NULL,
-  max_price_filter numeric DEFAULT NULL, min_rating_filter double precision DEFAULT NULL
-) RETURNS TABLE(brand text)
-LANGUAGE sql STABLE SECURITY INVOKER SET search_path = '' AS $$
-  SELECT DISTINCT c.brand FROM public.storefront_search_refined_candidates(search_query,merchant_id_param,NULL,category_id_filter,condition_filter,min_price_filter,max_price_filter,min_rating_filter) c
-  WHERE c.brand IS NOT NULL AND btrim(c.brand) <> '' ORDER BY c.brand;
-$$;
-REVOKE ALL ON FUNCTION public.get_storefront_search_brands(text,uuid,uuid,text,numeric,numeric,double precision) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.get_storefront_search_brands(text,uuid,uuid,text,numeric,numeric,double precision) TO anon,authenticated;

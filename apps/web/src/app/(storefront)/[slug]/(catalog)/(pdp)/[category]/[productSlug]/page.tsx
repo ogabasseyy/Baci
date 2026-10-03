@@ -22,12 +22,10 @@ import { OgabasseyPdpCriticalShell } from '@/components/storefront/ogabassey/pdp
 import { GenericProductRouteSummary } from '@/components/storefront/ogabassey/pdp/generic-product-route-summary';
 import { OgabasseyPdpServerPrimaryDetails } from '@/components/storefront/ogabassey/pdp/server-primary-details';
 import { SemanticSectionsErrorBoundary } from '@/components/storefront/ogabassey/seo/semantic-sections-error-boundary';
-import { normalizeProductCondition } from '@/components/storefront/ogabassey/types';
 import type { VariantAttributeSource } from '@/components/storefront/ogabassey/variant-attributes';
 import {
   getRenderableVariantAxes,
   mergeVariantAxisOptions,
-  normalizeVariantAttributes,
 } from '@/components/storefront/ogabassey/variant-attributes';
 import { OGABASSEY_DOMAIN } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
@@ -35,18 +33,14 @@ import {
   type CachedLegacyProductRedirectTarget,
   type CachedMerchant,
   type CachedProductLcpHint,
-  getCachedLegacyProductRedirectTarget,
   getCachedProductLcpHint,
-  getCachedProductWithDetails,
   getRequestScopedMerchant,
   sanitizeLookupLogValue,
 } from '@/lib/cached-data';
 import type { CurrencyConfig } from '@/lib/currency';
 import { isKorapayConfigured } from '@/lib/korapay';
-import { normalizeStorefrontCategorySlug } from '@/lib/normalize-storefront-category-slug';
 import { getKnownOgaBasseyMerchantId } from '@/lib/ogabassey-route-identity';
 import { isPaystackConfigured } from '@/lib/paystack';
-import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import {
@@ -56,13 +50,17 @@ import {
 } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { stripVolatileProductPriceSentences } from '@/lib/storefront-product-description';
-import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { buildMerchantTrustProfile } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
+import { evaluateCategoryProductCanonicalRoute } from './category-product-canonicalization';
+import {
+  type CategoryProductResult,
+  resolveCategoryProductForMerchant,
+} from './category-product-detail-resolution';
 import {
   buildCriticalCommerceRouteProduct,
   getCachedProductRoutePrimaryImage,
@@ -213,19 +211,6 @@ function redirectInvalidVariantSelectionParams(
   }
 }
 
-type CategoryProductResult =
-  | {
-      product: Product;
-      categoryMismatch: boolean;
-      merchant: CachedMerchant;
-      needsValuesRedirect: boolean;
-    }
-  | {
-      merchant: CachedMerchant;
-      legacyRedirectTarget: CachedLegacyProductRedirectTarget;
-    }
-  | null;
-
 type CategoryProductRouteControlResult =
   | {
       product: LcpRouteProduct;
@@ -249,21 +234,6 @@ interface StartedKnownOgaBasseyPdpProductPreload {
   productSlug: string;
 }
 
-function hasCategoryMismatch(
-  productCategorySlug: string | null | undefined,
-  urlCategorySlug: string
-) {
-  const normalizedProductCategorySlug =
-    normalizeStorefrontCategorySlug(productCategorySlug);
-  const normalizedUrlCategorySlug =
-    normalizeStorefrontCategorySlug(urlCategorySlug);
-
-  return Boolean(
-    normalizedProductCategorySlug &&
-      normalizedProductCategorySlug !== normalizedUrlCategorySlug
-  );
-}
-
 function getMappedProductCategorySlug(product: LcpRouteProduct) {
   return (
     product.category_slug ||
@@ -271,165 +241,9 @@ function getMappedProductCategorySlug(product: LcpRouteProduct) {
   );
 }
 
-function isUuidProductRouteValue(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value
-  );
-}
-
-function shouldRedirectResolvedProductSlugValue(
-  productSlug: string,
-  resolvedSlug: string | null | undefined
-) {
-  return (
-    !isUuidProductRouteValue(productSlug) &&
-    Boolean(resolvedSlug) &&
-    resolvedSlug !== productSlug &&
-    resolvedSlug?.toLowerCase() === productSlug.toLowerCase()
-  );
-}
-
 function getDirectProductPreloadKey(src: string): string {
   return `direct:${src}`;
 }
-
-const getProductForMerchant = async (
-  merchant: CachedMerchant,
-  categorySlug: string,
-  productSlug: string
-): Promise<CategoryProductResult> => {
-  // 2. Get Product using the new cached function with full joins
-  // The bounded PDP snapshot normalizes the identifier inside PostgreSQL, so
-  // mixed-case requests resolve in this one call and still redirect below to
-  // the stored canonical slug. Do not add a second application retry owner.
-  const product = await getCachedProductWithDetails(merchant.id, productSlug);
-
-  if (!product) {
-    const legacyRedirectTarget = await getCachedLegacyProductRedirectTarget(
-      merchant.id,
-      productSlug
-    );
-
-    if (legacyRedirectTarget) {
-      return {
-        merchant,
-        legacyRedirectTarget,
-      };
-    }
-
-    return null;
-  }
-
-  const needsValuesRedirect = shouldRedirectResolvedProductSlugValue(
-    productSlug,
-    product.slug
-  );
-
-  // 3. Process category data
-  interface ProductWithCategory {
-    categories?: {
-      id: string;
-      name: string;
-      slug: string;
-      parent_id?: string;
-    } | null;
-  }
-  const productWithCat = product as unknown as ProductWithCategory;
-  const joinedCategory = productWithCat.categories;
-
-  const dbCategorySlug = joinedCategory?.slug;
-  const dbCategoryName = joinedCategory?.name || product.category;
-
-  // Normalize the images array from the database (JSON column stored as string or object array).
-  // Guard against both non-array values and empty arrays so primaryImage always resolves.
-  const rawImages = Array.isArray(product.images)
-    ? (product.images as Array<string | { url: string; alt?: string }>)
-    : [];
-  const normalizedImages = rawImages.map((image, index) =>
-    typeof image === 'string'
-      ? { url: image, alt: product.name, order: index }
-      : {
-          url: image.url,
-          alt: image.alt || product.name,
-          order: index,
-        }
-  );
-  const primaryImage = normalizedImages[0]?.url || '/placeholder.png';
-  const rawVariantAttributes = (product as { variant_attributes?: unknown })
-    .variant_attributes as VariantAttributeSource;
-  const normalizedVariantAttributes =
-    normalizeVariantAttributes(rawVariantAttributes);
-
-  // Create extended product with category info.
-  // Default `manage_stock` to `true` so legacy rows with `null` are treated as
-  // managed inventory. Treating missing values as `false` would make
-  // `generateProductSchema` advertise them as `InStock` regardless of actual
-  // stock, which regresses historical data. See seo-utils
-  // `getProductAvailability` — `manage_stock === false` short-circuits to
-  // InStock.
-  const manageStock = product.manage_stock ?? true;
-
-  const productWithCategorySlug: Product = {
-    ...product,
-    product_key_specs:
-      product.product_key_specs as unknown as Product['product_key_specs'],
-    description: product.description || '',
-    price:
-      typeof product.price === 'string'
-        ? Number.parseFloat(product.price) || 0
-        : product.price,
-    compare_at_price:
-      typeof product.compare_at_price === 'string'
-        ? Number.parseFloat(product.compare_at_price) || undefined
-        : product.compare_at_price,
-    manage_stock: manageStock,
-    stock: getEffectiveStock(product),
-    image: primaryImage,
-    imageLarge: primaryImage,
-    imageHint: product.imageHint || product.name,
-    images: normalizedImages,
-    variant_attributes: normalizedVariantAttributes,
-    fulfillmentFields: product.fulfillmentFields || [],
-    category: dbCategoryName || product.category,
-    category_slug: dbCategorySlug,
-    // Filter offers to exclude main product condition
-    offers: product.product_offers?.filter((offer) => {
-      const offerCondition = normalizeProductCondition(offer.condition);
-      const productCondition = normalizeProductCondition(product.condition);
-      return (
-        offerCondition !== undefined &&
-        offerCondition !== productCondition &&
-        offer.status === 'active'
-      );
-    }),
-    // Map variants
-    variants: normalizeStorefrontProductVariants(product.product_variants, {
-      merchantId: product.merchant_id || merchant.id,
-      productId: product.id,
-    }),
-    has_variant_matrix:
-      Array.isArray(product.product_variants) &&
-      product.product_variants.length > 0,
-  } as unknown as Product;
-
-  const productCategorySlug =
-    dbCategorySlug ||
-    (product.category ? generateSlug(product.category) : null);
-
-  // Compare normalized slugs so alias remaps (e.g. samsung -> smartphones) don't
-  // trigger a redirect loop between the canonical URL and the raw DB slug.
-  const categoryMismatch = hasCategoryMismatch(
-    productCategorySlug,
-    categorySlug
-  );
-
-  return {
-    product: productWithCategorySlug,
-    categoryMismatch,
-    merchant,
-    needsValuesRedirect,
-  };
-};
 
 function startKnownOgaBasseyPdpProductPreload(
   storeSlug: string,
@@ -551,7 +365,7 @@ const getProductRouteControl = cache(
       }
     );
     if (!cachedProduct) {
-      const result = await getProductForMerchant(
+      const result = await resolveCategoryProductForMerchant(
         merchant,
         categorySlug,
         productSlug
@@ -565,22 +379,20 @@ const getProductRouteControl = cache(
     }
 
     const product = mapCachedProductLcpHintToRouteProduct(cachedProduct);
-    const needsValuesRedirect = shouldRedirectResolvedProductSlugValue(
-      productSlug,
-      product.slug
-    );
+    const canonicalRoute = evaluateCategoryProductCanonicalRoute({
+      requestedCategorySlug: categorySlug,
+      requestedProductSlug: productSlug,
+      resolvedCategorySlug: getMappedProductCategorySlug(product),
+      resolvedProductSlug: product.slug,
+    });
     const loadProductResult = () =>
-      getProductForMerchant(merchant, categorySlug, productSlug);
+      resolveCategoryProductForMerchant(merchant, categorySlug, productSlug);
 
     return {
       result: {
         product,
         merchant,
-        categoryMismatch: hasCategoryMismatch(
-          getMappedProductCategorySlug(product),
-          categorySlug
-        ),
-        needsValuesRedirect,
+        ...canonicalRoute,
       },
       loadProductResult,
     };

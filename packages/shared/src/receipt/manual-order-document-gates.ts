@@ -45,11 +45,18 @@ export function isManualOrderRecord(input: {
 // A manual balance is settled when finite payments cover a non-negative
 // total. Nulls fail closed (never coerced to zero through Number(null)),
 // and a negative total is data corruption, never a covered receipt.
+// Booleans and blank strings likewise fail closed: they coerce through
+// Number() (true -> 1, '' -> 0), but the database never produces them for
+// money columns, so only genuine money settles — like the mobile gate.
 export function isSettledManualBalance(input: {
   total?: number | string | null;
   amountPaid?: number | string | null;
 }): boolean {
   if (input.total == null || input.amountPaid == null) return false;
+  for (const value of [input.total, input.amountPaid]) {
+    if (typeof value === 'boolean') return false;
+    if (typeof value === 'string' && value.trim() === '') return false;
+  }
   const total = Number(input.total);
   const amountPaid = Number(input.amountPaid);
   return (

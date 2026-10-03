@@ -10,8 +10,9 @@ import re
 from semgrep_sarif_pins import _ws_rooted
 from semgrep_sarif_redirect import redirect_targets
 from semgrep_sarif_scan import github_cmdfile_kind
-from semgrep_sarif_shell import (ENV_POISON, _bare_word,
-                                 split_commands2, tokenize, unquote)
+from semgrep_sarif_consts import ENV_POISON
+from semgrep_sarif_shell import (_bare_word, split_commands2,
+                                 tokenize, unquote)
 
 
 def _env_value_hit(text):

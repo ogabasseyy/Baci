@@ -6,8 +6,8 @@ brace skipper back from scan (no cycle: scan never imports
 redirect).
 """
 import re
-from semgrep_sarif_scan import (_collapse_proc_root,
-                                skip_braced)
+from semgrep_sarif_scan import skip_braced
+from semgrep_sarif_zone import _collapse_proc_root
 from semgrep_sarif_shell import _bare_word
 
 

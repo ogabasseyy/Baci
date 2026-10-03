@@ -10,7 +10,7 @@ global flags are skipped: git rejects them before executing.
 """
 import re
 from semgrep_sarif_pins import _is_home_write
-from semgrep_sarif_scan import _write_zone
+from semgrep_sarif_zone import _write_zone
 
 GIT_ALLOW = {"fetch", "merge-base", "diff", "show", "config"}
 C_ALLOW = {"core.quotePath"}
@@ -36,6 +36,9 @@ def _zone_target(target, drift):
     if zone == "workspace" \
             and "helper-workspace-write" not in drift:
         drift.append("helper-workspace-write")
+    if zone == "glob" \
+            and "helper-unzoneable-write" not in drift:
+        drift.append("helper-unzoneable-write")
     if _is_home_write(target) \
             and "helper-home-write" not in drift:
         drift.append("helper-home-write")

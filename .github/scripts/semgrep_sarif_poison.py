@@ -6,7 +6,7 @@ needs no rule: every dangerous value flows through an
 assignment this module (or the bare-assign scan) already drifts.
 """
 import re
-from semgrep_sarif_shell import ENV_POISON
+from semgrep_sarif_consts import ENV_POISON
 
 
 def _base(word):
@@ -139,6 +139,35 @@ def _check_poison_assign(pre, argv0, rest, drift):
             if "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")
     _indirect_poison(argv0, rest, drift)
+
+
+_PS_VALUE_OPTS = {"U", "-u", "--user", "-U", "-p", "--pid",
+                  "-C", "-G", "-g", "--group", "-s", "--sid",
+                  "-t", "--tty", "-q", "-o", "--format", "-O",
+                  "--sort"}
+
+
+def audit_ps_env(rest, drift):
+    # ps shows process environments only via the BSD e option
+    # (ps e, auxe: no dash -- ps --help all defines e as "show
+    # the environment after command"): SysV -e selects all
+    # processes without disclosure, so dashed words never
+    # match. Selection/format values (-u user, -o etime) are
+    # skipped: a username containing e is not the e option.
+    if "helper-env-dump" in drift:
+        return
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok in _PS_VALUE_OPTS:
+            i += 2
+        elif tok.startswith("-"):
+            i += 1
+        elif re.fullmatch(r"[A-Za-z]+", tok) and "e" in tok:
+            drift.append("helper-env-dump")
+            return
+        else:
+            i += 1
 
 
 def audit_env_dump(argv0, rest, drift):

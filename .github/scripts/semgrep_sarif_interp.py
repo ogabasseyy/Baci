@@ -11,9 +11,11 @@ from semgrep_sarif_git import audit_git
 from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
                                 _safe_exec_path, _ws_rooted,
                                 script_operand)
-from semgrep_sarif_poison import audit_env_dump
+from semgrep_sarif_poison import audit_env_dump, audit_ps_env
 from semgrep_sarif_programs import jq_program_has_env
-from semgrep_sarif_shell import (ENV_POISON, peel_prefix)
+from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
+                                  NET_DENY, _GCC_RE)
+from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
 
 
@@ -43,51 +45,6 @@ def _jq_program(rest):
     return None
 
 
-# Bare network-capable commands: no audited helper needs them —
-# install.sh's pinned download curl is the single exemption
-# (the installer URL rule constrains its target); git stays
-# allowed (load-bearing, audited separately) and gh is confined
-# to its load-bearing api shapes (see semgrep_sarif_gh). A bare
-# curl/nc/ssh falls past every path rule while exfiltrating
-# GH_TOKEN, so any other use drifts for human review.
-NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
-            "mail", "msmtp", "nc", "ncat", "netcat", "nmap",
-            "openssl", "scp", "sendmail", "sftp", "socat", "ssh",
-            "telnet", "tftp", "rsync", "wget"}
-
-# Build/package/container/provisioner drivers: each executes
-# repo-controlled files. Canonical names only (variants fail at
-# exec when absent); mix/stack/rake/port excluded (prose words).
-LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
-             "bazel", "bazelisk", "bmake", "brew", "buck2", "bun",
-             "bundle", "cargo", "choco", "cmake", "conda", "crictl",
-             "ctest", "ctr", "deno", "dnf", "docker", "flatpak",
-             "gem", "gmake", "go", "gradle", "gradlew", "guix",
-             "hatch", "helm", "installer", "invoke", "just",
-             "kubectl", "mamba", "make", "meson", "micromamba",
-             "msiexec", "mvn", "mvnw", "nerdctl", "ninja", "nix",
-             "nox", "npm", "npx", "pacman", "pants", "pex", "pip",
-             "pip3", "pipx", "pkg", "pkg_add", "pnpm", "podman",
-             "poetry", "remake", "rustc", "sbt", "snap", "task",
-             "terraform", "tofu", "tox", "uv", "vagrant", "winget",
-             "yarn", "yum", "zypper", "composer", "conan", "pmake",
-             "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
-             "g++", "c++", "clang", "clang++"}
-# java runs source files, classes, and jars (all repo-
-# controlled inputs execute); javac runs annotation
-# processors off the classpath; run-parts executes every
-# eligible executable in its directory operand; sqlite3 runs
-# .shell commands and -init files (dot-command execution);
-# the gcc/clang drivers execute subprograms (cc1, cc1plus,
-# as, ld) resolved through -B search-path directories, so a
-# workspace -B dir runs attacker code with the helper token.
-_GCC_RE = re.compile(
-    r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
-    r"clang\+\+)(?:-\d[\d.]*)?$")
-# Versioned (gcc-12, g++-13, clang-17) and cross-prefixed
-# (x86_64-linux-gnu-gcc) driver spellings share the -B
-# mechanism; only dash-joined prefixes match (mycc/acc are
-# not drivers).
 
 
 def _check_command(argv0, rest, pre, drift, src=""):
@@ -206,6 +163,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
     elif base in ("printenv", "export", "declare", "typeset",
                   "readonly", "local", "set"):
         audit_env_dump(base, rest, drift)
+    elif base == "ps":
+        audit_ps_env(rest, drift)
     elif base == "xargs":
         audit_xargs(rest, drift, src, _check_command)
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
@@ -250,13 +209,11 @@ def _check_command(argv0, rest, pre, drift, src=""):
         if "helper-privilege" not in drift:
             drift.append("helper-privilege")
     elif base == "eval":
-        # Static strings pass (visible for human review);
-        # anything dynamic ($, backtick, workspace-rooted)
-        # drifts. Subshells extract to $() first, so the $
-        # test still sees through $(...) indirection.
-        if any("$" in tok or "`" in tok or _ws_rooted(tok)
-               for tok in rest) \
-                and "helper-untrusted-exec" not in drift:
+        # eval combines its arguments and executes the result
+        # as shell commands: even static payloads run
+        # PR-relative scripts (eval 'bash ./evil.sh'), so any
+        # use drifts. No audited helper uses eval (verified).
+        if "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
 
 

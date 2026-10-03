@@ -7,7 +7,7 @@ letters inside s bodies, addresses, and text blocks stay
 silent. Residual: --debug/-l attacker flags are noise, not
 execution; old-form tar-style option order is unsupported.
 """
-from semgrep_sarif_scan import _write_zone
+from semgrep_sarif_zone import _write_zone
 
 
 def _sed_scripts(rest):
@@ -195,7 +195,7 @@ def audit_sed_programs(rest, drift):
         drift.append("helper-untrusted-exec")
     for path in ffiles:
         zone = _write_zone(path)
-        if zone == "workspace" \
+        if zone == "workspace" or zone == "glob" \
                 or (zone is None and not path.startswith("/")):
             if "helper-untrusted-exec" not in drift:
                 drift.append("helper-untrusted-exec")

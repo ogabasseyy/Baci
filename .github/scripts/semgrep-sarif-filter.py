@@ -14,7 +14,8 @@ import os
 import posixpath
 import sys
 from types import SimpleNamespace
-from semgrep_sarif_audit import (audit_pr_checkout,
+from semgrep_sarif_audit import (audit_flow_with,
+                                 audit_pr_checkout,
                                  audit_trusted_checkout, find_pr_refs,
                                  load_workflow)
 from semgrep_sarif_consumer import (audit_helpers,
@@ -23,11 +24,13 @@ from semgrep_sarif_consumer import (audit_helpers,
                                     audit_resolver,
                                     audit_run_hygiene,
                                     audit_script_dir)
-from semgrep_sarif_helpers import audit_trusted_changed
+from semgrep_sarif_order import audit_checkout_order
+from semgrep_sarif_helpertree import audit_trusted_changed
 from semgrep_sarif_pins import AUDITED_PATH, AUDITED_RULE_ID
 from semgrep_sarif_agent import audit_agent_runner
 from semgrep_sarif_runner import audit_installer
-from semgrep_sarif_steps import audit_agent_env, audit_step_commands
+from semgrep_sarif_agentenv import audit_agent_env
+from semgrep_sarif_steps import audit_step_commands
 
 def main():
     drift = []
@@ -64,8 +67,10 @@ def main():
         return 0
     audit_pr_checkout(ctx, drift)
     audit_trusted_checkout(ctx, drift)
+    audit_flow_with(ctx, drift)
     audit_resolver(ctx, drift)
     audit_path_literals(ctx, drift)
+    audit_checkout_order(ctx, drift)
     audit_invocations(ctx, drift)
     audit_script_dir(ctx, drift)
     audit_run_hygiene(ctx, drift)

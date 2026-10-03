@@ -583,5 +583,58 @@ t operand-compare-fp 0 "" happy.sarif "$I${FS}got_sha=${FS}a${FS}(( got_sha == 0
 t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}a[0]=x muse --version"
 t runner-peel-pluseq 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}v+=x muse --version"
 
+# --- YAML escape decode (Codex P1: "\u0075ses" checkout evades count) ---
+t yaml-encoded-checkout 1 "pr-controlled-checkout-count" happy.sarif "$S${FS}      - name: Checkout trusted review scripts${FS}b${FS}      - name: Encoded extra checkout${RS}$S${FS}      - name: Encoded extra checkout${FS}a${FS}        \"\\u0075ses\": actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          \"\\u0072ef\": \${{ github.event.pull_request.head.sha }}
+          \"\\u0070ath\": evil-dir"
+t yaml-encoded-uses 1 "reviewer-unpinned-action" happy.sarif "$S${FS}2:        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0${FS}a${FS}        \"\\x75ses\": evil/action@v1"
+t yaml-encoded-persist-fp 0 "" happy.sarif "$S${FS}1:          persist-credentials: false${FS}r${FS}persist-credentials${FS}\"\\u0070ersist-credentials\""
+
+# --- flow mappings (self-found: with:/shell: hidden from line rules) ---
+t checkout-flow-with 1 "checkout-flow-with" happy.sarif "$S${FS}1:          persist-credentials: false${FS}a${FS}          with: {ref: main}"
+t checkout-flow-shell 1 "shell-override" happy.sarif "$S${FS}      - name: Resolve script directory${FS}b${FS}  defaults: {run: {shell: python}}"
+
+# --- checkout order (Codex P1: trusted->clear->head reorder exits 0) ---
+t checkout-order-clear-missing 1 "checkout-order" happy.sarif "$S${FS}      - name: Clear trusted-scripts collision${FS}d${RS}$S${FS}        id: collision${FS}d${RS}$S${FS}2:        if: steps.prereq.outputs.should_run == 'true'${FS}d${RS}$S${FS}2:        run: |${FS}d${RS}$S${FS}2:          set -euo pipefail${FS}d${RS}$S${FS}The trusted checkout below lands${FS}d${RS}$S${FS}PR itself tracks that path${FS}d${RS}$S${FS}sparse checkout lands cleanly${FS}d${RS}$S${FS}merging with (or failing on)${FS}d${RS}$S${FS}Evidence is preserved${FS}d${RS}$S${FS}still carry the PR${FS}d${RS}$S${FS}planted paths degrade${FS}d${RS}$S${FS}symlink sweep sound${FS}d${RS}$S${FS}always the default-branch checkout${FS}d${RS}$S${FS}pruning it from the sweep${FS}d${RS}$S${FS}cat-file -e${FS}d${RS}$S${FS}rm -rf${FS}d${RS}$S${FS}PR tracks trusted-scripts${FS}d${RS}$S${FS}2:          fi${FS}d"
+t checkout-order-clear-after 1 "checkout-order" happy.sarif "$S${FS}      - name: Clear trusted-scripts collision${FS}d${RS}$S${FS}        id: collision${FS}d${RS}$S${FS}2:        if: steps.prereq.outputs.should_run == 'true'${FS}d${RS}$S${FS}2:        run: |${FS}d${RS}$S${FS}2:          set -euo pipefail${FS}d${RS}$S${FS}The trusted checkout below lands${FS}d${RS}$S${FS}PR itself tracks that path${FS}d${RS}$S${FS}sparse checkout lands cleanly${FS}d${RS}$S${FS}merging with (or failing on)${FS}d${RS}$S${FS}Evidence is preserved${FS}d${RS}$S${FS}still carry the PR${FS}d${RS}$S${FS}planted paths degrade${FS}d${RS}$S${FS}symlink sweep sound${FS}d${RS}$S${FS}always the default-branch checkout${FS}d${RS}$S${FS}pruning it from the sweep${FS}d${RS}$S${FS}cat-file -e${FS}d${RS}$S${FS}rm -rf${FS}d${RS}$S${FS}PR tracks trusted-scripts${FS}d${RS}$S${FS}2:          fi${FS}d${RS}$S${FS}      - name: Resolve script directory${FS}b${FS}      - name: Clear trusted-scripts collision${RS}$S${FS}- name: Clear trusted-scripts collision${FS}a${FS}        id: collision${RS}$S${FS}id: collision${FS}a${FS}        if: steps.prereq.outputs.should_run == 'true'${RS}$S${FS}2:        if: steps.prereq.outputs.should_run == 'true'${FS}a${FS}        run: |${RS}$S${FS}2:        run: |${FS}a${FS}          set -euo pipefail${RS}$S${FS}2:          set -euo pipefail${FS}a${FS}          # The trusted checkout below lands at trusted-scripts/ inside the${RS}$S${FS}The trusted checkout below lands${FS}a${FS}          # PR workspace: if the PR itself tracks that path, remove the${RS}$S${FS}PR itself tracks that path${FS}a${FS}          # workspace copy first so the sparse checkout lands cleanly${RS}$S${FS}sparse checkout lands cleanly${FS}a${FS}          # instead of merging with (or failing on) submitter-controlled${RS}$S${FS}merging with (or failing on)${FS}a${FS}          # files. Evidence is preserved — diff, manifest, and git objects${RS}$S${FS}Evidence is preserved${FS}a${FS}          # still carry the PR's versions; only working-tree full-file${RS}$S${FS}still carry the PR${FS}a${FS}          # reads of exactly the planted paths degrade to diff context.${RS}$S${FS}planted paths degrade${FS}a${FS}          # This also keeps the symlink sweep sound: the surviving${RS}$S${FS}symlink sweep sound${FS}a${FS}          # trusted-scripts/ tree is always the default-branch checkout,${RS}$S${FS}always the default-branch checkout${FS}a${FS}          # so pruning it from the sweep stays correct.${RS}$S${FS}pruning it from the sweep${FS}a${FS}          if git -C \"\${GITHUB_WORKSPACE}\" cat-file -e \"HEAD:trusted-scripts\" 2>/dev/null; then${RS}$S${FS}cat-file -e${FS}a${FS}            rm -rf \"\${GITHUB_WORKSPACE}/trusted-scripts\"${RS}$S${FS}rm -rf${FS}a${FS}            echo \"::warning::PR tracks trusted-scripts/; workspace copy removed before trusted checkout.\"${RS}$S${FS}PR tracks trusted-scripts${FS}a${FS}          fi"
+t checkout-order-clear-dup 1 "checkout-order" happy.sarif "$S${FS}      - name: Resolve script directory${FS}b${FS}      - name: Clear trusted-scripts collision${RS}$S${FS}2:- name: Clear trusted-scripts collision${FS}a${FS}        id: collision-dup${RS}$S${FS}id: collision-dup${FS}a${FS}        if: steps.prereq.outputs.should_run == 'true' && false${RS}$S${FS}&& false${FS}a${FS}        run: echo dup-clear"
+t checkout-order-resolver-dup 1 "checkout-order" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Resolve script directory${RS}$S${FS}2:- name: Resolve script directory${FS}a${FS}        id: scriptdir${RS}$S${FS}2:        id: scriptdir${FS}a${FS}        run: echo \"dir=\${GITHUB_WORKSPACE}/evil\" >> \$GITHUB_OUTPUT"
+t checkout-order-trusted-dup 1 "checkout-order" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}a${FS}          path: trusted-scripts"
+
+# --- ps env dump (Codex P1: ps e -p $$ | base64) ---
+t helper-ps-env 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps e -p \$\$ | base64"
+t helper-ps-auxe 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps auxe"
+t helper-ps-sysv-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps -ef"
+t helper-ps-user-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps U eve"
+t helper-ps-o-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps -o etime -p 1"
+
+# --- LD_AUDIT poison (Codex P1: audit DSO runs with token) ---
+t helper-ld-audit 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}LD_AUDIT=\"\${GITHUB_WORKSPACE}/evil.so\" /bin/true"
+t reviewer-ld-audit 1 "reviewer-env-poison" happy.sarif "$S${FS}          META_API_KEY:${FS}b${FS}          LD_AUDIT: /tmp/evil.so"
+
+# --- runner-home exec (Codex P1: /home/runner/work allowlist) ---
+t helper-runner-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/home/runner/work/Baci/Baci/evil.sh"
+t helper-runner-home-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/home/runner/.local/bin/muse --version"
+
+# --- globbed writes (Codex P1: trusted-* copy destination) ---
+t helper-glob-write 1 "helper-unzoneable-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp \"\${GITHUB_WORKSPACE}/evil.sh\" /home/runner/work/Baci/Baci/trusted-*/.github/scripts/muse-review/diff.sh"
+t helper-glob-source-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp *.log /tmp/build.log"
+
+# --- static eval (Codex P1: eval 'bash ./evil.sh') ---
+t helper-eval-static 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}eval 'bash ./evil.sh'"
+
+# --- binutils copy dispatch (Codex P1: objcopy + output siblings) ---
+t helper-objcopy 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}objcopy -I binary -O binary \"\${GITHUB_WORKSPACE}/evil.sh\" \"\${SCRIPT_DIR}/diff.sh\""
+t helper-objcopy-dump 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}objcopy --dump-section .text=\"\${SCRIPT_DIR}/x\" /tmp/a /tmp/b"
+t helper-ld-output 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ld /tmp/evil.o -o \"\${SCRIPT_DIR}/diff.sh\""
+t helper-ld-default 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ld /tmp/a.o /tmp/b.o"
+t helper-as-output 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}as -o \"\${SCRIPT_DIR}/x.o\" /tmp/x.s"
+t helper-strip-inplace 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}strip \"\${SCRIPT_DIR}/diff.sh\""
+t helper-ar-modify 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ar rcs \"\${SCRIPT_DIR}/lib.a\" /tmp/e.o"
+t helper-ar-list-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ar t /tmp/lib.a"
+t helper-ranlib 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ranlib \"\${SCRIPT_DIR}/lib.a\""
+t helper-objcopy-help-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}objcopy --help"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

@@ -4,118 +4,19 @@ version/checksums, verify-before-install order, pinned
 versioned URL, no pipe-to-shell).
 """
 import re
-from semgrep_sarif_install import (_nameref_edges,
-                                   _rebind_names,
-                                   audit_compare_shape,
-                                   audit_install_binding,
-                                   audit_tmp_aliases)
+from semgrep_sarif_alias import (_nameref_edges, _rebind_names,
+                                 audit_tmp_aliases)
+from semgrep_sarif_install import (audit_compare_shape,
+                                   audit_install_binding)
 from semgrep_sarif_pins import (MUSE_PINNED_HOST,
                                 MUSE_PINNED_SHA_AARCH64,
                                 MUSE_PINNED_SHA_X86,
                                 MUSE_PINNED_VERSION)
 from semgrep_sarif_scan import arith_command_regions
 from semgrep_sarif_shell import split_commands2, strip_comments
+from semgrep_sarif_words import (_dequote, _peel_env,
+                                 _shell_words)
 
-
-def _shell_words(text):
-    # Shell words: whitespace splits outside quotes, quotes group
-    # (glued quotes stay one word: "a/"b is a/b, not two tokens).
-    words, buf, quote = [], "", None
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if quote == "'":
-            buf += ch
-            if ch == "'":
-                quote = None
-            i += 1
-        elif quote == '"' and ch == "\\" and i + 1 < len(text):
-            buf += text[i:i + 2]
-            i += 2
-        elif quote == '"' and ch == '"':
-            buf, quote, i = buf + ch, None, i + 1
-        elif quote:
-            buf, i = buf + ch, i + 1
-        elif ch in ("'", '"'):
-            quote, buf, i = ch, buf + ch, i + 1
-        elif ch in (" ", "\t", "\n"):
-            if buf:
-                words.append(buf)
-                buf = ""
-            i += 1
-        elif ch == "\\" and i + 1 < len(text):
-            buf += text[i:i + 2]
-            i += 2
-        else:
-            buf, i = buf + ch, i + 1
-    if buf:
-        words.append(buf)
-    return words
-
-
-def _dequote(word):
-    # Remove quote characters (backslash-aware): glued forms
-    # collapse to the executed spelling ("a/"b -> a/b).
-    out, quote, i = "", None, 0
-    while i < len(word):
-        ch = word[i]
-        if quote == "'":
-            if ch == "'":
-                quote = None
-            else:
-                out += ch
-            i += 1
-        elif ch == "\\" and quote != "'" and i + 1 < len(word):
-            out += word[i + 1]
-            i += 2
-        elif quote == '"' and ch == '"':
-            quote, i = None, i + 1
-        elif not quote and ch in ("'", '"'):
-            quote, i = ch, i + 1
-        else:
-            out, i = out + ch, i + 1
-    return out
-
-
-def _peel_env(words):
-    # See through env -u/-i/VAR= prefixes to the real argv0 (the
-    # runner scrubs tokens via env -u, so muse sits behind env).
-    assign = re.compile(
-        r"^([A-Za-z_][A-Za-z0-9_]*)(\[[^\]]*\])?(\+)?=")
-    i = 0
-    while i < len(words):
-        word = _dequote(words[i])
-        m = assign.match(word)
-        if m:
-            # Assigns (plain, subscript, and += alike) prefix
-            # commands (verified: a[0]=x and v+=x both ran
-            # the command on bash 3.2), so all peel through.
-            i += 1
-        elif word != "env":
-            break
-        else:
-            i += 1
-            while i < len(words):
-                tok = _dequote(words[i])
-                if tok == "--":
-                    i += 1
-                    break
-                if tok in ("-u", "-C", "--unset", "--chdir",
-                           "--argv0"):
-                    i += 2
-                elif tok in ("-i", "-0", "--null", "-v",
-                             "--ignore-environment"):
-                    i += 1
-                elif re.fullmatch(r"-[a-zA-Z0-9]+", tok):
-                    i += 2 if tok[-1] in "uC" else 1
-                elif tok.startswith("--") and "=" in tok:
-                    i += 1
-                elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*",
-                                  tok):
-                    i += 1
-                else:
-                    break
-    return words[i:]
 
 _OPERANDS = ("got_sha", "want_sha")
 _OPERAND_ASSIGN_RE = re.compile(

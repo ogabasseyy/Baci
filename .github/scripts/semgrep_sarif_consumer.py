@@ -4,18 +4,19 @@ interpreter operands, SCRIPT_DIR bindings, and run-block hygiene
 """
 import os
 import re
-from semgrep_sarif_helpers import (DEFERRED_RE, XTRACE_RE,
-                                   _audit_shell_file,
-                                   invoked_shell_refs)
+from semgrep_sarif_consts import (DEFERRED_RE, ENV_POISON,
+                                  INTERP_ALLOW, XTRACE_RE)
+from semgrep_sarif_helpertree import (_audit_shell_file,
+                                      invoked_shell_refs)
 from semgrep_sarif_perl import audit_perl_file
 from semgrep_sarif_pins import (PINNED_CHECKOUT_USES,
                                 script_operand)
 from semgrep_sarif_programs import audit_jq_content
-from semgrep_sarif_scan import (arith_regions,
-                                has_proc_environ)
+from semgrep_sarif_scan import arith_regions
+from semgrep_sarif_zone import has_proc_environ
 from semgrep_sarif_segments import run_segments
-from semgrep_sarif_shell import (ENV_POISON, INTERP_ALLOW,
-                                 _bare_word, map_key_value, peel_prefix,
+from semgrep_sarif_peel import peel_prefix
+from semgrep_sarif_shell import (_bare_word, map_key_value,
                                  split_commands2, tokenize,
                                  unquote_value)
 from semgrep_sarif_steps import (is_step_boundary, step_end,
@@ -139,6 +140,14 @@ def audit_run_hygiene(ctx, drift):
     # counts: quotes do not change YAML semantics.
     if any(map_key_value(line.strip())[0] == "shell"
            for line in ctx.workflow_lines):
+        drift.append("shell-override")
+    # A single-line flow mapping hides shell: from the
+    # line rule above (defaults: {run: {shell: python}}):
+    # multi-line flows need no rule (inner lines parse).
+    if any(re.search(r"\{[^}\n]*[\"']?shell[\"']?\s*:",
+                     line)
+           for line in ctx.workflow_lines) \
+            and "shell-override" not in drift:
         drift.append("shell-override")
     # Only the two pinned checkouts may run as actions: a third
     # uses: — even pinned — could smuggle execution past the run:

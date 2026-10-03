@@ -6,7 +6,7 @@ from semgrep_sarif_pins import (SCRIPT_PIN,
                                 _is_home_write,
                                 _safe_exec_path)
 from semgrep_sarif_programs import audit_perl_content
-from semgrep_sarif_scan import _write_zone
+from semgrep_sarif_zone import _write_zone
 
 
 def _zone_target(target, drift):
@@ -17,6 +17,9 @@ def _zone_target(target, drift):
     if zone == "workspace" \
             and "helper-workspace-write" not in drift:
         drift.append("helper-workspace-write")
+    if zone == "glob" \
+            and "helper-unzoneable-write" not in drift:
+        drift.append("helper-unzoneable-write")
     if _is_home_write(target) \
             and "helper-home-write" not in drift:
         drift.append("helper-home-write")

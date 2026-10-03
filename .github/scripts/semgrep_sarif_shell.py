@@ -41,61 +41,92 @@ def strip_comments(line):
     return "".join(buf)
 
 
+_YAML_DOUBLE_ESCAPES = {
+    "0": "\0", "a": "\a", "b": "\b", "t": "\t", "n": "\n",
+    "v": "\v", "f": "\f", "r": "\r", "e": "\x1b", " ": " ",
+    '"': '"', "\\": "\\", "N": "\u0085", "_": "\u00a0",
+    "L": "\u2028", "P": "\u2029",
+}
+
+
+def _yaml_double_unescape(text):
+    # Decode YAML double-quoted escape sequences (\uXXXX,
+    # \UXXXXXXXX, \xXX, \n, \", \\, ...): the runner's YAML
+    # parser resolves "\u0075ses" to uses, so key/value
+    # classification must see the decoded scalar or encoded
+    # checkouts evade the ref count. Escape-free text is
+    # returned unchanged; unknown/invalid escapes pass
+    # through literally (invalid YAML fails CI anyway).
+    out, i = [], 0
+    while i < len(text):
+        ch = text[i]
+        if ch != "\\" or i + 1 >= len(text):
+            out.append(ch)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt in _YAML_DOUBLE_ESCAPES:
+            out.append(_YAML_DOUBLE_ESCAPES[nxt])
+            i += 2
+        elif nxt in ("x", "u", "U"):
+            width = {"x": 2, "u": 4, "U": 8}[nxt]
+            digits = text[i + 2:i + 2 + width]
+            if len(digits) == width:
+                try:
+                    out.append(chr(int(digits, 16)))
+                    i += 2 + width
+                    continue
+                except ValueError:
+                    pass
+            out.append(text[i:i + 2])
+            i += 2
+        else:
+            out.append(text[i:i + 2])
+            i += 2
+    return "".join(out)
+
+
 def map_key_value(stripped):
     # Split a stripped YAML mapping line into (key, value) with
-    # quoted keys normalized ("uses": -> uses). Single/double
-    # quotes only; exotic spellings (anchors, tags, ? keys) yield
-    # None so callers fall through to their fail-closed path.
-    m = re.match(r"""^(?:"([^"]*)"|'([^']*)'|"""
+    # quoted keys normalized ("uses": -> uses) and YAML escapes
+    # decoded ("\u0075ses": -> uses, 'it''s' -> it's). Single/
+    # double quotes only; exotic spellings (anchors, tags, ?
+    # keys) yield None so callers fall through to their
+    # fail-closed path.
+    m = re.match(r"""^(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|"""
                  r"""([A-Za-z_][A-Za-z0-9_.-]*))\s*:\s*(.*)$""",
                  stripped)
     if not m:
         return None, None
-    key = m.group(1) or m.group(2) or m.group(3)
+    if m.group(1):
+        key = _yaml_double_unescape(m.group(1))
+    elif m.group(2):
+        key = m.group(2).replace("''", "'")
+    else:
+        key = m.group(3)
     return key, m.group(4)
 
 
 def unquote_value(value):
     # Strip one matching quote pair (uses: "actions/..." is valid
-    # YAML); anything else passes through to exact comparison.
+    # YAML) and decode YAML escapes inside it ("a\u0075b" is
+    # really aub to the runner); anything else passes through
+    # to exact comparison (plain scalars decode nothing).
     text = value.strip()
     if len(text) >= 2 and text[0] == text[-1] \
             and text[0] in ("'", '"'):
-        return text[1:-1]
+        inner = text[1:-1]
+        if text[0] == '"':
+            return _yaml_double_unescape(inner)
+        return inner.replace("''", "'")
     return text
 
 
 # Shared shell parsing for the consumer checks below.
 # Residual: -c payloads (drift, needs human review), URLs/paths
 # assembled from variables, read/getopts/printf -v rebindings.
-SHELL_KEYWORDS = {"if", "then", "else", "elif", "fi", "for",
-                  "while", "until", "do", "done", "case", "in",
-                  "esac", "select", "function", "time", "!",
-                  "[[", "]]", "{", "}"}
 # Peeled (transparent) leading words; `for/select/case` pieces
 # are skipped outright (word lists, not commands).
-STRIP_WORDS = {"if", "while", "until", "time", "!", "then",
-               "do", "else", "elif", "{", "}"}
-INTERP_ALLOW = {"bash", "sh", "source", "."}
-STRICT_ALLOW = INTERP_ALLOW | {
-    "set", "echo", "exit", "export", "readonly", "local",
-    "declare", "typeset", "true", "false", ":", "test"}
-# Vars whose assignment redirects execution or the environment
-# of later commands in the same step (PATH hijack, preloaded
-# libraries, startup files, parser behavior).
-ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
-              "BASH_ENV", "ENV", "ZDOTDIR", "PYTHONPATH",
-              "PYTHONHOME", "RUBYLIB", "RUBYOPT", "PERL5LIB",
-              "PERL5OPT", "NODE_PATH", "NODE_OPTIONS",
-              "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
-              "IFS", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_PAGER",
-              "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
-              "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
-              "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
-              "GIT_CONFIG_PARAMETERS",
-              "PAGER", "GH_HOST")
-# GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
-# ignores keys), so the COUNT exact-match closes the family.
 
 def split_commands2(text):
     # Quote-aware operator split. Yields (piece,
@@ -203,103 +234,3 @@ def _bare_word(token):
         else:
             out, i = out + ch, i + 1
     return out
-
-def _peel_exec_opts(words, j):
-    # Index of exec's command past -c/-l/-a name/-- (an
-    # unknown dash word is the command: exec errors on it, so
-    # treating it as argv0 fails closed).
-    while j < len(words):
-        tok = words[j]
-        if tok == "--":
-            return j + 1
-        m = re.fullmatch(r"-([cla]+)", tok)
-        if not m:
-            return j
-        if "a" in m.group(1):
-            rest = m.group(1).split("a", 1)[1]
-            return j + 1 if rest else j + 2
-        j += 1
-    return j
-
-def _peel_command_opts(words, j):
-    # Index of command's command past -p/--, or None for -v/-V
-    # queries (they print, never execute).
-    while j < len(words):
-        tok = words[j]
-        if tok == "--":
-            return j + 1
-        if re.fullmatch(r"-[pVv]+", tok):
-            if "v" in tok or "V" in tok:
-                return None
-            j += 1
-        else:
-            return j
-    return j
-
-def _peel_keyword(word):
-    # Wrapper keywords match bare, or by basename behind a safe
-    # exec path (/usr/bin/timeout peels exactly like timeout,
-    # so its command operand audits). A slash spelling that is
-    # not a safe exec path is not a wrapper: "" stops the peel
-    # and the caller's path rule drifts it (./timeout sits in
-    # PR-controlled cwd, so peeling it would bless evil).
-    if "/" not in word:
-        return word
-    base = word.rsplit("/", 1)[-1]
-    if base in ("timeout", "time", "exec", "command",
-                "builtin", "sudo", "doas") \
-            and _safe_exec_path(word):
-        return base
-    return ""
-
-
-def peel_prefix(words):
-    # Strip VAR= assigns, timeout + duration, transparent
-    # wrappers (with their options: exec -a name, command -p,
-    # -- terminators, time -p) and control keywords; returns
-    # (argv0, rest). sudo/doas peel bare (their pre-words always
-    # drift via the privilege rule). Nesting re-enters: builtin
-    # exec cmd parses exec's options on the next pass.
-    # Wrappers peel by basename behind safe absolute paths too
-    # (/usr/bin/timeout 5s evil must audit evil, not pass as a
-    # safe system executable); STRIP_WORDS stays exact-match
-    # (an executable named `if` is a command, not a keyword).
-    i = 0
-    timeout_args = {"-s", "--signal", "-k", "--kill-after"}
-    while i < len(words):
-        word = words[i]
-        key = _peel_keyword(word)
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=\S*",
-                        word):
-            i += 1
-        elif key == "timeout":
-            i += 1
-            while i < len(words) \
-                    and words[i].startswith("-"):
-                i += 2 if words[i] in timeout_args else 1
-            i += 1
-        elif key == "exec":
-            i = _peel_exec_opts(words, i + 1)
-        elif key == "command":
-            j = _peel_command_opts(words, i + 1)
-            if j is None:
-                return "", []
-            i = j
-        elif key == "builtin":
-            i += 1
-            if i < len(words) and words[i] == "--":
-                i += 1
-        elif key == "time":
-            i += 1
-            while i < len(words) and words[i] == "-p":
-                i += 1
-        elif key in ("sudo", "doas"):
-            i += 1
-        elif word in STRIP_WORDS:
-            i += 1
-        else:
-            break
-    if i >= len(words):
-        return "", []
-    return words[i], words[i + 1:]
-

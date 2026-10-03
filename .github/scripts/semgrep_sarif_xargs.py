@@ -8,7 +8,7 @@ child, so poison names drift like env assigns.
 """
 import re
 from semgrep_sarif_pins import _safe_exec_path, _ws_rooted
-from semgrep_sarif_shell import ENV_POISON
+from semgrep_sarif_consts import ENV_POISON
 
 
 def audit_xargs(rest, drift, src, dispatch):

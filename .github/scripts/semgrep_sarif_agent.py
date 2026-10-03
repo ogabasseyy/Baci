@@ -4,13 +4,14 @@ masquerade as flags), scrub both GitHub tokens exactly, and
 build model_args from --model pairs only.
 """
 import re
-from semgrep_sarif_varmap import (CARRY_VARS, _collect_vars,
-                                  _resolve)
-from semgrep_sarif_runner import (_dequote, _peel_env,
-                                  _shell_words)
+from semgrep_sarif_varcollect import CARRY_VARS
+from semgrep_sarif_varmap import _collect_vars, _resolve
+from semgrep_sarif_words import (_dequote, _peel_env,
+                                 _shell_words)
 from semgrep_sarif_scan import extract_subshells
 from semgrep_sarif_segments import logical_lines
-from semgrep_sarif_shell import (peel_prefix, split_commands2)
+from semgrep_sarif_peel import peel_prefix
+from semgrep_sarif_shell import split_commands2
 
 MUSE_VALUE_FLAGS = {"--prompt-file", "--workspace",
                     "--reasoning-effort", "--max-model-steps",

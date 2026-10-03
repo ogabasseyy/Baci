@@ -15,41 +15,18 @@ they drift value-insensitively (helper-env-poison);
 shell redirections split by writer (see
 semgrep_sarif_poison).
 """
+import re
 from semgrep_sarif_install import _install_operands
 from semgrep_sarif_scan import github_cmdfile_kind
-from semgrep_sarif_scan import _write_zone
+from semgrep_sarif_zone import _write_zone
 from semgrep_sarif_sed import audit_sed_programs
 from semgrep_sarif_tar import audit_tar_exec
+from semgrep_sarif_binutils import audit_binutils_targets
+from semgrep_sarif_words import _flag_value, _operands
 
 COPY_TOOLS = {"cp", "mv", "ln", "install", "tee", "dd", "tar",
-              "unzip", "zip", "patch", "ed", "ex", "sed"}
-
-
-def _operands(rest):
-    ops, done = [], False
-    for tok in rest:
-        if not done and tok == "--":
-            done = True
-        elif not done and tok.startswith("-") and len(tok) > 1:
-            continue
-        else:
-            ops.append(tok)
-    return ops
-
-
-def _flag_value(rest, names):
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        if tok == "--":
-            return None
-        if tok in names and i + 1 < len(rest):
-            return rest[i + 1]
-        for name in names:
-            if tok.startswith(name + "="):
-                return tok.split("=", 1)[1]
-        i += 1
-    return None
+              "unzip", "zip", "patch", "ed", "ex", "sed",
+              "objcopy", "ld", "as", "strip", "ar", "ranlib"}
 
 
 def _sed_files(rest):
@@ -126,7 +103,7 @@ def _source_alias(src):
     # outside) the trusted tree or workspace: writes through
     # the link land there. Absolute system/tmp paths pass.
     zone = _write_zone(src)
-    if zone in ("trusted", "workspace"):
+    if zone in ("trusted", "workspace", "glob"):
         return True
     return zone is None and not src.startswith("/")
 
@@ -214,6 +191,13 @@ def audit_copy_dest(base, rest, drift, src=""):
         targets = audit_sed_programs(rest, drift)
         if _is_inplace(rest):
             targets += _sed_files(rest)
+    elif base in ("objcopy", "ld", "as", "strip", "ar",
+                     "ranlib"):
+        bin_targets, bin_implicit = audit_binutils_targets(
+            base, rest)
+        targets += bin_targets
+        if bin_implicit is not None:
+            implicit = bin_implicit
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
     if implicit is not None:
@@ -224,6 +208,9 @@ def audit_copy_dest(base, rest, drift, src=""):
     if "workspace" in zones \
             and "helper-workspace-write" not in drift:
         drift.append("helper-workspace-write")
+    if "glob" in zones \
+            and "helper-unzoneable-write" not in drift:
+        drift.append("helper-unzoneable-write")
     kinds = {github_cmdfile_kind(t) for t in targets}
     kinds.discard(None)
     if kinds and "helper-env-poison" not in drift:
@@ -244,6 +231,9 @@ def audit_find_output(rest, drift):
             if zone == "workspace" \
                     and "helper-workspace-write" not in drift:
                 drift.append("helper-workspace-write")
+            if zone == "glob" \
+                    and "helper-unzoneable-write" not in drift:
+                drift.append("helper-unzoneable-write")
             if github_cmdfile_kind(rest[i + 1]) is not None \
                     and "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")

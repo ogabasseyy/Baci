@@ -20,49 +20,20 @@ from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
 from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
 from semgrep_sarif_scan import (arith_command_regions,
-                                arith_regions, extract_subshells,
-                                has_proc_environ,
-                                subscript_cmdsubst, _write_zone)
+                                arith_regions, extract_subshells)
+from semgrep_sarif_subscript import subscript_cmdsubst
+from semgrep_sarif_zone import _write_zone, has_proc_environ
 from semgrep_sarif_segments import logical_lines
-from semgrep_sarif_shell import (ENV_POISON, SHELL_KEYWORDS,
-                                 _bare_word, peel_prefix,
-                                 split_commands2, tokenize)
+from semgrep_sarif_consts import (BARE_POISON_RE, DEFERRED_RE,
+                                  ENV_POISON, INDIRECT_RE,
+                                  SECRET_EXPAND_RE, SHELL_KEYWORDS,
+                                  XTRACE_RE)
+from semgrep_sarif_peel import peel_prefix
+from semgrep_sarif_shell import (_bare_word, split_commands2,
+                                 tokenize)
 from semgrep_sarif_varmap import (_collect_vars, _resolve,
                                   audit_unresolved_argv)
 
-DEFERRED_RE = re.compile(
-    r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
-    r"(?:(?:export|local|readonly|declare|typeset)\s+"
-    r"(?:-\S+\s+)*)?"
-    r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
-    r"(PS4|PROMPT_COMMAND)\s*="
-    r"|(?:^|[;&|])\s*printf\s+(?:--\s+)?-v\s*"
-    r"(PS4|PROMPT_COMMAND)\b"
-    # ${var@P} prompt-expands its value at the USE site,
-    # running embedded $() (no PS4/PROMPT_COMMAND binding
-    # needed); the value's shape is unknowable statically, so
-    # the expansion itself drifts. @Q/@E/@A only quote.
-    r"|\$\{[^${}]*@P\}")
-XTRACE_RE = re.compile(
-    r"\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace\b"
-    r"|\b(?:bash|sh)\s+-[A-Za-z]*x")
-_POISON_ALT = "(?:" + "|".join(
-    v for v in ENV_POISON if v != "IFS") + ")"
-BARE_POISON_RE = re.compile(
-    r"(?:^|[;&|])\s*" + _POISON_ALT + r"\s*=[^=]"
-    r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"
-    r"(?:command\s+|builtin\s+)?read\b)[^=]")
-# Helpers authenticate gh via the environment (never expanding
-# the token: the sole legit mention is run.sh's -u scrub), so
-# any $GH_TOKEN/$GITHUB_TOKEN expansion stages a secret into a
-# log, file, or agent input. \b keeps GH_TOKEN_SUFFIX silent.
-SECRET_EXPAND_RE = re.compile(
-    r"\$\{[#!]?GH_TOKEN\b|\$GH_TOKEN\b"
-    r"|\$\{[#!]?GITHUB_TOKEN\b|\$GITHUB_TOKEN\b")
-# Bare ${!name} indirects to a caller-chosen variable (value!);
-# [@]/[*] subscripts and !prefix* globs list names only.
-INDIRECT_RE = re.compile(
-    r"\$\{![A-Za-z_]\w*(\[(?![@*]\])[^]]*\])?\}")
 
 
 def _strip_case_patterns(nosub):
@@ -234,6 +205,9 @@ def _audit_line(line, drift, src="", stale=frozenset(),
         if zone == "workspace" \
                 and "helper-workspace-write" not in drift:
             drift.append("helper-workspace-write")
+        if zone == "glob" \
+                and "helper-unzoneable-write" not in drift:
+            drift.append("helper-unzoneable-write")
         if _is_home_write(tgt) \
                 and "helper-home-write" not in drift:
             drift.append("helper-home-write")
@@ -303,44 +277,3 @@ def _audit_line(line, drift, src="", stale=frozenset(),
         audit_promptfile_rebind(argv0, rest, drift)
         _check_command(argv0, list(rest), list(pre), drift,
                        src)
-
-
-def _audit_shell_file(path, drift):
-    try:
-        with open(path) as fh:
-            raw = fh.read().splitlines()
-    except OSError:
-        drift.append("helper-unreadable")
-        return
-    varmap, stale, namerefs, opaque = _collect_vars(raw)
-    src = os.path.basename(path)
-    code, bodies, env_bodies = _strip_heredocs(raw)
-    for line in logical_lines(code):
-        _audit_line(_resolve(line, varmap, namerefs), drift,
-                    src, stale, opaque)
-    for line in bodies:
-        _audit_expansions(_resolve(line, varmap, namerefs),
-                           drift, src, stale, opaque)
-    for kind, quoted, line in env_bodies:
-        audit_github_cmdfile_body(
-            kind, _resolve(line, varmap, namerefs), drift,
-            quoted)
-
-
-def invoked_shell_refs(raw):
-    # .sh names the workflow routes via ${SCRIPT_DIR} (plus lib.sh,
-    # sourced by every helper): referenced-but-missing drifts.
-    invoked = set(re.findall(
-        r"\$\{SCRIPT_DIR\}/([\w][\w.-]*\.sh)", raw))
-    compact = re.sub(r"\s+", "", raw)
-    invoked.update(re.findall(
-        r"steps\.scriptdir\.outputs\.dir\}\}/"
-        r"([\w][\w.-]*\.sh)", compact))
-    invoked.add("lib.sh")
-    return invoked
-
-
-def audit_trusted_changed(drift):
-    if os.environ.get("TRUSTED_CHANGED") == "true" \
-            and "trusted-tree-changed" not in drift:
-        drift.append("trusted-tree-changed")

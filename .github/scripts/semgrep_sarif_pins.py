@@ -82,6 +82,14 @@ def _safe_exec_path(path):
     if path == "/home/runner":
         return True
     if path.startswith("/home/runner/"):
+        # The PR-controlled checkout (and the runner temp dir
+        # beneath it) lives under /home/runner/work: executables
+        # there are attacker-planted. Normalize first so ..
+        # spellings cannot dodge the exclusion.
+        norm = posixpath.normpath(path)
+        if norm == "/home/runner/work" \
+                or norm.startswith("/home/runner/work/"):
+            return False
         return _contained_exec_path(path, r"^/home/runner/")
     if path.startswith("/"):
         norm = posixpath.normpath(path)

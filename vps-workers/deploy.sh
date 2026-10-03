@@ -75,7 +75,7 @@ record_deploy_workflow_promote "$APP_SHA" || {
     if record_deploy_workflow_promote "$APP_SHA" restore; then
       echo "Restore-window record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
     else
-      echo "RESTORE-WINDOW RECORD FAILED: the rollback landed but its readers are unrecorded. Manually confirm no production deploy published off the rolled-back candidate reads before rerunning deploy.sh." >&2
+      echo "RESTORE-WINDOW RECORD FAILED: the rollback landed but its readers are unrecorded and this deploy's promote barrier is stuck (blocking all publishes). Manually confirm no production deploy published off the rolled-back candidate reads, clear the stale barrier per the cutover runbook, then rerun deploy.sh." >&2
     fi
   else
     echo "ROLLBACK FAILED: the live tree may be mixed and the promote is unrecorded. Follow the emergency rollback runbook NOW, then confirm no production deploy published off stale reads." >&2

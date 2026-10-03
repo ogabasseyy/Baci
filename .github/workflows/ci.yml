@@ -417,6 +417,7 @@ jobs:
           .github/scripts/deploy-vps-readiness-checkout.test.mjs
           .github/scripts/deploy-with-retry-current-main.test.mjs
           .github/scripts/deploy-with-retry-overlap.test.mjs
+          .github/scripts/deploy-with-retry-overlap-rollback.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
           .github/scripts/assert-preview-env-allowlist.test.mjs

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Serializes manual worker promotion with the production deploy
 # workflow. Sourced by deploy.sh.
+# No dirname: sourcing must work on a minimal PATH (callers use absolute paths).
+_inflight_lib_dir="${BASH_SOURCE[0]:-$0}"
+_inflight_lib_dir="${_inflight_lib_dir%/*}"
+# shellcheck source=promote-barrier.sh
+. "$_inflight_lib_dir/promote-barrier.sh"
 #
 # Every function here RETURNS its status and never exits: deploy.sh
 # must complete the post-promote installation even when the promote
@@ -27,24 +32,20 @@
 # - record_deploy_workflow_promote (THREE writes: immediately before
 #   the flip as a fail-closed gate, immediately after as a refresh,
 #   and after an auto-rollback as a restore record): records the
-#   promoted SHA plus the runs in flight at record time in a
-#   single-file ops branch (ops/gigl-promote-record). The workflow's
-#   pre-publish step reads that file live and refuses to publish when
-#   its own run id is in the record — true mutual exclusion even for
-#   runs that were invisible to the pre-promote query. The pre-flip
-#   write is the fail-closed half: when the record path is broken
-#   (auth, network, permissions), the promote is refused before
-#   anything is mutated, so a promote can never land that no workflow
-#   can see. If the post-flip refresh fails, deploy.sh rolls the
-#   promotion back (tree + checkout pointer + marker) and then
-#   records the restore window: runs that started during the stalled
-#   refresh read the rolled-back candidate yet are absent from the
-#   pre-flip record, so without this write their pre-publish check
-#   would pass. Run ids, not timestamps: no clocks, no TTL, no stale
-#   state — a record only ever matches live runs. The store is a
-#   branch (not an Actions variable) because GITHUB_TOKEN cannot be
-#   granted the Variables permission; the contents API read works
-#   under the job's existing contents:read.
+#   promoted SHA plus the runs in flight at record time in the ops
+#   branch (ops/gigl-promote-record), plus a per-deploy barrier file
+#   (barriers/<sha>-<host>-<pid>) raised pre-flip and cleared
+#   post-flip/restore. The workflow's pre-publish step reads that
+#   branch live and refuses when its own run id is recorded OR any
+#   barrier file exists — true mutual exclusion even for runs
+#   invisible to the pre-promote query and during a stalled refresh
+#   (ID lists alone cannot see runs that start mid-stall). The
+#   pre-flip write is the fail-closed half: a broken record path
+#   refuses the promote before anything is mutated. If the post-flip
+#   refresh fails, deploy.sh rolls back and records the restore
+#   window. Run ids, not timestamps: no clocks, no TTL. The store is
+#   a branch (not an Actions variable) because GITHUB_TOKEN cannot be
+#   granted the Variables permission.
 
 _inflight_owner=""
 _inflight_repo=""
@@ -100,11 +101,9 @@ _set_inflight_repo() {
 # `gh run list --limit N` filter applies AFTER the limit, hiding
 # approval-held runs older than N newer ones from both the refusal
 # and the record. The Actions API filters each non-completed status
-# server-side (~zero rows per query); --paginate covers deep
-# backlogs and the completed-guard stays fail-safe. The scan repeats
-# until two consecutive passes see the same id set (capped at three
-# passes) so a mid-scan status transition cannot dodge both reads;
-# passes union in, so the result can only over-include (fail-safe).
+# server-side (~zero rows); --paginate covers deep backlogs. Two
+# consecutive passes must agree (capped at three) so a mid-scan
+# transition cannot dodge both reads; passes union in (fail-safe).
 # Usage: _list_noncompleted_deploy_runs <err-file-or-empty>.
 _list_noncompleted_deploy_runs() {
   local _list_err_file="$1"
@@ -194,7 +193,7 @@ record_deploy_workflow_promote() {
       ;;
     restore)
       record_refused="Rolled-back worker promote is NOT recorded"
-      record_aftermath="The rollback already landed but restore-window runs are unrecorded: manually confirm no production deploy published off the rolled-back candidate reads, then re-run this restore record once the cause is fixed."
+      record_aftermath="The rollback already landed but restore-window runs are unrecorded and this deploy's promote barrier is stuck: manually confirm no production deploy published off the rolled-back candidate reads, clear the stale barrier per the cutover runbook, then re-run this restore record once the cause is fixed."
       ;;
     *)
       echo "Refusing to record worker promotion: unknown phase '$record_phase' (want 'pre', 'post', or 'restore')." >&2
@@ -223,13 +222,11 @@ record_deploy_workflow_promote() {
     return 0
   fi
   _set_inflight_repo || return 1
-  # List AFTER promote: runs that appeared during the promote are
-  # recorded so their own pre-publish step proves overlap itself.
+  # List AFTER promote so flip-window runs prove overlap themselves.
   record_err="$(mktemp 2>/dev/null)" || record_err=""
-  # Capture first, parse second: a `$(_list ... | cut | paste)`
-  # pipeline reports paste's status without pipefail, and callers
-  # (runbook one-liners) cannot be assumed to set it — a masked list
-  # failure would record a vacuous overlap set.
+  # Capture first, parse second: without pipefail a `$(_list | cut
+  # | paste)` pipeline reports paste's status — a masked list failure
+  # would record a vacuous overlap set.
   if ! record_tsv="$(_list_noncompleted_deploy_runs "$record_err")"; then
     record_detail=""
     if [ -n "$record_err" ]; then
@@ -285,8 +282,12 @@ _push_promote_record() {
   # the command line so a bare-bones operator clone (no user.name or
   # user.email configured) still records.
   push_blob="$(printf '%s\n' "$push_value" | git hash-object -w --stdin)" || return 1
-  push_tree="$(printf '100644 blob %s\t%s\n' "$push_blob" "$PROMOTE_RECORD_FILE" | git mktree)" || return 1
+  push_base=""
   if git fetch --quiet origin "$PROMOTE_RECORD_BRANCH:$push_ref" 2>/dev/null; then
+    push_base="$push_ref"
+  fi
+  push_tree="$(promote_record_tree "$push_blob" "$record_phase" "$record_sha" "$push_base")" || return 1
+  if [ -n "$push_base" ]; then
     push_commit="$(GIT_AUTHOR_NAME='baci-deploy' GIT_AUTHOR_EMAIL='baci-deploy@users.noreply.github.com' GIT_COMMITTER_NAME='baci-deploy' GIT_COMMITTER_EMAIL='baci-deploy@users.noreply.github.com' git commit-tree "$push_tree" -p "$push_ref" -m "$push_msg")" || return 1
   else
     # First record (branch absent) — or an unreachable origin, in

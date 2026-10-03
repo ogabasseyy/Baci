@@ -9,7 +9,14 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const scriptPath = join(scriptDir, 'refuse-publish-on-promote-overlap.sh');
 
-function runOverlap({ scenario = 'ok', record = '', runId = '333', repo = 'example-owner/example-repo' }) {
+function runOverlap({
+  scenario = 'ok',
+  record = '',
+  runId = '333',
+  repo = 'example-owner/example-repo',
+  barrierScenario = 'missing',
+  barriers = '',
+}) {
   const workDir = mkdtempSync(join(tmpdir(), 'baci-promote-overlap-'));
   const binDir = join(workDir, 'bin');
   mkdirSync(binDir, { recursive: true });
@@ -19,10 +26,21 @@ function runOverlap({ scenario = 'ok', record = '', runId = '333', repo = 'examp
     stubPath,
     `#!/usr/bin/env bash
 echo "$@" >> "${argsFile}"
-case "$GH_SCENARIO" in
-  ok) printf '%s' "$GH_RECORD" ;;
-  missing) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
-  error) echo 'gh: Internal Server Error (HTTP 500)' >&2; exit 1 ;;
+case "$@" in
+  *contents/barriers?*)
+    case "$GH_BARRIER_SCENARIO" in
+      blocked) printf '%s' "$GH_BARRIERS" ;;
+      missing) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+      error) echo 'gh: Internal Server Error (HTTP 500)' >&2; exit 1 ;;
+    esac
+    ;;
+  *)
+    case "$GH_SCENARIO" in
+      ok) printf '%s' "$GH_RECORD" ;;
+      missing) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+      error) echo 'gh: Internal Server Error (HTTP 500)' >&2; exit 1 ;;
+    esac
+    ;;
 esac
 `
   );
@@ -34,6 +52,8 @@ esac
       ...process.env,
       GH_SCENARIO: scenario,
       GH_RECORD: record,
+      GH_BARRIER_SCENARIO: barrierScenario,
+      GH_BARRIERS: barriers,
       GITHUB_RUN_ID: runId,
       GITHUB_REPOSITORY: repo,
       OVERLAP_RETRY_DELAY_SECONDS: '0',
@@ -105,4 +125,55 @@ test('allows publish when the record lists no runs', () => {
   const { result } = runOverlap({ record: 'abc123:' });
 
   assert.equal(result.status, 0, result.stderr);
+});
+
+test('refuses publish when a barrier file exists, even if unlisted', () => {
+  // The run id is absent (it started after the pre-flip snapshot),
+  // but a promote is mid-flight: the ID list alone would allow.
+  const { result } = runOverlap({
+    record: 'abc123:111,222',
+    barrierScenario: 'blocked',
+    barriers:
+      '[{"name":"abc-host-1","path":"barriers/abc-host-1","type":"file"}]',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing production publish/);
+  assert.match(result.stderr, /promote is in progress/);
+  assert.match(result.stderr, /stale barrier/);
+});
+
+test('refuses publish when the barriers path is a file, not a directory', () => {
+  const { result } = runOverlap({
+    record: 'abc123:',
+    barrierScenario: 'blocked',
+    barriers: '{"name":"barriers","path":"barriers","type":"file"}',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /promote is in progress/);
+});
+
+test('fails closed when the barriers cannot be read', () => {
+  const { result, ghArgs } = runOverlap({
+    record: 'abc123:',
+    barrierScenario: 'error',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /could not read the worker promote barriers/);
+  assert.equal(
+    ghArgs.split('\n').filter((line) => line.includes('contents/barriers')).length,
+    3
+  );
+});
+
+test('allows publish when the barriers directory is absent', () => {
+  const { result } = runOverlap({
+    record: 'abc123:',
+    barrierScenario: 'missing',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /No worker promote overlapped this run/);
 });

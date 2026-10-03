@@ -8,6 +8,7 @@ import {
   BRANCH,
   fixtureOrigin,
   libPath,
+  recordBarriers,
   recordCommits,
   recordContent,
   runRecord,
@@ -180,6 +181,39 @@ test('pre-flip gate refuses before mutation when the run list fails', () => {
   assert.match(result.stderr, /Refusing worker promotion/);
   assert.match(result.stderr, /Nothing was mutated/);
   assert.doesNotMatch(result.stderr, /already landed/);
+});
+
+test('pre-flip gate raises a per-deploy barrier file', () => {
+  const { bare, result } = runRecord({
+    phase: 'pre',
+    runIds: tsvRows('184400111'),
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(recordBarriers(bare), [`barriers/${SHA}-testpid`]);
+  const barrierContent = execFileSync(
+    'git',
+    ['--git-dir', bare, 'show', `${BRANCH}:barriers/${SHA}-testpid`],
+    { encoding: 'utf8' }
+  ).trim();
+  assert.equal(barrierContent, SHA);
+});
+
+test('post-flip refresh clears its own barrier file', () => {
+  const bare = fixtureOrigin();
+  const first = runRecord({
+    origin: bare,
+    phase: 'pre',
+    runIds: tsvRows('184400111'),
+  });
+  assert.equal(first.result.status, 0, first.result.stderr);
+  assert.deepEqual(recordBarriers(bare), [`barriers/${SHA}-testpid`]);
+  const second = runRecord({ origin: bare, runIds: tsvRows('184400111') });
+
+  assert.equal(second.result.status, 0, second.result.stderr);
+  assert.deepEqual(recordBarriers(bare), []);
+  // The record itself still stands (barrier removal must not wipe it).
+  assert.equal(recordContent(bare), `${SHA}:184400111`);
 });
 
 test('rejects an unknown record phase', () => {

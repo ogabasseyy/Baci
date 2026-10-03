@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   fixtureOrigin,
+  recordBarriers,
   recordCommits,
   recordContent,
   runRecord,
   SHA,
+  SHA2,
   tsvRows,
 } from './record-deploy-workflow-promote.test-fixtures.mjs';
 
@@ -73,4 +75,49 @@ test('restore phase fails closed when the run list fails', () => {
   assert.match(result.stderr, /Rolled-back worker promote is NOT recorded/);
   assert.match(result.stderr, /could not list workflow runs/);
   assert.throws(() => recordContent(bare));
+});
+
+test('restore phase clears its own barrier file', () => {
+  const bare = fixtureOrigin();
+  const first = runRecord({
+    origin: bare,
+    phase: 'pre',
+    runIds: tsvRows('184400111'),
+  });
+  assert.equal(first.result.status, 0, first.result.stderr);
+  const second = runRecord({
+    origin: bare,
+    phase: 'restore',
+    runIds: tsvRows('184400111', '184400112'),
+  });
+
+  assert.equal(second.result.status, 0, second.result.stderr);
+  assert.deepEqual(recordBarriers(bare), []);
+});
+
+test('concurrent deploys never clear each other\u2019s barrier', () => {
+  const bare = fixtureOrigin();
+  const first = runRecord({
+    origin: bare,
+    phase: 'pre',
+    barrier: 'deploy-a',
+    runIds: tsvRows('184400111'),
+  });
+  assert.equal(first.result.status, 0, first.result.stderr);
+  const second = runRecord({
+    origin: bare,
+    sha: SHA2,
+    phase: 'pre',
+    barrier: 'deploy-b',
+    runIds: tsvRows('184400112'),
+  });
+  assert.equal(second.result.status, 0, second.result.stderr);
+  assert.deepEqual(recordBarriers(bare), [
+    `barriers/${SHA}-deploy-a`,
+    `barriers/${SHA2}-deploy-b`,
+  ]);
+  const third = runRecord({ origin: bare, barrier: 'deploy-a' });
+
+  assert.equal(third.result.status, 0, third.result.stderr);
+  assert.deepEqual(recordBarriers(bare), [`barriers/${SHA2}-deploy-b`]);
 });

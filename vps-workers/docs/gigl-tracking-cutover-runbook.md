@@ -301,6 +301,28 @@ API, in both directions:
   stale. The store is a branch (not an Actions variable) because
   `GITHUB_TOKEN` cannot be granted the Variables permission; the
   contents read works under the publish job's existing `contents:read`.
+- Every promote also raises a durable presence barrier on the same
+  branch before the pre-flip record read: one empty file per deploy at
+  `barriers/<sha>-<short-host>-<pid>` (all committed together; removal
+  at the end of the promote commits each barrier-file deletion
+  individually, one commit per barrier, so a partial-removal deploy
+  fails loudly with the remaining barriers still blocking). The
+  branch's own git history is the cross-run presence store: a
+  `git fetch` + `cat-file` read sees a barrier even through a
+  concurrent reader's refresh. The pre-publish guard refuses to publish
+  whenever a barrier file exists, regardless of run ids — the barrier
+  covers the window the record cannot. A dead deploy (operator Ctrl-C,
+  runner loss) leaves a stale barrier that blocks ALL publishes until
+  cleared: this fails safe (stuck publish beats silent stale publish),
+  but it is operator-actionable. Stuck-barrier recovery: (1) confirm no
+  promote is actually in flight on any runner (`gh api
+  repos/<owner>/<repo>/contents/barriers?ref=ops/gigl-promote-record`
+  lists the stale files; check deploy runners for the matching
+  host/pid), (2) remove the stale barrier files from the record branch
+  (`git push` deletions to `ops/gigl-promote-record`), (3) confirm the
+  published revision matches a recorded promote before re-running
+  publishes. The restore-window failure message names this procedure
+  when a stuck barrier is implicated.
 
 ## Scoped GIGL process environment
 

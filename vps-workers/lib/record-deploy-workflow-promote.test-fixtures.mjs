@@ -56,6 +56,15 @@ export function recordCommits(bare) {
     .split('\n');
 }
 
+export function recordBarriers(bare) {
+  const out = execFileSync(
+    'git',
+    ['--git-dir', bare, 'ls-tree', '-r', '--name-only', BRANCH, '--', 'barriers/'],
+    { encoding: 'utf8' }
+  ).trim();
+  return out === '' ? [] : out.split('\n');
+}
+
 // TSV rows (id, status, short-sha, event, url), the `gh api --jq @tsv`
 // contract the record parser consumes.
 export const tsvRows = (...ids) =>
@@ -74,6 +83,9 @@ export function runRecord({
   origin = null,
   env = {},
   path = null,
+  // Stable barrier identity across the suite's one-shell-per-call
+  // harness (production derives host+PID in-process instead).
+  barrier = 'testpid',
 }) {
   const bare = origin ?? fixtureOrigin();
   const work = workRepo(bare);
@@ -111,6 +123,7 @@ if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FI
         RECORD_LIB: libPath,
         RECORD_SHA: sha,
         RECORD_PHASE: phase,
+        PROMOTE_BARRIER_ID_SUFFIX: barrier,
         GH_SCENARIO: scenario,
         GH_RUN_IDS: runIds,
         GH_FIRST_CALL_MARKER: join(work, 'gh-first-call'),

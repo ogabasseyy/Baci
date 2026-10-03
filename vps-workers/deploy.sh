@@ -47,9 +47,8 @@ ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_R
 
 # Final refusal BEFORE anything below mutates live state: staging and
 # the image build take minutes, and a workflow that started in that
-# window publishes off the pre-promote latch/SHA. Workflows that start
-# during the promote itself are covered in the other direction: the
-# overlap record makes their pre-publish overlap check refuse.
+# window publishes off the pre-promote latch/SHA; flip-window runs are
+# covered the other way (the overlap record refuses them at publish).
 check_deploy_workflow_inflight
 
 # Fail-closed overlap gate BEFORE the flip: write the overlap record
@@ -65,13 +64,19 @@ promote_worker_release
 # check (the other half of the serialization): runs that appeared
 # during the promote must refuse to publish off their pre-promote
 # latch/SHA read. If this refresh fails, the promotion is ROLLED BACK
-# (no unrecorded tree may stay live — a slow promote lets flip-window
-# runs read pre-flip state the standing pre-flip record cannot list)
-# and the deploy exits before the transition or any install runs.
+# (no unrecorded tree may stay live) and the restore window is
+# recorded: runs that started during the stalled refresh read the
+# rolled-back candidate yet are absent from the pre-flip record, so
+# without this second write their pre-publish check would pass.
 record_deploy_workflow_promote "$APP_SHA" || {
   echo "Post-flip overlap record failed; rolling back the promotion so no unrecorded worker tree stays live." >&2
   if rollback_worker_release; then
-    echo "Rollback complete; the pre-flip record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
+    echo "Rollback complete; recording restore-window runs so the runs that read the rolled-back candidate refuse at publish." >&2
+    if record_deploy_workflow_promote "$APP_SHA" restore; then
+      echo "Restore-window record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
+    else
+      echo "RESTORE-WINDOW RECORD FAILED: the rollback landed but its readers are unrecorded. Manually confirm no production deploy published off the rolled-back candidate reads before rerunning deploy.sh." >&2
+    fi
   else
     echo "ROLLBACK FAILED: the live tree may be mixed and the promote is unrecorded. Follow the emergency rollback runbook NOW, then confirm no production deploy published off stale reads." >&2
   fi

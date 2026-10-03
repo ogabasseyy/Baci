@@ -24,9 +24,10 @@
 #   again after the image build, before the cron transition mutates
 #   live schedule): refuses when any main-branch deploy run is still
 #   in flight.
-# - record_deploy_workflow_promote (TWICE: immediately before the flip
-#   as a fail-closed gate, and immediately after as a refresh): records
-#   the promoted SHA plus the runs in flight at record time in a
+# - record_deploy_workflow_promote (THREE writes: immediately before
+#   the flip as a fail-closed gate, immediately after as a refresh,
+#   and after an auto-rollback as a restore record): records the
+#   promoted SHA plus the runs in flight at record time in a
 #   single-file ops branch (ops/gigl-promote-record). The workflow's
 #   pre-publish step reads that file live and refuses to publish when
 #   its own run id is in the record — true mutual exclusion even for
@@ -35,14 +36,15 @@
 #   (auth, network, permissions), the promote is refused before
 #   anything is mutated, so a promote can never land that no workflow
 #   can see. If the post-flip refresh fails, deploy.sh rolls the
-#   promotion back (tree + checkout pointer + marker) and exits
-#   before any install runs — a slow promote lets flip-window runs
-#   read pre-flip state the standing pre-flip record cannot list, so
-#   no unrecorded tree may stay live. Run ids, not
-#   timestamps: no clocks, no TTL, no stale state — a record only ever
-#   matches live runs. The store is a branch (not an Actions variable)
-#   because GITHUB_TOKEN cannot be granted the Variables permission;
-#   the contents API read works under the job's existing contents:read.
+#   promotion back (tree + checkout pointer + marker) and then
+#   records the restore window: runs that started during the stalled
+#   refresh read the rolled-back candidate yet are absent from the
+#   pre-flip record, so without this write their pre-publish check
+#   would pass. Run ids, not timestamps: no clocks, no TTL, no stale
+#   state — a record only ever matches live runs. The store is a
+#   branch (not an Actions variable) because GITHUB_TOKEN cannot be
+#   granted the Variables permission; the contents API read works
+#   under the job's existing contents:read.
 
 _inflight_owner=""
 _inflight_repo=""
@@ -65,11 +67,9 @@ _is_valid_repo_slug() {
 }
 
 _set_inflight_repo() {
-  # Resolve the repo explicitly: gh's default resolution follows the
-  # checkout's remotes, so a fork-clone deploy would query the fork
-  # (no runs) and pass vacuously while production deploys fly. Fail
-  # closed when origin is missing or unrecognized; the override covers
-  # exotic-but-correct setups (non-github or wrapped remotes).
+  # Resolve the repo explicitly: gh follows the checkout's remotes,
+  # so a fork-clone deploy would query the fork (no runs) and pass
+  # vacuously. Fail closed; the override covers exotic setups.
   if [ -n "${BACI_DEPLOY_WORKFLOW_REPO:-}" ]; then
     if ! _is_valid_repo_slug "$BACI_DEPLOY_WORKFLOW_REPO"; then
       echo "Refusing worker promotion: BACI_DEPLOY_WORKFLOW_REPO must be 'owner/repo', got '$BACI_DEPLOY_WORKFLOW_REPO'." >&2
@@ -96,24 +96,15 @@ _set_inflight_repo() {
 }
 
 # Lists every non-completed main-branch deploy.yml run as TSV (id,
-# status, short-sha, event, url) with NO fixed recent-run window. A
-# `gh run list --limit N` query applies its jq filter AFTER the limit,
-# so an approval-held run older than N newer runs is invisible both to
-# the pre-promote refusal and to the promote record — and the older
-# workflow then publishes off stale readiness state. The Actions API
-# filters each non-completed status server-side instead, so every
-# query returns ~zero rows in one page however many completed runs
-# exist; --paginate covers an arbitrarily deep non-completed backlog,
-# and the client-side completed-guard keeps a future API behavior
-# change fail-safe instead of fail-open. Prints nothing when quiet.
-# A run that transitions status mid-scan (requested -> queued is a
-# normal lifecycle step) can dodge a single pass — queried under its
-# old status before the transition and under its new status after —
-# so the full scan repeats until two consecutive passes observe the
-# same id set (stable: nothing transitioned mid-scan), capped at
-# three passes. Every pass unions in and ids dedupe: the result can
-# only over-include (a run that completes mid-scan may linger), and
-# over-inclusion fails safe on both sides (refusal + record match).
+# status, short-sha, event, url) with NO fixed recent-run window: a
+# `gh run list --limit N` filter applies AFTER the limit, hiding
+# approval-held runs older than N newer ones from both the refusal
+# and the record. The Actions API filters each non-completed status
+# server-side (~zero rows per query); --paginate covers deep
+# backlogs and the completed-guard stays fail-safe. The scan repeats
+# until two consecutive passes see the same id set (capped at three
+# passes) so a mid-scan status transition cannot dodge both reads;
+# passes union in, so the result can only over-include (fail-safe).
 # Usage: _list_noncompleted_deploy_runs <err-file-or-empty>.
 _list_noncompleted_deploy_runs() {
   local _list_err_file="$1"
@@ -188,7 +179,9 @@ check_deploy_workflow_inflight() {
 record_deploy_workflow_promote() {
   record_sha="${1:?promoted SHA is required}"
   # Phase-aware failure voice: pre-flip failures refuse before any
-  # mutation; post-flip failures report the landed-but-unrecorded state.
+  # mutation; post-flip failures report the landed-but-unrecorded
+  # state; restore failures report the rolled-back-but-unrecorded
+  # state (restore-window runs read a candidate that no longer exists).
   record_phase="${2:-post}"
   case "$record_phase" in
     pre)
@@ -199,8 +192,12 @@ record_deploy_workflow_promote() {
       record_refused="Worker promotion is NOT recorded"
       record_aftermath="The promote already landed and must not stay unrecorded: deploy.sh rolls it back automatically, while a manual rollback operator must re-run this refresh once the cause is fixed. Then confirm no production deploy published off stale reads."
       ;;
+    restore)
+      record_refused="Rolled-back worker promote is NOT recorded"
+      record_aftermath="The rollback already landed but restore-window runs are unrecorded: manually confirm no production deploy published off the rolled-back candidate reads, then re-run this restore record once the cause is fixed."
+      ;;
     *)
-      echo "Refusing to record worker promotion: unknown phase '$record_phase' (want 'pre' or 'post')." >&2
+      echo "Refusing to record worker promotion: unknown phase '$record_phase' (want 'pre', 'post', or 'restore')." >&2
       return 1
       ;;
   esac
@@ -226,10 +223,8 @@ record_deploy_workflow_promote() {
     return 0
   fi
   _set_inflight_repo || return 1
-  # List AFTER promote: runs that appeared during the promote read
-  # torn (fail-closed marker mismatch) or fresh post-promote state,
-  # but recording them is what lets their own pre-publish step prove
-  # that instead of trusting this comment.
+  # List AFTER promote: runs that appeared during the promote are
+  # recorded so their own pre-publish step proves overlap itself.
   record_err="$(mktemp 2>/dev/null)" || record_err=""
   # Capture first, parse second: a `$(_list ... | cut | paste)`
   # pipeline reports paste's status without pipefail, and callers
@@ -266,6 +261,8 @@ record_deploy_workflow_promote() {
       fi
       if [ "$record_phase" = "pre" ]; then
         echo "Recorded pre-promote overlap for $record_sha ($record_overlap); the post-flip refresh follows."
+      elif [ "$record_phase" = "restore" ]; then
+        echo "Recorded restore-window overlap for rolled-back $record_sha ($record_overlap); affected runs refuse at publish."
       else
         echo "Recorded worker promote $record_sha ($record_overlap)."
       fi
@@ -283,7 +280,7 @@ record_deploy_workflow_promote() {
 _push_promote_record() {
   push_value="$1"
   push_ref="refs/baci-tmp/promote-record"
-  push_msg="record worker promote ${push_value%%:*} [skip ci]"
+  push_msg="record worker promote overlap ${push_value%%:*} [skip ci]"
   # Plumbing only: no checkout touched. Committer identity rides on
   # the command line so a bare-bones operator clone (no user.name or
   # user.email configured) still records.

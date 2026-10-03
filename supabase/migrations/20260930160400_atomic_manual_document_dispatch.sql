@@ -1,9 +1,11 @@
 -- Atomically validate the rendered snapshot and mark dispatch start for a
 -- manual-order document. A check-then-mark in application code leaves a
--- millisecond race between the re-read and the marker; this function holds
--- the order row (FOR SHARE, matching the claim/trigger lock order) while
--- comparing, so a payment, contact correction, or item edit landing
--- mid-dispatch aborts instead of sending a stale document. The snapshot
+-- millisecond race between the re-read and the marker; this function locks
+-- child, parent, merchant, account, then outbox (the trigger paths enter
+-- holding child/parent/merchant locks, so any other order deadlocks
+-- against concurrent staff edits) while comparing, so a payment, contact
+-- correction, or item edit landing mid-dispatch aborts instead of sending
+-- a stale document. The snapshot
 -- covers every order-row input the renderer reads (identity, money
 -- breakdown, notes, address, dates, and item contents including
 -- descriptions) plus the manual-order origin fields: a same-total money
@@ -96,6 +98,8 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_notification public.order_notification_outbox%ROWTYPE;
   v_order public.orders%ROWTYPE;
+  v_order_id uuid;
+  v_merchant_id uuid;
   v_item_count bigint;
   v_items jsonb;
   v_merchant_bank_code text;
@@ -119,37 +123,32 @@ DECLARE
   v_merchant_vat_registration_status text;
   v_merchant_vat_rate numeric;
 BEGIN
-  -- Lock the order before the outbox (same order as the claim and trigger
-  -- paths) and hold it through the comparison and the mark.
-  SELECT o.* INTO v_order FROM public.orders AS o
-  WHERE o.id = (SELECT n.order_id FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id)
-    AND o.merchant_id = (SELECT n.merchant_id FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id)
-  FOR SHARE;
-  SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
-  WHERE n.id = p_outbox_id AND n.status = 'processing'
-    AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-  FOR UPDATE;
-  IF NOT FOUND OR v_order IS NULL THEN
-    RETURN jsonb_build_object('status', 'lease_lost');
-  END IF;
-  PERFORM 1 FROM public.order_items AS oi
-  WHERE oi.order_id = v_order.id FOR SHARE OF oi;
-  SELECT count(*) INTO v_item_count FROM public.order_items AS oi
-  WHERE oi.order_id = v_order.id;
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-    'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
-    'variant_name', oi.variant_name, 'condition', oi.condition,
-    'item_description', oi.item_description
-  ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
-  FROM public.order_items AS oi
-  WHERE oi.order_id = v_order.id;
   IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
     RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
   END IF;
   -- Receipts render no payment instructions, so the payment snapshot only
   -- applies to invoice and proforma kinds.
   v_compare_payment := p_document_kind <> 'receipt';
+  -- Common lock order (child, parent, merchant, account, outbox): the item
+  -- trigger path necessarily enters holding a child row lock, so taking the
+  -- parent first here deadlocks parent-to-child against child-to-parent.
+  -- order_id/merchant_id are immutable, so an unlocked outbox read seeds the
+  -- row locks; the claim gate below re-validates under the outbox lock.
+  SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
+  FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'lease_lost');
+  END IF;
+  PERFORM 1 FROM public.order_items AS oi
+  WHERE oi.order_id = v_order_id FOR SHARE OF oi;
+  PERFORM 1 FROM public.order_tax_subtotals AS ts
+  WHERE ts.order_id = v_order_id FOR SHARE OF ts;
+  PERFORM 1 FROM public.transactions AS t
+  WHERE t.order_id = v_order_id AND t.transaction_type = 'payment'
+    AND t.status IN ('completed', 'success') FOR SHARE OF t;
+  SELECT o.* INTO v_order FROM public.orders AS o
+  WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
+  FOR SHARE;
   -- The preferred virtual account mirrors the sender's resolution (latest
   -- unexpired non-legacy paystack row); a missing row leaves NULLs, which
   -- match a null snapshot. FOR SHARE narrows the open-transaction window
@@ -178,11 +177,26 @@ BEGIN
     -- renderer lookup, so rechecks never flap between two live accounts.
     ORDER BY opa.created_at DESC, opa.account_number DESC LIMIT 1 FOR SHARE;
   END IF;
+  SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
+  WHERE n.id = p_outbox_id AND n.status = 'processing'
+    AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+  FOR UPDATE;
+  IF NOT FOUND OR v_order IS NULL THEN
+    RETURN jsonb_build_object('status', 'lease_lost');
+  END IF;
+  SELECT count(*) INTO v_item_count FROM public.order_items AS oi
+  WHERE oi.order_id = v_order.id;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
+    'variant_name', oi.variant_name, 'condition', oi.condition,
+    'item_description', oi.item_description
+  ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
+  FROM public.order_items AS oi
+  WHERE oi.order_id = v_order.id;
   -- The PDF tax breakdown renders the same five columns; both sides sort
   -- rows by id (uuid text order matches byte order), so the canonical order
   -- is collation-independent.
-  PERFORM 1 FROM public.order_tax_subtotals AS ts
-  WHERE ts.order_id = v_order.id FOR SHARE OF ts;
   SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -195,9 +209,6 @@ BEGIN
   -- The settled-status filter mirrors the sender's read exactly
   -- (payment type, completed/success): a row flipping out of the filter
   -- changes the count and aborts, and unsettled rows never count.
-  PERFORM 1 FROM public.transactions AS t
-  WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
-    AND t.status IN ('completed', 'success') FOR SHARE OF t;
   SELECT count(*) INTO v_txn_count FROM public.transactions AS t
   WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success');

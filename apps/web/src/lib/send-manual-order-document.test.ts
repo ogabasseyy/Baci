@@ -278,4 +278,26 @@ describe('send manual order document', () => {
     ).toString('latin1');
     expect(pdf).toContain('12 Marina Street');
   });
+
+  it('snapshots the raw registered address the RPC compares against', async () => {
+    for (const registered_address of [
+      '12 Marina Street',
+      { city: 'Lagos', legacy_note: 'handover' },
+    ]) {
+      const db = database(
+        { payment_status: 'unpaid', amount_paid: 0 },
+        { merchantOverride: { registered_address } }
+      );
+      await sendManualOrderDocument({
+        supabase: db.client,
+        row: { ...row, event_type: 'manual_order_invoice' },
+      });
+      const markCall = db.rpc.mock.calls.find(
+        ([fn]) => fn === 'mark_manual_document_dispatch_started'
+      );
+      expect(markCall?.[1]).toMatchObject({
+        p_merchant_registered_address: registered_address,
+      });
+    }
+  });
 });

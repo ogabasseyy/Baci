@@ -341,10 +341,6 @@ jobs:
       url: https://ogabassey.com
     permissions:
       contents: read
-      # Read the GIGL_WORKER_PROMOTE_RECORD Actions variable in the
-      # pre-publish overlap check (liveness proof a mid-run promote
-      # did not invalidate this run's early latch/SHA read).
-      actions: read
     timeout-minutes: 150
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -477,10 +473,13 @@ jobs:
         # The deploy.sh-side inflight check is fail-fast; this is the
         # correctness backstop and must stay the last step before the
         # publish: deploy.sh records every promote (SHA + in-flight run
-        # ids) in the GIGL_WORKER_PROMOTE_RECORD repo variable, and a
-        # promote that landed mid-run invalidates this run's early
-        # latch/SHA read. On overlap the step fails and the operator
-        # re-runs the workflow off fresh reads.
+        # ids) in the ops/gigl-promote-record branch, and a promote
+        # that landed mid-run invalidates this run's early latch/SHA
+        # read. On overlap the step fails and the operator re-runs the
+        # workflow off fresh reads. The read uses the contents API
+        # under this job's contents:read (GITHUB_TOKEN cannot be
+        # granted the Variables permission a variable-backed record
+        # would need).
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/refuse-publish-on-promote-overlap.sh

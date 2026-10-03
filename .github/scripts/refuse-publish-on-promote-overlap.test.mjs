@@ -52,7 +52,13 @@ test('allows publish when this run is absent from the record', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /No worker promote overlapped this run/);
   assert.match(result.stdout, /abc123/);
-  assert.match(ghArgs, /repos\/example-owner\/example-repo\/actions\/variables\/GIGL_WORKER_PROMOTE_RECORD/);
+  // Contents API under contents:read (GITHUB_TOKEN cannot be granted
+  // the Variables permission a variable-backed record would need).
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/contents\/\.gigl-promote-record\?ref=ops\/gigl-promote-record/
+  );
+  assert.doesNotMatch(ghArgs, /actions\/variables/);
 });
 
 test('refuses publish when this run is in the record', () => {
@@ -81,9 +87,9 @@ test('fails closed when the record cannot be read', () => {
   const { result, ghArgs } = runOverlap({ scenario: 'error' });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /could not read GIGL_WORKER_PROMOTE_RECORD/);
+  assert.match(result.stderr, /could not read the worker promote record/);
   assert.equal(
-    ghArgs.split('\n').filter((line) => line.includes('actions/variables')).length,
+    ghArgs.split('\n').filter((line) => line.includes('contents/.gigl-promote-record')).length,
     3
   );
 });

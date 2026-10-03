@@ -16,15 +16,21 @@
 #   again immediately before promote): refuses when any main-branch
 #   deploy run is still in flight.
 # - record_deploy_workflow_promote (immediately after promote): records
-#   the promoted SHA plus the runs in flight during the promote in the
-#   GIGL_WORKER_PROMOTE_RECORD repo variable. The workflow's
-#   pre-publish step refuses to publish when its own run id is in that
-#   record — true mutual exclusion even for runs that were invisible
-#   to the pre-promote query. Run ids, not timestamps: no clocks, no
-#   TTL, no stale state — a record only ever matches live runs.
+#   the promoted SHA plus the runs in flight during the promote in a
+#   single-file ops branch (ops/gigl-promote-record). The workflow's
+#   pre-publish step reads that file live and refuses to publish when
+#   its own run id is in the record — true mutual exclusion even for
+#   runs that were invisible to the pre-promote query. Run ids, not
+#   timestamps: no clocks, no TTL, no stale state — a record only ever
+#   matches live runs. The store is a branch (not an Actions variable)
+#   because GITHUB_TOKEN cannot be granted the Variables permission;
+#   the contents API read works under the job's existing contents:read.
 
 _inflight_owner=""
 _inflight_repo=""
+
+PROMOTE_RECORD_BRANCH="ops/gigl-promote-record"
+PROMOTE_RECORD_FILE=".gigl-promote-record"
 
 _is_valid_repo_slug() {
   # Exactly one slash, non-empty owner and repo. Two case stages: the
@@ -154,23 +160,41 @@ record_deploy_workflow_promote() {
   fi
   if [ -n "$record_err" ]; then rm -f "$record_err"; fi
   record_value="$record_sha:$record_runs"
-  record_path="repos/$_inflight_owner/$_inflight_repo/actions/variables/GIGL_WORKER_PROMOTE_RECORD"
-  # Update, creating the variable on first promote (PATCH answers 404
-  # when it does not exist yet). Any other write failure fails loud:
-  # the promote landed, so silence would leave overlapping runs
-  # publishable off stale reads.
-  if gh api -X PATCH "$record_path" -f value="$record_value" >/dev/null 2>&1; then
-    echo "Recorded worker promote $record_sha ($([ -n "$record_runs" ] && echo "overlapping runs: $record_runs" || echo "no overlapping runs"))."
-    return 0
-  fi
-  if gh api "$record_path" -f name="GIGL_WORKER_PROMOTE_RECORD" -f value="$record_value" >/dev/null 2>&1; then
-    echo "Recorded worker promote $record_sha ($([ -n "$record_runs" ] && echo "overlapping runs: $record_runs" || echo "no overlapping runs"))."
-    return 0
-  fi
+  record_attempt=0
+  while [ "$record_attempt" -lt 3 ]; do
+    record_attempt=$((record_attempt + 1))
+    if _push_promote_record "$record_value"; then
+      if [ -n "$record_runs" ]; then
+        echo "Recorded worker promote $record_sha (overlapping runs: $record_runs)."
+      else
+        echo "Recorded worker promote $record_sha (no overlapping runs)."
+      fi
+      return 0
+    fi
+  done
   if [ "$record_strict" = "1" ]; then
-    echo "Worker promotion is NOT recorded: could not write GIGL_WORKER_PROMOTE_RECORD. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once gh works, then confirm no production deploy published off the pre-promote latch/SHA." >&2
+    echo "Worker promotion is NOT recorded: could not push $PROMOTE_RECORD_BRANCH to origin after 3 attempts. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once the network cooperates, then confirm no production deploy published off the pre-promote latch/SHA." >&2
     exit 1
   fi
-  echo "WARNING: worker promotion is NOT recorded (variable write failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
+  echo "WARNING: worker promotion is NOT recorded (branch push failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
   return 0
+}
+
+_push_promote_record() {
+  push_value="$1"
+  push_ref="refs/baci-tmp/promote-record"
+  push_msg="record worker promote ${push_value%%:*} [skip ci]"
+  # Plumbing only: no checkout touched. Committer identity rides on
+  # the command line so a bare-bones operator clone (no user.name or
+  # user.email configured) still records.
+  push_blob="$(printf '%s\n' "$push_value" | git hash-object -w --stdin)" || return 1
+  push_tree="$(printf '100644 blob %s\t%s\n' "$push_blob" "$PROMOTE_RECORD_FILE" | git mktree)" || return 1
+  if git fetch --quiet origin "$PROMOTE_RECORD_BRANCH:$push_ref" 2>/dev/null; then
+    push_commit="$(GIT_AUTHOR_NAME='baci-deploy' GIT_AUTHOR_EMAIL='baci-deploy@users.noreply.github.com' GIT_COMMITTER_NAME='baci-deploy' GIT_COMMITTER_EMAIL='baci-deploy@users.noreply.github.com' git commit-tree "$push_tree" -p "$push_ref" -m "$push_msg")" || return 1
+  else
+    # First record (branch absent) — or an unreachable origin, in
+    # which case the push below fails and the caller retries/loud-fails.
+    push_commit="$(GIT_AUTHOR_NAME='baci-deploy' GIT_AUTHOR_EMAIL='baci-deploy@users.noreply.github.com' GIT_COMMITTER_NAME='baci-deploy' GIT_COMMITTER_EMAIL='baci-deploy@users.noreply.github.com' git commit-tree "$push_tree" -m "$push_msg")" || return 1
+  fi
+  git push --quiet origin "$push_commit:refs/heads/$PROMOTE_RECORD_BRANCH" 2>/dev/null
 }

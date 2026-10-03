@@ -139,13 +139,16 @@ describe('GIGL tracking worker capability migration', () => {
       /request_method IS DISTINCT FROM 'POST'/
     );
     expect(postgrestRepairMigration).toMatch(/request_path IS NULL/);
-    // PostgREST spells RPC routes in request.path without a leading slash
-    // ("rpc/<function>"), so the five literals below are slashless by
-    // design; a leading-slash spelling would never match and would fail
-    // closed (deny) rather than open.
+    // PostgREST stores request.path WITH the leading slash
+    // ("/rpc/<function>"); slashless literals would never match and
+    // would deny every worker RPC with 42501, so the five literals
+    // carry the slash by design.
     expect(
-      postgrestRepairMigration.match(/'rpc\/gigl_worker_[a-z_]+'/g)
+      postgrestRepairMigration.match(/'\/rpc\/gigl_worker_[a-z_]+'/g)
     ).toHaveLength(5);
+    // No slashless twin may linger: it would read as a sixth allowed
+    // path while matching nothing.
+    expect(postgrestRepairMigration).not.toMatch(/'rpc\/gigl_worker_/);
     expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE authenticator\s+SET pgrst\.db_pre_request = 'public\.enforce_gigl_tracking_worker_request_scope'/
     );

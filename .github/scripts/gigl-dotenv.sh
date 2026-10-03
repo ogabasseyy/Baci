@@ -9,11 +9,11 @@
 # after) separator, one layer of matched surrounding quotes
 # (single/double/backtick) stripped, otherwise a quote-aware trailing
 # `#` comment stripped. Prints nothing when the file or key is absent.
-# Inside double quotes an escape never ends the quoted region (so a
-# `#` after `\"` stays data), and `\n` / `\r` expand exactly as dotenv
-# parses them; every other escape stays literal, as do single-quoted,
-# backtick-quoted, and unquoted values. Multiline values are out of
-# subset.
+# Inside quotes an escape never ends the quoted region (so a `#`
+# after an escaped delimiter stays data); `\n` / `\r` expand inside
+# double quotes exactly as dotenv parses them, while every other
+# escape stays literal, as do single-quoted, backtick-quoted, and
+# unquoted values. Multiline values are out of subset.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   echo 'gigl-dotenv.sh must be sourced, not executed' >&2
   exit 2
@@ -46,11 +46,13 @@ gigl_dotenv_value() {
       seen_data = 0
       for (i = 1; i <= length(value); i++) {
         char = substr(value, i, 1)
-        if (quote == dq && char == "\\" && i < length(value)) {
-          # An escape inside double quotes: copy both characters
-          # literally (escapes stay literal per the subset contract)
-          # without letting an escaped quote end the quoted region,
-          # or a `#` after it would wrongly start a comment.
+        if (quote != "" && char == "\\" && i < length(value)) {
+          # An escape inside quotes: copy both characters literally
+          # (escapes stay literal per the subset contract) without
+          # letting an escaped quote end the quoted region, or a `#`
+          # after it would wrongly start a comment. dotenv treats the
+          # escaped delimiter as non-terminating in single- and
+          # backtick-quoted values too, preserving the backslash.
           i++
           uncommented = uncommented char substr(value, i, 1)
         } else if (quote == "") {
@@ -61,8 +63,8 @@ gigl_dotenv_value() {
           # opening mid-value would preserve a `#` dotenv drops and
           # hand the poller different bytes than the preflight saw.
           # Backtick joins single/double here (the third dotenv
-          # quoted form); like single quotes it is raw below (escapes
-          # are honored inside double quotes only).
+          # quoted form); like single quotes it is raw below, and
+          # escapes are skipped (non-terminating) in all three.
           if (char == dq || char == sq || char == bq) {
             if (!seen_data) quote = char
           } else if (char != " " && char != "\t" && char != "\r") {

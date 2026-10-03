@@ -32,6 +32,21 @@ describe('gigl-dotenv', () => {
     );
   });
 
+  it('keeps a `#` after an escaped single or backtick quote as data, like dotenv', () => {
+    // dotenv 17.4.2 treats an escaped delimiter as non-terminating
+    // inside single/backtick quotes (preserving the backslash), so
+    // the `#` stays data. Closing at the escaped quote would truncate
+    // a provider password the preflight validated in full.
+    assert.equal(
+      readValue("GIGL_PASSWORD='abc\\'def#ghi'\n", 'GIGL_PASSWORD'),
+      "abc\\'def#ghi"
+    );
+    assert.equal(
+      readValue('GIGL_PASSWORD=`abc\\`def#ghi`\n', 'GIGL_PASSWORD'),
+      'abc\\`def#ghi'
+    );
+  });
+
   it('honors an escaped backslash before the closing quote', () => {
     assert.equal(
       readValue('ESC_BS="abc\\\\" # tail\n', 'ESC_BS'),

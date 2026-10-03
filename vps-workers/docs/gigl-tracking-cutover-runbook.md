@@ -111,12 +111,17 @@ exclusive across the GitHub API, in both directions:
   or `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` in an emergency (then re-run
   the smoke/latch sequence and confirm the published revision).
 - Every promote records `<sha>:<in-flight-run-ids>` in the
-  `GIGL_WORKER_PROMOTE_RECORD` repo variable (created automatically
-  on first promote). The workflow's last pre-publish step refuses to
-  publish when its own run id is in that record — so even a run that
-  was invisible to the pre-promote query cannot publish off a stale
-  latch/SHA read. Recovery is re-running the workflow off fresh
-  reads; run ids (not timestamps) mean the record never goes stale.
+  `ops/gigl-promote-record` branch (single file
+  `.gigl-promote-record`, created automatically on first promote;
+  `[skip ci]` commits). The workflow's last pre-publish step reads
+  that file live and refuses to publish when its own run id is in
+  the record — so even a run that was invisible to the pre-promote
+  query cannot publish off a stale latch/SHA read. Recovery is
+  re-running the workflow off fresh reads; run ids (not timestamps)
+  mean the record never goes stale. The store is a branch (not an
+  Actions variable) because `GITHUB_TOKEN` cannot be granted the
+  Variables permission; the contents read works under the publish
+  job's existing `contents:read`.
 
 ## Scoped GIGL process environment
 

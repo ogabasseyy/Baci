@@ -43,12 +43,15 @@ BEGIN
     RETURN;
   END IF;
 
+  -- PostgREST stores request.path WITH the leading slash (e.g.
+  -- '/projects', '/rpc/<function>'): slashless literals would never
+  -- match and would deny every worker RPC with 42501.
   IF request_method IS DISTINCT FROM 'POST' OR request_path IS NULL OR request_path NOT IN (
-    'rpc/gigl_worker_apply_tracking_result',
-    'rpc/gigl_worker_claim_due_tracking_monitors',
-    'rpc/gigl_worker_pause_tracking_monitor',
-    'rpc/gigl_worker_record_tracking_failure',
-    'rpc/gigl_worker_release_tracking_claim'
+    '/rpc/gigl_worker_apply_tracking_result',
+    '/rpc/gigl_worker_claim_due_tracking_monitors',
+    '/rpc/gigl_worker_pause_tracking_monitor',
+    '/rpc/gigl_worker_record_tracking_failure',
+    '/rpc/gigl_worker_release_tracking_claim'
   ) THEN
     RAISE EXCEPTION 'GIGL worker request is outside its capability scope'
       USING ERRCODE = '42501';

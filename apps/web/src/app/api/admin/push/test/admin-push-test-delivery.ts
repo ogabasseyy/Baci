@@ -81,11 +81,20 @@ export async function deliverAdminPushTest(
       uncertain: uncertainTickets.length,
     };
   } catch {
+    // Locally-invalid tokens never dispatch: chunk delivery rejects
+    // them with definitive DeviceNotRegistered tickets before any
+    // provider request. Use the same predicate here so a
+    // post-dispatch throw reports only dispatch-eligible tokens as
+    // uncertain, never a token that provably sent nothing.
+    const locallyInvalid = tokens.filter(
+      ({ token }) => !Expo.isExpoPushToken(token)
+    ).length;
+    const dispatchEligible = tokens.length - locallyInvalid;
     // A throw before dispatch (chunking, client setup) definitely
     // sent nothing; a throw after dispatch started (e.g. the
     // per-message fallback) may have delivered.
     if (deliveryBoundary.wasDeliveryStarted()) {
-      return { failed: 0, sent: 0, uncertain: tokens.length };
+      return { failed: locallyInvalid, sent: 0, uncertain: dispatchEligible };
     }
     return { failed: tokens.length, sent: 0, uncertain: 0 };
   }

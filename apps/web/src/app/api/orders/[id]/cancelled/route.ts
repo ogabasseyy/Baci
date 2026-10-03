@@ -100,9 +100,12 @@ export async function POST(
         p_reason: cancellationReason,
       });
     if (cancellationError) {
+      // PostgREST can wrap the raised sentinel with context, so match
+      // it as a substring: exact equality would silently demote a 409
+      // PAYMENT_RECONCILIATION_REQUIRED to a generic failure.
       const paymentNeedsReconciliation =
         cancellationError.code === 'P0001' &&
-        cancellationError.message === 'payment_capture_in_flight';
+        cancellationError.message.includes('payment_capture_in_flight');
       const status =
         cancellationError.code === 'P0002'
           ? 404

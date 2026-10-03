@@ -216,6 +216,31 @@ describe('POST /api/orders/[id]/cancelled', () => {
     expect(mocks.revalidateDashboard).not.toHaveBeenCalled();
   });
 
+  it('still reconciles when PostgREST wraps the capture-in-flight sentinel', async () => {
+    const { supabase } = createSupabase();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'cancel_order: payment_capture_in_flight (order order-1)',
+      },
+    });
+    mocks.authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase,
+      user: { id: 'user-1' },
+    });
+
+    const response = await POST(request({ confirm_cancellation: true }), {
+      params: Promise.resolve({ id: 'order-1' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_RECONCILIATION_REQUIRED',
+    });
+  });
+
   it('keeps an idempotent retry queued without using the new request reason', async () => {
     const { supabase } = createSupabase();
     supabase.rpc.mockResolvedValue({ data: false, error: null });

@@ -10,6 +10,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('expo-server-sdk', () => ({
   default: class MockExpo {
+    static isExpoPushToken(token: unknown): boolean {
+      return (
+        typeof token === 'string' &&
+        (/^ExponentPushToken\[.+\]$/.test(token) ||
+          /^ExpoPushToken\[.+\]$/.test(token))
+      );
+    }
+
     constructor(options: unknown) {
       mocks.expo(options);
     }
@@ -207,6 +215,28 @@ describe('deliverAdminPushTest', () => {
     );
 
     expect(result).toEqual({ failed: 0, sent: 0, uncertain: 1 });
+  });
+
+  it('keeps never-dispatched invalid tokens out of post-dispatch uncertain counts', async () => {
+    mockTokenQuery({
+      data: [{ token: 'bad-token' }, { token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockImplementation(async (_expo, _messages, options) => {
+      await options?.onDeliveryStart?.();
+      throw new Error('fallback failed after partial send');
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // The invalid token never dispatched, so it is a definitive
+    // failure even though dispatch started for the eligible token.
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
   });
 
   it('reports a pre-dispatch throw as a definitive failure', async () => {

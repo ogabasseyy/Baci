@@ -186,7 +186,7 @@ export function buildInvoiceContent({
       product_id: item.product_id || undefined,
       name: itemName,
       description: appendReceiptFulfillmentDescription({
-        description: undefined,
+        description: item.item_description || undefined,
         fulfillment: fulfillmentAttachment.fulfillment,
         hasDeviceItem: fulfillmentAttachment.hasDeviceItem,
         index: fulfillmentAttachment.index,

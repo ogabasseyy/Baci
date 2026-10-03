@@ -32,9 +32,12 @@ BEGIN
   -- processing marker so the lease check aborts instead of recording a
   -- stale document as sent. Rendered branding (logo, colors) and the
   -- From display name invalidate alongside issuer/contact fields. Bank
-  -- fields reset invoice markers only: receipts render no payment
-  -- instructions and the dispatch RPC compares none for them, so a
-  -- bank edit must not park an in-flight receipt as stale.
+  -- fields reset invoice markers only, and only for NGN orders without a
+  -- selected virtual account: receipts render no payment instructions,
+  -- foreign-currency invoices strip all bank details, and a selected VA
+  -- replaces the merchant-bank card, so resetting those markers would
+  -- push an accepted, visually unchanged invoice into a corrective
+  -- duplicate. The dispatch RPC compares the same rendered subset.
   v_bank_changed :=
     OLD.bank_code IS DISTINCT FROM NEW.bank_code
     OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
@@ -64,9 +67,21 @@ BEGIN
   ELSIF v_bank_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
-    WHERE n.merchant_id = NEW.id
+    FROM public.orders AS o
+    WHERE o.merchant_id = NEW.id
+      AND n.order_id = o.id
       AND n.event_type = 'manual_order_invoice'
-      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL
+      AND upper(trim(COALESCE(o.currency, 'NGN'))) = 'NGN'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.order_payment_accounts AS opa
+        WHERE opa.order_id = o.id
+          AND (opa.assignment_customer_email_source IS NULL
+            OR opa.assignment_customer_email_source <> 'legacy_untrusted')
+          AND (opa.expires_at IS NULL
+            OR opa.expires_at > now() + interval '15 minutes')
+          AND (COALESCE(opa.assigned_at, opa.created_at) IS NULL
+            OR COALESCE(opa.assigned_at, opa.created_at) <= now()));
   END IF;
   RETURN NEW;
 END;

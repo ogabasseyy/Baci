@@ -1,3 +1,4 @@
+import { showMerchantBankDetails } from '@baci/shared';
 import type { z } from 'zod';
 import type { ManualOrderDocumentPaymentAccount } from '@/lib/build-manual-order-document-pdf-input';
 import type {
@@ -5,21 +6,46 @@ import type {
   DispatchPaymentSnapshot,
 } from '@/lib/mark-manual-document-dispatch-started';
 import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
+import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
 type ManualDocumentMerchant = z.infer<typeof manualDocumentMerchantSchema>;
+type ManualDocumentOrder = z.infer<typeof manualDocumentOrderSchema>;
 
 export function buildDispatchPaymentSnapshot(
   merchant: ManualDocumentMerchant,
-  preferredPaymentAccount: ManualOrderDocumentPaymentAccount | null
+  preferredPaymentAccount: ManualOrderDocumentPaymentAccount | null,
+  order: Pick<ManualDocumentOrder, 'currency' | 'total' | 'amount_paid'>,
+  documentKind: 'invoice' | 'proforma_invoice' | 'receipt'
 ): DispatchPaymentSnapshot {
+  // Mirror the jsPDF payment-section gate exactly: instructions render
+  // only for invoices with an outstanding balance, only in NGN, and the
+  // virtual account suppresses the merchant-bank fallback. Snapshotting
+  // hidden fields would let an unrelated bank edit mark an accepted,
+  // visually unchanged invoice stale and resend it as a corrective
+  // duplicate; the dispatch RPC compares the same rendered-only sides.
+  const instructionsRendered =
+    documentKind !== 'receipt' &&
+    order.total - order.amount_paid > 0 &&
+    showMerchantBankDetails(order.currency);
+  const merchantBankRendered = instructionsRendered && !preferredPaymentAccount;
   return {
-    merchantBankCode: merchant.bank_code,
-    merchantBankAccountNumber: merchant.bank_account_number,
-    merchantBankName: merchant.bank_name,
-    merchantBankAccountName: merchant.bank_account_name,
-    virtualAccountNumber: preferredPaymentAccount?.account_number ?? null,
-    virtualAccountBankName: preferredPaymentAccount?.bank_name ?? null,
-    virtualAccountName: preferredPaymentAccount?.account_name ?? null,
+    merchantBankCode: merchantBankRendered ? merchant.bank_code : null,
+    merchantBankAccountNumber: merchantBankRendered
+      ? merchant.bank_account_number
+      : null,
+    merchantBankName: merchantBankRendered ? merchant.bank_name : null,
+    merchantBankAccountName: merchantBankRendered
+      ? merchant.bank_account_name
+      : null,
+    virtualAccountNumber: instructionsRendered
+      ? (preferredPaymentAccount?.account_number ?? null)
+      : null,
+    virtualAccountBankName: instructionsRendered
+      ? (preferredPaymentAccount?.bank_name ?? null)
+      : null,
+    virtualAccountName: instructionsRendered
+      ? (preferredPaymentAccount?.account_name ?? null)
+      : null,
   };
 }
 

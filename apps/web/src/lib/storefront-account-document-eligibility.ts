@@ -18,13 +18,22 @@ export function normalizeShippingStatus(status: string | null | undefined) {
   return status?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
 }
 
+// A blank staff-entered source is absent, not imported: match the trigger
+// and sender truthiness so the archive agrees with the queued email.
+// Shared with the order-success resolver so both surfaces classify the
+// same row the same way.
+export function hasImportProvenance(input: {
+  externalSource?: string | null;
+  importJobId?: string | null;
+}) {
+  return Boolean(input.externalSource?.trim() || input.importJobId?.trim());
+}
+
 function isImportedHistoricalOrder(input: {
   externalSource?: string | null;
   importJobId?: string | null;
 }) {
-  // A blank staff-entered source is absent, not imported: match the trigger
-  // and sender truthiness so the archive agrees with the queued email.
-  return Boolean(input.externalSource?.trim() || input.importJobId);
+  return hasImportProvenance(input);
 }
 
 export function isManualOrder(input: {

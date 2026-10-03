@@ -224,6 +224,7 @@ export function buildOrderItems(
       variant_name: buildReceiptVariantName(item),
       name: item.name,
       product_name: item.name,
+      item_description: item.item_description || undefined,
       quantity: item.quantity,
       price,
       line_extension_amount:

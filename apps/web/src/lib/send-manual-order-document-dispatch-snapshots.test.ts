@@ -105,6 +105,47 @@ describe('send manual order document dispatch snapshots', () => {
     });
   });
 
+  it('excludes the suppressed merchant bank when a VA is selected', async () => {
+    const db = database(
+      { payment_status: 'unpaid', amount_paid: 0 },
+      {
+        merchantOverride: {
+          bank_code: '058',
+          bank_account_number: '1234567890',
+          bank_name: 'GTBank',
+          bank_account_name: 'Shop Ltd',
+        },
+        paymentAccounts: [
+          {
+            account_number: '9988776655',
+            bank_name: 'Test Bank',
+            account_name: 'Ogabassey Collections',
+            assigned_at: '2026-09-30T09:00:00Z',
+            expires_at: null,
+            revoked_at: null,
+            archived_at: null,
+          },
+        ],
+      }
+    );
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_merchant_bank_code: null,
+      p_merchant_bank_account_number: null,
+      p_merchant_bank_name: null,
+      p_merchant_bank_account_name: null,
+      p_va_account_number: '9988776655',
+      p_va_bank_name: 'Test Bank',
+      p_va_account_name: 'Ogabassey Collections',
+    });
+  });
+
   it('snapshots the rendered tax breakdown in the dispatch marker', async () => {
     const db = database(
       {},

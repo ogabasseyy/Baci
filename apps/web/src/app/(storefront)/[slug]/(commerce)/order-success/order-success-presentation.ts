@@ -1,3 +1,4 @@
+import { hasImportProvenance } from '@/lib/storefront-account-document-eligibility';
 import type { StorefrontOrderData as OrderData } from './fetch-storefront-order';
 
 /**
@@ -71,9 +72,10 @@ export function resolvePaidInvoiceDocument({
   // every paid imported historical order is receipt-eligible regardless
   // of shipping status; other paid orders need shipped/delivered.
   const isPaid = order?.payment_status?.trim().toLowerCase() === 'paid';
-  const isImportedHistoricalOrder = Boolean(
-    order?.external_source || order?.import_job_id
-  );
+  const isImportedHistoricalOrder = hasImportProvenance({
+    externalSource: order?.external_source,
+    importJobId: order?.import_job_id,
+  });
   const shippedOrDelivered = ['shipped', 'delivered'].includes(
     order?.shipping_status?.trim().toLowerCase() ?? ''
   );

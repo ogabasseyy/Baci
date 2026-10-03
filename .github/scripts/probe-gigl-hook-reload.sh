@@ -21,9 +21,11 @@
 # detected unless it dodges every probe in the window: ~150 probes per
 # window at the defaults, i.e. escape probability ((R-1)/R)^150 for one
 # stale replica among R under uniform routing (≈1e-7 at R=10, ~0 below
-# that). The probe also re-sends the reload notification at start and
-# every RENOTIFY_S (best-effort): replicas that missed the restore-time
-# signal reload now instead of failing the window. Residuals: an
+# that). The probe also re-sends BOTH reload notifications (config
+# AND schema — separate PostgREST listener payloads) at start and
+# every RENOTIFY_S (best-effort): replicas that missed the
+# restore-time signals reload now instead of failing the window.
+# Residuals: an
 # IP-sticky load balancer would collapse unanimity to single-replica
 # evidence (then the defense degrades to re-notify plus window); a
 # replica that cannot reach PostgreSQL at all fails closed on hook
@@ -71,22 +73,29 @@ if [ "$applied" -ge 1 ]; then
 fi
 
 renotify_postgrest() {
-  local payload
-  payload="$(jq -n '{query: "NOTIFY pgrst, \u0027reload config\u0027"}')" || return 1
-  curl --fail-with-body --silent --show-error -X POST \
-    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    --data-binary @- "$mgmt_api" <<<"$payload" >/dev/null 2>&1
+  local signal payload
+  # Config and schema notifications are SEPARATE (PostgREST listener
+  # docs): a replica that missed the restore-time schema reload keeps
+  # 404ing the canary until it hears 'reload schema' — config-only
+  # re-notifies can never heal it, and unanimity would time out. Both
+  # signals, every time.
+  for signal in 'reload config' 'reload schema'; do
+    payload="$(jq -n --arg signal "$signal" '{query: ("NOTIFY pgrst, \u0027" + $signal + "\u0027")}')" || return 1
+    curl --fail-with-body --silent --show-error -X POST \
+      -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+      -H 'Content-Type: application/json' \
+      --data-binary @- "$mgmt_api" <<<"$payload" >/dev/null 2>&1 || return 1
+  done
 }
 
-# Fresh reload signal for replicas that missed the restore-time notify
-# (restarting or LISTEN-flapping then). Best-effort: the unanimity
-# window below is the actual gate, so a failed re-notify warns and the
-# probe still verifies empirically.
+# Fresh reload signals for replicas that missed the restore-time
+# notifies (restarting or LISTEN-flapping then). Best-effort: the
+# unanimity window below is the actual gate, so a failed re-notify
+# warns and the probe still verifies empirically.
 if renotify_postgrest; then
-  echo "Signaled PostgREST config reload."
+  echo "Signaled PostgREST config+schema reload."
 else
-  echo "::warning::GIGL hook probe could not re-send the reload signal; relying on the restore-time signal plus unanimous observation."
+  echo "::warning::GIGL hook probe could not re-send the reload signals; relying on the restore-time signals plus unanimous observation."
 fi
 
 url="${NEXT_PUBLIC_SUPABASE_URL%/}/rest/v1/rpc/${CANARY_PATH}"

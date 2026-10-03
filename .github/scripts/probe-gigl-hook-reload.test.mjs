@@ -11,6 +11,7 @@ const PROBE = join(scriptDir, 'probe-gigl-hook-reload.sh');
 
 function startStub({ mgmt, canary }) {
   const hits = { mgmt: 0, canary: 0, notify: 0 };
+  const notifies = [];
   let lastCanaryHeaders = null;
   const server = createServer((req, res) => {
     let body = '';
@@ -26,6 +27,7 @@ function startStub({ mgmt, canary }) {
         const parsed = JSON.parse(body);
         if (String(parsed.query || '').startsWith('NOTIFY')) {
           hits.notify += 1;
+          notifies.push(parsed.query);
         }
         const [status, payload] = mgmt(parsed, hits.mgmt);
         res.writeHead(status, { 'content-type': 'application/json' });
@@ -50,6 +52,7 @@ function startStub({ mgmt, canary }) {
       resolve({
         server,
         hits,
+        notifies,
         canaryHeaders: () => lastCanaryHeaders,
         port: server.address().port,
       });
@@ -134,7 +137,13 @@ describe('probe-gigl-hook-reload', () => {
       assert.match(result.stdout, /acknowledged fleet-wide: 2s unanimous/);
       assert.ok(stub.hits.canary >= 4);
       assert.equal(stub.canaryHeaders().apikey, 'test-anon-key');
-      assert.equal(stub.hits.notify, 1);
+      // Both listener payloads: a replica that missed the
+      // restore-time schema reload can never be healed by
+      // config-only re-notifies.
+      assert.deepEqual(stub.notifies, [
+        "NOTIFY pgrst, 'reload config'",
+        "NOTIFY pgrst, 'reload schema'",
+      ]);
     } finally {
       stub.server.close();
     }

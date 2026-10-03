@@ -92,7 +92,7 @@ _set_inflight_repo() {
 _list_noncompleted_deploy_runs() {
   local _list_err_file="$1"
   local _list_status _list_page
-  for _list_status in queued in_progress waiting requested; do
+  for _list_status in queued in_progress waiting requested pending; do
     if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
       --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
       2>"${_list_err_file:-/dev/null}")"; then

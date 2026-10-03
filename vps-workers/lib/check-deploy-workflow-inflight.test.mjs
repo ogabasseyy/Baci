@@ -95,8 +95,14 @@ test('queries every non-completed status without a fixed window', () => {
 
   assert.equal(result.status, 0, result.stderr);
   const calls = ghArgs.split('\n').filter(Boolean);
-  assert.equal(calls.length, 4);
-  for (const status of ['queued', 'in_progress', 'waiting', 'requested']) {
+  assert.equal(calls.length, 5);
+  for (const status of [
+    'queued',
+    'in_progress',
+    'waiting',
+    'requested',
+    'pending',
+  ]) {
     assert.ok(
       calls.some((call) => call.includes(`status=${status}`)),
       `expected a status=${status} query`

@@ -85,8 +85,8 @@ function runRecord({
     `#!/usr/bin/env bash
 if [ "$GH_SCENARIO" = "listfail" ]; then echo 'gh: API error' >&2; exit 1; fi
 # A real run carries exactly one status, so it surfaces under exactly
-# one of the four status queries; answering every call would
-# quadruple every id.
+# one of the five status queries; answering every call would quintuple
+# every id.
 if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FIRST_CALL_MARKER"; fi
 `
   );

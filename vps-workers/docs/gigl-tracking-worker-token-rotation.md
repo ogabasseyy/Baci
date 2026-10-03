@@ -43,15 +43,22 @@ Production value decodes to the same `exp`.
    a signing key or service-role credential to the worker host).
 2. Write the new token to the VPS `.env`, then update the Vercel
    Production env var to the identical value.
-3. Redeploy Vercel production via a main push or a manual workflow
-   dispatch — NOT a Vercel dashboard redeploy. Env values snapshot at
-   deploy time, so the running deployment keeps serving the OLD token
-   until redeployed (a 200 from step 5 beforehand would be false
-   confidence). A dashboard redeploy skips the capability smoke, and
-   the rotation invalidates the cutover latch by design (new token
-   fingerprint): the smoke must re-run with the new token and
-   re-latch, which only the workflow paths do. If you dispatch
-   (rather than push), run `bash vps-workers/deploy.sh` from current
+3. Redeploy Vercel production via a manual workflow dispatch, or a
+   main push that selects the tracking filter — NOT a Vercel
+   dashboard redeploy and NOT an ordinary non-tracking push. Env
+   values snapshot at deploy time, so the running deployment keeps
+   serving the OLD token until redeployed (a 200 from step 5
+   beforehand would be false confidence). The rotation invalidates
+   the cutover latch by design (new token fingerprint), so the
+   capability smoke must re-run with the new token and re-latch —
+   but the smoke job is skipped whenever `tracking == 'false'`, and
+   without either a smoke success or a valid latch bypass
+   `deploy-production` never runs: a dashboard redeploy skips the
+   smoke unconditionally, and a non-tracking push skips it while
+   the invalidated latch kills the bypass, stranding the old token
+   in production. A dispatch always runs the smoke (unset filter
+   outputs fail closed into it). If you dispatch (rather than
+   push), run `bash vps-workers/deploy.sh` from current
    main FIRST: a dispatch always runs the exact-SHA worker check, so
    a worker that legitimately trails main after web-only releases
    would block the redeploy. If a dashboard redeploy already

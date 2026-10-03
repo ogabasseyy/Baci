@@ -1,11 +1,16 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Cart from './page';
+
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: string }) => (
     <a href={href}>{children}</a>
   ),
+}));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush }),
 }));
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
@@ -35,6 +40,7 @@ function expectStorageCleared() {
 }
 
 beforeEach(() => {
+  routerPush.mockClear();
   localStorage.clear();
   sessionStorage.clear();
   window.history.replaceState({}, '', '/cart');
@@ -53,6 +59,10 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Proceed to Checkout/ })
+    );
+    expect(routerPush).toHaveBeenCalledWith('/checkout');
   });
 
   it('propagates the explicit manual QA query to checkout without clearing state', async () => {
@@ -67,6 +77,10 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Proceed to Checkout/ })
+    );
+    expect(routerPush).toHaveBeenCalledWith('/checkout?qa=manual');
   });
 
   it('clears every checkout fixture key immediately and after deferred cleanup', async () => {

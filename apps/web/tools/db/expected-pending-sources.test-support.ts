@@ -7,6 +7,7 @@ import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
+import { EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES } from './expected-manual-document-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -251,56 +252,7 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160000_manual_order_document_notifications.sql',
-    sha256: '6f35fa67bb8f80b637926792268b3a867f9f7237d620d19913351b737a68c6ee',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160050_manual_order_document_claims.sql',
-    sha256: '1fe2de456f32fdaf6daac276a0d1140acb701c0958547154041d8a529d40d8f8',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160060_manual_order_document_child_invalidation.sql',
-    sha256: '409d0d26475d171398a63bd87f45be2adf79c3082506ef45a0a850111416e741',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160065_manual_order_document_merchant_rearm.sql',
-    sha256: '01a3438060639ba5b8da30e38c474eed694c4922a515fe890fb9dd4424d59b96',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: 'a1cda14a988e954a1c2bf3d7301cba30cdf398fdaf843df8508bbcca6d449cbe',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '92ebac23dd4733c22156cd8db238979a4cf73df757a07d408ce6e5ca48c2fc60',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: 'c626b31aeff2aa12458042b46e9c15f1e1ba1258df968f42b128da871aac5cfb',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160350_manual_document_snapshot_builders.sql',
-    sha256: '3fd819f816f683372c8ceccf7e9e03c9c372f1a712da0ed3d54f0e8d770889d6',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
-    sha256: 'd02901537f3a42911e073429da10c05545393e81a4740476b5022772d480d412',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160450_atomic_manual_document_dispatch_privileges.sql',
-    sha256: 'bc28c09d0b92a92d5e9269308d85a5a51e92220e47abb4efce38cc63aba16b84',
-  },
+  ...EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

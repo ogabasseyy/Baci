@@ -61,6 +61,11 @@ describe('send manual order document', () => {
       payment_status: 'partially_paid',
       amount_paid: 100000,
       invoice_issue_date: '2026-09-26',
+      payment_due_date: null,
+      payment_terms: null,
+      buyer_reference: null,
+      firs_irn: null,
+      firs_csid: null,
     });
     await sendManualOrderDocument({
       supabase: db.client,
@@ -145,6 +150,11 @@ describe('send manual order document', () => {
       payment_status: 'unpaid',
       amount_paid: 0,
       invoice_issue_date: null,
+      payment_due_date: null,
+      payment_terms: null,
+      buyer_reference: null,
+      firs_irn: null,
+      firs_csid: null,
     });
     await sendManualOrderDocument({
       supabase: db.client,

@@ -125,6 +125,11 @@ describe('render manual order document pdf', () => {
     const order = manualDocumentOrderSchema.parse({
       ...orderFixture,
       invoice_issue_date: null,
+      payment_due_date: null,
+      payment_terms: null,
+      buyer_reference: null,
+      firs_irn: null,
+      firs_csid: null,
       payment_status: 'unpaid',
       amount_paid: 0,
     });
@@ -238,5 +243,38 @@ describe('render manual order document pdf', () => {
       })
     ).rejects.toThrow('Manual document tax breakdown unavailable');
     expect(mockedPdf).not.toHaveBeenCalled();
+  });
+
+  it('passes invoice terms and fiscal references to the renderer like the account download', async () => {
+    const db = database({}, { paymentHistory: [], taxSubtotals: [] });
+    const order = manualDocumentOrderSchema.parse({
+      ...orderFixture,
+      payment_due_date: '2026-10-15',
+      payment_terms: 'Net 30',
+      buyer_reference: 'BUYER-1',
+      firs_irn: 'IRN-1',
+      firs_csid: 'CSID-1',
+    });
+    const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
+
+    await renderManualOrderDocumentPdf({
+      supabase: db.client,
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: false,
+      pdfDocumentKind: 'invoice',
+      invoiceTypeCode: '380',
+    });
+
+    const [, , options] = mockedPdf.mock.calls[0];
+    expect(options).toMatchObject({
+      buyerReference: 'BUYER-1',
+      dueDate: '2026-10-15',
+      firsCsid: 'CSID-1',
+      firsIrn: 'IRN-1',
+      paymentTerms: 'Net 30',
+    });
   });
 });

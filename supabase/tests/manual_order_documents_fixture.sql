@@ -25,6 +25,8 @@ CREATE TABLE public.orders (
   tax_amount numeric DEFAULT 0, discount_amount numeric DEFAULT 0, amount_paid numeric DEFAULT 0,
   currency text DEFAULT 'NGN', payment_method text, invoice_type_code text, invoice_note text, notes text,
   transaction_date timestamptz, invoice_issue_date date, shipping_address jsonb,
+  payment_due_date date, payment_terms text, buyer_reference text,
+  firs_irn text, firs_csid text,
   fulfillment_notification_cycle_id uuid DEFAULT gen_random_uuid(),
   updated_at timestamptz DEFAULT now()
 );

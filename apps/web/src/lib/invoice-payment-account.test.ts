@@ -217,8 +217,11 @@ describe('resolveInvoicePaymentAccount', () => {
       new Date('2026-08-27T10:15:00.000Z')
     );
 
+    // Null-created legacy rows sort last, matching the shared selector
+    // (-infinity) and the dispatch recheck (NULLS LAST).
     expect(query.order).toHaveBeenNthCalledWith(1, 'created_at', {
       ascending: false,
+      nullsFirst: false,
     });
     expect(query.order).toHaveBeenNthCalledWith(2, 'account_number', {
       ascending: false,

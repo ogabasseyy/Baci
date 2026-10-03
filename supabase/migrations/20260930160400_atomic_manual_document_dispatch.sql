@@ -20,7 +20,7 @@
 -- on every path and multi-key holders sort ascending, so no cycle forms.
 -- The marker write re-validates the lease. DROP before CREATE: the
 -- branding params changed the signature, which OR REPLACE cannot do.
-DROP FUNCTION IF EXISTS public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz);
+DROP FUNCTION IF EXISTS public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text);
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -80,7 +80,14 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   -- positional harness calls valid while the sender passes explicit values.
   p_merchant_email_sender_name text DEFAULT NULL,
   p_merchant_logo_url text DEFAULT NULL,
-  p_merchant_brand_colors jsonb DEFAULT NULL
+  p_merchant_brand_colors jsonb DEFAULT NULL,
+  -- Rendered invoice terms + fiscal references compare; same trailing-
+  -- default discipline as branding: old positional calls stay valid.
+  p_payment_due_date date DEFAULT NULL,
+  p_payment_terms text DEFAULT NULL,
+  p_buyer_reference text DEFAULT NULL,
+  p_firs_irn text DEFAULT NULL,
+  p_firs_csid text DEFAULT NULL
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -190,7 +197,9 @@ BEGIN
       AND (opa.expires_at IS NULL OR opa.expires_at > now() + interval '15 minutes')
       -- The sender's selector rejects future assignments; skip them too.
       AND (COALESCE(opa.assigned_at, opa.created_at) IS NULL OR COALESCE(opa.assigned_at, opa.created_at) <= now())
-    ORDER BY opa.created_at DESC, opa.account_number DESC LIMIT 1;
+    -- NULLS LAST mirrors the sender and shared selector (missing
+    -- created_at sorts last): a null-created row never beats a dated one.
+    ORDER BY opa.created_at DESC NULLS LAST, opa.account_number DESC LIMIT 1;
   END IF;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
@@ -228,6 +237,11 @@ BEGIN
     OR v_order.notes IS DISTINCT FROM p_notes
     OR v_order.transaction_date IS DISTINCT FROM p_transaction_date
     OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date
+    OR v_order.payment_due_date IS DISTINCT FROM p_payment_due_date
+    OR v_order.payment_terms IS DISTINCT FROM p_payment_terms
+    OR v_order.buyer_reference IS DISTINCT FROM p_buyer_reference
+    OR v_order.firs_irn IS DISTINCT FROM p_firs_irn
+    OR v_order.firs_csid IS DISTINCT FROM p_firs_csid
     OR v_order.created_at IS DISTINCT FROM p_order_created_at
     OR v_order.shipping_address IS DISTINCT FROM p_shipping_address
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
@@ -273,3 +287,9 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
+-- Grants live in this creation migration: the applier commits each file
+-- separately, so a split grant would expose PUBLIC execute between commits.
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text)
+  TO service_role;

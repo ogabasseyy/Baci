@@ -1,57 +1,6 @@
 # Muse Code PR reviewer (advisory only, never blocks merges).
-#
-# Runs automatically on every same-repo pull request. It collects the PR diff,
-# runs `muse exec` headless with the repo checked out, and posts the result as
-# a PR review comment.
-#
-# Billing: whatever credential is stored in the META_API_KEY secret. That can
-# be the subscription-linked key from `muse login` onboarding (flat monthly
-# rate, subject to plan prompt limits) or a pay-as-you-go Meta Model API key.
-# The workflow cannot tell the difference; verify billing on dev.meta.ai.
-#
-# Key hygiene (the agent holds this key with web tools on; see run.sh):
-#   - minimum scope: a key that can only run model prompts, nothing else.
-#   - rotation trigger: rotate immediately if any posted review looks
-#     tampered with, exfiltrated, or off-mission; treat odd output as compromise.
-#   - spending cap: set plan/prompt limits or spend alerts on dev.meta.ai so
-#     one malicious same-repo PR cannot silently burn quota.
-#
-# Recency: web tools are ON so every review verifies against current
-# official docs instead of training memory. The agent determines the repo's
-# stack/versions from manifests, checks for deprecated APIs and better modern
-# alternatives, and cites sources. A redaction step scrubs common secret
-# patterns from the review body before posting (defense in depth, since web
-# access widens prompt-injection exfil options).
-#
-# Quota safety: subscription plans cap prompts per rolling window, so this
-# workflow stays cheap and advisory:
-#   - concurrency cancel-in-progress: only the latest push per PR is reviewed
-#   - bounded prompt (diff + repo guidance; the agent reads full files itself)
-#   - --max-model-steps cap + job timeout
-#   - never fails the build and never posts a commit status gate
-#
-# Forks skipped by the job `if` (head repo check) — load-bearing under
-# pull_request_target, which WOULD expose secrets to forks otherwise.
-#
-# Layout: this file only orchestrates steps; every shell program lives in
-# .github/scripts/muse-review/ (each file under 300 lines per repo rules):
-#   lib.sh       shared pure helpers (redact, truncate, dedupe, neutralize)
-#   collect.sh   PR metadata, changed files, manifest, inter-phase vars
-#   diff.sh      unified diff + removed-lines supplement
-#   guidance.sh  repo guidance (trusted base first, head labeled UNTRUSTED)
-#   prompt.sh    prompt assembly + pre-run dedupe check
-#   guard.sh     pre-invocation head-freshness check (owns the GitHub token)
-#   install.sh   pinned Muse CLI install with SHA256 verification
-#   run.sh       headless agent invocation (no GitHub token in env)
-#   post.sh      staleness re-check, render, inline threads, post
-#   ranges.pl    diff-range extractor (JSON, escape-safe)
-#   clean.jq / validate.jq / dedupe.jq / fallback.jq   finding/dedupe filters
-#   schema.json  agent output contract
-#   test.sh      regression suite (runs in muse-review-selftest.yml)
-#
-# Prerequisites per repo:
-#   - Secret META_API_KEY (repo Settings -> Secrets and variables -> Actions)
-#   - Optional repo variables: MUSE_MODEL, MUSE_REASONING_EFFORT
+# Operations guide (billing, key hygiene, layout, prerequisites):
+# .github/muse-code-review.md
 name: Muse Code Review
 
 on:
@@ -173,11 +122,14 @@ jobs:
           if [[ -f "${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review/lib.sh" ]]; then
             echo "dir=${GITHUB_WORKSPACE}/trusted-scripts/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
           else
-            # Default branch predates the scripts (first-merge bootstrap
-            # only): fall back to the head copy. Afterwards the default
-            # branch always provides them.
-            echo "dir=${GITHUB_WORKSPACE}/.github/scripts/muse-review" >> "${GITHUB_OUTPUT}"
-            echo "::warning::Default branch lacks review scripts; running head copy (first-merge bootstrap)."
+            # No fallback to the head copy: executing PR-controlled scripts
+            # with tokens present would defeat the trusted-scripts design.
+            # The default branch has carried these scripts since launch, so
+            # a miss means breakage, never a bootstrap case. Fail closed.
+            # (The Security workflow's SARIF filter asserts this property;
+            # keep the two in lockstep.)
+            echo "::error::Trusted review scripts missing from default branch; refusing to run head copy."
+            exit 1
           fi
 
       - name: Collect PR diff and build prompt

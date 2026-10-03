@@ -16,7 +16,7 @@ is_postdeploy_migration() {
   esac
 }
 
-# These migrations replace a live pending-order trigger. They must be sent in
+# These migrations replace live database contracts. They must be sent in
 # one Management API transaction so the broad predecessor is never observable
 # without its scoped replacement.
 atomic_migration_group_next_base() {
@@ -38,6 +38,15 @@ atomic_migration_group_next_base() {
       ;;
     20260828160100_preserve_quiz_reserved_order_delivery_metadata)
       printf '%s\n' '20260828160200_limit_quiz_reserved_order_delivery_validation_to_redemption'
+      ;;
+    20261002191000_guarded_discovery_metadata_update)
+      printf '%s\n' '20261002222000_guard_discovery_research_source'
+      ;;
+    20261002222000_guard_discovery_research_source)
+      printf '%s\n' '20261002233000_lossless_discovery_research_revision'
+      ;;
+    20261002233000_lossless_discovery_research_revision)
+      printf '%s\n' '20261003021500_authorize_discovery_research_reader'
       ;;
     *)
       return 1

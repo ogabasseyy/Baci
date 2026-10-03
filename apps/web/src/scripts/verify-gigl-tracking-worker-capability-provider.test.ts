@@ -5,12 +5,14 @@ const {
   createClient,
   createScopeProbeClient,
   verifyCapability,
+  verifyDelegationCanary,
   verifyPathProbe,
   verifyScopeProbe,
 } = vi.hoisted(() => ({
   createClient: vi.fn(() => ({ rpc: vi.fn() })),
   createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
   verifyCapability: vi.fn(),
+  verifyDelegationCanary: vi.fn(),
   verifyPathProbe: vi.fn(),
   verifyScopeProbe: vi.fn(),
 }));
@@ -32,6 +34,7 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
   return {
     GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
     verifyGiglTrackingWorkerCapability: verifyCapability,
+    verifyGiglTrackingWorkerDelegationCanary: verifyDelegationCanary,
     verifyGiglTrackingWorkerScopePathProbe: verifyPathProbe,
     verifyGiglTrackingWorkerScopeProbe: verifyScopeProbe,
   };
@@ -42,6 +45,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
 
   it('fails closed when the provider login probe fails', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
     verifyPathProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
@@ -61,6 +65,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
 
   it('fails closed without exposing a throwing probe error', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
     verifyPathProbe.mockResolvedValue(true);
     const logger = { error: vi.fn(), info: vi.fn() };
@@ -145,6 +150,7 @@ describe('runGiglTrackingCapabilityVerification provider probe', () => {
         './verify-gigl-tracking-worker-capability'
       );
       verifyCapability.mockResolvedValue(true);
+      verifyDelegationCanary.mockResolvedValue(true);
       verifyScopeProbe.mockResolvedValue(true);
       verifyPathProbe.mockResolvedValue(true);
       const logger = { error: vi.fn(), info: vi.fn() };

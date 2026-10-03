@@ -102,7 +102,7 @@ describe('deploy promotion record guards', () => {
     );
     // The promote snapshot survives success for exactly this path;
     // deploy.sh removes it once the refresh lands.
-    assert.match(deploySource, /rm -rf '\$REMOTE_DIR\.pre-promote-backup'/);
+    assert.match(deploySource, /rm -rf '\$STAGING_DIR\.pre-promote-backup'/);
     // The failure branch only runs because the serialization
     // functions return instead of exiting (an exit inside a sourced
     // function would kill deploy.sh before the branch runs).
@@ -199,6 +199,41 @@ describe('deploy promotion record guards', () => {
       ],
       'unexpected template variable: extend the rollback render step'
     );
+  });
+
+  it('isolates rollback snapshots between concurrent deploys', () => {
+    // The deploy lock serializes promotes but releases before the
+    // post-flip record and possible rollback, so a shared backup
+    // would let a second deploy clobber the first's snapshot
+    // mid-record. Each deployment owns its snapshot (named after the
+    // unique staging dir) on both the promote and rollback legs;
+    // orphaned snapshots retire by age only, never blindly.
+    const releaseSource = readFileSync(
+      join(workerRoot, 'lib', 'prepare-worker-release.sh'),
+      'utf8'
+    );
+    const owned = releaseSource.match(
+      /pre_promote_backup="\$\{staging_dir\}\.pre-promote-backup"/g
+    );
+    assert.equal(owned?.length, 2, 'expected owned snapshots on both legs');
+    assert.doesNotMatch(
+      releaseSource,
+      /\$\{remote_dir\}\.pre-promote-backup/,
+      'expected no shared snapshot path'
+    );
+    assert.match(releaseSource, /-name '\*\.pre-promote-backup' -mmin \+60/);
+    // Rollback refuses when the live marker moved past this deploy's
+    // SHA (a concurrent deploy landed): restoring then would wipe
+    // the newer live tree.
+    const rollbackSlice = releaseSource.slice(
+      releaseSource.indexOf('rollback_worker_release()')
+    );
+    assert.match(rollbackSlice, /expected_sha="\$3"/);
+    assert.match(
+      rollbackSlice,
+      /live_sha=.*app-checkout\.sha.*\nif \[ -n "\$live_sha" \] && \[ "\$live_sha" != "\$expected_sha" \]; then/
+    );
+    assert.match(rollbackSlice, /moved past this promote/);
   });
 
   it('records the rollback overlap before and after the restore', () => {

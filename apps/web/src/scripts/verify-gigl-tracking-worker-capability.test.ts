@@ -5,12 +5,14 @@ const {
   createClient,
   createScopeProbeClient,
   verifyCapability,
+  verifyDelegationCanary,
   verifyPathProbe,
   verifyScopeProbe,
 } = vi.hoisted(() => ({
   createClient: vi.fn(() => ({ rpc: vi.fn() })),
   createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
   verifyCapability: vi.fn(),
+  verifyDelegationCanary: vi.fn(),
   verifyPathProbe: vi.fn(),
   verifyScopeProbe: vi.fn(),
 }));
@@ -33,6 +35,7 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
   return {
     GiglWrapperSchemaMissingError: original.GiglWrapperSchemaMissingError,
     verifyGiglTrackingWorkerCapability: verifyCapability,
+    verifyGiglTrackingWorkerDelegationCanary: verifyDelegationCanary,
     verifyGiglTrackingWorkerScopePathProbe: verifyPathProbe,
     verifyGiglTrackingWorkerScopeProbe: verifyScopeProbe,
   };
@@ -43,6 +46,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
   it('passes only after the live restricted wrapper smoke succeeds', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
     verifyPathProbe.mockResolvedValue(true);
     const verifyProviderAuth = vi.fn(async () => true);
@@ -58,6 +62,13 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
     expect(createClient).toHaveBeenCalledOnce();
     expect(verifyCapability).toHaveBeenCalledOnce();
+    expect(verifyDelegationCanary).toHaveBeenCalledOnce();
+    // The canary runs through the RESTRICTED client (mapped, hook
+    // allowlisted release path) — the same client as the capability
+    // probe, not the unmapped scope-probe client.
+    expect(verifyDelegationCanary).toHaveBeenCalledWith(
+      createClient.mock.results[0].value
+    );
     expect(verifyScopeProbe).toHaveBeenCalledOnce();
     expect(verifyPathProbe).toHaveBeenCalledOnce();
     // The path probe must receive the UNMAPPED client: the restricted
@@ -80,6 +91,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
   it('fails closed when the hook stops enforcing the path allowlist', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(true);
     verifyPathProbe.mockResolvedValue(false);
     const verifyProviderAuth = vi.fn(async () => true);
@@ -101,6 +113,7 @@ describe('runGiglTrackingCapabilityVerification', () => {
 
   it('fails closed when the scope hook is not enforcing', async () => {
     verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
     verifyScopeProbe.mockResolvedValue(false);
     const logger = { error: vi.fn(), info: vi.fn() };
 
@@ -152,6 +165,24 @@ describe('runGiglTrackingCapabilityVerification', () => {
     expect(logger.error).toHaveBeenCalledWith(
       '[gigl-capability] verification failed'
     );
+  });
+
+  it('fails closed when the wrapper cannot delegate to its inner RPC', async () => {
+    verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(false);
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCapabilityVerification({
+        env: { NODE_ENV: 'test' },
+        logger,
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      '[gigl-capability] wrapper delegation check failed; the claim wrapper validates input but cannot reach its inner RPC — check the elevation grant and re-run'
+    );
+    expect(verifyScopeProbe).not.toHaveBeenCalled();
   });
 
   // Disabled-branch coverage lives in

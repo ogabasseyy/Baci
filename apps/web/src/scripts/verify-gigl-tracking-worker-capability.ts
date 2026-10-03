@@ -12,6 +12,7 @@ import type { GiglFetchOptions } from '@/lib/shipping/providers/gigl.constants';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
+  verifyGiglTrackingWorkerDelegationCanary,
   verifyGiglTrackingWorkerScopePathProbe,
   verifyGiglTrackingWorkerScopeProbe,
 } from '@/lib/verify-gigl-tracking-worker-capability';
@@ -148,6 +149,15 @@ export async function runGiglTrackingCapabilityVerification({
   try {
     const client = createGiglTrackingWorkerClient(env);
     if (await verifyGiglTrackingWorkerCapability(client)) {
+      // The capability probe passes on the wrapper's own
+      // pre-delegation 22023: prove the elevation and inner call
+      // before the hook probes below can authorize the latch.
+      if (!(await verifyGiglTrackingWorkerDelegationCanary(client))) {
+        logger.error(
+          '[gigl-capability] wrapper delegation check failed; the claim wrapper validates input but cannot reach its inner RPC — check the elevation grant and re-run'
+        );
+        return 1;
+      }
       if (await verifyGiglTrackingWorkerScopeProbe(client)) {
         // A method-only hook passes the GET probe above while letting
         // POST reach any PUBLIC RPC: prove path enforcement before

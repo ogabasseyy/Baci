@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   GiglWrapperSchemaMissingError,
   verifyGiglTrackingWorkerCapability,
+  verifyGiglTrackingWorkerDelegationCanary,
   verifyGiglTrackingWorkerScopePathProbe,
   verifyGiglTrackingWorkerScopeProbe,
 } from './verify-gigl-tracking-worker-capability';
@@ -63,6 +64,65 @@ describe('verifyGiglTrackingWorkerCapability', () => {
 
       await expect(
         verifyGiglTrackingWorkerCapability({ rpc } as never)
+      ).rejects.toBeInstanceOf(GiglWrapperSchemaMissingError);
+    }
+  });
+});
+
+describe('verifyGiglTrackingWorkerDelegationCanary', () => {
+  it('passes only when the canary release reaches the inner RPC and writes nothing', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null });
+
+    await expect(
+      verifyGiglTrackingWorkerDelegationCanary({ rpc } as never)
+    ).resolves.toBe(true);
+    // Fixed canary lease keys no live lease can match, through the
+    // restricted client (which remaps to the allowlisted wrapper).
+    expect(rpc).toHaveBeenCalledWith('release_gigl_tracking_claim', {
+      p_shipment_id: '11111111-1111-4111-8111-111111111111',
+      p_tracking_epoch_id: '22222222-2222-4222-8222-222222222222',
+      p_worker_id: 'gigl-capability-delegation-canary',
+    });
+  });
+
+  it('fails closed on broken elevation and unexpected results', async () => {
+    // Broken elevation surfaces as the inner 42501 (the wrapper's own
+    // 22023 guard passed, so only the post-validation path is left);
+    // data other than false means the canary matched something — or
+    // the contract changed — and must never latch.
+    for (const response of [
+      {
+        data: null,
+        error: {
+          code: '42501',
+          message: 'GIGL monitor claim release requires service role',
+        },
+      },
+      { data: null, error: { code: '22023', message: 'invalid' } },
+      { data: null, error: { code: 'PGRST301', message: 'invalid JWT' } },
+      { data: true, error: null },
+      { data: null, error: null },
+    ]) {
+      const rpc = vi.fn().mockResolvedValue(response);
+
+      await expect(
+        verifyGiglTrackingWorkerDelegationCanary({ rpc } as never)
+      ).resolves.toBe(false);
+    }
+  });
+
+  it('throws schema-missing when the wrapper RPCs are not deployed yet', async () => {
+    for (const error of [
+      { code: 'PGRST202', message: 'not found' },
+      {
+        code: '42501',
+        message: 'permission denied to set role "gigl_tracking_worker"',
+      },
+    ]) {
+      const rpc = vi.fn().mockResolvedValue({ data: null, error });
+
+      await expect(
+        verifyGiglTrackingWorkerDelegationCanary({ rpc } as never)
       ).rejects.toBeInstanceOf(GiglWrapperSchemaMissingError);
     }
   });

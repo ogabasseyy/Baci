@@ -39,13 +39,24 @@ DEPLOY_CURRENT_MAIN_GUARD=${DEPLOY_CURRENT_MAIN_GUARD:-}
 # to the publish-side overlap refusal: the pre-publish step is only a
 # point-in-time check before a deployment step that may run ~55 minutes,
 # and a promote recorded after that step would otherwise publish off a
-# stale latch/SHA read. Re-checked immediately before EVERY promote
-# attempt, so a record written during the deploy, a backoff, or an
-# earlier promote attempt blocks the promotion. Tests and non-production
-# callers may omit it.
+# stale latch/SHA read. Checked immediately before EVERY promote attempt
+# (a record written during the deploy, a backoff, or an earlier attempt
+# blocks the promotion) AND immediately after (a record written during
+# the promote itself rolls the publish back to the captured previous
+# production deployment). Tests and non-production callers may omit it.
 DEPLOY_PROMOTE_OVERLAP_CHECK=${DEPLOY_PROMOTE_OVERLAP_CHECK:-}
 deploy_command=("$@")
+# The deploy command prefix is static per process: resolve it once for
+# the promote/rollback command-shape dispatch in the overlap helper.
+promote_first_command="$(basename "${deploy_command[0]}")"
+promote_second_command="${deploy_command[1]:-}"
+promote_third_command="${deploy_command[2]:-}"
 last_deployment_target=""
+# Post-promote overlap exclusion (capture + verify + rollback): split
+# to keep this file under the 300-line limit.
+retry_lib_dir="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy-with-retry-overlap.sh
+. "$retry_lib_dir/deploy-with-retry-overlap.sh"
 
 run_current_main_guard() {
   if [ -z "$DEPLOY_CURRENT_MAIN_GUARD" ]; then
@@ -102,33 +113,52 @@ remember_deployment_target() {
 }
 
 run_promote_command() {
-  local first_command
-  local second_command
-  local third_command
-
-  first_command="$(basename "${deploy_command[0]}")"
-  second_command="${deploy_command[1]:-}"
-  third_command="${deploy_command[2]:-}"
+  local overlap_bound
+  local previous_production_target
 
   if ! run_current_main_guard; then
     echo "The current-main deployment guard refused to promote ${last_deployment_target}." >&2
     return 1
   fi
 
+  overlap_bound=0
   if [ -n "$DEPLOY_PROMOTE_OVERLAP_CHECK" ]; then
+    overlap_bound=1
     if ! "$DEPLOY_PROMOTE_OVERLAP_CHECK"; then
       echo "The worker-promote overlap check refused to promote ${last_deployment_target}." >&2
       return 1
     fi
   fi
 
-  if [ "$first_command" = "pnpm" ] && [ "$second_command" = "exec" ] && [ "$third_command" = "vercel" ]; then
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" "${deploy_command[1]}" "${deploy_command[2]}" promote "$last_deployment_target" --yes
-  elif [ "$first_command" = "npx" ] && [ "$second_command" = "vercel" ]; then
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" "${deploy_command[1]}" promote "$last_deployment_target" --yes
-  else
-    run_with_timeout "$PROMOTE_TIMEOUT_SECONDS" "${deploy_command[0]}" promote "$last_deployment_target" --yes
+  # Capture the rollback target BEFORE promoting: the pre-check above
+  # is point-in-time, and a worker flip recorded during the promote
+  # below lands too late for any pre-promote read. Without a captured
+  # target there is nothing to roll back to, so refuse instead.
+  previous_production_target=""
+  if [ "$overlap_bound" = "1" ]; then
+    if ! previous_production_target="$(capture_previous_production_deployment)"; then
+      echo "The worker-promote overlap check refused to promote ${last_deployment_target}: no rollback target could be captured." >&2
+      return 1
+    fi
+    if [ -z "$previous_production_target" ]; then
+      echo "WARNING: no previous production deployment found; promoting ${last_deployment_target} without a rollback target." >&2
+    fi
   fi
+
+  if ! _run_vercel_promote "$last_deployment_target"; then
+    return 1
+  fi
+
+  # Durable half of the exclusion (helper): a promote recorded DURING
+  # the promote above rolls back here. Retries re-enter above and
+  # refuse at the pre-check (the record now lists this run), so the
+  # rollback runs exactly once.
+  if [ "$overlap_bound" = "1" ]; then
+    if ! verify_post_promote_overlap "$last_deployment_target" "$previous_production_target"; then
+      return 1
+    fi
+  fi
+  return 0
 }
 
 # Promote last_deployment_target, retrying a transient promote failure before

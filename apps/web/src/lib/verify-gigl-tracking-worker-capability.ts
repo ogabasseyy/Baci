@@ -59,6 +59,41 @@ export async function verifyGiglTrackingWorkerCapability(
   return error?.code === '22023';
 }
 
+// Fixed canary lease keys: valid UUID syntax the inner function
+// accepts, paired with a worker id no poller ever uses, so the
+// triple can never match a live lease.
+const DELEGATION_CANARY_SHIPMENT_ID = '11111111-1111-4111-8111-111111111111';
+const DELEGATION_CANARY_EPOCH_ID = '22222222-2222-4222-8222-222222222222';
+const DELEGATION_CANARY_WORKER_ID = 'gigl-capability-delegation-canary';
+
+/**
+ * Proves the wrapper DELEGATION works, not just its argument guard.
+ * The capability probe above passes on the wrapper's own 22023,
+ * which its `p_limit = 0` guard raises BEFORE `set_config` elevation
+ * and the inner call — a regression in that post-validation path
+ * would still latch. This probe releases a canary lease that can
+ * never exist: the fixed UUIDs plus a valid worker id sail through
+ * both the wrapper and inner validation, execute the elevation, and
+ * reach the inner UPDATE, which matches zero rows and returns false
+ * WITHOUT WRITING. Any other outcome fails closed — an error
+ * (broken elevation surfaces as the inner 42501), or data other
+ * than false. Schema-missing defers like the capability probe (same
+ * exit-42 rollout contract).
+ */
+export async function verifyGiglTrackingWorkerDelegationCanary(
+  client: GiglTrackingRpcClient
+): Promise<boolean> {
+  const { data, error } = await client.rpc('release_gigl_tracking_claim', {
+    p_shipment_id: DELEGATION_CANARY_SHIPMENT_ID,
+    p_tracking_epoch_id: DELEGATION_CANARY_EPOCH_ID,
+    p_worker_id: DELEGATION_CANARY_WORKER_ID,
+  });
+  if (isGiglWrapperSchemaMissing(error)) {
+    throw new GiglWrapperSchemaMissingError();
+  }
+  return !error && data === false;
+}
+
 const SCOPE_HOOK_DENIAL_MESSAGE =
   'GIGL worker request is outside its capability scope';
 

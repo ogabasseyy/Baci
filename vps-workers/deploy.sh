@@ -83,9 +83,9 @@ record_deploy_workflow_promote "$APP_SHA" || {
   exit 1
 }
 # The promote snapshot is no longer needed: the refresh landed, so no
-# rollback can follow. (A crashed deploy's residue is cleared by the
-# next promote before snapshotting.)
-ssh "$VPS" "rm -rf '$REMOTE_DIR.pre-promote-backup'"
+# rollback can follow. (A crashed deploy's orphaned snapshot retires
+# by age on later promotes.)
+ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
 
 # The cron transition runs AFTER the recorded promote (never before
 # any live mutation can be refused): promote's quiesce therefore sees

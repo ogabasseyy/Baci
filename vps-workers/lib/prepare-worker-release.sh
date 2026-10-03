@@ -47,24 +47,18 @@ prepare_worker_release() {
   gigl_capability_status=0
   ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
   if [ "$gigl_capability_status" -eq 42 ]; then
-    # Exit 42 means the wrapper RPCs or the worker grant are missing. That
-    # is expected ONLY before the isolation migrations land (initial
-    # rollout): the RPCs land via db-migrations minutes later, so install
-    # the worker now (readiness requires it) and let the post-migration
-    # workflow smoke verify capability before the web deploy. But the same
-    # exit after a smoke has PROVED token+hook function (a non-vacuous
-    # latch exists) USUALLY means the grant/membership/schema regressed:
-    # refuse to promote over the previously-proven worker instead of
-    # deferring -- UNLESS the candidate tree adds GIGL migrations since
-    # the latched revision, which independently explains the 42 as
-    # schema-behind-code (a coordinated wrapper migration): then defer so
-    # the workflow can apply the migration and verify afterwards.
-    # Without that transition, refusing would deadlock wrapper
-    # migrations (readiness needs the new worker before db-migrations,
-    # but the worker could never promote against the old schema).
-    # Latch format is scope:sha:fingerprint; a vacuous latch (disabled
-    # scope, empty-sha256 fingerprint) proves no token ever functioned, so
-    # it stays deferrable (initial token rollout, disabled-path restore).
+    # Exit 42 means the wrapper RPCs or the worker grant are missing.
+    # Deferrable ONLY before the isolation migrations land (initial
+    # rollout: the RPCs land via db-migrations minutes later, so
+    # install now and let the post-migration smoke verify), after a
+    # PROVEN latch (non-vacuous) UNLESS the candidate adds GIGL
+    # migrations since the latched revision (schema-behind-code from
+    # a coordinated wrapper migration — refusing here would deadlock
+    # it, since readiness needs the new worker before db-migrations),
+    # or on a vacuous latch (disabled scope, empty-sha256
+    # fingerprint: no token ever functioned). Otherwise the 42 means
+    # the grant/membership/schema regressed: refuse to promote over
+    # the previously-proven worker. (Latch: scope:sha:fingerprint.)
     gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
     gigl_latch_scope="${gigl_latch%%:*}"
     gigl_latch_fp="${gigl_latch##*:}"
@@ -106,19 +100,14 @@ prepare_worker_release() {
 promote_worker_release() {
   echo "==> Promoting validated worker files to $VPS:$REMOTE_DIR"
   # Promote also holds the GIGL runtime lock exclusive across the file
-  # sync and the checkout flip: the cron takes it non-blocking, so a tick
-  # that would land between new wrappers and the old checkout (or vice
-  # versa) skips instead of running mixed-revision. A running poll delays
-  # promote by at most one tick (its own timeout + kill-after); lock order
-  # is deploy-then-gigl while cron takes gigl only, so no cycle. The
-  # remote script additionally quiesces EVERY scheduled worker lock
-  # (parsed from the installed crontab) across the same window, because
-  # the flipped checkout symlink is shared: without that, a Petrock,
-  # quiz, or other tick could read half-synced wrappers or straddle two
-  # revisions. The three persistent `--loop` systemd services are
-  # stopped first (they hold locks for life) and restarted by an EXIT
-  # trap that also covers abort paths. The locks dir is pre-created
-  # because flock will not create parents.
+  # sync and flip (cron takes it non-blocking, so a straddling tick
+  # skips instead of running mixed-revision; a running poll delays
+  # promote by at most one tick; deploy-then-gigl order vs gigl-only
+  # cron means no cycle). The remote script additionally quiesces
+  # EVERY scheduled worker lock plus the persistent `--loop` services
+  # (stopped first, restarted by an EXIT trap covering aborts too),
+  # because the flipped checkout symlink is shared. The locks dir is
+  # pre-created because flock will not create parents.
   ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
@@ -149,22 +138,26 @@ mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
 
 # Snapshot the pre-promote live tree BEFORE the rsync below mutates
-# it: if the checkout flip then refuses (the per-SHA checkout went
-# missing or invalid between prepare and promote), the rsync has
-# already replaced bin/, jobs/, lib/, config/, dependencies, and the
-# SHA marker while app-live still points at the previous checkout.
-# Restoring the snapshot keeps the quiesce EXIT trap from restarting
-# services against that mixed release. Entries that do not exist yet
-# (first deploy) are skipped on both legs; a snapshot failure refuses
-# the promote before anything is mutated. The backup sits BESIDE the
-# live dir (never inside the synced tree). It SURVIVES a successful
-# promote: the post-flip overlap record may still fail, and
-# rollback_worker_release below restores this snapshot then. deploy.sh
-# removes it after a successful record; a crashed run's residue is
-# cleared by the next promote before snapshotting (the deploy lock
-# above serializes promotes, so no live backup is ever clobbered).
-pre_promote_backup="${remote_dir}.pre-promote-backup"
+# it: if the checkout flip then refuses, the rsync has already
+# replaced bin/, jobs/, lib/, config/, dependencies, and the SHA
+# marker while app-live still points at the previous checkout, and
+# restoring the snapshot keeps the quiesce EXIT trap from restarting
+# services against that mixed release. Missing entries (first deploy)
+# are skipped on both legs; a snapshot failure refuses the promote
+# before anything is mutated. The backup sits BESIDE the live dir and
+# is OWNED by this deployment (named after the unique staging dir):
+# the deploy lock serializes promotes but releases before the
+# post-flip record and possible rollback, so a shared backup would
+# let a second deploy clobber the first's snapshot mid-record. It
+# SURVIVES success for rollback_worker_release below; deploy.sh
+# removes it after a successful record. Other deploys' orphaned
+# snapshots retire here by age only (a concurrent live deploy keeps
+# its own; a >60-minute post-flip stall is operator territory, and a
+# later rollback fails loud on the missing snapshot like any other
+# snapshot loss).
+pre_promote_backup="${staging_dir}.pre-promote-backup"
 rm -rf "$pre_promote_backup"
+find "$(dirname "$remote_dir")" -maxdepth 1 -name '*.pre-promote-backup' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 mkdir -p "$pre_promote_backup"
 for entry in bin jobs lib config node_modules app-checkout.sha; do
   if [ -e "$remote_dir/$entry" ]; then
@@ -227,18 +220,20 @@ REMOTE_SH
 # before the cron transition and the service/crontab installs: at that
 # point the promote is the sole live mutation, so restoring the
 # snapshot plus the checkout pointer returns the VPS to its exact
-# pre-deploy state — and the standing pre-flip record (which lists
-# every run in flight at flip time) is once again complete, so no
-# workflow can publish off stale reads. A missing snapshot fails
-# loudly: the operator follows the emergency rollback runbook.
+# pre-deploy state. Refuses when the live marker moved past this
+# deploy's SHA (a concurrent deploy landed: restoring then would wipe
+# the newer live tree, and the newer deploy's own records cover the
+# window). A missing snapshot fails loudly: the operator follows the
+# emergency rollback runbook.
 rollback_worker_release() {
   echo "==> Rolling back the unrecorded worker promotion on $VPS:$REMOTE_DIR"
-  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR'" <<'REMOTE_SH'
+  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"
 remote_dir="$2"
-pre_promote_backup="${remote_dir}.pre-promote-backup"
+expected_sha="$3"
+pre_promote_backup="${staging_dir}.pre-promote-backup"
 if [ ! -d "$pre_promote_backup" ]; then
   echo "Rollback refused: no pre-promote snapshot at $pre_promote_backup; follow the emergency rollback runbook." >&2
   exit 1
@@ -250,6 +245,17 @@ fi
 # shellcheck source=quiesce-worker-release.sh
 . "$staging_dir/lib/quiesce-worker-release.sh"
 quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
+
+# Refuse when a concurrent deploy landed after this promote: the live
+# marker moved past this SHA, so restoring this snapshot would wipe
+# the newer live tree. Read INSIDE the locks above so no promote can
+# interleave between the read and the restore. A missing marker
+# (first deploy) cannot verify — proceed.
+live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
+if [ -n "$live_sha" ] && [ "$live_sha" != "$expected_sha" ]; then
+  echo "Rollback refused: live checkout ($live_sha) moved past this promote ($expected_sha); a concurrent deploy landed. Reconcile manually via the emergency rollback runbook." >&2
+  exit 1
+fi
 
 for entry in bin jobs lib config node_modules; do
   if [ -e "$pre_promote_backup/$entry" ]; then

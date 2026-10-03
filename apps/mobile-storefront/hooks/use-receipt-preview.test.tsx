@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import { useReceiptPreview } from './use-receipt-preview';
+import { unpaidProformaDetail } from './use-receipt-preview.test-fixture';
 
 let mockReceiptDetail: Record<string, unknown> | null = null;
 
@@ -30,33 +31,6 @@ jest.mock('./use-receipts', () => ({
   }),
   useReceiptDetail: () => ({ data: mockReceiptDetail }),
 }));
-
-function unpaidProformaDetail(currency: string): Record<string, unknown> {
-  return {
-    id: 'order-1',
-    order_number: 'ORD-1',
-    created_at: '2026-09-01T10:00:00.000Z',
-    currency,
-    total: 500,
-    subtotal: 500,
-    shipping_fee: 0,
-    tax_amount: 0,
-    discount_amount: 0,
-    amount_paid: 0,
-    balance: 500,
-    payment_status: 'unpaid',
-    payment_method: 'invoice',
-    notes: null,
-    is_credit_order: false,
-    customer_name: 'Ada Buyer',
-    customer_email: 'ada@example.com',
-    customer_phone: null,
-    shipping_address: null,
-    virtual_account: null,
-    items: [],
-    transactions: [],
-  };
-}
 
 describe('useReceiptPreview foreign-currency bank details', () => {
   it('omits the NGN merchant account from USD previews', () => {
@@ -209,103 +183,6 @@ describe('useReceiptPreview document kind', () => {
     expect(result.current.html).toContain(
       '<div class="doc-title">Receipt</div>'
     );
-  });
-
-  it('opens a covered manual balance as the emailed receipt', () => {
-    // Staff-recorded orders keep non-paid labels despite full coverage;
-    // the app link on the emailed receipt must open a receipt, not an
-    // invoice (mirrors web isReceiptEligible).
-    mockReceiptDetail = {
-      ...unpaidProformaDetail('NGN'),
-      payment_status: 'pending',
-      total: 500,
-      amount_paid: 500,
-      recorded_by_user_id: 'staff-1',
-      import_job_id: null,
-      external_source: null,
-      items: [
-        {
-          id: 'item-1',
-          name: 'Device',
-          product_name: 'Device',
-          quantity: 1,
-          price: 500,
-        },
-      ],
-    };
-    const covered = renderHook(() => useReceiptPreview());
-    act(() => {
-      covered.result.current.openPreviewByOrderId('order-1');
-    });
-    expect(covered.result.current.documentKind).toBe('receipt');
-    expect(covered.result.current.html).toContain(
-      '<div class="doc-title">Receipt</div>'
-    );
-  });
-
-  it.each([
-    ['cancelled shipping', { shipping_status: 'cancelled' }],
-    ['unknown payment status', { payment_status: 'on_hold' }],
-    ['negative total', { total: -5, amount_paid: 0 }],
-    ['no items', { items: [] }],
-    ['null money the sender skips', { total: 0, amount_paid: null }],
-    ['NaN money breakdown', { subtotal: Number.NaN }],
-  ])('fails a covered manual balance closed on %s', (_label, override) => {
-    // The balance alone never promotes: ineligible manual rows preview
-    // as invoices like the sender, archive, and download routes treat them.
-    mockReceiptDetail = {
-      ...unpaidProformaDetail('NGN'),
-      payment_status: 'pending',
-      total: 500,
-      amount_paid: 500,
-      recorded_by_user_id: 'staff-1',
-      import_job_id: null,
-      external_source: null,
-      items: [
-        {
-          id: 'item-1',
-          name: 'Device',
-          product_name: 'Device',
-          quantity: 1,
-          price: 500,
-        },
-      ],
-      ...override,
-    };
-    const preview = renderHook(() => useReceiptPreview());
-    act(() => {
-      preview.result.current.openPreviewByOrderId('order-1');
-    });
-    expect(preview.result.current.documentKind).not.toBe('receipt');
-  });
-
-  it('opens a null-currency covered manual balance as the emailed receipt', () => {
-    // Web content validity allows nullish currency, so the sender emails
-    // a receipt; the app link must open the same kind, not an invoice.
-    mockReceiptDetail = {
-      ...unpaidProformaDetail('NGN'),
-      currency: null,
-      payment_status: 'pending',
-      total: 500,
-      amount_paid: 500,
-      recorded_by_user_id: 'staff-1',
-      import_job_id: null,
-      external_source: null,
-      items: [
-        {
-          id: 'item-1',
-          name: 'Device',
-          product_name: 'Device',
-          quantity: 1,
-          price: 500,
-        },
-      ],
-    };
-    const preview = renderHook(() => useReceiptPreview());
-    act(() => {
-      preview.result.current.openPreviewByOrderId('order-1');
-    });
-    expect(preview.result.current.documentKind).toBe('receipt');
   });
 
   it('counts legacy paid spellings on non-manual orders like web', () => {

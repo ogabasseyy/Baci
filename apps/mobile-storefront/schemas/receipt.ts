@@ -41,6 +41,10 @@ const TransactionSchema = z.object({
   created_at: z.string(),
   description: z.string().nullable(),
   metadata: z.object({ payment_method: z.string().optional() }).nullable(),
+  // Provided by the RPC mapper for receipt dating (settled filter).
+  gateway: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  transaction_type: z.string().nullable().optional(),
 });
 
 // ============================================

@@ -6,6 +6,7 @@ import {
   PLATFORM_BLOG_CONTEXT,
 } from '@/lib/platform-blog';
 import { sanitizeForFeed } from '@/lib/sanitize';
+import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
 
 function parseValidDate(value: string | null | undefined): Date | null {
   if (!value) {
@@ -21,6 +22,7 @@ export async function GET(_request: NextRequest) {
     const posts = await getPlatformBlogFeedPosts();
     const feedUrl = `${PLATFORM_BLOG_CONTEXT.baseUrl}/blog/feed.xml`;
     const blogUrl = `${PLATFORM_BLOG_CONTEXT.baseUrl}/blog`;
+    const feedText = stripInvalidXml10Characters;
 
     const validPosts = posts.flatMap((post) => {
       const publishedDate = parseValidDate(post.published_at);
@@ -28,15 +30,17 @@ export async function GET(_request: NextRequest) {
     });
 
     const feed = new Feed({
-      title: `${PLATFORM_BLOG_CONTEXT.businessName} Blog`,
+      title: feedText(`${PLATFORM_BLOG_CONTEXT.businessName} Blog`),
       description:
         'Insights, updates, and practical playbooks for modern African merchants.',
-      id: blogUrl,
-      link: blogUrl,
+      id: feedText(blogUrl),
+      link: feedText(blogUrl),
       language: 'en',
-      image: PLATFORM_BLOG_CONTEXT.logoUrl,
-      favicon: `${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`,
-      copyright: `All rights reserved ${new Date().getFullYear()}, ${PLATFORM_BLOG_CONTEXT.businessName}`,
+      image: feedText(PLATFORM_BLOG_CONTEXT.logoUrl),
+      favicon: feedText(`${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`),
+      copyright: feedText(
+        `All rights reserved ${new Date().getFullYear()}, ${PLATFORM_BLOG_CONTEXT.businessName}`
+      ),
       generator: 'Baci Platform Blog',
       ...(validPosts[0]
         ? {
@@ -44,11 +48,11 @@ export async function GET(_request: NextRequest) {
           }
         : {}),
       feedLinks: {
-        rss2: feedUrl,
+        rss2: feedText(feedUrl),
       },
       author: {
-        name: PLATFORM_BLOG_CONTEXT.businessName,
-        link: PLATFORM_BLOG_CONTEXT.baseUrl,
+        name: feedText(PLATFORM_BLOG_CONTEXT.businessName),
+        link: feedText(PLATFORM_BLOG_CONTEXT.baseUrl),
       },
     });
 
@@ -56,20 +60,26 @@ export async function GET(_request: NextRequest) {
       const excerpt =
         post.excerpt || stripHtml(post.content || '').substring(0, 300);
       feed.addItem({
-        title: post.title,
-        id: `${blogUrl}/${post.slug}`,
-        link: `${blogUrl}/${post.slug}`,
-        description: excerpt,
+        title: feedText(post.title),
+        id: feedText(`${blogUrl}/${post.slug}`),
+        link: feedText(`${blogUrl}/${post.slug}`),
+        description: feedText(excerpt),
         content: sanitizeForFeed(post.content || ''),
         author: [
           {
-            name: post.author_name || PLATFORM_BLOG_CONTEXT.businessName,
-            link: PLATFORM_BLOG_CONTEXT.baseUrl,
+            name: feedText(
+              post.author_name || PLATFORM_BLOG_CONTEXT.businessName
+            ),
+            link: feedText(PLATFORM_BLOG_CONTEXT.baseUrl),
           },
         ],
         date: publishedDate,
-        image: post.featured_image_url || undefined,
-        category: post.category ? [{ name: post.category }] : undefined,
+        image: post.featured_image_url
+          ? feedText(post.featured_image_url)
+          : undefined,
+        category: post.category
+          ? [{ name: feedText(post.category) }]
+          : undefined,
       });
     }
 

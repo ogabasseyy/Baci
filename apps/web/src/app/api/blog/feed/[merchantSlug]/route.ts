@@ -10,6 +10,7 @@ import {
   isPublicBlogCategory,
 } from '@/lib/public-blog-content-quality';
 import { sanitizeForFeed } from '@/lib/sanitize';
+import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
 /**
@@ -340,53 +341,60 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       postsWithValidDates.length === 0
         ? null
         : (postsWithValidDates[0]?.publishedDate ?? new Date());
+    const feedText = stripInvalidXml10Characters;
+    const safeStoreUrl = feedText(storeUrl);
+    const safeFeedUrl = feedText(feedUrl);
+    const safeBaseUrl = feedText(baseUrl);
 
     const feed = new Feed({
-      title: `${merchant.business_name} Blog`,
-      description:
+      title: feedText(`${merchant.business_name} Blog`),
+      description: feedText(
         merchant.site_description ||
-        `Latest posts from ${merchant.business_name}`,
-      id: `${storeUrl}/blog`,
-      link: `${storeUrl}/blog`,
+          `Latest posts from ${merchant.business_name}`
+      ),
+      id: `${safeStoreUrl}/blog`,
+      link: `${safeStoreUrl}/blog`,
       language: 'en',
-      image: merchant.logo_url || undefined,
-      favicon: `${baseUrl}/favicon.ico`,
-      copyright: `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`,
+      image: merchant.logo_url ? feedText(merchant.logo_url) : undefined,
+      favicon: `${safeBaseUrl}/favicon.ico`,
+      copyright: feedText(
+        `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`
+      ),
       ...(lastBuildDate ? { updated: lastBuildDate } : {}),
       generator: 'Baci E-commerce Platform',
       feedLinks: {
-        rss2: feedUrl,
+        rss2: safeFeedUrl,
       },
       author: {
-        name: merchant.business_name,
-        link: storeUrl,
+        name: feedText(merchant.business_name),
+        link: safeStoreUrl,
       },
     });
 
     for (const { post, publishedDate } of postsWithValidDates) {
-      const postUrl = `${storeUrl}/blog/${post.slug}`;
+      const postUrl = `${safeStoreUrl}/blog/${feedText(post.slug)}`;
       const excerpt = post.excerpt || stripHtml(post.content).substring(0, 300);
 
       const sanitizedContent = sanitizeForFeed(post.content);
       const imageUrls = getBlogStructuredDataImageUrls(post);
 
       feed.addItem({
-        title: post.title,
+        title: feedText(post.title),
         id: postUrl,
         link: postUrl,
-        description: excerpt,
+        description: feedText(excerpt),
         content: sanitizedContent,
         author: [
           {
-            name: post.author_name,
-            link: storeUrl,
+            name: feedText(post.author_name),
+            link: safeStoreUrl,
           },
         ],
         date: publishedDate,
-        image: imageUrls[0],
+        image: imageUrls[0] ? feedText(imageUrls[0]) : undefined,
         category:
           post.category && isPublicBlogCategory(post.category)
-            ? [{ name: post.category }]
+            ? [{ name: feedText(post.category) }]
             : undefined,
       });
     }

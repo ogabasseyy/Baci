@@ -242,6 +242,65 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     ]);
   });
 
+  it('removes XML 1.0 control characters from feed metadata and article fields', async () => {
+    const unsafeMerchant = {
+      ...merchant,
+      business_name: 'Oga\u001ABassey',
+      site_description: 'Phones\u000B and laptops',
+    };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable(
+      'blog_posts',
+      createPostQuery({
+        data: [
+          {
+            id: 'post-1',
+            slug: 'public-feed-post',
+            title: 'Phone\u001A guide',
+            content: '<p>₦61,817,004.65\u001A📱</p>',
+            excerpt: 'Price\u000B update',
+            featured_image_url: null,
+            author_name: 'Author\u0000 Name',
+            category: null,
+            published_at: '2026-05-02T10:00:00.000Z',
+            updated_at: null,
+          },
+        ],
+        error: null,
+      })
+    );
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      options: { title: string; description: string };
+      items: Array<{
+        title: string;
+        description: string;
+        content: string;
+        author: Array<{ name: string }>;
+      }>;
+    };
+    expect(payload.options.title).toBe('OgaBassey Blog');
+    expect(payload.options.description).toBe('Phones and laptops');
+    expect(payload.items[0]).toMatchObject({
+      title: 'Phone guide',
+      description: 'Price update',
+      content: '<p>₦61,817,004.65📱</p>',
+      author: [{ name: 'Author Name' }],
+    });
+  });
+
   it('over-fetches additional ranges when early batches are fully filtered', async () => {
     const junkBatch = buildJunkFeedBatch();
     const publicPost = {

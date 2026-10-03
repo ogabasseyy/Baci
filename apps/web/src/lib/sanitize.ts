@@ -7,6 +7,7 @@ import {
   type SanitizeHtmlOptions,
 } from '@/lib/sanitize-html-config';
 import { stripDisallowedRawTextBlocks } from '@/lib/sanitize-raw-text-blocks';
+import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
 
 // Re-export removed as per knip analysis
 // import from './sanitize-core' directly if needed
@@ -116,41 +117,43 @@ export function escapeHtmlAttribute(value: string): string {
  * Ensures all links have rel="noopener noreferrer".
  */
 export function sanitizeForFeed(dirty: string): string {
-  return sanitizeLib(dirty, {
-    allowedTags: [
-      'p',
-      'br',
-      'strong',
-      'em',
-      'u',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'ul',
-      'ol',
-      'li',
-      'blockquote',
-      'pre',
-      'code',
-      'a',
-      'img',
-    ],
-    allowedAttributes: {
-      a: ['href', 'title', 'rel'],
-      img: ['src', 'alt', 'title', 'width', 'height'],
-    },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    allowProtocolRelative: false,
-    transformTags: {
-      a: (tagName, attribs) => ({
-        tagName,
-        attribs: { ...attribs, rel: 'noopener noreferrer' },
-      }),
-    },
-  });
+  return stripInvalidXml10Characters(
+    sanitizeLib(dirty, {
+      allowedTags: [
+        'p',
+        'br',
+        'strong',
+        'em',
+        'u',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'pre',
+        'code',
+        'a',
+        'img',
+      ],
+      allowedAttributes: {
+        a: ['href', 'title', 'rel'],
+        img: ['src', 'alt', 'title', 'width', 'height'],
+      },
+      allowedSchemes: ['http', 'https', 'mailto'],
+      allowProtocolRelative: false,
+      transformTags: {
+        a: (tagName, attribs) => ({
+          tagName,
+          attribs: { ...attribs, rel: 'noopener noreferrer' },
+        }),
+      },
+    })
+  );
 }
 
 /**

@@ -29,6 +29,31 @@ COMMENT ON ROLE gigl_tracking_worker IS
 -- the worker's five-RPC capability at the Data API request boundary before
 -- PostgREST invokes any exposed function or relation.
 
+-- Reload canary: a REAL RPC the hook below shadows for anonymous
+-- callers, observed by probe-gigl-hook-reload.sh BEFORE the isolate
+-- migration grants membership. The function MUST exist: PostgREST
+-- resolves the action plan (including RPC existence) BEFORE invoking
+-- db_pre_request, so a nonexistent canary path would answer PGRST202
+-- from the schema cache with the hook never firing, and the probe
+-- could never ack. The function itself is inert (constant return, no
+-- writes, no privileged access, anonymous-only EXECUTE): only the
+-- loaded hook's 42501 denial satisfies the probe, while the bare
+-- constant (schema fresh, hook stale) and 404 (schema stale) both
+-- read as not-loaded-yet.
+CREATE OR REPLACE FUNCTION public.__gigl_hook_reload_canary__()
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$ SELECT 'gigl-hook-canary-alive' $$;
+
+ALTER FUNCTION public.__gigl_hook_reload_canary__()
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.__gigl_hook_reload_canary__()
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.__gigl_hook_reload_canary__()
+  TO anon;
+
 CREATE OR REPLACE FUNCTION public.enforce_gigl_tracking_worker_request_scope()
 RETURNS void
 LANGUAGE plpgsql
@@ -40,11 +65,11 @@ DECLARE
   request_path text := current_setting('request.path', true);
 BEGIN
   -- Reload canary, observed by probe-gigl-hook-reload.sh BEFORE the
-  -- isolate migration grants membership: an anonymous POST to a path
-  -- that matches no real RPC proves PostgREST loaded this hook when
-  -- it answers 42501 instead of 404, so the grant can never commit
-  -- ahead of an unloaded hook. Never create a real RPC at this path:
-  -- the hook would shadow it for anonymous callers.
+  -- isolate migration grants membership: an anonymous POST to the
+  -- real canary RPC proves PostgREST loaded this hook when it
+  -- answers the 42501 denial instead of the bare constant, so the
+  -- grant can never commit ahead of an unloaded hook. The shadow is
+  -- the signal, by design.
   IF auth.role() = 'anon'
     AND request_method = 'POST'
     AND request_path = '/rpc/__gigl_hook_reload_canary__' THEN

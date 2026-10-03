@@ -5,9 +5,14 @@
 # then this probe, then the applier for the rest: the grant can never
 # commit ahead of an unloaded hook, because a hook that never loads fails
 # this step while the isolate migration is still unapplied. Anonymous POST
-# to the canary path matches no real RPC, so 42501-with-canary-message is
-# the ack and anything else (404, other errors, connection failure) means
-# not-loaded-yet. Skips fast once the isolate migration is recorded.
+# to the canary path MUST name a real RPC (the restore migration creates
+# it): PostgREST resolves the action plan before invoking db_pre_request,
+# so a nonexistent path would answer PGRST202 with the hook never firing
+# and the probe could never ack. 42501-with-canary-message is the ack
+# (the loaded hook shadowing the real function); anything else — 404
+# (schema not yet reloaded), the bare canary constant (schema fresh,
+# hook stale), other errors, connection failure — means not-loaded-yet.
+# Skips fast once the isolate migration is recorded.
 #
 # Fleet convergence (not first-ack): a single ack proves only the routed
 # replica, so after the first ack this probe requires UNANIMITY_S of

@@ -77,6 +77,33 @@ _set_inflight_repo() {
   _inflight_repo="${inflight_repo#*/}"
 }
 
+# Lists every non-completed main-branch deploy.yml run as TSV (id,
+# status, short-sha, event, url) with NO fixed recent-run window. A
+# `gh run list --limit N` query applies its jq filter AFTER the limit,
+# so an approval-held run older than N newer runs is invisible both to
+# the pre-promote refusal and to the promote record — and the older
+# workflow then publishes off stale readiness state. The Actions API
+# filters each non-completed status server-side instead, so every
+# query returns ~zero rows in one page however many completed runs
+# exist; --paginate covers an arbitrarily deep non-completed backlog,
+# and the client-side completed-guard keeps a future API behavior
+# change fail-safe instead of fail-open. Prints nothing when quiet.
+# Usage: _list_noncompleted_deploy_runs <err-file-or-empty>.
+_list_noncompleted_deploy_runs() {
+  local _list_err_file="$1"
+  local _list_status _list_page
+  for _list_status in queued in_progress waiting requested; do
+    if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
+      --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
+      2>"${_list_err_file:-/dev/null}")"; then
+      return 1
+    fi
+    if [ -n "$_list_page" ]; then
+      printf '%s\n' "$_list_page"
+    fi
+  done
+}
+
 check_deploy_workflow_inflight() {
   if [ "${BACI_DEPLOY_SKIP_INFLIGHT_CHECK:-}" = "1" ]; then
     echo "WARNING: skipping the pre-promote in-flight deploy check (BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). The promote is still recorded for the workflow pre-publish overlap check when gh works; re-run the GIGL smoke/latch sequence after this promote and confirm no production deploy published off the pre-promote latch/SHA." >&2
@@ -92,10 +119,7 @@ check_deploy_workflow_inflight() {
   # queued and waiting runs (the production environment can hold a run
   # on approval) publish later off the same early latch/SHA read.
   inflight_err="$(mktemp 2>/dev/null)" || inflight_err=""
-  if ! inflight_runs="$(gh run list -R "$_inflight_owner/$_inflight_repo" --workflow deploy.yml --branch main --limit 50 \
-    --json databaseId,status,headSha,event,url \
-    --jq 'map(select(.status != "completed")) | .[] | "\(.databaseId) \(.status) \((.headSha // "?")[0:8]) \(.event // "?") \(.url)"' \
-    2>"${inflight_err:-/dev/null}")"; then
+  if ! inflight_runs="$(_list_noncompleted_deploy_runs "$inflight_err")"; then
     inflight_detail=""
     if [ -n "$inflight_err" ]; then
       inflight_detail="$(head -c 500 "$inflight_err" 2>/dev/null || true)"
@@ -142,10 +166,11 @@ record_deploy_workflow_promote() {
   # but recording them is what lets their own pre-publish step prove
   # that instead of trusting this comment.
   record_err="$(mktemp 2>/dev/null)" || record_err=""
-  if ! record_runs="$(gh run list -R "$_inflight_owner/$_inflight_repo" --workflow deploy.yml --branch main --limit 50 \
-    --json databaseId,status \
-    --jq 'map(select(.status != "completed") | .databaseId | tostring) | join(",")' \
-    2>"${record_err:-/dev/null}")"; then
+  # Capture first, parse second: a `$(_list ... | cut | paste)`
+  # pipeline reports paste's status without pipefail, and callers
+  # (runbook one-liners) cannot be assumed to set it — a masked list
+  # failure would record a vacuous overlap set.
+  if ! record_tsv="$(_list_noncompleted_deploy_runs "$record_err")"; then
     record_detail=""
     if [ -n "$record_err" ]; then
       record_detail="$(head -c 500 "$record_err" 2>/dev/null || true)"
@@ -159,6 +184,11 @@ record_deploy_workflow_promote() {
     return 0
   fi
   if [ -n "$record_err" ]; then rm -f "$record_err"; fi
+  if [ -n "$record_tsv" ]; then
+    record_runs="$(printf '%s\n' "$record_tsv" | cut -f1 | paste -sd, -)"
+  else
+    record_runs=""
+  fi
   record_value="$record_sha:$record_runs"
   record_attempt=0
   while [ "$record_attempt" -lt 3 ]; do

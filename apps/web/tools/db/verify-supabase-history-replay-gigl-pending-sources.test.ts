@@ -135,7 +135,7 @@ describe('GIGL tracking pending replay sources', () => {
       ],
       [
         'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',
-        'ee548f3cab781e6c8a9fa8e73b63bf7162508451fbee5cb1b1e862cc3ca3060d',
+        'a639ded915cb661e199187c31381c85c75b07930dbab9aa61cc29e4290f85ae7',
       ],
       [
         'supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql',

@@ -201,6 +201,27 @@ describe('probe-gigl-hook-reload', () => {
     }
   });
 
+  it('treats the unshadowed canary value as not-loaded', async () => {
+    // Schema fresh but hook stale: the real canary RPC executes and
+    // answers its bare constant (200 JSON string) instead of the
+    // hook's 42501 denial. That middle state must never ack.
+    const stub = await startStub({
+      mgmt: () => [200, [{ applied: '0' }]],
+      canary: () => [200, 'gigl-hook-canary-alive'],
+    });
+    try {
+      const result = await runProbe(
+        baseEnv(stub.port, { GIGL_HOOK_PROBE_DEADLINE_S: '2' })
+      );
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /never served the GIGL hook reload canary/);
+      assert.match(result.stderr, /isolate grant is NOT applied/);
+      assert.ok(stub.hits.canary >= 1);
+    } finally {
+      stub.server.close();
+    }
+  });
+
   it('fails closed when PostgREST is unreachable', async () => {
     const stub = await startStub({
       mgmt: () => [200, [{ applied: '0' }]],

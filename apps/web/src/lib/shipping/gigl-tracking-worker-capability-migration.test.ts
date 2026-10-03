@@ -150,13 +150,24 @@ describe('GIGL tracking worker capability migration', () => {
     // path while matching nothing.
     expect(postgrestRepairMigration).not.toMatch(/'rpc\/gigl_worker_/);
     // Reload canary for the pre-grant acknowledgement: an anonymous
-    // POST to a path matching no real RPC must raise 42501 (the probe
-    // treats anything else as hook-not-loaded and blocks the grant).
+    // POST to the canary path must raise 42501 (the probe treats
+    // anything else as hook-not-loaded and blocks the grant). The
+    // canary MUST be a real RPC: PostgREST resolves the action plan
+    // before invoking db_pre_request, so a nonexistent path would
+    // answer PGRST202 with the hook never firing and the probe could
+    // never ack. The function is inert (constant, anonymous-only).
     expect(postgrestRepairMigration).toMatch(
       /auth\.role\(\) = 'anon'[\s\S]*request_path = '\/rpc\/__gigl_hook_reload_canary__'/
     );
     expect(postgrestRepairMigration).toMatch(
       /GIGL hook reload canary observed/
+    );
+    expect(postgrestRepairMigration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.__gigl_hook_reload_canary__\(\)/
+    );
+    expect(postgrestRepairMigration).toMatch(/SELECT 'gigl-hook-canary-alive'/);
+    expect(postgrestRepairMigration).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.__gigl_hook_reload_canary__\(\)\s+TO anon/
     );
     expect(postgrestRepairMigration).toMatch(
       /ALTER ROLE authenticator\s+SET pgrst\.db_pre_request = 'public\.enforce_gigl_tracking_worker_request_scope'/

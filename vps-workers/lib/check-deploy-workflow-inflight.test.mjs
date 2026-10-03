@@ -77,15 +77,40 @@ test('passes when no production deploy run is in flight', () => {
 
   assert.equal(result.status, 0, result.stderr);
   // Only main-branch runs of the publishing workflow can land the
-  // cron removal, so the query scopes to exactly those.
-  assert.match(ghArgs, /--workflow deploy\.yml/);
-  assert.match(ghArgs, /--branch main/);
-  assert.match(ghArgs, /--json .*status/);
+  // cron removal, so the query scopes to exactly those — via the
+  // Actions API (server-side status filter + pagination), never a
+  // fixed recent-run window that could miss an approval-held run.
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows\/deploy\.yml\/runs\?branch=main/
+  );
+  assert.match(ghArgs, /--paginate/);
+  assert.match(ghArgs, /--jq/);
+});
+
+test('queries every non-completed status without a fixed window', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: 'echo "$@" >> "$GH_ARGS_FILE"',
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const calls = ghArgs.split('\n').filter(Boolean);
+  assert.equal(calls.length, 4);
+  for (const status of ['queued', 'in_progress', 'waiting', 'requested']) {
+    assert.ok(
+      calls.some((call) => call.includes(`status=${status}`)),
+      `expected a status=${status} query`
+    );
+  }
+  for (const call of calls) {
+    assert.match(call, /--paginate/);
+    assert.match(call, /actions\/workflows\/deploy\.yml\/runs\?branch=main/);
+  }
 });
 
 test('refuses promotion while a deploy run is in progress', () => {
   const { result } = runCheck({
-    ghBody: `${RECORD_ARGS}\necho '184400111 in_progress abc12345 push https://github.com/example/repo/actions/runs/184400111'`,
+    ghBody: `${RECORD_ARGS}\nprintf '184400111\\tin_progress\\tabc12345\\tpush\\thttps://github.com/example/repo/actions/runs/184400111\\n'`,
   });
 
   assert.equal(result.status, 1);
@@ -100,7 +125,7 @@ test('treats approval-held runs as in flight', () => {
   // later off the same early latch/SHA read, so `waiting` must block
   // promotion just like an actively running deploy.
   const { result } = runCheck({
-    ghBody: `${RECORD_ARGS}\necho '184400112 waiting def67890 workflow_dispatch https://github.com/example/repo/actions/runs/184400112'`,
+    ghBody: `${RECORD_ARGS}\nprintf '184400112\\twaiting\\tdef67890\\tworkflow_dispatch\\thttps://github.com/example/repo/actions/runs/184400112\\n'`,
   });
 
   assert.equal(result.status, 1);
@@ -169,7 +194,10 @@ test('queries the origin repo explicitly so fork checkouts cannot pass vacuously
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(ghArgs, /-R example-owner\/example-repo/);
+  assert.match(
+    ghArgs,
+    /repos\/example-owner\/example-repo\/actions\/workflows/
+  );
 });
 
 test('fails closed when the repo cannot be resolved from origin', () => {
@@ -195,7 +223,10 @@ test('honors the explicit repo override for exotic remotes', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(ghArgs, /-R override-owner\/override-repo/);
+  assert.match(
+    ghArgs,
+    /repos\/override-owner\/override-repo\/actions\/workflows/
+  );
 });
 
 test('rejects a malformed repo override', () => {

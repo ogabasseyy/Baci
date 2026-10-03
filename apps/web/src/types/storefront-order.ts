@@ -16,6 +16,7 @@ export interface StorefrontOrderItem {
   product_name?: string;
   quantity: number;
   price: number;
+  item_description?: string | null;
   line_extension_amount?: number;
   unit_code?: string | null;
   vat_category_code?: string | null;

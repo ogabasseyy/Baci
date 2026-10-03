@@ -24,6 +24,8 @@ AS $$
   FROM public.order_items AS oi
   WHERE oi.order_id = p_order_id;
 $$;
+REVOKE ALL ON FUNCTION private.manual_document_item_snapshot(uuid)
+  FROM PUBLIC, anon, authenticated;
 -- Both sides sort tax rows by id (uuid text order matches byte
 -- order), so the canonical order is collation-independent.
 CREATE OR REPLACE FUNCTION private.manual_document_tax_snapshot(p_order_id uuid)
@@ -41,6 +43,8 @@ AS $$
   FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = p_order_id;
 $$;
+REVOKE ALL ON FUNCTION private.manual_document_tax_snapshot(uuid)
+  FROM PUBLIC, anon, authenticated;
 -- Settled-status filter mirrors the sender exactly: a row flipping
 -- out changes the count and aborts; unsettled rows never count.
 -- Metadata snapshots payment_method only, mirroring the trigger: the
@@ -61,3 +65,5 @@ AS $$
   WHERE t.order_id = p_order_id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success');
 $$;
+REVOKE ALL ON FUNCTION private.manual_document_transaction_snapshot(uuid)
+  FROM PUBLIC, anon, authenticated;

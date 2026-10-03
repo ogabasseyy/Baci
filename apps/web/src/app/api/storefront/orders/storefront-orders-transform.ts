@@ -20,6 +20,13 @@ export interface StorefrontOrderListItemInput {
   variant_name?: string | null;
   quantity: number;
   price: number;
+  item_description?: string | null;
+  line_extension_amount?: number | null;
+  unit_code?: string | null;
+  vat_category_code?: string | null;
+  vat_rate?: number | null;
+  vat_amount?: number | null;
+  sellers_item_id?: string | null;
   has_assurance?: boolean | null;
   assurance_fee?: number | null;
   products?: JoinedProduct | JoinedProduct[] | null;
@@ -209,6 +216,13 @@ export function transformStorefrontOrdersForDisplay(
           variant_name: item.variant_name,
           quantity: item.quantity,
           price: item.price,
+          item_description: item.item_description,
+          line_extension_amount: item.line_extension_amount,
+          unit_code: item.unit_code,
+          vat_category_code: item.vat_category_code,
+          vat_rate: item.vat_rate,
+          vat_amount: item.vat_amount,
+          sellers_item_id: item.sellers_item_id,
           has_assurance: item.has_assurance,
           assurance_fee: item.assurance_fee,
           product_slug: product?.slug,

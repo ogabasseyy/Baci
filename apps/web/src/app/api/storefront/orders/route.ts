@@ -98,6 +98,13 @@ export async function GET(request: NextRequest) {
           image_url,
           quantity,
           price,
+          item_description,
+          line_extension_amount,
+          unit_code,
+          vat_category_code,
+          vat_rate,
+          vat_amount,
+          sellers_item_id,
           has_assurance,
           assurance_fee,
           products:products!order_items_product_id_fkey (

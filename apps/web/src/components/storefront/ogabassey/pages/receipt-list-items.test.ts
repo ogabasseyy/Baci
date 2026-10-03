@@ -66,6 +66,47 @@ describe('fetchReceiptListItems', () => {
     );
   });
 
+  it('projects line extensions and VAT/SKU/unit details into the preview model', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        items: [
+          {
+            id: 'item-1',
+            name: 'Samsung Galaxy S26',
+            quantity: 2,
+            price: 50,
+            item_description: 'Unlocked 512GB device',
+            line_extension_amount: 90,
+            unit_code: 'EA',
+            vat_category_code: 'S',
+            vat_rate: 7.5,
+            vat_amount: 6.75,
+            sellers_item_id: 'SKU-1',
+          },
+        ],
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder.items[0]).toMatchObject({
+      description: 'Unlocked 512GB device',
+      line_extension_amount: 90,
+      unit_code: 'EA',
+      vat_category_code: 'S',
+      vat_rate: 7.5,
+      vat_amount: 6.75,
+      sellers_item_id: 'SKU-1',
+    });
+  });
+
+  it('leaves absent line details out of the preview model', async () => {
+    mockOrdersResponse([baseOrder()]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder.items[0].line_extension_amount).toBeUndefined();
+    expect(item.rawOrder.items[0].description).toBeUndefined();
+  });
+
   it('maps display labels, images, and device counts', async () => {
     mockOrdersResponse([baseOrder()]);
 

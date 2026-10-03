@@ -79,11 +79,15 @@ export const manualDocumentOrderSchema = z.object({
       address: z.string().optional(),
       address_line1: z.string().optional(),
       address_line2: z.string().optional(),
-      city: z.string().optional(),
-      state: z.string().optional(),
-      postal_code: z.string().optional(),
+      // Nullish: the mobile-admin "same as customer" edit path persists
+      // explicit nulls when no locality is preserved, and the renderer
+      // already filters falsy parts. Rejecting null here would terminally
+      // skip the document as order_validation_failed.
+      city: z.string().nullish(),
+      state: z.string().nullish(),
+      postal_code: z.string().nullish(),
       // Mobile staff app persists camelCase; the PDF builder normalizes it.
-      postalCode: z.string().optional(),
+      postalCode: z.string().nullish(),
       country: z.string().optional(),
       // Passthrough: the dispatch marker compares the stored address key
       // set exactly, so unknown keys must survive parsing.
@@ -108,10 +112,19 @@ const manualDocumentArchiveMoneySchema = manualDocumentOrderSchema.pick({
   tax_amount: true,
   total: true,
 });
+// The archive pick mirrors every sender-validated numeric item field:
+// omitting one would advertise a document the sender terminally skips
+// as order_validation_failed. String fields accept any string on both
+// sides, so they cannot diverge.
 const manualDocumentArchiveItemSchema = manualDocumentOrderItemSchema.pick({
+  assurance_fee: true,
+  line_extension_amount: true,
+  line_id: true,
   name: true,
   price: true,
   quantity: true,
+  vat_amount: true,
+  vat_rate: true,
 });
 
 export interface ManualDocumentArchiveMoney {
@@ -128,6 +141,11 @@ export interface ManualDocumentArchiveItem {
   name?: unknown;
   price?: unknown;
   quantity?: unknown;
+  assurance_fee?: unknown;
+  line_extension_amount?: unknown;
+  line_id?: unknown;
+  vat_amount?: unknown;
+  vat_rate?: unknown;
 }
 
 export function isManualOrderDocumentContentValid(

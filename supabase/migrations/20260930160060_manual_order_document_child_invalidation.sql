@@ -217,22 +217,44 @@ CREATE TRIGGER reset_manual_markers_after_transaction_write
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_payment_account_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- Any account write can change the preferred pick, so every write locks
-  -- and resets the invoice marker; assignments are rare admin operations
-  -- and receipt markers are untouched (receipts embed no accounts).
+  -- Only writes that move the rendered instructions reset (NGN order,
+  -- eligible, ranking first, either side). A non-selected edit leaves the
+  -- rendered VA card untouched, so resetting would push an accepted
+  -- invoice into a corrective duplicate. Receipts embed no accounts.
   IF TG_OP = 'DELETE' THEN
-    PERFORM private.lock_manual_document_gate('order', OLD.order_id);
-    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    IF private.manual_document_renders_payment_account(OLD.order_id, OLD) THEN
+      PERFORM private.lock_manual_document_gate('order', OLD.order_id);
+      PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    END IF;
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
-    PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
-    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
-    PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+    IF private.manual_document_renders_payment_account(OLD.order_id, OLD)
+      OR private.manual_document_renders_payment_account(NEW.order_id, NEW) THEN
+      PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
+      IF private.manual_document_renders_payment_account(OLD.order_id, OLD) THEN
+        PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+      END IF;
+      IF private.manual_document_renders_payment_account(NEW.order_id, NEW) THEN
+        PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+      END IF;
+    END IF;
     RETURN NEW;
   END IF;
-  PERFORM private.lock_manual_document_gate('order', NEW.order_id);
-  PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+  IF TG_OP = 'INSERT' THEN
+    IF private.manual_document_renders_payment_account(NEW.order_id, NEW) THEN
+      PERFORM private.lock_manual_document_gate('order', NEW.order_id);
+      PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- Same-order UPDATE: the OLD state is evaluated against the current
+  -- sibling rows, so an update that unselects the account still resets.
+  IF private.manual_document_renders_payment_account(NEW.order_id, OLD)
+    OR private.manual_document_renders_payment_account(NEW.order_id, NEW) THEN
+    PERFORM private.lock_manual_document_gate('order', NEW.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+  END IF;
   RETURN NEW;
 END;
 $$;
@@ -241,61 +263,37 @@ REVOKE ALL ON FUNCTION private.reset_manual_markers_after_payment_account_write(
 CREATE TRIGGER reset_manual_markers_after_payment_account_write
   AFTER INSERT OR UPDATE OR DELETE ON public.order_payment_accounts
   FOR EACH ROW EXECUTE FUNCTION private.reset_manual_markers_after_payment_account_write();
-CREATE OR REPLACE FUNCTION private.reset_manual_document_markers_for_merchant(p_merchant_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  UPDATE public.order_notification_outbox AS n
-  SET dispatch_started_at = NULL, updated_at = now()
-  WHERE n.merchant_id = p_merchant_id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.reset_manual_document_markers_for_merchant(uuid)
-  FROM PUBLIC, anon, authenticated;
-CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_domain_write()
+CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_customer_delete()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- Only the active primary feeds the claim URL: pending verifications
-  -- and secondary hosts reset nothing, and a touch of the active primary
-  -- that leaves the winning host unchanged (ssl_status refresh) resets
-  -- nothing either. The no-op gate stays lock-free for the same reason.
+  -- A mid-dispatch soft-delete resets every processing marker for the
+  -- customer's orders: the send aborts instead of emailing a link whose
+  -- redemption immediately fails. Never re-arms (deletion suppresses);
+  -- the dispatch RPC rechecks liveness so the retry terminally skips.
   IF TG_OP = 'UPDATE'
-    AND OLD.is_primary = true AND OLD.status = 'active'
-    AND NEW.is_primary = true AND NEW.status = 'active'
-    AND OLD.domain IS NOT DISTINCT FROM NEW.domain
-    AND OLD.merchant_id IS NOT DISTINCT FROM NEW.merchant_id THEN
-    RETURN NEW;
+    AND OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN
+    UPDATE public.order_notification_outbox AS n
+    SET dispatch_started_at = NULL, updated_at = now()
+    FROM public.orders AS o
+    WHERE o.customer_id = NEW.id
+      AND n.order_id = o.id
+      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   END IF;
-  -- A cross-merchant primary move touches two merchant gates; take them
-  -- in ascending order like the order moves so opposite movers agree.
-  IF TG_OP = 'UPDATE' AND OLD.merchant_id IS DISTINCT FROM NEW.merchant_id
-    AND OLD.is_primary = true AND OLD.status = 'active'
-    AND NEW.is_primary = true AND NEW.status = 'active' THEN
-    PERFORM private.lock_manual_document_gate_pair('merchant', OLD.merchant_id, NEW.merchant_id);
-    PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
-    PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
-    RETURN NEW;
-  END IF;
-  IF TG_OP <> 'DELETE' AND NEW.is_primary = true AND NEW.status = 'active' THEN
-    PERFORM private.lock_manual_document_gate('merchant', NEW.merchant_id);
-    PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
-  END IF;
-  IF TG_OP <> 'INSERT' AND OLD.is_primary = true AND OLD.status = 'active' THEN
-    PERFORM private.lock_manual_document_gate('merchant', OLD.merchant_id);
-    PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  RETURN NEW;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.reset_manual_markers_after_domain_write()
+REVOKE ALL ON FUNCTION private.reset_manual_markers_after_customer_delete()
   FROM PUBLIC, anon, authenticated;
-CREATE TRIGGER reset_manual_markers_after_domain_write
-  AFTER INSERT OR UPDATE OR DELETE ON public.domains
-  FOR EACH ROW EXECUTE FUNCTION private.reset_manual_markers_after_domain_write();
+CREATE TRIGGER reset_manual_markers_after_customer_delete
+  AFTER UPDATE OF deleted_at ON public.customers
+  FOR EACH ROW EXECUTE FUNCTION private.reset_manual_markers_after_customer_delete();
 -- Ship disabled with the rest of the manual-document triggers; the
 -- postdeploy enable step activates them together.
+ALTER TABLE public.customers DISABLE TRIGGER reset_manual_markers_after_customer_delete;
 ALTER TABLE public.order_tax_subtotals DISABLE TRIGGER reset_manual_markers_after_tax_write;
 ALTER TABLE public.transactions DISABLE TRIGGER reset_manual_markers_after_transaction_write;
 ALTER TABLE public.order_payment_accounts DISABLE TRIGGER reset_manual_markers_after_payment_account_write;
-ALTER TABLE public.domains DISABLE TRIGGER reset_manual_markers_after_domain_write;
+
+-- The claim-link domain trigger lives in the follow-up migration
+-- 20260930160075 (300-line rule).

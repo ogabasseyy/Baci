@@ -20,6 +20,7 @@ ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after
 ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
 ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;
 ALTER TABLE public.domains ENABLE TRIGGER reset_manual_markers_after_domain_write;
+ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_delete;
 -- Backfill bound: the eligible set is staff-recorded orders created while
 -- the triggers were disabled (manual volume only — imports and marketplace
 -- rows never set the flag), each a single enqueue call that early-returns

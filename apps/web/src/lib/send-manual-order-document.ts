@@ -20,6 +20,7 @@ import {
   ManualDocumentValidationError,
   renderManualOrderDocumentPdf,
 } from '@/lib/render-manual-order-document-pdf';
+import { reportFailedManualDocumentSend } from '@/lib/report-failed-manual-document-send';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
@@ -196,7 +197,12 @@ export async function sendManualOrderDocument({
       row,
       order,
       pdfDocumentKind,
-      buildDispatchPaymentSnapshot(merchant, preferredPaymentAccount),
+      buildDispatchPaymentSnapshot(
+        merchant,
+        preferredPaymentAccount,
+        order,
+        pdfDocumentKind
+      ),
       taxSubtotals,
       transactions,
       buildDispatchMerchantSnapshot(
@@ -241,23 +247,9 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
-      // A definite rejection never reached the customer: clear the marker so
-      // the bounded retry re-claims cleanly. Unknown outcomes keep the marker.
-      if (result.deliveryOutcome !== 'unknown') {
-        // Inline clear retries + worker reclaim precede the next claim, so retries re-send.
-        try {
-          await persistDispatch(false);
-        } catch {
-          return { status: 'failed', error: 'dispatch_marker_clear_failed' };
-        }
-      }
-      return {
-        status: 'failed',
-        error: result.error || 'Document email failed',
-        ...(result.deliveryOutcome === 'unknown'
-          ? { deliveryOutcome: 'unknown' as const }
-          : {}),
-      };
+      return reportFailedManualDocumentSend(result, () =>
+        persistDispatch(false)
+      );
     }
     providerAccepted = true;
     // A data change reset the marker after dispatch: the PDF is stale,

@@ -96,6 +96,7 @@ export interface StorefrontAccountDocumentItemRow {
   variant_id: string | null;
   variant_name: string | null;
   name: string;
+  item_description?: string | null;
   quantity: number | null;
   price: MoneyValue;
   assurance_fee?: MoneyValue;

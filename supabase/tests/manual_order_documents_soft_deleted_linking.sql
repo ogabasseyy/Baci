@@ -32,4 +32,15 @@ SELECT set_config('request.jwt.claims', '{"email":"mismatch@example.com"}', true
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('4f',32), 'web')->>'status' = 'customer_link_failed', 'mismatched soft-deleted link fails closed');
 RESET ROLE;
+-- A soft-delete landing after dispatch started aborts the in-flight send:
+-- the customer-delete trigger clears the stuck processing marker instead
+-- of leaving a claim whose redemption immediately fails closed.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000063', '10000000-0000-4000-8000-000000000001', 'midflight@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000064', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000063', '10000000-0000-4000-8000-000000000010', 'midflight@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000064', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', dispatch_started_at = now(), locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000064' AND event_type = 'manual_order_receipt';
+UPDATE public.customers SET deleted_at = now() WHERE id = '10000000-0000-4000-8000-000000000063';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000064' AND event_type = 'manual_order_receipt'), 'mid-dispatch soft-delete clears the marker');
+SELECT pg_temp.assert_true((SELECT status = 'processing' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000064' AND event_type = 'manual_order_receipt'), 'mid-dispatch soft-delete never re-arms');
 ROLLBACK;

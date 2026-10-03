@@ -15,25 +15,80 @@ const merchant = {
   logo_url: 'https://cdn.example.com/logo.png',
 } as never;
 
+const ngnInvoice = { currency: 'NGN', total: 100, amount_paid: 0 } as never;
+
 describe('dispatch snapshot builders', () => {
-  it('maps bank fields and the preferred virtual account', () => {
+  it('snapshots the VA only when one is selected', () => {
     expect(
-      buildDispatchPaymentSnapshot(merchant, {
-        account_number: '9990001111',
-        bank_name: 'Paystack-Titan',
-        account_name: 'Shop Ltd/ORD',
-      })
+      buildDispatchPaymentSnapshot(
+        merchant,
+        {
+          account_number: '9990001111',
+          bank_name: 'Paystack-Titan',
+          account_name: 'Shop Ltd/ORD',
+        },
+        ngnInvoice,
+        'invoice'
+      )
     ).toEqual({
-      merchantBankCode: '058',
-      merchantBankAccountNumber: '1234567890',
-      merchantBankName: 'GTBank',
-      merchantBankAccountName: 'Shop Ltd',
+      merchantBankCode: null,
+      merchantBankAccountNumber: null,
+      merchantBankName: null,
+      merchantBankAccountName: null,
       virtualAccountNumber: '9990001111',
       virtualAccountBankName: 'Paystack-Titan',
       virtualAccountName: 'Shop Ltd/ORD',
     });
+  });
+
+  it('snapshots the merchant bank fallback when no VA is selected', () => {
+    const snapshot = buildDispatchPaymentSnapshot(
+      merchant,
+      null,
+      ngnInvoice,
+      'proforma_invoice'
+    );
+    expect(snapshot.merchantBankCode).toBe('058');
+    expect(snapshot.merchantBankAccountNumber).toBe('1234567890');
+    expect(snapshot.virtualAccountNumber).toBeNull();
+  });
+
+  it('excludes hidden bank data from the snapshot', () => {
+    const va = {
+      account_number: '9990001111',
+      bank_name: 'Paystack-Titan',
+      account_name: 'Shop Ltd/ORD',
+    };
+    // Foreign currency renders no bank details at all.
     expect(
-      buildDispatchPaymentSnapshot(merchant, null).virtualAccountNumber
+      buildDispatchPaymentSnapshot(
+        merchant,
+        va,
+        { currency: 'USD', total: 100, amount_paid: 0 },
+        'invoice'
+      )
+    ).toEqual({
+      merchantBankCode: null,
+      merchantBankAccountNumber: null,
+      merchantBankName: null,
+      merchantBankAccountName: null,
+      virtualAccountNumber: null,
+      virtualAccountBankName: null,
+      virtualAccountName: null,
+    });
+    // Receipts render no payment instructions.
+    expect(
+      buildDispatchPaymentSnapshot(merchant, va, ngnInvoice, 'receipt')
+        .virtualAccountNumber
+    ).toBeNull();
+    // A zero balance renders no instructions even when unpaid.
+    expect(
+      buildDispatchPaymentSnapshot(
+        merchant,
+        null,
+        { currency: 'NGN', total: 100, amount_paid: 100 },
+        'invoice'
+      ).merchantBankCode
     ).toBeNull();
   });
 

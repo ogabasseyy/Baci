@@ -108,7 +108,7 @@ export async function getStorefrontAccountDocumentData({
     supabase
       .from('order_items')
       .select(
-        'id, product_id, variant_id, condition, variant_name, name, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
+        'id, product_id, variant_id, condition, variant_name, name, item_description, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
       )
       .eq('order_id', orderId),
     loadStorefrontCustomerTransactions(supabase, [orderId]),
@@ -168,6 +168,11 @@ export async function getStorefrontAccountDocumentData({
       Number.isFinite(Number(order.total)) &&
       Number.isFinite(Number(order.amount_paid)) &&
       Number(order.amount_paid) >= Number(order.total));
+  const transactionRows = (transactionsResult.data ||
+    []) as StorefrontAccountDocumentTransactionRow[];
+  // The kind gate is child-aware: a covered balance with a rejected
+  // payment classifies as invoice, matching the availability verdict, so
+  // the receipt route never serves a PDF the sender would skip.
   const currentDocumentKind = getCurrentDocumentKind({
     paymentStatus: order.payment_status,
     shippingStatus: order.shipping_status,
@@ -186,9 +191,8 @@ export async function getStorefrontAccountDocumentData({
       currency: order.currency,
     },
     items: itemsResult.data || [],
+    payments: transactionRows,
   });
-  const transactionRows = (transactionsResult.data ||
-    []) as StorefrontAccountDocumentTransactionRow[];
 
   return buildStorefrontAccountDocumentBundle({
     merchant: merchant as StorefrontAccountDocumentMerchantRow,

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantColorValue } from './variant-color-value';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -28,7 +30,7 @@ export async function loadMcpProductVariants({
       content: [
         {
           type: 'text',
-          text: 'Please provide a valid product ID or product name.',
+          text: `Please provide a valid product ID or product name. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
     };
@@ -61,7 +63,7 @@ export async function loadMcpProductVariants({
     }
     return {
       content: [
-        { type: 'text', text: `Product "${lookupLabel}" not found.` },
+        { type: 'text', text: `Product "${lookupLabel}" not found. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` },
       ],
     };
   }
@@ -80,7 +82,7 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product variants:', error);
       if (!product.has_condition_offers) {
-        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+        return { content: [{ type: 'text', text: `Product variants are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
       }
       variantLookupFailed = true;
     } else {
@@ -103,7 +105,7 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product offers:', error);
       if (!product.has_variants) {
-        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+        return { content: [{ type: 'text', text: `Product offers are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
       }
       offerLookupFailed = true;
     } else {
@@ -116,19 +118,19 @@ export async function loadMcpProductVariants({
     (!offers || offers.length === 0)
   ) {
     if (variantLookupFailed || offerLookupFailed) {
-      return { content: [{ type: 'text', text: 'Product options are temporarily unavailable.' }] };
+      return { content: [{ type: 'text', text: `Product options are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
     }
     return {
       content: [
         {
           type: 'text',
-          text: `No variants available for "${product.name}".`,
+          text: `No variant options were returned for "${product.name}". ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
     };
   }
 
-  let text = `**Variants for ${product.name}:**\n\n`;
+  let text = `**Variants for ${product.name}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
   if (variantLookupFailed) text += 'Variant options are temporarily unavailable.\n';
   if (offerLookupFailed) text += 'Condition offers are temporarily unavailable.\n';
 
@@ -138,7 +140,7 @@ export async function loadMcpProductVariants({
       : variants;
     // Group by attribute type
     const colors = [
-      ...new Set(displayVariants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => getMcpVariantColorValue(v.attributes)).filter(Boolean)),
     ];
     const storages = [
       ...new Set(

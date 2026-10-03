@@ -7,7 +7,12 @@ on:
       - "apps/web/mcp-server/**"
       - ".github/scripts/check-live-mcp-tools.mjs"
       - ".github/scripts/check-live-mcp-tools.test.mjs"
+      - ".github/scripts/mcp-tool-contracts.mjs"
+      - ".github/scripts/mcp-tool-contracts.test.mjs"
+      - ".github/scripts/mcp-checkout-tool-schema-contracts.*"
+      - ".github/scripts/mcp-tool-inventory.*"
       - ".github/workflows/mcp-production-smoke.yml"
+      - "apps/web/src/schemas/mcp-delivery-fee-info.*"
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -35,6 +40,6 @@ jobs:
         with:
           node-version: "24"
       - name: Test smoke script contracts
-        run: node --test .github/scripts/check-live-mcp-tools.test.mjs
+        run: node --test .github/scripts/check-live-mcp-tools.test.mjs .github/scripts/mcp-tool-contracts.test.mjs .github/scripts/mcp-tool-inventory.test.mjs .github/scripts/mcp-checkout-tool-schema-contracts.test.mjs
       - name: Check live MCP tools
         run: node .github/scripts/check-live-mcp-tools.mjs

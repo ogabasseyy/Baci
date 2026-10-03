@@ -126,6 +126,12 @@ export function App() {
         </p>
       )}
 
+      {products.length > 0 && toolOutput?.coverage === 'partial' && (
+        <p role="status" className="coverage-notice">
+          Results cover only the products checked. Other products may match.
+        </p>
+      )}
+
       {products.length > 0 ? (
         <div
           className={`products-grid ${products.length === 1 ? 'products-grid--single' : ''}`}

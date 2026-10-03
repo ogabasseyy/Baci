@@ -110,6 +110,28 @@ describe('Ogabassey inline result presentation', () => {
     expect(screen.queryByText('No verified products match this search.')).toBeNull();
   });
 
+  it('qualifies partial coverage alongside successful product cards', () => {
+    window.openai = {
+      toolOutput: { products, status: 'success', coverage: 'partial' },
+    };
+    render(<App />);
+    expect(screen.getByText('Phone One')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe(
+      'Results cover only the products checked. Other products may match.'
+    );
+  });
+
+  it('does not qualify complete product results as partially checked', () => {
+    window.openai = {
+      toolOutput: { products, status: 'success', coverage: 'complete' },
+    };
+    render(<App />);
+    expect(screen.getByText('Phone One')).toBeTruthy();
+    expect(screen.queryByText(
+      'Results cover only the products checked. Other products may match.'
+    )).toBeNull();
+  });
+
   it('preserves the search error message in the widget', () => {
     window.openai = {
       toolOutput: {

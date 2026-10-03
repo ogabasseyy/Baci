@@ -142,14 +142,10 @@ describe('deploy promotion guards', () => {
     );
     assert.ok(dedupIndex !== -1 && deferIndex !== -1);
     assert.ok(
-      resolveIndex < dedupIndex &&
-        dedupIndex < deferIndex,
+      resolveIndex < dedupIndex && dedupIndex < deferIndex,
       'expected global-lock resolution, then first-appearance dedup, then the deferral'
     );
-    assert.match(
-      quiesceSource,
-      /awk -v gigl_global="\$gigl_global_lock"/
-    );
+    assert.match(quiesceSource, /awk -v gigl_global="\$gigl_global_lock"/);
     assert.match(
       quiesceSource,
       /END \{ if \(hold_global\) print gigl_global \}/

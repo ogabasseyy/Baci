@@ -60,6 +60,14 @@ export async function recoverUnknownPaystackRefund(
       typeof current.status === 'string' ? current.status : 'unknown',
     reference: resolvedPaymentReference,
   };
+  // Watch evidence is loop-invariant: hoisted so every branch opens
+  // (or refreshes) the watch with identical verified facts.
+  const watchEvidence = {
+    amount_minor: current.amount,
+    currency: current.currency,
+    provider_payment_transaction_id: current.transaction,
+    provider_refund_status: current.status,
+  };
   if (
     current.id !== refundId ||
     !Number.isSafeInteger(current.amount) ||
@@ -78,6 +86,24 @@ export async function recoverUnknownPaystackRefund(
   for (let pass = 0; ; pass++) {
     const payment = candidates[0];
     if (candidates.length > 1) {
+      if (pass === 0) {
+        // The decisive scan ran without the reference lock: a payment
+        // completing after the final read would leave this supposedly
+        // stable ambiguity silently incomplete — acknowledged with a
+        // completed order missing from the persisted evidence and no
+        // watch for its completion to claim. Re-scan atomically under
+        // the lock the completion path claims under before
+        // terminalizing (mirror the single-match path): rows returned
+        // loop around to be handled, while the open watch catches
+        // completions that land after the rescan. Nothing is filed on
+        // this pass, so the stable branch below files exactly once.
+        candidates = await openPaystackRefundRecoveryWatch(supabase, {
+          evidence: watchEvidence,
+          providerRefundId: refundId,
+          reference: resolvedPaymentReference,
+        });
+        continue;
+      }
       // The reference resolves to completed payments on different orders
       // and redelivery cannot disambiguate them: persist one review per
       // cancelled order so ops can route the verified provider refund,
@@ -135,13 +161,27 @@ export async function recoverUnknownPaystackRefund(
       if (detached && !detached.order_id) {
         // The sole completed payment was already detached when scanned
         // (order_id null — e.g. the order FK's ON DELETE SET NULL fired
-        // before the first read): the verified refund is still a real
-        // merchant debit, so retain it in the order-independent queue
-        // instead of opening a watch whose rescan returns the same
-        // detached row and acknowledges with no audit row or review.
-        // Mirrors the post-scan deletion branch in
-        // recordRecoveredPaystackRefund; merges are idempotent, so the
-        // rescan pass refiling is safe.
+        // before the first read).
+        if (pass === 0) {
+          // Open the watch and re-scan atomically before filing: a
+          // payment completing after the unlocked scan shares the
+          // reference the evidence was verified for, and without a
+          // watch its completion claims nothing. The rescan returns
+          // the same detached row when nothing landed (loop around
+          // to file on stable state) or the new arrival to handle.
+          candidates = await openPaystackRefundRecoveryWatch(supabase, {
+            evidence: watchEvidence,
+            providerRefundId: refundId,
+            reference: resolvedPaymentReference,
+          });
+          continue;
+        }
+        // Stable detached under the watch: the verified refund is
+        // still a real merchant debit, so retain it in the
+        // order-independent queue. The watch stays open — filed or
+        // not, a later completion sharing the reference must claim
+        // it instead of acknowledging silently; the sweep retires
+        // the watch when no payment ever lands.
         await fileInvalidPaystackRefundEvidenceReview(supabase, {
           evidence: {
             providerPaymentTransactionId: evidence.providerPaymentTransactionId,
@@ -152,10 +192,6 @@ export async function recoverUnknownPaystackRefund(
           reason: `Paystack refund ${refundId} verified for reference ${resolvedPaymentReference} but its completed payment is detached from any order; route the merchant debit manually`,
           reference: resolvedPaymentReference,
           refundId,
-        });
-        await resolvePaystackRefundRecoveryWatch(supabase, {
-          providerRefundId: refundId,
-          reference: resolvedPaymentReference,
         });
         logger.info({
           message:
@@ -200,12 +236,7 @@ export async function recoverUnknownPaystackRefund(
       // completion files its evidence instead of acknowledging
       // silently.
       candidates = await openPaystackRefundRecoveryWatch(supabase, {
-        evidence: {
-          amount_minor: current.amount,
-          currency: current.currency,
-          provider_payment_transaction_id: current.transaction,
-          provider_refund_status: current.status,
-        },
+        evidence: watchEvidence,
         providerRefundId: refundId,
         reference: resolvedPaymentReference,
       });
@@ -222,12 +253,7 @@ export async function recoverUnknownPaystackRefund(
       // handle them, including a newly visible ambiguity), while the
       // open watch catches completions that land after the rescan.
       candidates = await openPaystackRefundRecoveryWatch(supabase, {
-        evidence: {
-          amount_minor: current.amount,
-          currency: current.currency,
-          provider_payment_transaction_id: current.transaction,
-          provider_refund_status: current.status,
-        },
+        evidence: watchEvidence,
         providerRefundId: refundId,
         reference: resolvedPaymentReference,
       });

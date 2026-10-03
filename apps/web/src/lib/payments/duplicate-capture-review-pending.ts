@@ -43,9 +43,11 @@ async function setPendingMarker(
 }
 
 /**
- * Best-effort: a failed set during a total outage leaves the row
- * unmarked (the caller already records the filing failure), and a
- * failed clear only reselects a reviewed row whose refiling dedupes.
+ * Best-effort write with a verified result: true means the RPC
+ * committed. Callers must check it on the failed-filing path — a
+ * completed row without the marker matches no sweep — and retry or
+ * fail loudly instead of stranding the evidence. A failed clear only
+ * reselects a reviewed row whose refiling dedupes.
  */
 export function setDuplicateCaptureReviewPending(
   supabase: Pick<SupabaseClient, 'rpc'>,

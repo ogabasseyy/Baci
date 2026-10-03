@@ -234,6 +234,142 @@ describe('reconcileWedgedGatewayOrders late outcomes', () => {
     );
   });
 
+  it('fails loudly when the retry marker cannot be confirmed', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(false);
+    mocks.fileDuplicateCaptureFallbackReview.mockResolvedValue(false);
+    // The initial marker set and its retry both fail: without the
+    // marker the completed row matches no sweep, so the failed path
+    // throws instead of stranding the evidence silently.
+    supabase.rpc
+      .mockResolvedValueOnce({ data: null, error: { code: 'XX000' } })
+      .mockResolvedValueOnce({ data: null, error: { code: 'XX000' } });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(summary.failed).toEqual([
+      {
+        reason: 'duplicate_capture_retry_marker_failed',
+        transactionId: 'txn-1',
+      },
+    ]);
+    const markerSets = supabase.rpc.mock.calls.filter(
+      (call) =>
+        call[0] === 'set_duplicate_capture_review_pending_v1' &&
+        (call[1] as { p_pending: boolean }).p_pending === true
+    );
+    expect(markerSets).toHaveLength(2);
+  });
+
+  it('stays retryable when the marker retry succeeds', async () => {
+    const supabase = buildSupabase({ data: [wedgedCandidate] });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      capturedOnPaidOrder: true,
+      kind: 'completed',
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(false);
+    mocks.fileDuplicateCaptureFallbackReview.mockResolvedValue(false);
+    // The initial set fails but the retry commits: the marker is
+    // durable, so the failure stays an ordinary retryable filing
+    // failure instead of a loud stranding.
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX000' },
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(summary.failed).toEqual([
+      { reason: 'duplicate_capture_review_failed', transactionId: 'txn-1' },
+    ]);
+    const markerSets = supabase.rpc.mock.calls.filter(
+      (call) =>
+        call[0] === 'set_duplicate_capture_review_pending_v1' &&
+        (call[1] as { p_pending: boolean }).p_pending === true
+    );
+    expect(markerSets).toHaveLength(2);
+  });
+
+  it('skips the marker retry when a filing-only retry already carries one', async () => {
+    const supabase = buildSupabase(
+      { data: [] },
+      {
+        data: [
+          {
+            ...wedgedCandidate,
+            metadata: { duplicate_capture_review_pending: true },
+            orders: {
+              cancelled_at: null,
+              id: 'order-1',
+              payment_status: 'paid',
+            },
+          },
+        ],
+      }
+    );
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: {
+        amount: 5829060,
+        currency: 'NGN',
+        id: 123456789,
+        status: 'success',
+      },
+      success: true,
+    });
+    mocks.fileDuplicatePaymentCapture.mockResolvedValue(false);
+    mocks.fileDuplicateCaptureFallbackReview.mockResolvedValue(false);
+    // The re-set fails, but the row already carries the marker from
+    // the earlier tick and nothing cleared it — the retry handoff
+    // persists without a second write.
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX000' },
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(summary.failed).toEqual([
+      { reason: 'duplicate_capture_review_failed', transactionId: 'txn-1' },
+    ]);
+    const markerSets = supabase.rpc.mock.calls.filter(
+      (call) =>
+        call[0] === 'set_duplicate_capture_review_pending_v1' &&
+        (call[1] as { p_pending: boolean }).p_pending === true
+    );
+    expect(markerSets).toHaveLength(1);
+  });
+
   it('retries a marked capture with filing only, never re-finalizing', async () => {
     const supabase = buildSupabase(
       { data: [] },

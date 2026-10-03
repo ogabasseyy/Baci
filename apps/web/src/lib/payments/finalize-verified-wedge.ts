@@ -101,7 +101,10 @@ export async function finalizeVerifiedWedge({
       });
       return;
     }
-    await setDuplicateCaptureReviewPending(supabase, candidate.id);
+    const markerSet = await setDuplicateCaptureReviewPending(
+      supabase,
+      candidate.id
+    );
     const duplicateEvidence = {
       gateway: candidate.gateway,
       providerCurrency: verification.currency ?? candidate.currency ?? 'NGN',
@@ -145,6 +148,20 @@ export async function finalizeVerifiedWedge({
       await stampResolution(supabase, candidate, 'duplicate_capture_reviewed');
       await clearDuplicateCaptureReviewPending(supabase, candidate.id);
       return;
+    }
+    // Both filings failed: without the marker the completed row is
+    // invisible to every sweep, so require it durably before
+    // returning. A filing-only retry already carries one; otherwise
+    // retry the set once for a transient blip. If the marker still
+    // cannot be confirmed, throw instead of stranding the evidence
+    // silently — the sweep records the candidate failure loudly with
+    // the transaction attached.
+    const marked =
+      candidate.metadata?.[DUPLICATE_CAPTURE_REVIEW_PENDING_KEY] === true ||
+      markerSet ||
+      (await setDuplicateCaptureReviewPending(supabase, candidate.id));
+    if (!marked) {
+      throw new Error('duplicate_capture_retry_marker_failed');
     }
     summary.failed.push({
       reason: 'duplicate_capture_review_failed',

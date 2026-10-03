@@ -71,6 +71,8 @@ describe('isPromotedManualReceipt', () => {
     ['negative vat amount', { vat_amount: -1 }],
     ['negative line id', { line_id: -2 }],
     ['non-numeric vat amount', { vat_amount: 'abc' }],
+    ['boolean vat amount', { vat_amount: true }],
+    ['blank extension', { line_extension_amount: '' }],
     ['infinite extension', { line_extension_amount: Number.POSITIVE_INFINITY }],
   ])('rejects invalid financial fields: %s', (_label, financial) => {
     expect(
@@ -97,6 +99,10 @@ describe('isPromotedManualReceipt', () => {
     ['numeric payment status', { paymentStatus: 7 }],
     ['numeric shipping status', { shippingStatus: 3 }],
     ['numeric provenance', { externalSource: 7 }],
+    ['boolean total', { total: true }],
+    ['boolean amount paid', { amountPaid: false }],
+    ['blank total', { total: '' }],
+    ['whitespace amount paid', { amountPaid: '   ' }],
   ])('fails closed for %s rows', (_label, override) => {
     expect(isPromotedManualReceipt(coveredRow(override))).toBe(false);
   });

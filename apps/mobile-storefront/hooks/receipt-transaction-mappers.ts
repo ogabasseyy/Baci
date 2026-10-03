@@ -4,6 +4,7 @@ interface CustomerTransactionRpcRow {
   description: string | null;
   dva_account_number: string | null;
   gateway: string | null;
+  order_id: string;
   status: string | null;
   transaction_type: string | null;
 }
@@ -19,6 +20,7 @@ export function mapCustomerTransactionRpcRows(transactionRows: unknown) {
     metadata: transaction.dva_account_number
       ? { dva_account_number: transaction.dva_account_number }
       : null,
+    order_id: transaction.order_id,
     status: transaction.status,
     transaction_type: transaction.transaction_type,
   }));

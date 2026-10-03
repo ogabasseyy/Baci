@@ -21,6 +21,7 @@ import {
 import { isManualOrderRecord } from '@baci/shared/receipt';
 import { useState } from 'react';
 import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
+import { selectReceiptCompletionDate } from './receipt-completion-date';
 import { isPromotedManualReceipt } from './receipt-promotion-gates';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
@@ -123,26 +124,10 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // order-level virtual account, so the guard must cover it — not just
     // the merchant fallback below.
     // Paid receipts are dated by the completing payment like the emailed
-    // PDF and account download — never by a stale invoice issue date,
-    // which the generator would otherwise prefer. Settled statuses match
-    // web resolveManualDocumentReceiptDate exactly.
-    // Unparseable timestamps are dropped before sorting (a NaN comparator
-    // is implementation-defined); mirrors web selectReceiptCompletionDate.
-    // Null entries fail closed: corrupt rows must not crash the render.
+    // PDF and account download — never by a stale invoice issue date.
+    // Shared with the receipts list so both date from one selector.
     const completionDate = isPaidReceipt
-      ? ((receiptDetail.transactions ?? [])
-          .filter(
-            (txn) =>
-              txn != null &&
-              typeof txn === 'object' &&
-              txn.transaction_type === 'payment' &&
-              (txn.status === 'completed' || txn.status === 'success') &&
-              typeof txn.created_at === 'string' &&
-              Number.isFinite(Date.parse(txn.created_at))
-          )
-          .map((txn) => txn.created_at as string)
-          .sort((left, right) => Date.parse(left) - Date.parse(right))
-          .pop() ?? null)
+      ? selectReceiptCompletionDate(receiptDetail.transactions)
       : null;
     const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {

@@ -47,14 +47,15 @@ function normalizeStatus(value: unknown): string {
     : '';
 }
 
-// Web sender coercion: numeric strings count, null/NaN fail.
+// Genuine money only: numbers and numeric strings count, null/NaN fail.
+// Booleans and blank strings coerce through Number() (true -> 1, '' -> 0)
+// exactly like the sender's z.coerce.number() — but the database never
+// produces them for money columns, so only real money promotes here.
 function isValidMoney(value: unknown): boolean {
-  return (
-    value !== null &&
-    value !== undefined &&
-    Number.isFinite(Number(value)) &&
-    Number(value) >= 0
-  );
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'boolean') return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  return Number.isFinite(Number(value)) && Number(value) >= 0;
 }
 
 function hasValidContent(input: ManualReceiptPromotionInput): boolean {
@@ -97,17 +98,15 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
     }
     // Sender-validated financial fields, from the shared gate list: absent
     // is fine (nullish in the sender schema), but a present value must be
-    // finite and nonnegative exactly like the sender/archive gates — a
-    // negative extension, fee, or VAT row renders as an invoice, never a
-    // promoted receipt, so mobile cannot disagree with the emailed document.
+    // genuine money exactly like the header totals — a negative extension,
+    // fee, or VAT row renders as an invoice, never a promoted receipt, so
+    // mobile cannot disagree with the emailed document.
     const financial = item as Partial<
       Record<ManualOrderItemFinancialField, unknown>
     >;
     return MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.every((field) => {
       const value = financial[field];
-      return (
-        value == null || (Number.isFinite(Number(value)) && Number(value) >= 0)
-      );
+      return value == null || isValidMoney(value);
     });
   });
 }

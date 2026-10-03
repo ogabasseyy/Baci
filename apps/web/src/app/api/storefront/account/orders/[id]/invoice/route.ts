@@ -77,6 +77,20 @@ export async function GET(
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
     });
+    // Manual orders live or die by the availability gate like the archive:
+    // a sender-refused manual row (failed content validity, cancelled)
+    // must not serve a direct-URL download. Non-manual invoice downloads
+    // keep their legacy ungated behavior.
+    if (data.order.is_manual_order && !data.order.manual_document_available) {
+      return NextResponse.json(
+        {
+          error: 'Invoice is not available for this order',
+          code: 'INVOICE_NOT_AVAILABLE',
+        },
+        { status: 409 }
+      );
+    }
+
     try {
       generatePeppolInvoiceXml(data.invoiceData);
     } catch (error) {

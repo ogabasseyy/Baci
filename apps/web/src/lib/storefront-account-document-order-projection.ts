@@ -60,6 +60,8 @@ export interface BuildOrderProjectionInput {
   customerPhone: string | null;
   invoiceTypeCode: string;
   receiptEligible: boolean;
+  isManualOrderRow: boolean;
+  manualDocumentAvailable: boolean;
   canCancel: boolean;
   currentDocumentKind: 'invoice' | 'receipt';
   confirmedTransactions: StorefrontAccountDocumentTransactionRow[];
@@ -86,6 +88,8 @@ export function buildOrderProjection({
   customerPhone,
   invoiceTypeCode,
   receiptEligible,
+  isManualOrderRow,
+  manualDocumentAvailable,
   canCancel,
   currentDocumentKind,
   confirmedTransactions,
@@ -120,6 +124,8 @@ export function buildOrderProjection({
     current_document_kind: currentDocumentKind,
     invoice_type_code: invoiceTypeCode,
     receipt_eligible: receiptEligible,
+    is_manual_order: isManualOrderRow,
+    manual_document_available: manualDocumentAvailable,
     can_cancel: canCancel,
     customer_name: customerName,
     customer_email: customerEmail,

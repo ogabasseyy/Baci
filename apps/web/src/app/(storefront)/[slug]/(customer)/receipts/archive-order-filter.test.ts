@@ -21,21 +21,23 @@ describe('isArchiveOrder', () => {
     ).toBe(false);
   });
 
-  it('fails closed when the manual flag is missing but a document is set', () => {
+  it('ignores a stray manual flag on servable non-manual rows', () => {
+    // The flag grants nothing, but hiding the row would conceal a receipt
+    // the download route (receipt_eligible gate) can serve.
     expect(
       isArchiveOrder({
         ...baseOrder,
         receipt_eligible: true,
         manual_document_available: true,
       })
-    ).toBe(false);
+    ).toBe(true);
     expect(
       isArchiveOrder({
         ...baseOrder,
         shipping_status: 'delivered',
         manual_document_available: true,
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('includes shipped, delivered, and invoice-method orders', () => {

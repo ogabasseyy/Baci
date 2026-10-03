@@ -33,7 +33,6 @@ interface SearchResultsListProps {
 
 export default function SearchResultsList({
   colors,
-  committedQuery,
   isLoadingMore,
   isNextPageError,
   isRetrying,
@@ -44,13 +43,7 @@ export default function SearchResultsList({
   onRetryNextPage,
   products,
   resultsKey,
-  totalCount,
 }: SearchResultsListProps) {
-  const countText =
-    totalCount > products.length
-      ? `Showing ${products.length} of ${totalCount} results`
-      : `${totalCount > 0 ? totalCount : products.length} result${(totalCount > 0 ? totalCount : products.length) === 1 ? '' : 's'}`;
-
   return (
     <FlashList
       key={resultsKey}
@@ -73,16 +66,6 @@ export default function SearchResultsList({
       keyboardDismissMode="on-drag"
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
-      ListHeaderComponent={
-        <View style={styles.resultsCountHeader}>
-          <Text
-            style={[styles.resultsCountText, { color: colors.textSecondary }]}
-          >
-            {countText}
-            {committedQuery ? ` for “${committedQuery}”` : ''}
-          </Text>
-        </View>
-      }
       ListFooterComponent={
         isLoadingMore || (listError && isRetrying) ? (
           <View style={styles.resultsFooter}>

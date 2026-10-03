@@ -453,3 +453,17 @@ jest.mock('react-native-webview', () => {
     React.createElement(View, props);
   return { __esModule: true, default: WebView, WebView };
 });
+
+// Sheet gestures are native; behavioral tests exercise the callbacks and content.
+jest.mock('@gorhom/bottom-sheet', () => {
+  const { View, ScrollView, TextInput } = jest.requireActual('react-native');
+  const React = jest.requireActual('react');
+  return {
+    __esModule: true,
+    default: (props: Record<string, unknown>) =>
+      React.createElement(View, { ...props, testID: 'mock-bottom-sheet' }),
+    BottomSheetBackdrop: View,
+    BottomSheetScrollView: ScrollView,
+    BottomSheetTextInput: TextInput,
+  };
+});

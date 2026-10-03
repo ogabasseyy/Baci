@@ -547,6 +547,9 @@ importers:
       '@expo/metro-runtime':
         specifier: ~57.0.12
         version: 57.0.12(@expo/log-box@57.0.3)(expo@57.0.15)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.2(patch_hash=cf94882b1c91d0f63472e723a06a922f9dda1978461558c6fec627c682969ce5)(@babel/core@7.29.6)(@react-native/jest-preset@0.86.2(@babel/core@7.29.6)(react@19.2.3))(@react-native/metro-config@0.86.2(@babel/core@7.29.6))(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
+      '@gorhom/bottom-sheet':
+        specifier: ^5.2.14
+        version: 5.2.14(e8ef654c9f2aaf86bf2900988c5c9509)
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.79.0(react@19.2.3))

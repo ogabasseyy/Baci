@@ -73,7 +73,7 @@ function renderList(
 }
 
 describe('SearchResultsList', () => {
-  it('shows a truthful loaded count and appends pages at the list end', () => {
+  it('starts with products without a count summary and still appends pages', () => {
     const onEndReached = jest.fn();
     const products = [
       { id: 'product-1', name: 'iPhone 16' },
@@ -88,14 +88,14 @@ describe('SearchResultsList', () => {
     });
 
     expect(
-      screen.getByText('Showing 2 of 45 results for “iphone”')
-    ).toBeTruthy();
+      screen.queryByText('Showing 2 of 45 results for “iphone”')
+    ).toBeNull();
 
     fireEvent.press(screen.getByTestId('mock-flash-end-reached'));
     expect(onEndReached).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the total once every match is loaded', () => {
+  it('omits the summary even when every match is loaded', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
@@ -104,7 +104,7 @@ describe('SearchResultsList', () => {
       totalCount: 1,
     });
 
-    expect(screen.getByText('1 result for “iphone 16”')).toBeTruthy();
+    expect(screen.queryByText('1 result for “iphone 16”')).toBeNull();
   });
 
   it('shows a loading footer while more results append', () => {

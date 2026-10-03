@@ -3,9 +3,9 @@ import Ionicons, {
 } from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FilterBar } from '@/components/storefront/FilterBar';
 import type Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
+import { SearchFilterBar } from './SearchFilterBar';
 import SearchResultsEmptyState from './SearchResultsEmptyState';
 import SearchResultsErrorState from './SearchResultsErrorState';
 import SearchResultsHeader from './SearchResultsHeader';
@@ -275,7 +275,7 @@ export default function SearchScreenView({
         showMinLengthHint={showMinLengthHint}
       />
       {hasSearchQuery && (
-        <FilterBar
+        <SearchFilterBar
           categories={categoryNames}
           selectedCategory={selectedCategory}
           onSelectCategory={onCategorySelect}

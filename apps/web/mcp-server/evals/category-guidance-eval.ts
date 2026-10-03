@@ -42,12 +42,15 @@ export function gradeCategoryGuidance(caseId: CaseId, capturedTraces: unknown) {
       && Array.isArray(alternative.brands)
       && alternative.brands.some((brand: unknown) => typeof brand === 'string' && brand.toLowerCase() === testCase.brand.toLowerCase())
       && typeof model === 'string'
-      && [testCase.model, `${testCase.brand} ${testCase.model}`].some((expectedModel) => model.trim().replace(/\s+/g, ' ').toLowerCase() === expectedModel.toLowerCase());
+      && [testCase.model, ...testCase.modelAliases].flatMap((alias) => [alias, `${testCase.brand} ${alias}`]).some((expectedModel) => model.trim().replace(/\s+/g, ' ').toLowerCase() === expectedModel.toLowerCase());
   })) {
     failures.push('First emitted intent must contain the requested product type, brand and model');
   }
   if (output.status !== 'success' || !Array.isArray(output.products) || output.products.length === 0) {
     failures.push('First call must return products successfully; a later retry does not pass');
+  }
+  if (Array.isArray(output.products) && !output.products.some((product) => record(product).id === testCase.productId)) {
+    failures.push('First returned products must include the requested catalog product identity');
   }
   return { passed: failures.length === 0, failures };
 }

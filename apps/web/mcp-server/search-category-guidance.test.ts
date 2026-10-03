@@ -1,5 +1,6 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PUBLIC_MCP_TOOLS } from '../src/config/mcp-server-card-tools';
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from './search-category-guidance';
@@ -13,7 +14,7 @@ describe('published category guidance parity', () => {
     });
   });
   it('uses the same guidance for the runtime category schema', () => {
-    const serverSource = readFileSync(resolve('mcp-server/server.ts'), 'utf8');
+    const serverSource = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'server.ts'), 'utf8');
     expect(serverSource).toContain('.describe(MCP_SEARCH_CATEGORY_GUIDANCE)');
   });
 });

@@ -27,7 +27,12 @@ rejects it. Scorer unit tests are not proof that revised guidance works.
 
 All three must exit zero before recording the submission demo. A camera/Tecno
 request must omit category in the first emitted arguments; the explicit Cameras
-request must preserve it. Each first call must return products with the requested
+request must preserve Cameras case-insensitively. This measures preservation of
+the shopper-requested category, not every substring that the retrieval engine could
+accept; runtime substring filtering is unchanged. The model check accepts explicit
+verified aliases (including the captured Smart Camera C300) while rejecting added
+model suffixes such as Pro or 5G. Each first call must include the case-specific
+product ID verified in the actual live catalog readback, as well as the requested
 intent. A second successful call cannot mask a failed first call. No cart actions,
 orders or payments are needed. Missing/malformed evidence fails the eval.
 

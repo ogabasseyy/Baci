@@ -17,7 +17,7 @@ describe('natural request category argument eval', () => {
   it('does not substitute a later successful retry for the first empty call', () => {
     const retry = { result: { type: 'string', value: JSON.stringify({
       toolInput: { intent: { alternatives: [{ product_type: 'security_camera', brands: ['Xiaomi'], model: 'C300' }] } },
-      toolOutput: { status: 'success', products: [{ name: 'Camera' }] },
+      toolOutput: { status: 'success', products: [{ id: 'bfab9f45-7c2e-4744-be8e-9540af062406', name: 'Xiaomi Smart Camera C300' }] },
     }) } };
     expect(gradeCategoryGuidance('camera', [observedFailure.traces[0], retry]).passed).toBe(false);
     // Synthetic scorer control, not evidence of a successful model evaluation.
@@ -33,16 +33,32 @@ describe('category and model identity controls', () => {
   function trace(model: string, category?: string, brand = 'Xiaomi') {
     return [{ result: { type: 'string', value: JSON.stringify({
       toolInput: { ...(category === undefined ? {} : { category }), intent: { alternatives: [{ product_type: brand === 'Tecno' ? 'phone' : 'security_camera', brands: [brand], model }] } },
-      toolOutput: { status: 'success', products: [{ name: model }] },
+      toolOutput: { status: 'success', products: [{ id: brand === 'Tecno' ? '02f16ba8-0349-41f2-a7a3-bc0ee6874560' : 'bfab9f45-7c2e-4744-be8e-9540af062406', name: model }] },
     }) } }];
   }
   it('accepts category casing allowed by the runtime', () => {
     expect(gradeCategoryGuidance('explicitCategory', trace('C300', 'cameras')).passed).toBe(true);
+  });
+  it('accepts the fuller camera model captured in the actual first call', () => {
+    expect(gradeCategoryGuidance('camera', trace('Smart Camera C300')).passed).toBe(true);
+    expect(gradeCategoryGuidance('camera', trace('Xiaomi Smart Camera C300')).passed).toBe(true);
+    expect(gradeCategoryGuidance('camera', trace('Smart Camera C300 Pro')).passed).toBe(false);
   });
   it('rejects model suffixes while accepting the stored manufacturer prefix', () => {
     expect(gradeCategoryGuidance('camera', trace('C300 Pro')).passed).toBe(false);
     expect(gradeCategoryGuidance('tecno', trace('Spark 50 5G', undefined, 'Tecno')).passed).toBe(false);
     expect(gradeCategoryGuidance('camera', trace('Xiaomi C300')).passed).toBe(true);
     expect(gradeCategoryGuidance('tecno', trace('Tecno Spark 50', undefined, 'Tecno')).passed).toBe(true);
+  });
+});
+
+// Output controls are synthetic scorer tests, not live model evidence.
+describe('returned product identity', () => {
+  it('rejects unrelated successful products for otherwise correct camera intent', () => {
+    const captured = [{ result: { type: 'string', value: JSON.stringify({
+      toolInput: { intent: { alternatives: [{ product_type: 'security_camera', brands: ['Xiaomi'], model: 'C300' }] } },
+      toolOutput: { status: 'success', products: [{ id: 'unrelated-product', name: 'Other camera' }] },
+    }) } }];
+    expect(gradeCategoryGuidance('camera', captured).passed).toBe(false);
   });
 });

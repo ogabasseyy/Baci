@@ -154,7 +154,15 @@ export function selectPreferredOrderPaymentAccount<
         return rightCreatedAtMs - leftCreatedAtMs;
       }
 
+<<<<<<< HEAD
       return left.account_number.localeCompare(right.account_number);
+=======
+      // created_at ties when accounts share a transaction (now() is
+      // transaction-stable): break them by account number descending,
+      // exactly like the emailed-invoice selector and the atomic dispatch
+      // recheck, so every surface embeds the same account.
+      return right.account_number.localeCompare(left.account_number);
+>>>>>>> 77b7802722 (fix(pr3580): address rounds 47-48 findings (locks, parity, splits))
     })[0] ?? null
   );
 }

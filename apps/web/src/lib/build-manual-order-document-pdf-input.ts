@@ -71,6 +71,9 @@ export function buildManualOrderDocumentPdfInput({
       ...item,
       product_name: item.name,
       description: item.item_description || undefined,
+      // ReceiptOrder line ids/amounts are undefined-absent, never null.
+      line_id: item.line_id ?? undefined,
+      line_extension_amount: item.line_extension_amount ?? undefined,
     })),
   };
   const assuranceTotal = sumAssuranceFees(order.order_items);

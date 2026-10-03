@@ -35,7 +35,7 @@ export async function resolveManualDocumentReceiptDate(
     : null;
 }
 
-interface ReceiptCompletionCandidate {
+export interface ReceiptCompletionCandidate {
   created_at?: string | null;
   status?: string | null;
   transaction_type?: string | null;

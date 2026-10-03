@@ -102,10 +102,14 @@ BEGIN
   SET user_id = p_user_id, last_login_at = now(), updated_at = now()
   WHERE c.id = v_owner.id AND (c.user_id IS NULL OR c.user_id = p_user_id);
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'customer_link_failed'); END IF;
+  -- Trusted relink: customer_id is not rendered, so shield this UPDATE
+  -- from dispatch invalidation (transaction-local; auto-reverts).
+  PERFORM set_config('manual_document.trusted_relink', 'on', true);
   UPDATE public.orders AS o
   SET customer_id = v_owner.id, updated_at = now()
   WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
                  WHERE rco.receipt_claim_id = v_claim.id);
+  PERFORM set_config('manual_document.trusted_relink', 'off', true);
   -- update_customer_stats_trigger recalculates only the NEW customer row
   -- on UPDATE, so refresh the previous row explicitly with the same
   -- aggregates: without this it permanently retains the moved orders in
@@ -176,9 +180,16 @@ BEGIN
   IF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN
     RETURN jsonb_build_object('status', 'email_mismatch');
   END IF;
+  -- Lock-free read: this row only feeds the checks below, and holding it
+  -- FOR UPDATE across the order-scoped path inverts the global claim ->
+  -- order -> customer lock order (claim creation locks order FOR SHARE
+  -- before customer FOR SHARE), deadlocking invoice redemption against a
+  -- concurrent receipt-claim rotation on different claim rows. A stale read
+  -- fails safe: the v2 core and order-scoped path re-lock and re-validate
+  -- everything they act on.
   SELECT c.* INTO v_customer FROM public.customers AS c
   WHERE c.id = v_claim.customer_id AND c.merchant_id = v_claim.merchant_id
-    AND c.deleted_at IS NULL FOR UPDATE;
+    AND c.deleted_at IS NULL;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'customer_link_failed'); END IF;
   -- Import claims stay strict because the link is the only access path: the
   -- customers row must agree with the verified sign-in.

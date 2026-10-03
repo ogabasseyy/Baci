@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
 import {
   assertManualDocumentClaimMatchesOrder,
@@ -14,13 +13,16 @@ interface ClaimRow {
   merchant_id: string;
 }
 
-type ClaimToken = ReturnType<typeof createReceiptClaimToken>;
+export interface ManualDocumentClaimToken {
+  token: string;
+  tokenHash: string;
+}
 
 export type PreparedManualDocumentClaim =
   | {
       status: 'ready';
       prepared: ManualDocumentCreatedClaim;
-      claim: ClaimToken;
+      claim: ManualDocumentClaimToken;
       customDomain: string | null;
     }
   | { status: 'skipped'; reason: string };
@@ -29,15 +31,19 @@ export type PreparedManualDocumentClaim =
  * Claims the receipt link for a manual send and resolves the merchant's
  * custom claim domain. A malformed claim payload or an unavailable claim
  * skips (later triggers re-arm) instead of throwing into retries.
+ *
+ * The claim token is created by the sender, which owns the allow-listed
+ * receipt-claim-links import — this helper stays clear of the credential
+ * authority so the event-pipeline boundary contract holds.
  */
 export async function prepareManualDocumentClaim(input: {
   supabase: SupabaseClient;
   row: ClaimRow;
   order: ManualDocumentClaimOrderSnapshot;
   recipientEmail: string;
+  claim: ManualDocumentClaimToken;
 }): Promise<PreparedManualDocumentClaim> {
-  const { supabase, row, order, recipientEmail } = input;
-  const claim = createReceiptClaimToken();
+  const { supabase, row, order, recipientEmail, claim } = input;
   const { data, error } = await supabase.rpc(
     'create_manual_order_document_claim',
     {

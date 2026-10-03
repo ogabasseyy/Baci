@@ -24,6 +24,7 @@ from semgrep_sarif_consumer import (audit_helpers,
                                     audit_resolver,
                                     audit_run_hygiene,
                                     audit_script_dir)
+from semgrep_sarif_container import audit_container_image
 from semgrep_sarif_order import audit_checkout_order
 from semgrep_sarif_helpertree import audit_trusted_changed
 from semgrep_sarif_pins import AUDITED_PATH, AUDITED_RULE_ID
@@ -71,6 +72,7 @@ def main():
     audit_resolver(ctx, drift)
     audit_path_literals(ctx, drift)
     audit_checkout_order(ctx, drift)
+    audit_container_image(ctx, drift)
     audit_invocations(ctx, drift)
     audit_script_dir(ctx, drift)
     audit_run_hygiene(ctx, drift)

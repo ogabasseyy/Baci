@@ -34,7 +34,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "terraform", "tofu", "tox", "uv", "vagrant", "winget",
              "yarn", "yum", "zypper", "composer", "conan", "pmake",
              "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
-             "g++", "c++", "clang", "clang++"}
+             "g++", "c++", "clang", "clang++", "jshell",
+             "ssh-keygen", "pwsh", "powershell"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -43,6 +44,10 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # the gcc/clang drivers execute subprograms (cc1, cc1plus,
 # as, ld) resolved through -B search-path directories, so a
 # workspace -B dir runs attacker code with the helper token.
+# jshell executes load-file operands; ssh-keygen -D loads a
+# PKCS#11 provider .so (its constructor runs before provider
+# validation); pwsh/powershell -File runs script operands and
+# ship on the ubuntu runner image.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")
@@ -62,6 +67,24 @@ INTERP_ALLOW = {"bash", "sh", "source", "."}
 STRICT_ALLOW = INTERP_ALLOW | {
     "set", "echo", "exit", "export", "readonly", "local",
     "declare", "typeset", "true", "false", ":", "test"}
+
+
+# Expected (env NAME, secrets KEY) bindings in the audited
+# workflow: any other NAME bound to an exact ${{ secrets.KEY }}
+# value drifts (a fresh LEAK binding plus an allowed echo
+# would print the key in fragments redaction cannot match).
+# SEMGREP_APP_TOKEN lives in security.yml (outside this audit's
+# scope) and is pinned here for scope-widening safety.
+SECRET_BINDINGS = {("GH_TOKEN", "GITHUB_TOKEN"),
+                   ("META_API_KEY", "META_API_KEY"),
+                   ("SEMGREP_APP_TOKEN", "SEMGREP_APP_TOKEN")}
+
+
+# Short-lived bearer tokens the runner injects into every
+# step: echo/printf of one leaks it to the Actions log even
+# in a step that binds no secret of its own.
+RUNTIME_TOKEN_VARS = {"ACTIONS_RUNTIME_TOKEN",
+                      "ACTIONS_ID_TOKEN_REQUEST_TOKEN"}
 
 
 # Vars whose assignment redirects execution or the environment

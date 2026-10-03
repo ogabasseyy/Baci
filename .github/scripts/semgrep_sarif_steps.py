@@ -7,7 +7,8 @@ from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
 from semgrep_sarif_scan import is_trusted_write_target
 from semgrep_sarif_segments import run_segments
-from semgrep_sarif_consts import (ENV_POISON, SHELL_KEYWORDS,
+from semgrep_sarif_consts import (ENV_POISON, RUNTIME_TOKEN_VARS,
+                                  SECRET_BINDINGS, SHELL_KEYWORDS,
                                   STRICT_ALLOW)
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_shell import (_bare_word, map_key_value,
@@ -59,6 +60,15 @@ def step_end(lines, start_index):
             return i
     return len(lines)
 
+def _var_ref(text, name):
+    # True when shell text references $NAME (plain or braced):
+    # the boundary guards reject $NAMESAKE and ${NAMESAKE}.
+    return re.search(r"\$" + name + r"(?![A-Za-z0-9_])",
+                     text) is not None \
+        or re.search(r"\$\{" + name + r"(?=[}:?#%/+\-=])",
+                     text) is not None
+
+
 def step_name(line):
     # Name of a - name: step (quoted spellings included); "" when
     # the line is not a named-step header.
@@ -99,6 +109,29 @@ def audit_step_commands(ctx, drift):
                         "--exec-path", "-p", "--paginate",
                         "--git-dir", "--work-tree"}
     GIT_READ_SUBCOMMANDS = {"cat-file", "help", "version"}
+    # (e) Secret bindings are allowlisted over the whole file
+    # (job-level env precedes the first step boundary, so a
+    # per-span scan would miss it): any other NAME bound to an
+    # exact ${{ secrets.KEY }} value drifts, since a fresh LEAK
+    # binding plus an allowed echo would print the key in
+    # fragments redaction cannot match. Comparisons (HAS_KEY)
+    # are not bindings: they evaluate to booleans.
+    bound = {}
+    for line in ctx.workflow_lines:
+        key, val = map_key_value(line.strip())
+        if not key \
+                or re.fullmatch(r"[A-Za-z_]\w*", key) is None:
+            continue
+        text = re.sub(r"\s+#.*$", "",
+                      unquote_value(val or "")).strip()
+        m = re.fullmatch(r"\$\{\{\s*secrets\.([A-Za-z_]\w*)"
+                         r"\s*\}\}", text)
+        if not m:
+            continue
+        bound.setdefault(key, m.group(1))
+        if (key, m.group(1)) not in SECRET_BINDINGS \
+                and "secret-step-unexpected-binding" not in drift:
+            drift.append("secret-step-unexpected-binding")
     # Poison names tolerate shell escapes (export P\ATH= unescapes
     # its operand -- verified); the = stays literal (a\=1 is dead).
     poison_alt = "(?:" + "|".join(
@@ -151,6 +184,17 @@ def audit_step_commands(ctx, drift):
                         and "step-trusted-write" not in drift:
                     drift.append("step-trusted-write")
             code = re.sub(r"'[^']*'", "''", seg)
+            plain = strip_comments(code)
+            if secret_ref.search(plain) \
+                    and "secret-step-inline-secret" not in drift:
+                drift.append("secret-step-inline-secret")
+            if re.search(r"(?:^|[;&|]|\(|\{)\s*(?:echo|printf)"
+                         r"(?![A-Za-z0-9_])", plain) \
+                    and any(_var_ref(plain, n)
+                            for n in list(bound)
+                            + sorted(RUNTIME_TOKEN_VARS)) \
+                    and "secret-step-exfil" not in drift:
+                drift.append("secret-step-exfil")
             if strict and re.search(
                     assign_prefix + builtin_prefix
                     + poison_alt + r"\s*=", code) \
@@ -190,6 +234,18 @@ def audit_step_commands(ctx, drift):
                         and "secret-step-untrusted-command" \
                         not in drift:
                     drift.append("secret-step-untrusted-command")
+                # (f) Bare env builtins dump every variable --
+                # bound secrets and the runner's injected tokens
+                # included -- to the log, as does -p. Flagged
+                # spellings (set -euo) pass; set -o/+o only
+                # lists option states, never variables.
+                if argv0 in ("set", "export", "declare",
+                             "typeset", "readonly", "local") \
+                        and (not rest or "-p" in rest) \
+                        and not (argv0 == "set" and rest
+                                and rest[0] in ("-o", "+o")) \
+                        and "secret-step-env-dump" not in drift:
+                    drift.append("secret-step-env-dump")
                 if argv0 == "git":
                     # git reads only, from the workspace: no config
                     # injection, no pager exec, no path redirect,

@@ -1,5 +1,5 @@
 -- Assertion-specific SQLSTATEs survive replay log sanitization without exposing row data.
--- P1001..P1014 identify fixed assertions; P1031..P1036 identify stale source fields.
+-- P1001..P1015 identify fixed assertions; P1031..P1036 identify stale source fields.
 BEGIN;
 INSERT INTO auth.users(id) VALUES
  ('ab120000-0000-4000-8000-000000000001'),
@@ -71,6 +71,8 @@ BEGIN
   'ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','{}',revision);
  IF n<>1 THEN RAISE EXCEPTION USING ERRCODE = 'P1010', MESSAGE = 'refreshed revision could not save'; END IF;
 END $$;
+SELECT set_config('app.test_own_revision',revision,true)
+ FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000002',NULL);
 SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000006',true);
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000002',NULL))<>1
@@ -80,6 +82,9 @@ SELECT set_config('request.jwt.claim.sub','ab120000-0000-4000-8000-000000000007'
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM public.get_product_discovery_research_page('ab120000-0000-4000-8000-000000000002',NULL))
  THEN RAISE EXCEPTION USING ERRCODE='P1014',MESSAGE='staff without edit read research'; END IF;
+ IF EXISTS(SELECT 1 FROM public.update_product_discovery_metadata_guarded(
+  'ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','{}',current_setting('app.test_own_revision')))
+ THEN RAISE EXCEPTION USING ERRCODE='P1015',MESSAGE='staff without edit wrote research'; END IF;
 END $$;
 RESET ROLE;
 DO $$ BEGIN

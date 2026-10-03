@@ -6,6 +6,31 @@ function object(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function sourceLinks(value: unknown) {
+  if (value === undefined || value === null)
+    return { urls: null, omitted: false };
+  const items = Array.isArray(value) ? value : [value];
+  const urls: string[] = [];
+  let omitted = items.length > 40;
+  for (const item of items.slice(0, 40)) {
+    if (typeof item !== 'string' || item.length > 2048 || urls.length === 20) {
+      omitted = true;
+      continue;
+    }
+    try {
+      const url = new URL(item);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        omitted = true;
+        continue;
+      }
+      urls.push(item);
+    } catch {
+      omitted = true;
+    }
+  }
+  return { urls, omitted };
+}
+
 /** Proposals require evidence review. No descriptions, titles or option facts are mined. */
 export function proposeDiscoveryFacts(input: {
   category: string | null;
@@ -58,6 +83,11 @@ export function proposeDiscoveryFacts(input: {
   }
   if (explicitType && categoryType)
     warnings.push('Check that the stored type agrees with the category.');
+  const links = sourceLinks(source.source_urls ?? source.official_sources);
+  if (links.omitted)
+    warnings.push(
+      'Source links were omitted or truncated; consult the original catalog record for complete evidence.'
+    );
   return {
     draft,
     warnings,
@@ -67,7 +97,7 @@ export function proposeDiscoveryFacts(input: {
       type: explicitType ?? null,
       model: model ?? null,
       canonical_model: canonical ?? null,
-      source_urls: source.source_urls ?? source.official_sources ?? null,
+      source_urls: links.urls,
     },
   };
 }

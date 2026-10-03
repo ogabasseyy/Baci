@@ -99,3 +99,24 @@ it('isolates nested draft edits from the raw invalid snapshot', () => {
   }
   expect(snapshot.attributes.ram_gb).toBe('8');
 });
+
+it('bounds source evidence and rejects non-URL or object payloads', () => {
+  const urls = Array.from({ length: 25 }, (_, n) => `https://example.com/${n}`);
+  const result = proposeDiscoveryFacts({
+    category: null,
+    discovery_metadata: null,
+    metadata: {
+      source_urls: [
+        null,
+        {},
+        'javascript:alert(1)',
+        `https://example.com/${'x'.repeat(2048)}`,
+        ...urls,
+      ],
+    },
+  });
+  expect(result.evidence.source_urls).toEqual(urls.slice(0, 20));
+  expect(result.warnings).toContain(
+    'Source links were omitted or truncated; consult the original catalog record for complete evidence.'
+  );
+});

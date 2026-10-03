@@ -11,6 +11,7 @@ function tier(width: number): ApprovedPilotTier {
     actualWidth: width,
     bytes: 1000,
     contentType: 'image/webp',
+    delivery: 'generated',
     fileName: `${width}.webp`,
     format: 'webp',
     generationId: 'c'.repeat(64),

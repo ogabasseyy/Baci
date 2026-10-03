@@ -60,6 +60,7 @@ function logoTier(format: 'avif' | 'webp', width: number): ApprovedPilotTier {
     actualWidth: width,
     bytes: 1000,
     contentType: format === 'avif' ? 'image/avif' : 'image/webp',
+    delivery: 'generated',
     fileName: `logo-${width}w.${format}`,
     format,
     generationId: 'gen-test',

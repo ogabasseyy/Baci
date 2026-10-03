@@ -91,6 +91,7 @@ function cardTier(format: 'avif' | 'webp', width: number): ApprovedPilotTier {
     actualWidth: width,
     bytes: 1000,
     contentType: format === 'avif' ? 'image/avif' : 'image/webp',
+    delivery: 'generated',
     fileName: `card-${width}w.${format}`,
     format,
     generationId: 'gen-test',

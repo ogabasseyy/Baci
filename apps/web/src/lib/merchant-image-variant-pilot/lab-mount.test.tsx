@@ -36,6 +36,7 @@ function tiers(): ApprovedPilotTier[] {
         actualWidth: width,
         bytes: 1000 + width,
         contentType: `image/${format}`,
+        delivery: 'generated',
         fileName: `tier-${width}.${format}`,
         format,
         generationId: GENERATION_ID,

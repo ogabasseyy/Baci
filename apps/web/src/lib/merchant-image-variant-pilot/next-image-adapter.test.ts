@@ -13,6 +13,7 @@ function tier(
     actualWidth: overrides.width,
     bytes: 1000,
     contentType: `image/${format}`,
+    delivery: 'generated',
     fileName: `${'a'.repeat(63)}${overrides.width % 10}.${format}`,
     format,
     generationId: 'c'.repeat(64),

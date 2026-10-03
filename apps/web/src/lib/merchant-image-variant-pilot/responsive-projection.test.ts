@@ -9,6 +9,7 @@ function tier(
     actualWidth: overrides.width,
     bytes: 1000,
     contentType: 'image/webp',
+    delivery: 'generated',
     fileName: `${'a'.repeat(64)}.webp`,
     format: 'webp',
     generationId: 'c'.repeat(64),

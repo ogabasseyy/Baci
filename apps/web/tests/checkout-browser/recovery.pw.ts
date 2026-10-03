@@ -264,16 +264,33 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
   page,
 }) => {
   await seedCheckout(page);
+  const waitForCartValidation = () =>
+    page.waitForResponse((response) => {
+      const request = response.request();
+      return (
+        new URL(response.url()).pathname === '/api/cart/validate' &&
+        request.method() === 'POST'
+      );
+    });
+
+  const storefrontCartValidation = waitForCartValidation();
   await page.goto('/checkout');
+  const storefrontValidationResponse = await storefrontCartValidation;
+  expect(await storefrontValidationResponse.finished()).toBeNull();
+  expect(storefrontValidationResponse.status()).toBe(200);
   await expect(
     page.getByRole('complementary', { name: 'Manual checkout QA fixtures' })
   ).toHaveCount(0);
 
+  const initialCartValidation = waitForCartValidation();
   await page.goto('/checkout?qa=manual');
   const controls = page.getByRole('complementary', {
     name: 'Manual checkout QA fixtures',
   });
   await expect(controls).toBeVisible();
+  const initialValidationResponse = await initialCartValidation;
+  expect(await initialValidationResponse.finished()).toBeNull();
+  expect(initialValidationResponse.status()).toBe(200);
   // Selecting a scenario updates the cookie and reloads the fixture page.
   const scenarioReload = page.waitForEvent('load');
   const cartValidation = page.waitForResponse((response) => {

@@ -81,7 +81,7 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product variants:', error);
       if (!product.has_condition_offers) {
-        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+        return { content: [{ type: 'text', text: `Product variants are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
       }
       variantLookupFailed = true;
     } else {
@@ -104,7 +104,7 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product offers:', error);
       if (!product.has_variants) {
-        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+        return { content: [{ type: 'text', text: `Product offers are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
       }
       offerLookupFailed = true;
     } else {
@@ -117,13 +117,13 @@ export async function loadMcpProductVariants({
     (!offers || offers.length === 0)
   ) {
     if (variantLookupFailed || offerLookupFailed) {
-      return { content: [{ type: 'text', text: 'Product options are temporarily unavailable.' }] };
+      return { content: [{ type: 'text', text: `Product options are temporarily unavailable. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` }] };
     }
     return {
       content: [
         {
           type: 'text',
-          text: `No variants available for "${product.name}".`,
+          text: `No variant options were returned for "${product.name}". ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
     };

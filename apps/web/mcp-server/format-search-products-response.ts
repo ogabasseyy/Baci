@@ -108,6 +108,7 @@ export function formatSearchProductsResponse({
       content: [{
         type: 'text' as const,
         text: [`No clear catalog match for "${sanitizedQuery || 'your criteria'}". Specify a product type, brand, or model and try again.`,
+          MCP_OPTION_COLOR_EVIDENCE_GUIDANCE,
           ...(coverage === 'partial' ? ['This is a partial selection; other products may match.'] : []),
         ].join('\n'),
       }],

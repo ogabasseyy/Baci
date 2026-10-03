@@ -182,7 +182,8 @@ describe('loadMcpProductVariants', () => {
         sanitizeString: (value) => value,
         formatPrice: String,
       });
-      expect(result.content[0].text).toBe('Product variants are temporarily unavailable.');
+      expect(result.content[0].text).toContain('Product variants are temporarily unavailable.');
+      expect(result.content[0].text).toContain('color is unconfirmed; do not guess.');
       expect(result.structuredContent).toBeUndefined();
     } finally {
       log.mockRestore();
@@ -207,9 +208,51 @@ describe('loadMcpProductVariants', () => {
         supabase: supabase as unknown as SupabaseClient,
         sanitizeString: (value) => value, formatPrice: String,
       });
-      expect(result.content[0].text).toBe('Product offers are temporarily unavailable.');
+      expect(result.content[0].text).toContain('Product offers are temporarily unavailable.');
+      expect(result.content[0].text).toContain('color is unconfirmed; do not guess.');
       expect(result.structuredContent).toBeUndefined();
       expect(supabase.rpc).not.toHaveBeenCalledWith('get_storefront_product_variants', expect.anything());
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('reports unconfirmed color when an option lookup returns no variants', async () => {
+    const supabase = createSupabase();
+    supabase.rpc.mockResolvedValue({ data: [], error: null });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' },
+      merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value,
+      formatPrice: String,
+    });
+
+    expect(result.content[0].text).toContain('No variant options were returned for "Phone".');
+    expect(result.content[0].text).toContain('color is unconfirmed; do not guess.');
+    expect(result.structuredContent).toBeUndefined();
+  });
+
+  it('keeps color unconfirmed when both variant and offer lookups fail', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: true, has_condition_offers: true },
+      error: null,
+    });
+    supabase.rpc.mockResolvedValue({ data: null, error: { message: 'unavailable' } });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await loadMcpProductVariants({
+        args: { product_id: 'phone-1' },
+        merchantId: 'merchant-1',
+        supabase: supabase as unknown as SupabaseClient,
+        sanitizeString: (value) => value,
+        formatPrice: String,
+      });
+
+      expect(result.content[0].text).toContain('Product options are temporarily unavailable.');
+      expect(result.content[0].text).toContain('color is unconfirmed; do not guess.');
+      expect(result.structuredContent).toBeUndefined();
     } finally {
       log.mockRestore();
     }

@@ -33,6 +33,10 @@ describe('formatSearchProductsResponse', () => {
       requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
     });
     expect(response.content[0].text).toContain('This is a partial selection; other products may match.');
+    expect(response.content[0].text).toContain(
+      'A selectable color is confirmed only by a returned variant attributes.color value.'
+    );
+    expect(response.content[0].text).toContain('color is unconfirmed; do not guess.');
     expect(response.structuredContent).toMatchObject({status: 'empty', coverage: 'partial'});
   });
 
@@ -154,7 +158,10 @@ describe('formatSearchProductsResponse', () => {
     });
 
     expect(response).toEqual({
-      content: [{ type: 'text', text: 'No clear catalog match for "your criteria". Specify a product type, brand, or model and try again.' }],
+      content: [{ type: 'text', text: [
+        'No clear catalog match for "your criteria". Specify a product type, brand, or model and try again.',
+        'A selectable color is confirmed only by a returned variant attributes.color value. Product-level images and image filenames are illustrative and do not prove a selectable color. If no color value is returned, say color is unconfirmed; do not guess.',
+      ].join('\n') }],
       structuredContent: { products: [], status: 'empty', coverage: 'complete' },
     });
   });

@@ -1,9 +1,11 @@
 -- Atomically validate the rendered snapshot and mark dispatch start for a
 -- manual-order document. A check-then-mark in application code leaves a
 -- millisecond race between the re-read and the marker; this function locks
--- child, parent, merchant, account, then outbox (the trigger paths enter
--- holding child/parent/merchant locks, so any other order deadlocks
--- against concurrent staff edits) while comparing, so a payment, contact
+-- items/transactions, parent, merchant, account, tax, then outbox. Items
+-- and transactions go first because their row triggers enter holding those
+-- locks, while tax goes after the parent to match the historical
+-- tax-rebuild trigger's parent-to-child order; any other sequence
+-- deadlocks against concurrent staff edits. A payment, contact
 -- correction, or item edit landing mid-dispatch aborts instead of sending
 -- a stale document. The snapshot
 -- covers every order-row input the renderer reads (identity, money
@@ -92,7 +94,8 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_cac_rc_number text,
   p_merchant_tax_identification_number text,
   p_merchant_vat_registration_status text,
-  p_merchant_vat_rate numeric
+  p_merchant_vat_rate numeric,
+  p_claim_domain text
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -122,6 +125,7 @@ DECLARE
   v_merchant_tax_identification_number text;
   v_merchant_vat_registration_status text;
   v_merchant_vat_rate numeric;
+  v_claim_domain text;
 BEGIN
   IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
     RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
@@ -129,11 +133,9 @@ BEGIN
   -- Receipts render no payment instructions, so the payment snapshot only
   -- applies to invoice and proforma kinds.
   v_compare_payment := p_document_kind <> 'receipt';
-  -- Common lock order (child, parent, merchant, account, outbox): the item
-  -- trigger path necessarily enters holding a child row lock, so taking the
-  -- parent first here deadlocks parent-to-child against child-to-parent.
-  -- order_id/merchant_id are immutable, so an unlocked outbox read seeds the
-  -- row locks; the claim gate below re-validates under the outbox lock.
+  -- Lock order (child, parent, merchant, account, outbox): item triggers
+  -- enter holding a child lock, so parent-first deadlocks. The unlocked
+  -- outbox seed is re-validated under the outbox lock below.
   SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
   FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id;
   IF NOT FOUND THEN
@@ -141,18 +143,14 @@ BEGIN
   END IF;
   PERFORM 1 FROM public.order_items AS oi
   WHERE oi.order_id = v_order_id FOR SHARE OF oi;
-  PERFORM 1 FROM public.order_tax_subtotals AS ts
-  WHERE ts.order_id = v_order_id FOR SHARE OF ts;
   PERFORM 1 FROM public.transactions AS t
   WHERE t.order_id = v_order_id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success') FOR SHARE OF t;
   SELECT o.* INTO v_order FROM public.orders AS o
   WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
   FOR SHARE;
-  -- The preferred virtual account mirrors the sender's resolution (latest
-  -- unexpired non-legacy paystack row); a missing row leaves NULLs, which
-  -- match a null snapshot. FOR SHARE narrows the open-transaction window
-  -- the same way the order lock does.
+  -- Preferred virtual account mirrors the sender (latest unexpired
+  -- non-legacy paystack row); a missing row leaves NULLs, matching null.
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.cac_rc_number, m.tax_identification_number,
     m.vat_registration_status, m.vat_rate,
@@ -164,6 +162,15 @@ BEGIN
     v_merchant_bank_code, v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
+  -- The claim URL embeds the active primary domain; a deactivation between
+  -- the sender's resolve and this mark must abort rather than email a CTA
+  -- that no longer routes. Mirrors resolveManualDocumentClaimDomain.
+  SELECT d.domain INTO v_claim_domain
+  FROM public.domains AS d
+  WHERE d.merchant_id = v_merchant_id AND d.is_primary = true
+    AND d.status = 'active'
+  ORDER BY d.updated_at DESC NULLS LAST, d.created_at DESC NULLS LAST, d.id
+  LIMIT 1 FOR SHARE;
   IF v_compare_payment THEN
     SELECT opa.account_number, opa.bank_name, opa.account_name
     INTO v_va_account_number, v_va_bank_name, v_va_account_name
@@ -171,12 +178,20 @@ BEGIN
     WHERE opa.order_id = v_order.id AND opa.provider = 'paystack'
       AND (opa.assignment_customer_email_source IS NULL
         OR opa.assignment_customer_email_source <> 'legacy_untrusted')
-      AND (opa.expires_at IS NULL OR opa.expires_at > now())
-    -- created_at ties when accounts share a transaction (now() is
-    -- transaction-stable): break them by account number, exactly like the
-    -- renderer lookup, so rechecks never flap between two live accounts.
+      -- A 15-minute validity buffer: an account expiring mid-delivery
+      -- would embed unusable instructions with no mutation for a trigger
+      -- to catch. Mirrors the sender's cutoff (see resolveInvoicePaymentAccount).
+      AND (opa.expires_at IS NULL OR opa.expires_at > now() + interval '15 minutes')
+    -- now() is transaction-stable: break created_at ties by account
+    -- number, exactly like the renderer, so rechecks never flap.
     ORDER BY opa.created_at DESC, opa.account_number DESC LIMIT 1 FOR SHARE;
   END IF;
+  -- Tax locks AFTER the parent: the historical tax-rebuild trigger runs
+  -- parent-to-child, so tax-first here deadlocks against a concurrent
+  -- item insert. Items/transactions stay child-first to match the row
+  -- triggers that enter holding those locks.
+  PERFORM 1 FROM public.order_tax_subtotals AS ts
+  WHERE ts.order_id = v_order_id FOR SHARE OF ts;
   SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
   WHERE n.id = p_outbox_id AND n.status = 'processing'
     AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
@@ -194,9 +209,8 @@ BEGIN
   ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
   FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
-  -- The PDF tax breakdown renders the same five columns; both sides sort
-  -- rows by id (uuid text order matches byte order), so the canonical order
-  -- is collation-independent.
+  -- Both sides sort tax rows by id (uuid text order matches byte
+  -- order), so the canonical order is collation-independent.
   SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -206,9 +220,8 @@ BEGIN
   ) ORDER BY ts.id), '[]'::jsonb) INTO v_tax_subtotals
   FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
-  -- The settled-status filter mirrors the sender's read exactly
-  -- (payment type, completed/success): a row flipping out of the filter
-  -- changes the count and aborts, and unsettled rows never count.
+  -- Settled-status filter mirrors the sender exactly: a row flipping
+  -- out changes the count and aborts; unsettled rows never count.
   SELECT count(*) INTO v_txn_count FROM public.transactions AS t
   WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success');
@@ -253,6 +266,7 @@ BEGIN
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_vat_registration_status IS DISTINCT FROM p_merchant_vat_registration_status
     OR v_merchant_vat_rate IS DISTINCT FROM p_merchant_vat_rate
+    OR v_claim_domain IS DISTINCT FROM p_claim_domain
     OR (v_compare_payment AND (
       v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
       OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
@@ -276,7 +290,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text)
   TO service_role;

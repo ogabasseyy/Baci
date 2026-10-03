@@ -206,6 +206,7 @@ export async function sendManualOrderDocument({
       taxSubtotals,
       transactions,
       buildDispatchMerchantSnapshot(merchant, rawMerchantRegisteredAddress),
+      customDomain,
       started
     );
     dispatchStarted = started;

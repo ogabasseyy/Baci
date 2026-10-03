@@ -52,7 +52,9 @@ describe('resolveInvoicePaymentAccount', () => {
     );
     expect(query.or).toHaveBeenNthCalledWith(
       2,
-      'expires_at.is.null,expires_at.gt.2026-08-27T10:15:00.000Z'
+      // 15-minute validity buffer past now (10:15): an account expiring
+      // mid-delivery must not be printed on the invoice.
+      'expires_at.is.null,expires_at.gt.2026-08-27T10:30:00.000Z'
     );
     expect(query.limit).toHaveBeenCalledWith(1);
     expect(result.paymentAccount?.account_number).toBe('2222222222');

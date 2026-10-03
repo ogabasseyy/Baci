@@ -115,7 +115,8 @@ describe('markManualDocumentDispatchStarted', () => {
         payment,
         taxSubtotals,
         transactions,
-        merchant
+        merchant,
+        'shop.example.com'
       )
     ).resolves.toBeUndefined();
     expect(rpc).toHaveBeenCalledWith('mark_manual_document_dispatch_started', {
@@ -159,6 +160,7 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_tax_identification_number: 'TIN123',
       p_merchant_vat_registration_status: 'registered',
       p_merchant_vat_rate: 7.5,
+      p_claim_domain: 'shop.example.com',
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',
       p_va_account_name: 'Shop Ltd/ORD',
@@ -222,7 +224,8 @@ describe('markManualDocumentDispatchStarted', () => {
         payment,
         taxSubtotals,
         transactions,
-        merchant
+        merchant,
+        null
       )
     ).rejects.toThrow('Manual document order changed before dispatch');
   });
@@ -241,7 +244,8 @@ describe('markManualDocumentDispatchStarted', () => {
         payment,
         taxSubtotals,
         transactions,
-        merchant
+        merchant,
+        null
       )
     ).rejects.toThrow('Manual document dispatch lease lost');
   });
@@ -260,7 +264,8 @@ describe('markManualDocumentDispatchStarted', () => {
         payment,
         taxSubtotals,
         transactions,
-        merchant
+        merchant,
+        null
       )
     ).rejects.toThrow('Manual document dispatch state unavailable');
   });

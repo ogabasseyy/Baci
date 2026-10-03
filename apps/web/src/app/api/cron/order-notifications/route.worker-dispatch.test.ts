@@ -49,6 +49,7 @@ function createUpdateBuilder() {
       return builder;
     }),
     maybeSingle,
+    not: vi.fn(() => builder),
     select: vi.fn(() => builder),
     update: vi.fn(() => builder),
   };

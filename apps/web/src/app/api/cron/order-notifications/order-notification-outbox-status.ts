@@ -26,6 +26,13 @@ export class OutboxStatusUpdateError extends Error {
   }
 }
 
+export class OutboxDispatchResetError extends Error {
+  constructor(readonly outboxId: string) {
+    super(`Dispatch marker was reset for outbox row ${outboxId}`);
+    this.name = 'OutboxDispatchResetError';
+  }
+}
+
 export async function updateOutboxStatus(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
@@ -109,4 +116,63 @@ export async function markOutboxNotificationSent(
     sent_at: new Date().toISOString(),
     status: 'sent' satisfies OrderNotificationOutboxStatus,
   });
+}
+
+export async function markManualOutboxNotificationSent(
+  supabase: SupabaseClientLike,
+  row: OutboxStatusRow,
+  messageId: string | undefined
+) {
+  // The sender's standalone lease read cannot cover the gap before this
+  // write: verify the dispatch marker atomically inside the sent
+  // transition, or a data change landing between the two records a stale
+  // PDF as cleanly sent. A reset row retries with fresh data; only a
+  // genuinely lost claim terminalizes as outcome-unknown.
+  const liveMetadata = await readLiveOutboxMetadata(supabase, row);
+  try {
+    const { data, error } = await supabase
+      .from('order_notification_outbox')
+      .update({
+        last_error: null,
+        metadata: {
+          ...liveMetadata,
+          ...(messageId ? { message_id: messageId } : {}),
+        },
+        sent_at: new Date().toISOString(),
+        status: 'sent' satisfies OrderNotificationOutboxStatus,
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      })
+      .match({
+        id: row.id,
+        locked_by: row.claim_owner,
+        status: 'processing',
+      })
+      .not('dispatch_started_at', 'is', null)
+      .select('id')
+      .maybeSingle();
+    if (!error && data?.id === row.id) return;
+    const { data: current } = await supabase
+      .from('order_notification_outbox')
+      .select('dispatch_started_at, locked_by, status')
+      .match({ id: row.id })
+      .maybeSingle();
+    if (
+      current?.status === 'processing' &&
+      current.locked_by === row.claim_owner &&
+      current.dispatch_started_at == null
+    ) {
+      throw new OutboxDispatchResetError(row.id);
+    }
+    throw error ?? new Error('order notification claim was lost');
+  } catch (error) {
+    if (error instanceof OutboxDispatchResetError) throw error;
+    logger.error({
+      message: 'Failed to update order notification outbox row',
+      outboxId: row.id,
+      error,
+    });
+    throw new OutboxStatusUpdateError(row.id, { cause: error });
+  }
 }

@@ -52,8 +52,12 @@ export async function resolveInvoicePaymentAccount(
     );
 
   if (!isPaidOrder) {
+    // A 15-minute validity buffer: an account expiring mid-delivery would
+    // embed unusable instructions with no mutation for a trigger to catch.
+    // Mirrors the atomic dispatch recheck (see the mark RPC).
+    const validityCutoff = new Date(now.getTime() + 15 * 60 * 1000);
     paymentAccountQuery = paymentAccountQuery.or(
-      `expires_at.is.null,expires_at.gt.${now.toISOString()}`
+      `expires_at.is.null,expires_at.gt.${validityCutoff.toISOString()}`
     );
   }
 

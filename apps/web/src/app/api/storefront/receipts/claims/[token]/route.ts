@@ -196,10 +196,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (result.status === 'email_mismatch') {
+      // Manual-order claims redeem invoices and proformas as well as
+      // receipts, and the redeem result carries no document kind: keep the
+      // copy kind-neutral instead of naming the wrong document.
       return NextResponse.json(
         {
           error:
-            'Sign in with the email address that received this receipt link',
+            'Sign in with the email address that received this document link',
         },
         { status: 403 }
       );

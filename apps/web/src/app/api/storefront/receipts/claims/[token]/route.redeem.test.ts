@@ -122,7 +122,7 @@ describe('POST /api/storefront/receipts/claims/[token]', () => {
 
     expect(response.status).toBe(403);
     expect(body).toEqual({
-      error: 'Sign in with the email address that received this receipt link',
+      error: 'Sign in with the email address that received this document link',
     });
     expect(supabase.rpc).toHaveBeenCalledWith('redeem_receipt_claim_v2', {
       p_source: 'web',

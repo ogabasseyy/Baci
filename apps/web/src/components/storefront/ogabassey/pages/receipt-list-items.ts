@@ -235,6 +235,9 @@ export async function fetchReceiptListItems(
           (order.fulfillment_details as ReceiptOrder['fulfillment_details']) ??
           null,
         items: rawItems,
+        // Settled payment history from the orders API: partial manual
+        // invoices preview the same Payment table as the emailed document.
+        transactions: (order.transactions as ReceiptOrder['transactions']) ?? [],
       };
 
       const statusLabel =

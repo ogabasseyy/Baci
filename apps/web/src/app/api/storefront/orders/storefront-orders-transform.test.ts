@@ -7,8 +7,25 @@ const lookups = {
       'order-1',
       [
         {
+          id: 'txn-1',
+          order_id: 'order-1',
+          amount: 150000,
           created_at: '2026-09-30T12:00:00Z',
+          description: 'Transfer',
+          metadata: null,
+          gateway: 'paystack',
           status: 'completed',
+          transaction_type: 'payment',
+        },
+        {
+          id: 'txn-2',
+          order_id: 'order-1',
+          amount: 1000,
+          created_at: '2026-09-30T13:00:00Z',
+          description: 'Retry hold',
+          metadata: null,
+          gateway: 'paystack',
+          status: 'pending',
           transaction_type: 'payment',
         },
       ],
@@ -70,6 +87,16 @@ describe('transformStorefrontOrdersForDisplay', () => {
     );
 
     expect(entry.receipt_completion_date).toBe('2026-09-30T12:00:00Z');
+    // Settled payments project for the preview Payment table; unsettled
+    // rows never reach the model.
+    expect(entry.transactions).toEqual([
+      {
+        amount: 150000,
+        created_at: '2026-09-30T12:00:00Z',
+        description: 'Transfer',
+        metadata: null,
+      },
+    ]);
     expect(entry.virtual_account).toMatchObject({
       account_number: '9876543210',
     });

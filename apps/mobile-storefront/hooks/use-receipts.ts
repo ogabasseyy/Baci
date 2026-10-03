@@ -157,7 +157,13 @@ async function fetchReceiptDetail(
             variant_name,
             quantity,
             price,
-            image_url
+            image_url,
+            assurance_fee,
+            line_extension_amount,
+            unit_code,
+            vat_category_code,
+            vat_rate,
+            vat_amount
           ),
           customers!inner (
             user_id
@@ -174,7 +180,19 @@ async function fetchReceiptDetail(
   if (orderError) throw orderError;
   if (!order) throw new Error('Order not found');
 
-  const isPaidOrder = order.payment_status?.trim().toLowerCase() === 'paid';
+  // Covered manual balances promote to receipts dated from their
+  // transactions: a transaction-fetch failure must fail the whole detail
+  // load like a paid order, never render a misdated receipt.
+  const isCoveredManualOrder =
+    Boolean(order.recorded_by_user_id) &&
+    !order.import_job_id &&
+    !order.external_source?.trim() &&
+    Number.isFinite(Number(order.total)) &&
+    Number.isFinite(Number(order.amount_paid)) &&
+    Number(order.amount_paid) >= Number(order.total);
+  const isPaidOrder =
+    order.payment_status?.trim().toLowerCase() === 'paid' ||
+    isCoveredManualOrder;
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {

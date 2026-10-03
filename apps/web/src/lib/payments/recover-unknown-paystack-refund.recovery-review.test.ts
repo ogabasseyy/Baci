@@ -84,9 +84,9 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   });
 
   function reviewRpc(error: unknown = null, watchRows: unknown = null) {
-    // Single-candidate flows re-scan atomically under the reference
-    // lock before recovering; multi-candidate flows never open the
-    // watch, so the default only matters for single-path tests.
+    // Every ambiguous shape re-scans atomically under the reference
+    // lock before terminalizing: stage the locked set explicitly so
+    // tests file the rescan result, not the unlocked snapshot.
     return vi.fn((fn: string) => {
       if (fn === 'open_paystack_refund_recovery_watch_v1') {
         return Promise.resolve({ data: watchRows, error: null });
@@ -96,9 +96,9 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   }
 
   it('files one review per order when the reference matches two payments', async () => {
-    const rpc = reviewRpc();
-    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const candidates = [firstPayment, secondPayment];
+    const rpc = reviewRpc(null, candidates);
+    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(candidates))
@@ -109,13 +109,18 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenNthCalledWith(
+      1,
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
     );
     expect(rpc).toHaveBeenNthCalledWith(
-      1,
+      2,
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
         p_order_id: 'order-1',
@@ -138,7 +143,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       })
     );
     expect(rpc).toHaveBeenNthCalledWith(
-      2,
+      3,
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
         p_order_id: 'order-2',
@@ -181,9 +186,9 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
   });
 
   it('merges redelivered ambiguity evidence into the open reviews', async () => {
-    const rpc = reviewRpc();
-    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const candidates = [firstPayment, secondPayment];
+    const rpc = reviewRpc(null, candidates);
+    const orders = [order, { ...order, id: 'order-2', order_number: 'B-2' }];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(candidates))
@@ -196,7 +201,11 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     // The merge moved server-side: redelivery refiles the same evidence
     // payload and the RPC absorbs it into the open reviews.
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -403,7 +412,8 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     // The atomic recheck returned the same detached row the watch was
     // opened for: without the detached branch the stable pass would
-    // acknowledge with no audit row or review.
+    // acknowledge with no audit row or review. The watch stays open
+    // so a later completion sharing the reference claims it.
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'paystack_refund_evidence_invalid',
@@ -413,8 +423,12 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       })
     );
     expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.anything()
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
-      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+      expect.anything()
     );
   });
 

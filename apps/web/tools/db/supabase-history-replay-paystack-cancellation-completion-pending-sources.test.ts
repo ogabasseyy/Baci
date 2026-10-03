@@ -12,7 +12,7 @@ describe('paystack cancellation completion pending replay sources', () => {
       PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS.trim().split(
         '\n'
       );
-    expect(rows).toHaveLength(30);
+    expect(rows).toHaveLength(32);
     const filenames = rows.map((row) => row.split(' ')[1]);
     expect(new Set(filenames).size).toBe(filenames.length);
 

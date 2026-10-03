@@ -87,7 +87,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
   }
 
   it('files ambiguous reviews only for cancelled orders', async () => {
-    const rpc = reviewRpc();
+    const candidates = [
+      payment('pay-1', 'order-1', 'merchant-1'),
+      payment('pay-2', 'order-2', 'merchant-2'),
+      payment('pay-9', 'order-9', 'merchant-9'),
+    ];
+    // The pass-0 snapshot is unlocked: the branch opens the watch and
+    // re-scans under the reference lock first, then files the stable
+    // locked set exactly once.
+    const rpc = reviewRpc(null, candidates);
     const orders = [
       cancelledOrder('order-1'),
       cancelledOrder('order-2'),
@@ -98,11 +106,6 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       },
     ];
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
-    const candidates = [
-      payment('pay-1', 'order-1', 'merchant-1'),
-      payment('pay-2', 'order-2', 'merchant-2'),
-      payment('pay-9', 'order-9', 'merchant-9'),
-    ];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(candidates))
@@ -114,7 +117,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -143,10 +150,12 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
   });
 
   it('files every order when matches span more than one page', async () => {
-    const rpc = reviewRpc();
     const payments = Array.from({ length: 11 }, (_, index) =>
       payment(`pay-${index + 1}`, `order-${index + 1}`, `merchant-${index + 1}`)
     );
+    // The locked rescan confirms the same eleven matches before the
+    // branch terminalizes.
+    const rpc = reviewRpc(null, payments);
     const orders = Array.from({ length: 11 }, (_, index) =>
       cancelledOrder(`order-${index + 1}`)
     );
@@ -190,7 +199,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // behind the cursor is still observed before acknowledgement.
     expect(firstLimit).toHaveBeenCalledWith(10);
     expect(secondPage.gt).toHaveBeenCalledWith('id', 'pay-10');
-    expect(rpc).toHaveBeenCalledTimes(12);
+    expect(rpc).toHaveBeenCalledTimes(13);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -204,12 +217,12 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
   });
 
   it('files one review per order when three payments share the reference', async () => {
-    const rpc = reviewRpc();
     const candidates = [
       payment('pay-1', 'order-1', 'merchant-1'),
       payment('pay-2', 'order-2', 'merchant-2'),
       payment('pay-3', 'order-3', 'merchant-3'),
     ];
+    const rpc = reviewRpc(null, candidates);
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(candidates))
@@ -233,13 +246,20 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(4);
+    // The watch open leads, then one filing per order, then the
+    // resolve: the third order's filing shifts from third to fourth.
+    expect(rpc).toHaveBeenCalledTimes(5);
+    expect(rpc).toHaveBeenNthCalledWith(
+      1,
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
     );
     expect(rpc).toHaveBeenNthCalledWith(
-      3,
+      4,
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({
         p_order_id: 'order-3',
@@ -517,7 +537,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
   });
 
   it('keeps every payment leg when one active order has several candidates', async () => {
-    const rpc = reviewRpc();
+    const candidates = [
+      payment('pay-1', 'order-9', 'merchant-9'),
+      payment('pay-2', 'order-9', 'merchant-9'),
+    ];
+    const rpc = reviewRpc(null, candidates);
     const active = [
       {
         cancelled_at: null,
@@ -527,10 +551,6 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
       },
     ];
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
-    const candidates = [
-      payment('pay-1', 'order-9', 'merchant-9'),
-      payment('pay-2', 'order-9', 'merchant-9'),
-    ];
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(candidates))
@@ -545,7 +565,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // One review for the order, but both candidate legs retained: the
     // webhook is acknowledged, so a dropped leg would vanish from the
     // evidence ops uses to route the verified refund.
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
       { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
@@ -572,11 +596,13 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
   });
 
   it('files a generic review when the sole completed payment is already detached', async () => {
-    const rpc = reviewRpc();
-    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const detached = [
       { ...payment('pay-1', 'order-1', 'merchant-1'), order_id: null },
     ];
+    // The locked rescan confirms the same detached row: the branch
+    // files once on stable state instead of the unlocked snapshot.
+    const rpc = reviewRpc(null, detached);
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(selectQuery(detached))
@@ -586,10 +612,10 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    // The order FK already nulled the link before the scan: opening a
-    // watch would rescan the same detached row and acknowledge with no
-    // audit row or review, so the verified merchant debit files into
-    // the order-independent queue instead.
+    // The order FK already nulled the link before the scan, so the
+    // verified merchant debit files into the order-independent queue
+    // — but the watch stays open: a later completion sharing the
+    // reference must claim it instead of acknowledging silently.
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'paystack_refund_evidence_invalid',
@@ -600,11 +626,115 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     );
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
       'resolve_paystack_refund_recovery_watch_v1',
-      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+      expect.anything()
     );
     expect(mocks.loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({ refundId: 202 })
     );
+  });
+
+  it('files a late arrival the unlocked multi-match snapshot missed', async () => {
+    const initial = [
+      payment('pay-1', 'order-1', 'merchant-1'),
+      payment('pay-2', 'order-2', 'merchant-2'),
+    ];
+    // A third payment completes after the unlocked scan: the locked
+    // rescan observes it and the stable branch files all three
+    // instead of acknowledging with order-3 missing from the
+    // evidence.
+    const rescan = [...initial, payment('pay-3', 'order-3', 'merchant-3')];
+    const rpc = reviewRpc(null, rescan);
+    const orders = [
+      cancelledOrder('order-1'),
+      cancelledOrder('order-2'),
+      cancelledOrder('order-3'),
+    ];
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery(initial))
+      .mockReturnValueOnce(selectQuery(initial))
+      .mockReturnValueOnce(selectQuery(orders))
+      .mockReturnValueOnce(selectQuery(orders));
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    for (const orderId of ['order-1', 'order-2', 'order-3']) {
+      expect(rpc).toHaveBeenCalledWith(
+        'file_paystack_refund_recovery_review_v1',
+        expect.objectContaining({ p_order_id: orderId })
+      );
+    }
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      { p_paystack_ref: 'PSK-1', p_provider_refund_id: 202 }
+    );
+  });
+
+  it('leaves the watch open when the multi-match rescan comes back empty', async () => {
+    // Both unlocked matches vanish before the locked rescan (e.g.
+    // detached by concurrent order deletes): nothing is filed on the
+    // stale snapshot, and the stable-empty return keeps the watch
+    // open for a later completion instead of resolving it.
+    const rpc = reviewRpc();
+    const initial = [
+      payment('pay-1', 'order-1', 'merchant-1'),
+      payment('pay-2', 'order-2', 'merchant-2'),
+    ];
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery(initial))
+      .mockReturnValueOnce(selectQuery(initial))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'resolve_paystack_refund_recovery_watch_v1',
+      expect.anything()
+    );
+    expect(reviewInsert).not.toHaveBeenCalled();
+  });
+
+  it('leaves the watch open when the detached rescan comes back empty', async () => {
+    // The detached row vanishes before the locked rescan: no review
+    // files on the stale snapshot, and the stable-empty return keeps
+    // the watch open for a later completion instead of resolving it.
+    const rpc = reviewRpc();
+    const detached = [
+      { ...payment('pay-1', 'order-1', 'merchant-1'), order_id: null },
+    ];
+    const reviewInsert = vi.fn().mockResolvedValue({ error: null });
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectQuery(detached))
+      .mockReturnValueOnce(selectQuery(detached))
+      .mockReturnValueOnce({ insert: reviewInsert });
+    const supabase = { from, rpc } as unknown as SupabaseClient;
+
+    await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
+    expect(reviewInsert).not.toHaveBeenCalled();
   });
 });

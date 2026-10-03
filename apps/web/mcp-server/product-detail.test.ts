@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { buildMcpProductDetail } from './product-detail';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
 const product = {
   id: 'option-phone', name: 'Option Phone', slug: null, price: 100000,
@@ -154,7 +155,7 @@ describe('buildMcpProductDetail', () => {
     });
 
     expect(result.content[0].text).toContain(
-      'A selectable color is confirmed only by a returned variant attributes.color value.'
+      MCP_OPTION_COLOR_EVIDENCE_GUIDANCE
     );
     expect(result.content[0].text).not.toContain('**Available Colors:**');
     expect(result.content[0].text).not.toContain('Midnight Black');

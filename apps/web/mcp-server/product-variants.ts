@@ -29,7 +29,7 @@ export async function loadMcpProductVariants({
       content: [
         {
           type: 'text',
-          text: 'Please provide a valid product ID or product name.',
+          text: `Please provide a valid product ID or product name. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
     };
@@ -62,7 +62,7 @@ export async function loadMcpProductVariants({
     }
     return {
       content: [
-        { type: 'text', text: `Product "${lookupLabel}" not found.` },
+        { type: 'text', text: `Product "${lookupLabel}" not found. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` },
       ],
     };
   }

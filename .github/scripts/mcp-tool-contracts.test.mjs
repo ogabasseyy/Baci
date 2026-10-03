@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -28,4 +29,16 @@ test('keeps checkout schema requirements scoped to the two session tools', () =>
   ]);
   assert.deepEqual(DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS.create_agentic_checkout_session.required, ['items']);
   assert.deepEqual(DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS.update_agentic_checkout_session.required, ['session_id']);
+});
+
+
+test('production smoke watches and runs the extracted contract tests', () => {
+  const workflow = readFileSync(new URL('../workflows/mcp-production-smoke.yml', import.meta.url), 'utf8');
+  const paths = workflow.split('  schedule:')[0];
+  const command = workflow.split('run: node --test ')[1]?.split('\n')[0];
+  assert.ok(command);
+  for (const name of ['mcp-tool-inventory', 'mcp-checkout-tool-schema-contracts']) {
+    assert.ok(paths.includes(`.github/scripts/${name}.*`));
+    assert.ok(command.includes(`.github/scripts/${name}.test.mjs`));
+  }
 });

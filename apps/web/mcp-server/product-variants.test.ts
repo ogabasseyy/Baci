@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { loadMcpProductVariants } from './product-variants';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
 type MockRpcResponse = {
   data: Record<string, unknown>[] | null;
@@ -161,7 +162,7 @@ describe('loadMcpProductVariants', () => {
     });
 
     expect(result.content[0].text).toContain(
-      'A selectable color is confirmed only by a returned variant attributes.color value.'
+      MCP_OPTION_COLOR_EVIDENCE_GUIDANCE
     );
     expect(result.content[0].text).not.toContain('**Colors:**');
     expect(result.structuredContent).toMatchObject({
@@ -256,5 +257,39 @@ describe('loadMcpProductVariants', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  it('includes color evidence guidance when the product lookup input sanitizes away', async () => {
+    const supabase = createSupabase();
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'invalid' },
+      merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: () => '',
+      formatPrice: String,
+    });
+
+    expect(result.content[0].text).toContain('Please provide a valid product ID or product name.');
+    expect(result.content[0].text).toContain(MCP_OPTION_COLOR_EVIDENCE_GUIDANCE);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it('includes color evidence guidance when a product is not found', async () => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST116', message: 'not found' },
+    });
+
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'missing-product' },
+      merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value,
+      formatPrice: String,
+    });
+
+    expect(result.content[0].text).toContain('Product "missing-product" not found.');
+    expect(result.content[0].text).toContain(MCP_OPTION_COLOR_EVIDENCE_GUIDANCE);
   });
 });

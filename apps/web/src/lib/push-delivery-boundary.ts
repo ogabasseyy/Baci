@@ -27,3 +27,17 @@ export function createDeliveryStartBoundary(
     wasDeliveryStarted: (): boolean => deliveryStarted,
   };
 }
+
+/**
+ * Spread `{ deliveryOutcome: 'unknown' }` when the provider may have
+ * delivered a push. Single home for the uncertain-outcome vocabulary
+ * so call sites cannot drift into neighboring meanings (a failed
+ * ticket, an unsent message): unknown is only ever the dispatch
+ * boundary's verdict — the call threw after dispatch started, or the
+ * chunk path reported uncertainty.
+ */
+export function unknownDeliveryOutcome(uncertain: boolean): {
+  deliveryOutcome?: 'unknown';
+} {
+  return uncertain ? { deliveryOutcome: 'unknown' } : {};
+}

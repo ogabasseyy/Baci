@@ -34,24 +34,40 @@ export async function paystackRequest<T>(
       },
     });
 
-    const data: PaystackApiResponse<T> = await response.json();
+    // Parse defensively: a non-JSON or empty error body (block
+    // page, truncated 429) must not erase the HTTP status below.
+    let data: PaystackApiResponse<T> | null = null;
+    try {
+      data = (await response.json()) as PaystackApiResponse<T>;
+    } catch {
+      data = null;
+    }
 
     logger.info({
       message: 'Paystack API Response',
       endpoint,
       status: response.status,
-      success: data.status,
+      success: data?.status,
     });
 
-    if (!response.ok || !data.status) {
+    if (data === null && response.ok) {
+      // 2xx with an unusable body: acceptance is unknown (a POST may
+      // have executed), so keep the historical ambiguous
+      // NETWORK_ERROR classification.
+      const message = `Paystack response parsing failed: ${response.status}`;
+      logger.error({ message: 'Paystack request failed', error: message });
+      return { success: false, error: message, code: 'NETWORK_ERROR' };
+    }
+
+    if (!response.ok || !data?.status) {
       logger.error({
         message: 'Paystack API Error',
         status: response.status,
-        error: data.message,
+        error: data?.message,
       });
       return {
         success: false,
-        error: data.message || `API request failed: ${response.status}`,
+        error: data?.message || `API request failed: ${response.status}`,
         code: `HTTP_${response.status}`,
       };
     }

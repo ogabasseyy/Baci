@@ -56,6 +56,41 @@ describe('paystackRequest', () => {
     });
   });
 
+  it('preserves the HTTP status when an error body is not JSON', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+      ok: false,
+      status: 429,
+    } as unknown as Response);
+    const paystackRequest = await request();
+
+    // A definite 429 rejection must stay retryable: reporting it as
+    // NETWORK_ERROR would quarantine the refund as delivery_uncertain
+    // instead of retrying after the rate limit.
+    await expect(paystackRequest('/refund')).resolves.toMatchObject({
+      code: 'HTTP_429',
+      error: 'API request failed: 429',
+      success: false,
+    });
+  });
+
+  it('keeps a 2xx response with an unusable body ambiguous', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
+      ok: true,
+      status: 200,
+    } as unknown as Response);
+    const paystackRequest = await request();
+
+    // The provider said OK but the body is unusable: a POST may have
+    // executed, so acceptance stays unknown instead of reading as a
+    // deterministic rejection.
+    await expect(paystackRequest('/refund')).resolves.toMatchObject({
+      code: 'NETWORK_ERROR',
+      success: false,
+    });
+  });
+
   it('reports network failures without throwing', async () => {
     vi.mocked(fetch).mockRejectedValue(new Error('socket hangup'));
     const paystackRequest = await request();

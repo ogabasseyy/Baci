@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDeliveryStartBoundary } from './push-delivery-boundary';
+import {
+  createDeliveryStartBoundary,
+  unknownDeliveryOutcome,
+} from './push-delivery-boundary';
 
 describe('createDeliveryStartBoundary', () => {
   it('runs the callback once after it completes successfully', async () => {
@@ -29,5 +32,17 @@ describe('createDeliveryStartBoundary', () => {
 
     expect(onDeliveryStart).toHaveBeenCalledTimes(2);
     expect(boundary.wasDeliveryStarted()).toBe(true);
+  });
+});
+
+describe('unknownDeliveryOutcome', () => {
+  it('marks the outcome unknown only when dispatch may have happened', () => {
+    expect(unknownDeliveryOutcome(true)).toEqual({
+      deliveryOutcome: 'unknown',
+    });
+    // Certain outcomes omit the key so historical result shapes
+    // (where the field is optional) keep working.
+    expect(unknownDeliveryOutcome(false)).toEqual({});
+    expect(unknownDeliveryOutcome(false)).not.toHaveProperty('deliveryOutcome');
   });
 });

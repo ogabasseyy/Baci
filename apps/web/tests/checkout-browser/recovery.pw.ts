@@ -276,8 +276,20 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
   await expect(controls).toBeVisible();
   // Selecting a scenario updates the cookie and reloads the fixture page.
   const scenarioReload = page.waitForEvent('load');
+  const cartValidation = page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      new URL(response.url()).pathname === '/api/cart/validate' &&
+      request.method() === 'POST'
+    );
+  });
   await controls.getByLabel('Payment scenario').selectOption('provider-error');
-  await scenarioReload;
+  const [, validationResponse] = await Promise.all([
+    scenarioReload,
+    cartValidation,
+  ]);
+  expect(await validationResponse.finished()).toBeNull();
+  expect(validationResponse.status()).toBe(200);
   await expect(controls.getByLabel('Payment scenario')).toHaveValue(
     'provider-error'
   );

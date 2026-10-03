@@ -118,8 +118,7 @@ export function selectPreferredOrderPaymentAccount<
   const eligibleAccounts = accounts.filter((account) =>
     isActivePaystackAccount(account, now.getTime(), options)
   );
-  const preferredAccountNumber =
-    options.preferredPaystackAccountNumber?.trim();
+  const preferredAccountNumber = options.preferredPaystackAccountNumber?.trim();
   if (preferredAccountNumber && /^\d{6,20}$/.test(preferredAccountNumber)) {
     const preferredAccount = eligibleAccounts.find(
       (account) =>
@@ -132,31 +131,34 @@ export function selectPreferredOrderPaymentAccount<
   }
 
   return (
-    eligibleAccounts
-      .sort((left, right) => {
-        const leftProviderRank = left.provider === 'paystack' ? 0 : 1;
-        const rightProviderRank = right.provider === 'paystack' ? 0 : 1;
-        if (leftProviderRank !== rightProviderRank) {
-          return leftProviderRank - rightProviderRank;
-        }
+    eligibleAccounts.sort((left, right) => {
+      const leftProviderRank = left.provider === 'paystack' ? 0 : 1;
+      const rightProviderRank = right.provider === 'paystack' ? 0 : 1;
+      if (leftProviderRank !== rightProviderRank) {
+        return leftProviderRank - rightProviderRank;
+      }
 
-        const leftCreatedAt = left.created_at
-          ? Date.parse(left.created_at)
-          : Number.NaN;
-        const rightCreatedAt = right.created_at
-          ? Date.parse(right.created_at)
-          : Number.NaN;
-        const leftCreatedAtMs = Number.isFinite(leftCreatedAt)
-          ? leftCreatedAt
-          : Number.NEGATIVE_INFINITY;
-        const rightCreatedAtMs = Number.isFinite(rightCreatedAt)
-          ? rightCreatedAt
-          : Number.NEGATIVE_INFINITY;
-        if (leftCreatedAtMs !== rightCreatedAtMs) {
-          return rightCreatedAtMs - leftCreatedAtMs;
-        }
+      const leftCreatedAt = left.created_at
+        ? Date.parse(left.created_at)
+        : Number.NaN;
+      const rightCreatedAt = right.created_at
+        ? Date.parse(right.created_at)
+        : Number.NaN;
+      const leftCreatedAtMs = Number.isFinite(leftCreatedAt)
+        ? leftCreatedAt
+        : Number.NEGATIVE_INFINITY;
+      const rightCreatedAtMs = Number.isFinite(rightCreatedAt)
+        ? rightCreatedAt
+        : Number.NEGATIVE_INFINITY;
+      if (leftCreatedAtMs !== rightCreatedAtMs) {
+        return rightCreatedAtMs - leftCreatedAtMs;
+      }
 
-        return left.account_number.localeCompare(right.account_number);
-      })[0] ?? null
+      // created_at ties when accounts share a transaction (now() is
+      // transaction-stable): break them by account number descending,
+      // exactly like the emailed-invoice selector and the atomic dispatch
+      // recheck, so every surface embeds the same account.
+      return right.account_number.localeCompare(left.account_number);
+    })[0] ?? null
   );
 }

@@ -35,6 +35,18 @@ describe('selectPreferredOrderPaymentAccount', () => {
     expect(selected?.account_number).toBe('2222222222');
   });
 
+  it('breaks created_at ties by account number descending like the RPC', () => {
+    const selected = selectPreferredOrderPaymentAccount(
+      [
+        account('paystack', '9990001111', '2026-08-24T12:00:00.000Z'),
+        account('paystack', '9990002222', '2026-08-24T12:00:00.000Z'),
+      ],
+      new Date('2026-08-24T12:30:00.000Z')
+    );
+
+    expect(selected?.account_number).toBe('9990002222');
+  });
+
   it('returns null for an empty account list', () => {
     expect(selectPreferredOrderPaymentAccount([])).toBeNull();
   });

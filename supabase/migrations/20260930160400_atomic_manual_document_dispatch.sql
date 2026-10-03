@@ -197,7 +197,11 @@ BEGIN
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
     'variant_name', oi.variant_name, 'condition', oi.condition,
-    'item_description', oi.item_description
+    'item_description', oi.item_description, 'line_id', oi.line_id,
+    'unit_code', oi.unit_code,
+    'line_extension_amount', oi.line_extension_amount,
+    'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate,
+    'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id
   ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
   FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
@@ -292,7 +296,3 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb)
-  FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb)
-  TO service_role;

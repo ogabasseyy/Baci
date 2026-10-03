@@ -4,10 +4,10 @@ import { ReceiptStatusBadge } from './ReceiptStatusBadge';
 
 describe('ReceiptStatusBadge', () => {
   it.each([
-    ['Paid', 'Paid', 'text-green-700'],
-    ['Partially Paid', 'Partial', 'text-yellow-700'],
-    ['Unpaid', 'Unpaid', 'text-red-700'],
-    ['unknown', 'Unpaid', 'text-red-700'],
+    ['Paid', 'Paid', 'bg-store-primary'],
+    ['Partially Paid', 'Partial', 'bg-store-secondary'],
+    ['Unpaid', 'Unpaid', 'bg-destructive'],
+    ['unknown', 'Unpaid', 'bg-destructive'],
   ])('renders the %s badge', (status, label, tone) => {
     render(<ReceiptStatusBadge status={status} />);
 

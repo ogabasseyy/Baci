@@ -85,6 +85,23 @@ describe('fetchReceiptListItems', () => {
     });
   });
 
+  it('bills the modal to the order contact snapshot over the profile', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        customer_name: 'Ada Lovelace',
+        customer_email: 'ada@example.com',
+        customer_phone: '+2348000000003',
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder).toMatchObject({
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000003',
+    });
+  });
+
   it('carries the proforma kind for unresolved 325 orders', async () => {
     mockOrdersResponse([
       baseOrder({

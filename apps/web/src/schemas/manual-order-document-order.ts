@@ -23,6 +23,13 @@ const manualDocumentOrderItemSchema = z.object({
   condition: nullableText,
   item_description: nullableText,
   assurance_fee: number.nullish(),
+  line_id: number.nullish(),
+  unit_code: z.string().nullish(),
+  line_extension_amount: number.nullish(),
+  vat_category_code: z.string().nullish(),
+  vat_rate: number.nullish(),
+  vat_amount: number.nullish(),
+  sellers_item_id: z.string().nullish(),
 });
 
 export const manualDocumentOrderSchema = z.object({

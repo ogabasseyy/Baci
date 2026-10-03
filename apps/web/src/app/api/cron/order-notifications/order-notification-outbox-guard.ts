@@ -1,3 +1,11 @@
+/**
+ * Optimistic-guard inputs for a sent-merge write. updatedAt passes the
+ * re-read string through byte-identical: PostgREST casts the `eq` operand
+ * to timestamptz, so the database compares instants, not text — Z-vs-offset
+ * suffixes and fractional-second padding cannot false-positive. Never
+ * normalize through `Date` here: JS truncates to milliseconds while
+ * timestamptz keeps microseconds, so reformatting could only break matches.
+ */
 export interface OutboxMergeGuard {
   metadataRaw: unknown;
   updatedAt: string | null;

@@ -1,5 +1,9 @@
 import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import type React from 'react';
+import { ThemedBadge } from '@/components/themed/themed-badge';
+
+const BADGE_LAYOUT =
+  'text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit';
 
 export const ReceiptStatusBadge: React.FC<{ status: string }> = ({
   status,
@@ -7,21 +11,21 @@ export const ReceiptStatusBadge: React.FC<{ status: string }> = ({
   switch (status) {
     case 'Paid':
       return (
-        <span className="bg-green-50 text-green-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-green-100 flex items-center gap-1 w-fit">
+        <ThemedBadge colorRole="primary" className={BADGE_LAYOUT}>
           <CheckCircle2 size={12} /> Paid
-        </span>
+        </ThemedBadge>
       );
     case 'Partially Paid':
       return (
-        <span className="bg-yellow-50 text-yellow-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-yellow-100 flex items-center gap-1 w-fit">
+        <ThemedBadge colorRole="secondary" className={BADGE_LAYOUT}>
           <Clock size={12} /> Partial
-        </span>
+        </ThemedBadge>
       );
     default:
       return (
-        <span className="bg-red-50 text-red-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-red-100 flex items-center gap-1 w-fit">
+        <ThemedBadge variant="destructive" className={BADGE_LAYOUT}>
           <AlertCircle size={12} /> Unpaid
-        </span>
+        </ThemedBadge>
       );
   }
 };

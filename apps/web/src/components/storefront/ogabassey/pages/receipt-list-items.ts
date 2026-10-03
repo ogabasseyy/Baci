@@ -194,9 +194,17 @@ export async function fetchReceiptListItems(
         payment_status: rendererPaymentStatus,
         payment_method: (order.payment_method as string) ?? null,
         is_credit_order: (order.is_credit_order as boolean) ?? false,
-        customer_name: customerName,
-        customer_email: customer?.email || '',
-        customer_phone: customer?.phone ?? null,
+        // The order-scoped claim flow can re-link an order to the
+        // recipient's existing customer row, leaving the order's snapshotted
+        // contact intentionally different from the profile: bill to the order
+        // snapshot like the emailed attachment and download, profile fallback.
+        customer_name: (order.customer_name as string) || customerName,
+        customer_email:
+          (order.customer_email as string) || customer?.email || '',
+        customer_phone:
+          (order.customer_phone as string | null | undefined) ??
+          customer?.phone ??
+          null,
         shipping_address:
           (order.shipping_address as ReceiptOrder['shipping_address']) ?? null,
         virtual_account:

@@ -1,15 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { clearManualDocumentDispatchMarker } from '@/lib/check-manual-document-dispatch-lease';
 
-interface DispatchOrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-  variant_name: string | null;
-  condition: string | null;
-  item_description: string | null;
-}
+import {
+  type DispatchOrderItem,
+  projectDispatchSnapshotItems,
+} from './manual-order-document-dispatch-items';
 
 interface DispatchOrderSnapshot {
   customer_id: string | null;
@@ -170,17 +165,7 @@ export async function markManualDocumentDispatchStarted(
       p_va_account_number: payment.virtualAccountNumber,
       p_va_bank_name: payment.virtualAccountBankName,
       p_va_account_name: payment.virtualAccountName,
-      p_items: [...order.order_items]
-        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          variant_name: item.variant_name,
-          condition: item.condition,
-          item_description: item.item_description,
-        })),
+      p_items: projectDispatchSnapshotItems(order.order_items),
       p_tax_count: taxSubtotals.length,
       p_tax_subtotals: [...taxSubtotals]
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))

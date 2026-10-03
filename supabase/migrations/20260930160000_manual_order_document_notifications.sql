@@ -137,9 +137,32 @@ CREATE OR REPLACE FUNCTION private.enqueue_manual_documents_after_item_updates()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_order_id uuid;
 BEGIN
+  -- Rendered-column gate (function-level: transition tables cannot combine
+  -- with an UPDATE OF column list). Fulfillment-only writes such as
+  -- fulfillment_data assignment must not re-enqueue: one landing after
+  -- provider dispatch resets the marker and pushes the accepted,
+  -- still-current attachment into a corrective retry that can send a
+  -- duplicate with a rotated link. order_id stays compared so lines moving
+  -- between orders re-enqueue both sides.
   FOR v_order_id IN (
-    SELECT order_id FROM inserted_items
-    UNION SELECT order_id FROM removed_items
+    SELECT DISTINCT COALESCE(n.order_id, o.order_id) AS order_id
+    FROM inserted_items AS n
+    FULL JOIN removed_items AS o ON o.id = n.id
+    WHERE n.order_id IS DISTINCT FROM o.order_id
+      OR n.name IS DISTINCT FROM o.name
+      OR n.quantity IS DISTINCT FROM o.quantity
+      OR n.price IS DISTINCT FROM o.price
+      OR n.variant_name IS DISTINCT FROM o.variant_name
+      OR n.condition IS DISTINCT FROM o.condition
+      OR n.item_description IS DISTINCT FROM o.item_description
+      OR n.assurance_fee IS DISTINCT FROM o.assurance_fee
+      OR n.line_id IS DISTINCT FROM o.line_id
+      OR n.unit_code IS DISTINCT FROM o.unit_code
+      OR n.line_extension_amount IS DISTINCT FROM o.line_extension_amount
+      OR n.vat_category_code IS DISTINCT FROM o.vat_category_code
+      OR n.vat_rate IS DISTINCT FROM o.vat_rate
+      OR n.vat_amount IS DISTINCT FROM o.vat_amount
+      OR n.sellers_item_id IS DISTINCT FROM o.sellers_item_id
     ORDER BY order_id
   ) LOOP
     PERFORM private.enqueue_manual_order_document(v_order_id);
@@ -173,6 +196,15 @@ CREATE TRIGGER enqueue_manual_documents_after_item_deletes
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
+  -- The order-scoped redemption relink sets manual_document.trusted_relink
+  -- around its customer_id UPDATE: customer_id is not rendered, so the
+  -- relink must not reset an in-flight marker (the accepted send would
+  -- classify as document_changed_during_send, then retry into a skipped
+  -- row once the token is claimed). Staff-driven customer changes do not
+  -- set the flag and still invalidate below.
+  IF current_setting('manual_document.trusted_relink', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
   -- Payment progress, total corrections, manual-marking transitions, and
   -- late customer-contact corrections all re-evaluate eligibility; an order
   -- created without an email/customer still sends once staff fix the contact
@@ -223,64 +255,6 @@ CREATE TRIGGER enqueue_manual_document_after_order_update
   AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, created_at, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
-CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  -- Completing a merchant profile (slug, VAT rate) re-arms rows the worker
-  -- terminally skipped as merchant_validation_failed: only order and item
-  -- changes invoke the order re-enqueue, so without this the corrected
-  -- document is permanently lost. Other skip reasons keep their own re-arm
-  -- paths; sent and possibly-dispatched rows stay terminal. The worker
-  -- re-validates the merchant on the next attempt, so a still-invalid
-  -- profile simply skips again until staff finish the correction.
-  UPDATE public.order_notification_outbox AS n
-  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
-    locked_by = NULL, locked_at = NULL, last_error = NULL,
-    skip_reason = NULL, skipped_at = NULL, updated_at = now()
-  WHERE n.merchant_id = NEW.id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'skipped'
-    AND n.skip_reason = 'merchant_validation_failed'
-    AND n.dispatch_started_at IS NULL;
-  -- A snapshot-relevant merchant edit landing mid-dispatch resets every
-  -- processing marker so the lease check aborts instead of recording a
-  -- stale document as sent. Rendered branding (logo, colors) and the
-  -- From display name invalidate alongside issuer/contact/payment fields.
-  IF OLD.slug IS DISTINCT FROM NEW.slug
-    OR OLD.business_name IS DISTINCT FROM NEW.business_name
-    OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
-    OR OLD.business_address IS DISTINCT FROM NEW.business_address
-    OR OLD.registered_address IS DISTINCT FROM NEW.registered_address
-    OR OLD.cac_rc_number IS DISTINCT FROM NEW.cac_rc_number
-    OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
-    OR OLD.vat_registration_status IS DISTINCT FROM NEW.vat_registration_status
-    OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate
-    OR OLD.support_email IS DISTINCT FROM NEW.support_email
-    OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
-    OR OLD.phone IS DISTINCT FROM NEW.phone
-    OR OLD.bank_code IS DISTINCT FROM NEW.bank_code
-    OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
-    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
-    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name
-    OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
-    OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
-    OR OLD.brand_colors IS DISTINCT FROM NEW.brand_colors
-  THEN
-    UPDATE public.order_notification_outbox AS n
-    SET dispatch_started_at = NULL, updated_at = now()
-    WHERE n.merchant_id = NEW.id
-      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.rearm_manual_documents_after_merchant_update()
-  FROM PUBLIC, anon, authenticated;
-CREATE TRIGGER rearm_manual_documents_after_merchant_update
-  AFTER UPDATE ON public.merchants
-  FOR EACH ROW EXECUTE FUNCTION private.rearm_manual_documents_after_merchant_update();
-
 -- Ship disabled: enabling here would let rows enqueue while an older cron
 -- binary (whole-batch parse) is still live, stalling the queue with 500s.
 -- Activation is the deferred postdeploy migration 20260930160300, which the
@@ -291,7 +265,6 @@ ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_it
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_updates;
 ALTER TABLE public.order_items DISABLE TRIGGER enqueue_manual_documents_after_item_deletes;
 ALTER TABLE public.orders DISABLE TRIGGER enqueue_manual_document_after_order_update;
-ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update;
 
 -- Revoke explicitly, including installations with older authenticated grants.
 REVOKE ALL ON FUNCTION public.claim_order_notification_outbox(integer, text)
@@ -300,4 +273,5 @@ GRANT EXECUTE ON FUNCTION public.claim_order_notification_outbox(integer, text)
   TO service_role;
 
 -- Receipt-claim storage and the claim-creation RPC live in the follow-up
--- migration 20260930160050 (300-line rule).
+-- migration 20260930160050 (300-line rule). Merchant re-arm lives in
+-- 20260930160065 for the same reason.

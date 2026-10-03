@@ -30,9 +30,11 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
  * nonterminal, then file a preflight review and record delivery_uncertain
  * after the pending-refund worker already completed it. Workers report
  * per-row failure counts instead of throwing, so both rejections and
- * reported failures surface as a 503. Dead-lettered notifications count
- * as failures too: a 200 with exhausted rows would present unreconciled
- * money as success and never page operations.
+ * reported failures surface as a 503. Dead-lettered notifications warn
+ * instead: they need manual review with no ack path, so 503ing would
+ * pin the cron red until a human clears them and mask fresh failures.
+ * The warn log and the success payload's exhausted count keep them
+ * visible to operations.
  */
 export async function processCancellationDrain(
   supabase: ServiceClient,

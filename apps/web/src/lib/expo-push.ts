@@ -24,7 +24,10 @@ import {
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
 import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
-import { createDeliveryStartBoundary } from './push-delivery-boundary';
+import {
+  createDeliveryStartBoundary,
+  unknownDeliveryOutcome,
+} from './push-delivery-boundary';
 
 // Module-scope cache: locale + minimumFractionDigits are static; currency varies.
 const _currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -242,9 +245,7 @@ export async function notifyMerchant(
     result = {
       sent: 0,
       failed: tokens.length,
-      ...(deliveryBoundary.wasDeliveryStarted()
-        ? { deliveryOutcome: 'unknown' as const }
-        : {}),
+      ...unknownDeliveryOutcome(deliveryBoundary.wasDeliveryStarted()),
       errors: [
         error instanceof Error ? error.message : 'Unknown push send error',
       ],
@@ -697,7 +698,7 @@ export async function processTickets(
     sent,
     failed,
     errors,
-    ...(deliveryUnknown ? { deliveryOutcome: 'unknown' as const } : {}),
+    ...unknownDeliveryOutcome(deliveryUnknown),
     ...(succeededTokens.length > 0 ? { succeededTokens } : {}),
   };
 }

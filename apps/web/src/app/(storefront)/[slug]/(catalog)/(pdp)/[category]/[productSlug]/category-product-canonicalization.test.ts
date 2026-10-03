@@ -24,6 +24,16 @@ describe('evaluateCategoryProductCanonicalRoute', () => {
       expected: { categoryMismatch: true, needsValuesRedirect: true },
     },
     {
+      name: 'does not redirect a genuinely different product slug',
+      identity: {
+        requestedCategorySlug: 'phones',
+        requestedProductSlug: 'other-product',
+        resolvedCategorySlug: 'smartphones',
+        resolvedProductSlug: 'phone-x',
+      },
+      expected: { categoryMismatch: false, needsValuesRedirect: false },
+    },
+    {
       name: 'does not redirect UUID routes to the resolved product slug',
       identity: {
         requestedCategorySlug: 'phones',

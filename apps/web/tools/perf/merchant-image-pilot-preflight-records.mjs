@@ -1,0 +1,117 @@
+// Preflight record mirrors: inventory/acceptance shape checks that must
+// agree with the lab route's contracts (offline must never report ok for
+// inputs the route rejects).
+import {
+  ACCEPTANCE_KEYS,
+  ASSET_ID,
+  HEX64,
+  isRouteDatetime,
+  ROLES,
+  UUID,
+} from './merchant-image-pilot-preflight-shared.mjs';
+
+export function acceptanceKey(record) {
+  return `${record.merchantId}/${record.assetId}`;
+}
+
+export function sameAcceptance(left, right) {
+  return (
+    left.generationId === right.generationId &&
+    left.verdict === right.verdict &&
+    left.recipeId === right.recipeId &&
+    left.sourceSha256 === right.sourceSha256 &&
+    [...left.outputHashes].sort().join(',') ===
+      [...right.outputHashes].sort().join(',')
+  );
+}
+
+// Mirror of lab-config originalFileName: the staged original name is derived
+// from the binding plus the source-path extension, never from remote input.
+export function stagedOriginalName(binding, sourcePath) {
+  const segments = String(sourcePath).split('/');
+  const base = segments[segments.length - 1] ?? '';
+  const extension = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
+  const safeExtension = /^\.[a-z0-9]{1,5}$/i.test(extension)
+    ? extension.toLowerCase()
+    : '';
+  return `${binding.merchantId}-${binding.assetId}${safeExtension}`;
+}
+
+// Mirror of the route's binding contract (parsePilotInventoryBinding):
+// assetId charset, http(s) source URL. Record-shape fields (slot,
+// sourcePath, sha256) keep the standalone record checks.
+export function validInventoryRecord(record) {
+  return (
+    record &&
+    typeof record === 'object' &&
+    UUID.test(record.merchantId ?? '') &&
+    ASSET_ID.test(record.assetId ?? '') &&
+    ROLES.has(record.role) &&
+    typeof record.slot === 'string' &&
+    record.slot.length > 0 &&
+    record.slot.length <= 128 &&
+    HEX64.test(record.sha256 ?? '') &&
+    isSafeRelativePath(record.sourcePath) &&
+    isHttpUrl(record.url)
+  );
+}
+
+// Exact mirror of lab-route isSafeRelativePath: non-empty relative path,
+// no backslashes, no empty/dot/dot-dot segments. Offline must never report
+// ok for an inventory the route rejects.
+export function isSafeRelativePath(value) {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.startsWith('/') ||
+    value.includes('\\')
+  ) {
+    return false;
+  }
+  return !value
+    .split('/')
+    .some((segment) => segment === '' || segment === '.' || segment === '..');
+}
+
+export function isHttpUrl(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export function validAcceptanceShape(record) {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    return false;
+  }
+  const keys = Object.keys(record);
+  if (
+    keys.length !== ACCEPTANCE_KEYS.size ||
+    keys.some((key) => !ACCEPTANCE_KEYS.has(key))
+  ) {
+    return false;
+  }
+  const text = (value, max) =>
+    typeof value === 'string' && value.length > 0 && value.length <= max;
+  return (
+    UUID.test(record.merchantId ?? '') &&
+    text(record.assetId, 128) &&
+    HEX64.test(record.generationId ?? '') &&
+    text(record.recipeId, 64) &&
+    (record.verdict === 'accepted' || record.verdict === 'rejected') &&
+    HEX64.test(record.sourceSha256 ?? '') &&
+    Array.isArray(record.outputHashes) &&
+    record.outputHashes.length > 0 &&
+    record.outputHashes.length <= 24 &&
+    record.outputHashes.every((hash) => HEX64.test(hash ?? '')) &&
+    text(record.note, 500) &&
+    text(record.reviewer, 128) &&
+    isRouteDatetime(record.reviewedAt) &&
+    record.schemaVersion === 1
+  );
+}

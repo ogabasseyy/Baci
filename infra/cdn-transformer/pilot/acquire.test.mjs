@@ -407,3 +407,99 @@ test('rejects a null response body as an acquire error', async () => {
     globalThis.fetch = realFetch;
   }
 });
+
+test('rejects unsafe or over-long asset ids before fetching', async () => {
+  const inputRoot = await makeInputRoot();
+  let fetches = 0;
+  await withServer(
+    (_request, response) => {
+      fetches += 1;
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      const base = {
+        inputRoot,
+        merchantId: MERCHANT,
+        probe: stubProbe,
+        role: 'logo',
+        slot: 'header-logo',
+        url,
+      };
+      // Unsafe characters never reach the snapshot namer (or the network).
+      await assert.rejects(
+        () => acquireSnapshot({ ...base, assetId: '../evil' }),
+        /invalid identity/
+      );
+      // 92-char id: contract-valid length, but the 36+1+92 stem exceeds 128.
+      await assert.rejects(
+        () => acquireSnapshot({ ...base, assetId: 'a'.repeat(92) }),
+        /128 characters/
+      );
+      // 91 chars is the longest stem-safe id.
+      const record = await acquireSnapshot({
+        ...base,
+        assetId: 'a'.repeat(91),
+      });
+      assert.equal(record.assetId, 'a'.repeat(91));
+      assert.equal(fetches, 1);
+    }
+  );
+});
+
+test('rejects content-type and decoded-format mismatches', async () => {
+  const inputRoot = await makeInputRoot();
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      const jpegProbe = async () => ({ format: 'jpeg', height: 1, width: 1 });
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            assetId: 'logo-1',
+            inputRoot,
+            merchantId: MERCHANT,
+            probe: jpegProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /labeled bytes "image\/png" but they decode as "jpeg"/
+      );
+      // The mismatched snapshot is removed, like other probe failures.
+      await assert.rejects(
+        readFile(join(inputRoot, `${MERCHANT}-logo-1.png`)),
+        /ENOENT/
+      );
+    }
+  );
+});
+
+test('serializes concurrent inventory appends without loss', async () => {
+  const { appendInventoryRecord } = await import('./acquire.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-append-race-'));
+  const path = join(dir, 'inventory.json');
+  const sha = createHash('sha256').update('x').digest('hex');
+  const record = (n) => ({
+    assetId: `card-${n}`,
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: `slot-${n}`,
+    sourcePath: `snapshots/card-${n}.png`,
+    url: `https://cdn.example.com/media/card-${n}.png`,
+  });
+  const counts = await Promise.all(
+    [0, 1, 2, 3].map((n) => appendInventoryRecord(path, record(n)))
+  );
+  assert.deepEqual([...counts].sort(), [1, 2, 3, 4]);
+  const stored = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(stored.length, 4);
+  // No lock debris or temp fragments remain beside the inventory.
+  const { readdir } = await import('node:fs/promises');
+  assert.deepEqual(await readdir(dir), ['inventory.json']);
+});

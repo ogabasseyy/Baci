@@ -85,6 +85,9 @@ async function readVerifiedSnapshot(
 // Stages one approved tier by reading it once, validating the captured
 // bytes against the verified size/hash, and writing that same buffer. A
 // copy-after-verify would re-read the file and could stage swapped bytes.
+// Destinations that already hold the verified bytes are left untouched, so
+// the pre-start stage step is idempotent and request-time loads never churn
+// post-start mtimes.
 export async function stageVerifiedTier(input: {
   destPath: string;
   expectedBytes: number;
@@ -102,7 +105,19 @@ export async function stageVerifiedTier(input: {
   ) {
     throw new Error('merchant image pilot: tier hash mismatch before staging');
   }
+  if (await destMatches(input.destPath, bytes)) {
+    return;
+  }
   await writeFile(input.destPath, bytes);
+}
+
+async function destMatches(destPath: string, bytes: Buffer): Promise<boolean> {
+  const existing = await readFile(destPath).catch(() => null);
+  return (
+    existing !== null &&
+    existing.length === bytes.length &&
+    existing.equals(bytes)
+  );
 }
 
 export async function loadLabConfig(input: {
@@ -138,7 +153,13 @@ export async function loadLabConfig(input: {
   });
   // Stage approved derivatives plus original snapshots under the lab base
   // URL so both comparison arms serve bytes from the same lab asset origin.
-  // This runs once at lab setup, never on a shopper request.
+  // This runs once at lab setup, never on a shopper request. Staging must
+  // complete BEFORE `next start`: files added to public/ after the server
+  // starts are not served, so operators run the pre-start stage CLI
+  // (tools/perf/merchant-image-pilot-stage.cli.ts) and then start the
+  // origin. Request-time loads re-verify and self-heal missing or drifted
+  // files for the NEXT restart; preflight's served-byte checks fail closed
+  // when staged bytes are not actually servable.
   const stagedOriginals = new Map<string, string>();
   for (const status of statuses) {
     if (status.status !== 'accepted' || !status.generationId) {
@@ -185,7 +206,10 @@ export async function loadLabConfig(input: {
       record.sourcePath,
       status.binding.sourceSha256
     );
-    await writeFile(join(originalsStage, fileName), snapshot);
+    const originalDest = join(originalsStage, fileName);
+    if (!(await destMatches(originalDest, snapshot))) {
+      await writeFile(originalDest, snapshot);
+    }
     stagedOriginals.set(
       `${status.binding.merchantId}/${status.binding.slotId}`,
       `${baseUrl}/originals/${fileName}`

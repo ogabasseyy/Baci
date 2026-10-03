@@ -6,7 +6,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGeneration } from './manifest.mjs';
-import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
+import {
+  assertJobDeadline,
+  parseMinFreeBytes,
+  runPilotGeneration,
+} from './generate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
@@ -202,4 +206,13 @@ test('over-cap inventories and exhausted disks fail fast', async () => {
     outputRoot: single.outputRoot,
   });
   assert.equal(summary.failed, 1);
+});
+
+test('assertJobDeadline fails closed past the job budget', () => {
+  assert.doesNotThrow(() => assertJobDeadline(Date.now() + 60_000, 'claim'));
+  assert.throws(() => assertJobDeadline(Date.now() - 1, 'commit'), (error) => {
+    assert.equal(error.code, 'deadline-exceeded');
+    assert.match(error.message, /120000ms budget during commit/);
+    return true;
+  });
 });

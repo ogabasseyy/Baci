@@ -200,4 +200,14 @@ describe('LabHeroMobileCarousel original-renderer parity', () => {
     expect(control.fallbackSrcSet).toBe(CONTROL_URL);
     expect(control.preload.href).toBe(CONTROL_URL);
   });
+
+  it('links hero CTAs at the lab-category fixture route, never a missing product route', () => {
+    const [slide0, slide1] = slides(CONTROL_URL);
+    expect(slide0.href).toBe(
+      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-0'
+    );
+    expect(slide1.href).toBe(
+      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-1'
+    );
+  });
 });

@@ -1,10 +1,20 @@
 import { createHash } from 'node:crypto';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { parseCliArgs } from './cli-args.mjs';
 import { MAX_INPUT_BYTES, OP_TIMEOUT_MS, ROLES } from './constants.mjs';
 import {
+  ASSET_ID_PATTERN,
   resolveNewSnapshotPath,
   snapshotNameForAsset,
 } from './input-store.mjs';
@@ -23,12 +33,23 @@ export const EXTENSION_FOR_CONTENT_TYPE = {
 
 const AcquireIdentitySchema = z
   .object({
-    assetId: z.string().min(1),
+    // Same contract the shared job schema and snapshot namer enforce, so a
+    // bad id fails here instead of after the whole remote image downloads.
+    assetId: z.string().regex(ASSET_ID_PATTERN),
     merchantId: z.string().uuid(),
     role: z.enum(ROLES),
     slot: z.string().min(1).max(128),
   })
   .strict();
+
+// Decoded-format to MIME map for the acquisition content-type cross-check.
+// Sharp reports 'jpeg' (never 'jpg'); anything unmapped fails closed.
+const CONTENT_TYPE_FOR_DECODED_FORMAT = {
+  avif: 'image/avif',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+};
 
 export class PilotAcquireError extends Error {
   constructor(message) {
@@ -127,6 +148,13 @@ export async function acquireSnapshot(options) {
       `acquire: invalid identity (${fields.join(', ')})`
     );
   }
+  // The snapshot stem is "<merchantId>-<assetId>" capped at 128 chars; a
+  // 92+ char asset id would otherwise download fully, then fail naming.
+  if (`${merchantId}-${assetId}`.length > 128) {
+    throw new PilotAcquireError(
+      `acquire: asset id keeps the snapshot stem over 128 characters`
+    );
+  }
   const { bytes, contentType } = await fetchBoundedBytes(url, {
     maxBytes,
     timeoutMs,
@@ -167,6 +195,18 @@ export async function acquireSnapshot(options) {
     }
     throw error;
   }
+  // The origin's label must agree with the decoded bytes: JPEG bytes filed
+  // as image/png would stage a mismatched snapshot and control URL.
+  const decodedContentType =
+    CONTENT_TYPE_FOR_DECODED_FORMAT[geometry?.format];
+  if (decodedContentType !== contentType) {
+    if (wroteSnapshot) {
+      await unlink(target).catch(() => {});
+    }
+    throw new PilotAcquireError(
+      `acquire: origin labeled bytes "${contentType}" but they decode as "${geometry?.format ?? 'unknown'}"`
+    );
+  }
   const record = {
     assetId,
     capturedAt: new Date().toISOString(),
@@ -196,45 +236,131 @@ export async function acquireSnapshot(options) {
   return record;
 }
 
-export async function appendInventoryRecord(inventoryPath, record) {
-  const existing = await readFile(inventoryPath, 'utf8').catch((error) => {
-    if (error?.code === 'ENOENT') {
-      return '[]';
-    }
-    throw error;
-  });
-  let records;
+const INVENTORY_LOCK_TIMEOUT_MS = 10_000;
+const INVENTORY_LOCK_STALE_MS = 60_000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function isStaleInventoryLock(lockDir) {
+  const owner = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
+    () => null
+  );
+  // No owner file yet: a holder is mid-acquire, not stale.
+  if (owner === null) {
+    return false;
+  }
+  let parsed;
   try {
-    records = JSON.parse(existing);
+    parsed = JSON.parse(owner);
   } catch {
-    throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
+    return true;
   }
-  if (!Array.isArray(records)) {
-    throw new PilotAcquireError(`acquire: inventory is not an array`);
+  if (Date.now() - Date.parse(parsed.startedAt) > INVENTORY_LOCK_STALE_MS) {
+    return true;
   }
-  records.push(record);
-  const jobs = records.map((entry) => ({
-    assetId: entry.assetId,
-    expectedSha256: entry.sha256,
-    merchantId: entry.merchantId,
-    role: entry.role,
-    schemaVersion: entry.schemaVersion,
-    sourcePath: entry.sourcePath,
-  }));
-  const validated = validateInventory(jobs);
-  if (!validated.ok) {
-    throw new PilotAcquireError(
-      `acquire: inventory invalid (${validated.errors.join('; ')})`
+  if (Number.isInteger(parsed.pid)) {
+    try {
+      process.kill(parsed.pid, 0);
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function acquireInventoryLock(lockDir) {
+  const deadline = Date.now() + INVENTORY_LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await mkdir(lockDir);
+      await writeFile(
+        join(lockDir, 'owner.json'),
+        JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
+      );
+      return;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+    }
+    // Steal a crashed holder's lock instead of wedging every future append.
+    if (await isStaleInventoryLock(lockDir)) {
+      await rm(lockDir, { force: true, recursive: true });
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new PilotAcquireError(
+        `acquire: timed out waiting for the inventory lock`
+      );
+    }
+    await sleep(25);
+  }
+}
+
+async function releaseInventoryLock(lockDir) {
+  await rm(lockDir, { force: true, recursive: true });
+}
+
+export async function appendInventoryRecord(inventoryPath, record) {
+  // Serialized: two concurrent appends must never read the same array and
+  // overwrite each other, silently dropping an asset.
+  const lockDir = `${inventoryPath}.lock`;
+  await acquireInventoryLock(lockDir);
+  try {
+    const existing = await readFile(inventoryPath, 'utf8').catch((error) => {
+      if (error?.code === 'ENOENT') {
+        return '[]';
+      }
+      throw error;
+    });
+    let records;
+    try {
+      records = JSON.parse(existing);
+    } catch {
+      throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
+    }
+    if (!Array.isArray(records)) {
+      throw new PilotAcquireError(`acquire: inventory is not an array`);
+    }
+    records.push(record);
+    const jobs = records.map((entry) => ({
+      assetId: entry.assetId,
+      expectedSha256: entry.sha256,
+      merchantId: entry.merchantId,
+      role: entry.role,
+      schemaVersion: entry.schemaVersion,
+      sourcePath: entry.sourcePath,
+    }));
+    const validated = validateInventory(jobs);
+    if (!validated.ok) {
+      throw new PilotAcquireError(
+        `acquire: inventory invalid (${validated.errors.join('; ')})`
+      );
+    }
+    const unique = validateInventoryUniqueness(records);
+    if (!unique.ok) {
+      throw new PilotAcquireError(
+        `acquire: inventory invalid (${unique.errors.join('; ')})`
+      );
+    }
+    // Publish via temp + fsync + atomic rename so an interruption leaves the
+    // old inventory or the new one, never half-written JSON.
+    const tmp = join(
+      dirname(inventoryPath),
+      `.inventory-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
     );
+    const handle = await open(tmp, 'w');
+    try {
+      await handle.writeFile(`${JSON.stringify(records, null, 2)}\n`);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(tmp, inventoryPath);
+    return records.length;
+  } finally {
+    await releaseInventoryLock(lockDir);
   }
-  const unique = validateInventoryUniqueness(records);
-  if (!unique.ok) {
-    throw new PilotAcquireError(
-      `acquire: inventory invalid (${unique.errors.join('; ')})`
-    );
-  }
-  await writeFile(inventoryPath, `${JSON.stringify(records, null, 2)}\n`);
-  return records.length;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

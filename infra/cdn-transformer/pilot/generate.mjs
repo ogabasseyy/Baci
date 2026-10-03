@@ -45,6 +45,22 @@ export class PilotGenerateError extends Error {
   }
 }
 
+// Phase-boundary deadline guard: the absolute job deadline previously
+// reached only the encoder, so slow claim/snapshot/staging/commit phases
+// could blow past the 120s cap (or hold a claim indefinitely while making
+// no progress). Every throw here funnels through runJob's catch, which
+// releases the claim and reports 'failed' instead of hanging or lying.
+// Residual: a truly wedged storage syscall cannot be interrupted from this
+// process; these checks bound slow phases, not hung syscalls.
+export function assertJobDeadline(deadlineMs, phase) {
+  if (Date.now() > deadlineMs) {
+    throw new PilotGenerateError(
+      'deadline-exceeded',
+      `job exceeded its ${JOB_TIMEOUT_MS}ms budget during ${phase}`
+    );
+  }
+}
+
 async function findPnpmPin() {
   let dir = here;
   for (let depth = 0; depth < 6; depth += 1) {
@@ -91,15 +107,18 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
       await recoverAbandonedClaim(outputRoot, job);
       claim = await acquireClaim(outputRoot, job, runToken);
     }
+    assertJobDeadline(deadlineMs, 'claim');
     sampleRss();
     const snapshot = await readInputSnapshot(inputRoot, job.sourcePath);
     if (!verifySnapshotHash(snapshot, job.expectedSha256)) {
       throw new PilotGenerateError('source-mismatch', 'source bytes differ from the validated hash');
     }
+    assertJobDeadline(deadlineMs, 'snapshot');
     stagingDir = ownedStagingPath(outputRoot, claim.runToken);
     await mkdir(stagingDir, { recursive: true });
     const frozenCopy = join(stagingDir, 'source.snapshot');
     await writeFile(frozenCopy, snapshot.bytes, { flag: 'wx' });
+    assertJobDeadline(deadlineMs, 'staging');
     const stagingBudget = createStagingBudget();
     stagingBudget.charge(snapshot.bytes.length);
     sampleRss();
@@ -197,6 +216,7 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
           : tier.path;
       files.push({ from, name });
     }
+    assertJobDeadline(deadlineMs, 'pre-commit');
     const committed = await commitGeneration({
       files,
       generationId,
@@ -205,6 +225,7 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
       outputRoot,
       stagingDir,
     });
+    assertJobDeadline(deadlineMs, 'commit');
     sampleRss();
     await releaseClaim(outputRoot, job, claim.runToken);
     if (!committed.reused) {

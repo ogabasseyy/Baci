@@ -394,6 +394,12 @@ node pilot/generate.mjs --inventory .pilot-input/inventory.json \
 node pilot/quality-sheet.mjs --output-root .pilot-output \
   --acceptance .pilot-output/acceptance.json --out /tmp/pilot-sheet.html
 
+# Lab serving (from apps/web; stage BEFORE starting Next — files added to
+# public/ after start are not served, verified 2026-10-03 on next start)
+BACI_IMAGE_PILOT_LAB=1 corepack pnpm pilot:stage \
+  --input-root <dir> --output-root <dir> --public-dir <public>
+corepack pnpm exec next start -p 3122   # only after staging succeeds
+
 # Final validation (Task 7)
 pnpm turbo lint
 pnpm turbo typecheck

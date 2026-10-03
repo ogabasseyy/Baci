@@ -1,9 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, open, realpath, stat } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from './constants.mjs';
 
-const ASSET_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+export const ASSET_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 const SNAPSHOT_EXTENSION_PATTERN = /^(png|jpg|jpeg|webp|avif)$/;
 
 export class PilotInputError extends Error {
@@ -51,18 +51,30 @@ export async function resolveExistingInputPath(inputRoot, sourcePath) {
 
 export async function readInputSnapshot(inputRoot, sourcePath) {
   const resolvedPath = await resolveExistingInputPath(inputRoot, sourcePath);
-  const bytes = await readFile(resolvedPath);
-  if (bytes.length > MAX_INPUT_BYTES) {
-    throw new PilotInputError(
-      `source file is too large: ${bytes.length} bytes exceeds ${MAX_INPUT_BYTES}`
-    );
+  // Bound the read BEFORE allocating: a stat-then-read races a concurrent
+  // replacement, so read at most MAX+1 bytes through an open handle. A file
+  // that exceeds the cap — or grows past it mid-read — is rejected instead
+  // of exhausting the generator process.
+  const handle = await open(resolvedPath, 'r');
+  try {
+    const probe = Buffer.alloc(MAX_INPUT_BYTES + 1);
+    const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    if (bytesRead > MAX_INPUT_BYTES) {
+      throw new PilotInputError(
+        `source file is too large: exceeds ${MAX_INPUT_BYTES} bytes`
+      );
+    }
+    // Copy out so small snapshots don't pin the 10 MiB probe buffer.
+    const bytes = Buffer.from(probe.subarray(0, bytesRead));
+    return {
+      bytes,
+      resolvedPath,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      size: bytes.length,
+    };
+  } finally {
+    await handle.close();
   }
-  return {
-    bytes,
-    resolvedPath,
-    sha256: createHash('sha256').update(bytes).digest('hex'),
-    size: bytes.length,
-  };
 }
 
 export function verifySnapshotHash(snapshot, expectedSha256) {

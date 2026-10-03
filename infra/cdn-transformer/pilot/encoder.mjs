@@ -49,6 +49,16 @@ export async function encodeVariant({
   width,
 }) {
   const output = join(stagingDir, `${fileStem}-w${width}-q${quality}.${format}`);
+  // Reserve against the tier ceiling BEFORE the worker writes: charging
+  // after the fact lets a large attempt exceed the staging cap on disk
+  // (cleanup only runs later, at job scope). Refusing upfront returns the
+  // same over-budget outcome the post-write check would reach.
+  if (
+    stagingBudget &&
+    stagingBudget.used + budgetBytes > stagingBudget.cap
+  ) {
+    return { bytes: budgetBytes, quality, status: 'over-budget' };
+  }
   const encoded = await runWorkerOp(
     {
       expectedInputSha256: expectedSha256,

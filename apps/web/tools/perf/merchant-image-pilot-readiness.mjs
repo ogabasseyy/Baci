@@ -1,60 +1,30 @@
 // Browser readiness gate for the merchant image pilot.
 //
-// Loads every sampled store surface in both arms in real Chrome (mobile
-// viewport) and fails closed unless the surface is measurement-ready:
-// styles delivered (computed styles, never class names), responsive geometry
-// holds, layout matches across arms, selected image identities hold, and no
-// failed requests or console errors pollute the run. Timing is NOT measured
-// here — this gate qualifies the surface before any quiet-window comparison.
+// Loads every sampled store surface in both arms in real Chrome across the
+// required profile matrix (mobile DPR 1/2/3 + desktop) and fails closed
+// unless the surface is measurement-ready: styles delivered (computed
+// styles, never class names), responsive geometry holds, layout matches
+// across arms, the selected image decoded from a staged URL, and no failed
+// requests or console errors pollute the run. Timing is NOT measured here
+// — this gate qualifies the surface before any quiet-window comparison.
 //
 // Usage:
 //   node merchant-image-pilot-readiness.mjs --origin=http://localhost:3122 \
 //     --store-map='merchant-uuid=slug,...' --hero-stores='ogabassey' \
-//     --chrome='/path/to/Chrome'
+//     --chrome='/path/to/Chrome' [--profiles=mobile-dpr2,desktop-dpr1]
 // Exits 0 with a JSON report on stdout when ready; exit 1 otherwise.
 import { chromium } from 'playwright';
-
-const VIEWPORT = { height: 844, width: 390 };
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const match = /^--([a-z-]+)=(.*)$/.exec(argv[i]);
-    if (match) {
-      args[match[1]] = match[2];
-    }
-  }
-  return args;
-}
-
-function parseStoreMap(value) {
-  return String(value ?? '')
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-    .map((entry) => {
-      const [merchantId, slug] = entry.split('=');
-      if (!merchantId || !slug) {
-        throw new Error(`bad --store-map entry: ${entry}`);
-      }
-      return { merchantId, slug };
-    });
-}
-
-// Rounded-box equality: identical DOM + identical CSS must lay out
-// identically. Rounding absorbs subpixel serialization, nothing more.
-export function boxesMatch(left, right) {
-  for (const key of ['x', 'y', 'width', 'height']) {
-    if (Math.round(left[key]) !== Math.round(right[key])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-export function pilotImageUrlsOk(urls) {
-  return urls.every((url) => !url.includes('/originals/'));
-}
+import {
+  boxesMatch,
+  pilotImageUrlsOk,
+  selectedImageProblems,
+} from './merchant-image-pilot-readiness-checks.mjs';
+import {
+  parseArgs,
+  parseProfiles,
+  parseStoreMap,
+  READINESS_PROFILES,
+} from './merchant-image-pilot-readiness-config.mjs';
 
 async function collectSurface(page, url, surface) {
   const consoleErrors = [];
@@ -81,6 +51,16 @@ async function collectSurface(page, url, surface) {
     if (contentType.startsWith('image/')) {
       imageUrls.push(responseUrl);
     }
+  });
+  // Network-level failures (DNS, reset, aborted) never produce a response.
+  page.on('requestfailed', (request) => {
+    const requestUrl = request.url();
+    if (!requestUrl.startsWith(origin)) {
+      return;
+    }
+    failedRequests.push(
+      `requestfailed ${requestUrl.slice(-80)} (${request.failure()?.errorText ?? 'unknown'})`
+    );
   });
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   const geometry = await page.evaluate((surface) => {
@@ -120,6 +100,13 @@ async function collectSurface(page, url, surface) {
         ? getComputedStyle(selectedImg).objectFit
         : null,
       selected: rectOf(selected),
+      selectedImg: selectedImg
+        ? {
+            complete: selectedImg.complete,
+            currentSrc: selectedImg.currentSrc,
+            naturalWidth: selectedImg.naturalWidth,
+          }
+        : null,
       stylesheetBytes: sheets.reduce(
         (sum, entry) => sum + (entry.encodedBodySize ?? 0),
         0
@@ -151,6 +138,13 @@ async function run() {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false };
   }
+  let profiles;
+  try {
+    profiles = parseProfiles(args.profiles);
+  } catch (error) {
+    fail('usage', error instanceof Error ? error.message : String(error));
+    return { checks, failures, ok: false };
+  }
   let browser;
   try {
     browser = await chromium.launch({
@@ -172,88 +166,92 @@ async function run() {
         .filter((slug) => slug.length > 0)
     );
     for (const store of stores) {
-      const surfaces = {};
       const surface = heroStores.has(store.slug) ? 'hero' : 'grid';
       const expectedFit = surface === 'hero' ? 'contain' : 'cover';
-      for (const arm of ['control', 'pilot']) {
-        const name = `store:${store.slug}:${arm}`;
-        const context = await browser.newContext({
-          deviceScaleFactor: 2,
-          hasTouch: true,
-          isMobile: true,
-          viewport: VIEWPORT,
-        });
-        try {
-          const page = await context.newPage();
-          const collected = await collectSurface(
-            page,
-            `${args.origin}/pilot-lab/store/${store.slug}?arm=${arm}`,
-            surface
-          );
-          surfaces[arm] = collected;
-          const problems = [];
-          if (collected.consoleErrors.length > 0) {
-            problems.push(
-              `console errors: ${collected.consoleErrors.join(' | ')}`
+      for (const profile of profiles) {
+        const surfaces = {};
+        const device = READINESS_PROFILES[profile];
+        for (const arm of ['control', 'pilot']) {
+          const name = `store:${store.slug}:${arm}:${profile}`;
+          const context = await browser.newContext({
+            deviceScaleFactor: device.deviceScaleFactor,
+            hasTouch: device.hasTouch,
+            isMobile: device.isMobile,
+            viewport: device.viewport,
+          });
+          try {
+            const page = await context.newPage();
+            const collected = await collectSurface(
+              page,
+              `${args.origin}/pilot-lab/store/${store.slug}?arm=${arm}`,
+              surface
             );
+            surfaces[arm] = collected;
+            const problems = [];
+            if (collected.consoleErrors.length > 0) {
+              problems.push(
+                `console errors: ${collected.consoleErrors.join(' | ')}`
+              );
+            }
+            if (collected.failedRequests.length > 0) {
+              problems.push(
+                `failed requests: ${collected.failedRequests.join(' | ')}`
+              );
+            }
+            const g = collected.geometry;
+            if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {
+              problems.push('no stylesheet delivered');
+            }
+            if (!g.heading || g.heading.width > 1 || g.heading.height > 1) {
+              problems.push('sr-only heading occupies visible space');
+            }
+            if (!g.selected) {
+              problems.push('selected slot absent');
+            } else if (g.selected.x + g.selected.width > g.viewportWidth + 1) {
+              problems.push('selected slot overflows the viewport');
+            }
+            if (surface === 'grid' && g.gridDisplay !== 'grid') {
+              problems.push(`grid display is ${g.gridDisplay ?? 'missing'}`);
+            }
+            if (g.imgObjectFit !== expectedFit) {
+              problems.push(
+                `selected image object-fit is ${g.imgObjectFit ?? 'missing'}, expected ${expectedFit}`
+              );
+            }
+            problems.push(...selectedImageProblems(g.selectedImg, arm));
+            if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
+              problems.push('pilot requested a selected original');
+            }
+            if (
+              arm === 'control' &&
+              !collected.imageUrls.some((url) => url.includes('/originals/'))
+            ) {
+              problems.push('control requested no staged original');
+            }
+            if (problems.length > 0) {
+              fail(name, problems.join('; '));
+            } else {
+              pass(name);
+            }
+          } finally {
+            await context.close();
           }
-          if (collected.failedRequests.length > 0) {
-            problems.push(
-              `failed requests: ${collected.failedRequests.join(' | ')}`
-            );
-          }
-          const g = collected.geometry;
-          if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {
-            problems.push('no stylesheet delivered');
-          }
-          if (!g.heading || g.heading.width > 1 || g.heading.height > 1) {
-            problems.push('sr-only heading occupies visible space');
-          }
-          if (!g.selected) {
-            problems.push('selected slot absent');
-          } else if (g.selected.x + g.selected.width > g.viewportWidth + 1) {
-            problems.push('selected slot overflows the viewport');
-          }
-          if (surface === 'grid' && g.gridDisplay !== 'grid') {
-            problems.push(`grid display is ${g.gridDisplay ?? 'missing'}`);
-          }
-          if (g.imgObjectFit !== expectedFit) {
-            problems.push(
-              `selected image object-fit is ${g.imgObjectFit ?? 'missing'}, expected ${expectedFit}`
-            );
-          }
-          if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
-            problems.push('pilot requested a selected original');
-          }
-          if (
-            arm === 'control' &&
-            !collected.imageUrls.some((url) => url.includes('/originals/'))
-          ) {
-            problems.push('control requested no staged original');
-          }
-          if (problems.length > 0) {
-            fail(name, problems.join('; '));
-          } else {
-            pass(name);
-          }
-        } finally {
-          await context.close();
         }
-      }
-      const pair = `store:${store.slug}:cross-arm-layout`;
-      const left = surfaces.control?.geometry;
-      const right = surfaces.pilot?.geometry;
-      if (!left || !right || !left.selected || !right.selected) {
-        fail(pair, 'missing geometry for cross-arm comparison');
-      } else if (
-        !boxesMatch(left.selected, right.selected) ||
-        (left.heading &&
-          right.heading &&
-          !boxesMatch(left.heading, right.heading))
-      ) {
-        fail(pair, 'selected-slot boxes differ between arms');
-      } else {
-        pass(pair);
+        const pair = `store:${store.slug}:cross-arm-layout:${profile}`;
+        const left = surfaces.control?.geometry;
+        const right = surfaces.pilot?.geometry;
+        if (!left || !right || !left.selected || !right.selected) {
+          fail(pair, 'missing geometry for cross-arm comparison');
+        } else if (
+          !boxesMatch(left.selected, right.selected) ||
+          (left.heading &&
+            right.heading &&
+            !boxesMatch(left.heading, right.heading))
+        ) {
+          fail(pair, 'selected-slot boxes differ between arms');
+        } else {
+          pass(pair);
+        }
       }
     }
   } finally {

@@ -84,6 +84,31 @@ test('encodeVariant encodes within budget and flags over-budget output', async (
   assert.ok(over.bytes > 100);
 });
 
+test('encodeVariant refuses before writing when the tier cannot fit the staging cap', async () => {
+  const dir = await staging();
+  const input = fixture('photo-1254x1254.jpg');
+  // 100 bytes of headroom with a 500KB tier ceiling: the attempt must be
+  // refused without invoking the worker (no output file appears).
+  const budget = createStagingBudget(100);
+  const refused = await encodeVariant({
+    budgetBytes: 500_000,
+    deadlineMs: Date.now() + 60_000,
+    expectedSha256: await shaOf(input),
+    fileStem: 'photo-refused',
+    format: 'webp',
+    quality: 70,
+    snapshotPath: input,
+    stagingBudget: budget,
+    stagingDir: dir,
+    width: 384,
+  });
+  assert.equal(refused.status, 'over-budget');
+  assert.equal(refused.bytes, 500_000);
+  assert.equal(budget.used, 0);
+  const { readdir } = await import('node:fs/promises');
+  assert.deepEqual(await readdir(dir), []);
+});
+
 test('encode preserves alpha, converts color, applies EXIF, never upscales', async () => {
   const dir = await staging();
   const budget = createStagingBudget();

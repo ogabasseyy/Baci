@@ -15,9 +15,10 @@
 // Add --lighthouse plus --expect-form-factor, --expect-throttling-method,
 // --expect-lh-viewport, --expect-lh-dpr and --expect-cpu-slowdown to also
 // verify a Lighthouse report. Exits 0 with a JSON report on stdout when
-// every setting matches. Optional attestations remove unknowns: without
-// --cache-provenance / --browser-version the report warns unknown instead
-// of claiming cold-cache proof or executable identity.
+// every setting matches. --cache-provenance is REQUIRED for the cold-cache
+// claim: HAR converters (chrome-har drops disk-cached resources by default)
+// can omit cache hits entirely, so zero recorded hits alone never proves
+// cold. --browser-version stays an optional unknown-removing attestation.
 import { readFile } from 'node:fs/promises';
 
 function parseArgs(argv) {
@@ -37,6 +38,16 @@ function parseDimensions(value, name) {
     throw new Error(`bad --${name}: ${value}`);
   }
   return { height: Number(match[2]), width: Number(match[1]) };
+}
+
+// A non-numeric DPR would make every geometry comparison NaN (false) and
+// silently pass the check, so reject it at parse time like dimensions.
+export function parsePositiveNumber(value, name) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`bad --${name}: ${value}`);
+  }
+  return parsed;
 }
 
 // PNG IHDR: width/height as uint32BE at bytes 16..23. No image deps.
@@ -102,7 +113,7 @@ async function checkHar(args, pass, fail, warn, recorded) {
     pass('har.browser');
   }
   const viewport = parseDimensions(args['expect-viewport'], 'expect-viewport');
-  const dpr = Number(args['expect-dpr']);
+  const dpr = parsePositiveNumber(args['expect-dpr'], 'expect-dpr');
   try {
     const png = pngDimensions(await readFile(args.screenshot));
     recorded.screenshot = `${png.width}x${png.height}`;
@@ -122,25 +133,35 @@ async function checkHar(args, pass, fail, warn, recorded) {
   } catch {
     fail('har.geometry', `cannot read ${args.screenshot}`);
   }
-  // Cold cache means NO RECORDED cache hit: a revalidation miss (304) or
-  // any runner-recorded cache path (disk, prefetch, service worker). Cached
-  // resources can carry HTTP 200, so status alone never proves cold. Plain
-  // zero-byte entries (204s, data URLs) carry none of these signals and are
-  // not classified as cache. Absence of recorded hits plus affirmative
-  // runner provenance (har.cache-provenance) is the full claim.
+  // Cold cache means NO RECORDED cache hit: a revalidation miss (304),
+  // any runner-recorded cache path (disk, prefetch, service worker), or a
+  // retained disk-cache marker (HARs built with cached resources kept carry
+  // entry.cache.beforeRequest). Cached resources can carry HTTP 200, so
+  // status alone never proves cold. Plain zero-byte entries (204s, data
+  // URLs) carry none of these signals and are not classified as cache.
+  // Absence of recorded hits is necessary but NOT sufficient: converters
+  // such as chrome-har drop disk-cached resources by default, so a warm run
+  // can present zero entries. The cold claim additionally requires
+  // affirmative runner provenance (--cache-provenance).
   const cached = (har?.log?.entries ?? []).filter((entry) => {
     const response = entry?.response ?? {};
     return (
       response.status === 304 ||
       response.fromDiskCache === true ||
       response.fromPrefetchCache === true ||
-      response.fromServiceWorker === true
+      response.fromServiceWorker === true ||
+      entry?.cache?.beforeRequest !== undefined
     );
   });
   if (cached.length > 0) {
     fail(
       'har.cold-cache',
-      `${cached.length} recorded cache hits (304/disk/prefetch/service-worker)`
+      `${cached.length} recorded cache hits (304/disk/prefetch/service-worker/beforeRequest)`
+    );
+  } else if (args['cache-provenance'] === undefined) {
+    fail(
+      'har.cold-cache',
+      'no recorded hits, but no cache-reset provenance: absence cannot prove cold (converters may omit cached resources)'
     );
   } else {
     pass('har.cold-cache');
@@ -148,7 +169,7 @@ async function checkHar(args, pass, fail, warn, recorded) {
   if (args['cache-provenance'] === undefined) {
     warn(
       'har.cache-provenance',
-      'unknown (no runner profile/reset provenance supplied; HAR shows no recorded hits)'
+      'unknown (no runner profile/reset provenance supplied)'
     );
   } else {
     recorded.cacheProvenance = args['cache-provenance'];

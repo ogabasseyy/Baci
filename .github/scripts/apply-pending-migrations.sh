@@ -35,6 +35,14 @@
 # actually serving a hook -- before a later step applies the rest. The cap
 # never splits an atomic group: a group reaching above it defers whole.
 #
+# Ordering contract (callers, not this script, own it): the cap only
+# proves a prefix when the caller applies restore-capped, probes, then
+# applies the remainder uncapped -- invoking this script directly
+# without the cap applies everything in one pass by design (local
+# single-phase use), skipping whatever gate the cap was sectioning
+# off. Keep deploy.yml's two-phase apply/probe/apply sequence (or an
+# equivalent) whenever a canary proof is required.
+#
 # `statements` remains ARRAY[]::text[] because the CLI only consults version/name;
 # preserving SQL there would require fragile escaping of `$$` and single quotes.
 set -euo pipefail

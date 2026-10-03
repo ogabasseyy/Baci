@@ -58,13 +58,37 @@ unless `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` — emergency only, then
 re-run the smoke/latch sequence). For an emergency manual rollback,
 restore the COMPLETE old worker release — not just the checkout
 symlink: repointing `app-live` alone leaves the newer `bin/`, `jobs/`,
-and `lib/` installed, so cron executes a mixed release while the SHA
-marker claims the old revision, and neither readiness nor the latch
-can detect the wrapper skew. The old worktree is a full repo checkout,
-so it carries the old `vps-workers/` tree; if it was already retired,
-re-create it first (`git -C <base>/app-live worktree add --detach
-<base>/app-<sha> <sha>`), or use the `deploy.sh` path instead. Then,
-under the deploy lock with the GIGL runtime lock nested inside
+`lib/`, and `node_modules/` installed, so cron executes a mixed
+release while the SHA marker claims the old revision, and neither
+readiness nor the latch can detect the wrapper or dependency skew.
+The old worktree is a full repo checkout, so it carries the old
+`vps-workers/` tree; if it was already retired, re-create it first
+(`git -C <base>/app-live worktree add --detach <base>/app-<sha>
+<sha>`), or use the `deploy.sh` path instead.
+
+Rebuild the old dependency tree BEFORE taking locks: a registry
+fetch under the quiesce would hold every worker lock for the whole
+install, while the retired worktree runs nothing until the flip, so
+building there is contention-free (node_modules/ is git-ignored, so
+the "immutable" worktree stays git-clean — provision does the same
+`pnpm install` inside per-SHA worktrees):
+
+```sh
+(cd <base>/app-<sha>/vps-workers && CI=true pnpm install --frozen-lockfile --prod)
+```
+
+Refuse the rollback while a production deploy is in flight, through
+the same GitHub-side protocol as `deploy.sh` — run from a checkout
+of the production repo with an authenticated `gh` (the `bash -c`
+wrapper contains the `exit` refusal without killing an interactive
+shell; emergency-only bypass `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1`,
+then re-verify the latch):
+
+```sh
+bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && check_deploy_workflow_inflight'
+```
+
+Then, under the deploy lock with the GIGL runtime lock nested inside
 (promote's order), quiesce EVERY worker via the shared helper before
 touching the shared trees — this restore replaces `bin/`/`jobs/`/`lib/`
 for all workers, not just GIGL, so a non-GIGL tick that lands mid-restore
@@ -74,37 +98,54 @@ would otherwise run mixed-release code:
 flock -x /tmp/baci-workers-deploy.lock \
 flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   set -euo pipefail
+  # The remote dir arrives as $0 (the trailing argument), NOT via
+  # $REMOTE_DIR: this child shell only inherits EXPORTED variables,
+  # and an operator who set REMOTE_DIR without export would trip
+  # `set -u` on the first inner reference.
+  remote_dir="$0"
   # Full quiesce (same helper as promote): stops the persistent
   # services (auto-restarted on shell exit, even on abort) and holds
   # every scheduled worker lock, so other ticks skip instead of
   # straddling. Sourced from LIVE (the revision actually running). If
   # the helper itself is absent, lib/ is destroyed and the other
   # workers are already down — proceed with the two locks.
-  if [ -f "$REMOTE_DIR/lib/quiesce-worker-release.sh" ]; then
-    . "$REMOTE_DIR/lib/quiesce-worker-release.sh"
-    quiesce_worker_release "$REMOTE_DIR" || exit 1
+  if [ -f "$remote_dir/lib/quiesce-worker-release.sh" ]; then
+    . "$remote_dir/lib/quiesce-worker-release.sh"
+    quiesce_worker_release "$remote_dir" || exit 1
   else
     echo "WARNING: quiesce helper missing; continuing with deploy+GIGL locks only." >&2
   fi
-  rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$REMOTE_DIR/bin/"
-  rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$REMOTE_DIR/jobs/"
-  rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$REMOTE_DIR/lib/"
-  cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$REMOTE_DIR/bin/gigl-dotenv.sh"
+  rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$remote_dir/bin/"
+  rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$remote_dir/jobs/"
+  rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$remote_dir/lib/"
+  rsync -a --delete <base>/app-<sha>/vps-workers/node_modules/ "$remote_dir/node_modules/"
+  cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$remote_dir/bin/gigl-dotenv.sh"
   ln -sfn <base>/app-<sha> <base>/app-live
-  printf "<sha>" > "$REMOTE_DIR/app-checkout.sha"
-  rm -f "$REMOTE_DIR/.gigl-capability-smoke-ok"
-'
+  printf "<sha>" > "$remote_dir/app-checkout.sha"
+  rm -f "$remote_dir/.gigl-capability-smoke-ok"
+' "$REMOTE_DIR"
 ```
 
-Files restore BEFORE the symlink/marker flip, so the marker never
-claims the old revision while newer wrappers are still installed.
-Deleting the latch is required — it certified the newer revision, and
-without this a later non-tracking push would bypass on a stale proof
-while cron runs the old code. Re-smoke afterwards for immediate
-confidence; the next tracking push re-latches. Installed dependencies
-(`$REMOTE_DIR/node_modules`) and the crontab stay at the newer
-release: follow with a full `deploy.sh` from the old SHA at the first
-opportunity to converge them.
+Files (including the rebuilt dependency tree) restore BEFORE the
+symlink/marker flip, so the marker never claims the old revision
+while newer wrappers are still installed. Deleting the latch is
+required — it certified the newer revision, and without this a later
+non-tracking push would bypass on a stale proof while cron runs the
+old code. Record the rollback afterwards so the workflow's
+pre-publish overlap check sees it (same record as a promote, with
+the restored full 40-hex SHA — a deploy that started after the
+pre-rollback check reads post-rollback files and needs no warning,
+but one that was already in flight must refuse to publish off its
+pre-rollback latch/SHA read):
+
+```sh
+bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && record_deploy_workflow_promote "<full-sha>"'
+```
+
+Re-smoke afterwards for immediate confidence; the next tracking push
+re-latches. The crontab stays at the newer release: follow with a
+full `deploy.sh` from the old SHA at the first opportunity to
+converge it.
 
 Known residual window: promote lands new code before the workflow's
 `db-migrations` apply, so a tracking change that needs a new migration
@@ -116,8 +157,10 @@ and is tracked as a follow-up, not this cutover.
 
 ## deploy.sh / workflow serialization
 
-Manual promotion and the production deploy workflow are mutually
-exclusive across the GitHub API, in both directions:
+Manual promotion (including the emergency manual rollback above,
+which runs the same check-before/record-after steps) and the
+production deploy workflow are mutually exclusive across the GitHub
+API, in both directions:
 
 - `deploy.sh` refuses to promote while any main-branch deploy run is
   in flight (checked before staging for fail-fast, and again

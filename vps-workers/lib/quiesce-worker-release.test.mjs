@@ -181,6 +181,68 @@ describe('quiesce-worker-release', () => {
     assert.ok(!lockExists(fixture, 'error-remediator-global.lock'));
   });
 
+  it('defers a renamed remediation global lock past every per-job lock', () => {
+    const fixture = setup();
+    // Live tree with a custom global lock path, read through the real
+    // staged reader (copied verbatim, so this tests the production
+    // parse path, not a stub).
+    mkdirSync(join(fixture.remote, 'bin'), { recursive: true });
+    writeFileSync(
+      join(fixture.remote, 'bin', 'gigl-dotenv.sh'),
+      readFileSync(
+        join(directory, '..', '..', '.github', 'scripts', 'gigl-dotenv.sh'),
+        'utf8'
+      )
+    );
+    writeFileSync(
+      join(fixture.remote, '.env'),
+      'BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/custom-global.lock\n'
+    );
+    writeFileSync(
+      fixture.crontabFixture,
+      [
+        '* * * * * flock -n $REMOTE_DIR/locks/custom-global.lock true',
+        '* * * * * flock -n $REMOTE_DIR/locks/aaa.lock true',
+        '*/5 * * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock true',
+        '* * * * * flock -n $REMOTE_DIR/locks/zzz.lock true',
+        '',
+      ].join('\n')
+    );
+    // Fail on the 3rd take: with the fix the order is aaa, zzz, mmm,
+    // custom-global (deferred last despite appearing first), so the
+    // custom file is never opened. Without the fix the hardcoded
+    // default would not match and custom-global would take first.
+    const result = runDriver(fixture, { FLOCK_FAIL_ON_CALL: '3' });
+    assert.equal(result.status, 3);
+    for (const name of ['aaa.lock', 'zzz.lock', 'mmm.lock']) {
+      assert.ok(lockExists(fixture, name), `expected ${name} to be held`);
+    }
+    assert.equal(flockTakes(fixture).length, 3);
+    assert.ok(!lockExists(fixture, 'custom-global.lock'));
+    // The default name never appears: the configured name is the one
+    // deferred, so no fd is ever opened for the default.
+    assert.ok(!lockExists(fixture, 'error-remediator-global.lock'));
+  });
+
+  it('falls back to the default global lock without a dotenv reader', () => {
+    const fixture = setup();
+    // A custom value the quiesce cannot read (first install, legacy
+    // tree): the default keeps its deferral, the custom name is never
+    // resolved.
+    writeFileSync(
+      join(fixture.remote, '.env'),
+      'BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/custom-global.lock\n'
+    );
+    const result = runDriver(fixture, { FLOCK_FAIL_ON_CALL: '3' });
+    assert.equal(result.status, 3);
+    for (const name of ['aaa.lock', 'zzz.lock', 'mmm.lock']) {
+      assert.ok(lockExists(fixture, name), `expected ${name} to be held`);
+    }
+    assert.equal(flockTakes(fixture).length, 3);
+    assert.ok(!lockExists(fixture, 'error-remediator-global.lock'));
+    assert.ok(!lockExists(fixture, 'custom-global.lock'));
+  });
+
   it('is sourced from live by the emergency rollback procedure', () => {
     const runbook = readFileSync(
       join(directory, '..', 'docs', 'gigl-tracking-cutover-runbook.md'),
@@ -188,8 +250,8 @@ describe('quiesce-worker-release', () => {
     );
     assert.match(
       runbook,
-      /\.\s"\$REMOTE_DIR\/lib\/quiesce-worker-release\.sh"/
+      /\.\s"\$remote_dir\/lib\/quiesce-worker-release\.sh"/
     );
-    assert.match(runbook, /quiesce_worker_release "\$REMOTE_DIR" \|\| exit 1/);
+    assert.match(runbook, /quiesce_worker_release "\$remote_dir" \|\| exit 1/);
   });
 });

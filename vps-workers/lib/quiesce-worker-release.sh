@@ -23,6 +23,32 @@ quiesce_worker_release() {
   fi
   gigl_quiesced=1
 
+  # The remediation global lock name is configurable
+  # (BACI_REMEDIATION_GLOBAL_LOCK_PATH in the live .env; the transition
+  # installer honors a custom path such as locks/custom-global.lock). A
+  # hardcoded default here would order a renamed global lock by
+  # first-appearance and deadlock promotion against a canary tick the
+  # same way an unordered default would, so resolve it exactly the way
+  # the transition installer does: the LIVE .env (the running entries
+  # hold the current name, not the staged revision's) through the
+  # shared reader every promote installs at bin/. A missing reader
+  # (first install, legacy tree) falls back to the default — which is
+  # also what the transition would use there. Only the basename
+  # participates: the hold loop below only opens locks/*.lock, so an
+  # absolute custom path outside locks/ is out of scope for the
+  # quiesce (pre-existing limitation, shared with the hold loop).
+  local gigl_global_lock="error-remediator-global.lock"
+  local gigl_dotenv_reader="$remote_dir/bin/gigl-dotenv.sh"
+  if [ -f "$gigl_dotenv_reader" ]; then
+    # shellcheck disable=SC1090
+    . "$gigl_dotenv_reader"
+    local gigl_global_value
+    gigl_global_value="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REMEDIATION_GLOBAL_LOCK_PATH' 2>/dev/null || true)"
+    if [ -n "$gigl_global_value" ]; then
+      gigl_global_lock="$(basename "$gigl_global_value")"
+    fi
+  fi
+
   # Stop the persistent systemd user services before quiescing: their
   # `--loop` workers hold runtime locks for life, so waiting on those
   # locks would stall every promote until the 600s timeout and then fail
@@ -65,7 +91,7 @@ quiesce_worker_release() {
         [ -e "$gigl_quiesce_path" ] || continue
         basename "$gigl_quiesce_path"
       done
-    } | awk '!seen[$0]++' | awk '
+    } | awk '!seen[$0]++' | awk -v gigl_global="$gigl_global_lock" '
       # The remediation cron lines nest flock per-job (outer) -> global
       # (inner), but first-appearance lists the global lock -- first seen
       # on the vercel line -- before the later per-job locks. The canary
@@ -74,10 +100,12 @@ quiesce_worker_release() {
       # one lock, waiting on the other) for the full timeout. Defer the
       # global lock until every lock that can outer it is already held.
       # Nothing else nests global-outer except the deploy-lock-serialized
-      # transition, so trailing it cannot open a new cycle.
-      $0 == "error-remediator-global.lock" { hold_global = 1; next }
+      # transition, so trailing it cannot open a new cycle. The deferred
+      # name is the configured global lock resolved above, not the
+      # default: a renamed global lock nests the same way.
+      $0 == gigl_global { hold_global = 1; next }
       { print }
-      END { if (hold_global) print "error-remediator-global.lock" }
+      END { if (hold_global) print gigl_global }
     '
   )"
   local gigl_quiesce_fd=10

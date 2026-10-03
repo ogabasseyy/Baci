@@ -11,6 +11,8 @@ const merchant = {
   bank_account_name: 'Shop Ltd',
   business_name: 'Shop Ltd',
   registered_address: null,
+  email_sender_name: 'Shop Orders',
+  logo_url: 'https://cdn.example.com/logo.png',
 } as never;
 
 describe('dispatch snapshot builders', () => {
@@ -37,12 +39,24 @@ describe('dispatch snapshot builders', () => {
 
   it('snapshots the raw registered address', () => {
     expect(
-      buildDispatchMerchantSnapshot(merchant, '12 Marina Street')
+      buildDispatchMerchantSnapshot(merchant, '12 Marina Street', null)
         .registered_address
     ).toBe('12 Marina Street');
     const legacy = { city: 'Lagos', legacy_note: 'handover' };
     expect(
-      buildDispatchMerchantSnapshot(merchant, legacy).registered_address
+      buildDispatchMerchantSnapshot(merchant, legacy, null).registered_address
     ).toBe(legacy);
+  });
+
+  it('snapshots raw brand colors instead of the normalized shape', () => {
+    const legacyColors = { primary: '#111827' };
+    const snapshot = buildDispatchMerchantSnapshot(
+      merchant,
+      '12 Marina Street',
+      legacyColors
+    );
+    expect(snapshot.brand_colors).toBe(legacyColors);
+    expect(snapshot.email_sender_name).toBe('Shop Orders');
+    expect(snapshot.logo_url).toBe('https://cdn.example.com/logo.png');
   });
 });

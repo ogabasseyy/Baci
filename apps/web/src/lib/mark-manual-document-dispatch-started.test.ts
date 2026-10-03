@@ -103,6 +103,9 @@ const merchant = {
   supportPhone: '+2348000000001',
   phone: '+2348000000002',
   slug: 'shop',
+  emailSenderName: null,
+  logoUrl: null,
+  brandColors: null,
 };
 
 describe('markManualDocumentDispatchStarted', () => {
@@ -170,6 +173,9 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_support_phone: '+2348000000001',
       p_merchant_phone: '+2348000000002',
       p_merchant_slug: 'shop',
+      p_merchant_email_sender_name: null,
+      p_merchant_logo_url: null,
+      p_merchant_brand_colors: null,
       p_order_created_at: '2026-09-30T09:00:00Z',
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',

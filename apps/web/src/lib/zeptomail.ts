@@ -546,7 +546,15 @@ export async function sendEmail({
           isRetryableError(failure.code)
         ) {
           if (resetTransportDispatch) {
-            await resetTransportDispatch();
+            try {
+              await resetTransportDispatch();
+            } catch {
+              // A failed in-loop reset must not convert this definite
+              // provider rejection into a thrown unknown: stop retrying and
+              // report the definite failure so the sender clears or reclaims
+              // the still-started marker on its bounded retry path.
+              break;
+            }
             transportDispatchMarked = false;
           }
           const delay = RETRY_CONFIG.baseDelayMs * 2 ** attempt;

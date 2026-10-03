@@ -42,6 +42,20 @@ describe('legacy terminal verdict transition migration', () => {
     expect(migrationSql).toContain("AND n.event_type = 'failed_merchant_push'");
   });
 
+  it('normalizes the external-leg count like the coverage gate', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // A raw gateway against an uppercase internal list would count
+    // wallet legs as external and misfire the sole-payment rule.
+    expect(migrationSql).toContain(
+      "AND COALESCE(public.normalized_gateway_name_v1(gateway), '') NOT IN ("
+    );
+    expect(migrationSql).not.toContain("coalesce(gateway, '') NOT IN");
+  });
+
   it('stays within the file modularity limit', () => {
     expect(existsSync(migrationPath)).toBe(true);
     if (!existsSync(migrationPath)) return;

@@ -3,6 +3,7 @@ import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-tra
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { DeliveryUncertainError } from '@/lib/orders/run-order-cancellation-side-effect';
 import { fetchAllOrderRefundRows } from './fetch-all-order-refund-rows';
+import { normalizeCurrencyCode } from './normalize-currency-code';
 import { normalizePaymentGateway } from './normalize-payment-gateway';
 
 interface ContradictionRow {
@@ -76,7 +77,8 @@ function replacementMatchesFailedLeg(
   if (
     typeof replacement.currency !== 'string' ||
     typeof failed.currency !== 'string' ||
-    replacement.currency.toUpperCase() !== failed.currency.toUpperCase()
+    normalizeCurrencyCode(replacement.currency) !==
+      normalizeCurrencyCode(failed.currency)
   ) {
     return false;
   }

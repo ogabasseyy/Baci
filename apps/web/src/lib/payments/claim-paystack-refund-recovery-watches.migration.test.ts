@@ -23,8 +23,12 @@ describe('claim refund-recovery watches migration', () => {
     );
     expect(migrationSql).toContain("'baci_paystack_refund_watch:'");
     // Watches are paystack-reference watches: a colliding reference
-    // from another gateway must not claim them.
-    expect(migrationSql).toContain("v_txn_gateway IS DISTINCT FROM 'paystack'");
+    // from another gateway must not claim them. Normalized like the
+    // opener's scan so a legacy ` Paystack ` payment claims the watch
+    // the opener filed for it.
+    expect(migrationSql).toContain(
+      "public.normalized_gateway_name_v1(v_txn_gateway) IS DISTINCT FROM 'PAYSTACK'"
+    );
     expect(migrationSql).toContain('FOR UPDATE');
   });
 

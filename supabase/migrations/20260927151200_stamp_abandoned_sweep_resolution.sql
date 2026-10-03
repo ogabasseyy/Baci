@@ -33,7 +33,7 @@ BEGIN
     updated_at = now()
   WHERE id = p_transaction_id
     AND transaction_type = 'payment'
-    AND gateway = 'paystack'
+    AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
     AND gateway_reference = p_expected_reference
     AND status IN ('pending', 'processing')
     AND metadata->>'abandoned_sweep_resolution' IS NULL;

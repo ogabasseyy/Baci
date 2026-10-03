@@ -518,10 +518,12 @@ describe('sendSettlementNotifications', () => {
     // Supabase resolves write failures instead of throwing: the mark
     // rejects nothing, so only the checked response catches it.
     const mark = markQuery({ error: { code: 'XX000' } });
+    const retry = markQuery();
     const from = vi
       .fn()
       .mockReturnValueOnce(fresh)
-      .mockReturnValueOnce({ update: mark.update });
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: retry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -532,6 +534,8 @@ describe('sendSettlementNotifications', () => {
 
     // The email was delivered but the row stays unnotified: reporting
     // sent would hide the next run's duplicate email behind success.
+    // The rows still advance through retry accounting instead of
+    // pinning the bounded oldest-first batch.
     expect(result).toEqual({ failed: 1, sent: 0 });
     expect(mocks.loggerError).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -539,5 +543,10 @@ describe('sendSettlementNotifications', () => {
         message: 'Failed to mark settlement notification sent',
       })
     );
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 1,
+      notification_next_retry_at: expect.any(String),
+    });
+    expect(retry.calls.in).toEqual([['id', ['set-1']]]);
   });
 });

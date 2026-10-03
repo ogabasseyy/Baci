@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchRefund } from './fetch-paystack-refund';
 import { normalizeCurrencyCode } from './normalize-currency-code';
@@ -8,15 +9,6 @@ import type { RefundRow } from './paystack-cancellation-refund-row';
 /** A signed event is only a wake-up hint. Provider reads decide the transition. */
 const PAYMENT_ID_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION = new Set([
-  'wallet',
-  'savings',
-  'store_credit',
-  'cash',
-  'manual',
-  'pay_on_delivery',
-]);
 
 async function resolveLinkedPayment(
   supabase: SupabaseClient,
@@ -61,11 +53,8 @@ async function resolveSoleLegacyPayment(
     .eq('status', 'completed')
     .gt('amount', 0);
   if (error) throw new Error('refund_event_lookup_failed');
-  const candidates = (data ?? []).filter(
-    (payment) =>
-      !EXTERNAL_PAYMENT_GATEWAYS_EXCLUSION.has(
-        normalizePaymentGateway(payment.gateway).toLowerCase()
-      )
+  const candidates = (data ?? []).filter((payment) =>
+    isExternalPaymentGateway(payment.gateway)
   );
   if (candidates.length !== 1) throw new Error('refund_payment_link_mismatch');
   const [sole] = candidates;

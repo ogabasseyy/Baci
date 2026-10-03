@@ -46,17 +46,7 @@ BEGIN
     -- Normalize like the aggregate coverage gate: a legacy `Paystack`
     -- attempt the sweep selected must stamp instead of retrying
     -- forever. Missing or blank gateways never match.
-    AND NULLIF(
-      upper(
-        regexp_replace(
-          COALESCE(gateway, ''),
-          '^\s+|\s+$',
-          '',
-          'g'
-        )
-      ),
-      ''
-    ) = 'PAYSTACK'
+    AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
     AND gateway_reference IS NOT DISTINCT FROM p_expected_reference
     AND status IN ('pending', 'processing')
     AND metadata->>'abandoned_sweep_resolution' IS NULL;
@@ -103,17 +93,7 @@ BEGIN
       -- Normalize like the aggregate coverage gate: same-order
       -- evidence from a legacy `Paystack` attempt must merge instead
       -- of refiling ref-less. Missing or blank gateways never match.
-      AND NULLIF(
-        upper(
-          regexp_replace(
-            COALESCE(gateway, ''),
-            '^\s+|\s+$',
-            '',
-            'g'
-          )
-        ),
-        ''
-      ) = 'PAYSTACK'
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
   ) THEN
     RETURN false;
   END IF;
@@ -185,27 +165,7 @@ BEGIN
     SELECT 1 FROM public.transactions
     WHERE id = p_transaction_id AND order_id = p_order_id
       AND merchant_id = p_merchant_id AND transaction_type = 'payment'
-      AND NULLIF(
-        upper(
-          regexp_replace(
-            COALESCE(gateway, ''),
-            '^\s+|\s+$',
-            '',
-            'g'
-          )
-        ),
-        ''
-      ) = NULLIF(
-        upper(
-          regexp_replace(
-            COALESCE(p_gateway, ''),
-            '^\s+|\s+$',
-            '',
-            'g'
-          )
-        ),
-        ''
-      )
+      AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(p_gateway)
   ) THEN
     RETURN false;
   END IF;

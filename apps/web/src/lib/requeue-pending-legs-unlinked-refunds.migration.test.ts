@@ -58,11 +58,11 @@ describe('unlinked-refund pending-leg correction migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(payment.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      'AND public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)'
     );
     expect(migrationSql).toContain("refund.status = 'completed'");
     expect(migrationSql).toContain(
-      'upper(refund.currency) = upper(payment.currency)'
+      'upper(btrim(refund.currency)) = upper(btrim(payment.currency))'
     );
     expect(migrationSql).toContain(
       "refund.metadata->>'provider_refund_status' = 'processed'"

@@ -25,9 +25,8 @@ describe('abandoned sweep RPC gateway normalization migration', () => {
       'CREATE OR REPLACE FUNCTION public.merge_abandoned_attempt_evidence_mismatch_v1('
     );
     expect(migrationSql).toContain(
-      "COALESCE(gateway, ''), '^\\s+|\\s+$', '', 'g'"
+      "public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'"
     );
-    expect(migrationSql).toContain(") = 'PAYSTACK'");
   });
 
   it('normalizes both sides of the duplicate-merge gateway guard', () => {
@@ -40,7 +39,7 @@ describe('abandoned sweep RPC gateway normalization migration', () => {
       'CREATE OR REPLACE FUNCTION public.merge_duplicate_payment_capture_evidence_v1('
     );
     expect(migrationSql).toContain(
-      "COALESCE(p_gateway, ''), '^\\s+|\\s+$', '', 'g'"
+      'public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(p_gateway)'
     );
   });
 

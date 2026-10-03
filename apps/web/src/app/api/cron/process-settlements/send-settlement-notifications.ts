@@ -206,6 +206,17 @@ export async function sendSettlementNotifications({
             merchantId: data.merchantId,
             error: markError,
           });
+          // The email was delivered but the mark failed: the rows
+          // stay settled-yet-unnotified at the head of the bounded
+          // oldest-first batch, so they advance through the same
+          // retry accounting as thrown errors instead of pinning
+          // every later merchant behind them.
+          await scheduleSettlementNotificationRetries({
+            items: stillSettled,
+            logScope: { merchantId: data.merchantId },
+            reason: 'error',
+            supabase,
+          });
           notificationResults.failed++;
           continue;
         }

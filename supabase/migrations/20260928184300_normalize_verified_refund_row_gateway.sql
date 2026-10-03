@@ -84,7 +84,7 @@ BEGIN
   END IF;
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
     OR v_refund.amount > v_payment.amount
-    OR upper(v_refund.currency) <> upper(p_currency)
+    OR upper(btrim(v_refund.currency)) <> upper(btrim(p_currency))
     OR round(v_refund.amount * 100)::bigint <> p_amount_kobo
     OR (v_refund.metadata ? 'provider_payment_transaction_id' AND
         CASE WHEN coalesce(v_refund.metadata->>'provider_payment_transaction_id', '') ~ '^[0-9]+$'
@@ -206,7 +206,7 @@ BEGIN
           AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
           AND r.status = 'completed'
           AND r.amount > 0
-          AND upper(r.currency) = upper(p.currency)
+          AND upper(btrim(r.currency)) = upper(btrim(p.currency))
           -- A locally completed Paystack refund counts only after this RPC
           -- provider-verified it; other gateways keep local-status trust.
           AND (

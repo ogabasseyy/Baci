@@ -44,6 +44,7 @@ import { confirmPaystackMerchantWalletDva } from '@/lib/payments/confirm-paystac
 import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-wallet-dva-top-up';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
@@ -1364,7 +1365,8 @@ export async function POST(request: NextRequest) {
       if (
         expectedCurrency &&
         verifiedAmount.currency &&
-        expectedCurrency.toUpperCase() !== verifiedAmount.currency.toUpperCase()
+        normalizeCurrencyCode(expectedCurrency) !==
+          normalizeCurrencyCode(verifiedAmount.currency)
       ) {
         logger.error({
           message: 'Payment currency mismatch',

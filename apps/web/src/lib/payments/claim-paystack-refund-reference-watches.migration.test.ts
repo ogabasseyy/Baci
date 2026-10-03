@@ -36,4 +36,18 @@ describe('claim reference watches migration', () => {
       "v_watch.evidence->>'provider_refund_status'"
     );
   });
+
+  it('claims paystack completions only, normalized like the opener', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // A colliding reference from another gateway must not claim
+    // paystack watches — but a legacy ` Paystack ` payment must claim
+    // the watch the opener already matched for it.
+    expect(migrationSql).toContain(
+      "public.normalized_gateway_name_v1(v_txn_gateway) IS DISTINCT FROM 'PAYSTACK'"
+    );
+  });
 });

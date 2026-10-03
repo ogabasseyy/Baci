@@ -62,7 +62,7 @@ BEGIN
   END IF;
 
   SELECT * INTO v_refund FROM public.transactions
-    WHERE id = p_refund_id AND transaction_type = 'refund' AND gateway = 'paystack'
+    WHERE id = p_refund_id AND transaction_type = 'refund' AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
       AND gateway_reference ~ '^[0-9]+$' FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'refund_not_found'; END IF;
   SELECT * INTO v_order FROM public.orders WHERE id = v_refund.order_id FOR UPDATE;
@@ -73,7 +73,7 @@ BEGIN
   SELECT * INTO v_payment FROM public.transactions
     WHERE id = (v_refund.metadata->>'payment_transaction_id')::uuid
       AND order_id = v_order.id AND merchant_id = v_order.merchant_id
-      AND transaction_type = 'payment' AND gateway = 'paystack'
+      AND transaction_type = 'payment' AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
       AND status = 'completed';
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
     OR v_payment.amount <> v_refund.amount
@@ -115,8 +115,8 @@ BEGIN
     WHERE p.order_id = v_order.id AND p.merchant_id = v_order.merchant_id
       AND p.transaction_type = 'payment' AND p.status = 'completed'
       AND p.amount > 0
-      AND coalesce(p.gateway, '') NOT IN
-        ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+      AND COALESCE(public.normalized_gateway_name_v1(p.gateway), '') NOT IN
+        ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       AND NOT EXISTS (
         SELECT 1 FROM public.transactions r
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
@@ -138,8 +138,8 @@ BEGIN
         WHERE funded.order_id = v_order.id AND funded.merchant_id = v_order.merchant_id
           AND funded.transaction_type = 'payment' AND funded.status = 'completed'
           AND funded.amount > 0
-          AND coalesce(funded.gateway, '') NOT IN
-            ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+          AND COALESCE(public.normalized_gateway_name_v1(funded.gateway), '') NOT IN
+            ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       )
     )
   ) THEN
@@ -160,7 +160,7 @@ BEGIN
         AND EXISTS (
           SELECT 1 FROM public.transactions r
           WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
-            AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
+            AND r.transaction_type = 'refund' AND public.normalized_gateway_name_v1(r.gateway) = 'PAYSTACK'
             AND r.status = 'completed'
             AND (review.metadata->>'provider_refund_id' = r.gateway_reference
                  OR review.metadata->>'refund_transaction_id' = r.id::text)
@@ -190,7 +190,7 @@ BEGIN
       jsonb_build_object('refund_reconciliation_hold', left(p_reason, 120)),
       updated_at = now()
     WHERE id = p_refund_id AND transaction_type = 'refund'
-      AND gateway = 'paystack' AND status IN ('pending', 'failed');
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK' AND status IN ('pending', 'failed');
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN v_count = 1;
 END;

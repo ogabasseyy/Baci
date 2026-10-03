@@ -27,7 +27,7 @@ BEGIN
     SELECT 1 FROM public.transactions
     WHERE id = p_transaction_id AND order_id = p_order_id
       AND merchant_id = p_merchant_id AND transaction_type = 'payment'
-      AND gateway = 'paystack'
+      AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
   ) THEN
     RETURN false;
   END IF;

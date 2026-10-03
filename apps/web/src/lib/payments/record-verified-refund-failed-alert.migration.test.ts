@@ -46,10 +46,17 @@ describe('record verified refund failed alert migration', () => {
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(v_refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      'AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(v_refund.gateway)'
     );
+    // The external-leg count normalizes too: a raw gateway against an
+    // uppercase internal list would count wallet legs as external and
+    // misfire the sole-payment rule.
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(p.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      "AND COALESCE(public.normalized_gateway_name_v1(gateway), '') NOT IN ("
+    );
+    expect(migrationSql).not.toContain("coalesce(gateway, '') NOT IN");
+    expect(migrationSql).toContain(
+      'AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)'
     );
   });
 });

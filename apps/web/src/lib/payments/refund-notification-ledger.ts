@@ -1,22 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
+import { normalizeCurrencyCode } from './normalize-currency-code';
+import { normalizePaymentGateway } from './normalize-payment-gateway';
 
 function formatAmount(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
     currency,
   }).format(amount);
-}
-
-// Mirror the aggregate claim gate: trimmed, uppercased gateway
-// comparison with missing gateways never matching, so a legacy
-// `Paystack` leg and its `paystack` refund agree on coverage here
-// and in the claim gate instead of dead-lettering a notification
-// for a successfully finalized order.
-function normalizeLedgerGateway(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toUpperCase();
 }
 
 /**
@@ -86,11 +77,11 @@ export async function refundNotificationLedgerAmount({
     if (leg.status === 'refunded') {
       return { amount: leg.amount, currency: leg.currency };
     }
-    const legCurrency = String(leg.currency ?? '').toUpperCase();
-    const legGateway = normalizeLedgerGateway(leg.gateway);
+    const legCurrency = normalizeCurrencyCode(leg.currency);
+    const legGateway = normalizePaymentGateway(leg.gateway);
     const matchedKobo = refunds
       .filter((refund) => {
-        const refundGateway = normalizeLedgerGateway(refund.gateway);
+        const refundGateway = normalizePaymentGateway(refund.gateway);
         if (refundGateway === '' || refundGateway !== legGateway) return false;
         const metadata = refund.metadata as {
           payment_transaction_id?: unknown;
@@ -104,7 +95,7 @@ export async function refundNotificationLedgerAmount({
         )
           return false;
         if (
-          String(refund.currency ?? '').toUpperCase() !== legCurrency ||
+          normalizeCurrencyCode(refund.currency) !== legCurrency ||
           !(Number(refund.amount) > 0)
         )
           return false;
@@ -133,15 +124,18 @@ export async function refundNotificationLedgerAmount({
     (sum, leg) => sum + Number(leg.amount),
     0
   );
+  // Normalize the order currency once: a legacy padded code must
+  // compare equal AND format — Intl.NumberFormat throws on ' NGN '.
+  const orderCurrency = normalizeCurrencyCode(order.currency) || 'NGN';
   if (
     refundAmount <= 0 ||
     linkedRefunds.some(
       (leg) =>
-        (leg as { currency: string }).currency.toUpperCase() !==
-        (order.currency || 'NGN').toUpperCase()
+        normalizeCurrencyCode((leg as { currency: string }).currency) !==
+        orderCurrency
     )
   ) {
     throw new Error('refund_notification_ledger_mismatch');
   }
-  return formatAmount(refundAmount, order.currency || 'NGN');
+  return formatAmount(refundAmount, orderCurrency);
 }

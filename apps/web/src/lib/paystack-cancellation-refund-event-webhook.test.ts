@@ -33,10 +33,12 @@ describe('handlePaystackCancellationRefundEvent', () => {
   function database(refund: unknown) {
     const query = {
       eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       limit: vi
         .fn()
         .mockResolvedValue({ data: refund == null ? [] : [refund] }),
+      order: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
     };
     return { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -104,13 +106,18 @@ describe('handlePaystackCancellationRefundEvent', () => {
   it('fails retryably when duplicate audit rows share the provider id', async () => {
     const query = {
       eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockResolvedValue({
-        data: [
-          { gateway: 'paystack', id: 'refund-1' },
-          { gateway: ' Paystack ', id: 'refund-2' },
-        ],
-      }),
+      limit: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: [
+            { gateway: 'paystack', id: 'refund-1' },
+            { gateway: ' Paystack ', id: 'refund-2' },
+          ],
+        })
+        .mockResolvedValue({ data: [] }),
+      order: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
     };
     const db = { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -127,11 +134,13 @@ describe('handlePaystackCancellationRefundEvent', () => {
   it('fails retryably when the refund lookup errors', async () => {
     const query = {
       eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue({
         data: null,
         error: { message: 'db unavailable' },
       }),
+      order: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
     };
     const db = { from: vi.fn(() => query) } as unknown as SupabaseClient;
@@ -247,7 +256,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
       'PSK-1',
-      'unknown'
+      'processed'
     );
     expect(response.status).toBe(200);
   });
@@ -263,7 +272,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
       'PAYMENT-1',
-      'unknown'
+      'processed'
     );
     expect(response.status).toBe(200);
   });
@@ -282,7 +291,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
       'PAYMENT-1',
-      'unknown'
+      'processed'
     );
     expect(response.status).toBe(200);
   });
@@ -306,12 +315,44 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(response.status).toBe(200);
   });
 
-  it('coerces a non-string event verdict to unknown', async () => {
+  it('derives the failed verdict from the event when data.status is absent', async () => {
+    const db = database(null);
+
+    await handlePaystackCancellationRefundEvent(db, {
+      data: { transaction_reference: 'PAYMENT-1' },
+      event: 'refund.failed',
+    });
+
+    // A bare refund.failed still means no money moved: coercing it
+    // to 'unknown' would strand the reference, since failed-only
+    // evidence exclusion can't match 'unknown'.
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1',
+      'failed'
+    );
+  });
+
+  it('derives the processed verdict from the event when data.status is absent', async () => {
+    const db = database(null);
+
+    await handlePaystackCancellationRefundEvent(db, {
+      data: { transaction_reference: 'PAYMENT-1' },
+      event: 'refund.processed',
+    });
+
+    expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
+      db,
+      'PAYMENT-1',
+      'processed'
+    );
+  });
+
+  it('coerces to unknown when neither status nor event carries a verdict', async () => {
     const db = database(null);
 
     await handlePaystackCancellationRefundEvent(db, {
       data: { status: 42, transaction_reference: 'PAYMENT-1' },
-      event: 'refund.failed',
     });
 
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
@@ -403,7 +444,7 @@ describe('handlePaystackCancellationRefundEvent', () => {
     expect(mocks.reconcilePaystackRefundEvent).toHaveBeenCalledWith(
       db,
       'PAYMENT-1',
-      'unknown'
+      'processed'
     );
     expect(response.status).toBe(200);
   });

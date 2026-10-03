@@ -50,7 +50,7 @@ describe('GIGL direct worker cost contract', () => {
     assert.ok(cronLine);
     assert.match(
       cronLine,
-      /^\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/gigl-tracking\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/process-gigl-tracking\.sh' >> \$REMOTE_DIR\/logs\/gigl-tracking\.log 2>&1$/
+      /^\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/gigl-tracking\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/process-gigl-tracking\.sh' >> \$REMOTE_DIR\/logs\/gigl-tracking\.log 2>&1$/
     );
     assert.doesNotMatch(cronLine, /run-web-cron|\/api\/cron\/gigl-tracking/);
   });
@@ -76,14 +76,8 @@ describe('GIGL direct worker cost contract', () => {
       provisioner,
       /"\$staging_dir\/bin\/process-gigl-tracking\.sh"/
     );
-    assert.match(
-      provisioner,
-      /verify-gigl-tracking-worker-capability\.sh/
-    );
-    assert.match(
-      releaseHelper,
-      /lib\/provision-immutable-checkout\.sh/
-    );
+    assert.match(provisioner, /verify-gigl-tracking-worker-capability\.sh/);
+    assert.match(releaseHelper, /lib\/provision-immutable-checkout\.sh/);
   });
 
   it('runs the GIGL gate suites in the deployment-scripts CI step', () => {
@@ -130,8 +124,13 @@ describe('GIGL direct worker cost contract', () => {
       join(repoRoot, '.github', 'workflows', 'deploy.yml'),
       'utf8'
     );
-    assert.match(deploy, /manifests: \$\{\{ steps\.filter\.outputs\.manifests \}\}/);
-    const step = deploy.split('- name: Warn on manifest-only worker dependency drift')[1].split(/^\s+- name: /m)[0];
+    assert.match(
+      deploy,
+      /manifests: \$\{\{ steps\.filter\.outputs\.manifests \}\}/
+    );
+    const step = deploy
+      .split('- name: Warn on manifest-only worker dependency drift')[1]
+      .split(/^\s+- name: /m)[0];
     assert.match(
       step,
       /needs\.changes\.outputs\.manifests == 'true' && needs\.changes\.outputs\.tracking != 'true'/

@@ -44,6 +44,8 @@ function createUpdateBuilder() {
     }>
   >(async () => ({ data: { id: matchedId }, error: null }));
   const builder = {
+    eq: vi.fn(() => builder),
+    is: vi.fn(() => builder),
     match: vi.fn((values: { id: string }) => {
       matchedId = values.id;
       return builder;

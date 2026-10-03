@@ -124,6 +124,40 @@ describe('scheduleSettlementNotificationRetries', () => {
     );
   });
 
+  it('dead-letters delivered-but-unmarked rows immediately', async () => {
+    const retry = retryQuery();
+    const from = vi.fn().mockReturnValueOnce({ update: retry.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    await scheduleSettlementNotificationRetries({
+      items: [{ id: 'set-1', notificationAttempts: 0 }],
+      logScope: { merchantId: 'merchant-a' },
+      reason: 'delivered-unmarked',
+      supabase,
+    });
+
+    // The email was already sent: the row skips the backoff ladder
+    // and retires at the cap so the next run cannot resend it.
+    expect(retry.update).toHaveBeenCalledWith({
+      notification_attempts: 5,
+      notification_next_retry_at: null,
+    });
+    expect(retry.calls.eq).toEqual([
+      ['status', 'settled'],
+      ['settlement_notified', false],
+    ]);
+    expect(retry.calls.in).toEqual([['id', ['set-1']]]);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message:
+          'Settlement notification dead-lettered after delivery without a notified mark',
+        settlementIds: ['set-1'],
+        attempts: 5,
+      })
+    );
+  });
+
   it('logs a retry-update failure without throwing', async () => {
     const retry = retryQuery({ code: 'XX000' });
     const from = vi.fn().mockReturnValueOnce({ update: retry.update });
@@ -134,6 +168,31 @@ describe('scheduleSettlementNotificationRetries', () => {
         items: [{ id: 'set-1', notificationAttempts: 0 }],
         logScope: { merchantId: 'merchant-a' },
         reason: 'rejected',
+        supabase,
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Failed to schedule settlement notification retry',
+      })
+    );
+  });
+
+  it('logs a transport throw without throwing', async () => {
+    const retry = retryQuery();
+    retry.terminal.mockRejectedValueOnce(new Error('connection reset'));
+    const from = vi.fn().mockReturnValueOnce({ update: retry.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    // Error paths call the scheduler without a second catch, so a
+    // transport throw must resolve like a resolved error.
+    await expect(
+      scheduleSettlementNotificationRetries({
+        items: [{ id: 'set-1', notificationAttempts: 0 }],
+        logScope: { merchantId: 'merchant-a' },
+        reason: 'error',
         supabase,
       })
     ).resolves.toBeUndefined();

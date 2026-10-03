@@ -123,7 +123,7 @@ describe('deliverAdminPushTest', () => {
     });
     mocks.sendChunks.mockResolvedValue({
       deliveryUncertain: true,
-      tickets: [{ status: 'error' }],
+      tickets: [{ details: { error: 'ExpoError' }, status: 'error' }],
     });
 
     const result = await deliverAdminPushTest(
@@ -157,6 +157,36 @@ describe('deliverAdminPushTest', () => {
     );
 
     expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
+  });
+
+  it('keeps unknown codes and missing details as failures under batch uncertainty', async () => {
+    mockTokenQuery({
+      data: [
+        { token: 'ExponentPushToken[one]' },
+        { token: 'ExponentPushToken[two]' },
+        { token: 'ExponentPushToken[three]' },
+      ],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      tickets: [
+        { status: 'error', details: { error: 'FutureExpoCode' } },
+        { status: 'error' },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    // Only the exact synthetic code converts: anything else is a real
+    // ticket the batch-level flag must not excuse.
+    expect(result).toEqual({ failed: 2, sent: 0, uncertain: 1 });
   });
 
   it('reports a post-dispatch throw as uncertain', async () => {

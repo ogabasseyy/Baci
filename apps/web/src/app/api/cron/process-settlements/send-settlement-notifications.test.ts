@@ -311,8 +311,9 @@ describe('sendSettlementNotifications', () => {
 
     expect(result).toEqual({ failed: 1, sent: 0 });
     expect(from).toHaveBeenCalledTimes(2);
-    // A thrown send is pre-dispatch, so the row rejoins the retry
-    // queue with backoff instead of pinning the batch.
+    // A thrown send is pre-dispatch per ZeptoMail's dispatch-boundary
+    // contract, so the row rejoins the retry queue with backoff
+    // instead of pinning the batch.
     expect(retry.update).toHaveBeenCalledWith({
       notification_attempts: 1,
       notification_next_retry_at: expect.any(String),
@@ -323,19 +324,184 @@ describe('sendSettlementNotifications', () => {
     );
   });
 
-  it('counts a mark-write failure after a delivered email', async () => {
+  it('recovers when the mark retry succeeds after a delivered email', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([
       { id: 'set-1', settlement_notified: false, status: 'settled' },
     ]);
     const mark = markQuery();
     mark.terminal.mockRejectedValueOnce(new Error('mark failed'));
-    const retry = markQuery();
+    const markRetry = markQuery();
     const from = vi
       .fn()
       .mockReturnValueOnce(fresh)
       .mockReturnValueOnce({ update: mark.update })
-      .mockReturnValueOnce({ update: retry.update });
+      .mockReturnValueOnce({ update: markRetry.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // The guarded mark is idempotent, so a transient throw retries
+    // once before giving up — and a recovered mark counts sent.
+    expect(result).toEqual({ failed: 0, sent: 1 });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(mark.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settlement_notified: true })
+    );
+    expect(markRetry.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settlement_notified: true })
+    );
+    expect(mocks.loggerError).not.toHaveBeenCalled();
+  });
+
+  it('dead-letters delivered rows when the mark retry also fails', async () => {
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery({ error: { code: 'XX000' } });
+    const markRetry = markQuery({ error: { code: 'XX000' } });
+    const deadLetter = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: markRetry.update })
+      .mockReturnValueOnce({ update: deadLetter.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // The email was delivered but the rows are unmarked: deferring
+    // would resend on the next run, so they retire from the queue
+    // and operations verifies delivery out of band.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(deadLetter.update).toHaveBeenCalledWith({
+      notification_attempts: 5,
+      notification_next_retry_at: null,
+    });
+    expect(deadLetter.calls.in).toEqual([['id', ['set-1']]]);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Settlement notification delivered but unmarked',
+      })
+    );
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Settlement notification dead-lettered after delivery without a notified mark',
+        settlementIds: ['set-1'],
+      })
+    );
+  });
+
+  it('dead-letters delivered rows when the mark throws twice', async () => {
+    const sendEmail = vi.fn().mockResolvedValue({ success: true });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery();
+    mark.terminal.mockRejectedValueOnce(new Error('mark failed'));
+    const markRetry = markQuery();
+    markRetry.terminal.mockRejectedValueOnce(new Error('mark failed again'));
+    const deadLetter = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: markRetry.update })
+      .mockReturnValueOnce({ update: deadLetter.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // Transport throws take the same path as resolved mark errors:
+    // retry once, then dead-letter — never requeue a delivered
+    // email.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(deadLetter.update).toHaveBeenCalledWith({
+      notification_attempts: 5,
+      notification_next_retry_at: null,
+    });
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Settlement notification delivered but unmarked',
+      })
+    );
+  });
+
+  it('dead-letters uncertain rows when the mark retry fails', async () => {
+    const sendEmail = vi
+      .fn()
+      .mockResolvedValue({ deliveryOutcome: 'unknown', success: false });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery({ error: { code: 'XX000' } });
+    const markRetry = markQuery({ error: { code: 'XX000' } });
+    const deadLetter = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: markRetry.update })
+      .mockReturnValueOnce({ update: deadLetter.update });
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const result = await sendSettlementNotifications({
+      pendingNotifications: [settlement('set-1', merchantA)],
+      sendEmail,
+      supabase,
+    });
+
+    // The provider may have accepted the message but nothing was
+    // persisted: requeueing could duplicate a delivered email, so
+    // the rows retire and operations verifies delivery.
+    expect(result).toEqual({ failed: 1, sent: 0 });
+    expect(deadLetter.update).toHaveBeenCalledWith({
+      notification_attempts: 5,
+      notification_next_retry_at: null,
+    });
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Settlement notification delivered but unmarked',
+      })
+    );
+    expect(mocks.loggerError).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Settlement notification delivery uncertain',
+      })
+    );
+  });
+
+  it('counts failed-but-verified when the mark retry succeeds after uncertain delivery', async () => {
+    const sendEmail = vi
+      .fn()
+      .mockResolvedValue({ deliveryOutcome: 'unknown', success: false });
+    const fresh = freshQuery([
+      { id: 'set-1', settlement_notified: false, status: 'settled' },
+    ]);
+    const mark = markQuery({ error: { code: 'XX000' } });
+    const markRetry = markQuery();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(fresh)
+      .mockReturnValueOnce({ update: mark.update })
+      .mockReturnValueOnce({ update: markRetry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -345,15 +511,14 @@ describe('sendSettlementNotifications', () => {
     });
 
     expect(result).toEqual({ failed: 1, sent: 0 });
-    expect(sendEmail).toHaveBeenCalledTimes(1);
-    // The mark write threw, so the row stays unnotified and rejoins
-    // the retry queue with backoff.
-    expect(retry.update).toHaveBeenCalledWith({
-      notification_attempts: 1,
-      notification_next_retry_at: expect.any(String),
-    });
+    expect(markRetry.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settlement_notified: true })
+    );
     expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({ merchantId: 'merchant-a' })
+      expect.objectContaining({
+        merchantId: 'merchant-a',
+        message: 'Settlement notification delivery uncertain',
+      })
     );
   });
 
@@ -510,20 +675,22 @@ describe('sendSettlementNotifications', () => {
     );
   });
 
-  it('counts a resolved mark error instead of reporting sent', async () => {
+  it('retries a resolved mark error instead of reporting sent', async () => {
     const sendEmail = vi.fn().mockResolvedValue({ success: true });
     const fresh = freshQuery([
       { id: 'set-1', settlement_notified: false, status: 'settled' },
     ]);
     // Supabase resolves write failures instead of throwing: the mark
-    // rejects nothing, so only the checked response catches it.
+    // rejects nothing, so only the checked response catches it — and
+    // the retry below proves the check ran instead of reporting
+    // sent over a failed mark.
     const mark = markQuery({ error: { code: 'XX000' } });
-    const retry = markQuery();
+    const markRetry = markQuery();
     const from = vi
       .fn()
       .mockReturnValueOnce(fresh)
       .mockReturnValueOnce({ update: mark.update })
-      .mockReturnValueOnce({ update: retry.update });
+      .mockReturnValueOnce({ update: markRetry.update });
     const supabase = { from } as unknown as SupabaseClient;
 
     const result = await sendSettlementNotifications({
@@ -532,21 +699,13 @@ describe('sendSettlementNotifications', () => {
       supabase,
     });
 
-    // The email was delivered but the row stays unnotified: reporting
-    // sent would hide the next run's duplicate email behind success.
-    // The rows still advance through retry accounting instead of
-    // pinning the bounded oldest-first batch.
-    expect(result).toEqual({ failed: 1, sent: 0 });
-    expect(mocks.loggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchantId: 'merchant-a',
-        message: 'Failed to mark settlement notification sent',
-      })
+    // The first mark failed but the idempotent retry persisted, so
+    // the batch counts sent with no error logged.
+    expect(result).toEqual({ failed: 0, sent: 1 });
+    expect(markRetry.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settlement_notified: true })
     );
-    expect(retry.update).toHaveBeenCalledWith({
-      notification_attempts: 1,
-      notification_next_retry_at: expect.any(String),
-    });
-    expect(retry.calls.in).toEqual([['id', ['set-1']]]);
+    expect(mocks.loggerError).not.toHaveBeenCalled();
+    expect(markRetry.calls.in).toEqual([['id', ['set-1']]]);
   });
 });

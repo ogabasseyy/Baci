@@ -60,17 +60,18 @@ export async function deliverAdminPushTest(
     const errorTickets = tickets.filter((ticket) => ticket.status === 'error');
     // A provider throw yields synthetic ExpoError tickets plus
     // deliveryUncertain: report those as uncertain instead of
-    // definitive failures so a test push is never misreported. But
-    // DeviceNotRegistered tickets are definitive either way — a
-    // throw-synthetic never carries that code (local validation and
-    // real provider rejections do) — so partition them out instead of
-    // converting the aggregate failure count wholesale, or an invalid
-    // token hides behind another message's uncertain throw.
+    // definitive failures so a test push is never misreported. Only
+    // the exact ExpoError code converts — both synthetic sites hardcode
+    // it, so any other code (DeviceNotRegistered, a future Expo code,
+    // or a missing details shape) is a real ticket and stays a
+    // definitive failure even when another message's throw made the
+    // batch uncertain. Converting wholesale would hide an invalid
+    // token behind that throw.
     const uncertainTickets = deliveryUncertain
       ? errorTickets.filter(
           (ticket) =>
-            (ticket.details as { error?: unknown } | undefined)?.error !==
-            'DeviceNotRegistered'
+            (ticket.details as { error?: unknown } | undefined)?.error ===
+            'ExpoError'
         )
       : [];
     const failed = errorTickets.length - uncertainTickets.length;

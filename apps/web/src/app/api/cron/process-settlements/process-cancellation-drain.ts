@@ -153,6 +153,18 @@ export async function processCancellationDrain(
     notificationResult[0].status === 'fulfilled'
       ? (notificationResult[0].value.uncertain ?? 0)
       : 0;
+  // Dead-lettered rows need the same treatment as uncertain ones:
+  // manual operations review with no ack path. They stay visible via
+  // this warn log plus the success-payload count, but must not 503 —
+  // otherwise the first dead letter pins the cron red until a human
+  // clears it, masking fresh failures behind the stale row.
+  if (notificationExhausted > 0) {
+    logger.warn({
+      message:
+        'Cancellation drain has dead-lettered notifications awaiting review',
+      notificationExhausted,
+    });
+  }
   if (
     cancellationResult.status === 'rejected' ||
     refundResult.status === 'rejected' ||
@@ -163,8 +175,7 @@ export async function processCancellationDrain(
     refundFailures > 0 ||
     legacyRefundFailures > 0 ||
     watchSweepFailures > 0 ||
-    notificationFailures > 0 ||
-    notificationExhausted > 0
+    notificationFailures > 0
   ) {
     logger.error({
       message: 'Cancellation and refund background work partially failed',
@@ -176,9 +187,7 @@ export async function processCancellationDrain(
       watchSweepFailed:
         watchSweepResult.status === 'rejected' || watchSweepFailures > 0,
       notificationFailed:
-        notificationResult[0].status === 'rejected' ||
-        notificationFailures > 0 ||
-        notificationExhausted > 0,
+        notificationResult[0].status === 'rejected' || notificationFailures > 0,
       notificationExhausted,
       notificationUncertain,
     });

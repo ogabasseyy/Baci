@@ -46,6 +46,7 @@ function unpaidProformaDetail(currency: string): Record<string, unknown> {
     balance: 500,
     payment_status: 'unpaid',
     payment_method: 'invoice',
+    notes: null,
     is_credit_order: false,
     customer_name: 'Ada Buyer',
     customer_email: 'ada@example.com',
@@ -247,6 +248,8 @@ describe('useReceiptPreview document kind', () => {
     ['unknown payment status', { payment_status: 'on_hold' }],
     ['negative total', { total: -5, amount_paid: 0 }],
     ['no items', { items: [] }],
+    ['null money the sender skips', { total: 0, amount_paid: null }],
+    ['NaN money breakdown', { subtotal: Number.NaN }],
   ])('fails a covered manual balance closed on %s', (_label, override) => {
     // The balance alone never promotes: ineligible manual rows preview
     // as invoices like the sender, archive, and download routes treat them.

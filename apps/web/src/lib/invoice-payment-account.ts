@@ -42,20 +42,23 @@ export async function resolveInvoicePaymentAccount(
       getPaystackDvaAccountNumberFromTransactions(transactions);
   }
 
+  // All providers: an order-specific Korapay (or other non-Paystack)
+  // assignment must print on the emailed invoice exactly like the
+  // authenticated download, which feeds every provider row to the shared
+  // selector. Paystack still ranks first inside the selector; the query
+  // only pre-filters rows no surface may print.
   let paymentAccountQuery = supabase
     .from('order_payment_accounts')
     .select(PAYMENT_ACCOUNT_COLUMNS)
     .eq('order_id', orderId)
-    .eq('provider', 'paystack')
     .or(
       'assignment_customer_email_source.is.null,assignment_customer_email_source.neq.legacy_untrusted'
     );
 
   // Future assignments are selector-invisible (assigned_at, else created_at,
-  // must not exceed now): filter them at the database so the unpaid LIMIT 1
-  // keeps returning the newest eligible row instead of a row the selector
-  // then rejects, which would starve the older eligible fallback. Mirrors
-  // the atomic dispatch recheck (see the mark RPC).
+  // must not exceed now): filter them at the database so the selector never
+  // sees a row it would reject while starving the older eligible fallback.
+  // Mirrors the atomic dispatch recheck (see the mark RPC).
   const assignmentCutoff = now.toISOString();
   paymentAccountQuery = paymentAccountQuery.or(
     `assigned_at.lte.${assignmentCutoff},and(assigned_at.is.null,created_at.lte.${assignmentCutoff}),and(assigned_at.is.null,created_at.is.null)`
@@ -74,12 +77,13 @@ export async function resolveInvoicePaymentAccount(
   // created_at ties when accounts share a transaction (now() is
   // transaction-stable): break them by account number, exactly like the
   // atomic dispatch recheck, so renderer and recheck never pick apart.
+  // No LIMIT: the shared selector ranks an eligible Paystack row above a
+  // newer non-Paystack row, so it must see every eligible row — LIMIT 1
+  // newest could return a Korapay row the selector would not pick.
   const orderedPaymentAccountQuery = paymentAccountQuery
     .order('created_at', { ascending: false, nullsFirst: false })
     .order('account_number', { ascending: false });
-  const { data, error } = isPaidOrder
-    ? await orderedPaymentAccountQuery
-    : await orderedPaymentAccountQuery.limit(1);
+  const { data, error } = await orderedPaymentAccountQuery;
 
   const rows = Array.isArray(data)
     ? (data as unknown as InvoicePaymentAccountRow[])

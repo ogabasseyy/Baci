@@ -132,17 +132,27 @@ export function transformStorefrontOrdersForDisplay(
     // a non-paid label; resolve the type code from the same boolean so a
     // settled order never pairs kind 'receipt' with a proforma code.
     const receiptEligible = isReceiptEligible(documentEligibility);
+    // Canonical paid-receipt date (null only when no completion transaction).
+    const receiptCompletionDate = selectReceiptCompletionDate(
+      lookups.transactionsByOrderId.get(order.id)
+    );
+    // The receipt list sorts by the display-date fallback (issue →
+    // transaction → creation), while the Ogabassey mapper dates paid
+    // receipts by their completing payment. Normalize the sortable dates
+    // for paid-renderer rows here — the same kind-or-paid condition the
+    // mapper uses — so the server sort files a receipt under the date the
+    // card displays instead of a stale issue date.
+    const paidRenderer = receiptEligible || paymentStatus === 'paid';
 
     return {
       id: order.id,
       order_number: order.order_number,
       created_at: order.created_at,
-      transaction_date: order.transaction_date,
-      invoice_issue_date: order.invoice_issue_date,
-      // Canonical paid-receipt date (null only when no completion transaction).
-      receipt_completion_date: selectReceiptCompletionDate(
-        lookups.transactionsByOrderId.get(order.id)
-      ),
+      transaction_date: paidRenderer
+        ? (receiptCompletionDate ?? order.transaction_date)
+        : order.transaction_date,
+      invoice_issue_date: paidRenderer ? undefined : order.invoice_issue_date,
+      receipt_completion_date: receiptCompletionDate,
       // Settled payment history for the preview Payment table: mirrors the
       // sender filter so partial manual invoices show the same payments as
       // the emailed document. The RPC exposes no payment_method, so rows

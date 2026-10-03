@@ -1,6 +1,8 @@
 import {
   isManualOrderRecord,
   isSettledManualBalance,
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
 
 // Narrow view of a receipt detail / order row for the manual promotion
@@ -83,14 +85,30 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
     };
     // Raw order rows carry name; mapped detail rows carry product_name.
     const label = row.product_name ?? row.name;
-    return (
-      typeof label === 'string' &&
-      isValidMoney(row.price) &&
-      row.quantity !== null &&
-      row.quantity !== undefined &&
-      Number.isFinite(Number(row.quantity)) &&
-      Number(row.quantity) > 0
-    );
+    if (
+      typeof label !== 'string' ||
+      !isValidMoney(row.price) ||
+      row.quantity === null ||
+      row.quantity === undefined ||
+      !Number.isFinite(Number(row.quantity)) ||
+      Number(row.quantity) <= 0
+    ) {
+      return false;
+    }
+    // Sender-validated financial fields, from the shared gate list: absent
+    // is fine (nullish in the sender schema), but a present value must be
+    // finite and nonnegative exactly like the sender/archive gates — a
+    // negative extension, fee, or VAT row renders as an invoice, never a
+    // promoted receipt, so mobile cannot disagree with the emailed document.
+    const financial = item as Partial<
+      Record<ManualOrderItemFinancialField, unknown>
+    >;
+    return MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.every((field) => {
+      const value = financial[field];
+      return (
+        value == null || (Number.isFinite(Number(value)) && Number(value) >= 0)
+      );
+    });
   });
 }
 

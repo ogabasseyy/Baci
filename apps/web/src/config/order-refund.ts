@@ -1,0 +1,15 @@
+export const orderRefundStatusLabels: Record<string, string> = {
+  refunded: 'Refunded',
+  processing: 'Processing',
+  requires_review: 'Requires review',
+  queued: 'Queued',
+  failed: 'Failed',
+  not_started: 'Not started',
+  claimed: 'Processing',
+  completed: 'Refund completed',
+  delivery_uncertain: 'Requires review',
+  existing_state: 'Previous refund status',
+  retry_requested: 'Retry requested',
+  manual_recorded: 'Manual refund recorded',
+  provider_confirmed: 'Refund confirmed',
+};

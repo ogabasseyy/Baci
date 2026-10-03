@@ -9,6 +9,7 @@ import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import { reconcileCancellationRefunds } from './reconcile-cancellation-refunds';
 
 const DEFAULT_LIMIT = 10;
 const MAX_ATTEMPTS = 5;
@@ -46,6 +47,7 @@ export async function drainFailedOrderCancellationSideEffects({
   limit?: number;
   sendCancellationEmail: CancellationEmailSender;
 }): Promise<CancellationSideEffectDrainSummary> {
+  await reconcileCancellationRefunds(supabase);
   const summary: CancellationSideEffectDrainSummary = {
     drained: [],
     failed: [],

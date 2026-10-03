@@ -52,6 +52,7 @@ import ConfirmInsuranceDialog, {
 } from './confirm-insurance-dialog';
 import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary';
 import { OrderPaymentSummary } from './OrderPaymentSummary';
+import { OrderRefundPanel } from './order-refund-panel';
 import { ShipmentDetailsCard } from './shipment-details-card';
 
 // Type definitions
@@ -510,6 +511,19 @@ export default function OrderDetailsClientPage({
 
           <div className="grid auto-rows-max items-start gap-4">
             <OrderPaymentSummary order={order} />
+            {['Canceled', 'Cancelled'].includes(order.shippingStatus) && (
+              <OrderRefundPanel
+                key={order.id}
+                orderId={order.id}
+                onRefunded={() =>
+                  setOrder((prev) =>
+                    prev.paymentStatus === 'Refunded'
+                      ? prev
+                      : { ...prev, paymentStatus: 'Refunded' }
+                  )
+                }
+              />
+            )}
 
             <Card>
               <CardHeader>

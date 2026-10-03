@@ -66,7 +66,7 @@ export function generateOrderCancellationEmail(
         </tr>
       </table>
       <p style="margin: 12px 0 0 0; font-size: 13px; color: #047857;">
-        Your refund will be processed within 3-5 business days.
+        Cancellation starts the refund workflow. Please contact the store for an update on your refund status.
       </p>
     </div>
     `
@@ -210,7 +210,7 @@ export function generateOrderCancellationText(
 REFUND INFORMATION
 Amount Paid: ${formatEmailMoney(data.amountPaid, data.currency)}
 Refund Amount: ${formatEmailMoney(data.refundAmount, data.currency)}
-Your refund will be processed within 3-5 business days.
+Cancellation starts the refund workflow. Please contact the store for an update on your refund status.
 `
       : '';
 

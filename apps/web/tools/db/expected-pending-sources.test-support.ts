@@ -37,6 +37,16 @@ const REDVAULT_PENDING_SOURCES = REDVAULT_PENDING_REPLAY_SOURCE_ROWS.split(
 export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
+      'supabase/migrations/20261002090000_order_refund_management.sql',
+    sha256: 'ab72c43d3c3d94dd3e700deb59e13db4fcf4f35e9cd898d45c4ccac8a5fdbc20',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090100_partial_cancellation_refund_claims.sql',
+    sha256: '09cd689aee1afff975769008b0af4e9a05b3c3e158a254b7c588c706b527010c',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',
     sha256: 'e8398b0b10a5e9d199707bcceb5835f865bfce85dd4732e9bc46fc4e13d16d29',
   },

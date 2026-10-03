@@ -5,6 +5,8 @@ import {
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/paystack';
+import { buildCancellationRefundPlan } from './build-cancellation-refund-plan';
+import { checkCancellationRefundProvider } from './check-cancellation-refund-provider';
 
 type CancellationOrder = Parameters<
   typeof buildOrderCancellationEmailMessage
@@ -163,19 +165,31 @@ export async function executeOrderCancellationSideEffect({
       transactions,
     });
   }
+  if (
+    transactions.some(
+      (transaction) =>
+        !transaction.currency || transaction.currency !== order.currency
+    )
+  ) {
+    throw new DeliveryUncertainError(
+      'Payment currency requires review before refund'
+    );
+  }
   const gatewayRefundAmount = transactions.reduce(
     (total, transaction) => total + (Number(transaction.amount) || 0),
     0
   );
   if (
     gatewayRefundAmount <= 0 ||
+    !Number.isSafeInteger(Math.round(gatewayRefundAmount * 100)) ||
+    Math.round(gatewayRefundAmount * 100) > Math.round(refundAmount * 100) ||
     transactions.some((transaction) => Number(transaction.amount) <= 0)
   ) {
     throw new Error('Completed payment transaction has no refundable amount');
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
-    .select('metadata, status')
+    .select('amount, metadata, status, gateway, gateway_reference')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'refund')
@@ -183,48 +197,31 @@ export async function executeOrderCancellationSideEffect({
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
   }
-  const refundedPaymentIds = new Set(
-    (refundRows ?? [])
-      .filter((row) => row.status === 'completed')
-      .map((row) => {
-        const metadata = row.metadata;
-        return metadata &&
-          typeof metadata === 'object' &&
-          !Array.isArray(metadata)
-          ? metadata.payment_transaction_id
-          : null;
-      })
-      .filter((id): id is string => typeof id === 'string')
-  );
-  const pendingRefundPaymentIds = new Set(
-    (refundRows ?? [])
-      .filter((row) => row.status !== 'completed')
-      .map((row) => {
-        const metadata = row.metadata;
-        return metadata &&
-          typeof metadata === 'object' &&
-          !Array.isArray(metadata)
-          ? metadata.payment_transaction_id
-          : null;
-      })
-      .filter((id): id is string => typeof id === 'string')
-  );
-  const pendingTransactions = transactions.filter((transaction) =>
-    pendingRefundPaymentIds.has(transaction.id)
-  );
-  if (pendingTransactions.length > 0) {
-    await quarantineRefund({
-      order,
-      reason: 'A previously accepted cancellation refund is not terminal',
-      supabase,
-      transactions: pendingTransactions,
-    });
+  let refundPlan: Array<{
+    transaction: GatewayPaymentTransaction;
+    transactionAmount: number;
+  }>;
+  try {
+    refundPlan = buildCancellationRefundPlan(
+      transactions,
+      refundRows ?? [],
+      refundAmount
+    );
+  } catch (error) {
+    throw new DeliveryUncertainError(
+      error instanceof Error ? error.message : 'Refund ledger requires review'
+    );
   }
   const refundIds: number[] = [];
-
-  for (const transaction of transactions) {
-    if (refundedPaymentIds.has(transaction.id)) continue;
-    const transactionAmount = Number(transaction.amount);
+  for (const { transaction, transactionAmount } of refundPlan) {
+    if (transactionAmount === 0) continue;
+    await checkCancellationRefundProvider({
+      reference: transaction.gateway_reference as string,
+      currency: transaction.currency || order.currency || 'NGN',
+      knownRefunds: (refundRows ?? []).filter(
+        (row) => row.metadata?.payment_transaction_id === transaction.id
+      ),
+    });
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
       Math.round(transactionAmount * 100),

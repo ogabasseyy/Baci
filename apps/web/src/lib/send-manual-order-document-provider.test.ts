@@ -96,6 +96,23 @@ describe('send manual order document provider and validation', () => {
     });
   });
 
+  it('stays retryable when the marker clear fails after a definite rejection', async () => {
+    const db = database({}, { dispatchLeaseError: true });
+    sendEmail.mockImplementationOnce(async (message) => {
+      await message.beforeTransportDispatch();
+      return { success: false, error: 'provider rejected' };
+    });
+    // No deliveryOutcome: the rejection is definite, so the bounded retry
+    // path (which re-clears before sending) stays open.
+    expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
+      { status: 'failed', error: 'dispatch_marker_clear_failed' }
+    );
+    expect(db.updates).toContainEqual({
+      table: 'order_notification_outbox',
+      values: { dispatch_started_at: null },
+    });
+  });
+
   it('keeps the dispatch marker after an indeterminate provider outcome', async () => {
     const db = database();
     sendEmail.mockImplementationOnce(async (message) => {

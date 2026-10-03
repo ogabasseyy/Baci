@@ -634,28 +634,38 @@ export async function sendEmail({
     );
   }
   if (sender.isCustomDomain && !deliveryOutcomeUnknown && fallbackFits) {
-    await resetTransportDispatch?.();
-    transportDispatchMarked = false;
-    const platformSender = getSenderAddress(emailType, fromName);
-    console.warn(
-      `ZeptoMail custom sender rejected (${lastError.code ?? 'unknown'}); retrying from platform sender`
-    );
-    // Offset the fallback attempt counter by the primary's actual tries (not a
-    // fixed maxRetries+1) so a fallback that succeeds on its first send records
-    // attempt_count as primary.attempts + 1, not an inflated 5.
-    const fallback = await dispatch(
-      platformSender,
-      primary.attempts,
-      fallbackAttempts
-    );
-    if ('ok' in fallback) {
-      return fallback.ok;
+    let resetSucceeded = true;
+    try {
+      await resetTransportDispatch?.();
+    } catch {
+      // A transient marker-clear failure must not convert the primary's
+      // definite rejection into an unknown outcome: skip the fallback so
+      // the primary failure below stays definite and retryable.
+      resetSucceeded = false;
     }
-    lastError = fallback.failed;
-    deliveryOutcomeUnknown ||=
-      lastError.code === ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE;
-    totalAttempts += fallback.attempts;
-    finalSenderAddress = platformSender.address;
+    if (resetSucceeded) {
+      transportDispatchMarked = false;
+      const platformSender = getSenderAddress(emailType, fromName);
+      console.warn(
+        `ZeptoMail custom sender rejected (${lastError.code ?? 'unknown'}); retrying from platform sender`
+      );
+      // Offset the fallback attempt counter by the primary's actual tries (not a
+      // fixed maxRetries+1) so a fallback that succeeds on its first send records
+      // attempt_count as primary.attempts + 1, not an inflated 5.
+      const fallback = await dispatch(
+        platformSender,
+        primary.attempts,
+        fallbackAttempts
+      );
+      if ('ok' in fallback) {
+        return fallback.ok;
+      }
+      lastError = fallback.failed;
+      deliveryOutcomeUnknown ||=
+        lastError.code === ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE;
+      totalAttempts += fallback.attempts;
+      finalSenderAddress = platformSender.address;
+    }
   }
 
   console.error('ZeptoMail email error:', JSON.stringify(lastError));

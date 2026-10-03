@@ -241,7 +241,16 @@ export async function sendManualOrderDocument({
       // marker so the bounded retry re-claims cleanly instead of skipping
       // forever on a stale marker. Unknown outcomes keep the marker to
       // preserve at-most-once delivery.
-      if (result.deliveryOutcome !== 'unknown') await persistDispatch(false);
+      if (result.deliveryOutcome !== 'unknown') {
+        // The rejection is definite but the marker clear can fail
+        // transiently: stay on the bounded retry path (later attempts
+        // re-clear before sending) instead of terminalizing unknown.
+        try {
+          await persistDispatch(false);
+        } catch {
+          return { status: 'failed', error: 'dispatch_marker_clear_failed' };
+        }
+      }
       return {
         status: 'failed',
         error: result.error || 'Document email failed',

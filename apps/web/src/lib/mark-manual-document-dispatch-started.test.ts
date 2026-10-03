@@ -32,6 +32,7 @@ const order = {
   notes: 'Call first',
   transaction_date: '2026-09-28T09:00:00Z',
   invoice_issue_date: null,
+  created_at: '2026-09-30T09:00:00Z',
   shipping_address: { city: 'Lagos', postalCode: '100001' },
   order_items: [
     {
@@ -169,6 +170,7 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_support_phone: '+2348000000001',
       p_merchant_phone: '+2348000000002',
       p_merchant_slug: 'shop',
+      p_order_created_at: '2026-09-30T09:00:00Z',
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',
       p_va_account_name: 'Shop Ltd/ORD',

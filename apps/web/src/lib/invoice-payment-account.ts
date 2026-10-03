@@ -51,6 +51,16 @@ export async function resolveInvoicePaymentAccount(
       'assignment_customer_email_source.is.null,assignment_customer_email_source.neq.legacy_untrusted'
     );
 
+  // Future assignments are selector-invisible (assigned_at, else created_at,
+  // must not exceed now): filter them at the database so the unpaid LIMIT 1
+  // keeps returning the newest eligible row instead of a row the selector
+  // then rejects, which would starve the older eligible fallback. Mirrors
+  // the atomic dispatch recheck (see the mark RPC).
+  const assignmentCutoff = now.toISOString();
+  paymentAccountQuery = paymentAccountQuery.or(
+    `assigned_at.lte.${assignmentCutoff},and(assigned_at.is.null,created_at.lte.${assignmentCutoff}),and(assigned_at.is.null,created_at.is.null)`
+  );
+
   if (!isPaidOrder) {
     // A 15-minute validity buffer: an account expiring mid-delivery would
     // embed unusable instructions with no mutation for a trigger to catch.

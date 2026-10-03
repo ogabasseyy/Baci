@@ -34,6 +34,7 @@ interface DispatchOrderSnapshot {
   notes?: string | null;
   transaction_date: string | null;
   invoice_issue_date: string | null;
+  created_at: string;
   shipping_address: Record<string, unknown> | null;
   order_items: readonly DispatchOrderItem[];
 }
@@ -208,6 +209,7 @@ export async function markManualDocumentDispatchStarted(
       p_merchant_support_phone: merchant.supportPhone,
       p_merchant_phone: merchant.phone,
       p_merchant_slug: merchant.slug,
+      p_order_created_at: order.created_at,
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');

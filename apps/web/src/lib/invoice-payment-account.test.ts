@@ -52,6 +52,13 @@ describe('resolveInvoicePaymentAccount', () => {
     );
     expect(query.or).toHaveBeenNthCalledWith(
       2,
+      // Future assignments are selector-invisible: exclude them at the
+      // database so LIMIT 1 keeps the newest eligible row instead of a
+      // row the selector then rejects.
+      'assigned_at.lte.2026-08-27T10:15:00.000Z,and(assigned_at.is.null,created_at.lte.2026-08-27T10:15:00.000Z),and(assigned_at.is.null,created_at.is.null)'
+    );
+    expect(query.or).toHaveBeenNthCalledWith(
+      3,
       // 15-minute validity buffer past now (10:15): an account expiring
       // mid-delivery must not be printed on the invoice.
       'expires_at.is.null,expires_at.gt.2026-08-27T10:30:00.000Z'

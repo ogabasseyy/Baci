@@ -70,6 +70,9 @@ describe('send manual order document dispatch snapshots', () => {
       ([fn]) => fn === 'mark_manual_document_dispatch_started'
     );
     expect(markCall?.[1]).toMatchObject({ p_merchant_slug: 'shop' });
+    expect(markCall?.[1]).toMatchObject({
+      p_order_created_at: '2026-09-30T09:00:00Z',
+    });
   });
 
   it('snapshots the rendered payment instructions in the dispatch marker', async () => {

@@ -10,7 +10,7 @@ import '@/app/(storefront)/storefront-full.css';
 
 export default function Cart() {
   const router = useRouter();
-  const { cart } = useCart();
+  const { cart, cartTotal } = useCart();
   const [manualQa, setManualQa] = useState(false);
   useEffect(() => {
     setManualQa(
@@ -38,14 +38,14 @@ export default function Cart() {
         <p key={item.cartItemId}>{item.name}</p>
       ))}
       <CartPageSummaryPanel
-        displayCartTotal={cart.reduce((total, item) => total + item.price, 0)}
+        displayCartTotal={cartTotal}
         hasNonNegotiableCartItem={true}
         hasPriceNegotiation={false}
         onCheckoutClick={onCheckoutClick}
         onOpenTotalNegotiation={() => undefined}
       />
       <CartPageMobileCheckoutBar
-        displayCartTotal={cart.reduce((total, item) => total + item.price, 0)}
+        displayCartTotal={cartTotal}
         hasNonNegotiableCartItem={true}
         hasPriceNegotiation={false}
         onCheckoutClick={onCheckoutClick}

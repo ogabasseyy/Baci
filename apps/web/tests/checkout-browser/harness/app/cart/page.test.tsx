@@ -14,7 +14,16 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
-    cart: [{ cartItemId: 'fixture-item', name: 'Checkout fixture phone' }],
+    cart: [
+      {
+        cartItemId: 'fixture-item',
+        name: 'Checkout fixture phone',
+        price: 100_000,
+        quantity: 2,
+        negotiatedPrice: 90_000,
+      },
+    ],
+    cartTotal: 180_000,
   }),
 }));
 
@@ -59,9 +68,11 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
-    fireEvent.click(
-      screen.getByRole('button', { name: /Proceed to Checkout/ })
-    );
+    const checkoutButton = screen.getByRole('button', {
+      name: /Proceed to Checkout/,
+    });
+    expect(checkoutButton).toHaveTextContent('₦180,000');
+    fireEvent.click(checkoutButton);
     expect(routerPush).toHaveBeenCalledWith('/checkout');
   });
 
@@ -77,9 +88,11 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
-    fireEvent.click(
-      screen.getByRole('button', { name: /Proceed to Checkout/ })
-    );
+    const checkoutButton = screen.getByRole('button', {
+      name: /Proceed to Checkout/,
+    });
+    expect(checkoutButton).toHaveTextContent('₦180,000');
+    fireEvent.click(checkoutButton);
     expect(routerPush).toHaveBeenCalledWith('/checkout?qa=manual');
   });
 

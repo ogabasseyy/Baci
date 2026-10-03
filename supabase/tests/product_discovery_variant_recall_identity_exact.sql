@@ -24,7 +24,7 @@ VALUES
    '{"product_type":"phone","model":"A-B"}'),
   ('cb58d110-0000-4000-8000-000000000662', 'cb58d110-0000-4000-8000-000000000211',
    'Spaced model', 'spaced-model', 'Acme', 'Smartphones', 50000, 'active', true, true, 'off',
-   '{"product_type":"phone","model":"A B"}');
+   '{"product_type":"phone","model":"Acme A B"}');
 
 INSERT INTO public.product_variants (id, product_id, merchant_id, attributes, stock_quantity)
 VALUES
@@ -82,6 +82,15 @@ BEGIN
     'cb58d110-0000-4000-8000-000000000661'::uuid
   ] THEN
     RAISE EXCEPTION 'separator-colliding models must sink below the exact match, got %', recall_ids;
+  END IF;
+  SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
+  FROM public.search_product_variant_recall(
+    'cb58d110-0000-4000-8000-000000000211',
+    '[{"key":"storage_gb","operator":"eq","value":256,"branch":0}]'::jsonb,
+    1, 0, '[{"branch":0,"brands":["Acme"],"model":"A B Pro"}]'::jsonb
+  ) WITH ORDINALITY AS ranked(product_id, attributes, rank);
+  IF recall_ids IS DISTINCT FROM ARRAY['cb58d110-0000-4000-8000-000000000661'::uuid] THEN
+    RAISE EXCEPTION 'manufacturer prefix matching must preserve Pro suffix contradictions, got %', recall_ids;
   END IF;
   SELECT array_agg(product_id ORDER BY rank) INTO recall_ids
   FROM public.search_product_variant_recall(

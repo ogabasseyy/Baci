@@ -50,7 +50,7 @@ export function App() {
     const observer = new ResizeObserver(reportHeight);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [displayMode]);
+  }, [displayMode, toolOutput]);
 
   return (
     <div

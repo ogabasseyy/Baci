@@ -73,6 +73,32 @@ describe('Ogabassey inline result presentation', () => {
     expect(window.openai.requestDisplayMode).not.toHaveBeenCalled();
   });
 
+  it('updates inline height when results arrive without ResizeObserver', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    let contentHeight = 120;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => ({ height: contentHeight }) as DOMRect
+    );
+    const notifyIntrinsicHeight = vi.fn();
+    window.openai = {
+      toolOutput: null,
+      displayMode: 'inline',
+      notifyIntrinsicHeight,
+    };
+    render(<App />);
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(120);
+    contentHeight = 280;
+    act(() => {
+      if (window.openai) window.openai.toolOutput = { products };
+      window.dispatchEvent(
+        new CustomEvent('openai:set_globals', {
+          detail: { globals: { toolOutput: window.openai?.toolOutput } },
+        })
+      );
+    });
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
+  });
+
   it('preserves the search error message in the widget', () => {
     window.openai = {
       toolOutput: {

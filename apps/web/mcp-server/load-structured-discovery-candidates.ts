@@ -211,7 +211,7 @@ export async function loadStructuredDiscoveryCandidates({
       loadLexicalIds(keywords, merchantId, supabase)
     )
   ).then((results) => ({
-    ids: [...new Set(results.flatMap((result) => result.ids))],
+    sources: results.map((result) => result.ids),
     truncated: results.some((result) => result.truncated),
   }));
   const semanticPromise = query && semanticSearch
@@ -236,8 +236,8 @@ export async function loadStructuredDiscoveryCandidates({
   const hasStructuredFactTerms = intent !== undefined &&
     buildDiscoveryFactRetrievalQuery(intent, '') !== '(a & !a)';
   const rankedIds = hasStructuredFactTerms
-    ? reciprocalRankFusion([lexical.ids], [facts.ids, variants.ids], [semantic.value.ids])
-    : reciprocalRankFusion([lexical.ids, facts.ids], [variants.ids], [semantic.value.ids]);
+    ? reciprocalRankFusion(lexical.sources, [facts.ids, variants.ids], [semantic.value.ids])
+    : reciprocalRankFusion([...lexical.sources, facts.ids], [variants.ids], [semantic.value.ids]);
   // RRF order keeps the best candidates; overflow past the global budget
   // marks truncation like any other cap instead of hydrating silently.
   const cappedIds = rankedIds.slice(0, MAX_STRUCTURED_CANDIDATE_PRODUCTS);

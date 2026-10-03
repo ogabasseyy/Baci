@@ -74,6 +74,13 @@ body {
 
 .ogabassey-widget.mode-fullscreen {
   max-width: none;
+  min-height: calc(100dvh - 36px);
+}
+
+html:has(.mode-fullscreen),
+body:has(.mode-fullscreen) {
+  min-height: 100dvh;
+  background: var(--background);
 }
 
 /* @include:styles-header.css */

@@ -65,6 +65,9 @@ async function setupLabFiles() {
         actualWidth: 48,
         bytes: bytes.length,
         contentType: `image/${format}`,
+        // Synthetic tiers exceed the snapshot bytes from a png source:
+        // the explicit over-source exception (never forced into a cap).
+        delivery: 'generated-over-source',
         format,
         height: 48,
         path: fileName,

@@ -15,6 +15,10 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const RECIPE = RECIPE_ID;
+// Frozen r1 recipe identity: delivery-less tiers are valid ONLY under a
+// non-current recipe. The plain validManifest pair below is the frozen
+// r1 legacy case; current-recipe manifests must record delivery.
+const RECIPE_FROZEN_R1 = 'pilot-r1-0123456789abcdef';
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const SOURCE = createHash('sha256').update('contract-source').digest('hex');
 
@@ -77,6 +81,7 @@ function guardedTiers() {
 function validManifestGuarded() {
   return {
     ...validManifest(),
+    recipeId: RECIPE,
     source: {
       bytes: GUARD_SOURCE_BYTES,
       format: 'avif',
@@ -117,7 +122,7 @@ function validManifest() {
     encoder: { libvipsVersion: '8.18.6', name: 'sharp', sharpVersion: '0.35.4' },
     merchantId: MERCHANT,
     policyVersion: 1,
-    recipeId: RECIPE,
+    recipeId: RECIPE_FROZEN_R1,
     role: 'logo',
     schemaVersion: 1,
     source: {
@@ -138,7 +143,7 @@ function validAcceptance() {
     merchantId: MERCHANT,
     note: 'Contract review: text legible, colors preserved.',
     outputHashes: logoTiers().map((tier) => tier.sha256),
-    recipeId: RECIPE,
+    recipeId: RECIPE_FROZEN_R1,
     reviewedAt: '2026-10-01T21:00:00.000Z',
     reviewer: 'pilot-owner',
     schemaVersion: 1,
@@ -155,6 +160,19 @@ const mutateGuardedTier = (index, patch) => ({
   tiers: guardedTiers().map((tier, position) =>
     position === index ? { ...tier, ...patch } : tier
   ),
+});
+// Delivery omission (key removed, not nulled): the current-recipe
+// omission the never-larger checks must reject.
+const stripGuardedTierDelivery = (index) => ({
+  ...guarded,
+  tiers: guardedTiers().map((tier, position) => {
+    if (position !== index) {
+      return tier;
+    }
+    const { delivery, ...rest } = tier;
+    void delivery;
+    return rest;
+  }),
 });
 const shortTiers = logoTiers().slice(0, 5);
 const manyTiers = Array.from({ length: 25 }, (_, index) => ({
@@ -214,7 +232,17 @@ const fixtures = {
     deliveryNull: mutateGuardedTier(0, { delivery: null }),
     emptyTiers: { ...manifest, tiers: [] },
     generatedAboveSource: mutateGuardedTier(0, { bytes: 5001 }),
+    generatedHeightOffAspect: mutateGuardedTier(0, { height: 80 }),
+    generatedWidthTooNarrow: mutateGuardedTier(0, {
+      actualWidth: 48,
+      width: 48,
+    }),
+    generatedWidthUpscaled: mutateGuardedTier(0, {
+      actualWidth: 900,
+      width: 900,
+    }),
     generatedWithoutQuality: mutateGuardedTier(0, { quality: null }),
+    r2MissingDelivery: stripGuardedTierDelivery(0),
     overSourceWithoutCause: mutateGuardedTier(3, { bytes: 4000 }),
     passthroughByteMismatch: mutateGuardedTier(2, { bytes: 4999 }),
     passthroughWithQuality: mutateGuardedTier(2, { quality: 70 }),

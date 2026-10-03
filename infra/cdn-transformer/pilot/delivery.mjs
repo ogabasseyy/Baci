@@ -11,9 +11,11 @@
 //   800w). Geometry, crop, alpha, orientation, MIME, and hashes are preserved
 //   because the delivered bytes are the validated source bytes.
 // - rung > source with an incompatible original (jpeg/png source):
-//   `generated-over-source`. The generated tier is kept and the limitation
-//   is explicit: an unsupported codec is never forced into a typed branch
-//   solely to meet the cap.
+//   `generated-over-source` — an EXPLICIT OVER-SOURCE EXCEPTION, not a
+//   capped delivery. The generated tier is kept (bytes stay > source)
+//   because an unsupported codec is never forced into a typed branch
+//   solely to meet the cap. Consumers must never treat this disposition
+//   as capped; validators require its bytes to EXCEED the source.
 //
 // Pass-through bytes are committed as validated copies inside the generation
 // directory (see generate.mjs), so generations stay self-contained, hash

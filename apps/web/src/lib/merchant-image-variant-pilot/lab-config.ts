@@ -27,10 +27,9 @@ export interface PilotLabConfig {
     slotId: string;
   }) => string | null;
   // Absolute staged file paths (tiers + originals) with their verified
-  // hashes. The route layer re-verifies bytes on the cached-config path so
-  // deleted or drifted files fail closed instead of serving URLs for 404s
-  // or swapped bytes. Staged files are small and page-cached; the per-load
-  // re-hash is negligible next to a route render.
+  // hashes. The route layer re-stats on the cached-config path and only
+  // re-hashes when size/mtime changed, so deleted or drifted files fail
+  // closed instead of serving URLs for 404s or swapped bytes.
   stagedPaths: readonly { path: string; sha256: string }[];
   statuses: PilotBindingStatus[];
 }

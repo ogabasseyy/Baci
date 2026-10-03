@@ -116,6 +116,74 @@ test('PID reuse never steals a live claimant', async () => {
   assert.ok((await stat(join(root, stagingDirName))).isDirectory());
 });
 
+test('a live pid with an ancient recorded owner start is recoverable', async () => {
+  const root = await outputRoot();
+  // OUR live pid, but the recorded owner started before any legitimate
+  // run could still be alive: pid reuse (or a wedged owner), so the
+  // abandoned claim must not block the job forever.
+  const token = 'reused-pid-run';
+  const stagingDirName = `staging-${token}`;
+  const ancient = Date.now() - (150_000 + 60_000);
+  await mkdir(join(root, 'claims'), { recursive: true });
+  await mkdir(join(root, stagingDirName), { recursive: true });
+  await writeFile(
+    join(root, 'claims', `${claimKeyForJob(JOB)}.json`),
+    JSON.stringify({
+      createdAt: new Date(ancient).toISOString(),
+      jobKey: 'x',
+      ownerStartApproxMs: ancient,
+      pid: process.pid,
+      runToken: token,
+      stagingDirName,
+    })
+  );
+  const recovered = await recoverAbandonedClaim(root, JOB);
+  assert.equal(recovered.runToken, token);
+  assert.equal(recovered.removedStaging, true);
+  const reacquired = await acquireClaim(root, JOB, createRunToken());
+  assert.ok(reacquired.runToken);
+});
+
+test('a live pid with a recent recorded owner start stays held', async () => {
+  const root = await outputRoot();
+  const token = 'live-owner-run';
+  const stagingDirName = `staging-${token}`;
+  await mkdir(join(root, 'claims'), { recursive: true });
+  await mkdir(join(root, stagingDirName), { recursive: true });
+  await writeFile(
+    join(root, 'claims', `${claimKeyForJob(JOB)}.json`),
+    JSON.stringify({
+      createdAt: new Date().toISOString(),
+      jobKey: 'x',
+      ownerStartApproxMs: Date.now() - 1000,
+      pid: process.pid,
+      runToken: token,
+      stagingDirName,
+    })
+  );
+  const error = await recoverAbandonedClaim(root, JOB).catch((value) => value);
+  assert.equal(error.code, 'claim-held');
+});
+
+test('a live pid with unusable timestamps stays held', async () => {
+  const root = await outputRoot();
+  const token = 'no-timestamp-run';
+  const stagingDirName = `staging-${token}`;
+  await mkdir(join(root, 'claims'), { recursive: true });
+  await mkdir(join(root, stagingDirName), { recursive: true });
+  await writeFile(
+    join(root, 'claims', `${claimKeyForJob(JOB)}.json`),
+    JSON.stringify({
+      jobKey: 'x',
+      pid: process.pid,
+      runToken: token,
+      stagingDirName,
+    })
+  );
+  const error = await recoverAbandonedClaim(root, JOB).catch((value) => value);
+  assert.equal(error.code, 'claim-held');
+});
+
 test('corrupt claims are reported, not auto-deleted', async () => {
   const root = await outputRoot();
   await mkdir(join(root, 'claims'), { recursive: true });

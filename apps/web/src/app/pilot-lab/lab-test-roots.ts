@@ -67,7 +67,10 @@ export async function setupLabRoots(input: {
   const publicDir = join(base, 'public');
   await mkdir(inputRoot, { recursive: true });
   await mkdir(publicDir, { recursive: true });
-  const payload = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
+  // 2000x500 source: every role ladder fits without upscaling (the
+  // manifest contract rejects upscaled claims), and the 4:1 aspect keeps
+  // rung heights exact.
+  const payload = await readFile(join(GENERATOR_FIXTURES, 'wide-2000x500.png'));
 
   async function addAsset(asset: LabTestAsset): Promise<{
     record: Record<string, unknown>;
@@ -75,7 +78,7 @@ export async function setupLabRoots(input: {
   }> {
     const sourcePath = `${asset.assetId}.png`;
     await copyFile(
-      join(GENERATOR_FIXTURES, 'tiny-48x48.png'),
+      join(GENERATOR_FIXTURES, 'wide-2000x500.png'),
       join(inputRoot, sourcePath)
     );
     const snapshot = await readFile(join(inputRoot, sourcePath));
@@ -92,17 +95,24 @@ export async function setupLabRoots(input: {
         const hash = sha256(bytes);
         const fileName = `${hash}.${format}`;
         await writeFile(join(generationDir, fileName), bytes);
+        const width = Math.min(requestedWidth, 2000);
         tiers.push({
-          actualWidth: requestedWidth,
+          actualWidth: width,
           bytes: bytes.length,
           contentType: `image/${format}`,
+          // png source: capped rungs generate, larger rungs take the
+          // explicit over-source exception.
+          delivery:
+            bytes.length <= snapshot.length
+              ? 'generated'
+              : 'generated-over-source',
           format,
-          height: requestedWidth,
+          height: Math.round((500 * width) / 2000),
           path: fileName,
           quality: 70,
           requestedWidth,
           sha256: hash,
-          width: requestedWidth,
+          width,
         });
       }
     }
@@ -124,8 +134,8 @@ export async function setupLabRoots(input: {
         source: {
           bytes: snapshot.length,
           format: 'png',
-          orientedHeight: 48,
-          orientedWidth: 48,
+          orientedHeight: 500,
+          orientedWidth: 2000,
           sha256: sourceSha,
         },
         tiers,
@@ -136,7 +146,7 @@ export async function setupLabRoots(input: {
         assetId: asset.assetId,
         capturedAt: '2026-10-01T20:00:00.000Z',
         contentType: 'image/png',
-        height: 48,
+        height: 500,
         merchantId: asset.merchantId,
         role: asset.role,
         schemaVersion: 1,
@@ -145,7 +155,7 @@ export async function setupLabRoots(input: {
         slot: asset.slot,
         sourcePath,
         url: asset.url,
-        width: 48,
+        width: 2000,
       },
       tierHashes: tiers.map((tier) => tier.sha256),
     };

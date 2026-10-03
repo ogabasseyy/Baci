@@ -1,6 +1,7 @@
 // Offline per-binding stages: input snapshot integrity + acceptance match.
-// Each stage records its checks and returns whether the binding continues;
-// a false return mirrors the original loop's `continue` exactly.
+// The input stage returns the verified snapshot bytes (falsy = the binding
+// stops, mirroring the original loop's `continue`); downstream stages reuse
+// the verified buffer instead of re-reading the file.
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { acceptanceKey } from './merchant-image-pilot-preflight-records.mjs';
@@ -33,7 +34,7 @@ export async function checkBindingInput({
       `${name}:input`,
       `input snapshot missing: ${record.sourcePath}`
     );
-    return false;
+    return null;
   }
   if (
     realRoot === null ||
@@ -45,7 +46,7 @@ export async function checkBindingInput({
       `${name}:input`,
       `input escapes the input root: ${record.sourcePath}`
     );
-    return false;
+    return null;
   }
   let inputBytes;
   try {
@@ -57,7 +58,7 @@ export async function checkBindingInput({
       `${name}:input`,
       `input snapshot missing: ${record.sourcePath}`
     );
-    return false;
+    return null;
   }
   if (sha256Hex(inputBytes) !== record.sha256) {
     fail(
@@ -66,10 +67,10 @@ export async function checkBindingInput({
       `${name}:input`,
       `input snapshot hash mismatch: ${record.sourcePath}`
     );
-    return false;
+    return null;
   }
   pass(checks, `${name}:input`);
-  return true;
+  return inputBytes;
 }
 
 export function checkBindingAcceptance({

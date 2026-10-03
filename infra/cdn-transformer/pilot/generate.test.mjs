@@ -127,7 +127,7 @@ test('a failing job does not block the batch', async () => {
   assert.equal(failed.code, 'animated-input');
 });
 
-test('memory evidence is labeled as sampled parent RSS, never a job peak', async () => {
+test('memory evidence combines sampled parent RSS with worker peaks', async () => {
   const { inputRoot, outputRoot } = await setup();
   const good = await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-good');
   const animatedTarget = join(inputRoot, 'anim-bad.png');
@@ -150,14 +150,26 @@ test('memory evidence is labeled as sampled parent RSS, never a job peak', async
   );
   assert.equal(report.jobs.length, 2);
   for (const job of report.jobs) {
-    // The figure samples the parent RSS at checkpoints; worker children
-    // are excluded, so it must never be labeled or read as a peak.
     assert.ok(
       Number.isFinite(job.sampledParentRssBytes) && job.sampledParentRssBytes > 0,
       `job ${job.assetId} reports sampled parent RSS`
     );
-    assert.ok(!('peakRssBytes' in job), `job ${job.assetId} has no peak claim`);
+    // Worker children self-report per op; the combined figure is a
+    // conservative upper bound safe to size capacity (never a bare
+    // "peak" that silently excludes the encoder).
+    assert.ok(
+      Number.isInteger(job.peakWorkerRssBytes) && job.peakWorkerRssBytes >= 0,
+      `job ${job.assetId} reports worker RSS`
+    );
+    assert.equal(
+      job.peakCombinedUpperBoundBytes,
+      job.sampledParentRssBytes + job.peakWorkerRssBytes,
+      `job ${job.assetId} combined bound sums both peaks`
+    );
+    assert.ok(!('peakRssBytes' in job), `job ${job.assetId} has no bare peak`);
   }
+  const goodJob = report.jobs.find((job) => job.assetId === 'tiny-good');
+  assert.ok(goodJob.peakWorkerRssBytes > 0, 'encoded job saw worker memory');
 });
 
 test('source hash mismatch fails the job without encoding', async () => {

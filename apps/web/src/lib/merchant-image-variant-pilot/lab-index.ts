@@ -25,9 +25,9 @@ export interface ApprovedPilotTier {
   actualWidth: number;
   bytes: number;
   contentType: 'image/avif' | 'image/webp';
-  // Never-larger delivery disposition from the generation contract.
-  // Frozen r1 manifests record none and surface as 'legacy' (unguarded,
-  // never reinterpreted); r2 records one of the guarded dispositions.
+  // Delivery disposition: 'generated'/'original-passthrough' are capped
+  // at source bytes; 'generated-over-source' is the explicit over-source
+  // exception. Unrecorded r1 tiers surface as 'legacy' (unguarded).
   delivery: PilotTierDelivery;
   fileName: string;
   format: 'avif' | 'webp';

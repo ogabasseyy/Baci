@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tierContractIssues } from './merchant-image-variant-pilot-tiers';
 
 // Lab-only merchant image variant pilot contract. This Zod v4 mirror must
 // stay equivalent to the standalone generator contract in
@@ -26,9 +27,10 @@ const pilotTierSchema = z
     actualWidth: z.number().int().min(1).max(16384),
     bytes: z.number().int().min(1),
     contentType: z.enum(['image/avif', 'image/webp']),
-    // Never-larger delivery disposition (recipe r2). Absent on frozen r1
-    // manifests, which keep their legacy meaning and are never
-    // reinterpreted in place.
+    // Delivery disposition (recipe r2): 'generated' and
+    // 'original-passthrough' are capped at source bytes, while
+    // 'generated-over-source' is the explicit over-source exception.
+    // Absent on frozen r1 manifests, which keep their legacy meaning.
     delivery: z
       .enum(['generated', 'original-passthrough', 'generated-over-source'])
       .optional(),
@@ -138,42 +140,14 @@ export const pilotManifestSchema = z
         message: 'tiers must cover the full role ladder exactly once',
       });
     }
-    // Never-larger invariants hold only where a disposition is recorded;
-    // legacy tiers without one are exempt (frozen r1 keeps its meaning).
     for (const tier of manifest.tiers) {
-      if (tier.delivery === undefined) {
-        continue;
-      }
-      const key = `${tier.requestedWidth}:${tier.format}`;
-      if (tier.delivery === 'generated' && tier.bytes > manifest.source.bytes) {
-        context.addIssue({
-          code: 'custom',
-          message: `tier "${key}" claims generated delivery above the source bytes`,
-        });
-      }
-      if (
-        tier.delivery === 'generated-over-source' &&
-        (tier.bytes <= manifest.source.bytes ||
-          tier.format === manifest.source.format)
-      ) {
-        context.addIssue({
-          code: 'custom',
-          message: `tier "${key}" claims an over-source limitation that does not hold`,
-        });
-      }
-      if (tier.delivery === 'original-passthrough') {
-        const matchesSource =
-          tier.bytes === manifest.source.bytes &&
-          tier.sha256 === manifest.source.sha256 &&
-          tier.width === manifest.source.orientedWidth &&
-          tier.height === manifest.source.orientedHeight &&
-          tier.format === manifest.source.format;
-        if (!matchesSource) {
-          context.addIssue({
-            code: 'custom',
-            message: `tier "${key}" pass-through must reuse the validated source bytes, dimensions, and codec`,
-          });
-        }
+      for (const message of tierContractIssues(
+        tier,
+        manifest.source,
+        manifest.recipeId,
+        PILOT_RECIPE_ID
+      )) {
+        context.addIssue({ code: 'custom', message });
       }
     }
   });

@@ -173,7 +173,8 @@ export async function runOfflinePreflight(options) {
   for (const record of inventory) {
     const name = `binding:${record.assetId}`;
     const stage = { checks, failures, name, options, record };
-    if (!(await checkBindingInput(stage))) {
+    const inputBytes = await checkBindingInput(stage);
+    if (!inputBytes) {
       continue;
     }
     const acceptance = checkBindingAcceptance({
@@ -189,6 +190,7 @@ export async function runOfflinePreflight(options) {
       ...stage,
       acceptance,
       effectiveRecipe,
+      inputBytes,
     });
     if (!manifest) {
       continue;

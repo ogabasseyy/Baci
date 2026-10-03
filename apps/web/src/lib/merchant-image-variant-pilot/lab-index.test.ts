@@ -61,6 +61,9 @@ async function setupLab(
         actualWidth: 48,
         bytes: bytes.length,
         contentType: `image/${format}`,
+        // Current-recipe tiers must record delivery; these synthetic
+        // tiers stay under the 1234-byte source, so 'generated' holds.
+        delivery: 'generated',
         format,
         height: 48,
         path: fileName,
@@ -158,7 +161,7 @@ describe('buildLabIndex', () => {
     expect(tiers).toHaveLength(6);
   });
 
-  it('surfaces guarded dispositions and legacy tiers explicitly', async () => {
+  it('surfaces guarded dispositions explicitly', async () => {
     const guardedTiers = lab.tiers.map((tier) => ({
       ...tier,
       delivery: 'generated',
@@ -195,15 +198,26 @@ describe('buildLabIndex', () => {
     expect(tiers?.map((tier) => tier.delivery)).toEqual(
       Array(6).fill('generated')
     );
+  });
 
-    const legacy = await buildLabIndex({
+  it('rejects a current-recipe manifest that omits delivery', async () => {
+    // Delivery-less tiers are frozen r1 legacy only. Under the current
+    // recipe the omission would skip every never-larger check, so the
+    // lab refuses to activate instead of mapping to 'legacy'.
+    const undelivered = lab.tiers.map((tier) => {
+      const { delivery: _delivery, ...rest } = tier;
+      void _delivery;
+      return rest;
+    });
+    const fixture = await setupLab({ manifest: { tiers: undelivered } });
+    const { index, statuses } = await buildLabIndex({
       acceptances: [
         {
           assetId: 'logo-1',
           generationId: GENERATION_ID,
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
-          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          outputHashes: undelivered.map((tier) => tier.sha256),
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -212,18 +226,18 @@ describe('buildLabIndex', () => {
           verdict: 'accepted',
         },
       ],
-      bindings: lab.bindings,
-      outputRoot: lab.outputRoot,
+      bindings: fixture.bindings,
+      outputRoot: fixture.outputRoot,
     });
-    const legacyTiers = lookupPilotTiers(legacy.index, {
-      assetId: 'logo-1',
-      merchantId: MERCHANT,
-      role: 'logo',
-      sourceSha256: SOURCE,
-    });
-    expect(legacyTiers?.map((tier) => tier.delivery)).toEqual(
-      Array(6).fill('legacy')
-    );
+    expect(statuses[0]?.status).toBe('invalid-manifest');
+    expect(
+      lookupPilotTiers(index, {
+        assetId: 'logo-1',
+        merchantId: MERCHANT,
+        role: 'logo',
+        sourceSha256: SOURCE,
+      })
+    ).toBeNull();
   });
 
   it('rejects a guarded manifest whose disposition violates the source bytes', async () => {

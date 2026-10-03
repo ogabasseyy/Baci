@@ -48,37 +48,49 @@ async function setupOfflineAssets(assets) {
   for (const asset of assets) {
     const merchantId = asset.merchantId ?? MERCHANT;
     const sourcePath = `${asset.assetId}.png`;
+    // 2000px-wide source: every role ladder fits without upscaling (the
+    // manifest contract rejects upscaled claims), and the 4:1 aspect keeps
+    // rung heights exact.
     await copyFile(
-      join(GENERATOR_FIXTURES, 'tiny-48x48.png'),
+      join(GENERATOR_FIXTURES, 'wide-2000x500.png'),
       join(inputRoot, sourcePath)
     );
     const snapshot = await readFile(join(inputRoot, sourcePath));
     const sourceSha = sha256(snapshot);
+    const sourceMeta = await sharp(snapshot).metadata();
     const generationDir = join(outputRoot, 'generations', asset.generationId);
     await mkdir(generationDir, { recursive: true });
     // Real encodings on the genuine role ladder so descriptor checks verify
-    // actual decoded dimensions, not string shapes.
+    // actual decoded dimensions, not string shapes. Aspect-preserving
+    // downscale; claimed geometry is read back from the decoded bytes.
     const tiers = [];
     for (const width of asset.ladder) {
       for (const format of ['avif', 'webp']) {
         const bytes = await sharp(snapshot)
-          .resize(width, width)
+          .resize(Math.min(width, sourceMeta.width))
           .toFormat(format)
           .toBuffer();
+        const decoded = await sharp(bytes).metadata();
         const hash = sha256(bytes);
         const fileName = `${hash}.${format}`;
         await writeFile(join(generationDir, fileName), bytes);
         tiers.push({
-          actualWidth: width,
+          actualWidth: decoded.width,
           bytes: bytes.length,
           contentType: `image/${format}`,
+          // png source: capped rungs generate, larger rungs take the
+          // explicit over-source exception.
+          delivery:
+            bytes.length <= snapshot.length
+              ? 'generated'
+              : 'generated-over-source',
           format,
-          height: width,
+          height: decoded.height,
           path: fileName,
           quality: 70,
           requestedWidth: width,
           sha256: hash,
-          width,
+          width: decoded.width,
         });
       }
     }
@@ -100,8 +112,8 @@ async function setupOfflineAssets(assets) {
         source: {
           bytes: snapshot.length,
           format: 'png',
-          orientedHeight: 48,
-          orientedWidth: 48,
+          orientedHeight: sourceMeta.height,
+          orientedWidth: sourceMeta.width,
           sha256: sourceSha,
         },
         tiers,
@@ -269,7 +281,9 @@ describe('preflight offline gate', () => {
     await writeFile(manifestPath, JSON.stringify(manifest));
     const report = await runOfflinePreflight(offlineOptions(fixture));
     expect(report.ok).toBe(false);
-    expect(report.failures.join('\n')).toMatch(/dimension|decoded/i);
+    // The manifest contract binds encoded geometry to the source ladder,
+    // so the forged width is rejected at parse time, before byte decode.
+    expect(report.failures.join('\n')).toMatch(/dimension|decoded|rung width/i);
   });
 
   it('rejects ladder gaps and hash-set drift against the route contract', async () => {

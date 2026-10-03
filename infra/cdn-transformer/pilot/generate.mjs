@@ -25,6 +25,7 @@ import {
 } from './disk-guards.mjs';
 import { applyDeliveryGuard } from './delivery.mjs';
 import { encodeRoleLadder } from './encoder.mjs';
+import { takePeakWorkerRssBytes } from './worker-pool.mjs';
 import { readInputSnapshot, verifySnapshotHash } from './input-store.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import {
@@ -85,14 +86,19 @@ async function findPnpmPin() {
 async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
   const startedAt = Date.now();
   const deadlineMs = startedAt + JOB_TIMEOUT_MS;
-  // Sampled parent RSS at checkpoints only: expensive Sharp work runs in
-  // worker children whose memory is excluded, and peaks between samples are
-  // missed. This is not the encoder/job peak and must not size capacity.
+  // Memory accounting: parent RSS sampled at checkpoints, plus the max
+  // worker-child RSS across this job's completed ops (self-reported per
+  // op envelope; see encode-worker.mjs). Parent and worker run
+  // concurrently, so their peaks sum to a CONSERVATIVE upper bound on the
+  // combined job peak — safe to size capacity, unlike the parent sample
+  // alone. Missed: peaks between parent samples, and spikes inside one
+  // native worker call (bounded by the worker's input pixel limits).
   const startedRss = process.memoryUsage().rss;
   let sampledParentRss = startedRss;
   const sampleRss = () => {
     sampledParentRss = Math.max(sampledParentRss, process.memoryUsage().rss);
   };
+  takePeakWorkerRssBytes();
   const runToken = createRunToken();
   let stagingDir = null;
   try {
@@ -232,12 +238,15 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
       await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
     }
     stagingDir = null;
+    const peakWorkerRssBytes = takePeakWorkerRssBytes();
     return {
       assetId: job.assetId,
       durability: committed.durability,
       elapsedMs: Date.now() - startedAt,
       generationId,
       merchantId: job.merchantId,
+      peakCombinedUpperBoundBytes: sampledParentRss + peakWorkerRssBytes,
+      peakWorkerRssBytes,
       sampledParentRssBytes: sampledParentRss,
       reused: committed.reused,
       role: job.role,
@@ -259,12 +268,15 @@ async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
       await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
     }
     await releaseClaim(outputRoot, job, runToken).catch(() => {});
+    const peakWorkerRssBytes = takePeakWorkerRssBytes();
     return {
       assetId: job.assetId,
       code: error?.code ?? 'unknown',
       elapsedMs: Date.now() - startedAt,
       merchantId: job.merchantId,
       message: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+      peakCombinedUpperBoundBytes: sampledParentRss + peakWorkerRssBytes,
+      peakWorkerRssBytes,
       sampledParentRssBytes: sampledParentRss,
       role: job.role,
       status: 'failed',

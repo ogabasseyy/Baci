@@ -2,11 +2,13 @@
 
 import { Eye, Minus, Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { ThemedButton, ThemedCard } from '@/components/themed';
 import { CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import type { CartItem } from '@/hooks/use-cart';
 import { useCurrency } from '@/hooks/use-currency';
+import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import type { ProjectedPilotImage } from './next-image-adapter';
@@ -22,12 +24,13 @@ import type { ProjectedPilotImage } from './next-image-adapter';
 // parity proof (clone-control vs original).
 //
 // Accepted deltas (documented, fetch-neutral):
-// - No blur placeholder: the production blur style is next/image-internal
-//   inline CSS (zero requests). Replicating framework internals in the lab
-//   would couple the experiment to them; LCP/image-byte comparisons are
-//   unaffected.
 // - No error->fallback swap: client failure-path state; lab staging
 //   guarantees the bytes exist (preflight asserts).
+//
+// The production category blur placeholder IS preserved (same value,
+// same paint timing): the control paints it immediately while the pilot
+// <img> is still decoding, so dropping it would skew FCP/visual
+// comparisons independently of the image bytes.
 
 export {
   LAB_CARD_GEOMETRY,
@@ -37,13 +40,21 @@ export {
 
 export function LabProductCardImage({
   imageHint,
+  placeholder,
   projection,
 }: {
   imageHint: string;
+  placeholder: string;
   projection: ProjectedPilotImage;
 }) {
+  // Immediate paint parity with the control's next/image blur placeholder
+  // (data URL, zero requests); removed on decode like the framework's.
+  const [loaded, setLoaded] = useState(false);
+  const style = loaded
+    ? undefined
+    : { backgroundImage: `url("${placeholder}")`, backgroundSize: 'cover' };
   return (
-    <picture data-pilot-lab-card-image="true">
+    <picture data-pilot-lab-card-image="true" style={style}>
       {projection.sources.map((source) => (
         <source
           key={source.format}
@@ -63,6 +74,7 @@ export function LabProductCardImage({
         fetchPriority={projection.fetchPriority}
         decoding="async"
         className="object-cover w-full h-auto aspect-video"
+        onLoad={() => setLoaded(true)}
       />
     </picture>
   );
@@ -90,6 +102,10 @@ export function LabStorefrontProductCard({
   basePath = '',
 }: LabStorefrontProductCardProps) {
   const { formatCurrency } = useCurrency();
+
+  // Verbatim derivation (production product-card.tsx) for the same blur.
+  const productCategory =
+    product.categories?.name || product.category || 'General';
 
   const discountPercentage =
     product.compare_at_price && product.compare_at_price > product.price
@@ -160,6 +176,7 @@ export function LabStorefrontProductCard({
         >
           <LabProductCardImage
             imageHint={product.imageHint}
+            placeholder={getProductBlurPlaceholder(productCategory)}
             projection={projection}
           />
 

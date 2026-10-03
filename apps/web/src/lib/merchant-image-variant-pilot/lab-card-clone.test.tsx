@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StorefrontProductCard } from '@/components/storefront/product-card';
+import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import {
   LabStorefrontProductCard,
@@ -284,6 +285,32 @@ describe('LabStorefrontProductCard original-renderer parity', () => {
     expect(cloneHtml).toContain(
       'class="object-cover w-full h-auto aspect-video"'
     );
+  });
+
+  it('preserves the production blur placeholder behind the pilot image', () => {
+    const pilot = projectPilotNextImage({
+      baseUrl: CONTROL_URL,
+      slot: labCardSlot(product, { priority: false }),
+      tiers: PILOT_TIERS,
+    });
+    if (!pilot) {
+      throw new Error('pilot projection is null');
+    }
+    const cloneHtml = renderToStaticMarkup(
+      <LabStorefrontProductCard
+        product={product}
+        projection={pilot}
+        staggerClass=""
+        basePath="/test-store"
+        {...handlers()}
+      />
+    );
+    // Same value the control arm paints via next/image: identical category
+    // derivation through the identical production generator.
+    const category = product.categories?.name || product.category || 'General';
+    const blur = getProductBlurPlaceholder(category);
+    expect(cloneHtml).toContain('background-image:');
+    expect(cloneHtml).toContain(blur);
   });
 
   it('lab fixture is an in-stock active product with a discount badge', () => {

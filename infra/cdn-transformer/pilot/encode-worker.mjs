@@ -265,12 +265,21 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       return;
     }
     try {
+      // Worker self-report for job memory accounting: max RSS at op start
+      // and completion. Single-shot workers hold their peak through result
+      // serialization, so the end sample approximates the op peak; spikes
+      // inside one native call may exceed it (documented at the consumer).
+      const startRss = process.memoryUsage().rss;
       const result =
         op.op === 'metadata'
           ? await handleMetadataOp(op)
           : op.op === 'encode'
             ? await handleEncodeOp(op)
             : await handleVerifyOp(op);
+      result.workerPeakRssBytes = Math.max(
+        startRss,
+        process.memoryUsage().rss
+      );
       process.stdout.write(`${JSON.stringify(result)}\n`);
     } catch (error) {
       if (error instanceof WorkerInputError) {

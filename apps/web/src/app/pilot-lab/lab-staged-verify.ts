@@ -8,6 +8,34 @@ import { readFile, stat } from 'node:fs/promises';
 const MAX_STAGED_ENTRIES = 256;
 const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 
+// Last fully verified snapshot: size+mtime per path, keyed by the exact
+// staged set (paths AND expected digests). Repeat GETs re-stat (cheap)
+// and skip the re-read/re-hash only when every entry is byte-identical
+// to a snapshot that already passed the full check. Any size change,
+// mtime change, missing file, or changed expectation re-runs the full
+// read+hash below. This trusts the filesystem clock at ms granularity:
+// a rewrite that preserves both size and mtime is not re-hashed, which
+// is acceptable for a flag-gated lab route — an actor able to rewrite
+// staged bytes while pinning mtimes already has host write access.
+let lastVerified: { fingerprint: string; key: string } | null = null;
+
+function snapshotKey(paths: readonly { path: string; sha256: string }[]) {
+  return JSON.stringify(paths.map((entry) => [entry.path, entry.sha256]));
+}
+
+function fingerprintStats(
+  sizes: readonly ({ mtimeMs: number; size: number } | null)[]
+): string | null {
+  const parts: [number, number][] = [];
+  for (const info of sizes) {
+    if (info === null) {
+      return null;
+    }
+    parts.push([info.size, info.mtimeMs]);
+  }
+  return JSON.stringify(parts);
+}
+
 // Byte check over the staged tier/original paths: each file must exist
 // AND hash to its verified digest. Deleted files fail closed instead of
 // serving URLs for 404s; drifted (swapped) bytes fail closed instead of
@@ -30,6 +58,15 @@ export async function verifyStagedBytes(
       `merchant image pilot: staged lab assets total ${totalBytes} bytes, exceeding the ${MAX_STAGED_BYTES}-byte verification budget; re-run pnpm pilot:stage and restart the origin`
     );
   }
+  const key = snapshotKey(paths);
+  const fingerprint = fingerprintStats(sizes);
+  if (
+    fingerprint !== null &&
+    lastVerified?.key === key &&
+    lastVerified.fingerprint === fingerprint
+  ) {
+    return;
+  }
   const bad = (
     await Promise.all(
       paths.map(async (entry, index) => {
@@ -51,5 +88,8 @@ export async function verifyStagedBytes(
     throw new Error(
       `merchant image pilot: ${bad.length} staged lab asset(s) unverified (e.g. ${bad[0]}); re-run pnpm pilot:stage and restart the origin`
     );
+  }
+  if (fingerprint !== null) {
+    lastVerified = { fingerprint, key };
   }
 }

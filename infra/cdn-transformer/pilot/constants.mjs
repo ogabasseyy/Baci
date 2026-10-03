@@ -26,6 +26,15 @@ export const SHARP_LIMITS = {
 // Killable-operation budgets: 15 s per native op, 120 s absolute per job.
 export const OP_TIMEOUT_MS = 15_000;
 export const JOB_TIMEOUT_MS = 120_000;
+// Claim liveness window: a healthy owner self-aborts at its job deadline
+// (checkpoint throws) and only runs seconds of claim/staging cleanup after
+// it, so a claim whose recorded owner start predates this window cannot
+// belong to a live legitimate run — the pid was reused, or the owner is
+// wedged past its deadline. Recovery past this window is still steal-safe:
+// per-run staging dirs, token-checked release, and idempotent
+// same-identity commit mean a wedged owner that wakes can only reuse or
+// throw, never corrupt the new run.
+export const CLAIM_LIVE_WINDOW_MS = JOB_TIMEOUT_MS + 30_000;
 
 // Disk guards: 2 GiB free to start/recheck, 100 MiB staging cap per job.
 export const MIN_FREE_BYTES = 2 * 1024 ** 3;

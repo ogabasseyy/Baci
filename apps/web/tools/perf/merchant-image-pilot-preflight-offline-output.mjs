@@ -4,6 +4,10 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import {
+  normalizeFormat,
+  orientedDimensions,
+} from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
 import { assertManifestContract } from './merchant-image-pilot-preflight-manifest.mjs';
 import { stagedOriginalName } from './merchant-image-pilot-preflight-records.mjs';
 import {
@@ -19,6 +23,7 @@ export async function checkBindingManifest({
   checks,
   effectiveRecipe,
   failures,
+  inputBytes,
   name,
   options,
   record,
@@ -65,6 +70,55 @@ export async function checkBindingManifest({
       failures,
       `${name}:manifest`,
       'manifest identity does not match the bound inventory record'
+    );
+    return null;
+  }
+  // Source-fact binding: the never-larger policy compares tier bytes
+  // against manifest.source.bytes, so the claimed byte count, format, and
+  // oriented dimensions must match the hash-verified input — a matching
+  // SHA alone leaves the policy inputs unbound. Decoded from the verified
+  // buffer, never re-read from disk.
+  if (inputBytes.length !== manifest.source.bytes) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      `manifest source claims ${manifest.source.bytes} bytes but the verified input is ${inputBytes.length} bytes`
+    );
+    return null;
+  }
+  let meta;
+  try {
+    meta = await sharp(inputBytes).metadata();
+  } catch {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      'verified input does not decode for source-fact comparison'
+    );
+    return null;
+  }
+  const decodedFormat = normalizeFormat(meta);
+  if (decodedFormat !== manifest.source.format) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      `manifest source claims format "${manifest.source.format}" but the verified input decodes as "${decodedFormat ?? 'unknown'}"`
+    );
+    return null;
+  }
+  const oriented = orientedDimensions(meta);
+  if (
+    oriented.width !== manifest.source.orientedWidth ||
+    oriented.height !== manifest.source.orientedHeight
+  ) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      `manifest source claims ${manifest.source.orientedWidth}x${manifest.source.orientedHeight} but the verified input decodes ${oriented.width}x${oriented.height}`
     );
     return null;
   }

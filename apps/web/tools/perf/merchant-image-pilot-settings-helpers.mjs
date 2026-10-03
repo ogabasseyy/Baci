@@ -1,15 +1,14 @@
 // Pure parse/extract helpers for the pilot effective-settings gate.
 // Shared by the HAR and Lighthouse checks; no I/O, no subprocesses.
+import {
+  parseArgs as parseStrictArgs,
+  SETTINGS_CLI_OPTIONS,
+} from './merchant-image-pilot-readiness-config.mjs';
 
+// Single strict CLI parser shared with the readiness gate: unknown or
+// malformed tokens throw instead of silently dropping caller intent.
 export function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const match = /^--([a-z-]+)=(.*)$/.exec(argv[i]);
-    if (match) {
-      args[match[1]] = match[2];
-    }
-  }
-  return args;
+  return parseStrictArgs(argv, SETTINGS_CLI_OPTIONS);
 }
 
 export function parseDimensions(value, name) {

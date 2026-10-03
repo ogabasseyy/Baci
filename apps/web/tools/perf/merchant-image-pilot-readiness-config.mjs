@@ -2,13 +2,53 @@
 // profile matrix. The gate must qualify every profile that selects
 // different image tiers or lays out differently — mobile DPR 1/2/3 and
 // desktop — never a single hardcoded viewport.
-export function parseArgs(argv) {
+//
+// Every CLI token must be a known --key=value: a typoed flag (or a stray
+// value from a space-separated `--flag value`) is rejected instead of
+// silently dropped, so a green report always proves the matrix the caller
+// meant to configure.
+export const READINESS_CLI_OPTIONS = [
+  'chrome',
+  'hero-stores',
+  'origin',
+  'profiles',
+  'store-map',
+];
+
+export const SETTINGS_CLI_OPTIONS = [
+  'browser-version',
+  'cache-provenance',
+  'expect-cpu-slowdown',
+  'expect-chrome-major',
+  'expect-connectivity',
+  'expect-dpr',
+  'expect-form-factor',
+  'expect-iterations',
+  'expect-lh-dpr',
+  'expect-lh-viewport',
+  'expect-throttling-method',
+  'expect-viewport',
+  'har',
+  'lighthouse',
+  'screenshot',
+];
+
+export function parseArgs(argv, allowed) {
+  const allow = new Set(allowed ?? []);
   const args = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const match = /^--([a-z-]+)=(.*)$/.exec(argv[i]);
-    if (match) {
-      args[match[1]] = match[2];
+  for (const token of argv) {
+    const match = /^--([a-z-]+)=(.*)$/.exec(token);
+    if (!match) {
+      throw new Error(
+        `bad argument "${token}": expected --key=value (allowed: ${[...allow].map((key) => `--${key}`).join(', ')})`
+      );
     }
+    if (!allow.has(match[1])) {
+      throw new Error(
+        `unknown option --${match[1]} (allowed: ${[...allow].map((key) => `--${key}`).join(', ')})`
+      );
+    }
+    args[match[1]] = match[2];
   }
   return args;
 }

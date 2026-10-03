@@ -29,9 +29,12 @@ describe('preflight manifest contract', () => {
       'validManifestOffset',
       'validManifestGuarded',
     ]) {
+      // Structural agreement: check each manifest against its own recipe
+      // so the currency rule does not mask the structural rules (the
+      // frozen r1 pair is structurally valid but not current).
       expect(
         assertManifestContract(corpus[label], {
-          recipeId: RECIPE,
+          recipeId: corpus[label].recipeId,
           role: 'logo',
         }),
         label
@@ -39,8 +42,10 @@ describe('preflight manifest contract', () => {
     }
     for (const [label, candidate] of Object.entries(corpus.invalidManifests)) {
       expect(
-        assertManifestContract(candidate, { recipeId: RECIPE, role: 'logo' })
-          .length > 0,
+        assertManifestContract(candidate, {
+          recipeId: candidate.recipeId,
+          role: 'logo',
+        }).length > 0,
         label
       ).toBe(true);
     }
@@ -59,12 +64,13 @@ describe('preflight manifest contract', () => {
     const corpus = JSON.parse(
       await readFile(join(GENERATOR_FIXTURES, 'contract-fixtures.json'), 'utf8')
     );
+    const selfRecipe = corpus.validManifest.recipeId;
     const minute = {
       ...corpus.validManifest,
       createdAt: '2026-10-01T20:00+01:00',
     };
     expect(
-      assertManifestContract(minute, { recipeId: RECIPE, role: 'logo' })
+      assertManifestContract(minute, { recipeId: selfRecipe, role: 'logo' })
     ).toEqual([]);
     const basic = {
       ...corpus.validManifest,
@@ -72,7 +78,7 @@ describe('preflight manifest contract', () => {
     };
     expect(
       assertManifestContract(basic, {
-        recipeId: RECIPE,
+        recipeId: selfRecipe,
         role: 'logo',
       }).join('; ')
     ).toMatch(/createdAt/);
@@ -82,7 +88,7 @@ describe('preflight manifest contract', () => {
     };
     expect(
       assertManifestContract(impossible, {
-        recipeId: RECIPE,
+        recipeId: selfRecipe,
         role: 'logo',
       }).join('; ')
     ).toMatch(/createdAt/);
@@ -92,8 +98,9 @@ describe('preflight manifest contract', () => {
     const corpus = JSON.parse(
       await readFile(join(GENERATOR_FIXTURES, 'contract-fixtures.json'), 'utf8')
     );
-    const issues = assertManifestContract(corpus.invalidManifests.qualityZero, {
-      recipeId: RECIPE,
+    const candidate = corpus.invalidManifests.qualityZero;
+    const issues = assertManifestContract(candidate, {
+      recipeId: candidate.recipeId,
       role: 'logo',
     });
     expect(issues.join('; ')).toMatch(/quality/);

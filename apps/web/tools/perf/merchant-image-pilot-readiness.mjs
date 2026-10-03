@@ -23,6 +23,7 @@ import {
   parseArgs,
   parseProfiles,
   parseStoreMap,
+  READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
 } from './merchant-image-pilot-readiness-config.mjs';
 
@@ -119,7 +120,6 @@ async function collectSurface(page, url, surface) {
 }
 
 async function run() {
-  const args = parseArgs(process.argv.slice(2));
   const failures = [];
   const checks = [];
   const pass = (name) => checks.push({ name, ok: true });
@@ -127,6 +127,13 @@ async function run() {
     checks.push({ name, ok: false });
     failures.push(`${name}: ${detail}`);
   };
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2), READINESS_CLI_OPTIONS);
+  } catch (error) {
+    fail('usage', error instanceof Error ? error.message : String(error));
+    return { checks, failures, ok: false };
+  }
   if (!args.origin || !args['store-map'] || !args.chrome) {
     fail('usage', 'need --origin, --store-map and --chrome');
     return { checks, failures, ok: false };

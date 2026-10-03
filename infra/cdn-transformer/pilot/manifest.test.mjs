@@ -123,6 +123,80 @@ test('parsePilotManifest rejects malformed manifests strictly', () => {
   assert.equal(parsePilotManifest(validManifest({ tiers: mismatched })).ok, false);
 });
 
+test('generated tiers stay capped at source bytes', () => {
+  // tier[0] is the 96/avif rung of an 800x600 source: geometry-valid
+  // height is round(600*96/800) = 72.
+  const above = logoTiers();
+  above[0] = { ...above[0], bytes: 1235, delivery: 'generated', height: 72 };
+  const rejected = parsePilotManifest(validManifest({ tiers: above }));
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.issues.join('\n'), /above the source bytes/);
+  const capped = logoTiers();
+  capped[0] = { ...capped[0], bytes: 1234, delivery: 'generated', height: 72 };
+  assert.equal(parsePilotManifest(validManifest({ tiers: capped })).ok, true);
+});
+
+test('generated-over-source is an explicit over-source exception, not a cap', () => {
+  // Above-source bytes with an incompatible source codec are ACCEPTED:
+  // the disposition names the limitation instead of claiming a cap.
+  const over = logoTiers();
+  over[0] = {
+    ...over[0],
+    bytes: 6000,
+    delivery: 'generated-over-source',
+    height: 72,
+  };
+  assert.equal(parsePilotManifest(validManifest({ tiers: over })).ok, true);
+  // But the exception must actually hold: at/below-source bytes cannot
+  // claim it.
+  const notOver = logoTiers();
+  notOver[0] = {
+    ...notOver[0],
+    bytes: 1234,
+    delivery: 'generated-over-source',
+    height: 72,
+  };
+  const cappedClaim = parsePilotManifest(validManifest({ tiers: notOver }));
+  assert.equal(cappedClaim.ok, false);
+  assert.match(
+    cappedClaim.issues.join('\n'),
+    /over-source limitation that does not hold/
+  );
+  // Same-codec sources cannot claim it either (pass-through was available).
+  const avifSource = {
+    bytes: 1234,
+    format: 'avif',
+    orientedHeight: 600,
+    orientedWidth: 800,
+    sha256: 'b'.repeat(64),
+  };
+  const sameCodec = logoTiers();
+  sameCodec[0] = {
+    ...sameCodec[0],
+    bytes: 6000,
+    delivery: 'generated-over-source',
+    height: 72,
+  };
+  assert.equal(
+    parsePilotManifest(validManifest({ source: avifSource, tiers: sameCodec }))
+      .ok,
+    false
+  );
+  // Cross-codec above-source tiers against that avif source stay accepted.
+  const crossCodec = logoTiers();
+  crossCodec[1] = {
+    ...crossCodec[1],
+    bytes: 6000,
+    delivery: 'generated-over-source',
+    height: 72,
+  };
+  assert.equal(
+    parsePilotManifest(validManifest({ source: avifSource, tiers: crossCodec }))
+      .ok,
+    true
+  );
+});
+
 test('generation identity isolates tenants, assets, sources, and recipes', () => {
   const base = {
     encoderIdentity: { libvipsVersion: '8.18.0', name: 'sharp', sharpVersion: '0.35.4' },

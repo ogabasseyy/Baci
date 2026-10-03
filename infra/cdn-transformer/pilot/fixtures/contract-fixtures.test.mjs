@@ -59,6 +59,52 @@ test('generator rejects every shared invalid manifest', async () => {
   }
 });
 
+test('corpus pins the invalid-manifest key set (no silent case loss)', async () => {
+  const fixtures = await loadFixtures();
+  // The three suites iterate whatever keys exist, so a dropped case
+  // would pass silently. Pin the set: the delivery-omission, geometry,
+  // and never-larger cases must all be present.
+  assert.deepEqual(Object.keys(fixtures.invalidManifests).sort(), [
+    'assetIdTooLong',
+    'badContentType',
+    'badCreatedAt',
+    'badEncoderExtra',
+    'badEncoderName',
+    'badEncoderShape',
+    'badMerchant',
+    'badPolicyVersion',
+    'badQuality',
+    'badRole',
+    'badSchemaVersion',
+    'contentTypeFormatMismatch',
+    'deliveryNull',
+    'duplicateTier',
+    'emptyTiers',
+    'generatedAboveSource',
+    'generatedHeightOffAspect',
+    'generatedWidthTooNarrow',
+    'generatedWidthUpscaled',
+    'generatedWithoutQuality',
+    'hashPathMismatch',
+    'missingTier',
+    'overSourceWithoutCause',
+    'passthroughByteMismatch',
+    'passthroughWithQuality',
+    'passthroughWrongCodec',
+    'qualityZero',
+    'r2MissingDelivery',
+    'remoteUrlPath',
+    'sourceExtraField',
+    'tierBytesZero',
+    'tierExtraField',
+    'tooManyTiers',
+    'traversalPath',
+    'unknownField',
+    'widthActualMismatch',
+    'wrongLadder',
+  ]);
+});
+
 test('generator rejects every shared invalid acceptance and matcher drift', async () => {
   const fixtures = await loadFixtures();
   for (const [label, candidate] of Object.entries(fixtures.invalidAcceptanceSchemas)) {

@@ -21,6 +21,25 @@ export class PilotEncodeError extends Error {
 // also serial; this is defense in depth plus the kill-confirmation gate.
 let queueTail = Promise.resolve();
 
+// Max worker RSS across completed ops since the last take. Ops are
+// process-serial, so a plain accumulator is race-free; each job takes
+// (and resets) at its start and end. Killed or failed ops report no
+// envelope and contribute nothing — the peak covers completed ops.
+let peakWorkerRssBytes = 0;
+
+export function takePeakWorkerRssBytes() {
+  const peak = peakWorkerRssBytes;
+  peakWorkerRssBytes = 0;
+  return peak;
+}
+
+function noteWorkerPeak(result) {
+  const sample = result?.workerPeakRssBytes;
+  if (typeof sample === 'number' && Number.isFinite(sample) && sample > 0) {
+    peakWorkerRssBytes = Math.max(peakWorkerRssBytes, Math.floor(sample));
+  }
+}
+
 export function enqueuePilotOp(task) {
   const run = queueTail.then(task, task);
   queueTail = run.then(
@@ -144,6 +163,7 @@ async function spawnWorker(op, { signal, timeoutMs }) {
         result.message ?? 'worker op failed'
       );
     }
+    noteWorkerPeak(result);
     return result;
   } finally {
     signal?.removeEventListener?.('abort', onAbort);

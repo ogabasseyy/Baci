@@ -3,7 +3,10 @@
 // pilot/manifest.mjs). Every rule is cross-checked by the shared
 // contract-fixtures corpus consumed by all three suites, so drift breaks
 // loudly. Returns the issue list (empty = valid).
-import { TIERS } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import {
+  RECIPE_ID,
+  TIERS,
+} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   DELIVERIES,
   ENCODER_KEYS,
@@ -204,14 +207,27 @@ export function assertManifestContract(manifest, { recipeId, role }) {
   if (!ladderOk || seenLadder.size !== expectedLadder.size) {
     issues.push(`tiers do not cover the ${role} ladder exactly once`);
   }
-  // Never-larger invariants hold only where a disposition is recorded;
+  // Per-disposition invariants hold only where a disposition is recorded;
   // legacy tiers without one are exempt (frozen r1 keeps its meaning).
+  // 'generated' is capped at source bytes; 'generated-over-source' must
+  // exceed them (the exception must actually hold).
   if (isPlainObject(source)) {
     for (const tier of tiers) {
-      if (!isPlainObject(tier) || tier.delivery === undefined) {
+      if (!isPlainObject(tier)) {
         continue;
       }
       const key = `${tier.requestedWidth}:${tier.format}`;
+      if (tier.delivery === undefined) {
+        // Delivery-less tiers are frozen r1 legacy. A current-recipe
+        // manifest that omits delivery would skip every never-larger
+        // check and activate unguarded, so the omission is rejected.
+        // (Keyed on the true current recipe, not the caller's effective
+        // recipe parameter used by the currency rule above.)
+        if (manifest.recipeId === RECIPE_ID) {
+          issues.push(`tier "${key}" omits delivery for the current recipe`);
+        }
+        continue;
+      }
       if (tier.delivery === 'generated' && tier.bytes > source.bytes) {
         issues.push(
           `tier "${key}" claims generated delivery above the source bytes`
@@ -236,6 +252,42 @@ export function assertManifestContract(manifest, { recipeId, role }) {
           issues.push(
             `tier "${key}" pass-through must reuse the validated source bytes, dimensions, and codec`
           );
+        }
+      }
+      if (
+        (tier.delivery === 'generated' ||
+          tier.delivery === 'generated-over-source') &&
+        // Unlike the Zod mirrors (whose refinements only run on valid
+        // shapes), this loop also sees malformed tiers already flagged
+        // above — skip the arithmetic there instead of reporting NaN.
+        typeof tier.width === 'number' &&
+        typeof tier.requestedWidth === 'number' &&
+        typeof tier.height === 'number' &&
+        typeof source.orientedWidth === 'number' &&
+        typeof source.orientedHeight === 'number'
+      ) {
+        // Encoded tiers bind to the source ladder: no upscaling past the
+        // source, no narrowed/1px claims, aspect preserved within the same
+        // ±1px height tolerance the encoder verifies its own output with.
+        // (Pass-through tiers are exempt: they carry source dimensions,
+        // bound exactly by the check above.)
+        const encodedWidth = Math.min(
+          tier.requestedWidth,
+          source.orientedWidth
+        );
+        if (tier.width !== encodedWidth) {
+          issues.push(
+            `tier "${key}" width ${tier.width} is not the encoded rung width ${encodedWidth}`
+          );
+        } else {
+          const idealHeight = Math.round(
+            (source.orientedHeight * tier.width) / source.orientedWidth
+          );
+          if (Math.abs(tier.height - idealHeight) > 1) {
+            issues.push(
+              `tier "${key}" height ${tier.height} breaks the source aspect ratio (expected ${idealHeight}±1)`
+            );
+          }
         }
       }
     }

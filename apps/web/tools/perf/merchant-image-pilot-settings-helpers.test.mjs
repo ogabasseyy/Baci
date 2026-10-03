@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   harUserAgent,
+  parseArgs,
   parsePositiveNumber,
   pngDimensions,
 } from './merchant-image-pilot-settings-helpers.mjs';
@@ -49,5 +50,16 @@ describe('merchant-image-pilot-settings helpers', () => {
         /bad --expect-dpr/
       );
     }
+  });
+
+  it('shares the strict settings CLI allowlist', () => {
+    expect(parseArgs(['--har=a.har', '--expect-dpr=2'])).toEqual({
+      'expect-dpr': '2',
+      har: 'a.har',
+    });
+    expect(() => parseArgs(['--origin=https://x'])).toThrow(
+      /unknown option --origin/
+    );
+    expect(() => parseArgs(['--har'])).toThrow(/expected --key=value/);
   });
 });

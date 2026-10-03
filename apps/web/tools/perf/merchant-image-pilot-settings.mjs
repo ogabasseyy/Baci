@@ -207,7 +207,6 @@ async function checkLighthouse(args, pass, fail, recorded) {
 }
 
 async function run() {
-  const args = parseArgs(process.argv.slice(2));
   const failures = [];
   const checks = [];
   const recorded = {};
@@ -219,9 +218,14 @@ async function run() {
     checks.push({ name, ok: false });
     failures.push(`${name}: ${detail}`);
   };
-  const warn = (name, detail) => {
-    warnings.push(`${name}: ${detail}`);
-  };
+  const warn = (name, detail) => warnings.push(`${name}: ${detail}`);
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    fail('usage', error instanceof Error ? error.message : String(error));
+    return { checks, failures, ok: false, recorded, warnings };
+  }
   const required = [
     'har',
     'screenshot',

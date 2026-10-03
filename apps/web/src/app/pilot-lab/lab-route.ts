@@ -168,8 +168,7 @@ export function parseRawAcceptances(value: unknown): unknown[] {
 }
 
 let cachedConfig: { config: PilotLabConfig; key: string } | null = null;
-let inflightLoad: { key: string; promise: Promise<PilotLabConfig> } | null =
-  null;
+const inflightLoads = new Map<string, Promise<PilotLabConfig>>();
 
 function loadLabConfigFromText(
   input: {
@@ -233,8 +232,8 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
     process.env.BACI_IMAGE_PILOT_PUBLIC_DIR ?? join(process.cwd(), 'public');
   // The cache key commits to the frozen input bytes, so an inventory or
   // acceptance edit invalidates the config instead of serving stale lab
-  // state. Concurrent first requests share one in-flight load; a failed
-  // load clears so the next request retries.
+  // state. Concurrent first requests share one in-flight load per key;
+  // a failed load clears so the next request retries.
   const inventoryText = await readFile(
     join(inputRoot, 'inventory.json'),
     'utf8'
@@ -261,8 +260,9 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
     await verifyStagedBytes(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
-  if (inflightLoad?.key === key) {
-    return inflightLoad.promise;
+  const inflight = inflightLoads.get(key);
+  if (inflight) {
+    return inflight;
   }
   const promise = loadLabConfigFromText({
     acceptancesText,
@@ -283,18 +283,18 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
         cachedConfig = { config, key };
         return config;
       } finally {
-        if (inflightLoad?.key === key) {
-          inflightLoad = null;
+        if (inflightLoads.get(key) === promise) {
+          inflightLoads.delete(key);
         }
       }
     },
     (error: unknown) => {
-      if (inflightLoad?.key === key) {
-        inflightLoad = null;
+      if (inflightLoads.get(key) === promise) {
+        inflightLoads.delete(key);
       }
       throw error;
     }
   );
-  inflightLoad = { key, promise };
+  inflightLoads.set(key, promise);
   return promise;
 }

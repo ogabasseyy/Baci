@@ -12,6 +12,7 @@ import { z } from 'zod';
 import {
   PILOT_POLICY_VERSION,
   PILOT_SCHEMA_VERSION,
+  RECIPE_ID,
   TIERS,
 } from './constants.mjs';
 import { removeOwnedStaging } from './disk-guards.mjs';
@@ -46,9 +47,10 @@ const TierSchema = z
     actualWidth: z.number().int().min(1).max(16384),
     bytes: z.number().int().min(1),
     contentType: z.enum(['image/avif', 'image/webp']),
-    // Never-larger delivery disposition (recipe r2). Absent on frozen r1
-    // manifests, which keep their legacy meaning and are never
-    // reinterpreted in place.
+    // Delivery disposition (recipe r2): 'generated' and
+    // 'original-passthrough' are capped at source bytes, while
+    // 'generated-over-source' is the explicit over-source exception.
+    // Absent on frozen r1 manifests, which keep their legacy meaning.
     delivery: z.enum(['generated', 'original-passthrough', 'generated-over-source']).optional(),
     format: z.enum(['avif', 'webp']),
     height: z.number().int().min(1).max(16384),
@@ -134,13 +136,24 @@ export const PilotManifestSchema = z
         message: 'tiers must cover the full role ladder exactly once',
       });
     }
-    // Never-larger invariants hold only where a disposition is recorded;
+    // Per-disposition invariants hold only where a disposition is recorded;
     // legacy tiers without one are exempt (frozen r1 keeps its meaning).
+    // 'generated' is capped at source bytes; 'generated-over-source' must
+    // exceed them (the exception must actually hold).
     for (const tier of manifest.tiers) {
+      const key = `${tier.requestedWidth}:${tier.format}`;
       if (tier.delivery === undefined) {
+        // Delivery-less tiers are frozen r1 legacy. A current-recipe
+        // manifest that omits delivery would skip every never-larger
+        // check and activate unguarded, so the omission is rejected.
+        if (manifest.recipeId === RECIPE_ID) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `tier "${key}" omits delivery for the current recipe`,
+          });
+        }
         continue;
       }
-      const key = `${tier.requestedWidth}:${tier.format}`;
       if (tier.delivery === 'generated' && tier.bytes > manifest.source.bytes) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -168,6 +181,37 @@ export const PilotManifestSchema = z
             code: z.ZodIssueCode.custom,
             message: `tier "${key}" pass-through must reuse the validated source bytes, dimensions, and codec`,
           });
+        }
+      }
+      if (
+        tier.delivery === 'generated' ||
+        tier.delivery === 'generated-over-source'
+      ) {
+        // Encoded tiers bind to the source ladder: no upscaling past the
+        // source, no narrowed/1px claims, aspect preserved within the same
+        // ±1px height tolerance the encoder verifies its own output with.
+        // (Pass-through tiers are exempt: they carry source dimensions,
+        // bound exactly by the check above.)
+        const encodedWidth = Math.min(
+          tier.requestedWidth,
+          manifest.source.orientedWidth
+        );
+        if (tier.width !== encodedWidth) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `tier "${key}" width ${tier.width} is not the encoded rung width ${encodedWidth}`,
+          });
+        } else {
+          const idealHeight = Math.round(
+            (manifest.source.orientedHeight * tier.width) /
+              manifest.source.orientedWidth
+          );
+          if (Math.abs(tier.height - idealHeight) > 1) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `tier "${key}" height ${tier.height} breaks the source aspect ratio (expected ${idealHeight}±1)`,
+            });
+          }
         }
       }
     }

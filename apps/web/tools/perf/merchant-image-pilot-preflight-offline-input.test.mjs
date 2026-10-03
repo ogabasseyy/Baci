@@ -36,14 +36,15 @@ describe('checkBindingInput', () => {
     const root = await inputRootWith({ 'snapshots/logo-a.png': bytes });
     const checks = [];
     const failures = [];
-    const ok = await checkBindingInput({
+    const inputBytes = await checkBindingInput({
       checks,
       failures,
       name: `${MERCHANT}/logo-a`,
       options: { inputRoot: root },
       record: recordFor({ sha256: sha256(bytes) }),
     });
-    expect(ok).toBe(true);
+    expect(Buffer.isBuffer(inputBytes)).toBe(true);
+    expect(inputBytes.equals(bytes)).toBe(true);
     expect(failures).toEqual([]);
     expect(checks).toEqual([{ name: `${MERCHANT}/logo-a:input`, ok: true }]);
   });
@@ -57,14 +58,14 @@ describe('checkBindingInput', () => {
     ]) {
       const checks = [];
       const failures = [];
-      const ok = await checkBindingInput({
+      const inputBytes = await checkBindingInput({
         checks,
         failures,
         name: label,
         options: { inputRoot: root },
         record,
       });
-      expect(ok, label).toBe(false);
+      expect(inputBytes, label).toBeNull();
       expect(failures.join('\n')).toMatch(pattern);
     }
   });
@@ -75,7 +76,7 @@ describe('checkBindingInput', () => {
     await writeFile(outsideFile, 'outside');
     const checks = [];
     const failures = [];
-    const ok = await checkBindingInput({
+    const inputBytes = await checkBindingInput({
       checks,
       failures,
       name: 'escape',
@@ -85,7 +86,7 @@ describe('checkBindingInput', () => {
         sourcePath: `../${outsideFile.split('/').pop()}`,
       }),
     });
-    expect(ok).toBe(false);
+    expect(inputBytes).toBeNull();
     expect(failures.join('\n')).toMatch(/escapes the input root/);
   });
 
@@ -98,7 +99,7 @@ describe('checkBindingInput', () => {
     await symlink(outside, join(root, 'linked'));
     const checks = [];
     const failures = [];
-    const ok = await checkBindingInput({
+    const inputBytes = await checkBindingInput({
       checks,
       failures,
       name: 'symlink',
@@ -108,7 +109,7 @@ describe('checkBindingInput', () => {
         sourcePath: 'linked/real.png',
       }),
     });
-    expect(ok).toBe(false);
+    expect(inputBytes).toBeNull();
     expect(failures.join('\n')).toMatch(/escapes the input root/);
   });
 });

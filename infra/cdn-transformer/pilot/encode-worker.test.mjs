@@ -174,6 +174,10 @@ test('worker metadata op reports EXIF-corrected geometry', async () => {
   assert.equal(result.metadata.height, 800);
   assert.equal(result.metadata.orientedWidth, 800);
   assert.equal(result.metadata.orientedHeight, 600);
+  assert.ok(
+    Number.isInteger(result.workerPeakRssBytes) && result.workerPeakRssBytes > 0,
+    'ok envelope self-reports worker RSS for job accounting'
+  );
 });
 
 test('worker metadata op rejects animated and foreign input', async () => {

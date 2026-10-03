@@ -14,15 +14,17 @@ export interface OutboxStatusRow {
 }
 
 export class OutboxStatusUpdateError extends Error {
+  readonly reason: string;
   constructor(
     readonly outboxId: string,
-    options: { cause: unknown }
+    options: { cause: unknown; reason?: string }
   ) {
     super(
       `Failed to persist order notification outbox row ${outboxId}`,
       options
     );
     this.name = 'OutboxStatusUpdateError';
+    this.reason = options.reason ?? 'sent_outcome_persistence_failed';
   }
 }
 
@@ -153,11 +155,25 @@ export async function markManualOutboxNotificationSent(
       .select('id')
       .maybeSingle();
     if (!error && data?.id === row.id) return;
-    const { data: current } = await supabase
+    const { data: current, error: classifyError } = await supabase
       .from('order_notification_outbox')
       .select('dispatch_started_at, locked_by, status')
       .match({ id: row.id })
       .maybeSingle();
+    if (classifyError) {
+      // A failed classify read is neither a confirmed reset (retry would
+      // risk a double send) nor a confirmed loss: terminalize unknown
+      // with a distinct reason instead of the generic claim-lost path.
+      logger.error({
+        message: 'Failed to classify zero-row manual sent update',
+        outboxId: row.id,
+        error: classifyError,
+      });
+      throw new OutboxStatusUpdateError(row.id, {
+        cause: classifyError,
+        reason: 'sent_outcome_classify_failed',
+      });
+    }
     if (
       current?.status === 'processing' &&
       current.locked_by === row.claim_owner &&
@@ -167,7 +183,11 @@ export async function markManualOutboxNotificationSent(
     }
     throw error ?? new Error('order notification claim was lost');
   } catch (error) {
-    if (error instanceof OutboxDispatchResetError) throw error;
+    if (
+      error instanceof OutboxDispatchResetError ||
+      error instanceof OutboxStatusUpdateError
+    )
+      throw error;
     logger.error({
       message: 'Failed to update order notification outbox row',
       outboxId: row.id,

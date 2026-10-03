@@ -239,10 +239,10 @@ BEGIN
   -- A snapshot-relevant merchant edit landing mid-dispatch invalidates the
   -- in-flight send the same way an order/item edit does: reset every
   -- processing marker for the merchant's manual rows so the post-transport
-  -- lease check aborts instead of recording stale issuer or payment
-  -- details as sent. The slug rides along (the emailed claim link embeds
-  -- it) even though the snapshot does not compare it; cosmetic-only edits
-  -- leave markers intact.
+  -- lease check aborts instead of recording stale issuer, contact, or
+  -- payment details as sent. The slug rides along (the emailed claim link
+  -- embeds it) even though the snapshot does not compare it; cosmetic-only
+  -- edits leave markers intact.
   IF OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
@@ -252,6 +252,9 @@ BEGIN
     OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
     OR OLD.vat_registration_status IS DISTINCT FROM NEW.vat_registration_status
     OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate
+    OR OLD.support_email IS DISTINCT FROM NEW.support_email
+    OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
+    OR OLD.phone IS DISTINCT FROM NEW.phone
     OR OLD.bank_code IS DISTINCT FROM NEW.bank_code
     OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
     OR OLD.bank_name IS DISTINCT FROM NEW.bank_name

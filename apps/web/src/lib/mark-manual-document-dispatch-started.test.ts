@@ -98,6 +98,9 @@ const merchant = {
   taxIdentificationNumber: 'TIN123',
   vatRegistrationStatus: 'registered',
   vatRate: 7.5,
+  supportEmail: 'support@shop.example.com',
+  supportPhone: '+2348000000001',
+  phone: '+2348000000002',
 };
 
 describe('markManualDocumentDispatchStarted', () => {
@@ -161,6 +164,9 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_vat_registration_status: 'registered',
       p_merchant_vat_rate: 7.5,
       p_claim_domain: 'shop.example.com',
+      p_merchant_support_email: 'support@shop.example.com',
+      p_merchant_support_phone: '+2348000000001',
+      p_merchant_phone: '+2348000000002',
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',
       p_va_account_name: 'Shop Ltd/ORD',

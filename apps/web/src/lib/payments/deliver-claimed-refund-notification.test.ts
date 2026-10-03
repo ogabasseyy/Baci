@@ -41,6 +41,7 @@ function claimed(
   eventType: ClaimedRefundNotification['event_type']
 ): ClaimedRefundNotification {
   return {
+    attempts: 1,
     claim_token: 'claim-1',
     created_at: '2026-01-01T00:00:00.000Z',
     event_type: eventType,
@@ -314,7 +315,7 @@ describe('deliverClaimedRefundNotification', () => {
     );
   });
 
-  it('fails without sending when even the capped email cannot fit', async () => {
+  it('defers without sending when even the capped email cannot fit', async () => {
     const { supabase } = buildSupabase();
     const sendEmail = vi.fn();
     const sendMerchantPush = vi.fn();
@@ -329,7 +330,7 @@ describe('deliverClaimedRefundNotification', () => {
       })
     ).resolves.toEqual({
       lastError: 'refund_notification_deadline_before_send',
-      outcome: 'failed',
+      outcome: 'deferred',
     });
 
     expect(sendMerchantPush).not.toHaveBeenCalled();

@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
-import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
+import {
+  assertRefundNotificationSendTime,
+  isRefundNotificationSendAdmissionRefusal,
+} from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { deliverMerchantRefundNotification } from './deliver-merchant-refund-notification';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
@@ -58,6 +61,7 @@ export interface ClaimedRefundNotification {
   claim_token: string;
   created_at: string;
   generation: number;
+  attempts: number;
 }
 
 export interface RefundNotificationOrder {
@@ -83,7 +87,8 @@ export interface RefundNotificationMerchant {
 export type RefundNotificationOutcome =
   | 'sent'
   | 'failed'
-  | 'delivery_uncertain';
+  | 'delivery_uncertain'
+  | 'deferred';
 
 /**
  * Deliver one claimed refund notification and report its outcome.
@@ -218,7 +223,16 @@ export async function deliverClaimedRefundNotification({
   } catch (error) {
     lastError =
       error instanceof Error ? error.message : 'refund_notification_failed';
-    if (outcome !== 'delivery_uncertain') outcome = 'failed';
+    // A pre-send budget refusal never attempted delivery: report it
+    // as deferred so the caller releases the row without burning the
+    // attempt the claim just added. Collapsing it to failed would
+    // dead-letter a healthy notification after five tight-budget
+    // ticks without ever sending it.
+    if (isRefundNotificationSendAdmissionRefusal(error)) {
+      outcome = 'deferred';
+    } else if (outcome !== 'delivery_uncertain') {
+      outcome = 'failed';
+    }
   }
   return { lastError, outcome };
 }

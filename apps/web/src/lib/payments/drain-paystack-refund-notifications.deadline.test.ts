@@ -57,7 +57,7 @@ describe('refund notification cron deadline', () => {
     );
   });
 
-  it('refuses the customer email when only part of the sender budget remains', async () => {
+  it('releases the customer email unattempted when only part of the sender budget remains', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const db = database('processed_customer_email');
@@ -66,7 +66,9 @@ describe('refund notification cron deadline', () => {
     // 60s clears the row-claim floor and the old 20s admission check,
     // but not the full 135s four-attempt sender budget: starting the
     // loop would abort mid-send into delivery_uncertain, so the row
-    // fails retryably instead.
+    // is released back to pending without burning the attempt the
+    // claim just added — collapsing it to failed would dead-letter a
+    // healthy notification after five tight-budget ticks.
     const result = await drainPaystackRefundNotifications(
       db as never,
       sendEmail,
@@ -75,12 +77,13 @@ describe('refund notification cron deadline', () => {
       1_060_000
     );
 
-    expect(result).toMatchObject({ claimed: 1, failed: 1 });
+    expect(result).toMatchObject({ claimed: 1, failed: 0, sent: 0 });
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        attempts: 0,
         last_error: 'refund_notification_deadline_before_send',
-        status: 'failed',
+        status: 'pending',
       })
     );
   });
@@ -317,7 +320,7 @@ describe('refund notification cron deadline', () => {
     );
   });
 
-  it('refuses both phases when even the capped email cannot fit', async () => {
+  it('releases both phases unattempted when even the capped email cannot fit', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000_000);
     const db = database('failed_merchant_push', 'paid');
@@ -330,8 +333,9 @@ describe('refund notification cron deadline', () => {
 
     // 46s clears the drain's 45s claim floor but fits neither the
     // push phase nor the 48s single-attempt email: both stand down
-    // and the row fails retryably instead of starting a send the
-    // deadline then aborts into delivery_uncertain.
+    // and the row releases back to pending without burning the
+    // attempt instead of starting a send the deadline then aborts
+    // into delivery_uncertain.
     const result = await drainPaystackRefundNotifications(
       db as never,
       sendEmail,
@@ -340,13 +344,14 @@ describe('refund notification cron deadline', () => {
       1_046_000
     );
 
-    expect(result).toMatchObject({ claimed: 1, failed: 1 });
+    expect(result).toMatchObject({ claimed: 1, failed: 0, sent: 0 });
     expect(sendPush).not.toHaveBeenCalled();
     expect(sendEmail).not.toHaveBeenCalled();
     expect(db.finish.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        attempts: 0,
         last_error: 'refund_notification_deadline_before_send',
-        status: 'failed',
+        status: 'pending',
       })
     );
   });

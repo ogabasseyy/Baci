@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
-import { assertRefundNotificationSendTime } from './assert-refund-notification-send-time';
+import {
+  assertRefundNotificationSendTime,
+  isRefundNotificationSendAdmissionRefusal,
+} from './assert-refund-notification-send-time';
 import { attemptMerchantRefundPush } from './attempt-merchant-refund-push';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import type {
@@ -165,7 +168,11 @@ export async function deliverMerchantRefundNotification(
   } catch (error) {
     lastError =
       error instanceof Error ? error.message : 'refund_notification_failed';
-    if (outcome !== 'delivery_uncertain') outcome = 'failed';
+    if (isRefundNotificationSendAdmissionRefusal(error)) {
+      outcome = 'deferred';
+    } else if (outcome !== 'delivery_uncertain') {
+      outcome = 'failed';
+    }
   }
   return { lastError, outcome };
 }

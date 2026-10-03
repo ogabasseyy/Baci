@@ -67,11 +67,12 @@ describe('Paystack refund notifications', () => {
     );
   });
 
-  it('skips claiming when less than a full send slot remains', async () => {
+  it('releases the row unattempted when the admission check refuses it', async () => {
     const db = database('processed_customer_email');
-    // Above the old 45s reserve but below the 150s worst-case slot:
-    // claiming here would burn an attempt the 145s admission check
-    // then rejects.
+    // 100s clears the 45s claim floor but not the 145s admission
+    // budget: the row claims, the admission check refuses it, and the
+    // finish releases it back to pending with the attempt un-burned
+    // instead of collapsing it to failed toward dead-letter.
     const deadlineMs = Date.now() + 100_000;
 
     await expect(
@@ -83,14 +84,16 @@ describe('Paystack refund notifications', () => {
         deadlineMs
       )
     ).resolves.toEqual({
-      claimed: 0,
+      claimed: 1,
       sent: 0,
       failed: 0,
       exhausted: 0,
       uncertain: 0,
     });
-    expect(db.rpc).not.toHaveBeenCalled();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(db.finish.update).toHaveBeenCalledWith(
+      expect.objectContaining({ attempts: 0, status: 'pending' })
+    );
   });
 
   it('does not email before every payment leg is refunded', async () => {

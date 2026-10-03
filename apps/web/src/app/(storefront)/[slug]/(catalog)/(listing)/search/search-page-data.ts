@@ -1,3 +1,9 @@
+import {
+  buildRefinedSearchHref,
+  emptySearchRefinements,
+  parseSearchRefinements,
+  type SearchRefinements,
+} from '@baci/shared/lib';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import {
@@ -18,18 +24,23 @@ import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_PAGE,
 } from '@/lib/storefront-search-params';
+import { getStorefrontSearchFacets } from '@/lib/storefront-search-refined-products';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { buildSearchHref } from './search-page-href';
 
 export interface SearchPageDataInput {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{
+    [key: string]: string | string[] | undefined;
     q?: string | string[];
     page?: string | string[];
   }>;
 }
 
 export interface SearchPageData {
+  facets?: Awaited<ReturnType<typeof getStorefrontSearchFacets>>;
+  facetError?: boolean;
+  refinements?: SearchRefinements;
+  invalidFilters?: boolean;
   merchant: CachedMerchant;
   page: number;
   pathPrefix: string;
@@ -54,7 +65,13 @@ export async function loadSearchPageData({
   searchParams,
 }: SearchPageDataInput): Promise<SearchPageData> {
   const { slug } = await params;
-  const { q: rawQuery, page: rawPage } = await searchParams;
+  const rawParams = await searchParams;
+  const { q: rawQuery, page: rawPage } = rawParams;
+  const parsedFilters = parseSearchRefinements(rawParams);
+  const refinements = parsedFilters.success
+    ? parsedFilters.data
+    : emptySearchRefinements();
+  const invalidFilters = !parsedFilters.success;
   const query = parseStorefrontSearchQueryParam(rawQuery);
   const requestedPage = parseStorefrontPageParam(rawPage);
 
@@ -73,13 +90,35 @@ export async function loadSearchPageData({
   const searchBasePath = `${pathPrefix}/search`;
   const storeUrl = buildRequestScopedStoreUrl(merchant, headersList);
   const href = (targetQuery: string, targetPage: number) =>
-    buildSearchHref(searchBasePath, targetQuery, targetPage);
+    buildRefinedSearchHref(
+      searchBasePath,
+      targetQuery,
+      refinements,
+      targetPage
+    );
 
   // Validate before searching: malformed or repeated page parameters redirect
   // to a valid page, and a page without a query collapses to the plain route.
+  if (invalidFilters) {
+    return {
+      refinements,
+      invalidFilters,
+      merchant,
+      page: 1,
+      pathPrefix,
+      query,
+      redirectHref: null,
+      searchBasePath,
+      searchFailed: false,
+      searchResult: null,
+      storeUrl,
+    };
+  }
   if (!query) {
     if (requestedPage === null || requestedPage !== 1) {
       return {
+        refinements,
+        invalidFilters,
         merchant,
         page: 1,
         pathPrefix,
@@ -93,6 +132,8 @@ export async function loadSearchPageData({
     }
   } else if (requestedPage === null) {
     return {
+      refinements,
+      invalidFilters,
       merchant,
       page: 1,
       pathPrefix,
@@ -106,17 +147,48 @@ export async function loadSearchPageData({
   }
   const page = requestedPage ?? 1;
 
+  // Filters are independent of result hydration. Catch immediately so a
+  // filter failure never rejects while the product request is pending.
+  const facetRequest =
+    query && page <= STOREFRONT_SEARCH_MAX_PAGE
+      ? getStorefrontSearchFacets(merchant.id, query, refinements).then(
+          (facets) => ({ facets, facetError: false }),
+          () => ({
+            facets: {
+              brands: [],
+              categories: [],
+              conditions: [],
+              processors: [],
+              minPrice: null,
+              maxPrice: null,
+            },
+            facetError: true,
+          })
+        )
+      : Promise.resolve({
+          facets: {
+            brands: [],
+            categories: [],
+            conditions: [],
+            processors: [],
+            minPrice: null,
+            maxPrice: null,
+          },
+          facetError: false,
+        });
+
   let searchResult: StorefrontSearchProductsPage | null = null;
   let searchFailed = false;
   let redirectHref: string | null = null;
 
-  if (query) {
+  if (query && !invalidFilters) {
     const fetchSearchPage = (offset: number) =>
       getStorefrontSearchProducts({
         merchantId: merchant.id,
         query,
         limit: STOREFRONT_PRODUCTS_PER_PAGE,
         offset,
+        refinements,
       });
 
     try {
@@ -169,7 +241,12 @@ export async function loadSearchPageData({
     }
   }
 
+  const { facets, facetError } = await facetRequest;
   return {
+    facets,
+    facetError,
+    refinements,
+    invalidFilters,
     merchant,
     page,
     pathPrefix,

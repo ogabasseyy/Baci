@@ -12,8 +12,18 @@ vi.mock('next/image', () => ({
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href }: { children: ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    children,
+    href,
+    'aria-label': label,
+  }: {
+    children: ReactNode;
+    href: string;
+    'aria-label'?: string;
+  }) => (
+    <a href={href} aria-label={label}>
+      {children}
+    </a>
   ),
 }));
 
@@ -156,4 +166,33 @@ describe('ProductIndexCard', () => {
       screen.getByRole('img', { name: 'No image available for iPhone 13 Pro' })
     ).toBeInTheDocument();
   });
+});
+
+it('shows modern search text and separate compare and purchase actions', () => {
+  render(
+    <ProductIndexCard
+      modern
+      footer={<button type="button">Compare</button>}
+      formattedPrice="₦550,000"
+      pathPrefix=""
+      product={makeProduct({
+        searchMatch: {
+          productId: 'product-1',
+          total: 1,
+          price: 550000,
+          variantId: 'v1',
+          condition: 'used',
+        },
+      })}
+    />
+  );
+  expect(screen.getByText('iPhone 13 Pro')).toBeInTheDocument();
+  expect(screen.getByText('₦550,000')).toBeInTheDocument();
+  expect(screen.queryByText('View')).not.toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: 'Compare' }).closest('a')
+  ).toBeNull();
+  expect(
+    screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+  ).toHaveAttribute('href', expect.stringContaining('v1'));
 });

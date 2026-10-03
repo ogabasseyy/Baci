@@ -44,12 +44,22 @@ async function hydrateRankedStorefrontProducts(args: {
 
 export async function getStorefrontSearchProducts(args: {
   filters?: StorefrontSearchFilters;
+  refinements?: import('@baci/shared/lib').SearchRefinements;
   merchantId: string;
   query: string;
   limit: number;
   offset?: number;
   sort?: StorefrontSearchSort;
 }): Promise<StorefrontSearchProductsPage> {
+  if (args.refinements) {
+    const { getStorefrontRefinedSearchProducts } = await import(
+      './storefront-search-refined-products'
+    );
+    return getStorefrontRefinedSearchProducts({
+      ...args,
+      refinements: args.refinements,
+    });
+  }
   const publicSupabase = createPublicClient({
     clientInfo: 'baci-storefront-search-page',
   });

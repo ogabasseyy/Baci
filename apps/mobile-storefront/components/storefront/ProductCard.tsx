@@ -3,7 +3,7 @@ import {
   resolveDefaultVariantSelection,
 } from '@baci/shared/lib';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import {
   useAnimatedStyle,
@@ -25,6 +25,7 @@ import type { Product } from '@/types/product';
 import EditorialProductCard from './product-card/EditorialProductCard';
 import GridProductCard from './product-card/GridProductCard';
 import ListProductCard from './product-card/ListProductCard';
+import SearchGridProductCard from './product-card/SearchGridProductCard';
 import { trackCartAdd, trackWishlistAdd } from './product-card-tracking';
 
 const DEFAULT_BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
@@ -39,6 +40,8 @@ export const BLURHASH_VARIANTS = {
 
 interface ProductCardProps {
   product: Product;
+  modernSearch?: boolean;
+  footer?: ReactNode;
   variant?: 'grid' | 'editorial' | 'list';
   onPress?: () => void;
   onPressIn?: () => void;
@@ -48,6 +51,8 @@ interface ProductCardProps {
 
 export function ProductCard({
   product,
+  modernSearch = false,
+  footer,
   variant = 'grid',
   onPress,
   onPressIn,
@@ -77,8 +82,13 @@ export function ProductCard({
   );
   const defaultVariantSelection = resolveDefaultVariantSelection(product);
   const requiresSelection = requiresProductSelection(product);
-  const displayProduct =
-    product.has_variants && defaultVariantSelection
+  const displayProduct = product.searchMatch
+    ? {
+        ...product,
+        price: product.searchMatch.price ?? product.price,
+        compare_at_price: undefined,
+      }
+    : product.has_variants && defaultVariantSelection
       ? {
           ...product,
           price: defaultVariantSelection.price,
@@ -182,7 +192,7 @@ export function ProductCard({
     imageAttempt
   );
   const imageSource = createSafeBoundedImageSource({
-    fit: 'cover',
+    fit: modernSearch ? 'inside' : 'cover',
     height: variant === 'editorial' ? imageWidth / 0.8 : imageWidth,
     uri: imageAttemptUri,
     width: imageWidth,
@@ -197,6 +207,10 @@ export function ProductCard({
   });
 
   const handleAddToCart = () => {
+    if (product.searchMatch) {
+      handlePress();
+      return;
+    }
     if (requiresSelection) {
       router.push(`/product/${product.slug}`);
       return;
@@ -275,8 +289,10 @@ export function ProductCard({
     );
   }
 
+  const GridCard = modernSearch ? SearchGridProductCard : GridProductCard;
   return (
-    <GridProductCard
+    <GridCard
+      footer={footer}
       product={displayProduct}
       imageSource={imageSource}
       imageProps={imageProps}

@@ -1,11 +1,22 @@
 import { FlashList } from '@shopify/flash-list';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 import { ProductCard } from '@/components/storefront/ProductCard';
 import type Colors from '@/constants/Colors';
+import { SEARCH_SCROLL_DECELERATION_RATE } from '@/constants/scroll-momentum';
 import type { Product } from '@/types/product';
+import { SearchCompareButton } from './SearchComparisonControls';
 import styles from './search-screen.styles';
 
 interface SearchResultsListProps {
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  bottomSpace?: number;
   colors: (typeof Colors)['light'];
   committedQuery: string;
   isLoadingMore: boolean;
@@ -33,6 +44,8 @@ interface SearchResultsListProps {
 
 export default function SearchResultsList({
   colors,
+  onScroll,
+  bottomSpace = 24,
   committedQuery,
   isLoadingMore,
   isNextPageError,
@@ -62,15 +75,28 @@ export default function SearchResultsList({
             index % 2 === 0 ? styles.productLeft : styles.productRight,
           ]}
         >
-          <ProductCard product={item} onPress={() => onProductPress(item)} />
+          <ProductCard
+            product={item}
+            modernSearch
+            onPress={() => onProductPress(item)}
+            footer={
+              <SearchCompareButton product={item} colors={colors} compact />
+            }
+          />
         </View>
       )}
       keyExtractor={(item) => item.id}
       numColumns={2}
-      contentContainerStyle={styles.resultsContainer}
+      contentContainerStyle={[
+        styles.resultsContainer,
+        { paddingBottom: bottomSpace },
+      ]}
       showsVerticalScrollIndicator={false}
+      decelerationRate={SEARCH_SCROLL_DECELERATION_RATE}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={

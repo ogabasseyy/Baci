@@ -1,16 +1,19 @@
 import Link from 'next/link';
 import { asRoute } from '@/lib/routes';
+import { ProductRequest } from './product-request';
 
 interface SearchPageNoResultsPanelProps {
   allProductsHref: string;
   contactHref: string;
   searchQuery: string;
+  merchantSlug?: string;
 }
 
 export function SearchPageNoResultsPanel({
   allProductsHref,
   contactHref,
   searchQuery,
+  merchantSlug,
 }: SearchPageNoResultsPanelProps) {
   return (
     <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
@@ -20,6 +23,13 @@ export function SearchPageNoResultsPanel({
       <p className="mt-2 text-sm text-store-background-text/55">
         We could not find any products matching “{searchQuery}”.
       </p>
+      {merchantSlug && (
+        <ProductRequest
+          key={searchQuery}
+          query={searchQuery}
+          merchantSlug={merchantSlug}
+        />
+      )}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <Link
           href={asRoute(allProductsHref)}

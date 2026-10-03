@@ -1,3 +1,5 @@
+let mockFocused = true;
+
 import { act, render } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
 import type SearchScreenView from '@/components/search/SearchScreenView';
@@ -7,7 +9,7 @@ type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;
 
 const mockUseLocalSearchParams = jest.fn();
 const mockUseProducts = jest.fn();
-const mockUseProductBrands = jest.fn();
+const mockUseSearchFacets = jest.fn();
 const mockUseCategories = jest.fn();
 const mockViewProps: { current: SearchScreenViewProps | null } = {
   current: null,
@@ -15,6 +17,7 @@ const mockViewProps: { current: SearchScreenViewProps | null } = {
 const mockStorageData: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => mockFocused,
   router: { back: jest.fn(), push: jest.fn() },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockUseLocalSearchParams(),
@@ -22,8 +25,12 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/hooks', () => ({
   useCategories: () => mockUseCategories(),
-  useProductBrands: () => mockUseProductBrands(),
   useProducts: (args: unknown) => mockUseProducts(args),
+}));
+
+jest.mock('@/hooks/use-search-facet-options', () => ({
+  useSearchFacetOptions: (query: string, enabled: boolean) =>
+    mockUseSearchFacets(query, enabled),
 }));
 
 jest.mock('@/hooks/use-network-state', () => ({
@@ -70,6 +77,7 @@ function mockProductState(overrides: Record<string, unknown> = {}) {
 
 describe('SearchScreen route', () => {
   beforeEach(() => {
+    mockFocused = true;
     jest.clearAllMocks();
     jest.useFakeTimers();
     for (const key of Object.keys(mockStorageData)) {
@@ -78,7 +86,11 @@ describe('SearchScreen route', () => {
     mockViewProps.current = null;
     mockUseLocalSearchParams.mockReturnValue({});
     mockUseProducts.mockReturnValue(mockProductState());
-    mockUseProductBrands.mockReturnValue({ brands: [] });
+    mockUseSearchFacets.mockReturnValue({
+      data: { brands: [], categories: [], conditions: [] },
+      error: null,
+      refetch: jest.fn(),
+    });
     mockUseCategories.mockReturnValue({ data: [] });
   });
 
@@ -87,6 +99,16 @@ describe('SearchScreen route', () => {
     jest.useRealTimers();
   });
 
+  it('cancels typing commits when navigating to a product or blurring', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone', brand: ['Apple'] });
+    const { rerender } = render(<SearchScreen />);
+    act(() => mockViewProps.current?.onQueryChange('laptop'));
+    mockFocused = false;
+    rerender(<SearchScreen />);
+    act(() => jest.advanceTimersByTime(300));
+    expect(mockViewProps.current?.committedQuery).toBe('iphone');
+    expect(mockViewProps.current?.refinements?.brands).toEqual(['Apple']);
+  });
   it('initializes from the route query and saves history once', () => {
     mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
 

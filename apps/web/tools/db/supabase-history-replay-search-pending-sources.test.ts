@@ -7,17 +7,19 @@ import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-sea
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..');
 
 describe('search pending replay sources', () => {
-  it('pins the search_products_v2 compatibility repair to its checked-in bytes', async () => {
-    const [sha256, filename, ...extra] =
-      SEARCH_PENDING_REPLAY_SOURCE_ROWS.split(' ');
-    expect(extra).toEqual([]);
-    expect(filename).toBe(
-      '20260827100000_fix_search_products_not_archived_nulls.sql'
-    );
-
-    const migration = await readFile(
-      path.join(REPOSITORY_ROOT, 'supabase/migrations', filename)
-    );
-    expect(createHash('sha256').update(migration).digest('hex')).toBe(sha256);
+  it('pins both pending search migrations to their checked-in bytes', async () => {
+    const rows = SEARCH_PENDING_REPLAY_SOURCE_ROWS.split('\n');
+    expect(rows.map((row) => row.split(' ')[1])).toEqual([
+      '20260827100000_fix_search_products_not_archived_nulls.sql',
+      '20261002090046_storefront_search_refinements.sql',
+    ]);
+    for (const row of rows) {
+      const [sha256, filename, ...extra] = row.split(' ');
+      expect(extra).toEqual([]);
+      const migration = await readFile(
+        path.join(REPOSITORY_ROOT, 'supabase/migrations', filename)
+      );
+      expect(createHash('sha256').update(migration).digest('hex')).toBe(sha256);
+    }
   });
 });

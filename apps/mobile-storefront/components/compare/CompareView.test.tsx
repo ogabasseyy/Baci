@@ -127,7 +127,7 @@ describe('CompareView', () => {
     );
     fireEvent.press(screen.getByRole('button', { name: 'View Phone One' }));
     fireEvent.press(
-      screen.getByRole('button', { name: 'Add Phone One to cart' })
+      screen.getByRole('button', { name: 'View options for Phone One' })
     );
 
     expect(onClearComparison).toHaveBeenCalledTimes(1);
@@ -152,7 +152,7 @@ describe('CompareView', () => {
     expect(screen.getByText('-')).toBeTruthy();
     expect(screen.queryByText('undefined')).toBeNull();
     expect(
-      screen.getByRole('button', { name: 'Add Phone Two to cart' })
+      screen.getByRole('button', { name: 'View options for Phone Two' })
     ).toBeTruthy();
   });
 
@@ -196,5 +196,25 @@ describe('CompareView', () => {
         width: 216,
       });
     });
+  });
+});
+
+it('suppresses unverified saved price and rating even when a display snapshot remains', () => {
+  render(<CompareView {...createProps()} unavailableIds={[phone.id]} />);
+  expect(screen.getByText('Price not verified')).toBeTruthy();
+  expect(screen.queryByText('₦150,000')).toBeNull();
+  expect(screen.queryByText('4.5')).toBeNull();
+});
+
+it('allows vertical detail scrolling separately from the horizontal comparison columns', () => {
+  render(<CompareView {...createProps()} />);
+  expect(
+    screen.getByTestId('comparison-vertical-scroll').props.horizontal
+  ).not.toBe(true);
+  expect(
+    screen.getByTestId('comparison-horizontal-scroll').props.horizontal
+  ).toBe(true);
+  expect(screen.getByTestId('comparison-clear-row')).toHaveStyle({
+    alignItems: 'center',
   });
 });

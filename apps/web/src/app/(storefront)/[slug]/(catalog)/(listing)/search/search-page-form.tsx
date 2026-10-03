@@ -1,4 +1,10 @@
 'use client';
+import {
+  buildRefinedSearchHref,
+  resetRefinementsForQuery,
+  type SearchRefinements,
+  type SearchSuggestionProduct,
+} from '@baci/shared/lib';
 
 // Client boundary justified: the submit handler must intercept
 // sanitized-empty queries before the GET navigation fires.
@@ -8,18 +14,27 @@ import {
   parseStorefrontSearchQueryParam,
   STOREFRONT_SEARCH_MAX_QUERY_LENGTH,
 } from '@/lib/storefront-search-params';
+import { SearchAssistance } from './search-assistance';
 
 interface SearchPageFormProps {
   action: string;
   defaultQuery: string;
   pathPrefix: string;
+  refinements?: SearchRefinements;
+  suggestionProducts?: SearchSuggestionProduct[];
+  redOutline?: boolean;
 }
 
 export function SearchPageForm({
   action,
   defaultQuery,
   pathPrefix,
+  refinements,
+  suggestionProducts = [],
+  redOutline = false,
 }: SearchPageFormProps) {
+  const [query, setQuery] = useState(defaultQuery);
+  const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -33,10 +48,20 @@ export function SearchPageForm({
       setError('Enter a searchable term to update the results.');
       return;
     }
-    // An explicit re-search: record it while the native GET navigation
-    // proceeds. Never blocks or alters the navigation.
+    // Record explicit submission before navigating; refinements are retained
+    // only when the normalized query is unchanged.
     if (typeof raw === 'string') {
       recordSearchSubmission(raw, pathPrefix, 'results-form');
+      if (refinements) {
+        event.preventDefault();
+        window.location.assign(
+          buildRefinedSearchHref(
+            action,
+            parseStorefrontSearchQueryParam(raw),
+            resetRefinementsForQuery(defaultQuery, raw, refinements)
+          )
+        );
+      }
     }
   };
 
@@ -46,7 +71,14 @@ export function SearchPageForm({
   // showing the previous query) and any validation error. A key here
   // would NOT reset this component's own state.
   return (
-    <div className="mt-6 max-w-xl">
+    <div
+      className="mt-6 max-w-xl"
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setFocused(false);
+      }}
+    >
       <form
         method="get"
         action={action}
@@ -62,13 +94,16 @@ export function SearchPageForm({
           name="q"
           type="search"
           defaultValue={defaultQuery}
-          placeholder="Search products…"
+          placeholder="Search or ask a question…"
           maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
           autoComplete="off"
           aria-invalid={error !== null}
           aria-describedby={error === null ? undefined : 'search-page-error'}
-          onChange={() => setError(null)}
-          className="min-w-0 flex-1 rounded-xl border border-store-background-text/15 bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setError(null);
+          }}
+          className={`min-w-0 flex-1 rounded-xl border-2 ${redOutline ? 'border-red-600 focus:border-red-600' : 'border-store-primary focus:border-store-primary'} bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:outline-hidden`}
         />
         <button
           type="submit"
@@ -77,6 +112,15 @@ export function SearchPageForm({
           Search
         </button>
       </form>
+      {focused && refinements && (
+        <SearchAssistance
+          query={query}
+          resultQuery={defaultQuery}
+          products={suggestionProducts}
+          criteria={refinements}
+          basePath={action}
+        />
+      )}
       {error === null ? null : (
         <p
           id="search-page-error"

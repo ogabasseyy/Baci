@@ -4,8 +4,6 @@
  */
 
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import { syncStorage } from '../lib/storage';
 import type { Product } from '../types/product';
 
 const MAX_COMPARE_ITEMS = 3;
@@ -26,82 +24,77 @@ interface ComparisonState {
   toggleComparison: (product: Product) => boolean;
 }
 
-export const useComparisonStore = create<ComparisonState>()(
-  persist(
-    (set, get) => ({
-      // Initial state
-      products: [],
+/** Comparison lives only in this app process; a fresh launch starts empty. */
+export const createComparisonStore = () =>
+  create<ComparisonState>()((set, get) => ({
+    // Initial state
+    products: [],
 
-      // Computed values
-      count: () => get().products.length,
+    // Computed values
+    count: () => get().products.length,
 
-      canAdd: () => get().products.length < MAX_COMPARE_ITEMS,
+    canAdd: () => get().products.length < MAX_COMPARE_ITEMS,
 
-      // Add product to comparison
-      addProduct: (product) => {
-        const state = get();
+    // Add product to comparison
+    addProduct: (product) => {
+      const state = get();
 
-        // Check if already in comparison
-        if (state.products.some((p) => String(p.id) === String(product.id))) {
-          return false;
-        }
+      // Check if already in comparison
+      if (state.products.some((p) => String(p.id) === String(product.id))) {
+        return false;
+      }
 
-        // Check if max reached
-        if (state.products.length >= MAX_COMPARE_ITEMS) {
-          return false;
-        }
+      // Check if max reached
+      if (state.products.length >= MAX_COMPARE_ITEMS) {
+        return false;
+      }
 
-        set({ products: [...state.products, product] });
-        return true;
-      },
+      set({ products: [...state.products, product] });
+      return true;
+    },
 
-      // Remove product from comparison
-      removeProduct: (productId) => {
-        set((state) => ({
+    // Remove product from comparison
+    removeProduct: (productId) => {
+      set((state) => ({
+        products: state.products.filter(
+          (p) => String(p.id) !== String(productId)
+        ),
+      }));
+    },
+
+    // Check if product is in comparison
+    isInComparison: (productId) => {
+      return get().products.some((p) => String(p.id) === String(productId));
+    },
+
+    // Clear all products from comparison
+    clearComparison: () => {
+      set({ products: [] });
+    },
+
+    // Toggle product in comparison
+    toggleComparison: (product) => {
+      const state = get();
+      const isIn = state.products.some(
+        (p) => String(p.id) === String(product.id)
+      );
+
+      if (isIn) {
+        set({
           products: state.products.filter(
-            (p) => String(p.id) !== String(productId)
+            (p) => String(p.id) !== String(product.id)
           ),
-        }));
-      },
+        });
+        return false;
+      }
 
-      // Check if product is in comparison
-      isInComparison: (productId) => {
-        return get().products.some((p) => String(p.id) === String(productId));
-      },
+      if (state.products.length >= MAX_COMPARE_ITEMS) {
+        return false;
+      }
 
-      // Clear all products from comparison
-      clearComparison: () => {
-        set({ products: [] });
-      },
+      set({ products: [...state.products, product] });
+      return true;
+    },
+  }));
 
-      // Toggle product in comparison
-      toggleComparison: (product) => {
-        const state = get();
-        const isIn = state.products.some(
-          (p) => String(p.id) === String(product.id)
-        );
-
-        if (isIn) {
-          set({
-            products: state.products.filter(
-              (p) => String(p.id) !== String(product.id)
-            ),
-          });
-          return false;
-        }
-
-        if (state.products.length >= MAX_COMPARE_ITEMS) {
-          return false;
-        }
-
-        set({ products: [...state.products, product] });
-        return true;
-      },
-    }),
-    {
-      name: 'comparison-storage',
-      storage: createJSONStorage(() => syncStorage),
-      partialize: (state) => ({ products: state.products }),
-    }
-  )
-);
+export const useComparisonStore = createComparisonStore();

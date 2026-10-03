@@ -57,3 +57,35 @@ describe('search page form submission tracking', () => {
     );
   });
 });
+
+it('shows catalog suggestions beside the focused input and hides them on blur', () => {
+  render(
+    <SearchPageForm
+      action="/search"
+      pathPrefix=""
+      defaultQuery="iphone"
+      refinements={{ brands: [], sort: 'relevance' }}
+      suggestionProducts={[{ price: 250000, condition: 'used' }]}
+    />
+  );
+  const input = screen.getByRole('searchbox');
+  expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
+  fireEvent.focus(input);
+  expect(
+    screen.getByRole('link', { name: 'Used iphone' }).getAttribute('href')
+  ).toContain('condition=used');
+  expect(screen.queryByText('✦ Find for me')).toBeNull();
+  fireEvent.blur(input);
+  expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
+});
+
+it('keeps the requested red outline specific to Ogabassey', () => {
+  const props = { action: '/search', pathPrefix: '', defaultQuery: 'phone' };
+  const { rerender } = render(<SearchPageForm {...props} />);
+  expect(screen.getByRole('searchbox')).toHaveClass('border-store-primary');
+  rerender(<SearchPageForm {...props} redOutline />);
+  expect(screen.getByRole('searchbox')).toHaveClass(
+    'border-red-600',
+    'focus:border-red-600'
+  );
+});

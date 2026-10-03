@@ -57,3 +57,22 @@ describe('useKeyboard', () => {
     });
   });
 });
+it('updates the docking geometry when keyboard frame changes during rotation', () => {
+  const listeners: Record<string, (event: KeyboardEvent) => void> = {};
+  jest.spyOn(Keyboard, 'addListener').mockImplementation((name, callback) => {
+    listeners[name] = callback;
+    return { remove: jest.fn() } as unknown as ReturnType<
+      typeof Keyboard.addListener
+    >;
+  });
+  const { result } = renderHook(() => useKeyboard());
+  act(() =>
+    listeners[Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'](
+      keyboardEvent(600, 244)
+    )
+  );
+  act(() => listeners.keyboardWillChangeFrame(keyboardEvent(190, 200)));
+  expect(result.current.keyboardTop).toBe(190);
+  expect(result.current.keyboardHeight).toBe(200);
+  expect(result.current.isKeyboardVisible).toBe(true);
+});

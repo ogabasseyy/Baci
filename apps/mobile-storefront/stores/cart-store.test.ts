@@ -33,6 +33,39 @@ describe('cart-store', () => {
     jest.clearAllMocks();
   });
 
+  it('defaults new lines to assurance and preserves an opt-out when adding again', () => {
+    const product = {
+      product_id: 'assured-phone',
+      slug: 'assured-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    };
+    useCartStore.getState().addItem(product);
+    const [line] = useCartStore.getState().items;
+    expect(line.hasAssurance).toBe(true);
+    useCartStore.getState().toggleAssurance(line.id);
+    useCartStore.getState().addItem(product);
+    expect(useCartStore.getState().items[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 2,
+    });
+    useCartStore.getState().toggleAssurance(line.id);
+    expect(useCartStore.getState().items[0].hasAssurance).toBe(true);
+  });
+
+  it('respects an explicit assurance opt-out on a new line', () => {
+    useCartStore.getState().addItem({
+      product_id: 'unassured-phone',
+      slug: 'unassured-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+      hasAssurance: false,
+    });
+    expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+  });
+
   it('refreshes image and variant metadata when the same cart line is added again', () => {
     const { addItem } = useCartStore.getState();
 

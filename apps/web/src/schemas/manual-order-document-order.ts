@@ -1,3 +1,7 @@
+import {
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderItemFinancialField,
+} from '@baci/shared/receipt';
 import { z } from 'zod';
 
 // Database NULLs must fail closed, never coerce to zero: z.coerce.number()
@@ -14,6 +18,15 @@ const positiveNumber = z.preprocess(
 );
 const nullableText = z.string().nullable();
 
+// Sender-validated numeric item fields, derived from the shared gate
+// field list: a new validated field lands in the sender AND the archive
+// gate below from this one shape, instead of two hand-mirrored lists.
+const manualDocumentOrderItemFinancialShape: Record<
+  ManualOrderItemFinancialField,
+  ReturnType<typeof number.nullish>
+> = Object.fromEntries(
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.map((field) => [field, number.nullish()])
+) as Record<ManualOrderItemFinancialField, ReturnType<typeof number.nullish>>;
 const manualDocumentOrderItemSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -22,13 +35,9 @@ const manualDocumentOrderItemSchema = z.object({
   variant_name: nullableText,
   condition: nullableText,
   item_description: nullableText,
-  assurance_fee: number.nullish(),
-  line_id: number.nullish(),
+  ...manualDocumentOrderItemFinancialShape,
   unit_code: z.string().nullish(),
-  line_extension_amount: number.nullish(),
   vat_category_code: z.string().nullish(),
-  vat_rate: number.nullish(),
-  vat_amount: number.nullish(),
   sellers_item_id: z.string().nullish(),
 });
 
@@ -112,19 +121,15 @@ const manualDocumentArchiveMoneySchema = manualDocumentOrderSchema.pick({
   tax_amount: true,
   total: true,
 });
-// The archive pick mirrors every sender-validated numeric item field:
-// omitting one would advertise a document the sender terminally skips
-// as order_validation_failed. String fields accept any string on both
-// sides, so they cannot diverge.
-const manualDocumentArchiveItemSchema = manualDocumentOrderItemSchema.pick({
-  assurance_fee: true,
-  line_extension_amount: true,
-  line_id: true,
-  name: true,
-  price: true,
-  quantity: true,
-  vat_amount: true,
-  vat_rate: true,
+// The archive item schema derives from the same financial shape as the
+// sender: no hand-mirrored key list to drift. The name/price/quantity
+// core is stable primitives; the validated financials can never be
+// omitted here while the sender rejects them.
+const manualDocumentArchiveItemSchema = z.object({
+  name: z.string(),
+  price: number,
+  quantity: positiveNumber,
+  ...manualDocumentOrderItemFinancialShape,
 });
 
 export interface ManualDocumentArchiveMoney {
@@ -137,16 +142,13 @@ export interface ManualDocumentArchiveMoney {
   currency?: string | null;
 }
 
-export interface ManualDocumentArchiveItem {
+export type ManualDocumentArchiveItem = {
   name?: unknown;
   price?: unknown;
   quantity?: unknown;
-  assurance_fee?: unknown;
-  line_extension_amount?: unknown;
-  line_id?: unknown;
-  vat_amount?: unknown;
-  vat_rate?: unknown;
-}
+} & {
+  [K in ManualOrderItemFinancialField]?: unknown;
+};
 
 export function isManualOrderDocumentContentValid(
   order: unknown,

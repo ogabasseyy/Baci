@@ -1,3 +1,4 @@
+import { MANUAL_ORDER_ITEM_FINANCIAL_FIELDS } from '@baci/shared/receipt';
 import { describe, expect, it } from 'vitest';
 import {
   isManualOrderDocumentContentValid,
@@ -125,13 +126,7 @@ describe('manualDocumentOrderSchema', () => {
     };
     const item = { name: 'Phone', quantity: 1, price: 4500 };
     expect(isManualOrderDocumentContentValid(money, [item])).toBe(true);
-    for (const field of [
-      'assurance_fee',
-      'line_extension_amount',
-      'line_id',
-      'vat_rate',
-      'vat_amount',
-    ] as const) {
+    for (const field of MANUAL_ORDER_ITEM_FINANCIAL_FIELDS) {
       // The sender rejects the negative value, so the archive must not
       // advertise the document either.
       expect(

@@ -13,9 +13,19 @@ export {
   shouldAttachFulfillmentToItem,
 } from './receipt-fulfillment';
 export {
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  isManualOrderRecord,
+  isSettledManualBalance,
+  type ManualOrderItemFinancialField,
+} from './manual-order-document-gates';
+export {
   getReceiptDisplaySubtotal,
+  getReceiptItemDetailLines,
+  getReceiptItemLineTotal,
+  getReceiptItemVatLines,
   getReceiptVatRate,
   shouldShowVatLine,
+  type ReceiptLineItemLike,
   type VatBreakdownMerchant,
   type VatBreakdownOrder,
 } from './receipt-money';

@@ -1,3 +1,7 @@
+import {
+  isManualOrderRecord,
+  isSettledManualBalance,
+} from '@baci/shared/receipt';
 import type {
   ManualDocumentArchiveItem,
   ManualDocumentArchiveMoney,
@@ -28,7 +32,7 @@ export function isManualOrder(input: {
   importJobId?: string | null;
   recordedByUserId?: string | null;
 }) {
-  return Boolean(input.recordedByUserId) && !isImportedHistoricalOrder(input);
+  return isManualOrderRecord(input);
 }
 
 interface DocumentEligibilityInput {
@@ -51,15 +55,12 @@ export function isManualOrderDocumentAvailable(
   // archive must not advertise a document for it.
   const paidBalanceSettled =
     normalizePaymentStatus(input.paymentStatus) !== 'paid' ||
-    (input.total != null &&
-      input.amountPaid != null &&
-      Number.isFinite(Number(input.total)) &&
-      Number(input.total) >= 0 &&
-      Number.isFinite(Number(input.amountPaid)) &&
-      Number(input.amountPaid) >= Number(input.total));
+    isSettledManualBalance({
+      total: input.total,
+      amountPaid: input.amountPaid,
+    });
   return (
-    Boolean(input.recordedByUserId) &&
-    !isImportedHistoricalOrder(input) &&
+    isManualOrderRecord(input) &&
     !['cancelled', 'canceled', 'returned', 'failed'].includes(
       normalizeShippingStatus(input.shippingStatus)
     ) &&
@@ -79,15 +80,13 @@ export function isReceiptEligible(input: DocumentEligibilityInput) {
   // A fully-covered manual order is substantively paid even under a non-paid
   // label (e.g. an over-amount partial): mirror the sender/trigger
   // normalization so the archive agrees with the emailed document.
-  if (input.recordedByUserId && !isImportedHistoricalOrder(input)) {
+  if (isManualOrderRecord(input)) {
     return (
       isManualOrderDocumentAvailable(input) &&
-      input.total != null &&
-      input.amountPaid != null &&
-      Number.isFinite(Number(input.total)) &&
-      Number(input.total) >= 0 &&
-      Number.isFinite(Number(input.amountPaid)) &&
-      Number(input.amountPaid) >= Number(input.total)
+      isSettledManualBalance({
+        total: input.total,
+        amountPaid: input.amountPaid,
+      })
     );
   }
 

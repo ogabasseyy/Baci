@@ -104,6 +104,13 @@ describe('parseRawInventoryRecords', () => {
       '/abs/logo.png',
       'a\\b.png',
       './logo.png',
+      // Transformer-parity hardening: length cap, control characters,
+      // and encoded separators fail here, not downstream.
+      `${'a'.repeat(253)}.png`,
+      'a\nb.png',
+      'a%2flogo.png',
+      'a%5clogo.png',
+      'a%00.png',
     ]) {
       expect(() =>
         parseRawInventoryRecords([{ ...RECORD, sourcePath }])

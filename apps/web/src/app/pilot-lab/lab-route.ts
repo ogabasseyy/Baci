@@ -35,8 +35,33 @@ const RECORD_STRING_FIELDS = [
   'url',
 ] as const;
 
+// Mirrors the transformer-side isConfinedRelativePath (job-schema.mjs):
+// length cap, no control characters, no encoded separators, no
+// absolute/empty/dot segments. Traversal is also blocked downstream by
+// readVerifiedSnapshot's realpath confinement; this is the fail-fast
+// input-validation layer with lab errors instead of incidental throws.
+const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
+
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || code === 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isSafeRelativePath(value: string): boolean {
-  if (value.length === 0 || value.startsWith('/') || value.includes('\\')) {
+  if (value.length < 1 || value.length > 256) {
+    return false;
+  }
+  if (
+    value.startsWith('/') ||
+    value.includes('\\') ||
+    hasControlCharacter(value) ||
+    ENCODED_SEPARATOR_PATTERN.test(value)
+  ) {
     return false;
   }
   return !value

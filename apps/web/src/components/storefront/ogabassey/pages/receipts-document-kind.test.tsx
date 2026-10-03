@@ -176,6 +176,9 @@ describe('OgabasseyV2Receipts document kind', () => {
             currency: 'NGN',
             payment_status: 'partially_paid',
             current_document_kind: 'receipt',
+            is_manual_order: true,
+            manual_document_available: true,
+            receipt_eligible: true,
             items: [
               {
                 id: 'item-1',

@@ -115,6 +115,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 1283968.38,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -150,6 +151,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 930000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -186,6 +188,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 930000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 condition: 'open_box',
@@ -222,6 +225,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 3000000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',

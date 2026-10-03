@@ -93,6 +93,7 @@ describe('OgabasseyV2Receipts thumbnails', () => {
             amount_paid: 1283968.38,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -128,6 +129,7 @@ describe('OgabasseyV2Receipts thumbnails', () => {
             amount_paid: 0,
             currency: 'NGN',
             payment_status: 'unpaid',
+            payment_method: 'invoice',
             items: [
               {
                 id: 'item-1',

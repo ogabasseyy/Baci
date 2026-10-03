@@ -49,12 +49,16 @@ export default function ReceiptClaimPageClient({
   const loginNavigationInFlight = useRef(false);
   const redemptionInFlightToken = useRef<string | null>(null);
   const preview = initialClaim;
+  // Legacy claims predate documentKind: label them kind-neutrally instead
+  // of mislabeling a possible invoice as a receipt.
   const documentLabel =
     preview?.documentKind === 'invoice'
       ? 'invoice'
       : preview?.documentKind === 'proforma_invoice'
         ? 'proforma invoice'
-        : 'receipt';
+        : preview?.documentKind === 'receipt'
+          ? 'receipt'
+          : 'document';
   useEffect(() => {
     if (
       !token ||
@@ -217,7 +221,9 @@ export default function ReceiptClaimPageClient({
                       ? 'Device proforma invoices'
                       : documentLabel === 'invoice'
                         ? 'Device invoices'
-                        : 'Device receipts'}
+                        : documentLabel === 'receipt'
+                          ? 'Device receipts'
+                          : 'Device documents'}
                   </div>
                   <ol className="space-y-2 pl-5 text-sm">
                     {createDeviceListItems(preview.devices).map((item) => (

@@ -68,6 +68,13 @@ BEGIN
         OR v_order.amount_paid >= v_order.total))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 
+  -- Pre-lock the existing claim (if any) BEFORE the customer: redemption
+  -- locks claim-then-customer, so customer-then-claim here deadlocks when
+  -- a corrective retry races the recipient's redemption (and a lost
+  -- redemption then 404s after rotation). Fresh creates lock nothing yet
+  -- and serialize on the unique index instead.
+  PERFORM 1 FROM public.receipt_claims AS rc
+  WHERE rc.manual_notification_id = v_notification.id FOR UPDATE;
   -- Bind by staff-selected customer identity, not email equality: the order's
   -- email is the contact channel staff entered, and requiring the customers
   -- row to agree would strand legitimate late corrections (verified sign-in

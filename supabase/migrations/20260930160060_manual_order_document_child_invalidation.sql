@@ -8,17 +8,59 @@
 -- (multi-event is legal without transition tables); the transaction gate
 -- skips writes that cannot affect the settled-payment snapshot so hot
 -- payment webhooks stay cheap.
--- Pure-INSERT serialization: each trigger below takes the order's (or
--- merchant's) processing outbox rows FOR UPDATE before its
--- marker-qualified reset, so an uncommitted write blocks the mark RPC at
--- its gate and the post-gate re-reads always see the committed write.
--- The lock is unconditional on marker state: while no send is in flight
--- the reset matches nothing, but the lock must still serialize. The
--- outbox row is a leaf (holders take no further locks) and every path
--- takes rows before outbox, so no cycle forms. Locking the parent from a
--- child trigger would reverse the mark RPC's parent-to-child order and
--- deadlock: row locks precede even BEFORE triggers, so trigger timing
--- cannot fix the order.
+-- Serialization uses a per-order (or per-merchant) advisory lock taken
+-- before the marker-qualified reset: it exists regardless of outbox
+-- status, so a write that begins while the row is pending (or before
+-- any row exists) still blocks the mark RPC, whose post-gate re-reads
+-- then see the committed write. Locking the parent row instead would
+-- reverse the mark RPC's order and deadlock, and gating on the outbox
+-- row itself misses writes that start before the claim. Rows come
+-- before advisory locks on every path (a trigger enters holding its
+-- row lock; the mark locks rows first), and multi-key holders take
+-- keys in ascending order, so no cycle forms.
+CREATE OR REPLACE FUNCTION private.manual_document_gate_key(p_scope text, p_id uuid)
+RETURNS bigint LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT pg_catalog.hashtextextended('manual-order-gate:' || p_scope || ':' || p_id::text, 0);
+$$;
+REVOKE ALL ON FUNCTION private.manual_document_gate_key(text, uuid)
+  FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.lock_manual_document_gate(p_scope text, p_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(private.manual_document_gate_key(p_scope, p_id));
+END;
+$$;
+REVOKE ALL ON FUNCTION private.lock_manual_document_gate(text, uuid)
+  FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.lock_manual_document_gate_keys(p_first_key bigint, p_second_key bigint)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- Two-gate holders take ascending key order: opposite-direction movers
+  -- would deadlock taking OLD/NEW order (a shared key locks once;
+  -- collisions only over-serialize).
+  IF p_first_key < p_second_key THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(p_first_key);
+    PERFORM pg_catalog.pg_advisory_xact_lock(p_second_key);
+  ELSIF p_first_key > p_second_key THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(p_second_key);
+    PERFORM pg_catalog.pg_advisory_xact_lock(p_first_key);
+  ELSE
+    PERFORM pg_catalog.pg_advisory_xact_lock(p_first_key);
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.lock_manual_document_gate_keys(bigint, bigint)
+  FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.lock_manual_document_gate_pair(p_scope text, p_first_id uuid, p_second_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM private.lock_manual_document_gate_keys(
+    private.manual_document_gate_key(p_scope, p_first_id),
+    private.manual_document_gate_key(p_scope, p_second_id));
+END;
+$$;
+REVOKE ALL ON FUNCTION private.lock_manual_document_gate_pair(text, uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_document_markers_for_order(p_order_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -31,44 +73,22 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_document_markers_for_order(uuid)
   FROM PUBLIC, anon, authenticated;
-CREATE OR REPLACE FUNCTION private.lock_manual_document_rows_for_order(p_order_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  PERFORM 1 FROM public.order_notification_outbox AS n
-  WHERE n.order_id = p_order_id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'processing'
-  FOR UPDATE OF n;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.lock_manual_document_rows_for_order(uuid)
-  FROM PUBLIC, anon, authenticated;
-CREATE OR REPLACE FUNCTION private.lock_manual_document_rows_for_merchant(p_merchant_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  PERFORM 1 FROM public.order_notification_outbox AS n
-  WHERE n.merchant_id = p_merchant_id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'processing'
-  FOR UPDATE OF n;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.lock_manual_document_rows_for_merchant(uuid)
-  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- Tax writes are rebuilds: any of them can change the snapshotted rows.
   IF TG_OP = 'DELETE' THEN
-    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
+    PERFORM private.lock_manual_document_gate('order', OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
-    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
+    PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+    RETURN NEW;
   END IF;
-  PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
+  PERFORM private.lock_manual_document_gate('order', NEW.order_id);
   PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
@@ -107,11 +127,10 @@ BEGIN
   END IF;
   -- Lock the entered order: an insert, an unsettled-to-settled flip, or a
   -- cross-order move would otherwise slip an uncommitted payment past the
-  -- post-gate aggregates. Snapshotted updates and deletes already block
-  -- on the RPC's row locks, but locking here too is harmless and keeps
-  -- the rule uniform: every snapshot-affecting write serializes.
+  -- post-gate aggregates. The departed order needs no gate: its row was
+  -- settled, so the mark's row locks already serialize against this write.
   IF v_new_in_snapshot THEN
-    PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
+    PERFORM private.lock_manual_document_gate('order', NEW.order_id);
   END IF;
   IF v_old_in_snapshot THEN
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
@@ -133,15 +152,17 @@ BEGIN
   -- Any account write can change the preferred pick, so every write locks
   -- and resets; assignments are rare admin operations.
   IF TG_OP = 'DELETE' THEN
-    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
+    PERFORM private.lock_manual_document_gate('order', OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
-    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
+    PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+    RETURN NEW;
   END IF;
-  PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
+  PERFORM private.lock_manual_document_gate('order', NEW.order_id);
   PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
@@ -177,12 +198,22 @@ BEGIN
     AND OLD.merchant_id IS NOT DISTINCT FROM NEW.merchant_id THEN
     RETURN NEW;
   END IF;
+  -- A cross-merchant primary move touches two merchant gates; take them
+  -- in ascending order like the order moves so opposite movers agree.
+  IF TG_OP = 'UPDATE' AND OLD.merchant_id IS DISTINCT FROM NEW.merchant_id
+    AND OLD.is_primary = true AND OLD.status = 'active'
+    AND NEW.is_primary = true AND NEW.status = 'active' THEN
+    PERFORM private.lock_manual_document_gate_pair('merchant', OLD.merchant_id, NEW.merchant_id);
+    PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
+    PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
+    RETURN NEW;
+  END IF;
   IF TG_OP <> 'DELETE' AND NEW.is_primary = true AND NEW.status = 'active' THEN
-    PERFORM private.lock_manual_document_rows_for_merchant(NEW.merchant_id);
+    PERFORM private.lock_manual_document_gate('merchant', NEW.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
   END IF;
   IF TG_OP <> 'INSERT' AND OLD.is_primary = true AND OLD.status = 'active' THEN
-    PERFORM private.lock_manual_document_rows_for_merchant(OLD.merchant_id);
+    PERFORM private.lock_manual_document_gate('merchant', OLD.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;

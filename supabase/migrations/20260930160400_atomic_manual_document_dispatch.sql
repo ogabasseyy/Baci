@@ -1,39 +1,30 @@
 -- Atomically validate the rendered snapshot and mark dispatch start for a
 -- manual-order document. A check-then-mark in application code leaves a
 -- millisecond race between the re-read and the marker; this function locks
--- items/transactions, parent, merchant, tax, then outbox. Items
--- and transactions go first because their row triggers enter holding those
--- locks, while tax goes after the parent to match the historical
--- tax-rebuild trigger's parent-to-child order. A payment, contact
--- correction, or item edit landing mid-dispatch aborts instead of sending
--- a stale document. The snapshot covers every order-row input the renderer
--- reads (identity, money, notes, address, dates, item contents) plus the
--- manual-order origin fields. The sent kind is stored in row metadata so
--- claim previews survive later payments. Payment instructions (merchant
--- bank fields plus the preferred virtual account) compare for invoice and
--- proforma kinds only: receipts render none, so comparing them would
--- spuriously abort. The issuer identity (business name, legal entity,
--- addresses, support contacts, RC/TIN, VAT registration) compares for
--- every kind since receipts print the issuer header too. Cosmetic merchant
--- fields (logo, colors) and derived ledger rows stay outside. VAT
--- subtotals, payment history (settled filter), and the claim-link domain
--- compare as count plus canonical rows. The worker retries after an abort
--- and converges. Safe predeploy: only the new worker calls it.
--- Every child-table read locks its rows FOR SHARE first via a bare PERFORM
--- (aggregates forbid locking clauses), so a concurrent UPDATE/DELETE blocks
--- until this comparison commits; the writer's trigger then sees the set
--- marker and resets it, and the post-transport lease check aborts the stale
--- send for a bounded retry. Same-instant INSERTs cannot slip past either:
--- every invalidation trigger takes the order's (or merchant's) processing
--- outbox rows FOR UPDATE before its marker-qualified reset, so an
--- uncommitted write blocks this function at the gate below; the child
--- aggregates and picks then re-read strictly after the gate and always
--- see the committed write. The gate is a leaf: no row locks are taken
--- after it, and every path takes rows before outbox, so no cycle forms.
--- (Locking the parent from a child trigger would reverse this order and
--- deadlock; row locks precede even BEFORE triggers.) Order and merchant
--- fields stay pre-gate: their FOR SHARE locks keep concurrent updates
--- out, so those reads cannot go stale.
+-- items/transactions, parent, merchant, tax, then takes the per-order and
+-- per-merchant advisory gates. Items and transactions go first because
+-- their row triggers enter holding those locks, while tax goes after the
+-- parent to match the historical tax-rebuild trigger's parent-to-child
+-- order. A payment, contact correction, or item edit landing mid-dispatch
+-- aborts instead of sending a stale document. The snapshot covers every
+-- order-row input the renderer reads (identity, money, notes, address,
+-- dates, item contents) plus the manual-order origin fields, and the sent
+-- kind lands in row metadata so claim previews survive later payments.
+-- Payment instructions compare for invoice and proforma kinds only
+-- (receipts render none); the issuer identity compares for every kind
+-- since receipts print the issuer header too. VAT subtotals, payment
+-- history (settled filter), and the claim-link domain compare as count
+-- plus canonical rows. The worker retries after an abort and converges.
+-- Safe predeploy: only the new worker calls it.
+-- The advisory gates exist regardless of outbox status: every
+-- invalidation trigger takes its order's (or merchant's) key before
+-- resetting, so an uncommitted write blocks below even when the row is
+-- still pending or missing entirely, and the post-gate re-reads always
+-- see the committed write. Rows precede advisory locks on every path
+-- and multi-key holders sort ascending, so no cycle forms; parent-row
+-- locking from a trigger would reverse the order and deadlock. The
+-- final marker write re-validates the lease (a janitor may have
+-- terminalized mid-mark) instead of holding the outbox row.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -130,9 +121,9 @@ BEGIN
   -- Receipts render no payment instructions, so the payment snapshot only
   -- applies to invoice and proforma kinds.
   v_compare_payment := p_document_kind <> 'receipt';
-  -- Lock order (child, parent, outbox): item triggers enter holding a
-  -- child lock, and tax follows the parent to match the historical
-  -- rebuild trigger. The unlocked outbox seed is re-validated below.
+  -- Lock order (child rows, parent, advisory): item triggers enter
+  -- holding a child lock, and tax follows the parent to match the
+  -- historical rebuild trigger. The outbox seed is re-validated below.
   SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
   FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id;
   IF NOT FOUND THEN
@@ -167,17 +158,21 @@ BEGIN
   -- triggers that enter holding those locks.
   PERFORM 1 FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order_id FOR SHARE OF ts;
+  -- Advisory gates after all row locks: the writers this serializes
+  -- against take the same keys after their row locks.
+  PERFORM private.lock_manual_document_gate_keys(
+    private.manual_document_gate_key('order', v_order_id),
+    private.manual_document_gate_key('merchant', v_merchant_id));
   SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
   WHERE n.id = p_outbox_id AND n.status = 'processing'
     AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-  FOR UPDATE;
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt');
   IF NOT FOUND OR v_order IS NULL THEN
     RETURN jsonb_build_object('status', 'lease_lost');
   END IF;
   -- Post-gate re-reads, lock-free: the gate serialized against every
   -- invalidation trigger, so these see all committed writes. Locking here
-  -- would reverse the rows-before-outbox order and deadlock.
+  -- would reverse the rows-before-advisory order and deadlock.
   SELECT d.domain INTO v_claim_domain
   FROM public.domains AS d
   WHERE d.merchant_id = v_merchant_id AND d.is_primary = true
@@ -287,9 +282,9 @@ BEGIN
   END IF;
   UPDATE public.order_notification_outbox AS n
   SET dispatch_started_at = now(), updated_at = now(),
-    metadata = COALESCE(n.metadata, '{}'::jsonb)
-      || jsonb_build_object('sent_document_kind', p_document_kind)
-  WHERE n.id = p_outbox_id;
+    metadata = COALESCE(n.metadata, '{}'::jsonb) || jsonb_build_object('sent_document_kind', p_document_kind)
+  WHERE n.id = p_outbox_id AND n.status = 'processing' AND n.locked_by = p_claim_owner;
+  IF NOT FOUND THEN RETURN jsonb_build_object('status', 'lease_lost'); END IF;
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;

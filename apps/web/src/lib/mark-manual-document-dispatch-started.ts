@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { clearManualDocumentDispatchMarker } from '@/lib/check-manual-document-dispatch-lease';
 
 interface DispatchOrderItem {
   id: string;
@@ -278,19 +279,5 @@ export async function persistManualDocumentDispatch(
     );
     return;
   }
-  const { data: updated, error: updateError } = await supabase
-    .from('order_notification_outbox')
-    .update({ dispatch_started_at: null })
-    .match({
-      id: row.id,
-      order_id: row.order_id,
-      merchant_id: row.merchant_id,
-      event_type: row.event_type,
-      locked_by: row.claim_owner,
-      status: 'processing',
-    })
-    .select('id')
-    .maybeSingle();
-  if (updateError || updated?.id !== row.id)
-    throw new Error('Manual document dispatch lease lost');
+  await clearManualDocumentDispatchMarker(supabase, row);
 }

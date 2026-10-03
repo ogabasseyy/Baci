@@ -64,4 +64,15 @@ describe('isArchiveOrder', () => {
       })
     ).toBe(true);
   });
+
+  it('matches legacy payment-method spellings like shipping status', () => {
+    for (const method of ['Invoice', 'INVOICE', '  invoice  ']) {
+      expect(isArchiveOrder({ ...baseOrder, payment_method: method })).toBe(
+        true
+      );
+      expect(isArchiveOrder({ ...baseOrder, paymentMethod: method })).toBe(
+        true
+      );
+    }
+  });
 });

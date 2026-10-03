@@ -1,6 +1,7 @@
 import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resetTransportDispatchForFallback } from '@/lib/zeptomail-dispatch-reset';
 import {
   admitZeptomailPlatformFallback,
   clampZeptomailAttemptsPerSender,
@@ -634,15 +635,12 @@ export async function sendEmail({
     );
   }
   if (sender.isCustomDomain && !deliveryOutcomeUnknown && fallbackFits) {
-    let resetSucceeded = true;
-    try {
-      await resetTransportDispatch?.();
-    } catch {
-      // A transient marker-clear failure must not convert the primary's
-      // definite rejection into an unknown outcome: skip the fallback so
-      // the primary failure below stays definite and retryable.
-      resetSucceeded = false;
-    }
+    // A transient marker-clear failure must not convert the primary's
+    // definite rejection into an unknown outcome: skip the fallback so
+    // the primary failure below stays definite and retryable.
+    const resetSucceeded = await resetTransportDispatchForFallback(
+      resetTransportDispatch
+    );
     if (resetSucceeded) {
       transportDispatchMarked = false;
       const platformSender = getSenderAddress(emailType, fromName);

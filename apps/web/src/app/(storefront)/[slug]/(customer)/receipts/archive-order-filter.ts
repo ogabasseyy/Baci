@@ -22,10 +22,13 @@ export function isArchiveOrder(order: StorefrontOrder): boolean {
   // manual_document_available is intentionally absent here: the API only
   // sets it for manual orders (handled above), so honoring it for
   // non-manual rows would advertise a download on inconsistent data.
+  // The payment-method column is not constrained to lowercase (legacy
+  // spellings exist), so normalize exactly like shipping status: an
+  // 'Invoice' order still serves an invoice download from the archive.
   return (
     Boolean(order.receipt_eligible) ||
     ARCHIVE_STATUSES.has(normalizeShippingStatus(order.shipping_status)) ||
-    order.payment_method === 'invoice' ||
-    order.paymentMethod === 'invoice'
+    normalizeShippingStatus(order.payment_method) === 'invoice' ||
+    normalizeShippingStatus(order.paymentMethod) === 'invoice'
   );
 }

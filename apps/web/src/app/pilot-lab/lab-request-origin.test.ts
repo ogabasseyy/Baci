@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { labRequestOrigin } from './lab-route';
+import { labRequestOrigin } from './lab-request-origin';
 
 describe('labRequestOrigin', () => {
   afterEach(() => {

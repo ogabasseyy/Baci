@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   harUserAgent,
@@ -6,24 +9,49 @@ import {
   pngDimensions,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
-function pngBuffer(width, height) {
-  const buffer = Buffer.alloc(33, 0);
-  buffer.writeUInt32BE(0x89504e47, 0);
-  buffer.writeUInt32BE(0x0d0a1a0a, 4);
-  buffer.writeUInt32BE(13, 8);
-  buffer.write('IHDR', 12);
-  buffer.writeUInt32BE(width, 16);
-  buffer.writeUInt32BE(height, 20);
-  return buffer;
+const here = dirname(fileURLToPath(import.meta.url));
+const GENERATOR_FIXTURES = join(
+  here,
+  '..',
+  '..',
+  '..',
+  '..',
+  'infra',
+  'cdn-transformer',
+  'pilot',
+  'fixtures'
+);
+
+function fixturePng() {
+  return readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
 }
 
 describe('merchant-image-pilot-settings helpers', () => {
-  it('reads PNG dimensions from IHDR without image deps', () => {
-    expect(pngDimensions(pngBuffer(1125, 2000))).toEqual({
-      height: 2000,
-      width: 1125,
+  it('reads PNG dimensions from a fully validated file', async () => {
+    expect(pngDimensions(await fixturePng())).toEqual({
+      height: 48,
+      width: 48,
     });
     expect(() => pngDimensions(Buffer.alloc(33, 0))).toThrow('not a PNG');
+  });
+
+  it('rejects truncated, corrupted, and padded screenshots', async () => {
+    const full = await fixturePng();
+    // Header-only bytes must not pass on IHDR alone.
+    expect(() => pngDimensions(full.subarray(0, 24))).toThrow(
+      'PNG is truncated'
+    );
+    expect(() => pngDimensions(full.subarray(0, full.length - 10))).toThrow(
+      'PNG is truncated'
+    );
+    // A single flipped IDAT byte breaks the chunk CRC.
+    const corrupted = Buffer.from(full);
+    corrupted[corrupted.length - 20] ^= 0xff;
+    expect(() => pngDimensions(corrupted)).toThrow(/failed its CRC check/);
+    // Trailing garbage after IEND is not a clean artifact.
+    expect(() =>
+      pngDimensions(Buffer.concat([full, Buffer.from([0])]))
+    ).toThrow('trailing bytes after IEND');
   });
 
   it('extracts the browser UA from the first HAR entry', () => {

@@ -6,7 +6,8 @@ import {
   PilotLabStorePage,
   pilotLabStoreBySlug,
 } from '@/lib/merchant-image-variant-pilot/lab-store-page';
-import { getLabConfig, labRequestOrigin } from '../../lab-route';
+import { labRequestOrigin } from '../../lab-request-origin';
+import { getLabConfig } from '../../lab-route';
 
 // Per-store lab pages: /pilot-lab/store/<slug>?arm=pilot|control. The
 // measurement surfaces for the merchant image pilot — actual storefront

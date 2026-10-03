@@ -22,7 +22,14 @@ describe('merchant-image-pilot-readiness helpers', () => {
     );
   });
 
-  it('requires the selected image to decode from a staged URL', () => {
+  it('requires the selected image to decode from its approved identity', () => {
+    const mount = {
+      binding: 'merchant/card-a',
+      generationId: 'abc',
+      merchantId: 'merchant',
+      slotId: 'product-card',
+      stagedOriginal: '/__pilot/originals/x.png',
+    };
     const pilot = {
       complete: true,
       currentSrc: 'https://lab/__pilot/abc/x.avif',
@@ -33,50 +40,82 @@ describe('merchant-image-pilot-readiness helpers', () => {
       currentSrc: 'https://lab/__pilot/originals/x.png',
       naturalWidth: 1254,
     };
-    expect(selectedImageProblems(pilot, 'pilot')).toEqual([]);
-    expect(selectedImageProblems(control, 'control')).toEqual([]);
+    expect(selectedImageProblems(pilot, 'pilot', mount)).toEqual([]);
+    expect(selectedImageProblems(control, 'control', mount)).toEqual([]);
     // Absent, undecoded, or sourceless elements fail in both arms.
     for (const arm of ['pilot', 'control']) {
-      expect(selectedImageProblems(null, arm)).toEqual([
+      expect(selectedImageProblems(null, arm, mount)).toEqual([
         'selected image absent',
       ]);
-      expect(selectedImageProblems({ ...pilot, complete: false }, arm)).toEqual(
-        ['selected image did not decode']
-      );
-      expect(selectedImageProblems({ ...pilot, naturalWidth: 0 }, arm)).toEqual(
-        ['selected image did not decode']
-      );
-      expect(selectedImageProblems({ ...pilot, currentSrc: '' }, arm)).toEqual([
-        'selected image has no source',
-      ]);
+      expect(
+        selectedImageProblems({ ...pilot, complete: false }, arm, mount)
+      ).toEqual(['selected image did not decode']);
+      expect(
+        selectedImageProblems({ ...pilot, naturalWidth: 0 }, arm, mount)
+      ).toEqual(['selected image did not decode']);
+      expect(
+        selectedImageProblems({ ...pilot, currentSrc: '' }, arm, mount)
+      ).toEqual(['selected image has no source']);
     }
-    // Wrong-arm staged URLs fail: pilot on an original, control off one.
+    // Wrong-identity staged URLs fail: a stale generation on pilot, a
+    // foreign original (or a derivative) on control.
+    expect(
+      selectedImageProblems(
+        { ...pilot, currentSrc: 'https://lab/__pilot/stale/x.avif' },
+        'pilot',
+        mount
+      )
+    ).toEqual(['pilot selected is not from the approved generation']);
     expect(
       selectedImageProblems(
         { ...pilot, currentSrc: control.currentSrc },
-        'pilot'
+        'pilot',
+        mount
       )
-    ).toEqual(['pilot selected a non-staged image URL']);
+    ).toEqual(['pilot selected is not from the approved generation']);
     expect(
       selectedImageProblems(
         { ...control, currentSrc: 'https://lab/other/x.png' },
-        'pilot'
+        'pilot',
+        mount
       )
-    ).toEqual(['pilot selected a non-staged image URL']);
+    ).toEqual(['pilot selected is not from the approved generation']);
+    expect(
+      selectedImageProblems(
+        {
+          ...control,
+          currentSrc: 'https://lab/__pilot/originals/other.png',
+        },
+        'control',
+        mount
+      )
+    ).toEqual(['control selected is not the approved staged original']);
     expect(
       selectedImageProblems(
         { ...control, currentSrc: pilot.currentSrc },
-        'control'
+        'control',
+        mount
       )
-    ).toEqual(['control selected no staged original']);
+    ).toEqual(['control selected is not the approved staged original']);
+    // Loader params do not change identity: ?w&q still address the same
+    // staged original.
+    expect(
+      selectedImageProblems(
+        { ...control, currentSrc: `${control.currentSrc}?w=48&q=75` },
+        'control',
+        mount
+      )
+    ).toEqual([]);
   });
 });
 
 describe('merchant-image-pilot-readiness slot mounts', () => {
   const mount = {
     binding: 'merchant/logo-a',
+    generationId: 'abc',
     merchantId: 'merchant',
     slotId: 'header-logo',
+    stagedOriginal: '/__pilot/originals/x.png',
   };
   const pilotImg = {
     complete: true,
@@ -164,14 +203,18 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         mount,
         { arm: 'pilot', viewportWidth: 390 }
       )
-    ).toEqual(['pilot slot "header-logo" image is a non-staged image URL']);
+    ).toEqual([
+      'pilot slot "header-logo" image is not from the approved generation',
+    ]);
   });
 
   it('validates every expected mount on the surface', () => {
     const card = {
       binding: 'merchant/card-a',
+      generationId: 'abc',
       merchantId: 'merchant',
       slotId: 'product-card',
+      stagedOriginal: '/__pilot/originals/card.png',
     };
     const cardSlot = {
       binding: 'merchant/card-a',
@@ -325,6 +368,69 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         surface: 'hero',
       })
     ).toEqual(['pilot requested a selected original']);
+  });
+
+  it('rejects stale generations and foreign originals per slot', () => {
+    const slot = {
+      binding: 'merchant/logo-a',
+      img: {
+        complete: true,
+        currentSrc: 'https://lab/__pilot/stale/x.avif',
+        naturalWidth: 80,
+      },
+      rect: { height: 40, width: 40, x: 8, y: 8 },
+      slotId: 'header-logo',
+      status: null,
+    };
+    expect(
+      slotMountProblems(slot, mount, { arm: 'pilot', viewportWidth: 390 })
+    ).toEqual([
+      'pilot slot "header-logo" image is not from the approved generation',
+    ]);
+    const foreign = {
+      ...slot,
+      img: {
+        complete: true,
+        currentSrc: 'https://lab/__pilot/originals/other.png',
+        naturalWidth: 80,
+      },
+    };
+    expect(
+      slotMountProblems(foreign, mount, { arm: 'control', viewportWidth: 390 })
+    ).toEqual([
+      'control slot "header-logo" image is not the approved staged original',
+    ]);
+  });
+
+  it('fails closed when the primary slot has no expected mount', () => {
+    const collected = {
+      consoleErrors: [],
+      failedRequests: [],
+      geometry: {
+        gridDisplay: 'grid',
+        heading: { height: 1, width: 1, x: 0, y: 0 },
+        imgObjectFit: 'cover',
+        selected: { height: 300, width: 180, x: 8, y: 120 },
+        selectedImg: {
+          complete: true,
+          currentSrc: 'https://lab/__pilot/abc/x.avif',
+          naturalWidth: 384,
+        },
+        slots: [],
+        stylesheetBytes: 1200,
+        stylesheetCount: 1,
+        viewportWidth: 390,
+      },
+      imageUrls: ['https://lab/__pilot/abc/x.avif'],
+    };
+    expect(
+      surfaceProblems(collected, {
+        arm: 'pilot',
+        expectedFit: 'cover',
+        expectedMounts: [mount],
+        surface: 'grid',
+      })
+    ).toContain('selected slot "product-card" has no expected mount');
   });
 
   it('compares every expected slot across arms', () => {

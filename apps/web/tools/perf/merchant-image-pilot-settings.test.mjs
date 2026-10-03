@@ -1,17 +1,17 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
+// Real encodings: the gate fully validates PNG structure, so header-only
+// fakes no longer pass har.geometry.
 function pngBuffer(width, height) {
-  const buffer = Buffer.alloc(33, 0);
-  buffer.writeUInt32BE(0x89504e47, 0);
-  buffer.writeUInt32BE(0x0d0a1a0a, 4);
-  buffer.writeUInt32BE(13, 8);
-  buffer.write('IHDR', 12);
-  buffer.writeUInt32BE(width, 16);
-  buffer.writeUInt32BE(height, 20);
-  return buffer;
+  return sharp({
+    create: { background: '#ffffff', channels: 3, height, width },
+  })
+    .png()
+    .toBuffer();
 }
 
 describe('merchant-image-pilot-settings gate', () => {
@@ -40,7 +40,7 @@ describe('merchant-image-pilot-settings gate', () => {
         },
       })
     );
-    await writeFile(pngPath, pngBuffer(750, 1334));
+    await writeFile(pngPath, await pngBuffer(750, 1334));
     await writeFile(
       lhPath,
       JSON.stringify({
@@ -172,7 +172,7 @@ describe('merchant-image-pilot-settings gate', () => {
           },
         })
       );
-      await writeFile(pngPath, pngBuffer(750, 1334));
+      await writeFile(pngPath, await pngBuffer(750, 1334));
       const { execFile } = await import('node:child_process');
       const report = await new Promise((resolve) => {
         execFile(
@@ -322,7 +322,7 @@ describe('merchant-image-pilot-settings gate', () => {
         },
       })
     );
-    await writeFile(pngPath, pngBuffer(750, 1334));
+    await writeFile(pngPath, await pngBuffer(750, 1334));
     const { execFile } = await import('node:child_process');
     const { error, stdout } = await new Promise((resolve) => {
       execFile(

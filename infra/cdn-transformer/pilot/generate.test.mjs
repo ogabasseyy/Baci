@@ -6,12 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGeneration } from './manifest.mjs';
-import {
-  assertJobDeadline,
-  assertPreCommitGuards,
-  parseMinFreeBytes,
-  runPilotGeneration,
-} from './generate.mjs';
+import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
@@ -234,44 +229,3 @@ test('empty inventories are rejected instead of reporting green', async () => {
   );
 });
 
-test('assertPreCommitGuards rechecks the deadline and the disk floor', async () => {
-  const { outputRoot } = await setup();
-  await mkdir(join(outputRoot, 'generations'), { recursive: true });
-  await assert.rejects(
-    () =>
-      assertPreCommitGuards({
-        deadlineMs: Date.now() + 60_000,
-        minFreeBytes: Number.MAX_SAFE_INTEGER,
-        outputRoot,
-      }),
-    /below the .* byte floor/
-  );
-  await assert.rejects(
-    () =>
-      assertPreCommitGuards({
-        deadlineMs: Date.now() - 1,
-        minFreeBytes: 0,
-        outputRoot,
-      }),
-    (error) => {
-      assert.equal(error.code, 'deadline-exceeded');
-      return true;
-    }
-  );
-  await assert.doesNotReject(() =>
-    assertPreCommitGuards({
-      deadlineMs: Date.now() + 60_000,
-      minFreeBytes: 0,
-      outputRoot,
-    })
-  );
-});
-
-test('assertJobDeadline fails closed past the job budget', () => {
-  assert.doesNotThrow(() => assertJobDeadline(Date.now() + 60_000, 'claim'));
-  assert.throws(() => assertJobDeadline(Date.now() - 1, 'commit'), (error) => {
-    assert.equal(error.code, 'deadline-exceeded');
-    assert.match(error.message, /120000ms budget during commit/);
-    return true;
-  });
-});

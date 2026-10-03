@@ -124,17 +124,25 @@ export function parseMountsJson(text) {
       !mount ||
       typeof mount.binding !== 'string' ||
       typeof mount.merchantId !== 'string' ||
-      typeof mount.slotId !== 'string'
+      typeof mount.slotId !== 'string' ||
+      typeof mount.generationId !== 'string' ||
+      typeof mount.stagedOriginal !== 'string'
     ) {
       throw new Error(
-        'bad --mounts: every mount needs binding, merchantId, and slotId strings'
+        'bad --mounts: every mount needs binding, merchantId, slotId, generationId, and stagedOriginal strings'
       );
     }
   }
+  // Preserve the approved byte identities, not just the slot names: the
+  // browser gate pins each slot's served URL to its approved generation
+  // (pilot) or exact staged original (control), so a stale mounts file
+  // can never certify an unreviewed generation.
   return parsed.map((mount) => ({
     binding: mount.binding,
+    generationId: mount.generationId,
     merchantId: mount.merchantId,
     slotId: mount.slotId,
+    stagedOriginal: mount.stagedOriginal,
   }));
 }
 

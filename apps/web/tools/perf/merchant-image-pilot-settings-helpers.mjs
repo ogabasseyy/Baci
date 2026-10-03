@@ -29,16 +29,76 @@ export function parsePositiveNumber(value, name) {
   return parsed;
 }
 
-// PNG IHDR: width/height as uint32BE at bytes 16..23. No image deps.
+// CRC-32 (ISO 3309) for PNG chunk validation. No image deps.
+const PNG_CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function pngCrc32(buffer, start, end) {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    crc = PNG_CRC_TABLE[(crc ^ buffer[index]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// PNG dimensions with full structure validation: a screenshot truncated
+// or corrupted after its IHDR must not pass har.geometry on 24 header
+// bytes alone. Walks every chunk, verifies each CRC, and requires IEND
+// with no trailing garbage before the dimensions count as evidence.
 export function pngDimensions(buffer) {
   if (
-    buffer.length < 24 ||
+    buffer.length < 8 ||
     buffer.readUInt32BE(0) !== 0x89504e47 ||
     buffer.readUInt32BE(4) !== 0x0d0a1a0a
   ) {
     throw new Error('not a PNG');
   }
-  return { height: buffer.readUInt32BE(20), width: buffer.readUInt32BE(16) };
+  let offset = 8;
+  let dimensions = null;
+  let first = true;
+  for (;;) {
+    if (offset + 8 > buffer.length) {
+      throw new Error('PNG is truncated');
+    }
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString('latin1', offset + 4, offset + 8);
+    const dataEnd = offset + 8 + length;
+    if (dataEnd + 4 > buffer.length) {
+      throw new Error('PNG is truncated');
+    }
+    if (
+      pngCrc32(buffer, offset + 4, dataEnd) !== buffer.readUInt32BE(dataEnd)
+    ) {
+      throw new Error(`PNG chunk "${type}" failed its CRC check`);
+    }
+    if (first) {
+      if (type !== 'IHDR' || length !== 13) {
+        throw new Error('not a PNG');
+      }
+      dimensions = {
+        height: buffer.readUInt32BE(20),
+        width: buffer.readUInt32BE(16),
+      };
+      first = false;
+    }
+    offset = dataEnd + 4;
+    if (type === 'IEND') {
+      break;
+    }
+  }
+  if (offset !== buffer.length) {
+    throw new Error('PNG has trailing bytes after IEND');
+  }
+  return dimensions;
 }
 
 export function harUserAgent(har) {

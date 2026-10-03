@@ -104,7 +104,13 @@ describe('merchant-image-pilot-readiness expected mounts', () => {
         ])
       )
     ).toEqual([
-      { binding: 'm/logo-a', merchantId: 'm', slotId: 'header-logo' },
+      {
+        binding: 'm/logo-a',
+        generationId: 'g',
+        merchantId: 'm',
+        slotId: 'header-logo',
+        stagedOriginal: '/__pilot/originals/x.png',
+      },
     ]);
   });
 
@@ -113,7 +119,14 @@ describe('merchant-image-pilot-readiness expected mounts', () => {
     expect(() => parseMountsJson('{}')).toThrow(/non-empty JSON array/);
     expect(() => parseMountsJson('[]')).toThrow(/non-empty JSON array/);
     expect(() => parseMountsJson('[{}]')).toThrow(
-      /binding, merchantId, and slotId/
+      /binding, merchantId, slotId, generationId, and stagedOriginal/
     );
+    expect(() =>
+      parseMountsJson(
+        JSON.stringify([
+          { binding: 'm/logo-a', merchantId: 'm', slotId: 'header-logo' },
+        ])
+      )
+    ).toThrow(/generationId/);
   });
 });

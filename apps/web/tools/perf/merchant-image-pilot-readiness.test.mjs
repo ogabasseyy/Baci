@@ -53,8 +53,10 @@ describe('merchant-image-pilot-readiness gate', () => {
     const mounts = await writeMountsFile([
       {
         binding: `${MERCHANT}/hero-s0`,
+        generationId: 'g',
         merchantId: MERCHANT,
         slotId: 'mobile-hero-slide-0',
+        stagedOriginal: '/__pilot/originals/x.png',
       },
     ]);
     const { error, stdout } = await runCli([
@@ -97,8 +99,10 @@ describe('merchant-image-pilot-readiness gate', () => {
     const mounts = await writeMountsFile([
       {
         binding: `${MERCHANT}/hero-s0`,
+        generationId: 'g',
         merchantId: MERCHANT,
         slotId: 'mobile-hero-slide-0',
+        stagedOriginal: '/__pilot/originals/x.png',
       },
     ]);
     const { error, stdout } = await runCli([

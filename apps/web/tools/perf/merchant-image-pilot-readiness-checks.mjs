@@ -18,10 +18,21 @@ export function pilotImageUrlsOk(urls) {
 }
 
 // Shared staged-image rules, labelled per surface: the element must have
-// decoded (complete + nonzero natural width) from a staged URL of the
-// expected arm. A network failure or an HTML error page leaves the element
-// in place, so geometry alone cannot prove the image loaded.
-function stagedImageProblems(image, arm, label) {
+// decoded (complete + nonzero natural width) from the mount's APPROVED
+// byte identity — its generation URL on pilot, its exact staged original
+// on control. Broad prefix checks would let a stale mounts file certify
+// an unreviewed generation, or one binding serve another's original. A
+// network failure or an HTML error page leaves the element in place, so
+// geometry alone cannot prove the image loaded.
+function servedPathname(currentSrc) {
+  try {
+    return new URL(currentSrc).pathname;
+  } catch {
+    return String(currentSrc ?? '').split('?')[0];
+  }
+}
+
+function stagedImageProblems(image, arm, label, mount) {
   if (!image) {
     return [`${label} absent`];
   }
@@ -31,31 +42,30 @@ function stagedImageProblems(image, arm, label) {
   if (!image.currentSrc) {
     return [`${label} has no source`];
   }
+  const pathname = servedPathname(image.currentSrc);
   if (arm === 'pilot') {
-    if (
-      image.currentSrc.includes('/originals/') ||
-      !image.currentSrc.includes('/__pilot/')
-    ) {
-      return [`pilot ${label} is a non-staged image URL`];
+    if (!pathname.startsWith(`/__pilot/${mount.generationId}/`)) {
+      return [`pilot ${label} is not from the approved generation`];
     }
-  } else if (!image.currentSrc.includes('/originals/')) {
-    return [`control ${label} is no staged original`];
+  } else if (pathname !== mount.stagedOriginal) {
+    return [`control ${label} is not the approved staged original`];
   }
   return [];
 }
 
 // Pure verdict on the collected selected-image state.
-export function selectedImageProblems(image, arm) {
-  return stagedImageProblems(image, arm, 'selected image').map((problem) =>
-    problem
-      .replace(
-        'pilot selected image is a non-staged image URL',
-        'pilot selected a non-staged image URL'
-      )
-      .replace(
-        'control selected image is no staged original',
-        'control selected no staged original'
-      )
+export function selectedImageProblems(image, arm, mount) {
+  return stagedImageProblems(image, arm, 'selected image', mount).map(
+    (problem) =>
+      problem
+        .replace(
+          'pilot selected image is not from the approved generation',
+          'pilot selected is not from the approved generation'
+        )
+        .replace(
+          'control selected image is not the approved staged original',
+          'control selected is not the approved staged original'
+        )
   );
 }
 
@@ -96,7 +106,7 @@ export function slotMountProblems(
   if ((rect.x ?? 0) + (rect.width ?? 0) > (viewportWidth ?? 0) + 1) {
     return [`slot "${mount.slotId}" overflows the viewport`];
   }
-  return stagedImageProblems(slot.img, arm, label);
+  return stagedImageProblems(slot.img, arm, label, mount);
 }
 
 // Pure verdict on one collected surface: console/request hygiene, style
@@ -140,7 +150,20 @@ export function surfaceProblems(
   // still applies: hidden images fetch, so a pilot original fetch fails
   // on every profile.
   if (!expectHiddenMounts) {
-    problems.push(...selectedImageProblems(g.selectedImg, arm));
+    // The primary surface is one of the expected mounts (hero slot on
+    // hero surfaces, product card on grids): its identity pins the
+    // selected-image verdict, and a mounts file without it covers
+    // nothing the gate can certify.
+    const primarySlotId =
+      surface === 'hero' ? 'mobile-hero-slide-0' : 'product-card';
+    const primary = expectedMounts.find(
+      (mount) => mount.slotId === primarySlotId
+    );
+    if (!primary) {
+      problems.push(`selected slot "${primarySlotId}" has no expected mount`);
+    } else {
+      problems.push(...selectedImageProblems(g.selectedImg, arm, primary));
+    }
   }
   if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
     problems.push('pilot requested a selected original');

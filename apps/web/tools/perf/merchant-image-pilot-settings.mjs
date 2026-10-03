@@ -90,8 +90,9 @@ async function checkHar(args, pass, fail, warn, recorded) {
     } else {
       pass('har.geometry');
     }
-  } catch {
-    fail('har.geometry', `cannot read ${args.screenshot}`);
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    fail('har.geometry', `cannot use ${args.screenshot} (${why})`);
   }
   // Cold cache means NO RECORDED cache hit: a revalidation miss (304),
   // any runner-recorded cache path (disk, prefetch, service worker), or a

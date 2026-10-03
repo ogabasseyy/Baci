@@ -1,4 +1,4 @@
-import { PilotAcquireError } from './acquire.mjs';
+import { PilotAcquireError } from './inventory-store.mjs';
 
 // SSRF guard for pilot fetches: deny loopback, private, link-local
 // (covers the 169.254.169.254 cloud-metadata address), and other

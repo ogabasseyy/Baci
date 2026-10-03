@@ -104,7 +104,12 @@ describe('receipt detail covered-manual transaction failures', () => {
     ['cancelled', { shipping_status: 'cancelled' }],
     ['unknown-status', { payment_status: 'on_hold' }],
     ['content-invalid', { order_items: [] }],
-  ])('tolerates transaction lookup failures for covered-manual %s rows', async (_label, override) => {
+    [
+      'paid-but-cancelled',
+      { payment_status: 'paid', shipping_status: 'cancelled' },
+    ],
+    ['paid-but-uncovered', { payment_status: 'paid', amount_paid: 100 }],
+  ])('tolerates transaction lookup failures for invoice-preview %s rows', async (_label, override) => {
     // Fail-closed dating follows the preview promotion gate: a covered
     // row that previews as an invoice resolves with empty history like
     // any unpaid row instead of blocking the preview.

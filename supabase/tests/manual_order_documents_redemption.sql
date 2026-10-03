@@ -54,8 +54,8 @@ VALUES ('10000000-0000-4000-8000-000000000021', '10000000-0000-4000-8000-0000000
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000021', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000021' AND event_type = 'manual_order_receipt';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000021' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('6', 64))->>'status' = 'created'), 'taken-address claim created');
-INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000033', 'taken@example.com', now(), null);
-SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000033', true);
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000062', 'taken@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000062', true);
 SELECT set_config('request.jwt.claims', '{"email":"taken@example.com"}', true);
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('6',64), 'web')->>'status' = 'customer_link_failed', 'recipient row owned by another user fails closed');
@@ -115,3 +115,14 @@ SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('1f',32), 'web')->>'status' = 'ok', 'matching email with linked row redeems via relinking');
 RESET ROLE;
 SELECT pg_temp.assert_true((SELECT customer_id = '10000000-0000-4000-8000-000000000038' FROM public.orders WHERE id = '10000000-0000-4000-8000-000000000040'), 'claimed order links the existing user row');
+-- A redeemed stale link must not kill the corrected retry: rotation adopts
+-- the fresh token even after redemption (redemption serves live data and
+-- links stay re-openable), preserving claimed_at for history.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000062', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000062', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('ca', 32))->>'status' = 'created'), 'redeem-probe claim created');
+UPDATE public.receipt_claims SET claimed_at = now() WHERE token_hash = repeat('ca', 32);
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('cb', 32))->>'status' = 'created'), 'corrected retry rotates a redeemed claim');
+SELECT pg_temp.assert_true((SELECT token_hash = repeat('cb', 32) AND claimed_at IS NOT NULL FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'rotation preserves redemption while adopting the fresh token');

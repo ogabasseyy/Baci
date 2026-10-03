@@ -1,3 +1,4 @@
+import { isManualOrderRecord } from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
@@ -83,7 +84,9 @@ async function fetchReceiptDetail(
             unit_code,
             vat_category_code,
             vat_rate,
-            vat_amount
+            vat_amount,
+            item_description,
+            sellers_item_id
           ),
           customers!inner (
             user_id
@@ -104,27 +107,37 @@ async function fetchReceiptDetail(
   // renders through: a row that previews as an invoice (cancelled,
   // unknown-status, content-invalid) tolerates transaction failures like
   // any unpaid row, while a promoted row fails the whole load rather
-  // than render a misdated receipt. The status trim is typeof-guarded:
-  // the row is unvalidated here, so a numeric marker must fail closed,
-  // never throw.
+  // than render a misdated receipt. The generic paid shortcut applies to
+  // non-manual rows only, matching the preview and list classification —
+  // a paid-manual row that fails the gate opens as an invoice, so its
+  // detail load must tolerate lookup failures too. The status trim is
+  // typeof-guarded: the row is unvalidated here, so a numeric marker must
+  // fail closed, never throw.
+  const manualOrder = isManualOrderRecord({
+    recordedByUserId: order.recorded_by_user_id,
+    importJobId: order.import_job_id,
+    externalSource: order.external_source,
+  });
   const isPaidOrder =
-    (typeof order.payment_status === 'string' &&
+    (!manualOrder &&
+      typeof order.payment_status === 'string' &&
       order.payment_status.trim().toLowerCase() === 'paid') ||
-    isPromotedManualReceipt({
-      recordedByUserId: order.recorded_by_user_id,
-      importJobId: order.import_job_id,
-      externalSource: order.external_source,
-      paymentStatus: order.payment_status,
-      shippingStatus: order.shipping_status,
-      total: order.total,
-      subtotal: order.subtotal,
-      shippingFee: order.shipping_fee,
-      taxAmount: order.tax_amount,
-      discountAmount: order.discount_amount,
-      amountPaid: order.amount_paid,
-      currency: order.currency,
-      items: order.order_items,
-    });
+    (manualOrder &&
+      isPromotedManualReceipt({
+        recordedByUserId: order.recorded_by_user_id,
+        importJobId: order.import_job_id,
+        externalSource: order.external_source,
+        paymentStatus: order.payment_status,
+        shippingStatus: order.shipping_status,
+        total: order.total,
+        subtotal: order.subtotal,
+        shippingFee: order.shipping_fee,
+        taxAmount: order.tax_amount,
+        discountAmount: order.discount_amount,
+        amountPaid: order.amount_paid,
+        currency: order.currency,
+        items: order.order_items,
+      }));
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {
@@ -158,7 +171,16 @@ async function fetchReceiptDetail(
     ...order,
     balance: (order.total ?? 0) - (order.amount_paid ?? 0),
     items: (order.order_items ?? []).map((item) =>
-      item == null ? item : { ...item, product_name: item.name }
+      item == null
+        ? item
+        : {
+            ...item,
+            product_name: item.name,
+            // Rendered description like the emailed PDF input: without
+            // this the app link opens a document missing descriptions
+            // and SKU labels the attachment shows.
+            description: item.item_description || undefined,
+          }
     ),
     virtual_account: resolveReceiptPaymentAccount(
       virtualAccounts,

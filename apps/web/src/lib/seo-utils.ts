@@ -51,6 +51,7 @@ import type {
   MerchantTrustProfileReturnFee,
   MerchantTrustProfileReturnMethod,
 } from './storefront-trust/merchant-trust-profile-types';
+import { resolveVariantProductIdentifiers } from './variant-product-identifiers';
 
 export { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 // Re-export escapeHtml for use in other modules
@@ -1010,6 +1011,10 @@ export function generateProductSchema(
 
     // Build hasVariant array — each variant becomes a @type Product
     schema.hasVariant = product.variants.map((variant) => {
+      const identifiers = resolveVariantProductIdentifiers(
+        variant.attributes,
+        product
+      );
       const variantPrice = variant.price_override ?? product.price;
       const variantUrl = buildStructuredDataVariantUrl(
         structuredDataProductUrl,
@@ -1050,8 +1055,8 @@ export function generateProductSchema(
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
         sku: variant.sku || variant.id,
-        ...(product.gtin && { gtin: product.gtin }),
-        ...(product.mpn && { mpn: product.mpn }),
+        ...(identifiers.gtin && { gtin: identifiers.gtin }),
+        ...(identifiers.mpn && { mpn: identifiers.mpn }),
         offers: {
           '@type': 'Offer',
           price: variantPrice,

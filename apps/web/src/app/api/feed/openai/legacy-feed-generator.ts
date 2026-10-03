@@ -6,6 +6,7 @@ import {
   buildAgentProductUrl,
   trimTrailingSlash,
 } from '@/lib/storefront-agent-urls';
+import { resolveVariantProductIdentifiers } from '@/lib/variant-product-identifiers';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import {
   DEFAULT_RETURN_DAYS,
@@ -78,14 +79,18 @@ function buildVariantFeedItem({
     stockCount > 0 ? 'in_stock' : 'out_of_stock';
   const color = variant.attributes?.color || variant.attributes?.Color;
   const size = variant.attributes?.size || variant.attributes?.Size;
+  const identifiers = resolveVariantProductIdentifiers(
+    variant.attributes,
+    product
+  );
 
   return {
     enable_search: true,
     enable_checkout: true,
     id: itemId,
     item_group_id: product.id,
-    gtin: product.gtin || undefined,
-    mpn: product.mpn || undefined,
+    gtin: identifiers.gtin,
+    mpn: identifiers.mpn,
     title: buildVariantTitle(product, variant),
     description: buildPlainDescription(product),
     link: buildAgentProductUrl({ baseUrl, product }),

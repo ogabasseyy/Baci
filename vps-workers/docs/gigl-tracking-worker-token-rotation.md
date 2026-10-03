@@ -28,7 +28,13 @@ validity check.
 ## Check expiry (run against the REAL token, never in CI)
 
 ```sh
-token="$(grep '^GIGL_TRACKING_WORKER_TOKEN=' /home/bassey/baci-workers/.env | cut -d= -f2-)"
+# Read the token through the deployed dotenv parser — the same reader
+# cron uses — never grep: the file may use `export` prefixes, quoted
+# values, or duplicate assignments (last wins), and a grep pipeline
+# either finds nothing, keeps quote bytes, or inspects a different
+# token from the one cron actually uses.
+. /home/bassey/baci-workers/bin/gigl-dotenv.sh
+token="$(gigl_dotenv_value /home/bassey/baci-workers/.env 'GIGL_TRACKING_WORKER_TOKEN')"
 exp="$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+' | awk '{ while (length % 4) $0 = $0 "="; print }' | base64 -d 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["exp"])')"
 date -u -d "@$exp" 2>/dev/null || date -u -r "$exp"
 ```
@@ -39,8 +45,9 @@ Production value decodes to the same `exp`.
 ## Rotate
 
 1. Mint a new JWT for role `gigl_tracking_worker` OFF the VPS with a
-   trusted Supabase signing key (see `vps-workers/README.md`: never copy
-   a signing key or service-role credential to the worker host).
+   trusted Supabase signing key (ES256, RS256, or HS256 — all three are
+   accepted; see `vps-workers/README.md`: never copy a signing key or
+   service-role credential to the worker host).
 2. Write the new token to the VPS `.env`, then update the Vercel
    Production env var to the identical value.
 3. Redeploy Vercel production via a manual workflow dispatch, or a

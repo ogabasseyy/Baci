@@ -40,7 +40,12 @@ const RESTRICTED_RPC_NAMES: Readonly<Record<string, string>> = {
   record_gigl_tracking_failure: 'gigl_worker_record_tracking_failure',
   release_gigl_tracking_claim: 'gigl_worker_release_tracking_claim',
 };
-const SUPPORTED_SIGNING_ALGORITHMS = new Set(['ES256', 'HS256']);
+// Supabase JWT signing keys support all three: ES256 (Elliptic Curve),
+// RS256 (RSA), and HS256 (shared secret) —
+// https://supabase.com/docs/guides/auth/signing-keys. Rejecting RS256
+// would refuse genuinely RSA-signed worker tokens and misclassify them
+// as vacuous (absent/expired/mis-signed) in disabled setups.
+const SUPPORTED_SIGNING_ALGORITHMS = new Set(['ES256', 'HS256', 'RS256']);
 
 function parseJwtPart(token: string, index: number): Record<string, unknown> {
   const value = token.split('.')[index];

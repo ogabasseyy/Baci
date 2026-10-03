@@ -32,7 +32,13 @@ const GIGL_REQUIRED_ENV = [
 ];
 const ENV_BOOLEAN_VALUES = new Set(['0', '1', 'false', 'no', 'true', 'yes']);
 const DISABLED_GIGL_VALUES = new Set(['0', 'false', 'off']);
-const SUPPORTED_GIGL_TOKEN_ALGORITHMS = new Set(['ES256', 'HS256']);
+// Supabase JWT signing keys support ES256 (Elliptic Curve), RS256 (RSA),
+// and HS256 (shared secret) —
+// https://supabase.com/docs/guides/auth/signing-keys. Rejecting RS256
+// would refuse genuinely RSA-signed worker tokens and, while GIGL is
+// disabled, misclassify them as vacuous instead of fail-closed usable
+// credentials.
+const SUPPORTED_GIGL_TOKEN_ALGORITHMS = new Set(['ES256', 'HS256', 'RS256']);
 
 function isConfigured(env, name) {
   return typeof env[name] === 'string' && env[name].trim().length > 0;

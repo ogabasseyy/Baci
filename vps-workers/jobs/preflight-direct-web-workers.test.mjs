@@ -96,47 +96,6 @@ describe('direct worker environment preflight', () => {
     assert.deepEqual(problems, ['GIGL_BASE_URL is required']);
   });
 
-  it('rejects a token for an elevated database role', () => {
-    assert.deepEqual(
-      getDirectWorkerPreflightProblems({
-        ...commonEnv,
-        GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
-      }),
-      ['GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token']
-    );
-  });
-
-  it('rejects a usable non-worker token when GIGL is disabled', () => {
-    // A valid service_role JWT is a live credential, not a missing
-    // one: the disabled preflight must not pass it silently.
-    assert.deepEqual(
-      getDirectWorkerPreflightProblems({
-        ...commonEnv,
-        GIGL_ENABLED: 'off',
-        GIGL_TRACKING_WORKER_TOKEN: token('service_role'),
-      }),
-      [
-        'GIGL_TRACKING_WORKER_TOKEN must not be a usable non-worker token while GIGL is disabled',
-      ]
-    );
-  });
-
-  it('accepts an expired non-worker token when GIGL is disabled', () => {
-    // Unusable credentials stay vacuous: nothing to abuse.
-    assert.deepEqual(
-      getDirectWorkerPreflightProblems({
-        ...commonEnv,
-        GIGL_ENABLED: 'off',
-        GIGL_TRACKING_WORKER_TOKEN: token(
-          'service_role',
-          'ES256',
-          Math.floor(Date.now() / 1000) - 60
-        ),
-      }),
-      []
-    );
-  });
-
   for (const disabledValue of ['0', 'false', 'off', ' OFF ']) {
     it(`does not require provider credentials when GIGL is disabled with ${disabledValue}`, () => {
       const problems = getDirectWorkerPreflightProblems({

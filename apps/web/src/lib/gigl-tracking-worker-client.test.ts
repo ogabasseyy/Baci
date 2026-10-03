@@ -71,7 +71,7 @@ describe('createGiglTrackingWorkerClient', () => {
   });
 
   it('rejects unsigned and unsupported JWT algorithms', () => {
-    for (const alg of ['none', 'RS256']) {
+    for (const alg of ['none', 'HS384']) {
       expect(() =>
         createGiglTrackingWorkerClient({
           ...configuredEnv,
@@ -80,6 +80,25 @@ describe('createGiglTrackingWorkerClient', () => {
       ).toThrow('GIGL tracking worker database capability is invalid');
     }
     expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it('treats RS256 tokens per Supabase RSA signing keys', () => {
+    const client = createGiglTrackingWorkerClient({
+      ...configuredEnv,
+      GIGL_TRACKING_WORKER_TOKEN: token('gigl_tracking_worker', 'RS256'),
+    });
+
+    expect(createClient).toHaveBeenCalledOnce();
+    expect(client).toBeDefined();
+
+    expect(() =>
+      createGiglTrackingWorkerClient({
+        ...configuredEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token('service_role', 'RS256'),
+      })
+    ).toThrow(
+      'GIGL tracking worker token is a usable non-worker JWT; refusing to scope a privileged credential to the poller'
+    );
   });
 
   it('accepts a worker token inside its final 24 hours until expiry', () => {

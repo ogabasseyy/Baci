@@ -5,6 +5,7 @@ vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
 import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
+  OutboxClaimLostError,
   OutboxDispatchResetError,
   OutboxStatusUpdateError,
   updateOutboxStatus,
@@ -243,5 +244,39 @@ describe('order notification outbox status', () => {
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(OutboxStatusUpdateError);
     expect((failure as OutboxStatusUpdateError).outboxId).toBe(row.id);
+  });
+
+  it('reports a lost claim when a correction re-armed the undispatched row', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: { dispatch_started_at: null },
+        error: null,
+      });
+    const supabase = { from: vi.fn(() => builder) };
+
+    const failure = await updateOutboxStatus(supabase as never, row, {
+      status: 'skipped',
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(OutboxClaimLostError);
+    expect((failure as OutboxClaimLostError).outboxId).toBe(row.id);
+  });
+
+  it('escalates a lost claim once dispatch started instead of quiet retry', async () => {
+    const { builder } = createBuilder();
+    builder.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({
+        data: { dispatch_started_at: '2026-10-03T00:00:00Z' },
+        error: null,
+      });
+    const supabase = { from: vi.fn(() => builder) };
+
+    const failure = await updateOutboxStatus(supabase as never, row, {
+      status: 'sent',
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(OutboxStatusUpdateError);
+    expect(failure).not.toBeInstanceOf(OutboxClaimLostError);
   });
 });

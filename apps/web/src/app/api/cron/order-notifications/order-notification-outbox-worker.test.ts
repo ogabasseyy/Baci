@@ -40,6 +40,10 @@ function createSupabase(
         error: null,
       };
     }
+    // Lost-claim classify read: the re-armed row never started dispatch.
+    if (lastSelect === 'dispatch_started_at') {
+      return { data: { dispatch_started_at: null }, error: null };
+    }
     const error = updateErrors.shift();
     return { data: error ? null : { id: row.id }, error: error ?? null };
   });
@@ -271,5 +275,19 @@ describe('order notification outbox worker', () => {
         status: 'skipped',
       })
     );
+  });
+
+  it('ends a superseded skip as a quiet retry when a correction re-armed the row', async () => {
+    const { client, builder } = createSupabase([]);
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    mockNotificationResult({
+      status: 'skipped',
+      reason: 'order_validation_failed',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
+
+    expect(summary).toMatchObject({ sent: 0, skipped: 0, retried: 1 });
   });
 });

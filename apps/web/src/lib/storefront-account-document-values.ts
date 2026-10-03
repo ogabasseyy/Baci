@@ -214,6 +214,10 @@ export function buildOrderItems(
 
     return {
       id: item.id,
+      // Stored line IDs survive deletes (nonsequential): carry the real
+      // value so fulfillment metadata keyed by line_id matches the right
+      // product instead of the positional index.
+      line_id: item.line_id ?? undefined,
       product_id: item.product_id || '',
       condition: item.condition || undefined,
       variant_id: item.variant_id || undefined,

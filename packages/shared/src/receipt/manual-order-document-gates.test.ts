@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isDecimalMoney,
   isManualOrderRecord,
   isSettledManualBalance,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
@@ -89,5 +90,39 @@ describe('manual-order document gates', () => {
         amountPaid: false as unknown as number,
       })
     ).toBe(false);
+  });
+
+  it('counts decimal numbers and canonical decimal strings as money', () => {
+    expect(isDecimalMoney(100)).toBe(true);
+    expect(isDecimalMoney(100.5)).toBe(true);
+    expect(isDecimalMoney('100')).toBe(true);
+    expect(isDecimalMoney('100.50')).toBe(true);
+    expect(isDecimalMoney('-5')).toBe(true);
+    expect(isDecimalMoney(0)).toBe(true);
+  });
+
+  it('rejects non-decimal coercions money columns never produce', () => {
+    expect(isDecimalMoney('0x10')).toBe(false);
+    expect(isDecimalMoney('1e3')).toBe(false);
+    expect(isDecimalMoney(' 100')).toBe(false);
+    expect(isDecimalMoney('100 ')).toBe(false);
+    expect(isDecimalMoney('')).toBe(false);
+    expect(isDecimalMoney(true)).toBe(false);
+    expect(isDecimalMoney(null)).toBe(false);
+    expect(isDecimalMoney(undefined)).toBe(false);
+    expect(isDecimalMoney(Number.NaN)).toBe(false);
+    expect(isDecimalMoney(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+
+  it('refuses to settle hex, exponent, and padded money strings', () => {
+    expect(isSettledManualBalance({ total: '0x10', amountPaid: 100 })).toBe(
+      false
+    );
+    expect(isSettledManualBalance({ total: 100, amountPaid: '1e3' })).toBe(
+      false
+    );
+    expect(isSettledManualBalance({ total: ' 100', amountPaid: 100 })).toBe(
+      false
+    );
   });
 });

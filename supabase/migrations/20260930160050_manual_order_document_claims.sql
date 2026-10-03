@@ -102,11 +102,19 @@ BEGIN
   -- skips and the stale PDF is never corrected. Rotation preserves
   -- claimed_at (redemption serves live data and stays re-openable), so
   -- the customer keeps working access through the fresh link while the
-  -- emailed stale link dies with the rotation.
+  -- emailed stale link dies with the rotation — unless staff corrected
+  -- the order to a different recipient, in which case the stale
+  -- redemption is cleared so the fresh link is not already_used.
   DO UPDATE SET token_hash = EXCLUDED.token_hash,
     customer_id = EXCLUDED.customer_id,
     customer_email = EXCLUDED.customer_email,
     customer_name = EXCLUDED.customer_name,
+    claimed_at = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+      THEN NULL ELSE receipt_claims.claimed_at END,
+    claimed_by_user_id = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+      THEN NULL ELSE receipt_claims.claimed_by_user_id END,
     expires_at = now() + interval '90 days', updated_at = now()
   RETURNING id INTO v_claim_id;
   IF v_claim_id IS NULL THEN RETURN jsonb_build_object('status', 'skipped'); END IF;

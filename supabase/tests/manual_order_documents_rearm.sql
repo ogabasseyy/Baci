@@ -92,3 +92,34 @@ UPDATE public.customers SET deleted_at = now() WHERE id = '10000000-0000-4000-80
 SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer delete alone leaves the skipped row alone');
 UPDATE public.customers SET deleted_at = NULL WHERE id = '10000000-0000-4000-8000-000000000055';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer restore re-arms the skipped row');
+-- A correction landing while a worker holds the row re-arms it: without
+-- this the worker records a terminal skip from its stale read and the
+-- correction is permanently suppressed. Dispatch-started rows stay put.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000067', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000067', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000067' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET notes = 'corrected' WHERE id = '10000000-0000-4000-8000-000000000067';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL AND locked_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000067' AND event_type = 'manual_order_invoice'), 'mid-flight correction re-arms the processing row');
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000067' AND event_type = 'manual_order_invoice';
+-- Split from the claim: the dispatch-boundary trigger clears the marker on
+-- any status transition, so the marker must land in its own update.
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000067' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET notes = 'corrected again' WHERE id = '10000000-0000-4000-8000-000000000067';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND locked_by = 'm2-worker' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000067' AND event_type = 'manual_order_invoice'), 'dispatch-started row survives a mid-flight correction');
+-- A tax correction re-arms an invoice skipped as tax_breakdown_invalid;
+-- other skip reasons keep their own re-arm paths.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000068', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000068', 'Device', 1, 100);
+INSERT INTO public.order_tax_subtotals (order_id, vat_category_code, vat_rate, taxable_amount, tax_amount) VALUES ('10000000-0000-4000-8000-000000000068', 'S', -7.5, 100, -7.5);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'tax_breakdown_invalid', skipped_at = now(), attempt_count = 1 WHERE order_id = '10000000-0000-4000-8000-000000000068' AND event_type = 'manual_order_invoice';
+UPDATE public.order_tax_subtotals SET vat_rate = 7.5, tax_amount = 7.5 WHERE order_id = '10000000-0000-4000-8000-000000000068';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000068' AND event_type = 'manual_order_invoice'), 'tax correction re-arms the skipped invoice');
+-- A payment correction re-arms a receipt skipped as payment_history_invalid.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000069', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000069', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'payment_history_invalid', skipped_at = now(), attempt_count = 1 WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt';
+INSERT INTO public.transactions (id, order_id, transaction_type, amount, status) VALUES ('10000000-0000-4000-8000-000000000c03', '10000000-0000-4000-8000-000000000069', 'payment', 100, 'completed');
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt'), 'payment correction re-arms the skipped receipt');

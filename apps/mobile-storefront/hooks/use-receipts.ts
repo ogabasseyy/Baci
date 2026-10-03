@@ -17,6 +17,14 @@ const log = createLogger('Receipts');
 // Ownership-checked transaction RPC caps each call at 100 order ids.
 const TRANSACTION_RPC_BATCH_SIZE = 100;
 
+// PostgREST numeric columns arrive as decimal strings while the card
+// formats numbers: normalize once here so the card never formats raw
+// unvalidated values. Unparseable totals degrade to 0 instead of NaN.
+function toDisplayMoney(value: unknown): number {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 async function loadReceiptCompletionDates(
   orderIds: string[]
 ): Promise<Map<string, string>> {
@@ -165,7 +173,13 @@ export function useReceipts(userId: string | undefined) {
             }))
             ? 'receipt'
             : 'invoice';
-        return { ...order, items, document_kind };
+        return {
+          ...order,
+          items,
+          document_kind,
+          total: toDisplayMoney(order.total),
+          amount_paid: toDisplayMoney(order.amount_paid),
+        };
       });
 
       // Receipts are dated by their completing payment like the web

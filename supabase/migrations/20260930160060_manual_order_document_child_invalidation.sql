@@ -90,6 +90,46 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_invoice_markers_for_order(uuid)
   FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.rearm_tax_invalid_manual_documents_for_order(p_order_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- A tax correction re-arms rows the worker terminally skipped as
+  -- tax_breakdown_invalid: without this the corrected invoice is never
+  -- emailed. Invoice-scoped like the sender validation; the worker
+  -- re-validates on the next attempt, so a still-invalid breakdown
+  -- simply skips again until staff finish the correction.
+  UPDATE public.order_notification_outbox AS n
+  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+    locked_by = NULL, locked_at = NULL, last_error = NULL,
+    skip_reason = NULL, skipped_at = NULL, updated_at = now()
+  WHERE n.order_id = p_order_id
+    AND n.event_type = 'manual_order_invoice'
+    AND n.status = 'skipped'
+    AND n.skip_reason = 'tax_breakdown_invalid'
+    AND n.dispatch_started_at IS NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.rearm_tax_invalid_manual_documents_for_order(uuid)
+  FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.rearm_payment_invalid_manual_documents_for_order(p_order_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- A payment correction re-arms rows skipped as payment_history_invalid
+  -- the same way: every kind renders the settled-payment table, so both
+  -- events re-arm and the worker re-validates on the next attempt.
+  UPDATE public.order_notification_outbox AS n
+  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+    locked_by = NULL, locked_at = NULL, last_error = NULL,
+    skip_reason = NULL, skipped_at = NULL, updated_at = now()
+  WHERE n.order_id = p_order_id
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    AND n.status = 'skipped'
+    AND n.skip_reason = 'payment_history_invalid'
+    AND n.dispatch_started_at IS NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.rearm_payment_invalid_manual_documents_for_order(uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -99,16 +139,20 @@ BEGIN
   IF TG_OP = 'DELETE' THEN
     PERFORM private.lock_manual_document_gate('order', OLD.order_id);
     PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    PERFORM private.rearm_tax_invalid_manual_documents_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
     PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
     PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    PERFORM private.rearm_tax_invalid_manual_documents_for_order(OLD.order_id);
     PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+    PERFORM private.rearm_tax_invalid_manual_documents_for_order(NEW.order_id);
     RETURN NEW;
   END IF;
   PERFORM private.lock_manual_document_gate('order', NEW.order_id);
   PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
+  PERFORM private.rearm_tax_invalid_manual_documents_for_order(NEW.order_id);
   RETURN NEW;
 END;
 $$;
@@ -156,9 +200,11 @@ BEGIN
   END IF;
   IF v_old_in_snapshot THEN
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
+    PERFORM private.rearm_payment_invalid_manual_documents_for_order(OLD.order_id);
   END IF;
   IF v_new_in_snapshot THEN
     PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+    PERFORM private.rearm_payment_invalid_manual_documents_for_order(NEW.order_id);
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;

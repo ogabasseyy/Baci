@@ -1,4 +1,5 @@
 import {
+  isDecimalMoney,
   isManualOrderRecord,
   isSettledManualBalance,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
@@ -47,15 +48,11 @@ function normalizeStatus(value: unknown): string {
     : '';
 }
 
-// Genuine money only: numbers and numeric strings count, null/NaN fail.
-// Booleans and blank strings coerce through Number() (true -> 1, '' -> 0)
-// exactly like the sender's z.coerce.number() — but the database never
-// produces them for money columns, so only real money promotes here.
+// Genuine money only, shared with the settled-balance predicate: decimal
+// numbers and canonical decimal strings count; hex, exponent, padded,
+// boolean, and blank values fail closed to invoice instead of promoting.
 function isValidMoney(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'boolean') return false;
-  if (typeof value === 'string' && value.trim() === '') return false;
-  return Number.isFinite(Number(value)) && Number(value) >= 0;
+  return isDecimalMoney(value) && Number(value) >= 0;
 }
 
 function hasValidContent(input: ManualReceiptPromotionInput): boolean {
@@ -111,7 +108,11 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
   });
 }
 
-export function isPromotedManualReceipt(
+// Everything promotion needs except the settled balance: the detail
+// loader uses this to tell a deliverable manual invoice (history lookup
+// failure is fatal, like the sender) from an invalid row rendering as an
+// invoice (history lookup failure is tolerated so it can still open).
+export function isPromotableManualDocument(
   input: ManualReceiptPromotionInput
 ): boolean {
   if (
@@ -138,13 +139,17 @@ export function isPromotedManualReceipt(
   if (!PROMOTABLE_PAYMENT_STATUSES.has(normalizeStatus(input.paymentStatus))) {
     return false;
   }
-  if (
-    !isSettledManualBalance({
+  return hasValidContent(input);
+}
+
+export function isPromotedManualReceipt(
+  input: ManualReceiptPromotionInput
+): boolean {
+  return (
+    isPromotableManualDocument(input) &&
+    isSettledManualBalance({
       total: input.total as number | string | null | undefined,
       amountPaid: input.amountPaid as number | string | null | undefined,
     })
-  ) {
-    return false;
-  }
-  return hasValidContent(input);
+  );
 }

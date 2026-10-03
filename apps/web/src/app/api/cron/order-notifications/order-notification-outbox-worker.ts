@@ -11,6 +11,7 @@ import {
   markManualOutboxNotificationSent,
   markOutboxNotificationSent,
   type OrderNotificationOutboxStatus,
+  OutboxClaimLostError,
   OutboxDispatchResetError,
   OutboxStatusUpdateError,
   updateOutboxStatus,
@@ -112,17 +113,18 @@ async function markFailedOrRetry(
   error: string,
   summary: OrderNotificationCronSummary
 ) {
+  // Counts follow the durable write: a superseded attempt (lost claim)
+  // must not count an outcome the row never recorded.
   if (row.attempt_count >= row.max_attempts) {
-    summary.failed += 1;
     await updateOutboxStatus(supabase, row, {
       last_error: error,
       next_attempt_at: null,
       status: 'failed' satisfies OrderNotificationOutboxStatus,
     });
+    summary.failed += 1;
     return;
   }
 
-  summary.retried += 1;
   await updateOutboxStatus(supabase, row, {
     last_error: error,
     next_attempt_at: new Date(
@@ -130,6 +132,7 @@ async function markFailedOrRetry(
     ).toISOString(),
     status: 'pending' satisfies OrderNotificationOutboxStatus,
   });
+  summary.retried += 1;
 }
 
 async function processClaimedRow(
@@ -214,19 +217,27 @@ async function processClaimedRow(
     }
 
     if (result.status === 'skipped') {
-      summary.skipped += 1;
       await markSkipped(supabase, row, result.reason);
+      summary.skipped += 1;
       return;
     }
 
     if (result.deliveryOutcome === 'unknown') {
-      summary.skipped += 1;
       await markDeliveryOutcomeUnknown(supabase, row, result.error);
+      summary.skipped += 1;
       return;
     }
 
     await markFailedOrRetry(supabase, row, result.error, summary);
   } catch (error) {
+    // A staff correction re-armed this row mid-flight: it is re-picked
+    // with fresh data, so this superseded attempt ends as a quiet retry.
+    // Post-send claim loss never lands here — the status writer only
+    // reports a lost claim for undispatched rows and escalates otherwise.
+    if (error instanceof OutboxClaimLostError) {
+      summary.retried += 1;
+      return;
+    }
     if (error instanceof OutboxStatusUpdateError) throw error;
     const message = error instanceof Error ? error.message : 'unknown_error';
     logger.error({
@@ -235,7 +246,12 @@ async function processClaimedRow(
       orderId: row.order_id,
       error,
     });
-    await markFailedOrRetry(supabase, row, message, summary);
+    try {
+      await markFailedOrRetry(supabase, row, message, summary);
+    } catch (retryError) {
+      if (!(retryError instanceof OutboxClaimLostError)) throw retryError;
+      summary.retried += 1;
+    }
   }
 }
 

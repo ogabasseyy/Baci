@@ -90,6 +90,7 @@ export interface StorefrontAccountDocumentOrderRow {
 
 export interface StorefrontAccountDocumentItemRow {
   id: string;
+  line_id?: number | null;
   product_id: string | null;
   condition?: string | null;
   variant_id: string | null;

@@ -71,6 +71,7 @@ describe('isPromotedManualReceipt', () => {
     ['negative vat amount', { vat_amount: -1 }],
     ['negative line id', { line_id: -2 }],
     ['non-numeric vat amount', { vat_amount: 'abc' }],
+    ['hex vat amount', { vat_amount: '0x10' }],
     ['boolean vat amount', { vat_amount: true }],
     ['blank extension', { line_extension_amount: '' }],
     ['infinite extension', { line_extension_amount: Number.POSITIVE_INFINITY }],
@@ -103,6 +104,9 @@ describe('isPromotedManualReceipt', () => {
     ['boolean amount paid', { amountPaid: false }],
     ['blank total', { total: '' }],
     ['whitespace amount paid', { amountPaid: '   ' }],
+    ['hex total', { total: '0x10' }],
+    ['exponent amount paid', { amountPaid: '1e3' }],
+    ['padded total', { total: ' 500' }],
   ])('fails closed for %s rows', (_label, override) => {
     expect(isPromotedManualReceipt(coveredRow(override))).toBe(false);
   });

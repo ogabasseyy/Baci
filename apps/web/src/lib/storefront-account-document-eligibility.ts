@@ -35,6 +35,18 @@ export function isManualOrder(input: {
   return isManualOrderRecord(input);
 }
 
+interface ManualDocumentGatePaymentRow {
+  amount?: unknown;
+  status?: unknown;
+  transaction_type?: unknown;
+}
+
+interface ManualDocumentGateTaxRow {
+  vat_rate?: unknown;
+  taxable_amount?: unknown;
+  tax_amount?: unknown;
+}
+
 interface DocumentEligibilityInput {
   paymentStatus: string | null | undefined;
   shippingStatus: string | null | undefined;
@@ -45,6 +57,23 @@ interface DocumentEligibilityInput {
   amountPaid?: number | string | null;
   money?: ManualDocumentArchiveMoney | null;
   items?: readonly ManualDocumentArchiveItem[] | null;
+  payments?: readonly ManualDocumentGatePaymentRow[] | null;
+  taxSubtotals?: readonly ManualDocumentGateTaxRow[] | null;
+}
+
+// Sender's settled-payment filter, mirrored exactly: the dispatch query
+// matches transaction_type 'payment' with status completed/success, and
+// the renderer coerces each amount with Number(amount ?? 0).
+function isSenderSettledPayment(row: ManualDocumentGatePaymentRow) {
+  return (
+    row.transaction_type === 'payment' &&
+    (row.status === 'completed' || row.status === 'success')
+  );
+}
+
+function isSenderPrintableAmount(value: unknown) {
+  const amount = Number((value as number | string | null) ?? 0);
+  return Number.isFinite(amount) && amount >= 0;
 }
 
 export function isManualOrderDocumentAvailable(
@@ -59,6 +88,28 @@ export function isManualOrderDocumentAvailable(
       total: input.total,
       amountPaid: input.amountPaid,
     });
+  // Child financial rows commit separately too: a settled payment or tax
+  // subtotal the sender rejects must hide the document everywhere, not
+  // just in the email. Payments gate every kind; tax gates invoices only,
+  // mirroring the sender's !isPaid condition (paid label or covered
+  // balance renders a receipt, which prints no tax breakdown). Callers
+  // without child data pass nothing and keep the order/item verdict.
+  const paymentsValid = (input.payments ?? [])
+    .filter(isSenderSettledPayment)
+    .every((row) => isSenderPrintableAmount(row.amount));
+  const invoiceKind =
+    normalizePaymentStatus(input.paymentStatus) !== 'paid' &&
+    !isSettledManualBalance({
+      total: input.total,
+      amountPaid: input.amountPaid,
+    });
+  const taxValid =
+    !invoiceKind ||
+    (input.taxSubtotals ?? []).every((row) =>
+      [row.vat_rate, row.taxable_amount, row.tax_amount].every(
+        isSenderPrintableAmount
+      )
+    );
   return (
     isManualOrderRecord(input) &&
     !['cancelled', 'canceled', 'returned', 'failed'].includes(
@@ -68,6 +119,8 @@ export function isManualOrderDocumentAvailable(
       normalizePaymentStatus(input.paymentStatus)
     ) &&
     paidBalanceSettled &&
+    paymentsValid &&
+    taxValid &&
     // Items commit separately from the order, and staff can save
     // database-permitted invalid values: validate the money breakdown and
     // per-item content through the sender's schemas so the archive never

@@ -41,7 +41,15 @@ const mockQueryBuilder = {
 const mockFrom = jest.fn((_table: string) => mockQueryBuilder);
 // fetchReceiptDetail also reads payment-account/transaction RPCs; resolve them
 // as empty so detail-prefetch tests exercise the query scoping, not the RPCs.
-const mockRpc = jest.fn((_fn: string, _args: unknown) => ({}));
+const mockRpc = jest.fn(
+  async (
+    _fn: string,
+    _args?: unknown
+  ): Promise<{ data: unknown; error: Error | null }> => ({
+    data: undefined,
+    error: null,
+  })
+);
 const mockUseAuthStore = Object.assign(
   jest.fn((selector: (state: MockAuthState) => unknown) =>
     selector(mockAuthState)
@@ -231,5 +239,51 @@ describe('receipt detail loading', () => {
         sellers_item_id: 'SKU-1',
       })
     );
+  });
+
+  // biome-ignore format: compact fixtures preserve the 300-line gate.
+  const partialManualOrder = (overrides: Record<string, unknown> = {}) => ({ id: 'order-9', order_number: 'OG-9', created_at: '2026-05-24T10:00:00.000Z', currency: 'NGN', customer_email: 'ada@example.com', customer_name: 'Ada', customer_phone: null, discount_amount: 0, is_credit_order: false, notes: null, order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 100 }], payment_method: null, payment_status: 'partially_paid', shipping_status: 'processing', shipping_address: null, shipping_fee: 0, subtotal: 100, tax_amount: 0, total: 100, amount_paid: 50, recorded_by_user_id: 'staff-1', import_job_id: null, external_source: null, ...overrides });
+
+  it('fails a partial manual invoice closed when history is unavailable', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({ data: partialManualOrder(), error: null });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') });
+
+    await expect(
+      (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()
+    ).rejects.toThrow('tx down');
+  });
+
+  it('opens zero-progress manual invoices with empty history', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder({ amount_paid: 0 }),
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as { transactions: unknown[] };
+
+    expect(detail.transactions).toEqual([]);
+  });
+
+  it('opens paid-label-but-unsettled manual rows despite history errors', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder({ payment_status: 'paid' }),
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as { transactions: unknown[] };
+
+    expect(detail.transactions).toEqual([]);
   });
 });

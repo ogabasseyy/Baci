@@ -4,6 +4,7 @@ import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types'
 
 export interface StorefrontOrderItem {
   id: string;
+  line_id?: number | null;
   product_id: string;
   product_slug?: string;
   category?: string;

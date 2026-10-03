@@ -27,6 +27,8 @@ DECLARE
   v_order_found boolean;
   v_event text;
   v_payment_status text;
+  v_invoice_marked boolean;
+  v_receipt_marked boolean;
 BEGIN
   -- FOR NO KEY UPDATE still serializes against the claim/mark FOR SHARE
   -- locks but does not conflict with the FOR KEY SHARE locks foreign-key
@@ -37,6 +39,18 @@ BEGIN
   -- FOUND is set by every SQL statement, so capture the lock result
   -- before the reset below overwrites it.
   v_order_found := FOUND;
+  -- Stash the pre-reset in-flight state per event: the reset below
+  -- clears markers before the re-arm runs, so the re-arm must consult
+  -- this snapshot (not the live NULL marker) to spare rows whose send
+  -- was already dispatched.
+  SELECT
+    EXISTS(SELECT 1 FROM public.order_notification_outbox AS s
+      WHERE s.order_id = p_order_id AND s.event_type = 'manual_order_invoice'
+        AND s.status = 'processing' AND s.dispatch_started_at IS NOT NULL),
+    EXISTS(SELECT 1 FROM public.order_notification_outbox AS s
+      WHERE s.order_id = p_order_id AND s.event_type = 'manual_order_receipt'
+        AND s.status = 'processing' AND s.dispatch_started_at IS NOT NULL)
+  INTO v_invoice_marked, v_receipt_marked;
   -- Reset in-flight markers BEFORE any eligibility exit: an edit that
   -- flips the order ineligible (cancel, import attach, contact clear,
   -- last-item delete, unsupported status) must still invalidate the
@@ -82,6 +96,14 @@ BEGIN
   -- A later correction re-arms a terminal row the worker gave up on so the
   -- customer gets the corrected document without staff deleting rows: only
   -- skipped/failed rows that never started dispatch come back to pending.
+  -- A correction landing while a worker holds the row must re-arm it too:
+  -- otherwise the worker records a terminal skip from its stale read and
+  -- the correction has no later trigger to requeue it. Re-arming an
+  -- undispatched processing row is safe — the marker is set atomically
+  -- before provider dispatch, so nothing was sent, and the in-flight
+  -- worker's next guarded write observes the lost claim and stands down.
+  -- The undispatched test consults the pre-reset snapshot above, not the
+  -- live marker: the reset already cleared it by the time this runs.
   -- Sent rows never re-arm (resend stays deliberate), and rows that may
   -- already have dispatched (delivery_outcome_unknown, dispatch started)
   -- stay terminal to preserve at-most-once delivery.
@@ -96,9 +118,13 @@ BEGIN
     DO UPDATE SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
       locked_by = NULL, locked_at = NULL, last_error = NULL,
       skip_reason = NULL, skipped_at = NULL, updated_at = now()
-    WHERE public.order_notification_outbox.status IN ('skipped', 'failed')
-      AND public.order_notification_outbox.dispatch_started_at IS NULL
-      AND public.order_notification_outbox.skip_reason IS DISTINCT FROM 'delivery_outcome_unknown';
+    WHERE public.order_notification_outbox.dispatch_started_at IS NULL
+      AND public.order_notification_outbox.skip_reason IS DISTINCT FROM 'delivery_outcome_unknown'
+      AND (public.order_notification_outbox.status IN ('skipped', 'failed')
+        OR (public.order_notification_outbox.status = 'processing'
+          AND NOT CASE public.order_notification_outbox.event_type
+            WHEN 'manual_order_invoice' THEN v_invoice_marked
+            ELSE v_receipt_marked END));
 END;
 $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid)

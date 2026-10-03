@@ -122,6 +122,63 @@ describe('storefront account document content validity', () => {
     expect(isManualOrderDocumentAvailable(manualInput())).toBe(true);
   });
 
+  it('hides documents with a negative settled payment like the sender', () => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({
+          paymentStatus: 'paid',
+          amountPaid: 100,
+          payments: [
+            {
+              amount: -50,
+              status: 'completed',
+              transaction_type: 'payment',
+            },
+          ],
+        })
+      )
+    ).toBe(false);
+  });
+
+  it('ignores unsettled rows the sender never renders', () => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({
+          payments: [
+            { amount: -50, status: 'pending', transaction_type: 'payment' },
+            { amount: -5, status: 'completed', transaction_type: 'refund' },
+          ],
+        })
+      )
+    ).toBe(true);
+  });
+
+  it('hides invoices with a negative tax subtotal like the sender', () => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({
+          taxSubtotals: [
+            { vat_rate: 7.5, taxable_amount: 100, tax_amount: -7.5 },
+          ],
+        })
+      )
+    ).toBe(false);
+  });
+
+  it('shows receipts despite tax rows the sender skips', () => {
+    expect(
+      isManualOrderDocumentAvailable(
+        manualInput({
+          paymentStatus: 'paid',
+          amountPaid: 100,
+          taxSubtotals: [
+            { vat_rate: -7.5, taxable_amount: 100, tax_amount: 7.5 },
+          ],
+        })
+      )
+    ).toBe(true);
+  });
+
   it.each([
     '',
     '   ',

@@ -15,6 +15,13 @@ export interface OutboxStatusRow {
   claim_owner: string;
 }
 
+// A staff correction re-armed this row mid-flight: undispatched, safely
+// re-picked, so the superseded attempt ends quietly (never a 500).
+// biome-ignore format: compact error preserves the 300-line gate.
+export class OutboxClaimLostError extends Error {
+  constructor(readonly outboxId: string) { super(`Order notification outbox claim was lost for row ${outboxId}`); this.name = 'OutboxClaimLostError'; }
+}
+
 export class OutboxStatusUpdateError extends Error {
   readonly reason: string;
   constructor(
@@ -77,8 +84,22 @@ export async function updateOutboxStatus(
       .select('id')
       .maybeSingle();
     if (!error && data?.id === row.id) return;
+    if (!error) {
+      // Zero rows, no database error: a correction re-armed the row
+      // mid-flight. Classify on the dispatch marker — undispatched rows
+      // are safely re-picked, but a lost claim after dispatch started
+      // must escalate: quiet retry there could double-send.
+      const { data: current, error: classifyError } = await supabase
+        .from('order_notification_outbox')
+        .select('dispatch_started_at')
+        .match({ id: row.id })
+        .maybeSingle();
+      if (!classifyError && current?.dispatch_started_at == null)
+        throw new OutboxClaimLostError(row.id);
+    }
     throw error ?? new Error('order notification claim was lost');
   } catch (error) {
+    if (error instanceof OutboxClaimLostError) throw error;
     logger.error({
       message: 'Failed to update order notification outbox row',
       outboxId: row.id,

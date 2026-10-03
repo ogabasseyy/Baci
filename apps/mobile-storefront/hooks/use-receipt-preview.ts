@@ -128,7 +128,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // which the generator would otherwise prefer. Settled statuses match
     // web resolveManualDocumentReceiptDate exactly.
     const completionDate = isPaidReceipt
-      ? (receiptDetail.transactions ?? [])
+      ? ((receiptDetail.transactions ?? [])
           .filter(
             (txn) =>
               txn.transaction_type === 'payment' &&
@@ -137,7 +137,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
           )
           .map((txn) => txn.created_at as string)
           .sort((left, right) => Date.parse(left) - Date.parse(right))
-          .pop() ?? null
+          .pop() ?? null)
       : null;
     const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {
@@ -163,7 +163,9 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       // generator renders the name unconditionally, so fall back here too
       // instead of crashing on the null the warn-only fetch lets through.
       customer_name:
-        receiptDetail.customer_name || receiptDetail.customer_email || 'Customer',
+        receiptDetail.customer_name ||
+        receiptDetail.customer_email ||
+        'Customer',
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,

@@ -19,9 +19,11 @@ export function isArchiveOrder(order: StorefrontOrder): boolean {
       Boolean(order.manual_document_available)
     );
   }
+  // manual_document_available is intentionally absent here: the API only
+  // sets it for manual orders (handled above), so honoring it for
+  // non-manual rows would advertise a download on inconsistent data.
   return (
     Boolean(order.receipt_eligible) ||
-    Boolean(order.manual_document_available) ||
     ARCHIVE_STATUSES.has(normalizeShippingStatus(order.shipping_status)) ||
     order.payment_method === 'invoice' ||
     order.paymentMethod === 'invoice'

@@ -264,7 +264,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160060_manual_order_document_child_invalidation.sql',
-    sha256: 'a8f75dcab206097dfeabcbdc72b1d46672df763e750c8761474161b68f5f12fa',
+    sha256: 'c69ef5370337dd4b9e95218af2226ed864c88382a27c2812e3f02f569365a23f',
   },
   {
     repositoryPath:
@@ -284,7 +284,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
-    sha256: 'ccdb98cf5967042426d7e002fd072527cac8c1d05a2e29c0161d14f7d13ff80f',
+    sha256: '2259b2a75be5210230da23b52facf6cca19452c10eb03370965cdc3358d56537',
   },
 ]
   .sort((left, right) =>

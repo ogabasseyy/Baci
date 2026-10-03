@@ -20,17 +20,43 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_document_markers_for_order(uuid)
   FROM PUBLIC, anon, authenticated;
+-- Pure-INSERT serialization: an uncommitted child insert is invisible to
+-- the mark aggregates while its trigger's marker-qualified reset matches
+-- nothing, so each trigger below locks the order (FOR NO KEY UPDATE,
+-- mirroring the enqueue path) before resetting. The mark RPC holds the
+-- same row FOR SHARE, so insert and mark serialize in commit order and
+-- the aggregates always see the insert. Hot-path early returns stay
+-- lock-free: writes outside the snapshot cannot affect the comparison.
+CREATE OR REPLACE FUNCTION private.lock_manual_document_rows_for_order(p_order_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM 1 FROM public.orders AS o WHERE o.id = p_order_id FOR NO KEY UPDATE;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.lock_manual_document_rows_for_order(uuid)
+  FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.lock_manual_document_rows_for_merchant(p_merchant_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM 1 FROM public.merchants AS m WHERE m.id = p_merchant_id FOR NO KEY UPDATE;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.lock_manual_document_rows_for_merchant(uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- Tax writes are rebuilds: any of them can change the snapshotted rows.
   IF TG_OP = 'DELETE' THEN
+    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
+    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
   END IF;
+  PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
   PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
@@ -66,6 +92,13 @@ BEGIN
     AND OLD.order_id IS NOT DISTINCT FROM NEW.order_id THEN
     RETURN NEW;
   END IF;
+  -- Lock the entered order: the mark RPC locks only snapshotted rows, so
+  -- an insert, an unsettled-to-settled flip, or a cross-order move would
+  -- otherwise slip an uncommitted payment past the aggregates. Snapshotted
+  -- updates and deletes already block on the RPC's row locks.
+  IF v_new_in_snapshot THEN
+    PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
+  END IF;
   IF v_old_in_snapshot THEN
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
   END IF;
@@ -84,14 +117,18 @@ CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_payment_account_wr
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- Any account write can change the preferred pick, so every write
-  -- resets; assignments are rare admin operations.
+  -- locks and resets; assignments are rare admin operations. (The mark
+  -- RPC locks only the picked row, so unlike tax, updates here lock too.)
   IF TG_OP = 'DELETE' THEN
+    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
+    PERFORM private.lock_manual_document_rows_for_order(OLD.order_id);
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
   END IF;
+  PERFORM private.lock_manual_document_rows_for_order(NEW.order_id);
   PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
@@ -128,9 +165,11 @@ BEGIN
     RETURN NEW;
   END IF;
   IF TG_OP <> 'DELETE' AND NEW.is_primary = true AND NEW.status = 'active' THEN
+    PERFORM private.lock_manual_document_rows_for_merchant(NEW.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
   END IF;
   IF TG_OP <> 'INSERT' AND OLD.is_primary = true AND OLD.status = 'active' THEN
+    PERFORM private.lock_manual_document_rows_for_merchant(OLD.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;

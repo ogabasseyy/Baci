@@ -63,6 +63,15 @@ describe('send manual order document dispatch snapshots', () => {
     });
   });
 
+  it('snapshots the fallback claim-link slug in the dispatch marker', async () => {
+    const db = database({}, { merchantOverride: { slug: 'shop' } });
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({ p_merchant_slug: 'shop' });
+  });
+
   it('snapshots the rendered payment instructions in the dispatch marker', async () => {
     const db = database(
       { payment_status: 'partially_paid', amount_paid: 100000 },

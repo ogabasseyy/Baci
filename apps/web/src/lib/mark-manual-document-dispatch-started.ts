@@ -68,6 +68,7 @@ export interface DispatchMerchantIdentitySnapshot {
   supportEmail: string | null;
   supportPhone: string | null;
   phone: string | null;
+  slug: string | null;
 }
 
 export interface DispatchTaxSubtotal {
@@ -206,6 +207,7 @@ export async function markManualDocumentDispatchStarted(
       p_merchant_support_email: merchant.supportEmail,
       p_merchant_support_phone: merchant.supportPhone,
       p_merchant_phone: merchant.phone,
+      p_merchant_slug: merchant.slug,
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');
@@ -227,6 +229,7 @@ export interface DispatchMerchantRow {
   support_email: string | null;
   support_phone: string | null;
   phone: string | null;
+  slug: string | null;
 }
 
 /**
@@ -267,6 +270,7 @@ export async function persistManualDocumentDispatch(
         supportEmail: merchant.support_email,
         supportPhone: merchant.support_phone,
         phone: merchant.phone,
+        slug: merchant.slug,
       },
       claimDomain
     );

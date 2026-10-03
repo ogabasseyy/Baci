@@ -11,11 +11,14 @@ const baseOrder = {
 } as StorefrontOrder;
 
 describe('isArchiveOrder', () => {
-  it('includes receipt-eligible and manual-document orders', () => {
+  it('includes receipt-eligible orders', () => {
     expect(isArchiveOrder({ ...baseOrder, receipt_eligible: true })).toBe(true);
+  });
+
+  it('ignores the manual flag on non-manual orders', () => {
     expect(
       isArchiveOrder({ ...baseOrder, manual_document_available: true })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('includes shipped, delivered, and invoice-method orders', () => {

@@ -1,5 +1,7 @@
 import type { ReceiptOrder } from '@baci/shared';
 import { formatCanonicalProductConditionLabel } from '@baci/shared/lib';
+import { isArchiveOrder } from '@/app/(storefront)/[slug]/(customer)/receipts/archive-order-filter';
+import type { StorefrontOrder } from '@/types/storefront-order';
 import { formatReceiptListDate } from '../receipt-list-date';
 
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
@@ -125,97 +127,104 @@ export async function fetchReceiptListItems(
       'Customer'
     : 'Customer';
 
-  return data.orders.map((order: Record<string, unknown>) => {
-    const items = (order.items as Array<Record<string, unknown>>) ?? [];
-    const currency = (order.currency as string) || 'NGN';
-    const total = Number(order.total) || 0;
-    const amountPaid = Number(order.amount_paid ?? total);
-    const paymentStatus = (order.payment_status as string) || 'unpaid';
-    const firstProductName = getReceiptItemDisplayName(items[0]);
-    const additionalDeviceCount = getAdditionalDeviceCount(items);
+  // Fail unavailable documents closed like the standard archive: without
+  // this, an invalid manual order renders a View action for a document the
+  // routes cannot serve. The API rows carry the same eligibility flags.
+  return data.orders
+    .filter((order: Record<string, unknown>) =>
+      isArchiveOrder(order as unknown as StorefrontOrder)
+    )
+    .map((order: Record<string, unknown>) => {
+      const items = (order.items as Array<Record<string, unknown>>) ?? [];
+      const currency = (order.currency as string) || 'NGN';
+      const total = Number(order.total) || 0;
+      const amountPaid = Number(order.amount_paid ?? total);
+      const paymentStatus = (order.payment_status as string) || 'unpaid';
+      const firstProductName = getReceiptItemDisplayName(items[0]);
+      const additionalDeviceCount = getAdditionalDeviceCount(items);
 
-    const formatCurrency = (val: number) =>
-      getCurrencyFormatter(currency).format(val);
+      const formatCurrency = (val: number) =>
+        getCurrencyFormatter(currency).format(val);
 
-    // The modal and print renderer infer the document from payment_status;
-    // a settled manual balance reports kind receipt under a non-paid label,
-    // so normalize the renderer input to match the emailed/downloaded kind.
-    // The list badge below keeps the truthful staff-facing label.
-    const rendererPaymentStatus =
-      (order.current_document_kind as string) === 'receipt'
-        ? 'paid'
-        : paymentStatus;
+      // The modal and print renderer infer the document from payment_status;
+      // a settled manual balance reports kind receipt under a non-paid label,
+      // so normalize the renderer input to match the emailed/downloaded kind.
+      // The list badge below keeps the truthful staff-facing label.
+      const rendererPaymentStatus =
+        (order.current_document_kind as string) === 'receipt'
+          ? 'paid'
+          : paymentStatus;
 
-    // The orders API resolves unpaid invoice-method orders to Peppol type
-    // 325 (proforma); carry that kind so the modal labels and prints the
-    // emailed proforma instead of an ordinary invoice. Settled orders keep
-    // the commercial receipt even if a stale 325 travels with them.
-    const documentKind =
-      (order.invoice_type_code as string) === '325' &&
-      rendererPaymentStatus !== 'paid'
-        ? 'proforma'
-        : null;
+      // The orders API resolves unpaid invoice-method orders to Peppol type
+      // 325 (proforma); carry that kind so the modal labels and prints the
+      // emailed proforma instead of an ordinary invoice. Settled orders keep
+      // the commercial receipt even if a stale 325 travels with them.
+      const documentKind =
+        (order.invoice_type_code as string) === '325' &&
+        rendererPaymentStatus !== 'paid'
+          ? 'proforma'
+          : null;
 
-    const rawOrder: ReceiptOrder = {
-      order_number:
-        (order.order_number as string) ||
-        String(order.id).slice(0, 8).toUpperCase(),
-      created_at: order.created_at as string,
-      transaction_date: order.transaction_date as string | null | undefined,
-      invoice_issue_date: order.invoice_issue_date as string | null | undefined,
-      currency,
-      total,
-      subtotal: Number(order.subtotal ?? total),
-      shipping_fee: Number(order.shipping_fee ?? 0),
-      tax_amount: Number(order.tax_amount ?? 0),
-      discount_amount: Number(order.discount_amount ?? 0),
-      amount_paid: amountPaid,
-      balance: Number(order.balance ?? total - amountPaid),
-      payment_status: rendererPaymentStatus,
-      payment_method: (order.payment_method as string) ?? null,
-      is_credit_order: (order.is_credit_order as boolean) ?? false,
-      customer_name: customerName,
-      customer_email: customer?.email || '',
-      customer_phone: customer?.phone ?? null,
-      shipping_address:
-        (order.shipping_address as ReceiptOrder['shipping_address']) ?? null,
-      virtual_account:
-        (order.virtual_account as ReceiptOrder['virtual_account']) ?? null,
-      fulfillment_details:
-        (order.fulfillment_details as ReceiptOrder['fulfillment_details']) ??
-        null,
-      items: items.map((item) => ({
-        product_name: getReceiptItemName(item),
-        variant_name: getReceiptItemVariantName(item) || undefined,
-        quantity: getReceiptItemQuantity(item),
-        price: Number(item.price) || 0,
-      })),
-    };
+      const rawOrder: ReceiptOrder = {
+        order_number:
+          (order.order_number as string) ||
+          String(order.id).slice(0, 8).toUpperCase(),
+        created_at: order.created_at as string,
+        transaction_date: order.transaction_date as string | null | undefined,
+        invoice_issue_date: order.invoice_issue_date as string | null | undefined,
+        currency,
+        total,
+        subtotal: Number(order.subtotal ?? total),
+        shipping_fee: Number(order.shipping_fee ?? 0),
+        tax_amount: Number(order.tax_amount ?? 0),
+        discount_amount: Number(order.discount_amount ?? 0),
+        amount_paid: amountPaid,
+        balance: Number(order.balance ?? total - amountPaid),
+        payment_status: rendererPaymentStatus,
+        payment_method: (order.payment_method as string) ?? null,
+        is_credit_order: (order.is_credit_order as boolean) ?? false,
+        customer_name: customerName,
+        customer_email: customer?.email || '',
+        customer_phone: customer?.phone ?? null,
+        shipping_address:
+          (order.shipping_address as ReceiptOrder['shipping_address']) ?? null,
+        virtual_account:
+          (order.virtual_account as ReceiptOrder['virtual_account']) ?? null,
+        fulfillment_details:
+          (order.fulfillment_details as ReceiptOrder['fulfillment_details']) ??
+          null,
+        items: items.map((item) => ({
+          product_name: getReceiptItemName(item),
+          variant_name: getReceiptItemVariantName(item) || undefined,
+          quantity: getReceiptItemQuantity(item),
+          price: Number(item.price) || 0,
+        })),
+      };
 
-    const statusLabel =
-      paymentStatus === 'paid'
-        ? 'Paid'
-        : paymentStatus === 'partially_paid'
-          ? 'Partially Paid'
-          : 'Unpaid';
+      const statusLabel =
+        paymentStatus === 'paid'
+          ? 'Paid'
+          : paymentStatus === 'partially_paid'
+            ? 'Partially Paid'
+            : 'Unpaid';
 
-    return {
-      id: order.id as string,
-      order_number: rawOrder.order_number,
-      date: formatReceiptListDate(
-        (order.invoice_issue_date as string | null | undefined) ||
-          (order.transaction_date as string | null | undefined) ||
-          (order.created_at as string)
-      ),
-      total: formatCurrency(total),
-      status: statusLabel,
-      paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],
-      documentKind,
-      balance: formatCurrency(Math.max(0, total - amountPaid)),
-      firstProductName,
-      firstProductImage: getReceiptItemImage(items[0]),
-      additionalDeviceCount,
-      rawOrder,
-    } satisfies ReceiptListItem;
-  });
+      return {
+        id: order.id as string,
+        order_number: rawOrder.order_number,
+        date: formatReceiptListDate(
+          (order.invoice_issue_date as string | null | undefined) ||
+            (order.transaction_date as string | null | undefined) ||
+            (order.created_at as string)
+        ),
+        total: formatCurrency(total),
+        status: statusLabel,
+        paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],
+        documentKind,
+        balance: formatCurrency(Math.max(0, total - amountPaid)),
+        firstProductName,
+        firstProductImage: getReceiptItemImage(items[0]),
+        additionalDeviceCount,
+        rawOrder,
+      } satisfies ReceiptListItem;
+    });
 }

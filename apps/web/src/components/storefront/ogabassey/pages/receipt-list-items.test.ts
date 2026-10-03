@@ -28,6 +28,9 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
     currency: 'NGN',
     payment_status: 'paid',
     payment_method: 'card',
+    // A realistic archived legacy order: the list filters through the
+    // standard archive predicate before mapping.
+    shipping_status: 'shipped',
     items: [
       {
         id: 'item-1',
@@ -122,5 +125,25 @@ describe('fetchReceiptListItems', () => {
 
     expect(item.total).toBe(ngnItem.total);
     expect(item.balance).toBe(ngnItem.balance);
+  });
+
+  it('filters unavailable manual documents before mapping', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        id: 'order-unavailable',
+        is_manual_order: true,
+        manual_document_available: false,
+        receipt_eligible: false,
+      }),
+      baseOrder({
+        id: 'order-available',
+        is_manual_order: true,
+        manual_document_available: true,
+        receipt_eligible: false,
+      }),
+    ]);
+
+    const items = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(items.map((item) => item.id)).toEqual(['order-available']);
   });
 });

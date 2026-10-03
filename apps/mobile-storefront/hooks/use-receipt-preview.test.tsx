@@ -210,6 +210,29 @@ describe('useReceiptPreview document kind', () => {
     );
   });
 
+  it('opens a covered manual balance as the emailed receipt', () => {
+    // Staff-recorded orders keep non-paid labels despite full coverage;
+    // the app link on the emailed receipt must open a receipt, not an
+    // invoice (mirrors web isReceiptEligible).
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'pending',
+      total: 500,
+      amount_paid: 500,
+      recorded_by_user_id: 'staff-1',
+      import_job_id: null,
+      external_source: null,
+    };
+    const covered = renderHook(() => useReceiptPreview());
+    act(() => {
+      covered.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(covered.result.current.documentKind).toBe('receipt');
+    expect(covered.result.current.html).toContain(
+      '<div class="doc-title">Receipt</div>'
+    );
+  });
+
   it('reports the effective kind the artifact was built with', () => {
     // Derived proforma: modal chrome must read proforma, not commercial.
     mockReceiptDetail = unpaidProformaDetail('NGN');

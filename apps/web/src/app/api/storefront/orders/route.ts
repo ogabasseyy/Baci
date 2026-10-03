@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
           quantity,
           price,
           has_assurance,
+          assurance_fee,
           products:products!order_items_product_id_fkey (
             slug,
             category,

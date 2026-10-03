@@ -193,7 +193,7 @@ describe('send manual order document dispatch snapshots', () => {
           amount: 450000,
           created_at: '2026-09-30T09:00:00Z',
           description: 'balance',
-          metadata: null,
+          metadata: { payment_method: null },
         },
       ],
     });

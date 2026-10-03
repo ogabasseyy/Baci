@@ -194,40 +194,17 @@ BEGIN
   END IF;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-    'id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price,
-    'variant_name', oi.variant_name, 'condition', oi.condition,
-    'item_description', oi.item_description, 'line_id', oi.line_id,
-    'unit_code', oi.unit_code,
-    'line_extension_amount', oi.line_extension_amount,
-    'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate,
-    'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id
-  ) ORDER BY oi.id), '[]'::jsonb) INTO v_items
-  FROM public.order_items AS oi
-  WHERE oi.order_id = v_order.id;
-  -- Both sides sort tax rows by id (uuid text order matches byte
-  -- order), so the canonical order is collation-independent.
+  -- Snapshot field selection must stay in lockstep with the sender in
+  -- apps/web/src/lib/manual-order-document-dispatch-items.ts.
+  SELECT private.manual_document_item_snapshot(v_order.id) INTO v_items;
   SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-    'vat_category_code', ts.vat_category_code, 'vat_rate', ts.vat_rate,
-    'taxable_amount', ts.taxable_amount, 'tax_amount', ts.tax_amount,
-    'exemption_reason', ts.exemption_reason
-  ) ORDER BY ts.id), '[]'::jsonb) INTO v_tax_subtotals
-  FROM public.order_tax_subtotals AS ts
-  WHERE ts.order_id = v_order.id;
-  -- Settled-status filter mirrors the sender exactly: a row flipping
-  -- out changes the count and aborts; unsettled rows never count.
+  SELECT private.manual_document_tax_snapshot(v_order.id) INTO v_tax_subtotals;
   SELECT count(*) INTO v_txn_count FROM public.transactions AS t
   WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
     AND t.status IN ('completed', 'success');
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-    'amount', t.amount, 'created_at', t.created_at,
-    'description', t.description, 'metadata', t.metadata
-  ) ORDER BY t.id), '[]'::jsonb) INTO v_transactions
-  FROM public.transactions AS t
-  WHERE t.order_id = v_order.id AND t.transaction_type = 'payment'
-    AND t.status IN ('completed', 'success');
+  SELECT private.manual_document_transaction_snapshot(v_order.id)
+  INTO v_transactions;
   IF v_order.customer_id IS DISTINCT FROM p_customer_id
     OR lower(trim(both from COALESCE(v_order.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(p_customer_email, '')))
     OR v_order.customer_name IS DISTINCT FROM p_customer_name

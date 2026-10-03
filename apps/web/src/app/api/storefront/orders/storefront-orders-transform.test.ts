@@ -88,6 +88,28 @@ describe('transformStorefrontOrdersForDisplay', () => {
     ]);
   });
 
+  it('projects item assurance fees for the preview lines', () => {
+    const [entry] = transformStorefrontOrdersForDisplay(
+      [
+        {
+          id: 'order-3',
+          order_items: [
+            {
+              id: 'item-9',
+              name: 'Pixel 10 Pro XL',
+              quantity: 1,
+              price: 150000,
+              assurance_fee: 15000,
+            },
+          ],
+        },
+      ],
+      { transactionsByOrderId: new Map(), paymentAccountsByOrderId: new Map() }
+    );
+
+    expect(entry.items[0]).toMatchObject({ assurance_fee: 15000 });
+  });
+
   it('selects null when the order has no completion transaction', () => {
     const [entry] = transformStorefrontOrdersForDisplay(
       [{ id: 'order-2', total: 5000, amount_paid: 0 }],

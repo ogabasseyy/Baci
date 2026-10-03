@@ -119,10 +119,13 @@ BEGIN
   IF NOT v_old_in_snapshot AND NOT v_new_in_snapshot THEN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
+  -- Metadata compares on payment_method only: the PDF renders no other
+  -- metadata key, so a webhook enrichment landing after the dispatch
+  -- marker must not reset it into a corrective duplicate-send retry.
   IF v_old_in_snapshot AND v_new_in_snapshot
     AND OLD.amount IS NOT DISTINCT FROM NEW.amount
     AND OLD.description IS NOT DISTINCT FROM NEW.description
-    AND OLD.metadata IS NOT DISTINCT FROM NEW.metadata
+    AND (OLD.metadata->>'payment_method') IS NOT DISTINCT FROM (NEW.metadata->>'payment_method')
     AND OLD.created_at IS NOT DISTINCT FROM NEW.created_at
     AND OLD.order_id IS NOT DISTINCT FROM NEW.order_id THEN
     RETURN NEW;

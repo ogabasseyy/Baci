@@ -179,12 +179,20 @@ export async function markManualDocumentDispatchStarted(
       p_txn_count: transactions.length,
       p_transactions: [...transactions]
         .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        .map((txn) => ({
-          amount: txn.amount,
-          created_at: txn.created_at,
-          description: txn.description,
-          metadata: txn.metadata,
-        })),
+        .map((txn) => {
+          // Narrowed to the rendered key like the server snapshot (->>
+          // parity): webhook enrichments must not stale the comparison.
+          const paymentMethod = txn.metadata?.payment_method;
+          return {
+            amount: txn.amount,
+            created_at: txn.created_at,
+            description: txn.description,
+            metadata: {
+              payment_method:
+                paymentMethod == null ? null : String(paymentMethod),
+            },
+          };
+        }),
       p_merchant_business_name: merchant.businessName,
       p_merchant_legal_entity_name: merchant.legalEntityName,
       p_merchant_business_address: merchant.businessAddress,

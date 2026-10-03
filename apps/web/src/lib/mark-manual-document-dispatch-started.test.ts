@@ -43,6 +43,7 @@ const order = {
       variant_name: null,
       condition: 'new',
       item_description: 'Sealed box',
+      assurance_fee: 15000,
       line_id: 3,
       unit_code: 'EA',
       line_extension_amount: 95,
@@ -84,7 +85,10 @@ const transactions = [
     amount: 50000,
     created_at: '2026-09-29T09:00:00+00:00',
     description: null,
-    metadata: { payment_method: 'bank_transfer' },
+    metadata: {
+      payment_method: 'bank_transfer',
+      webhook_id: 'wh_enrichment_ignored',
+    },
   },
 ];
 const payment = {
@@ -196,6 +200,7 @@ describe('markManualDocumentDispatchStarted', () => {
           variant_name: null,
           condition: 'new',
           item_description: 'Sealed box',
+          assurance_fee: 15000,
           line_id: 3,
           unit_code: 'EA',
           line_extension_amount: 95,
@@ -234,7 +239,7 @@ describe('markManualDocumentDispatchStarted', () => {
           amount: 50000,
           created_at: '2026-09-30T09:00:00+00:00',
           description: 'balance',
-          metadata: null,
+          metadata: { payment_method: null },
         },
       ],
     });

@@ -47,21 +47,29 @@ export async function fetchRefinedProductsPage(
   const rows = new Map(
     ((raw ?? []) as Record<string, unknown>[]).map((row) => [row.id, row])
   );
-  const products = matches.map((match) => {
+  // A matched row can vanish between the RPC snapshot and this read
+  // (deactivated, unpublished, or RLS-filtered mid-request). Skip it and
+  // render the surviving matches, mirroring web: failing the whole page
+  // over one stale id is worse than a self-healing off-by-one total.
+  const products = matches.flatMap((match) => {
     const row = rows.get(match.productId);
-    if (!row) throw new Error('Search results changed; try again');
+    if (!row) return [];
     const product = transformProduct(row);
     if (!product) throw new Error('Search results unavailable');
-    return {
-      ...product,
-      price: match.price ?? product.price,
-      condition:
-        normalizeProductConditionFilterValue(match.condition) ??
-        product.condition,
-      searchMatch: match,
-    };
+    return [
+      {
+        ...product,
+        price: match.price ?? product.price,
+        condition:
+          normalizeProductConditionFilterValue(match.condition) ??
+          product.condition,
+        searchMatch: match,
+      },
+    ];
   });
-  const total = matches[0].total;
+  // Total minus rows that vanished mid-read: the RPC snapshot total
+  // overcounts the visible page by exactly the skipped rows.
+  const total = matches[0].total - (matches.length - products.length);
   return {
     products,
     total,

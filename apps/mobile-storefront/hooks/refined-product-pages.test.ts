@@ -92,6 +92,29 @@ describe('refined native pages', () => {
       searchMatch: { variantId: 'v1' },
     });
   });
+  it('skips matches whose rows vanished instead of failing the page', async () => {
+    mockRpc.mockResolvedValue({
+      data: [
+        { product_id: 'p1', total_count: 2 },
+        { product_id: 'p2', total_count: 2 },
+      ],
+      error: null,
+    });
+    mockRead.mockResolvedValue({
+      data: [{ id: 'p1', price: 500 }],
+      error: null,
+    });
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      20,
+      0
+    );
+    expect(result.products.map((p) => p.id)).toEqual(['p1']);
+    expect(result.total).toBe(1);
+    expect(result.nextOffset).toBeNull();
+  });
   it('does not silently fall back when the new contract fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
     await expect(

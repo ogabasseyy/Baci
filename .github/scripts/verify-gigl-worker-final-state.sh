@@ -27,7 +27,11 @@ response="$(curl --fail-with-body --silent --show-error -X POST \
   exit 1
 }
 
-if ! jq -e 'type == "array" and length == 1 and .[0].login == false and .[0].has_password == false and .[0].hooks == 1 and .[0].active_hook == 1 and .[0].grants == 1' >/dev/null 2>&1 <<<"$response"; then
+# NOTE: count(*) is bigint/int8, which postgres-meta serializes as a JSON
+# STRING ("1"), while other shapes (and older API behavior) yield a JSON
+# number. Normalize with tonumber so both shapes verify; a missing or
+# non-numeric value errors the filter and fails closed below.
+if ! jq -e 'type == "array" and length == 1 and .[0].login == false and .[0].has_password == false and (.[0].hooks | tonumber) == 1 and (.[0].active_hook | tonumber) == 1 and (.[0].grants | tonumber) == 1' >/dev/null 2>&1 <<<"$response"; then
   echo "::error::GIGL worker is not in least-privilege final state (expected NOLOGIN, no password, scope hook installed and active, authenticator grant); refusing to proceed." >&2
   exit 1
 fi

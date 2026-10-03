@@ -148,6 +148,18 @@ describe('production cache-invalidation drain rollout gate', () => {
       /tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
     );
     assert.match(deployment, /needs: \[[^\]]*vps-drain-readiness[^\]]*\]/);
+    // The pre-publish overlap check is the correctness backstop for
+    // the deploy.sh serialization: it must run the script immediately
+    // before the publish, with Actions-variable read permission.
+    assert.match(
+      deployment,
+      /run: \.github\/scripts\/refuse-publish-on-promote-overlap\.sh/
+    );
+    assert.ok(
+      deployment.indexOf('refuse-publish-on-promote-overlap.sh') <
+        deployment.indexOf('Deploy to Vercel (with retry)')
+    );
+    assert.match(deployment, /^ {6}actions: read$/m);
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
     assert.match(

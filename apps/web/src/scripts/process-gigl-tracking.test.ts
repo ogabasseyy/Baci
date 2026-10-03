@@ -175,6 +175,59 @@ describe('process-gigl-tracking', () => {
     );
   });
 
+  it('fails the run when every claimed monitor failed', async () => {
+    // A total provider outage surfaces as ok:true with
+    // failed === claimed; exiting 0 would log "completed" and hide the
+    // outage from the dead-man log check.
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCli({
+        env: configuredEnv,
+        logger,
+        runBatch: vi.fn().mockResolvedValue({
+          ok: true,
+          summary: {
+            applied: 0,
+            claimed: 3,
+            failed: 3,
+            paused: 0,
+            success: true,
+          },
+        }),
+      })
+    ).resolves.toBe(1);
+
+    expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] failed');
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it('succeeds an empty batch with nothing claimed', async () => {
+    const logger = { error: vi.fn(), info: vi.fn() };
+
+    await expect(
+      runGiglTrackingCli({
+        env: configuredEnv,
+        logger,
+        runBatch: vi.fn().mockResolvedValue({
+          ok: true,
+          summary: {
+            applied: 0,
+            claimed: 0,
+            failed: 0,
+            paused: 0,
+            success: true,
+          },
+        }),
+      })
+    ).resolves.toBe(0);
+
+    expect(logger.info).toHaveBeenCalledWith(
+      '[gigl-tracking] completed',
+      expect.any(String)
+    );
+  });
+
   it('fails generically when the monitor batch returns a bounded failure', async () => {
     const logger = { error: vi.fn(), info: vi.fn() };
 

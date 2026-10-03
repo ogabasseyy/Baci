@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -38,6 +39,14 @@ const crontabSource = join(
   dirname(fileURLToPath(import.meta.url)),
   'remediation_cron_transition_crontab.py'
 );
+const dotenvSource = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+  '.github',
+  'scripts',
+  'gigl-dotenv.sh'
+);
 export function runTransition(scenario) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-cron-transition-'));
   const binDirectory = join(directory, 'bin');
@@ -58,16 +67,18 @@ export function runTransition(scenario) {
   mkdirSync(join(remoteDirectory, 'lib'), { recursive: true });
   mkdirSync(procRoot);
   mkdirSync(transitionTmpDirectory);
-  if (
-    scenario === 'custom-global-lock' ||
-    scenario === 'custom-global-lock-export'
-  ) {
-    writeFileSync(
-      join(remoteDirectory, '.env'),
-      scenario === 'custom-global-lock-export'
-        ? 'export BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/custom-global.lock # comment\n'
-        : '  BACI_REMEDIATION_GLOBAL_LOCK_PATH = "locks/custom-global.lock" # comment\n'
-    );
+  const customLockEnv = {
+    'custom-global-lock':
+      '  BACI_REMEDIATION_GLOBAL_LOCK_PATH = "locks/custom-global.lock" # comment\n',
+    'custom-global-lock-export':
+      'export BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/custom-global.lock # comment\n',
+    'custom-global-lock-colon':
+      'BACI_REMEDIATION_GLOBAL_LOCK_PATH: locks/custom-global.lock\n',
+    'custom-global-lock-duplicate':
+      'BACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/stale-global.lock\nBACI_REMEDIATION_GLOBAL_LOCK_PATH=locks/custom-global.lock\n',
+  };
+  if (scenario in customLockEnv) {
+    writeFileSync(join(remoteDirectory, '.env'), customLockEnv[scenario]);
   }
   writeStage(
     stageDirectory,
@@ -75,6 +86,10 @@ export function runTransition(scenario) {
     transactionSource,
     crontabSource
   );
+  // Mirror prepare-worker-release.sh: the transition sources the
+  // shared dotenv reader from the staged bin.
+  mkdirSync(join(stageDirectory, 'bin'), { recursive: true });
+  copyFileSync(dotenvSource, join(stageDirectory, 'bin', 'gigl-dotenv.sh'));
   if (scenario === 'partial-stage') {
     rmSync(join(stageDirectory, 'jobs', 'sentry-mobile-error-remediator.mjs'));
   }

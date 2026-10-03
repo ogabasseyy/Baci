@@ -99,6 +99,25 @@ claim call fails before any write. Moving the flip itself
 post-migration (a workflow flip job) would close even the loud window
 and is tracked as a follow-up, not this cutover.
 
+## deploy.sh / workflow serialization
+
+Manual promotion and the production deploy workflow are mutually
+exclusive across the GitHub API, in both directions:
+
+- `deploy.sh` refuses to promote while any main-branch deploy run is
+  in flight (checked before staging for fail-fast, and again
+  immediately before the flip). Override: set
+  `BACI_DEPLOY_WORKFLOW_REPO=owner/repo` when origin is unresolvable,
+  or `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` in an emergency (then re-run
+  the smoke/latch sequence and confirm the published revision).
+- Every promote records `<sha>:<in-flight-run-ids>` in the
+  `GIGL_WORKER_PROMOTE_RECORD` repo variable (created automatically
+  on first promote). The workflow's last pre-publish step refuses to
+  publish when its own run id is in that record — so even a run that
+  was invisible to the pre-promote query cannot publish off a stale
+  latch/SHA read. Recovery is re-running the workflow off fresh
+  reads; run ids (not timestamps) mean the record never goes stale.
+
 ## Scoped GIGL process environment
 
 The shared worker `.env` holds every worker's secrets, but the

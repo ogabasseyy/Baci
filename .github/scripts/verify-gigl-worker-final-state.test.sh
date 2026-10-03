@@ -65,6 +65,30 @@ check 'pins the exact hook setting value' 0 "$?"
 if grep -q '\$role' "$fixture_root/queries.log"; then literal=0; else literal=1; fi
 check 'leaves no uninterpolated jq variable in SQL' 1 "$literal"
 
+# Production shape: postgres-meta serializes count(*) bigint as JSON
+# strings. The numeric fixtures above must keep passing too (older API
+# behavior and non-meta backends yield numbers).
+if run_verifier '[{"login":false,"has_password":false,"hooks":"1","active_hook":"1","grants":"1"}]'; then
+  status=0
+else
+  status=$?
+fi
+check 'accepts string-serialized counts' 0 "$status"
+
+if run_verifier '[{"login":false,"has_password":false,"hooks":"1","active_hook":"0","grants":"1"}]'; then
+  status=0
+else
+  status=$?
+fi
+check 'rejects string-serialized inactive hook' 1 "$status"
+
+if run_verifier '[{"login":false,"has_password":false,"hooks":"one","active_hook":"1","grants":"1"}]'; then
+  status=0
+else
+  status=$?
+fi
+check 'rejects non-numeric counts' 1 "$status"
+
 # Interim LOGIN window (current production shape): must block.
 if run_verifier '[{"login":true,"has_password":true,"hooks":0,"active_hook":0,"grants":0}]'; then
   status=0

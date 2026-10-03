@@ -16,32 +16,22 @@ lock_wait_seconds="$7"
 proc_root="$8"
 lock_dir="$remote_dir/locks"
 
-global_lock_value="$(awk '
-  # Last assignment wins, matching dotenv and every other checkout
-  # reader: an appended override must beat a stale line above it.
-  {
-    line = $0
-    sub(/^[[:space:]]*/, "", line)
-    if (line ~ /^export[[:space:]]+/) sub(/^export[[:space:]]+/, "", line)
-    if (line !~ /^BACI_REMEDIATION_GLOBAL_LOCK_PATH[[:space:]]*=/) next
-    sub(/^BACI_REMEDIATION_GLOBAL_LOCK_PATH[[:space:]]*=[[:space:]]*/, "", line)
-    if (substr(line, 1, 1) == "\"") {
-      line = substr(line, 2)
-      closing_quote = index(line, "\"")
-      if (closing_quote > 0) line = substr(line, 1, closing_quote - 1)
-    } else {
-      sub(/[[:space:]]+#.*$/, "", line)
-      sub(/[[:space:]]+$/, "", line)
-    }
-    value = line
-    have_value = 1
-  }
-  END { if (have_value) print value }
-' "$remote_dir/.env" 2>/dev/null || true)"
-global_lock_value="${global_lock_value%\"}"
-global_lock_value="${global_lock_value#\"}"
-global_lock_value="${global_lock_value%'}"
-global_lock_value="${global_lock_value#'}"
+# Single dotenv reader, shared with the checkout readers: every
+# spelling the preflight accepts (export prefix, spaces, colon
+# separator, quotes, comments, duplicates) must resolve identically
+# here — a strict subset would silently ignore a valid operator
+# setting. Staging-only (the remote shell has no repo checkout);
+# prepare ships this copy before the transition runs.
+dotenv_reader="$staging_dir/bin/gigl-dotenv.sh"
+if [ ! -f "$dotenv_reader" ]; then
+  echo "Missing staged gigl-dotenv.sh; rerun prepare." >&2
+  exit 1
+fi
+# shellcheck source=../../.github/scripts/gigl-dotenv.sh
+. "$dotenv_reader"
+# Last assignment wins inside the shared reader, matching dotenv and
+# every other reader: an appended override must beat a stale line.
+global_lock_value="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REMEDIATION_GLOBAL_LOCK_PATH' 2>/dev/null || true)"
 if [ -z "$global_lock_value" ]; then
   global_lock_path="$lock_dir/error-remediator-global.lock"
 elif [[ "$global_lock_value" = /* ]]; then

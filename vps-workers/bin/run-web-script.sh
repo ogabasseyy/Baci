@@ -56,22 +56,26 @@ case "$ENV_FILE" in
 esac
 
 if [ -z "${BACI_REPO_DIR:-}" ] && [ -f "$ENV_FILE" ]; then
-  ENV_REPO_DIR="$(
-    awk '
-      # Last assignment wins, matching dotenv and every other
-      # checkout reader: duplicates resolve to the live line.
-      /^BACI_REPO_DIR=/ {
-        value = $0
-        sub(/^BACI_REPO_DIR=/, "", value)
-        have_value = 1
-      }
-      END { if (have_value) print value }
-    ' "$ENV_FILE"
-  )"
-  ENV_REPO_DIR="${ENV_REPO_DIR%\"}"
-  ENV_REPO_DIR="${ENV_REPO_DIR#\"}"
-  ENV_REPO_DIR="${ENV_REPO_DIR%\'}"
-  ENV_REPO_DIR="${ENV_REPO_DIR#\'}"
+  # Single dotenv reader, shared with the provisioner, the flip, and
+  # the verifier: every BACI_REPO_DIR spelling the preflight accepts
+  # (export prefix, spaces, colon separator, quotes, comments,
+  # duplicates) must resolve identically on every cron tick. Primary:
+  # the promoted copy beside this script; fallback: the repo source
+  # for direct execution from a checkout.
+  runner_bin_dir="$(cd "$(dirname "$0")" && pwd)"
+  dotenv_reader="$runner_bin_dir/gigl-dotenv.sh"
+  if [ ! -f "$dotenv_reader" ]; then
+    dotenv_reader="$runner_bin_dir/../../.github/scripts/gigl-dotenv.sh"
+  fi
+  if [ ! -f "$dotenv_reader" ]; then
+    echo "[$LABEL] Missing gigl-dotenv.sh beside the worker bin and the repo." >&2
+    exit 1
+  fi
+  # shellcheck source=../../.github/scripts/gigl-dotenv.sh
+  . "$dotenv_reader"
+  # Last assignment wins inside the shared reader, matching dotenv and
+  # every other checkout reader: duplicates resolve to the live line.
+  ENV_REPO_DIR="$(gigl_dotenv_value "$ENV_FILE" 'BACI_REPO_DIR')"
   if [ -n "$ENV_REPO_DIR" ]; then
     BACI_REPO_DIR="$ENV_REPO_DIR"
   fi

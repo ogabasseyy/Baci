@@ -43,16 +43,21 @@ Production value decodes to the same `exp`.
    a signing key or service-role credential to the worker host).
 2. Write the new token to the VPS `.env`, then update the Vercel
    Production env var to the identical value.
-3. Redeploy Vercel production: env values snapshot at deploy time, so
-   the running deployment keeps serving the OLD token until redeployed
-   (a 200 from step 5 beforehand would be false confidence). If you
-   redeploy via manual workflow dispatch (rather than a main push or a
-   Vercel dashboard redeploy), run `bash vps-workers/deploy.sh` from
-   current main FIRST: a dispatch always runs the exact-SHA worker
-   check, so a worker that legitimately trails main after web-only
-   releases would block the redeploy. (The rotation itself also
-   invalidates the cutover latch by design; the redeploy run re-smokes
-   with the new token and re-latches automatically.)
+3. Redeploy Vercel production via a main push or a manual workflow
+   dispatch — NOT a Vercel dashboard redeploy. Env values snapshot at
+   deploy time, so the running deployment keeps serving the OLD token
+   until redeployed (a 200 from step 5 beforehand would be false
+   confidence). A dashboard redeploy skips the capability smoke, and
+   the rotation invalidates the cutover latch by design (new token
+   fingerprint): the smoke must re-run with the new token and
+   re-latch, which only the workflow paths do. If you dispatch
+   (rather than push), run `bash vps-workers/deploy.sh` from current
+   main FIRST: a dispatch always runs the exact-SHA worker check, so
+   a worker that legitimately trails main after web-only releases
+   would block the redeploy. If a dashboard redeploy already
+   happened, dispatch the workflow once immediately after to re-smoke
+   and re-latch; until then the next web push stays blocked on the
+   invalidated latch.
 4. On the worker host, run the capability wrapper to prove the new
    token executes a reviewed wrapper without claiming work (same
    environment as the cron and deployment smoke — `run-web-script.sh`

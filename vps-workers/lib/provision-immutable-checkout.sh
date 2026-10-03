@@ -18,23 +18,28 @@ staging_dir="${1:?staging dir is required}"
 expected_sha="${2:?expected SHA is required}"
 env_file="$staging_dir/.env"
 
-repo_link="$(
-  awk '
-    # Last assignment wins, matching dotenv, the scoped-environment
-    # reader, and the flip: a stale line above the live one must not
-    # provision the checkout under a directory promotion ignores.
-    /^BACI_REPO_DIR=/ {
-      value = $0
-      sub(/^BACI_REPO_DIR=/, "", value)
-      have_value = 1
-    }
-    END { if (have_value) print value }
-  ' "$env_file"
-)"
-repo_link="${repo_link%\"}"
-repo_link="${repo_link#\"}"
-repo_link="${repo_link%\'}"
-repo_link="${repo_link#\'}"
+# Single dotenv reader: BACI_REPO_DIR spellings (export prefix, spaces
+# around `=`, colon separator, quotes, comments, duplicates) must parse
+# exactly as the dotenv-grounded preflight validates them — a strict
+# ^KEY= match here would abort deployments the preflight accepted.
+# Primary: the copy prepare ships beside the staged tree; fallback: the
+# repo source (direct execution from a checkout for tests/debugging).
+dotenv_reader="$staging_dir/bin/gigl-dotenv.sh"
+if [ ! -f "$dotenv_reader" ]; then
+  dotenv_reader="$(cd "$(dirname "$0")" && pwd)/../../.github/scripts/gigl-dotenv.sh"
+fi
+if [ ! -f "$dotenv_reader" ]; then
+  echo "provision-immutable-checkout: missing gigl-dotenv.sh beside the staged tree and the repo." >&2
+  exit 1
+fi
+# shellcheck source=../../.github/scripts/gigl-dotenv.sh
+. "$dotenv_reader"
+
+# Last assignment wins inside the shared reader, matching dotenv, the
+# scoped-environment reader, and the flip: a stale line above the live
+# one must not provision the checkout under a directory promotion
+# ignores.
+repo_link="$(gigl_dotenv_value "$env_file" 'BACI_REPO_DIR')"
 
 case "$repo_link" in
   /*) ;;
@@ -137,10 +142,12 @@ fi
 # Re-point the STAGING env copy (never promoted: `.env*` is excluded) at
 # the provisioned checkout, so the capability smoke verifies the
 # candidate revision. The live .env keeps pointing at the release
-# symlink until promote flips it. Portable rewrite (no sed -i): the
-# consumers match strict `^BACI_REPO_DIR=`, so delete every spelling
-# and append one canonical line. The temp file lives beside its
-# destination so the final mv is an atomic same-device rename.
+# symlink until promote flips it. Portable rewrite (no sed -i): delete
+# every `=`-spelling and append one canonical line last — surviving
+# colon/export/space forms sit above it and the shared reader is
+# last-wins, so the canonical line always governs. The temp file lives
+# beside its destination so the final mv is an atomic same-device
+# rename.
 tmp_env="$(mktemp "${env_file}.XXXXXX")" || exit 1
 grep -v -E '^[[:space:]]*(export[[:space:]]+)?BACI_REPO_DIR=' "$env_file" > "$tmp_env" || true
 printf 'BACI_REPO_DIR=%s\n' "$repo_dir" >> "$tmp_env"

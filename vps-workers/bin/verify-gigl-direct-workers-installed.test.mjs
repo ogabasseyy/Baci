@@ -24,6 +24,7 @@ afterEach(() => {
 
 function fixture({
   dirtyCheckout = false,
+  dotenvFormRepoDir = false,
   duplicateRepoDir = false,
   duplicateTracking = false,
   staleCheckout = false,
@@ -46,7 +47,9 @@ function fixture({
   const deployedSha = 'a'.repeat(40);
   const repoEnv = duplicateRepoDir
     ? `BACI_REPO_DIR=/stale/checkout\nBACI_REPO_DIR=${repo}\n`
-    : `BACI_REPO_DIR=${repo}\n`;
+    : dotenvFormRepoDir
+      ? `export BACI_REPO_DIR = "${repo}" # live\n`
+      : `BACI_REPO_DIR=${repo}\n`;
   writeFileSync(join(remote, '.env'), repoEnv);
   writeFileSync(join(remote, 'app-checkout.sha'), `${deployedSha}\n`);
 
@@ -157,6 +160,16 @@ describe('GIGL direct-worker deployment gate', () => {
     // that same checkout — the path-sensitive fake git answers only
     // for it, so a first-match reader fails this test.
     const result = verify({ duplicateRepoDir: true });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /GIGL direct tracking worker is installed/);
+  });
+
+  it('certifies a non-strict BACI_REPO_DIR spelling', () => {
+    // Every spelling the dotenv-grounded preflight accepts must
+    // certify: a strict ^KEY= reader would block deployments the
+    // preflight validated.
+    const result = verify({ dotenvFormRepoDir: true });
 
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /GIGL direct tracking worker is installed/);

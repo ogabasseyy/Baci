@@ -9,23 +9,28 @@ set -euo pipefail
 remote_dir="${1:?remote dir is required}"
 expected_sha="${2:?expected SHA is required}"
 
-repo_link="$(
-  awk '
-    # Last assignment wins, matching dotenv and the scoped-environment
-    # reader: an operator override appended below a stale line must flip
-    # the same checkout the poller executes.
-    /^BACI_REPO_DIR=/ {
-      value = $0
-      sub(/^BACI_REPO_DIR=/, "", value)
-      have_value = 1
-    }
-    END { if (have_value) print value }
-  ' "$remote_dir/.env"
-)"
-repo_link="${repo_link%\"}"
-repo_link="${repo_link#\"}"
-repo_link="${repo_link%\'}"
-repo_link="${repo_link#\'}"
+# Single dotenv reader, shared with the provisioner and the cron
+# entrypoints: every BACI_REPO_DIR spelling the preflight accepts
+# (export prefix, spaces, colon separator, quotes, comments,
+# duplicates) must resolve identically here. Primary: the staged bin
+# beside this script (promote executes the staged copy); fallback: the
+# repo source for direct execution from a checkout.
+flip_lib_dir="$(cd "$(dirname "$0")" && pwd)"
+dotenv_reader="$flip_lib_dir/../bin/gigl-dotenv.sh"
+if [ ! -f "$dotenv_reader" ]; then
+  dotenv_reader="$flip_lib_dir/../../.github/scripts/gigl-dotenv.sh"
+fi
+if [ ! -f "$dotenv_reader" ]; then
+  echo "flip-immutable-checkout: missing gigl-dotenv.sh beside the staged tree and the repo." >&2
+  exit 1
+fi
+# shellcheck source=../../.github/scripts/gigl-dotenv.sh
+. "$dotenv_reader"
+
+# Last assignment wins inside the shared reader, matching dotenv and
+# the scoped-environment reader: an operator override appended below a
+# stale line must flip the same checkout the poller executes.
+repo_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
 case "$repo_link" in
   /*) ;;
   *)
@@ -55,9 +60,10 @@ else
   # never pull it again. Nothing reads the new symlink path until the
   # .env rewrite below lands, so each step fails safe; the shared
   # flip+verify after this branch then converges identically.
-  # Portable rewrite (no sed -i): consumers match strict
-  # `^BACI_REPO_DIR=`, so delete every spelling and append one
-  # canonical line. mktemp is 0600, the safe direction for a secrets
+  # Portable rewrite (no sed -i): delete every `=`-spelling and append
+  # one canonical line last — surviving colon/export/space forms sit
+  # above it and the shared reader is last-wins, so the canonical line
+  # always governs. mktemp is 0600, the safe direction for a secrets
   # file if the live .env was more permissive. The temp file lives
   # beside its destination so the final mv is an atomic same-device
   # rename: a /tmp temp on another filesystem would silently degrade

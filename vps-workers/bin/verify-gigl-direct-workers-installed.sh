@@ -78,23 +78,26 @@ if [ "$cutover_marker" -eq 0 ]; then
 fi
 
 if [ "$cutover_marker" -eq 0 ]; then
-  repo_dir="$(
-    awk '
-      # Last assignment wins, matching dotenv, the scoped-environment
-      # reader, and the flip script: a duplicate must certify the same
-      # checkout promotion flipped.
-      /^BACI_REPO_DIR=/ {
-        value = $0
-        sub(/^BACI_REPO_DIR=/, "", value)
-        have_value = 1
-      }
-      END { if (have_value) print value }
-    ' "$remote_dir/.env"
-  )"
-  repo_dir="${repo_dir%\"}"
-  repo_dir="${repo_dir#\"}"
-  repo_dir="${repo_dir%\'}"
-  repo_dir="${repo_dir#\'}"
+  # Single dotenv reader, shared with the provisioner, the flip, and
+  # the cron entrypoint: a duplicate must certify the same checkout
+  # promotion flipped, in every spelling the preflight accepts.
+  # Primary: the promoted copy beside this script (VPS layout);
+  # fallback: the repo source, which also covers the sparse CI
+  # checkout (vps-workers/bin/../../.github is present there).
+  verifier_bin_dir="$(cd "$(dirname "$0")" && pwd)"
+  dotenv_reader="$verifier_bin_dir/gigl-dotenv.sh"
+  if [ ! -f "$dotenv_reader" ]; then
+    dotenv_reader="$verifier_bin_dir/../../.github/scripts/gigl-dotenv.sh"
+  fi
+  if [ ! -f "$dotenv_reader" ]; then
+    echo "Missing gigl-dotenv.sh beside the worker bin and the repo." >&2
+    exit 1
+  fi
+  # shellcheck source=../../.github/scripts/gigl-dotenv.sh
+  . "$dotenv_reader"
+  # Last assignment wins inside the shared reader, matching dotenv,
+  # the scoped-environment reader, and the flip script.
+  repo_dir="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
   case "$repo_dir" in
     /*) ;;
     *)

@@ -139,6 +139,11 @@ exit 74
       encoding: 'utf8',
       env: {
         ...process.env,
+        BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
+        // The inflight guard fails closed without a resolvable repo;
+        // the stub git answers no origin, so pin the override (the
+        // stub gh swallows the query either way).
+        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
         PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
         TEST_RSYNC_MARKER: rsyncMarker,
         TEST_PROMOTION_MARKER: promotionMarker,

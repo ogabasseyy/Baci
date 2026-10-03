@@ -54,6 +54,11 @@ check_deploy_workflow_inflight
 
 promote_worker_release
 
+# Record the promote for the workflow's pre-publish overlap check (the
+# other half of the serialization): runs that appeared during the
+# promote must refuse to publish off their pre-promote latch/SHA read.
+record_deploy_workflow_promote "$APP_SHA"
+
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
 echo "==> Installing Vercel drain receiver user service"

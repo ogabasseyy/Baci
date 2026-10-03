@@ -93,6 +93,15 @@ export async function runGiglTrackingCli({
     }
 
     const { applied, claimed, failed, paused, success } = result.summary;
+    if (claimed > 0 && failed === claimed) {
+      // Total outage (provider login/batch failure, or every apply
+      // failed): the batch summary stays ok:true by contract, but a run
+      // that updated nothing must fail loudly, or a dead provider looks
+      // like a healthy cron tick and the dead-man log check never
+      // fires. Count-only: no provider/customer detail leaves here.
+      emitError('[gigl-tracking] failed');
+      return 1;
+    }
     logger.info(
       '[gigl-tracking] completed',
       JSON.stringify({ applied, claimed, failed, paused, success })

@@ -25,7 +25,15 @@ function writeStub(binDir, name, body) {
   return path;
 }
 
-function runCheck({ ghBody, gitBody = null, env = {}, path = null }) {
+// Promote-record coverage lives in record-deploy-workflow-promote.test.mjs
+// (extracted to keep both suites under the 300-line limit).
+
+function runCheck({
+  ghBody,
+  gitBody = 'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo.git\'; else exit 1; fi',
+  env = {},
+  path = null,
+}) {
   const workDir = mkdtempSync(join(tmpdir(), 'baci-inflight-'));
   const binDir = join(workDir, 'bin');
   mkdirSync(binDir, { recursive: true });
@@ -45,6 +53,10 @@ function runCheck({ ghBody, gitBody = null, env = {}, path = null }) {
       encoding: 'utf8',
       env: {
         ...process.env,
+        // Deterministic control env: a real BACI_DEPLOY_* export on the
+        // dev machine must not flip these cases (per-test env wins).
+        BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
+        BACI_DEPLOY_WORKFLOW_REPO: '',
         ...env,
         CHECK_LIB: libPath,
         GH_ARGS_FILE: argsFile,
@@ -121,6 +133,8 @@ test('fails closed when gh is missing', () => {
       encoding: 'utf8',
       env: {
         ...process.env,
+        BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
+        BACI_DEPLOY_WORKFLOW_REPO: '',
         CHECK_LIB: libPath,
         // No gh on PATH: only the empty stub dir, so `command -v gh`
         // fails before any other tool is needed.
@@ -142,9 +156,9 @@ test('bypass override proceeds with a loud warning', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stderr,
-    /WARNING: skipping the in-flight deploy-workflow check/
+    /WARNING: skipping the pre-promote in-flight deploy check/
   );
-  assert.match(result.stderr, /Re-run the GIGL smoke\/latch sequence/);
+  assert.match(result.stderr, /re-run the GIGL smoke\/latch sequence/);
 });
 
 test('queries the origin repo explicitly so fork checkouts cannot pass vacuously', () => {
@@ -158,19 +172,45 @@ test('queries the origin repo explicitly so fork checkouts cannot pass vacuously
   assert.match(ghArgs, /-R example-owner\/example-repo/);
 });
 
-test('falls back to gh default repo resolution when origin is unparsable', () => {
+test('fails closed when the repo cannot be resolved from origin', () => {
+  // No silent fallback to gh default resolution: a fork-clone deploy
+  // would query the fork (no runs) and pass vacuously while production
+  // deploys fly.
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody: 'exit 1',
   });
 
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /cannot resolve the deploy repo/);
+  assert.match(result.stderr, /BACI_DEPLOY_WORKFLOW_REPO/);
+  assert.equal(ghArgs, '');
+});
+
+test('honors the explicit repo override for exotic remotes', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody: 'exit 1',
+    env: { BACI_DEPLOY_WORKFLOW_REPO: 'override-owner/override-repo' },
+  });
+
   assert.equal(result.status, 0, result.stderr);
-  assert.doesNotMatch(ghArgs, /-R /);
+  assert.match(ghArgs, /-R override-owner\/override-repo/);
+});
+
+test('rejects a malformed repo override', () => {
+  const { result } = runCheck({
+    ghBody: RECORD_ARGS,
+    env: { BACI_DEPLOY_WORKFLOW_REPO: 'not-a-repo' },
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /must be 'owner\/repo'/);
 });
 
 test('runs under the system shell with strict mode (bash 3.2 compatible)', () => {
   // The guard runs on operator machines where /bin/bash may be 3.2:
-  // the unset-array expansion must survive `set -u` there.
+  // every expansion here must survive `set -u` there.
   const { result } = runCheck({ ghBody: RECORD_ARGS });
 
   assert.equal(result.status, 0, result.stderr);
@@ -197,4 +237,11 @@ test('deploy.sh checks for in-flight deploys before staging and before promote',
   assert.ok(first < deploy.indexOf('prepare_worker_release'));
   assert.ok(second > deploy.indexOf('install_remediation_cron_transition'));
   assert.ok(second < deploy.indexOf('promote_worker_release'));
+  // The promote is recorded for the workflow pre-publish overlap
+  // check immediately after the live SHA flips.
+  assert.match(deploy, /^record_deploy_workflow_promote "\$APP_SHA"$/m);
+  assert.ok(
+    deploy.indexOf('record_deploy_workflow_promote') >
+      deploy.indexOf('promote_worker_release')
+  );
 });

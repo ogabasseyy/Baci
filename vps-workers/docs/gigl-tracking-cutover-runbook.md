@@ -75,13 +75,23 @@ the "immutable" worktree stays git-clean — provision does the same
 `vps-workers` prod tree synced to `$REMOTE_DIR/node_modules`, AND the
 app-checkout tree the restored wrappers execute (a re-created
 worktree has no `tsx`, so without this the poller fails with
-"Missing executable tsx" right after the flip):
+"Missing executable tsx" right after the flip; an interrupted prior
+install needs the marker half too — `tsx` alone cannot prove the
+tree is complete):
 
 ```sh
 (cd <base>/app-<sha>/vps-workers && CI=true pnpm install --frozen-lockfile --prod)
-if [ ! -x <base>/app-<sha>/apps/web/node_modules/.bin/tsx ] && [ ! -x <base>/app-<sha>/node_modules/.bin/tsx ]; then
-  (cd <base>/app-<sha> && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile)
-  printf '%s\n' "<sha>" > <base>/app-<sha>/node_modules/.baci-deps-installed
+rollback_marker=<base>/app-<sha>/node_modules/.baci-deps-installed
+rollback_tsx=0
+if [ -x <base>/app-<sha>/apps/web/node_modules/.bin/tsx ] || [ -x <base>/app-<sha>/node_modules/.bin/tsx ]; then
+  rollback_tsx=1
+fi
+# Marker AND toolchain, mirroring the provisioner: an interrupted
+# install may have linked tsx without recording completion, and a
+# failed re-run must not record a marker it cannot vouch for.
+if [ ! -f "$rollback_marker" ] || [ "$rollback_tsx" != "1" ]; then
+  (cd <base>/app-<sha> && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile) || exit 1
+  printf '%s\n' "<sha>" > "$rollback_marker"
 fi
 ```
 
@@ -198,7 +208,26 @@ flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   # them), so no marker values cross the shell boundary.
   sed -n "/<<'REMOTE_SH'/,/^REMOTE_SH\$/p" <base>/app-<sha>/vps-workers/deploy.sh | sed '1d;$d' > /tmp/baci-old-cron-merge.sh
   bash /tmp/baci-old-cron-merge.sh "$remote_dir/crontab.fragment.rollback" "$remote_dir" "$(head -n 1 "$remote_dir/crontab.fragment.rollback")" "$(tail -n 1 "$remote_dir/crontab.fragment.rollback")"
-  ln -sfn <base>/app-<sha> <base>/app-live
+  # Repoint the CONFIGURED checkout link, not a hard-coded sibling:
+  # BACI_REPO_DIR may be a pre-existing absolute symlink with a
+  # non-app-live basename, and the normal flip path preserves that
+  # custom link — repointing app-live alone would leave cron resolving
+  # the configured link to the newer checkout while the marker below
+  # claims the old revision. The reader was restored above when the
+  # target carries it; the grep fallback covers older targets (strict
+  # spelling only — anything exotic aborts into manual resolution).
+  if [ -f "$remote_dir/bin/gigl-dotenv.sh" ]; then
+    . "$remote_dir/bin/gigl-dotenv.sh"
+    repo_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
+  else
+    repo_link="$(grep -E '^[[:space:]]*BACI_REPO_DIR=' "$remote_dir/.env" | tail -n 1 | cut -d= -f2- || true)"
+  fi
+  case "$repo_link" in
+    /*) ;;
+    *) echo "Cannot resolve BACI_REPO_DIR to an absolute link; aborting before the flip (take the deploy.sh path)." >&2; exit 1 ;;
+  esac
+  [ -L "$repo_link" ] || { echo "BACI_REPO_DIR ($repo_link) is not a symlink; aborting before the flip (take the deploy.sh path)." >&2; exit 1; }
+  ln -sfn <base>/app-<sha> "$repo_link"
   printf "<sha>" > "$remote_dir/app-checkout.sha"
   rm -f "$remote_dir/.gigl-capability-smoke-ok"
 ' "$REMOTE_DIR"

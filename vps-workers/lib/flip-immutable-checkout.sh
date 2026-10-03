@@ -25,6 +25,27 @@ fi
 # shellcheck source=../../.github/scripts/gigl-dotenv.sh
 . "$dotenv_reader"
 
+# Lexically collapses /./ and /name/../ segments of an absolute path
+# (prints the result). Pure string work, no filesystem access:
+# readlink -f/realpath are GNU-only and this suite also runs on
+# macOS. Intermediate SYMLINK components are not resolved — the GC
+# exclusion below is a string comparison against the walked base, so
+# canonical bases (production) or realpath'd fixtures carry that half.
+_normalize_absolute_path() {
+  _norm_input="$1/"
+  _norm_stack=""
+  while [ -n "$_norm_input" ]; do
+    _norm_seg="${_norm_input%%/*}"
+    _norm_input="${_norm_input#*/}"
+    case "$_norm_seg" in
+      "" | ".") ;;
+      "..") _norm_stack="${_norm_stack%/*}" ;;
+      *) _norm_stack="$_norm_stack/$_norm_seg" ;;
+    esac
+  done
+  printf '%s\n' "${_norm_stack:-/}"
+}
+
 # Last assignment wins inside the shared reader, matching dotenv and
 # the scoped-environment reader: an operator override appended below a
 # stale line must flip the same checkout the poller executes.
@@ -80,6 +101,16 @@ fi
 previous_target=""
 if [ -L "$repo_link" ]; then
   previous_target="$(readlink "$repo_link")"
+  case "$previous_target" in
+    /*) ;;
+    # A pre-existing checkout link may point at a relative target
+    # (app-live -> app-<sha>); readlink returns it verbatim while the
+    # GC loop below walks absolute paths, so resolve against the link
+    # directory (then collapse dot segments) or the previous release
+    # is not excluded and gets retired mid-flip.
+    *) previous_target="$checkout_base/$previous_target" ;;
+  esac
+  previous_target="$(_normalize_absolute_path "$previous_target")"
 else
   # One-time migration: the legacy in-place checkout can never become a
   # symlink in place (moving it would break every worktree gitdir

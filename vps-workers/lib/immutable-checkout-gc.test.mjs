@@ -7,6 +7,8 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -162,5 +164,56 @@ describe('immutable checkout garbage collection', () => {
 
     assert.equal(restored.status, 0, restored.stderr);
     assert.equal(readlinkSync(live), join(base, `app-${shas[0]}`));
+  });
+
+  it('preserves the previous release when its symlink target is relative', () => {
+    const { base, remote, shas, staging } = immutableCheckoutFixture({
+      commits: [{}, {}],
+    });
+    const [shaA, shaB] = shas;
+    const dirA = join(base, `app-${shaA}`);
+    const live = join(base, 'app-live');
+
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaA]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaA]).status, 0);
+    // A pre-existing checkout link may point at a relative target
+    // (app-live -> app-<sha>); readlink returns it verbatim while the
+    // GC loop walks absolute paths. The .env still names the absolute
+    // LINK path — only the target spelling differs.
+    assert.equal(lstatSync(live).isSymbolicLink(), true);
+    unlinkSync(live);
+    symlinkSync(`app-${shaA}`, live);
+    assert.equal(readlinkSync(live), `app-${shaA}`);
+    // Age A past the rapid-redeploy guard so the flip to B would
+    // retire it without the normalization.
+    execFileSync('touch', ['-t', '202001010000', dirA]);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaB]).status, 0);
+    const flipped = runCheckoutScript(flipScript, [remote, shaB]);
+
+    assert.equal(flipped.status, 0, flipped.stderr);
+    assert.equal(existsSync(dirA), true);
+    assert.equal(readlinkSync(live), join(base, `app-${shaB}`));
+  });
+
+  it('preserves the previous release when its relative target has dot segments', () => {
+    const { base, remote, shas, staging } = immutableCheckoutFixture({
+      commits: [{}, {}],
+    });
+    const [shaA, shaB] = shas;
+    const dirA = join(base, `app-${shaA}`);
+    const live = join(base, 'app-live');
+
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaA]).status, 0);
+    assert.equal(runCheckoutScript(flipScript, [remote, shaA]).status, 0);
+    assert.equal(lstatSync(live).isSymbolicLink(), true);
+    unlinkSync(live);
+    symlinkSync(`stale-dir/../app-${shaA}`, live);
+    execFileSync('touch', ['-t', '202001010000', dirA]);
+    assert.equal(runCheckoutScript(provisionScript, [staging, shaB]).status, 0);
+    const flipped = runCheckoutScript(flipScript, [remote, shaB]);
+
+    assert.equal(flipped.status, 0, flipped.stderr);
+    assert.equal(existsSync(dirA), true);
+    assert.equal(readlinkSync(live), join(base, `app-${shaB}`));
   });
 });

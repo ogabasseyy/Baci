@@ -56,22 +56,42 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
     // A fully-covered manual balance is a receipt in substance even under
-    // a non-paid label (mirrors web isReceiptEligible): the generator
-    // infers the document from payment_status, so normalize the renderer
-    // input like web does — otherwise the app link on an emailed receipt
-    // opens the same order as an invoice.
+    // a non-paid label (mirrors the manual branch of web isReceiptEligible
+    // in storefront-account-document-eligibility.ts): the generator infers
+    // the document from payment_status, so normalize the renderer input
+    // like web does — otherwise the app link on an emailed receipt opens
+    // the same order as an invoice. The balance alone never promotes: a
+    // cancelled, unknown-status, negative-total, or itemless manual row
+    // fails closed like the sender, archive filter, and download routes.
+    // Content validity is approximated by the non-empty items gate (the
+    // detail fetch only warns on schema failure, so web's strict money
+    // schemas are not enforced here); the non-manual literal-paid branch
+    // below predates this derivation and is unchanged.
+    const normalizeStatus = (value: string | null | undefined) =>
+      value?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
     const isManualOrder = Boolean(
       receiptDetail.recorded_by_user_id &&
         !receiptDetail.import_job_id &&
         !receiptDetail.external_source?.trim()
     );
-    const isCoveredBalance =
+    const manualPaymentStatus = normalizeStatus(receiptDetail.payment_status);
+    const isManualReceipt =
+      isManualOrder &&
+      !['cancelled', 'canceled', 'returned', 'failed'].includes(
+        normalizeStatus(receiptDetail.shipping_status)
+      ) &&
+      ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
+        manualPaymentStatus
+      ) &&
       Number.isFinite(Number(receiptDetail.total)) &&
+      Number(receiptDetail.total) >= 0 &&
       Number.isFinite(Number(receiptDetail.amount_paid)) &&
-      Number(receiptDetail.amount_paid) >= Number(receiptDetail.total);
+      Number(receiptDetail.amount_paid) >= Number(receiptDetail.total) &&
+      Array.isArray(receiptDetail.items) &&
+      receiptDetail.items.length > 0;
     const isPaidReceipt =
-      receiptDetail.payment_status === 'paid' ||
-      (isManualOrder && isCoveredBalance);
+      (!isManualOrder && receiptDetail.payment_status === 'paid') ||
+      isManualReceipt;
     // Same NGN-only rule as the web document builders: a
     // foreign-currency preview must not print the untyped naira account
     // beside a dollar-denominated balance. The renderer prefers the

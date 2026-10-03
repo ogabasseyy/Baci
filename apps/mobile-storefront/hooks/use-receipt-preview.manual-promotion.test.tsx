@@ -56,6 +56,14 @@ describe('useReceiptPreview manual promotion', () => {
     ['no items', { items: [] }],
     ['null money the sender skips', { total: 0, amount_paid: null }],
     ['NaN money breakdown', { subtotal: Number.NaN }],
+    [
+      'sender-rejected settled payment',
+      {
+        transactions: [
+          { transaction_type: 'payment', status: 'completed', amount: -50 },
+        ],
+      },
+    ],
   ])('fails a covered manual balance closed on %s', (_label, override) => {
     // The balance alone never promotes: ineligible manual rows preview
     // as invoices like the sender, archive, and download routes treat them.

@@ -125,10 +125,12 @@ export async function POST(
     const { data: paymentAccounts } = await supabase
       .from('order_payment_accounts')
       .select(
-        'account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
+        'id, account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
       )
       .eq('order_id', orderId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('account_number', { ascending: false })
+      .order('id', { ascending: false });
     const virtualAccount = selectPreferredOrderPaymentAccount(paymentAccounts);
 
     // 6. Generate payment link: the emailed CTA must resolve to a served

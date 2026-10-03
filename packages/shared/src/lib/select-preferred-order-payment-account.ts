@@ -6,6 +6,7 @@ export interface OrderPaymentAccountLike {
   bank_name: string | null;
   created_at?: string | null;
   expires_at?: string | null;
+  id?: string | null;
   provider?: string | null;
 }
 
@@ -182,15 +183,22 @@ export function selectPreferredOrderPaymentAccount<
         return rightCreatedAtMs - leftCreatedAtMs;
       }
 
-<<<<<<< HEAD
-      return left.account_number.localeCompare(right.account_number);
-=======
       // created_at ties when accounts share a transaction (now() is
       // transaction-stable): break them by account number descending,
       // exactly like the emailed-invoice selector and the atomic dispatch
       // recheck, so every surface embeds the same account.
-      return right.account_number.localeCompare(left.account_number);
->>>>>>> 77b7802722 (fix(pr3580): address rounds 47-48 findings (locks, parity, splits))
+      const accountNumberTie = right.account_number.localeCompare(
+        left.account_number
+      );
+      if (accountNumberTie !== 0) {
+        return accountNumberTie;
+      }
+      // Duplicate account numbers with divergent metadata are
+      // database-permitted: break the tie by row id descending, exactly
+      // like the atomic dispatch recheck, so independently ordered
+      // result sets never pick different rows. Rows without an id sort
+      // last; surfaces must select id for full determinism.
+      return String(right.id ?? '').localeCompare(String(left.id ?? ''));
     })[0] ?? null
   );
 }

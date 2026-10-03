@@ -8,7 +8,10 @@ import { ReceiptListItemSchema } from '@/schemas/receipt';
 import { useAuthStore } from '@/stores/auth-store';
 import type { ReceiptListItem } from '@/types/receipt';
 import { selectReceiptCompletionDate } from './receipt-completion-date';
-import { isPromotedManualReceipt } from './receipt-promotion-gates';
+import {
+  hasValidSettledPayments,
+  isPromotedManualReceipt,
+} from './receipt-promotion-gates';
 import { mapCustomerTransactionRpcRows } from './receipt-transaction-mappers';
 import { resolveReceiptMerchantId } from './use-receipt-detail';
 
@@ -25,10 +28,15 @@ function toDisplayMoney(value: unknown): number {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+interface ReceiptHistoryEntry {
+  completionDate: string | null;
+  settledPaymentsValid: boolean;
+}
+
 async function loadReceiptCompletionDates(
   orderIds: string[]
-): Promise<Map<string, string>> {
-  const completionByOrderId = new Map<string, string>();
+): Promise<Map<string, ReceiptHistoryEntry>> {
+  const completionByOrderId = new Map<string, ReceiptHistoryEntry>();
   for (
     let offset = 0;
     offset < orderIds.length;
@@ -58,9 +66,13 @@ async function loadReceiptCompletionDates(
       byOrderId.set(txn.order_id, rows);
     }
     for (const [orderId, txns] of byOrderId) {
-      const completion = selectReceiptCompletionDate(txns);
-      if (completion) completionByOrderId.set(orderId, completion);
+      completionByOrderId.set(orderId, {
+        completionDate: selectReceiptCompletionDate(txns),
+        settledPaymentsValid: hasValidSettledPayments(txns),
+      });
     }
+    // Orders with no transaction rows keep no entry: the list treats
+    // missing history like the gate does and keeps the order/item verdict.
   }
   return completionByOrderId;
 }
@@ -194,10 +206,16 @@ export function useReceipts(userId: string | undefined) {
         // its completing payment, else the sale date — never by the stale
         // invoice issue date, which the card would otherwise prefer.
         if (row.document_kind !== 'receipt') return row;
+        const entry = completionByOrderId.get(row.id);
+        // Settled-payment validity arrives with the completion lookup: a
+        // promoted row whose history the sender rejects demotes to
+        // invoice, matching the archive gate and the emailed document.
+        if (entry && !entry.settledPaymentsValid) {
+          return { ...row, document_kind: 'invoice' };
+        }
         return {
           ...row,
-          transaction_date:
-            completionByOrderId.get(row.id) ?? row.transaction_date,
+          transaction_date: entry?.completionDate ?? row.transaction_date,
           invoice_issue_date: null,
         };
       });

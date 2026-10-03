@@ -110,4 +110,41 @@ describe('isPromotedManualReceipt', () => {
   ])('fails closed for %s rows', (_label, override) => {
     expect(isPromotedManualReceipt(coveredRow(override))).toBe(false);
   });
+
+  it('keeps the order/item verdict when payment history is absent', () => {
+    expect(isPromotedManualReceipt(coveredRow())).toBe(true);
+    expect(isPromotedManualReceipt(coveredRow({ payments: null }))).toBe(true);
+  });
+
+  it.each([
+    [
+      'negative settled payment',
+      [{ transaction_type: 'payment', status: 'completed', amount: -50 }],
+    ],
+    [
+      'negative success payment',
+      [{ transaction_type: 'payment', status: 'success', amount: '-1' }],
+    ],
+    [
+      'unparseable settled payment',
+      [{ transaction_type: 'payment', status: 'completed', amount: 'abc' }],
+    ],
+    ['malformed history', 'not-an-array'],
+  ])('rejects sender-invalid history: %s', (_label, payments) => {
+    expect(isPromotedManualReceipt(coveredRow({ payments }))).toBe(false);
+  });
+
+  it('ignores unsettled rows when validating history', () => {
+    expect(
+      isPromotedManualReceipt(
+        coveredRow({
+          payments: [
+            { transaction_type: 'payment', status: 'pending', amount: -50 },
+            { transaction_type: 'refund', status: 'completed', amount: -50 },
+            { transaction_type: 'payment', status: 'completed', amount: 500 },
+          ],
+        })
+      )
+    ).toBe(true);
+  });
 });

@@ -79,6 +79,12 @@ printf '%s\n' "SELECT 'hash-version-context';" \
   >"$deferred_dir/20260828170000_prepare_storefront_order_hash_version_context.sql"
 printf '%s\n' "SELECT 'delivery-metadata-enforcement-restore';" \
   >"$deferred_dir/20260828190000_restore_storefront_order_delivery_metadata_enforcement.sql"
+printf '%s\n' "SELECT 'claim-redemption';" \
+  >"$deferred_dir/20260930160100_verified_receipt_claim_redemption.sql"
+printf '%s\n' "SELECT 'preview-document-kind';" \
+  >"$deferred_dir/20260930160200_preview_receipt_claim_document_kind.sql"
+printf '%s\n' "SELECT 'manual-trigger-activation';" \
+  >"$deferred_dir/20260930160300_enable_manual_order_document_triggers.sql"
 
 pending_output="$fixture_root/pending-output.log"
 PATH="$fake_bin:$PATH" \
@@ -99,7 +105,10 @@ all_deferred_response="$(jq -nc '[
   {version: "20260828120000", name: "enforce_storefront_order_replay_route_context"},
   {version: "20260828130000", name: "scope_storefront_order_replay_route_context"},
   {version: "20260828151000", name: "enforce_storefront_airport_pickup_location"},
-  {version: "20260828190000", name: "restore_storefront_order_delivery_metadata_enforcement"}
+  {version: "20260828190000", name: "restore_storefront_order_delivery_metadata_enforcement"},
+  {version: "20260930160100", name: "verified_receipt_claim_redemption"},
+  {version: "20260930160200", name: "preview_receipt_claim_document_kind"},
+  {version: "20260930160300", name: "enable_manual_order_document_triggers"}
 ]')"
 PATH="$fake_bin:$PATH" \
   MIGRATIONS_DIR="$deferred_dir" \
@@ -141,6 +150,9 @@ grep -q 'deferred until postdeploy: 20260828120000' "$deferred_predeploy_output"
 grep -q 'deferred until postdeploy: 20260828130000' "$deferred_predeploy_output"
 grep -q 'deferred until postdeploy: 20260828151000' "$deferred_predeploy_output"
 grep -q 'deferred until postdeploy: 20260828190000' "$deferred_predeploy_output"
+grep -q 'deferred until postdeploy: 20260930160100' "$deferred_predeploy_output"
+grep -q 'deferred until postdeploy: 20260930160200' "$deferred_predeploy_output"
+grep -q 'deferred until postdeploy: 20260930160300' "$deferred_predeploy_output"
 grep -q 'applied:         20260828140000  ordinary_follow_up' "$deferred_predeploy_output"
 grep -q 'applied:         20260828150000  prepare_storefront_order_delivery_columns' "$deferred_predeploy_output"
 grep -q 'applied:         20260828151100  prepare_storefront_order_delivery_metadata_persistence' "$deferred_predeploy_output"
@@ -148,7 +160,7 @@ grep -q 'applied:         20260828160000  persist_quiz_reserved_order_delivery_m
 grep -q 'applied:         20260828160100  preserve_quiz_reserved_order_delivery_metadata' "$deferred_predeploy_output"
 grep -q 'applied:         20260828160200  limit_quiz_reserved_order_delivery_validation_to_redemption' "$deferred_predeploy_output"
 grep -q 'applied:         20260828170000  prepare_storefront_order_hash_version_context' "$deferred_predeploy_output"
-grep -q 'Migrations summary: 7 applied, 0 skipped, 9 deferred.' "$deferred_predeploy_output"
+grep -q 'Migrations summary: 7 applied, 0 skipped, 12 deferred.' "$deferred_predeploy_output"
 if grep -q "SELECT 'delivery-metadata'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'context'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'quiz-context'" "$deferred_predeploy_log" || \
@@ -157,6 +169,9 @@ if grep -q "SELECT 'delivery-metadata'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'replay-context'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'replay-scope'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'pickup-location'" "$deferred_predeploy_log" || \
+  grep -q "SELECT 'claim-redemption'" "$deferred_predeploy_log" || \
+  grep -q "SELECT 'preview-document-kind'" "$deferred_predeploy_log" || \
+  grep -q "SELECT 'manual-trigger-activation'" "$deferred_predeploy_log" || \
   grep -q "SELECT 'delivery-metadata-enforcement-restore'" "$deferred_predeploy_log"; then
   echo 'Predeploy phase must not send deferred migration SQL' >&2
   exit 1
@@ -186,6 +201,9 @@ grep -q 'applied:         20260828160100  preserve_quiz_reserved_order_delivery_
 grep -q 'applied:         20260828160200  limit_quiz_reserved_order_delivery_validation_to_redemption' "$deferred_postdeploy_output"
 grep -q 'applied:         20260828170000  prepare_storefront_order_hash_version_context' "$deferred_postdeploy_output"
 grep -q 'applied:         20260828190000  restore_storefront_order_delivery_metadata_enforcement' "$deferred_postdeploy_output"
+grep -q 'applied:         20260930160100  verified_receipt_claim_redemption' "$deferred_postdeploy_output"
+grep -q 'applied:         20260930160200  preview_receipt_claim_document_kind' "$deferred_postdeploy_output"
+grep -q 'applied:         20260930160300  enable_manual_order_document_triggers' "$deferred_postdeploy_output"
 grep -q "SELECT 'delivery-metadata'" "$deferred_postdeploy_log"
 grep -q "SELECT 'context'" "$deferred_postdeploy_log"
 grep -q "SELECT 'quiz-context'" "$deferred_postdeploy_log"
@@ -200,6 +218,9 @@ grep -q "SELECT 'quiz-reserved-delivery-metadata-preserve'" "$deferred_postdeplo
 grep -q "SELECT 'quiz-reserved-delivery-validation-scope'" "$deferred_postdeploy_log"
 grep -q "SELECT 'hash-version-context'" "$deferred_postdeploy_log"
 grep -q "SELECT 'delivery-metadata-enforcement-restore'" "$deferred_postdeploy_log"
+grep -q "SELECT 'claim-redemption'" "$deferred_postdeploy_log"
+grep -q "SELECT 'preview-document-kind'" "$deferred_postdeploy_log"
+grep -q "SELECT 'manual-trigger-activation'" "$deferred_postdeploy_log"
 jq -e -s \
   --arg delivery "SELECT 'delivery-metadata';" \
   --arg context "SELECT 'context';" \

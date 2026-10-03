@@ -106,6 +106,10 @@ describe('ReceiptCard', () => {
     expect(screen.getByText('Invoice')).toBeTruthy();
     expect(screen.getByText('View Invoice')).toBeTruthy();
     expect(screen.queryByText('View Receipt')).toBeNull();
+    // Badge says invoice, but the ledger says paid — the money label
+    // must not misstate payment state as an unpaid Total.
+    expect(screen.getByText('Paid')).toBeTruthy();
+    expect(screen.queryByText('Total')).toBeNull();
   });
 
   it('renders the receipt product title', () => {

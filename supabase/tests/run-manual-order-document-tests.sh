@@ -36,6 +36,7 @@ psql -X -h "$task_pg_dir" -p "$task_pg_port" -d postgres -v ON_ERROR_STOP=1 \
   -f "$task_repo/supabase/migrations/20260930160065_manual_order_document_merchant_rearm.sql" \
   -f "$task_repo/supabase/migrations/20260930160070_manual_order_document_item_triggers.sql" \
   -f "$task_repo/supabase/migrations/20260930160075_manual_order_document_domain_invalidation.sql" \
+  -f "$task_repo/supabase/migrations/20260930160080_customer_payment_accounts_row_id.sql" \
   -f "$task_repo/supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql" \
   -f "$task_repo/supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql" \
   -f "$task_repo/supabase/migrations/20260930160350_manual_document_snapshot_builders.sql" \

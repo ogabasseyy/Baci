@@ -211,6 +211,7 @@ describe('ReceiptsPage archive list', () => {
             total: 100,
             shipping_status: 'pending',
             current_document_kind: 'invoice',
+            is_manual_order: true,
             manual_document_available: true,
             receipt_eligible: false,
             items: [

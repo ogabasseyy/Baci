@@ -101,6 +101,7 @@ const merchant = {
   supportEmail: 'support@shop.example.com',
   supportPhone: '+2348000000001',
   phone: '+2348000000002',
+  slug: 'shop',
 };
 
 describe('markManualDocumentDispatchStarted', () => {
@@ -167,6 +168,7 @@ describe('markManualDocumentDispatchStarted', () => {
       p_merchant_support_email: 'support@shop.example.com',
       p_merchant_support_phone: '+2348000000001',
       p_merchant_phone: '+2348000000002',
+      p_merchant_slug: 'shop',
       p_va_account_number: '9990001111',
       p_va_bank_name: 'Paystack-Titan',
       p_va_account_name: 'Shop Ltd/ORD',

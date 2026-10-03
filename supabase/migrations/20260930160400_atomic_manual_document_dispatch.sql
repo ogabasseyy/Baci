@@ -24,9 +24,10 @@
 -- (aggregates forbid locking clauses), so a concurrent UPDATE/DELETE blocks
 -- until this comparison commits; the writer's trigger then sees the set
 -- marker and resets it, and the post-transport lease check aborts the stale
--- send for a bounded retry. Same-instant INSERTs can still miss both the
--- comparison and the reset; that residual is bounded by this transaction's
--- duration (no I/O inside) rather than the whole send window.
+-- send for a bounded retry. Same-instant INSERTs cannot slip past either:
+-- every invalidation trigger locks the order (or merchant) FOR NO KEY
+-- UPDATE before its marker-qualified reset, which conflicts with the
+-- FOR SHARE locks below, so insert and mark serialize in commit order.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
   p_claim_owner text,
@@ -79,7 +80,8 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_claim_domain text,
   p_merchant_support_email text,
   p_merchant_support_phone text,
-  p_merchant_phone text
+  p_merchant_phone text,
+  p_merchant_slug text
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -113,6 +115,7 @@ DECLARE
   v_merchant_support_email text;
   v_merchant_support_phone text;
   v_merchant_phone text;
+  v_merchant_slug text;
 BEGIN
   IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
     RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
@@ -142,14 +145,14 @@ BEGIN
     m.registered_address, m.cac_rc_number, m.tax_identification_number,
     m.vat_registration_status, m.vat_rate, m.support_email, m.support_phone,
     m.phone, m.bank_code, m.bank_account_number, m.bank_name,
-    m.bank_account_name
+    m.bank_account_name, m.slug
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
     v_merchant_cac_rc_number, v_merchant_tax_identification_number,
     v_merchant_vat_registration_status, v_merchant_vat_rate,
     v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
     v_merchant_bank_code, v_merchant_bank_account_number,
-    v_merchant_bank_name, v_merchant_bank_account_name
+    v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
   -- The claim URL embeds the active primary domain; a deactivation between
   -- the sender's resolve and this mark must abort rather than email a CTA
@@ -258,6 +261,9 @@ BEGIN
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone
     OR v_merchant_phone IS DISTINCT FROM p_merchant_phone
+    -- Without an active custom domain the claim URL falls back to the
+    -- slug subdomain, so a slug change must abort like a domain change.
+    OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
     OR (v_compare_payment AND (
       v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
@@ -282,7 +288,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text)
   TO service_role;

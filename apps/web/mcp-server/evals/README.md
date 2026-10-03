@@ -36,5 +36,36 @@ product ID verified in the actual live catalog readback, as well as the requeste
 intent. A second successful call cannot mask a failed first call. No cart actions,
 orders or payments are needed. Missing/malformed evidence fails the eval.
 
-The pre-fix observed fixture is RED. Post-fix live model eval results are PENDING
-deployment; no live pass is claimed by this repository change.
+## Pre-merge model planning eval
+
+`run-category-guidance-model-eval.ts` invokes the existing configured Gemini 2.5
+Flash provider with the actual published search descriptor, shared runtime
+guidance and the three verbatim prompts. It forces one search tool selection,
+uses no tool executor, disables retries and bounds each request to 45 seconds.
+It records generated arguments, argument grades, descriptor/transport hashes,
+model, base Git head and whether the candidate worktree is dirty.
+
+Run from `apps/web` with the normal approved test environment loaded:
+
+```sh
+pnpm exec tsx mcp-server/evals/run-category-guidance-model-eval.ts /absolute/model-evidence.json
+```
+
+The actual pre-tightening model captures in `category-guidance-model-observed-before.json`
+omitted the camera model and the explicit-category intent constraints (two cases
+RED). After explicitly requiring named brand/model constraints in intent, actual
+captures in `category-guidance-model-observed-after.json` pass all three argument
+checks. A subsequent run of the reusable CLI also passed all three. These are
+single samples per case, not a reliability estimate. Mocked invocation tests are
+separately labeled and do not call a provider.
+
+Gemini rejects the published JSON Schema's numeric const and inherited conditional
+branches at transport validation. The planning harness materializes numeric const
+as equal bounds and inherited branch types/properties for that provider, while
+retaining the published schema and descriptions. The two hashes record that
+transport distinction; production MCP schemas and retrieval are unchanged.
+
+This is actual Gemini model planning evidence, not executed MCP product results
+or proof of ChatGPT behavior. The original actual ChatGPT camera failure remains
+RED. Post-deployment ChatGPT first-call/browser evaluations above are still
+PENDING and required before recording; no ChatGPT live pass is claimed here.

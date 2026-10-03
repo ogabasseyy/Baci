@@ -1,3 +1,4 @@
+import { gradeCategoryGuidanceArguments } from './category-guidance-arguments';
 import { categoryGuidanceCases } from './category-guidance-cases';
 
 type CaseId = keyof typeof categoryGuidanceCases;
@@ -27,25 +28,8 @@ export function gradeCategoryGuidance(caseId: CaseId, capturedTraces: unknown) {
   }
   const input = record(firstCall.toolInput);
   const output = record(firstCall.toolOutput);
-  if (testCase.category === undefined) {
-    if (Object.hasOwn(input, 'category')) {
-      failures.push('First emitted arguments must omit category for this natural request');
-    }
-  } else if (typeof input.category !== 'string' || input.category.toLowerCase() !== testCase.category.toLowerCase()) {
-    failures.push('First emitted arguments must preserve the explicitly requested category');
-  }
-  const alternatives = record(input.intent).alternatives;
-  if (!Array.isArray(alternatives) || !alternatives.some((value) => {
-    const alternative = record(value);
-    const model = alternative.model;
-    return alternative.product_type === testCase.productType
-      && Array.isArray(alternative.brands)
-      && alternative.brands.some((brand: unknown) => typeof brand === 'string' && brand.toLowerCase() === testCase.brand.toLowerCase())
-      && typeof model === 'string'
-      && [testCase.model, ...testCase.modelAliases].flatMap((alias) => [alias, `${testCase.brand} ${alias}`]).some((expectedModel) => model.trim().replace(/\s+/g, ' ').toLowerCase() === expectedModel.toLowerCase());
-  })) {
-    failures.push('First emitted intent must contain the requested product type, brand and model');
-  }
+  const failuresFromArguments = gradeCategoryGuidanceArguments(caseId, input);
+  failures.push(...failuresFromArguments.failures);
   if (output.status !== 'success' || !Array.isArray(output.products) || output.products.length === 0) {
     failures.push('First call must return products successfully; a later retry does not pass');
   }

@@ -222,6 +222,15 @@ describe('useReceiptPreview document kind', () => {
       recorded_by_user_id: 'staff-1',
       import_job_id: null,
       external_source: null,
+      items: [
+        {
+          id: 'item-1',
+          name: 'Device',
+          product_name: 'Device',
+          quantity: 1,
+          price: 500,
+        },
+      ],
     };
     const covered = renderHook(() => useReceiptPreview());
     act(() => {
@@ -231,6 +240,40 @@ describe('useReceiptPreview document kind', () => {
     expect(covered.result.current.html).toContain(
       '<div class="doc-title">Receipt</div>'
     );
+  });
+
+  it.each([
+    ['cancelled shipping', { shipping_status: 'cancelled' }],
+    ['unknown payment status', { payment_status: 'on_hold' }],
+    ['negative total', { total: -5, amount_paid: 0 }],
+    ['no items', { items: [] }],
+  ])('fails a covered manual balance closed on %s', (_label, override) => {
+    // The balance alone never promotes: ineligible manual rows preview
+    // as invoices like the sender, archive, and download routes treat them.
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      payment_status: 'pending',
+      total: 500,
+      amount_paid: 500,
+      recorded_by_user_id: 'staff-1',
+      import_job_id: null,
+      external_source: null,
+      items: [
+        {
+          id: 'item-1',
+          name: 'Device',
+          product_name: 'Device',
+          quantity: 1,
+          price: 500,
+        },
+      ],
+      ...override,
+    };
+    const preview = renderHook(() => useReceiptPreview());
+    act(() => {
+      preview.result.current.openPreviewByOrderId('order-1');
+    });
+    expect(preview.result.current.documentKind).not.toBe('receipt');
   });
 
   it('reports the effective kind the artifact was built with', () => {

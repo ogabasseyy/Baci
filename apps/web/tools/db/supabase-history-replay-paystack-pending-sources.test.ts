@@ -26,7 +26,7 @@ describe('PAYSTACK_PENDING_SOURCES', () => {
 
     expect(sources).toEqual(EXPECTED_PAYSTACK_PENDING_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20260928184600_cancel_gate_ignores_reviewed_abandoned_attempts.sql'
+      'supabase/migrations/20260928184800_transition_captured_abandoned_legs_for_cancellation.sql'
     );
   });
 

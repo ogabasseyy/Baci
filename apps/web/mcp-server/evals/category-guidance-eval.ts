@@ -11,6 +11,9 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Grade the FIRST real widget call, including failures before a successful retry. */
 export function gradeCategoryGuidance(caseId: CaseId, capturedTraces: unknown) {
+  if (!Object.hasOwn(categoryGuidanceCases, caseId)) {
+    return { passed: false, failures: ['Unknown evaluation case'] };
+  }
   const testCase = categoryGuidanceCases[caseId];
   const failures: string[] = [];
   if (!Array.isArray(capturedTraces) || capturedTraces.length === 0) {

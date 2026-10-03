@@ -7,6 +7,9 @@ function record(value: unknown): Record<string, unknown> {
 
 /** Grade emitted arguments independently of transport or product execution. */
 export function gradeCategoryGuidanceArguments(caseId: keyof typeof categoryGuidanceCases, emittedInput: unknown) {
+  if (!Object.hasOwn(categoryGuidanceCases, caseId)) {
+    return { passed: false, failures: ['Unknown evaluation case'] };
+  }
   const testCase = categoryGuidanceCases[caseId];
   const input = record(emittedInput);
   const failures: string[] = [];
@@ -14,7 +17,7 @@ export function gradeCategoryGuidanceArguments(caseId: keyof typeof categoryGuid
     if (Object.hasOwn(input, 'category')) {
       failures.push('First emitted arguments must omit category for this natural request');
     }
-  } else if (typeof input.category !== 'string' || input.category.toLowerCase() !== testCase.category.toLowerCase()) {
+  } else if (typeof input.category !== 'string' || input.category.trim().toLowerCase() !== testCase.category.toLowerCase()) {
     failures.push('First emitted arguments must preserve the explicitly requested category');
   }
   const alternatives = record(input.intent).alternatives;

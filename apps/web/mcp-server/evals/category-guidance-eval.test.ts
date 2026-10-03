@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import observedFailure from './camera-category-observed-failure.json';
+import { gradeCategoryGuidanceArguments } from './category-guidance-arguments';
 import { gradeCategoryGuidance } from './category-guidance-eval';
 
 describe('natural request category argument eval', () => {
@@ -7,6 +8,13 @@ describe('natural request category argument eval', () => {
     const result = gradeCategoryGuidance('camera', observedFailure.traces);
     expect(result.passed).toBe(false);
     expect(result.failures).toContain('First emitted arguments must omit category for this natural request');
+  });
+
+  it('fails closed for unknown and inherited case names', () => {
+    for (const caseId of ['unknown', 'toString', '__proto__']) {
+      expect(gradeCategoryGuidance(caseId as 'camera', observedFailure.traces)).toEqual({ passed: false, failures: ['Unknown evaluation case'] });
+      expect(gradeCategoryGuidanceArguments(caseId as 'camera', {})).toEqual({ passed: false, failures: ['Unknown evaluation case'] });
+    }
   });
 
   it('fails closed without captured arguments and output', () => {
@@ -38,6 +46,7 @@ describe('category and model identity controls', () => {
   }
   it('accepts category casing allowed by the runtime', () => {
     expect(gradeCategoryGuidance('explicitCategory', trace('C300', 'cameras')).passed).toBe(true);
+    expect(gradeCategoryGuidance('explicitCategory', trace('C300', ' Cameras ')).passed).toBe(true);
   });
   it('accepts the fuller camera model captured in the actual first call', () => {
     expect(gradeCategoryGuidance('camera', trace('Smart Camera C300')).passed).toBe(true);

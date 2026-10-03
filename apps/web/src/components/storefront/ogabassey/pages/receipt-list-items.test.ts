@@ -102,6 +102,30 @@ describe('fetchReceiptListItems', () => {
     });
   });
 
+  it('itemizes the assurance premium in preview lines', async () => {
+    mockOrdersResponse([
+      baseOrder({
+        items: [
+          {
+            id: 'item-1',
+            name: 'Samsung Galaxy S26',
+            quantity: 2,
+            price: 50,
+            assurance_fee: 15000,
+          },
+        ],
+      }),
+    ]);
+
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder.items).toHaveLength(2);
+    expect(item.rawOrder.items[1]).toMatchObject({
+      product_name: 'Ogabassey Assurance',
+      quantity: 1,
+      price: 15000,
+    });
+  });
+
   it('carries the proforma kind for unresolved 325 orders', async () => {
     mockOrdersResponse([
       baseOrder({

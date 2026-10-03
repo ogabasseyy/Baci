@@ -7,6 +7,7 @@ export interface DispatchOrderItem {
   variant_name: string | null;
   condition: string | null;
   item_description: string | null;
+  assurance_fee?: number | null;
   line_id?: number | null;
   unit_code?: string | null;
   line_extension_amount?: number | null;
@@ -36,6 +37,7 @@ export function projectDispatchSnapshotItems(
       variant_name: item.variant_name,
       condition: item.condition,
       item_description: item.item_description,
+      assurance_fee: item.assurance_fee ?? null,
       line_id: item.line_id ?? null,
       unit_code: item.unit_code ?? null,
       line_extension_amount: item.line_extension_amount ?? null,

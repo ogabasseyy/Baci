@@ -1,6 +1,10 @@
 import type { ReceiptOrder } from '@baci/shared';
 import { formatCanonicalProductConditionLabel } from '@baci/shared/lib';
 import { isArchiveOrder } from '@/app/(storefront)/[slug]/(customer)/receipts/archive-order-filter';
+import {
+  buildAssuranceReceiptItem,
+  sumAssuranceFees,
+} from '@/lib/insurance-assurance-line';
 import type { StorefrontOrder } from '@/types/storefront-order';
 import { formatReceiptListDate } from '../receipt-list-date';
 
@@ -171,6 +175,24 @@ export async function fetchReceiptListItems(
       const isPaidRenderer = rendererPaymentStatus === 'paid';
       const completionDate = getStringValue(order.receipt_completion_date);
 
+      const rawItems: Array<{
+        product_name: string;
+        variant_name?: string | null | undefined;
+        quantity: number;
+        price: number;
+      }> = items.map((item) => ({
+        product_name: getReceiptItemName(item),
+        variant_name: getReceiptItemVariantName(item) || undefined,
+        quantity: getReceiptItemQuantity(item),
+        price: Number(item.price) || 0,
+      }));
+      // Itemize the premium like the emailed PDF and download so the
+      // preview lines reconcile with the displayed total.
+      const assuranceTotal = sumAssuranceFees(items);
+      if (assuranceTotal > 0) {
+        rawItems.push(buildAssuranceReceiptItem(assuranceTotal));
+      }
+
       const rawOrder: ReceiptOrder = {
         order_number:
           (order.order_number as string) ||
@@ -212,12 +234,7 @@ export async function fetchReceiptListItems(
         fulfillment_details:
           (order.fulfillment_details as ReceiptOrder['fulfillment_details']) ??
           null,
-        items: items.map((item) => ({
-          product_name: getReceiptItemName(item),
-          variant_name: getReceiptItemVariantName(item) || undefined,
-          quantity: getReceiptItemQuantity(item),
-          price: Number(item.price) || 0,
-        })),
+        items: rawItems,
       };
 
       const statusLabel =

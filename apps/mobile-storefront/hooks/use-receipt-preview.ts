@@ -55,6 +55,23 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   // with it.
   let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
+    // A fully-covered manual balance is a receipt in substance even under
+    // a non-paid label (mirrors web isReceiptEligible): the generator
+    // infers the document from payment_status, so normalize the renderer
+    // input like web does — otherwise the app link on an emailed receipt
+    // opens the same order as an invoice.
+    const isManualOrder = Boolean(
+      receiptDetail.recorded_by_user_id &&
+        !receiptDetail.import_job_id &&
+        !receiptDetail.external_source?.trim()
+    );
+    const isCoveredBalance =
+      Number.isFinite(Number(receiptDetail.total)) &&
+      Number.isFinite(Number(receiptDetail.amount_paid)) &&
+      Number(receiptDetail.amount_paid) >= Number(receiptDetail.total);
+    const isPaidReceipt =
+      receiptDetail.payment_status === 'paid' ||
+      (isManualOrder && isCoveredBalance);
     // Same NGN-only rule as the web document builders: a
     // foreign-currency preview must not print the untyped naira account
     // beside a dollar-denominated balance. The renderer prefers the
@@ -74,7 +91,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       discount_amount: receiptDetail.discount_amount,
       amount_paid: receiptDetail.amount_paid,
       balance: receiptDetail.balance,
-      payment_status: receiptDetail.payment_status,
+      payment_status: isPaidReceipt ? 'paid' : receiptDetail.payment_status,
       payment_method: receiptDetail.payment_method,
       is_credit_order: receiptDetail.is_credit_order,
       customer_name: receiptDetail.customer_name,
@@ -122,7 +139,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     // wallet/savings credited) are proforma.
     const resolvedTypeCode = resolveInvoiceTypeCode({
       paymentMethod: receiptDetail.payment_method,
-      isPaid: receiptDetail.payment_status === 'paid',
+      isPaid: isPaidReceipt,
       wasPaid: receiptDetail.payment_status === 'refunded',
       paymentStatus: receiptDetail.payment_status,
       amountPaid: receiptDetail.amount_paid,
@@ -134,7 +151,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     html = generateReceiptHtml(orderData, merchant, {
       documentKind: derivedDocumentKind,
     });
-    isPaid = receiptDetail.payment_status === 'paid';
+    isPaid = isPaidReceipt;
     documentKind = isPaid ? 'receipt' : (derivedDocumentKind ?? 'invoice');
   }
 

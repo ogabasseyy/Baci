@@ -23,6 +23,7 @@ export interface StorefrontOrderListItemInput {
   quantity: number;
   price: number;
   has_assurance?: boolean | null;
+  assurance_fee?: number | null;
   products?: JoinedProduct | JoinedProduct[] | null;
 }
 
@@ -194,6 +195,7 @@ export function transformStorefrontOrdersForDisplay(
           quantity: item.quantity,
           price: item.price,
           has_assurance: item.has_assurance,
+          assurance_fee: item.assurance_fee,
           product_slug: product?.slug,
           category: product?.category,
           category_slug: primaryCategory?.slug,

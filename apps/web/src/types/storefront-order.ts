@@ -31,6 +31,7 @@ export interface StorefrontOrderItem {
   image_url?: string | null;
   image?: string;
   has_assurance?: boolean;
+  assurance_fee?: number | null;
   /**
    * @deprecated Prefer `fulfillment_details` for new payloads.
    */

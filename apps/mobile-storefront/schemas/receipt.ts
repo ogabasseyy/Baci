@@ -92,6 +92,9 @@ export const ReceiptDetailSchema = z.object({
   // Stored Peppol type code (orders.invoice_type_code, default 380):
   // an explicit non-default code survives the proforma derivation.
   invoice_type_code: z.string().nullable().optional(),
+  recorded_by_user_id: z.string().nullable().optional(),
+  import_job_id: z.string().nullable().optional(),
+  external_source: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
   virtual_account: VirtualAccountSchema.nullable(),
   transactions: z.array(TransactionSchema),

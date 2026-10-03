@@ -147,6 +147,9 @@ async function fetchReceiptDetail(
           customer_phone,
           shipping_address,
           invoice_type_code,
+          recorded_by_user_id,
+          import_job_id,
+          external_source,
           order_items (
             id,
             name,

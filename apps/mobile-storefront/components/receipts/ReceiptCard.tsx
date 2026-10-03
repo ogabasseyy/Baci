@@ -60,7 +60,12 @@ export function ReceiptCard({
   onPress,
   onPrefetch,
 }: ReceiptCardProps) {
-  const config = getPaymentConfig(item.payment_status);
+  // Badge/action follow the effective document kind: a covered manual
+  // balance under a non-paid label opens a receipt, so the card says
+  // receipt. Absent kind (legacy rows) falls back to the raw status.
+  const displayStatus =
+    item.document_kind === 'receipt' ? 'paid' : item.payment_status;
+  const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
     ? `${firstItem.product_name}${
@@ -136,12 +141,12 @@ export function ReceiptCard({
       <View style={styles.cardFooter}>
         <View>
           <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            {item.payment_status === 'paid' ? 'Paid' : 'Total'}
+            {displayStatus === 'paid' ? 'Paid' : 'Total'}
           </Text>
           <Text style={[styles.totalAmount, { color: colors.text }]}>
             {formatPrice(item.total, item.currency)}
           </Text>
-          {item.payment_status === 'partially_paid' && (
+          {displayStatus === 'partially_paid' && (
             <Text style={[styles.balanceLabel, { color: '#D97706' }]}>
               Balance:{' '}
               {formatPrice(item.total - item.amount_paid, item.currency)}

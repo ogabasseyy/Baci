@@ -1,8 +1,4 @@
 import { compareReceiptListDesc } from '@baci/shared';
-import {
-  isManualOrderRecord,
-  isSettledManualBalance,
-} from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { CONFIG } from '@/lib/config';
@@ -12,6 +8,7 @@ import { ReceiptDetailSchema, ReceiptListItemSchema } from '@/schemas/receipt';
 import { useAuthStore } from '@/stores/auth-store';
 import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
+import { isPromotedManualReceipt } from './receipt-promotion-gates';
 import { mapCustomerTransactionRpcRows } from './receipt-transaction-mappers';
 import { resolveReceiptPaymentAccount } from './resolve-receipt-payment-account';
 
@@ -56,7 +53,15 @@ export function useReceipts(userId: string | undefined) {
               id,
               order_number,
               payment_status,
+              shipping_status,
+              recorded_by_user_id,
+              import_job_id,
+              external_source,
               total,
+              subtotal,
+              shipping_fee,
+              tax_amount,
+              discount_amount,
               amount_paid,
               currency,
               created_at,
@@ -88,13 +93,35 @@ export function useReceipts(userId: string | undefined) {
 
       if (error) throw error;
 
-      const mapped = (data || []).map((order) => ({
-        ...order,
-        items: (order.order_items ?? []).map((item) => ({
-          ...item,
-          product_name: item.name,
-        })),
-      }));
+      const mapped = (data || []).map((order) => {
+        const items = (order.order_items ?? []).map((item) =>
+          item == null ? item : { ...item, product_name: item.name }
+        );
+        // Badge/action kind through the same promotion gate the preview
+        // renders through, so a covered manual row says receipt here and
+        // opens a receipt there — never "View Invoice" into a receipt.
+        const document_kind =
+          (typeof order.payment_status === 'string' &&
+            order.payment_status.trim().toLowerCase() === 'paid') ||
+          isPromotedManualReceipt({
+            recordedByUserId: order.recorded_by_user_id,
+            importJobId: order.import_job_id,
+            externalSource: order.external_source,
+            paymentStatus: order.payment_status,
+            shippingStatus: order.shipping_status,
+            total: order.total,
+            subtotal: order.subtotal,
+            shippingFee: order.shipping_fee,
+            taxAmount: order.tax_amount,
+            discountAmount: order.discount_amount,
+            amountPaid: order.amount_paid,
+            currency: order.currency,
+            items: order.order_items,
+          })
+            ? 'receipt'
+            : 'invoice';
+        return { ...order, items, document_kind };
+      });
 
       const result = ReceiptListItemSchema.array().safeParse(mapped);
       if (!result.success) {
@@ -184,22 +211,31 @@ async function fetchReceiptDetail(
   if (orderError) throw orderError;
   if (!order) throw new Error('Order not found');
 
-  // Covered manual balances promote to receipts dated from their
-  // transactions: a transaction-fetch failure must fail the whole detail
-  // load like a paid order, never render a misdated receipt.
-  const isCoveredManualOrder =
-    isManualOrderRecord({
+  // Fail-closed dating follows the same promotion gate the preview
+  // renders through: a row that previews as an invoice (cancelled,
+  // unknown-status, content-invalid) tolerates transaction failures like
+  // any unpaid row, while a promoted row fails the whole load rather
+  // than render a misdated receipt. The status trim is typeof-guarded:
+  // the row is unvalidated here, so a numeric marker must fail closed,
+  // never throw.
+  const isPaidOrder =
+    (typeof order.payment_status === 'string' &&
+      order.payment_status.trim().toLowerCase() === 'paid') ||
+    isPromotedManualReceipt({
       recordedByUserId: order.recorded_by_user_id,
       importJobId: order.import_job_id,
       externalSource: order.external_source,
-    }) &&
-    isSettledManualBalance({
+      paymentStatus: order.payment_status,
+      shippingStatus: order.shipping_status,
       total: order.total,
+      subtotal: order.subtotal,
+      shippingFee: order.shipping_fee,
+      taxAmount: order.tax_amount,
+      discountAmount: order.discount_amount,
       amountPaid: order.amount_paid,
+      currency: order.currency,
+      items: order.order_items,
     });
-  const isPaidOrder =
-    order.payment_status?.trim().toLowerCase() === 'paid' ||
-    isCoveredManualOrder;
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {
@@ -232,10 +268,9 @@ async function fetchReceiptDetail(
   const detail = {
     ...order,
     balance: (order.total ?? 0) - (order.amount_paid ?? 0),
-    items: (order.order_items ?? []).map((item) => ({
-      ...item,
-      product_name: item.name,
-    })),
+    items: (order.order_items ?? []).map((item) =>
+      item == null ? item : { ...item, product_name: item.name }
+    ),
     virtual_account: resolveReceiptPaymentAccount(
       virtualAccounts,
       transactions,

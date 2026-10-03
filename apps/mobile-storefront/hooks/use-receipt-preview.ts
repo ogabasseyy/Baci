@@ -18,8 +18,10 @@ import {
   resolveInvoiceTypeCode,
   showMerchantBankDetails,
 } from '@baci/shared';
+import { isManualOrderRecord } from '@baci/shared/receipt';
 import { useState } from 'react';
 import type { ReceiptDetail, ReceiptListItem } from '@/types/receipt';
+import { isPromotedManualReceipt } from './receipt-promotion-gates';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
 export interface ReceiptPreviewOptions {
@@ -74,70 +76,41 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
     // A fully-covered manual balance is a receipt in substance even under
-    // a non-paid label (mirrors the manual branch of web isReceiptEligible
-    // in storefront-account-document-eligibility.ts): the generator infers
-    // the document from payment_status, so normalize the renderer input
-    // like web does — otherwise the app link on an emailed receipt opens
-    // the same order as an invoice. The balance alone never promotes: a
-    // cancelled, unknown-status, or content-invalid manual row fails
-    // closed like the sender, archive filter, and download routes. Content
-    // validity mirrors web isManualOrderDocumentContentValid: money and
-    // items only (a null customer name is sender-permitted), with web
-    // coercion — numeric strings count, null/NaN fail. The detail fetch
-    // only warns on schema failure, so check here instead of trusting it.
-    const normalizeStatus = (value: string | null | undefined) =>
-      value?.trim().toLowerCase().replace(/\s+/g, '_') ?? '';
-    const isValidMoney = (value: unknown) =>
-      value !== null &&
-      value !== undefined &&
-      Number.isFinite(Number(value)) &&
-      Number(value) >= 0;
-    // Blank check without dereference: a present-but-malformed provenance
-    // marker (non-string) disqualifies manual status instead of crashing.
-    const isBlankProvenance = (value: unknown) =>
-      value === null ||
-      value === undefined ||
-      (typeof value === 'string' && value.trim() === '');
-    const isManualOrder = Boolean(
-      receiptDetail.recorded_by_user_id &&
-        isBlankProvenance(receiptDetail.import_job_id) &&
-        isBlankProvenance(receiptDetail.external_source)
-    );
-    const manualPaymentStatus = normalizeStatus(receiptDetail.payment_status);
-    const hasValidContent =
-      [
-        receiptDetail.total,
-        receiptDetail.subtotal,
-        receiptDetail.shipping_fee,
-        receiptDetail.tax_amount,
-        receiptDetail.discount_amount,
-        receiptDetail.amount_paid,
-      ].every(isValidMoney) &&
-      (receiptDetail.currency == null ||
-        /^[A-Za-z]{3}$/.test(receiptDetail.currency)) &&
-      Array.isArray(receiptDetail.items) &&
-      receiptDetail.items.length > 0 &&
-      receiptDetail.items.every(
-        (item) =>
-          item != null &&
-          typeof item === 'object' &&
-          typeof item.product_name === 'string' &&
-          isValidMoney(item.price) &&
-          item.quantity !== null &&
-          item.quantity !== undefined &&
-          Number.isFinite(Number(item.quantity)) &&
-          Number(item.quantity) > 0
-      );
-    const isManualReceipt =
-      isManualOrder &&
-      !['cancelled', 'canceled', 'returned', 'failed'].includes(
-        normalizeStatus(receiptDetail.shipping_status)
-      ) &&
-      ['paid', 'unpaid', 'pending', 'partially_paid'].includes(
-        manualPaymentStatus
-      ) &&
-      Number(receiptDetail.amount_paid) >= Number(receiptDetail.total) &&
-      hasValidContent;
+    // a non-paid label: the generator infers the document from
+    // payment_status, so normalize the renderer input like web does —
+    // otherwise the app link on an emailed receipt opens the same order
+    // as an invoice. Promotion details live in receipt-promotion-gates.
+    // Typeof-guarded: a corrupt numeric status must fail closed to '',
+    // never throw on .trim() (the detail fetch only warns on schema
+    // failure, so numbers can reach here at runtime).
+    const normalizeStatus = (value: unknown) =>
+      typeof value === 'string'
+        ? (value.trim().toLowerCase().replace(/\s+/g, '_') ?? '')
+        : '';
+    // Promotion comes from the single mobile gate the receipts-list
+    // fail-closed fetch consumes too: a row that previews as an invoice
+    // can never hard-fail detail load like a paid order, and a promoted
+    // row always fails closed on transaction errors instead of misdating.
+    const isManualOrder = isManualOrderRecord({
+      recordedByUserId: receiptDetail.recorded_by_user_id,
+      importJobId: receiptDetail.import_job_id,
+      externalSource: receiptDetail.external_source,
+    });
+    const isManualReceipt = isPromotedManualReceipt({
+      recordedByUserId: receiptDetail.recorded_by_user_id,
+      importJobId: receiptDetail.import_job_id,
+      externalSource: receiptDetail.external_source,
+      paymentStatus: receiptDetail.payment_status,
+      shippingStatus: receiptDetail.shipping_status,
+      total: receiptDetail.total,
+      subtotal: receiptDetail.subtotal,
+      shippingFee: receiptDetail.shipping_fee,
+      taxAmount: receiptDetail.tax_amount,
+      discountAmount: receiptDetail.discount_amount,
+      amountPaid: receiptDetail.amount_paid,
+      currency: receiptDetail.currency,
+      items: receiptDetail.items,
+    });
     // Legacy spellings ('Paid', ' paid ') count like web's normalized
     // comparison, so the preview agrees with archive/download labels.
     const isPaidReceipt =

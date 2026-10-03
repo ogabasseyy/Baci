@@ -16,17 +16,29 @@ export const MANUAL_ORDER_ITEM_FINANCIAL_FIELDS = [
 export type ManualOrderItemFinancialField =
   (typeof MANUAL_ORDER_ITEM_FINANCIAL_FIELDS)[number];
 
-// Staff-recorded, never imported: a blank staff-entered source is absent,
-// not imported, matching the enqueue trigger and sender truthiness.
-export function isManualOrderRecord(input: {
-  recordedByUserId?: string | null;
-  importJobId?: string | null;
-  externalSource?: string | null;
-}): boolean {
+// Blank without dereference: nullish or whitespace-only strings are
+// absent; a present-but-malformed (non-string) marker disqualifies manual
+// status instead of throwing on .trim(). Detail fetches only warn on
+// schema failure, so a numeric marker can reach this predicate at runtime.
+function isBlankProvenance(value: unknown): boolean {
   return (
-    Boolean(input.recordedByUserId) &&
-    !input.importJobId &&
-    !input.externalSource?.trim()
+    value === null ||
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '')
+  );
+}
+
+// Staff-recorded, never imported: matches the enqueue trigger and sender
+// truthiness for well-typed rows, and fails corrupt rows closed.
+export function isManualOrderRecord(input: {
+  recordedByUserId?: unknown;
+  importJobId?: unknown;
+  externalSource?: unknown;
+}): boolean {
+  return Boolean(
+    input.recordedByUserId &&
+      isBlankProvenance(input.importJobId) &&
+      isBlankProvenance(input.externalSource)
   );
 }
 

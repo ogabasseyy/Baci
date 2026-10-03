@@ -61,3 +61,14 @@ INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('100000
 UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'order_validation_failed', skipped_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000053';
 UPDATE public.orders SET created_at = '2026-09-30T11:00:00Z' WHERE id = '10000000-0000-4000-8000-000000000053';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000053'), 'creation-date correction re-arms the skipped row');
+-- Restoring a soft-deleted customer re-arms rows skipped as
+-- document_claim_unavailable; the delete alone re-arms nothing.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000055', '10000000-0000-4000-8000-000000000001', 'restored@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000056', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000055', '10000000-0000-4000-8000-000000000010', 'restored@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000056', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'document_claim_unavailable', skipped_at = now(), attempt_count = 2 WHERE order_id = '10000000-0000-4000-8000-000000000056';
+UPDATE public.customers SET deleted_at = now() WHERE id = '10000000-0000-4000-8000-000000000055';
+SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer delete alone leaves the skipped row alone');
+UPDATE public.customers SET deleted_at = NULL WHERE id = '10000000-0000-4000-8000-000000000055';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer restore re-arms the skipped row');

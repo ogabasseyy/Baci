@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { resolveInvoiceTypeCode } from './resolve-invoice-type-code';
 
 describe('resolveInvoiceTypeCode', () => {
+  it('fails closed on non-string markers instead of throwing on trim', () => {
+    // Mobile detail fetches only warn on schema failure, so corrupt
+    // numeric markers reach the resolver at runtime.
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 7,
+        paymentStatus: 42,
+        storedTypeCode: 380,
+        isPaid: false,
+      })
+    ).toBe('380');
+    expect(
+      resolveInvoiceTypeCode({
+        paymentMethod: 'invoice',
+        paymentStatus: 42,
+        isPaid: false,
+      })
+    ).toBe('325');
+  });
+
   it('forces 325 for unpaid invoice-method orders holding the 380 default', () => {
     expect(
       resolveInvoiceTypeCode({

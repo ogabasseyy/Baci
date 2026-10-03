@@ -118,6 +118,15 @@ UPDATE public.merchants SET email = 'renamed@example.com' WHERE id = '10000000-0
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'cosmetic merchant edit keeps the marker');
 UPDATE public.merchants SET email = 'store@example.com' WHERE id = '10000000-0000-4000-8000-000000000001';
 UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+-- A merchant bank edit resets only the invoice marker: receipts render
+-- no payment instructions, so their in-flight markers stay valid.
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET bank_name = 'Renamed Bank' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'merchant bank edit resets the invoice marker');
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'merchant bank edit preserves the receipt marker');
+UPDATE public.merchants SET bank_name = 'GTBank' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 -- An ineligibility flip (cancel) still resets the marker: the reset runs
 -- before every eligibility exit.
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';

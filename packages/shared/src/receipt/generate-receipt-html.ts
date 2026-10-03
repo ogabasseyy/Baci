@@ -8,11 +8,11 @@
 
 import { normalizeReceiptColor } from './receipt-colors';
 import { renderReceiptDocument } from './receipt-document';
+import { renderItemRows } from './receipt-item-rows';
 import { createMoneyFormatter, hexToRgba } from './receipt-money';
 import { renderBankDetailsHtml } from './receipt-payment-instructions';
 import {
   renderFinancialSummaryLines,
-  renderItemRows,
   renderLogoHtml,
   renderPaymentHistoryHtml,
   renderQrHtml,

@@ -57,7 +57,11 @@ promote_worker_release
 # Record the promote for the workflow's pre-publish overlap check (the
 # other half of the serialization): runs that appeared during the
 # promote must refuse to publish off their pre-promote latch/SHA read.
-record_deploy_workflow_promote "$APP_SHA"
+# A failed record must NOT abort the installation below (set -e would
+# exit here, leaving the flipped tree without services or schedule):
+# capture the status, complete every install, and fail at the end.
+record_status=0
+record_deploy_workflow_promote "$APP_SHA" || record_status=$?
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
@@ -256,6 +260,15 @@ fi
 crontab "$tmp_file"
 rm -f "$fragment_path"
 REMOTE_SH
+
+# The promote record failed above, after the flip: every install is
+# now complete, so fail the deployment honestly (the overlap guard is
+# blind until the record lands — re-run the record from this checkout,
+# then re-verify the latch before relying on the poller).
+if [ "$record_status" -ne 0 ]; then
+  echo "Worker promotion record failed; installation completed but the deploy is FAILED. Re-run record_deploy_workflow_promote $APP_SHA, then re-verify the latch." >&2
+  exit "$record_status"
+fi
 
 echo "==> Done."
 print_worker_env_reminder "$REMOTE_DIR"

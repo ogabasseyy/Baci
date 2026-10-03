@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { findMultilineDotenvAssignments } from './preflight-direct-web-workers.mjs';
+import { findMultilineDotenvAssignments } from './preflight-dotenv-assignments.mjs';
 
 describe('preflight multiline dotenv assignments', () => {
   it('rejects multiline values for keys the shell boundary reads', () => {

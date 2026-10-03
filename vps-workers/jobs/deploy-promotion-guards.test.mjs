@@ -205,6 +205,53 @@ describe('deploy promotion guards', () => {
     }
   });
 
+  it('completes installation when the promote record fails', () => {
+    // deploy.sh runs under set -e with the record AFTER the flip: a
+    // bare record call would exit there, leaving the live tree
+    // without services or schedule. The record status is captured,
+    // every install completes, and the deploy fails honestly at the
+    // end (before the "Done" marker, so success is never printed on
+    // a failed deploy).
+    const deploySource = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const captureIndex = deploySource.indexOf(
+      'record_deploy_workflow_promote "$APP_SHA" || record_status=$?'
+    );
+    const installIndex = deploySource.indexOf(
+      '==> Installing crontab entries on VPS'
+    );
+    const failIndex = deploySource.indexOf(
+      'if [ "$record_status" -ne 0 ]; then'
+    );
+    const doneIndex = deploySource.indexOf('echo "==> Done."');
+    assert.ok(
+      captureIndex !== -1 &&
+        installIndex !== -1 &&
+        failIndex !== -1 &&
+        doneIndex !== -1
+    );
+    assert.ok(
+      captureIndex < installIndex &&
+        installIndex < failIndex &&
+        failIndex < doneIndex,
+      'expected record-capture, then installs, then end-failure, then Done'
+    );
+    assert.match(deploySource, /exit "\$record_status"/);
+    // The capture only works because the serialization functions
+    // return instead of exiting (an exit inside a sourced function
+    // would kill deploy.sh before the capture runs).
+    const libSource = readFileSync(
+      join(workerRoot, 'lib', 'check-deploy-workflow-inflight.sh'),
+      'utf8'
+    );
+    for (const line of libSource.split('\n')) {
+      assert.doesNotMatch(
+        line,
+        /^\s*exit(\s|;|$)/,
+        'expected no exit commands in the serialization lib (return, never exit)'
+      );
+    }
+  });
+
   it('keeps the rollback crontab-restore anchors in deploy.sh', () => {
     // The emergency rollback renders the target rev's crontab fragment
     // from its deploy.sh and runs its merge script in-flock. Both are

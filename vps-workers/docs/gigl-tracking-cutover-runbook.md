@@ -58,10 +58,10 @@ unless `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1` — emergency only, then
 re-run the smoke/latch sequence). For an emergency manual rollback,
 restore the COMPLETE old worker release — not just the checkout
 symlink: repointing `app-live` alone leaves the newer `bin/`, `jobs/`,
-`lib/`, `node_modules/`, and crontab installed, so cron executes a
-mixed release while the SHA marker claims the old revision, and
-neither readiness nor the latch can detect the wrapper, dependency,
-or schedule skew. The old worktree is a full repo checkout, so it
+`lib/`, `config/`, `node_modules/`, and crontab installed, so cron
+executes a mixed release while the SHA marker claims the old
+revision, and neither readiness nor the latch can detect the
+wrapper, dependency, config, or schedule skew. The old worktree is a full repo checkout, so it
 carries the old `vps-workers/` tree; if it was already retired,
 re-create it first (`git -C <base>/app-live worktree add --detach
 <base>/app-<sha> <sha>`), or use the `deploy.sh` path instead.
@@ -119,9 +119,10 @@ deploy's image was never pruned. If it was, rebuild it or take the
 Refuse the rollback while a production deploy is in flight, through
 the same GitHub-side protocol as `deploy.sh` — run from a checkout
 of the production repo with an authenticated `gh` (the `bash -c`
-wrapper contains the `exit` refusal without killing an interactive
-shell; emergency-only bypass `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1`,
-then re-verify the latch):
+wrapper keeps the sourced functions out of the interactive shell and
+propagates the refusal status; the functions return, never exit, so
+even a direct source cannot kill the operator shell; emergency-only
+bypass `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1`, then re-verify the latch):
 
 ```sh
 bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && check_deploy_workflow_inflight'
@@ -157,6 +158,13 @@ flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$remote_dir/bin/"
   rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$remote_dir/jobs/"
   rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$remote_dir/lib/"
+  # Runtime config (seccomp profile): the restored crontab passes the
+  # live config path to the old release, so a newer policy must not
+  # survive under old code. Guarded for rollback targets that predate
+  # config/ (then old code cannot reference it either).
+  if [ -d <base>/app-<sha>/vps-workers/config ]; then
+    rsync -a --delete <base>/app-<sha>/vps-workers/config/ "$remote_dir/config/"
+  fi
   rsync -a --delete <base>/app-<sha>/vps-workers/node_modules/ "$remote_dir/node_modules/"
   cp <base>/app-<sha>/.github/scripts/gigl-dotenv.sh "$remote_dir/bin/gigl-dotenv.sh"
   # Restore the target revision's crontab while ticks are still

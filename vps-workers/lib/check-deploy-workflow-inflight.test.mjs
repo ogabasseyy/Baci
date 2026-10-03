@@ -94,8 +94,10 @@ test('queries every non-completed status without a fixed window', () => {
   });
 
   assert.equal(result.status, 0, result.stderr);
+  // Two consecutive stable passes prove nothing transitioned
+  // mid-scan; a single pass can always dodge.
   const calls = ghArgs.split('\n').filter(Boolean);
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 10);
   for (const status of [
     'queued',
     'in_progress',
@@ -103,15 +105,60 @@ test('queries every non-completed status without a fixed window', () => {
     'requested',
     'pending',
   ]) {
-    assert.ok(
-      calls.some((call) => call.includes(`status=${status}`)),
-      `expected a status=${status} query`
+    assert.equal(
+      calls.filter((call) => call.includes(`status=${status}`)).length,
+      2,
+      `expected two status=${status} queries`
     );
   }
   for (const call of calls) {
     assert.match(call, /--paginate/);
     assert.match(call, /actions\/workflows\/deploy\.yml\/runs\?branch=main/);
   }
+});
+
+test('captures a run that transitions status mid-scan', () => {
+  // requested -> queued between passes: both passes observe the id
+  // (stable set), so the scan stops after two passes and the union
+  // keeps the run exactly once.
+  const transitionStub = (queuedFrom) =>
+    [
+      'echo "$@" >> "$GH_ARGS_FILE"',
+      'n=$(($(cat "$GH_ARGS_FILE.count" 2>/dev/null || echo 0) + 1)); echo "$n" >"$GH_ARGS_FILE.count"',
+      'case "$*" in',
+      '  *status=requested*) if [ "$n" -le 5 ]; then printf \'184400113\\trequested\\tabc99999\\tpush\\thttps://example.invalid/runs/184400113\\n\'; fi;;',
+      `  *status=queued*) if [ "$n" -ge ${queuedFrom} ]; then printf '184400113\\tqueued\\tabc99999\\tpush\\thttps://example.invalid/runs/184400113\\n'; fi;;`,
+      'esac',
+      'exit 0',
+    ].join('\n');
+  const { result, ghArgs } = runCheck({ ghBody: transitionStub(6) });
+
+  assert.equal(result.status, 1);
+  assert.equal(ghArgs.split('\n').filter(Boolean).length, 10);
+  // Exactly one unioned row: the id plus its run URL (two mentions).
+  assert.equal(result.stderr.match(/184400113/g).length, 2);
+});
+
+test('re-scans when a pass diverges', () => {
+  // The run dodges the whole second pass (between statuses at every
+  // query) and reappears in the third: the divergent pass forces a
+  // third scan instead of settling on the gapped set.
+  const { result, ghArgs } = runCheck({
+    ghBody: [
+      'echo "$@" >> "$GH_ARGS_FILE"',
+      'n=$(($(cat "$GH_ARGS_FILE.count" 2>/dev/null || echo 0) + 1)); echo "$n" >"$GH_ARGS_FILE.count"',
+      'case "$*" in',
+      '  *status=requested*) if [ "$n" -le 5 ]; then printf \'184400114\\trequested\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
+      '  *status=queued*) if [ "$n" -ge 11 ]; then printf \'184400114\\tqueued\\tabc99998\\tpush\\thttps://example.invalid/runs/184400114\\n\'; fi;;',
+      'esac',
+      'exit 0',
+    ].join('\n'),
+  });
+
+  assert.equal(result.status, 1);
+  assert.equal(ghArgs.split('\n').filter(Boolean).length, 15);
+  // Exactly one unioned row: the id plus its run URL (two mentions).
+  assert.equal(result.stderr.match(/184400114/g).length, 2);
 });
 
 test('refuses promotion while a deploy run is in progress', () => {
@@ -275,8 +322,13 @@ test('deploy.sh checks for in-flight deploys before staging and before promote',
   assert.ok(second > deploy.indexOf('install_remediation_cron_transition'));
   assert.ok(second < deploy.indexOf('promote_worker_release'));
   // The promote is recorded for the workflow pre-publish overlap
-  // check immediately after the live SHA flips.
-  assert.match(deploy, /^record_deploy_workflow_promote "\$APP_SHA"$/m);
+  // check immediately after the live SHA flips — with the status
+  // captured, so a failed record completes the installs below before
+  // failing the deploy instead of exiting under set -e.
+  assert.match(
+    deploy,
+    /^record_deploy_workflow_promote "\$APP_SHA" \|\| record_status=\$\?$/m
+  );
   assert.ok(
     deploy.indexOf('record_deploy_workflow_promote') >
       deploy.indexOf('promote_worker_release')

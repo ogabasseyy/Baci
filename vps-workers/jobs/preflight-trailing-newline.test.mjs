@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'dotenv';
-import { findTrailingNewlineValues } from './preflight-direct-web-workers.mjs';
+import { findTrailingNewlineValues } from './preflight-dotenv-assignments.mjs';
 
 const jobsDir = dirname(fileURLToPath(import.meta.url));
 

@@ -2,6 +2,14 @@
 # Serializes manual worker promotion with the production deploy
 # workflow. Sourced by deploy.sh.
 #
+# Every function here RETURNS its status and never exits: deploy.sh
+# must complete the post-promote installation even when the promote
+# record fails (capturing the status and failing at the end), and an
+# exit inside a sourced function would kill the caller before it can.
+# deploy.sh relies on set -e for the pre-promote refusal and on an
+# explicit capture for the record; runbook one-liners propagate via
+# &&. Never add an exit to these functions.
+#
 # The deploy workflow reads the cutover latch and installed SHA early
 # (vps-drain-readiness), then runs migrations and a build that can take
 # hours before publishing. Promotion replaces app-checkout.sha while
@@ -55,7 +63,7 @@ _set_inflight_repo() {
   if [ -n "${BACI_DEPLOY_WORKFLOW_REPO:-}" ]; then
     if ! _is_valid_repo_slug "$BACI_DEPLOY_WORKFLOW_REPO"; then
       echo "Refusing worker promotion: BACI_DEPLOY_WORKFLOW_REPO must be 'owner/repo', got '$BACI_DEPLOY_WORKFLOW_REPO'." >&2
-      exit 1
+      return 1
     fi
     _inflight_owner="${BACI_DEPLOY_WORKFLOW_REPO%%/*}"
     _inflight_repo="${BACI_DEPLOY_WORKFLOW_REPO#*/}"
@@ -71,7 +79,7 @@ _set_inflight_repo() {
   esac
   if ! _is_valid_repo_slug "$inflight_repo"; then
     echo "Refusing worker promotion: cannot resolve the deploy repo from origin '$inflight_remote'. Run from a clean clone of the production repo, or set BACI_DEPLOY_WORKFLOW_REPO=owner/repo." >&2
-    exit 1
+    return 1
   fi
   _inflight_owner="${inflight_repo%%/*}"
   _inflight_repo="${inflight_repo#*/}"
@@ -88,20 +96,50 @@ _set_inflight_repo() {
 # exist; --paginate covers an arbitrarily deep non-completed backlog,
 # and the client-side completed-guard keeps a future API behavior
 # change fail-safe instead of fail-open. Prints nothing when quiet.
+# A run that transitions status mid-scan (requested -> queued is a
+# normal lifecycle step) can dodge a single pass — queried under its
+# old status before the transition and under its new status after —
+# so the full scan repeats until two consecutive passes observe the
+# same id set (stable: nothing transitioned mid-scan), capped at
+# three passes. Every pass unions in and ids dedupe: the result can
+# only over-include (a run that completes mid-scan may linger), and
+# over-inclusion fails safe on both sides (refusal + record match).
 # Usage: _list_noncompleted_deploy_runs <err-file-or-empty>.
 _list_noncompleted_deploy_runs() {
   local _list_err_file="$1"
-  local _list_status _list_page
-  for _list_status in queued in_progress waiting requested pending; do
-    if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
-      --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
-      2>"${_list_err_file:-/dev/null}")"; then
-      return 1
+  local _list_pass _list_status _list_page
+  local _list_pass_tsv _list_pass_ids _list_prev_ids _list_acc
+  _list_acc=""
+  _list_prev_ids="unseen"
+  _list_pass=1
+  while [ "$_list_pass" -le 3 ]; do
+    _list_pass_tsv=""
+    for _list_status in queued in_progress waiting requested pending; do
+      if ! _list_page="$(gh api "repos/$_inflight_owner/$_inflight_repo/actions/workflows/deploy.yml/runs?branch=main&status=$_list_status&per_page=100" --paginate \
+        --jq '.workflow_runs[] | select(.status != "completed") | "\(.id)\t\(.status)\t\((.head_sha // "?")[0:8])\t\(.event // "?")\t\(.html_url)"' \
+        2>"${_list_err_file:-/dev/null}")"; then
+        return 1
+      fi
+      if [ -n "$_list_page" ]; then
+        _list_pass_tsv="${_list_pass_tsv}${_list_page}
+"
+      fi
+    done
+    _list_acc="${_list_acc}${_list_pass_tsv}"
+    if [ -n "$_list_pass_tsv" ]; then
+      _list_pass_ids="$(printf '%s' "$_list_pass_tsv" | cut -f1 | sort -n -u | tr '\n' ' ')"
+    else
+      _list_pass_ids=""
     fi
-    if [ -n "$_list_page" ]; then
-      printf '%s\n' "$_list_page"
+    if [ "$_list_pass_ids" = "$_list_prev_ids" ]; then
+      break
     fi
+    _list_prev_ids="$_list_pass_ids"
+    _list_pass=$((_list_pass + 1))
   done
+  if [ -n "$_list_acc" ]; then
+    printf '%s' "$_list_acc" | awk -F'\t' 'NF && !seen[$1]++'
+  fi
 }
 
 check_deploy_workflow_inflight() {
@@ -111,9 +149,9 @@ check_deploy_workflow_inflight() {
   fi
   if ! command -v gh >/dev/null 2>&1; then
     echo "Refusing worker promotion: the gh CLI is not installed, so in-flight production deploys cannot be ruled out. Install and authenticate gh, or (emergency only) rerun with BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1 and re-verify the latch afterwards." >&2
-    exit 1
+    return 1
   fi
-  _set_inflight_repo
+  _set_inflight_repo || return 1
   # Only main-branch runs can publish (deploy-production requires
   # github.ref == refs/heads/main), but ANY non-completed status counts:
   # queued and waiting runs (the production environment can hold a run
@@ -126,14 +164,14 @@ check_deploy_workflow_inflight() {
       rm -f "$inflight_err"
     fi
     echo "Refusing worker promotion: could not list production deploy runs${inflight_detail:+: $inflight_detail}. Authenticate gh (gh auth login), or (emergency only) rerun with BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1 and re-verify the latch afterwards." >&2
-    exit 1
+    return 1
   fi
   if [ -n "$inflight_err" ]; then rm -f "$inflight_err"; fi
   if [ -n "$inflight_runs" ]; then
     echo "Refusing worker promotion: production deploy run(s) still in flight (they publish off the pre-promote latch/SHA):" >&2
     echo "$inflight_runs" >&2
     echo "Wait for the workflow to finish, then rerun deploy.sh. Emergency override: BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1 (then re-run the GIGL smoke/latch sequence before relying on the poller)." >&2
-    exit 1
+    return 1
   fi
 }
 
@@ -141,7 +179,7 @@ record_deploy_workflow_promote() {
   record_sha="${1:?promoted SHA is required}"
   if [[ ! "$record_sha" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Refusing to record worker promotion: expected a 40-hex SHA, got '$record_sha'." >&2
-    exit 1
+    return 1
   fi
   # Under the emergency bypass the pre-promote refusal is skipped but
   # the record is still attempted: a recorded overlap blocks the
@@ -155,12 +193,12 @@ record_deploy_workflow_promote() {
   if ! command -v gh >/dev/null 2>&1; then
     if [ "$record_strict" = "1" ]; then
       echo "Worker promotion is NOT recorded: the gh CLI is not installed, so overlapping workflow runs cannot be warned. Install gh and re-run record_deploy_workflow_promote '$record_sha' from this checkout, then confirm no production deploy published off the pre-promote latch/SHA." >&2
-      exit 1
+      return 1
     fi
     echo "WARNING: worker promotion is NOT recorded (no gh CLI under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
     return 0
   fi
-  _set_inflight_repo
+  _set_inflight_repo || return 1
   # List AFTER promote: runs that appeared during the promote read
   # torn (fail-closed marker mismatch) or fresh post-promote state,
   # but recording them is what lets their own pre-publish step prove
@@ -178,7 +216,7 @@ record_deploy_workflow_promote() {
     fi
     if [ "$record_strict" = "1" ]; then
       echo "Worker promotion is NOT recorded: could not list workflow runs${record_detail:+: $record_detail}. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once gh works, then confirm no production deploy published off the pre-promote latch/SHA." >&2
-      exit 1
+      return 1
     fi
     echo "WARNING: worker promotion is NOT recorded (run list failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1${record_detail:+: $record_detail}). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
     return 0
@@ -204,7 +242,7 @@ record_deploy_workflow_promote() {
   done
   if [ "$record_strict" = "1" ]; then
     echo "Worker promotion is NOT recorded: could not push $PROMOTE_RECORD_BRANCH to origin after 3 attempts. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once the network cooperates, then confirm no production deploy published off the pre-promote latch/SHA." >&2
-    exit 1
+    return 1
   fi
   echo "WARNING: worker promotion is NOT recorded (branch push failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
   return 0

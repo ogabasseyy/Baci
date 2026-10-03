@@ -83,6 +83,7 @@ tracking:
   - 'vps-workers/bin/verify-gigl-direct-workers-installed.sh'
   - 'vps-workers/bin/verify-gigl-tracking-worker-capability.sh'
   - 'vps-workers/jobs/preflight-direct-web-workers.mjs'
+  - 'vps-workers/jobs/preflight-dotenv-assignments.mjs'
   - 'vps-workers/lib/prepare-worker-release.sh'
   - 'vps-workers/lib/provision-immutable-checkout.sh'
   - 'vps-workers/lib/flip-immutable-checkout.sh'

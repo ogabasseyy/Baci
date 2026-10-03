@@ -238,6 +238,11 @@ BEGIN
     OR NEW.notes IS DISTINCT FROM OLD.notes
     OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
     OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
+    OR NEW.payment_due_date IS DISTINCT FROM OLD.payment_due_date
+    OR NEW.payment_terms IS DISTINCT FROM OLD.payment_terms
+    OR NEW.buyer_reference IS DISTINCT FROM OLD.buyer_reference
+    OR NEW.firs_irn IS DISTINCT FROM OLD.firs_irn
+    OR NEW.firs_csid IS DISTINCT FROM OLD.firs_csid
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
     OR NEW.currency IS DISTINCT FROM OLD.currency
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
@@ -252,7 +257,7 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_document_after_order_update()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER enqueue_manual_document_after_order_update
-  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, created_at, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
+  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, payment_due_date, payment_terms, buyer_reference, firs_irn, firs_csid, created_at, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
 -- Ship disabled: enabling here would let rows enqueue while an older cron

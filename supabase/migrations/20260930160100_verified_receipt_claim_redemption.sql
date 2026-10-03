@@ -216,6 +216,14 @@ BEGIN
     RETURN private.redeem_manual_order_claim_order_scoped(
       v_claim.id, v_user_id, v_email, p_source);
   END IF;
+  -- Lock the claimed orders in claim -> order order before validating:
+  -- the legacy core never rechecks receipt_claim_orders or the owner, so
+  -- an unlocked check lets a concurrent staff customer_id change strand
+  -- the consumed token on an order the redeemer cannot access.
+  PERFORM 1 FROM public.orders AS o
+  WHERE o.id IN (SELECT rco.order_id FROM public.receipt_claim_orders AS rco
+                 WHERE rco.receipt_claim_id = v_claim.id)
+  FOR UPDATE;
   IF NOT EXISTS (SELECT 1 FROM public.receipt_claim_orders WHERE receipt_claim_id = v_claim.id)
     OR EXISTS (
       SELECT 1 FROM public.receipt_claim_orders AS rco JOIN public.orders AS o ON o.id = rco.order_id

@@ -109,8 +109,13 @@ export async function renderManualOrderDocumentPdf({
   );
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
   const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
+    buyerReference: order.buyer_reference,
     documentKind: pdfDocumentKind,
+    dueDate: order.payment_due_date,
+    firsCsid: order.firs_csid,
+    firsIrn: order.firs_irn,
     invoiceTypeCode,
+    paymentTerms: order.payment_terms,
     documentDate:
       (isPaid
         ? (receiptDate ?? order.transaction_date)

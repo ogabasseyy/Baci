@@ -11,6 +11,7 @@ import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-w
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
+import { EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES } from './expected-manual-document-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -254,121 +255,8 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160000_manual_order_document_notifications.sql',
-    sha256: '6f35fa67bb8f80b637926792268b3a867f9f7237d620d19913351b737a68c6ee',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160050_manual_order_document_claims.sql',
-    sha256: '1fe2de456f32fdaf6daac276a0d1140acb701c0958547154041d8a529d40d8f8',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160060_manual_order_document_child_invalidation.sql',
-    sha256: '409d0d26475d171398a63bd87f45be2adf79c3082506ef45a0a850111416e741',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160065_manual_order_document_merchant_rearm.sql',
-    sha256: '01a3438060639ba5b8da30e38c474eed694c4922a515fe890fb9dd4424d59b96',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: 'a1cda14a988e954a1c2bf3d7301cba30cdf398fdaf843df8508bbcca6d449cbe',
-  },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
-  ...EXPECTED_SAVINGS_PENDING_SOURCES,
-  ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
-  {
-    repositoryPath:
-      'supabase/migrations/20261002090046_storefront_search_refinements.sql',
-    sha256: 'f2a1e439271d32eeb9e83dbde9f79782f00aedfdf318f28020c5edaef8a58372',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261015090001_storefront_payment_settings_shipping_insurance.sql',
-    sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016090000_search_condition_match_hyphen.sql',
-    sha256: '82e8ab798c5444cfcc1037f21bfb376940d15ae7801f0462efa12f32bde0b274',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016100000_storefront_order_replay_key_floor.sql',
-    sha256: '35bb3fc0bca3a6e133e1909c7dc53179709819abf734ae6ae573f8a505709039',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016110000_storefront_order_item_offer_id_snapshot.sql',
-    sha256: '35e6dc838033f09f69ed12d479988833a9d6dbfe0b41905093998584eac0ae18',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016115000_storefront_order_item_offer_identity_hardening.sql',
-    sha256: 'efb4ed9615d183d01155ab7ceedf1509228afb85a4d15e6adc8da80ff3e75e26',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016125000_storefront_order_replay_economics_offer_snapshot.sql',
-    sha256: '3e4ef56adae86434136c65c4c19e63c1ab04c2a62e4316ad0cbec1f77222b4e7',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016140000_storefront_order_item_offer_identity_freeze.sql',
-    sha256: 'bff7b2dbb638298f1a0c464506bc23a5de3af1c5a0ab0ea9b9cf7e88f99f4bb0',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016150000_storefront_order_idempotency_key_entropy.sql',
-    sha256: 'fb28c5d4994866dae1e83003b49d3ecfcd4d332b6f0d7a26b8b418c3f130fd21',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261016160000_storefront_order_item_offer_tenant_bind.sql',
-    sha256: '8b78693d6a9d1a9ab76c23d667795f435d2f6eaf1fda34fecd2620d05014262d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261019090000_storefront_order_offer_final_state.sql',
-    sha256: 'b804e2f56ee988be072063735e81ca669c5af5c0fb6e12c2b62900aca8fcc582',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20261019100000_storefront_order_item_offer_line_condition_identity.sql',
-    sha256: 'e2a9e1c01d2e137e3b198752c4310999b88ffd5cde4ac96714f2218a600f649d',
-  },
-  ...EXPECTED_PENDING_TAIL_SOURCES.recent,
-  ...EXPECTED_PRIMARY_PENDING_SOURCES,
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '92ebac23dd4733c22156cd8db238979a4cf73df757a07d408ce6e5ca48c2fc60',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: 'c626b31aeff2aa12458042b46e9c15f1e1ba1258df968f42b128da871aac5cfb',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160350_manual_document_snapshot_builders.sql',
-    sha256: '3fd819f816f683372c8ceccf7e9e03c9c372f1a712da0ed3d54f0e8d770889d6',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
-    sha256: 'd02901537f3a42911e073429da10c05545393e81a4740476b5022772d480d412',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260930160450_atomic_manual_document_dispatch_privileges.sql',
-    sha256: 'bc28c09d0b92a92d5e9269308d85a5a51e92220e47abb4efce38cc63aba16b84',
-  },
+  ...EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

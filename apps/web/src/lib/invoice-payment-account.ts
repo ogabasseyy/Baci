@@ -75,7 +75,7 @@ export async function resolveInvoicePaymentAccount(
   // transaction-stable): break them by account number, exactly like the
   // atomic dispatch recheck, so renderer and recheck never pick apart.
   const orderedPaymentAccountQuery = paymentAccountQuery
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false, nullsFirst: false })
     .order('account_number', { ascending: false });
   const { data, error } = isPaidOrder
     ? await orderedPaymentAccountQuery

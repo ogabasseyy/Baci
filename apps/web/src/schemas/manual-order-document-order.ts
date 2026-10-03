@@ -68,6 +68,11 @@ export const manualDocumentOrderSchema = z.object({
   customer_phone: nullableText,
   invoice_type_code: nullableText,
   invoice_note: z.string().nullish(),
+  payment_due_date: nullableText,
+  payment_terms: nullableText,
+  buyer_reference: nullableText,
+  firs_irn: nullableText,
+  firs_csid: nullableText,
   notes: z.string().nullish(),
   shipping_address: z
     .object({

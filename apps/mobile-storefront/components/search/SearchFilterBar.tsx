@@ -1,24 +1,12 @@
-import BottomSheet, {
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  BottomSheetScrollView,
-} from '@gorhom/bottom-sheet';
 import Feather from '@react-native-vector-icons/feather';
-import { useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   FilterBarActiveControls,
   type FilterBarActiveControlsProps,
 } from '@/components/storefront/FilterBarActiveControls';
+import { DraggableSheet } from '@/components/ui/DraggableSheet';
+import { SheetDoneButton } from '@/components/ui/SheetDoneButton';
 import { useTheme } from '@/hooks/useTheme';
 
 type FilterType = FilterBarActiveControlsProps['activeFilterType'];
@@ -41,19 +29,19 @@ const FILTERS = [
 export function SearchFilterBar(props: SearchFilterBarProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType | null>(null);
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const close = () => setActiveFilter(null);
+  const priceDraft = useRef<{ min: number; max: number } | null>(null);
+  const commitPrice = (min: number, max: number) => {
+    priceDraft.current = null;
+    props.onPriceChange(min, max);
+  };
+  const close = () => {
+    if (activeFilter === 'price' && priceDraft.current) {
+      commitPrice(priceDraft.current.min, priceDraft.current.max);
+    }
+    setActiveFilter(null);
+  };
   const title =
     FILTERS.find((filter) => filter.type === activeFilter)?.label ?? 'Rating';
-  const backdrop = (backdropProps: BottomSheetBackdropProps) => (
-    <BottomSheetBackdrop
-      {...backdropProps}
-      appearsOnIndex={0}
-      disappearsOnIndex={-1}
-      pressBehavior="close"
-    />
-  );
-
   return (
     <View style={styles.container}>
       <ScrollView
@@ -145,88 +133,34 @@ export function SearchFilterBar(props: SearchFilterBarProps) {
           </Pressable>
         ))}
       </View>
-      <Modal
+      <DraggableSheet
         visible={activeFilter !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={close}
+        title={title}
+        closeLabel="Close filters"
+        onClose={close}
       >
-        <GestureHandlerRootView style={styles.modal}>
-          {activeFilter !== null && (
-            <BottomSheet
-              index={0}
-              snapPoints={['45%', '80%']}
-              enableDynamicSizing={false}
-              enablePanDownToClose
-              onClose={close}
-              backdropComponent={backdrop}
-              backgroundStyle={{ backgroundColor: colors.card }}
-              handleIndicatorStyle={{ backgroundColor: colors.textSecondary }}
-              topInset={insets.top}
-              keyboardBehavior="interactive"
-              keyboardBlurBehavior="restore"
-              android_keyboardInputMode="adjustResize"
-            >
-              <BottomSheetScrollView
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[
-                  styles.content,
-                  { paddingBottom: insets.bottom + 24 },
-                ]}
-              >
-                <View accessibilityViewIsModal>
-                  <View style={styles.header}>
-                    <Text
-                      accessibilityRole="header"
-                      style={[styles.title, { color: colors.text }]}
-                    >
-                      {title}
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Close filters"
-                      onPress={close}
-                      style={styles.close}
-                    >
-                      <Feather name="x" size={24} color={colors.text} />
-                    </Pressable>
-                  </View>
-                  <FilterBarActiveControls
-                    {...props}
-                    activeFilterType={activeFilter}
-                    inSheet
-                    onDone={close}
-                  />
-                  {activeFilter !== 'price' && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Done"
-                      onPress={close}
-                      style={[styles.done, { backgroundColor: colors.primary }]}
-                    >
-                      <Text
-                        style={[
-                          styles.label,
-                          { color: colors.primaryForeground },
-                        ]}
-                      >
-                        Done
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-              </BottomSheetScrollView>
-            </BottomSheet>
-          )}
-        </GestureHandlerRootView>
-      </Modal>
+        {activeFilter !== null && (
+          <>
+            <FilterBarActiveControls
+              {...props}
+              activeFilterType={activeFilter}
+              inSheet
+              onDone={close}
+              onPriceChange={commitPrice}
+              onPriceDraftChange={(min, max) => {
+                priceDraft.current = { min, max };
+              }}
+            />
+            {activeFilter !== 'price' && <SheetDoneButton onPress={close} />}
+          </>
+        )}
+      </DraggableSheet>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16, paddingVertical: 12 },
-  modal: { flex: 1 },
   categories: { gap: 8, paddingBottom: 12 },
   category: {
     paddingHorizontal: 16,
@@ -246,25 +180,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: { fontSize: 15, fontWeight: '600' },
-  content: { padding: 20 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  title: { fontSize: 24, fontWeight: '700' },
   close: {
     minHeight: 44,
     minWidth: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  done: {
-    marginTop: 24,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
   },
 });

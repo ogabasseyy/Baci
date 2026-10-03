@@ -87,6 +87,8 @@ describe('manualDocumentMerchantSchema', () => {
       '-ogabassey',
       'ogabassey-',
       'oga bassey',
+      // A 64-octet label cannot resolve: fail closed before dispatch.
+      'a'.repeat(64),
     ]) {
       expect(() =>
         manualDocumentMerchantSchema.parse({ ...baseMerchant, slug })

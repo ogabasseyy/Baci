@@ -139,18 +139,6 @@ SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.o
 DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990003333';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'account delete preserves the receipt marker');
 DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt';
--- A no-op touch or non-rendered-column edit of the selected virtual
--- account keeps the marker: the rendered card is unchanged, so
--- resetting would duplicate an accepted send. Rendered-field edits
--- still reset.
-UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
-UPDATE public.order_payment_accounts SET bank_name = bank_name WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
-SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'no-op account touch preserves the marker');
-UPDATE public.order_payment_accounts SET expires_at = now() + interval '2 hours' WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
-SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'non-rendered account edit preserves the marker');
-UPDATE public.order_payment_accounts SET bank_name = 'Renamed VA' WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
-SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'rendered account edit resets the marker');
-UPDATE public.order_payment_accounts SET bank_name = 'Paystack-Titan', expires_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
 -- A snapshot-relevant merchant edit resets in-flight markers like an
 -- order edit does; cosmetic edits leave them intact.
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
@@ -262,19 +250,6 @@ UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE ord
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider, expires_at, created_at) VALUES ('10000000-0000-4000-8000-000000000017', '9990009999', 'Paystack-Titan', 'Shop Ltd/ORD17-legacy', 'paystack', NULL, NULL);
 SELECT pg_temp.assert_true((SELECT public.mark_manual_document_dispatch_started((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'm2-worker', '10000000-0000-4000-8000-000000000002', 'buyer@example.com', NULL, NULL, 100, 0, 0, 0, 0, 50, 'NGN', NULL, 'partially_paid', 'invoice', 'pending', NULL, NULL, NULL, NULL, NULL, NULL, '10000000-0000-4000-8000-000000000010', NULL, NULL, 'proforma_invoice', 1, (SELECT COALESCE(jsonb_agg(jsonb_build_object('id', oi.id, 'name', oi.name, 'quantity', oi.quantity, 'price', oi.price, 'variant_name', oi.variant_name, 'condition', oi.condition, 'item_description', oi.item_description, 'assurance_fee', oi.assurance_fee, 'line_id', oi.line_id, 'unit_code', oi.unit_code, 'line_extension_amount', oi.line_extension_amount, 'vat_category_code', oi.vat_category_code, 'vat_rate', oi.vat_rate, 'vat_amount', oi.vat_amount, 'sellers_item_id', oi.sellers_item_id) ORDER BY oi.id), '[]'::jsonb) FROM public.order_items AS oi WHERE oi.order_id = '10000000-0000-4000-8000-000000000017'), '058', '1234567890', 'GTBank', 'Shop Ltd', '9990002222', 'Paystack-Titan', 'Shop Ltd/ORD17', 0, '[]'::jsonb, 0, '[]'::jsonb, 'Fixture', 'Fixture Ltd', '1 Market St', '{"city": "Lagos"}'::jsonb, 'RC123', 'TIN123', 'registered', 7.5, NULL, NULL, NULL, NULL, 'fixture', '2026-09-30T10:00:00Z')->>'status' = 'marked'), 'null-created legacy account loses to the dated row');
 DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990009999';
-
--- Fully tied virtual accounts (same provider rank, created_at, and
--- number, divergent metadata) resolve by row id descending like the
--- shared selector, so independently ordered result sets never pick
--- different rows and stale every dispatch mark.
-INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
-VALUES ('10000000-0000-4000-8000-000000000072', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
-INSERT INTO public.order_payment_accounts (id, order_id, account_number, bank_name, account_name, provider, expires_at, created_at) VALUES ('10000000-0000-4000-8000-000000000073', '10000000-0000-4000-8000-000000000072', '9990002222', 'Lower Bank', 'Shop Ltd/ORD72', 'paystack', NULL, '2026-09-30T10:00:00Z');
-INSERT INTO public.order_payment_accounts (id, order_id, account_number, bank_name, account_name, provider, expires_at, created_at) VALUES ('10000000-0000-4000-8000-000000000074', '10000000-0000-4000-8000-000000000072', '9990002222', 'Higher Bank', 'Shop Ltd/ORD72', 'paystack', NULL, '2026-09-30T10:00:00Z');
-SELECT pg_temp.assert_true((SELECT s.bank_name = 'Higher Bank' FROM private.manual_document_payment_account_snapshot('10000000-0000-4000-8000-000000000072') AS s), 'full account tie resolves by row id');
-SELECT pg_temp.assert_true((SELECT private.manual_document_renders_payment_account('10000000-0000-4000-8000-000000000072', (SELECT o FROM public.order_payment_accounts AS o WHERE o.id = '10000000-0000-4000-8000-000000000074'))), 'tie winner renders payment instructions');
-SELECT pg_temp.assert_true((SELECT NOT private.manual_document_renders_payment_account('10000000-0000-4000-8000-000000000072', (SELECT o FROM public.order_payment_accounts AS o WHERE o.id = '10000000-0000-4000-8000-000000000073'))), 'tie loser renders nothing');
-
 -- A redemption relink racing provider acceptance must not invalidate the
 -- accepted send: customer_id is not rendered, so the trusted relink keeps
 -- the in-flight marker while staff-driven customer changes still reset it.

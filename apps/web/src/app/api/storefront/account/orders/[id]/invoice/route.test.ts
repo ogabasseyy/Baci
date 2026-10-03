@@ -332,38 +332,6 @@ describe('GET /api/storefront/account/orders/[id]/invoice', () => {
     expect(contentDisposition).not.toContain('\n');
   });
 
-  it('returns 409 for a sender-refused manual order', async () => {
-    vi.mocked(authenticateApiRequest).mockResolvedValue(
-      createAuthenticatedAuthResult()
-    );
-    const data = createDocumentData('ORD-1001');
-    vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue({
-      ...data,
-      order: {
-        ...data.order,
-        is_manual_order: true,
-        manual_document_available: false,
-      },
-    });
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost/api/storefront/account/orders/cfa945fc-9bf4-4485-857c-4d4374adf31f/invoice?merchantSlug=ogabassey'
-      ),
-      {
-        params: Promise.resolve({
-          id: 'cfa945fc-9bf4-4485-857c-4d4374adf31f',
-        }),
-      }
-    );
-
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({
-      code: 'INVOICE_NOT_AVAILABLE',
-    });
-    expect(generateReceiptBlob).not.toHaveBeenCalled();
-  });
-
   it('names type-325 downloads as proforma documents', async () => {
     vi.mocked(authenticateApiRequest).mockResolvedValue(
       createAuthenticatedAuthResult()

@@ -69,6 +69,7 @@ const tsvRows = (...ids) =>
 
 function runRecord({
   sha = SHA,
+  phase = 'post',
   scenario = 'ok',
   runIds = '',
   origin = null,
@@ -95,7 +96,8 @@ if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FI
     systemBash,
     [
       '-c',
-      'set -euo pipefail; source "$RECORD_LIB"; record_deploy_workflow_promote "$RECORD_SHA"',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell expansion passed to bash -c.
+      'set -euo pipefail; source "$RECORD_LIB"; record_deploy_workflow_promote "$RECORD_SHA" "${RECORD_PHASE:-post}"',
     ],
     {
       cwd: work,
@@ -109,6 +111,7 @@ if [ ! -f "$GH_FIRST_CALL_MARKER" ]; then printf '%s' "$GH_RUN_IDS"; : > "$GH_FI
         ...env,
         RECORD_LIB: libPath,
         RECORD_SHA: sha,
+        RECORD_PHASE: phase,
         GH_SCENARIO: scenario,
         GH_RUN_IDS: runIds,
         GH_FIRST_CALL_MARKER: join(work, 'gh-first-call'),
@@ -246,4 +249,44 @@ test('bypass push failure warns and proceeds', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stderr, /WARNING/);
   assert.match(result.stderr, /NOT recorded/);
+});
+
+test('pre-flip gate writes the same record shape', () => {
+  const { bare, result } = runRecord({
+    phase: 'pre',
+    runIds: tsvRows('184400111'),
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(recordContent(bare), `${SHA}:184400111`);
+  assert.match(result.stdout, /Recorded pre-promote overlap/);
+});
+
+test('pre-flip gate refuses before mutation when the push fails', () => {
+  const { result } = runRecord({
+    phase: 'pre',
+    origin: join(tmpdir(), 'baci-promote-missing-origin.git'),
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing worker promotion/);
+  assert.match(result.stderr, /Nothing was mutated/);
+  assert.match(result.stderr, /after 3 attempts/);
+  assert.doesNotMatch(result.stderr, /already landed/);
+});
+
+test('pre-flip gate refuses before mutation when the run list fails', () => {
+  const { result } = runRecord({ phase: 'pre', scenario: 'listfail' });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing worker promotion/);
+  assert.match(result.stderr, /Nothing was mutated/);
+  assert.doesNotMatch(result.stderr, /already landed/);
+});
+
+test('rejects an unknown record phase', () => {
+  const { result } = runRecord({ phase: 'bogus' });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /unknown phase/);
 });

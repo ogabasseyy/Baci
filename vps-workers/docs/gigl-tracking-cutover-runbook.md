@@ -241,15 +241,21 @@ API, in both directions:
 - Every promote records `<sha>:<in-flight-run-ids>` in the
   `ops/gigl-promote-record` branch (single file
   `.gigl-promote-record`, created automatically on first promote;
-  `[skip ci]` commits). The workflow's last pre-publish step reads
-  that file live and refuses to publish when its own run id is in
-  the record — so even a run that was invisible to the pre-promote
-  query cannot publish off a stale latch/SHA read. Recovery is
-  re-running the workflow off fresh reads; run ids (not timestamps)
-  mean the record never goes stale. The store is a branch (not an
-  Actions variable) because `GITHUB_TOKEN` cannot be granted the
-  Variables permission; the contents read works under the publish
-  job's existing `contents:read`.
+  `[skip ci]` commits) — TWICE: immediately before the flip as a
+  fail-closed gate (a broken record path refuses the promote before
+  anything is mutated, so a promote can never land that no workflow
+  can see) and immediately after as a refresh with flip-window runs.
+  If the refresh fails, the pre-flip record still stands and durably
+  blocks every run whose reads predate the flip; the deploy still
+  fails honestly because the overlap proof is degraded. The
+  workflow's last pre-publish step reads that file live and refuses
+  to publish when its own run id is in the record — so even a run
+  that was invisible to the pre-promote query cannot publish off a
+  stale latch/SHA read. Recovery is re-running the workflow off
+  fresh reads; run ids (not timestamps) mean the record never goes
+  stale. The store is a branch (not an Actions variable) because
+  `GITHUB_TOKEN` cannot be granted the Variables permission; the
+  contents read works under the publish job's existing `contents:read`.
 
 ## Scoped GIGL process environment
 

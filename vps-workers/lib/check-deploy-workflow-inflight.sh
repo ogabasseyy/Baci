@@ -21,14 +21,23 @@
 # serialization crosses the GitHub API in both directions:
 #
 # - check_deploy_workflow_inflight (before staging for fail-fast, and
-#   again immediately before promote): refuses when any main-branch
-#   deploy run is still in flight.
-# - record_deploy_workflow_promote (immediately after promote): records
-#   the promoted SHA plus the runs in flight during the promote in a
+#   again after the image build, before the cron transition mutates
+#   live schedule): refuses when any main-branch deploy run is still
+#   in flight.
+# - record_deploy_workflow_promote (TWICE: immediately before the flip
+#   as a fail-closed gate, and immediately after as a refresh): records
+#   the promoted SHA plus the runs in flight at record time in a
 #   single-file ops branch (ops/gigl-promote-record). The workflow's
 #   pre-publish step reads that file live and refuses to publish when
 #   its own run id is in the record — true mutual exclusion even for
-#   runs that were invisible to the pre-promote query. Run ids, not
+#   runs that were invisible to the pre-promote query. The pre-flip
+#   write is the fail-closed half: when the record path is broken
+#   (auth, network, permissions), the promote is refused before
+#   anything is mutated, so a promote can never land that no workflow
+#   can see. If the post-flip refresh fails, the pre-flip record still
+#   stands and durably blocks every run whose reads predate the flip;
+#   runs born later read post-flip state (or fail closed on a torn
+#   read via the latch marker-mismatch check). Run ids, not
 #   timestamps: no clocks, no TTL, no stale state — a record only ever
 #   matches live runs. The store is a branch (not an Actions variable)
 #   because GITHUB_TOKEN cannot be granted the Variables permission;
@@ -177,6 +186,23 @@ check_deploy_workflow_inflight() {
 
 record_deploy_workflow_promote() {
   record_sha="${1:?promoted SHA is required}"
+  # Phase-aware failure voice: pre-flip failures refuse before any
+  # mutation; post-flip failures report the landed-but-unrecorded state.
+  record_phase="${2:-post}"
+  case "$record_phase" in
+    pre)
+      record_refused="Refusing worker promotion"
+      record_aftermath="Nothing was mutated; fix the cause and rerun deploy.sh."
+      ;;
+    post)
+      record_refused="Worker promotion is NOT recorded"
+      record_aftermath="The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once the cause is fixed, then confirm no production deploy published off the pre-promote latch/SHA."
+      ;;
+    *)
+      echo "Refusing to record worker promotion: unknown phase '$record_phase' (want 'pre' or 'post')." >&2
+      return 1
+      ;;
+  esac
   if [[ ! "$record_sha" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Refusing to record worker promotion: expected a 40-hex SHA, got '$record_sha'." >&2
     return 1
@@ -192,7 +218,7 @@ record_deploy_workflow_promote() {
   fi
   if ! command -v gh >/dev/null 2>&1; then
     if [ "$record_strict" = "1" ]; then
-      echo "Worker promotion is NOT recorded: the gh CLI is not installed, so overlapping workflow runs cannot be warned. Install gh and re-run record_deploy_workflow_promote '$record_sha' from this checkout, then confirm no production deploy published off the pre-promote latch/SHA." >&2
+      echo "$record_refused: the gh CLI is not installed, so overlapping workflow runs cannot be warned. $record_aftermath" >&2
       return 1
     fi
     echo "WARNING: worker promotion is NOT recorded (no gh CLI under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
@@ -215,7 +241,7 @@ record_deploy_workflow_promote() {
       rm -f "$record_err"
     fi
     if [ "$record_strict" = "1" ]; then
-      echo "Worker promotion is NOT recorded: could not list workflow runs${record_detail:+: $record_detail}. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once gh works, then confirm no production deploy published off the pre-promote latch/SHA." >&2
+      echo "$record_refused: could not list workflow runs${record_detail:+: $record_detail}. $record_aftermath" >&2
       return 1
     fi
     echo "WARNING: worker promotion is NOT recorded (run list failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1${record_detail:+: $record_detail}). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2
@@ -233,15 +259,20 @@ record_deploy_workflow_promote() {
     record_attempt=$((record_attempt + 1))
     if _push_promote_record "$record_value"; then
       if [ -n "$record_runs" ]; then
-        echo "Recorded worker promote $record_sha (overlapping runs: $record_runs)."
+        record_overlap="overlapping runs: $record_runs"
       else
-        echo "Recorded worker promote $record_sha (no overlapping runs)."
+        record_overlap="no overlapping runs"
+      fi
+      if [ "$record_phase" = "pre" ]; then
+        echo "Recorded pre-promote overlap for $record_sha ($record_overlap); the post-flip refresh follows."
+      else
+        echo "Recorded worker promote $record_sha ($record_overlap)."
       fi
       return 0
     fi
   done
   if [ "$record_strict" = "1" ]; then
-    echo "Worker promotion is NOT recorded: could not push $PROMOTE_RECORD_BRANCH to origin after 3 attempts. The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once the network cooperates, then confirm no production deploy published off the pre-promote latch/SHA." >&2
+    echo "$record_refused: could not push $PROMOTE_RECORD_BRANCH to origin after 3 attempts. $record_aftermath" >&2
     return 1
   fi
   echo "WARNING: worker promotion is NOT recorded (branch push failed under BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1). Manually confirm no production deploy published off the pre-promote latch/SHA." >&2

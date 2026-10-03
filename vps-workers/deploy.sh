@@ -57,11 +57,25 @@ check_deploy_workflow_inflight
 
 install_remediation_cron_transition
 
+# Fail-closed overlap gate BEFORE the flip: write the overlap record
+# listing runs in flight right now. If the record path is broken (auth,
+# network, permissions), this bare call refuses under set -e before
+# anything is mutated — a promote can never land that no workflow can
+# see. The post-flip record below refreshes this with runs born during
+# the flip; if THAT write fails, this pre-flip record still stands and
+# durably blocks every run whose reads predate the flip (runs born
+# later read post-flip state, or fail closed on a torn read via the
+# latch marker-mismatch check).
+record_deploy_workflow_promote "$APP_SHA" pre
+
 promote_worker_release
 
-# Record the promote for the workflow's pre-publish overlap check (the
-# other half of the serialization): runs that appeared during the
-# promote must refuse to publish off their pre-promote latch/SHA read.
+# Refresh the overlap record for the workflow's pre-publish overlap
+# check (the other half of the serialization): runs that appeared
+# during the promote must refuse to publish off their pre-promote
+# latch/SHA read. If this refresh fails, the pre-flip record above
+# still stands and blocks every run in flight at flip time — but the
+# overlap proof is degraded, so the deploy still fails honestly below.
 # A failed record must NOT abort the installation below (set -e would
 # exit here, leaving the flipped tree without services or schedule):
 # capture the status, complete every install, and fail at the end.
@@ -266,10 +280,11 @@ crontab "$tmp_file"
 rm -f "$fragment_path"
 REMOTE_SH
 
-# The promote record failed above, after the flip: every install is
-# now complete, so fail the deployment honestly (the overlap guard is
-# blind until the record lands — re-run the record from this checkout,
-# then re-verify the latch before relying on the poller).
+# The post-flip record refresh failed above: every install is now
+# complete, so fail the deployment honestly. The pre-flip record still
+# stands and blocks runs in flight at flip time — but re-run the record
+# from this checkout to refresh the listing, then re-verify the latch
+# before relying on the poller.
 if [ "$record_status" -ne 0 ]; then
   echo "Worker promotion record failed; installation completed but the deploy is FAILED. Re-run record_deploy_workflow_promote $APP_SHA, then re-verify the latch." >&2
   exit "$record_status"

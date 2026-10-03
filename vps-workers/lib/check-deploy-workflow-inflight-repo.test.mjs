@@ -94,21 +94,32 @@ test('deploy.sh checks for in-flight deploys before staging and before promote',
   // the image build but BEFORE the cron transition mutates live
   // schedule: refusing after the transition would strand candidate
   // jobs against the old unsynchronized tree until an operator
-  // retries. The post-promote record covers the remaining window in
-  // the other direction (workflow pre-publish overlap check).
+  // retries. The overlap record (pre-flip gate + post-flip refresh)
+  // covers the remaining window in the other direction (workflow
+  // pre-publish overlap check).
   assert.ok(first < deploy.indexOf('prepare_worker_release'));
   assert.ok(second < deploy.indexOf('install_remediation_cron_transition'));
   assert.ok(second < deploy.indexOf('promote_worker_release'));
-  // The promote is recorded for the workflow pre-publish overlap
-  // check immediately after the live SHA flips — with the status
-  // captured, so a failed record completes the installs below before
-  // failing the deploy instead of exiting under set -e.
+  // The overlap record is written TWICE: a bare pre-flip gate (a
+  // broken record path refuses under set -e before anything is
+  // mutated — a promote can never land that no workflow can see) and
+  // a captured post-flip refresh (a failed refresh completes the
+  // installs below, then fails honestly; the pre-flip record still
+  // stands and blocks every run in flight at flip time).
+  assert.match(deploy, /^record_deploy_workflow_promote "\$APP_SHA" pre$/m);
   assert.match(
     deploy,
     /^record_deploy_workflow_promote "\$APP_SHA" \|\| record_status=\$\?$/m
   );
+  const promoteIndex = deploy.indexOf('promote_worker_release');
   assert.ok(
-    deploy.indexOf('record_deploy_workflow_promote') >
-      deploy.indexOf('promote_worker_release')
+    deploy.indexOf('record_deploy_workflow_promote "$APP_SHA" pre') <
+      promoteIndex,
+    'expected the fail-closed record gate before the flip'
+  );
+  assert.ok(
+    deploy.indexOf('record_deploy_workflow_promote "$APP_SHA" ||') >
+      promoteIndex,
+    'expected the record refresh after the flip'
   );
 });

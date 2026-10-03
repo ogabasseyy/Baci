@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -29,10 +29,98 @@ describe('production cache-invalidation drain rollout gate', () => {
       readiness,
       /vps-workers\/bin\/verify-cache-invalidation-drain-installed\.sh/
     );
+    assert.match(
+      readiness,
+      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
+    );
+    // The cutover marker runs on every push (no changeset condition),
+    // so an unrelated web push cannot deploy the cron removal while the
+    // worker was never installed.
+    assert.match(
+      readiness,
+      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
+    );
+    assert.match(readiness, /needs: \[changes\]/);
+    assert.match(readiness, /needs\.changes\.outputs\.tracking != 'false'/);
+    assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
     assert.doesNotMatch(readiness, /continue-on-error:\s*true/);
+    // Production latch reads fingerprint the installed dotenv, never a
+    // runner export (job-level env reaches the check script's resolver).
+    assert.match(readiness, /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m);
     assert.match(migrations, /needs: \[vps-drain-readiness\]/);
     assert.match(migrations, /needs\.vps-drain-readiness\.result == 'success'/);
+    // Production is mid-rollout (worker role LOGIN-capable until this PR's
+    // later migrations apply), so the cron removal must never land while
+    // the interim window is open: assert the NOLOGIN final state after
+    // every apply, before anything downstream can proceed.
+    assert.match(
+      migrations,
+      /run: \.github\/scripts\/verify-gigl-worker-final-state\.sh/
+    );
+    assert.ok(
+      migrations.indexOf('Apply pending migrations via Management API') <
+        migrations.indexOf('Verify GIGL worker least-privilege final state'),
+      'final-state verification must run after migrations apply'
+    );
+  });
+
+  it('smokes the live GIGL capability only after migrations apply', () => {
+    const capability = jobBlock('gigl-worker-capability', 'deploy-production');
+
+    assert.match(capability, /needs: \[changes, db-migrations\]/);
+    assert.match(capability, /needs\.db-migrations\.result == 'success'/);
+    assert.match(
+      capability,
+      /uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/
+    );
+    // No dispatch exemption: always() runs the smoke even when the
+    // changes job is skipped, and unset outputs fail closed.
+    assert.match(capability, /if: always\(\) &&/);
+    assert.doesNotMatch(
+      capability,
+      /github\.event_name != 'workflow_dispatch'/
+    );
+    // `tracking` only: the broad `migrations` output must never gate
+    // the smoke, or unrelated migrations freeze on worker drift.
+    assert.match(capability, /needs\.changes\.outputs\.tracking != 'false'/);
+    assert.doesNotMatch(capability, /outputs\.migrations/);
+    // A mid-flight deploy.sh must not let the smoke/latch verify a
+    // different revision than readiness checked: recheck install identity
+    // in this job immediately before smoking.
+    assert.match(capability, /Recheck installed SHA before smoke/);
+    assert.match(
+      capability,
+      /run: vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke/
+    );
+    assert.match(
+      capability,
+      /run: \.github\/scripts\/smoke-gigl-worker-capability\.sh/
+    );
+    // The latch persists only after the smoke succeeds (same job, later
+    // step): it proves live token+hook function for the gate's bypass.
+    assert.match(capability, /Persist GIGL cutover latch/);
+    assert.match(capability, /\.gigl-capability-smoke-ok/);
+    // The latch must bind the token actually smoked: capture the
+    // identity before the smoke and refuse to persist on any drift,
+    // so a mid-job .env edit cannot latch an unsmoked token.
+    assert.match(capability, /Capture pre-smoke latch identity/);
+    assert.ok(
+      capability.indexOf('Capture pre-smoke latch identity') <
+        capability.indexOf('smoke-gigl-worker-capability.sh')
+    );
+    assert.match(capability, /GIGL_PRE_SMOKE_IDENTITY/);
+    assert.match(
+      capability,
+      /\[ "\$identity" != "\$\{GIGL_PRE_SMOKE_IDENTITY:-\}" \]/
+    );
+    // Production smoke/identity is file-authoritative at the job level,
+    // so a runner export can never certify one token while cron runs
+    // another (the smoke entry sets the same mode for its filter).
+    assert.match(
+      capability,
+      /^ {4}env:\n {6}GIGL_ENV_FILE_AUTHORITATIVE: '1'/m
+    );
   });
 
   it('keeps the web release behind migrations and prebuilt-only', () => {
@@ -40,7 +128,173 @@ describe('production cache-invalidation drain rollout gate', () => {
 
     assert.match(deployment, /needs: \[[^\]]*db-migrations[^\]]*\]/);
     assert.match(deployment, /needs\.db-migrations\.result == 'success'/);
+    assert.match(deployment, /needs: \[[^\]]*gigl-worker-capability[^\]]*\]/);
+    assert.match(
+      deployment,
+      /needs\.gigl-worker-capability\.result == 'success'/
+    );
+    // The tracking=false bypass additionally requires the cutover latch
+    // (proven smoke function) at a revision that still covers the tree,
+    // so a web push cannot carry unsmoked tracking changes to production.
+    // It also requires manifest_drift == 'false': the poller executes
+    // the manifests-group dependency tree, so a manifest-only push must
+    // not bypass while the installed tree predates HEAD's manifests.
+    assert.match(
+      deployment,
+      /needs\.gigl-worker-capability\.result == 'success' \|\| \(needs\.changes\.outputs\.tracking == 'false' && needs\.vps-drain-readiness\.outputs\.cutover_latched == 'true' && needs\.vps-drain-readiness\.outputs\.tracking_stale == 'false' && needs\.vps-drain-readiness\.outputs\.manifest_drift == 'false'\)/
+    );
+    assert.doesNotMatch(
+      deployment,
+      /tracking == 'false' && needs\.changes\.outputs\.migrations == 'false'/
+    );
+    assert.match(deployment, /needs: \[[^\]]*vps-drain-readiness[^\]]*\]/);
+    // The pre-publish overlap check is the correctness backstop for
+    // the deploy.sh serialization: it must run the script immediately
+    // before the publish. The script reads the ops-branch record via
+    // the contents API, so no permission beyond contents:read is
+    // needed (GITHUB_TOKEN cannot be granted Variables).
+    assert.match(
+      deployment,
+      /run: \.github\/scripts\/refuse-publish-on-promote-overlap\.sh/
+    );
+    assert.ok(
+      deployment.indexOf('refuse-publish-on-promote-overlap.sh') <
+        deployment.indexOf('Deploy to Vercel (with retry)')
+    );
     assert.match(deployment, /deploy --prebuilt --prod/);
     assert.doesNotMatch(deployment, /run-pinned-vercel\.sh deploy --prod/);
+    assert.match(
+      deployment,
+      /run: \.github\/scripts\/verify-gigl-fallback-token\.sh \.vercel\/\.env\.production\.local/
+    );
+    // No dispatch exemption in the capability requirement: a dispatch
+    // can never land the cron removal unverified. The only remaining
+    // dispatch term is the pre-existing deploy-scope behavior.
+    assert.doesNotMatch(
+      deployment,
+      /needs\.gigl-worker-capability\.result == 'success' \|\| github\.event_name/
+    );
+    assert.doesNotMatch(deployment, /bypasses the GIGL worker capability/);
+    assert.match(
+      deployment,
+      /github\.event_name == 'workflow_dispatch' \|\| needs\.changes\.outputs\.web == 'true'/
+    );
+  });
+
+  it('scopes the tracking changeset to the worker, fallback, and wrapper paths', () => {
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(filter.indexOf('tracking:'));
+
+    assert.match(tracking, /^ {2}- 'vercel\.json'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/deploy\.sh'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/bin\/process-gigl-tracking\.sh'$/m
+    );
+    assert.match(tracking, /^ {2}- 'vps-workers\/bin\/run-web-script\.sh'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/bin\/verify-gigl-tracking-worker-capability\.sh'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/jobs\/preflight-direct-web-workers\.mjs'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'vps-workers\/lib\/prepare-worker-release\.sh'$/m
+    );
+    assert.match(tracking, /^ {2}- 'vps-workers\/package\.json'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/pnpm-lock\.yaml'$/m);
+    assert.match(tracking, /^ {2}- 'vps-workers\/pnpm-workspace\.yaml'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/run-gigl-tracking-monitor-batch\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/gigl-tracking-monitor-worker\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/nullable-supabase-rpc-argument\.ts'$/m
+    );
+    // No recursive glob: notification-only fixes must not demand a
+    // poller rollout (completeness is pinned by the graph test).
+    assert.doesNotMatch(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/app\/api\/cron\/gigl-tracking\/\*\*'$/m
+    );
+    assert.match(tracking, /^ {2}- 'supabase\/migrations\/\*gigl\*'$/m);
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/lib\/shipping\/providers\/gigl\*'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'apps\/web\/src\/lib\/shipping\/providers\/base\.ts'$/m
+    );
+    assert.match(
+      tracking,
+      /^ {2}- 'packages\/shared\/src\/lib\/gigl-tracking-status\.ts'$/m
+    );
+    // The shipped dotenv reader is a runtime dependency of every poll.
+    assert.match(tracking, /^ {2}- '\.github\/scripts\/gigl-dotenv\.sh'$/m);
+  });
+
+  it('keeps every GIGL-named behavioral worker file in the tracking filter', () => {
+    // Explicit paths (no vps-workers/** glob) risk silent under-triggering
+    // when GIGL worker files are added, so every gigl/tracking-named
+    // behavioral file must appear in the filter. Non-behavioral matches
+    // (tests, shared test fixtures, docs, runtime dirs) and the
+    // non-tracking GIGL directory sync (no worker token) are excluded
+    // by design.
+    const filter = readFileSync(
+      join(workerRoot, '..', '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    );
+    const tracking = filter.slice(
+      filter.indexOf('tracking:'),
+      filter.indexOf('migrations:')
+    );
+
+    assert.doesNotMatch(tracking, /^ {2}- 'vps-workers\/\*\*'$/m);
+
+    const excluded = new Set([
+      'jobs/sync-gigl-service-centres.mjs',
+      'jobs/sync-gigl-service-centres.test.mjs',
+    ]);
+    const entries = readdirSync(workerRoot, { recursive: true });
+    const discovered = entries.filter(
+      (entry) =>
+        /gigl|tracking/i.test(entry) &&
+        !/\.test[.-]/.test(entry) &&
+        !entry.startsWith('docs/') &&
+        !entry.startsWith('logs/') &&
+        !entry.startsWith('locks/') &&
+        !excluded.has(entry)
+    );
+
+    assert.ok(
+      discovered.length > 0,
+      'expected GIGL-named worker files to exist'
+    );
+    for (const entry of discovered) {
+      assert.match(
+        tracking,
+        new RegExp(
+          `^  - 'vps-workers/${entry.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'$`,
+          'm'
+        ),
+        `tracking filter omits vps-workers/${entry}`
+      );
+    }
   });
 });

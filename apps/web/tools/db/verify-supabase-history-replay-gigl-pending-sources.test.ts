@@ -125,6 +125,22 @@ describe('GIGL tracking pending replay sources', () => {
       ],
       [GIGL_TRACKING_RETRY_REPAIR_PATH, GIGL_TRACKING_RETRY_REPAIR_SHA256],
       ...GIGL_RECOVERY_EDGE_REPAIRS,
+      [
+        'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql',
+        '5437d3f7573d673192027f9804142925c16767ce20db4bddb1bcb0e1a454818b',
+      ],
+      [
+        'supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql',
+        '8fd980583ad2252de0585f723a92f89c2f21ee80dd2ef81353fc99067ad2322f',
+      ],
+      [
+        'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',
+        'a639ded915cb661e199187c31381c85c75b07930dbab9aa61cc29e4290f85ae7',
+      ],
+      [
+        'supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql',
+        'c8073d92cb844bb9569c59e5c52b8a46a15d03e3e5c03f4e152c692a04311877',
+      ],
     ] as const) {
       expectPendingSourceSha(
         result.manifest.pendingSources,

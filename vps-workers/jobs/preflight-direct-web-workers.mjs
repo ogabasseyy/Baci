@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { config } from 'dotenv';
+import { parse } from 'dotenv';
+import {
+  findMultilineDotenvAssignments,
+  findTrailingNewlineValues,
+} from './preflight-dotenv-assignments.mjs';
 
 const REQUIRED_ENV = [
   'BACI_REPO_DIR',
@@ -19,7 +24,21 @@ const REQUIRED_ENV = [
   'SUPABASE_JUMIA_CREDENTIAL_KEY',
   'ZEPTOMAIL_TOKEN',
 ];
+const GIGL_REQUIRED_ENV = [
+  'GIGL_BASE_URL',
+  'GIGL_EMAIL',
+  'GIGL_PASSWORD',
+  'GIGL_TRACKING_WORKER_TOKEN',
+];
 const ENV_BOOLEAN_VALUES = new Set(['0', '1', 'false', 'no', 'true', 'yes']);
+const DISABLED_GIGL_VALUES = new Set(['0', 'false', 'off']);
+// Supabase JWT signing keys support ES256 (Elliptic Curve), RS256 (RSA),
+// and HS256 (shared secret) —
+// https://supabase.com/docs/guides/auth/signing-keys. Rejecting RS256
+// would refuse genuinely RSA-signed worker tokens and, while GIGL is
+// disabled, misclassify them as vacuous instead of fail-closed usable
+// credentials.
+const SUPPORTED_GIGL_TOKEN_ALGORITHMS = new Set(['ES256', 'HS256', 'RS256']);
 
 function isConfigured(env, name) {
   return typeof env[name] === 'string' && env[name].trim().length > 0;
@@ -33,6 +52,63 @@ function isCredentialFreeHttpsUrl(value) {
     return false;
   }
 }
+
+function isGiglExplicitlyDisabled(env) {
+  return DISABLED_GIGL_VALUES.has(env.GIGL_ENABLED?.trim().toLowerCase() ?? '');
+}
+
+function parseJwtPart(token, index) {
+  const value = token.split('.')[index];
+  if (!value) throw new Error('JWT part is missing');
+  const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('JWT part is invalid');
+  }
+  return parsed;
+}
+
+function isRestrictedGiglWorkerToken(value, now = Date.now()) {
+  try {
+    if (value.split('.').length !== 3) return false;
+    const header = parseJwtPart(value, 0);
+    const claims = parseJwtPart(value, 1);
+    return (
+      SUPPORTED_GIGL_TOKEN_ALGORITHMS.has(header.alg) &&
+      claims.role === 'gigl_tracking_worker' &&
+      typeof claims.exp === 'number' &&
+      claims.exp * 1000 > now + 24 * 60 * 60 * 1000
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Same usability bar as the worker client's non-worker check
+// (well-formed, acceptably signed, unexpired) but WITHOUT the worker
+// role and WITHOUT the 24-hour rotation runway: true exactly when the
+// token is a live credential PostgREST would accept outside the worker
+// hook. The disabled preflight must reject it — otherwise a valid
+// service_role JWT passes silently and the disabled smoke would latch
+// the setup vacuously.
+function isUsableNonWorkerGiglToken(value, now = Date.now()) {
+  try {
+    if (value.split('.').length !== 3) return false;
+    const header = parseJwtPart(value, 0);
+    const claims = parseJwtPart(value, 1);
+    return (
+      SUPPORTED_GIGL_TOKEN_ALGORITHMS.has(header.alg) &&
+      claims.role !== 'gigl_tracking_worker' &&
+      typeof claims.exp === 'number' &&
+      claims.exp * 1000 > now
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Dotenv/shell-boundary anomaly scanners live in
+// preflight-dotenv-assignments.mjs (extracted to keep both modules
+// under the 300-line limit).
 
 function isBase64Encoded32ByteKey(value) {
   const normalized = value.trim();
@@ -59,6 +135,15 @@ export function getDirectWorkerPreflightProblems(env) {
     }
   }
 
+  const isGiglDisabled = isGiglExplicitlyDisabled(env);
+  if (!isGiglDisabled) {
+    for (const name of GIGL_REQUIRED_ENV) {
+      if (!isConfigured(env, name)) {
+        problems.push(`${name} is required`);
+      }
+    }
+  }
+
   if (
     isConfigured(env, 'JUMIA_AUTHORIZATION_ENCRYPTION_KEY') &&
     !isBase64Encoded32ByteKey(env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY)
@@ -73,6 +158,31 @@ export function getDirectWorkerPreflightProblems(env) {
     !isCredentialFreeHttpsUrl(env.BACI_WEB_BASE_URL)
   ) {
     problems.push('BACI_WEB_BASE_URL must be credential-free HTTPS');
+  }
+  if (
+    !isGiglDisabled &&
+    isConfigured(env, 'GIGL_BASE_URL') &&
+    !isCredentialFreeHttpsUrl(env.GIGL_BASE_URL)
+  ) {
+    problems.push('GIGL_BASE_URL must be credential-free HTTPS');
+  }
+  if (
+    !isGiglDisabled &&
+    isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN') &&
+    !isRestrictedGiglWorkerToken(env.GIGL_TRACKING_WORKER_TOKEN)
+  ) {
+    problems.push(
+      'GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token'
+    );
+  }
+  if (
+    isGiglDisabled &&
+    isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN') &&
+    isUsableNonWorkerGiglToken(env.GIGL_TRACKING_WORKER_TOKEN)
+  ) {
+    problems.push(
+      'GIGL_TRACKING_WORKER_TOKEN must not be a usable non-worker token while GIGL is disabled'
+    );
   }
 
   for (const name of [
@@ -112,23 +222,50 @@ export function getDirectWorkerPreflightProblems(env) {
 
 function runDirectWorkerPreflight({
   env = process.env,
+  rawText = '',
   logger = console,
 } = {}) {
   const problems = getDirectWorkerPreflightProblems(env);
+  for (const offender of findMultilineDotenvAssignments(rawText)) {
+    problems.push(
+      `${offender} has an unterminated quoted value: use a single line with \\n escapes`
+    );
+  }
+  for (const offender of findTrailingNewlineValues(env)) {
+    problems.push(
+      `${offender} must not end with a newline escape: the shell boundary strips trailing line feeds`
+    );
+  }
   if (problems.length > 0) {
     logger.error(`[direct-worker-preflight] ${problems.join(', ')}`);
     return 1;
   }
 
   logger.log(
-    '[direct-worker-preflight] Petrock and quiz environment is configured'
+    '[direct-worker-preflight] direct worker environment is configured'
   );
   return 0;
 }
 
 function main() {
-  config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
-  process.exitCode = runDirectWorkerPreflight();
+  // File-authoritative: validate the staged dotenv as parsed, ignoring
+  // inherited process state. dotenv's default non-overriding load would
+  // let a runner/SSH-exported GIGL_ENABLED=off (or a caller-provided
+  // provider value) satisfy checks that cron reads from the file.
+  // BACI_WORKER_ENV overrides the default staged path (tests;
+  // production callers rely on the fixed staging location).
+  const dotenvPath =
+    process.env.BACI_WORKER_ENV ||
+    fileURLToPath(new URL('../.env', import.meta.url));
+  let rawText = '';
+  let parsed = {};
+  try {
+    rawText = readFileSync(dotenvPath, 'utf8');
+    parsed = parse(rawText);
+  } catch {
+    // Missing/unreadable file: every required check fails below.
+  }
+  process.exitCode = runDirectWorkerPreflight({ env: parsed, rawText });
 }
 
 if (

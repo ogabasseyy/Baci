@@ -7,8 +7,12 @@ set -euo pipefail
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/prepare-worker-release.sh
 source "$WORKER_ROOT/lib/prepare-worker-release.sh"
+# shellcheck source=lib/check-deploy-workflow-inflight.sh
+source "$WORKER_ROOT/lib/check-deploy-workflow-inflight.sh"
 # shellcheck source=lib/install-remediation-cron-transition.sh
 source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
+# shellcheck source=lib/print-worker-env-reminder.sh
+source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
 
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
@@ -24,6 +28,10 @@ if [ -n "$(git ls-files --others --exclude-standard)" ]; then
   exit 1
 fi
 
+# Fail fast when a production deploy is already in flight; the check
+# runs again after the image build, before live cron is touched.
+check_deploy_workflow_inflight
+
 prepare_worker_release
 
 CODEX_CONTAINER_BIN=$(ssh "$VPS" "find /home/bassey/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor -path '*/bin/codex' -type f -print -quit")
@@ -37,9 +45,56 @@ fi
 echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
 
-install_remediation_cron_transition
+# Final refusal BEFORE anything below mutates live state: staging and
+# the image build take minutes, and a workflow that started in that
+# window publishes off the pre-promote latch/SHA; flip-window runs are
+# covered the other way (the overlap record refuses them at publish).
+check_deploy_workflow_inflight
+
+# Fail-closed overlap gate BEFORE the flip: write the overlap record
+# listing runs in flight right now. If the record path is broken (auth,
+# network, permissions), this bare call refuses under set -e before
+# anything is mutated — a promote can never land that no workflow can
+# see.
+record_deploy_workflow_promote "$APP_SHA" pre
 
 promote_worker_release
+
+# Refresh the overlap record for the workflow's pre-publish overlap
+# check (the other half of the serialization): runs that appeared
+# during the promote must refuse to publish off their pre-promote
+# latch/SHA read. If this refresh fails, the promotion is ROLLED BACK
+# (no unrecorded tree may stay live) and the restore window is
+# recorded: runs that started during the stalled refresh read the
+# rolled-back candidate yet are absent from the pre-flip record, so
+# without this second write their pre-publish check would pass.
+record_deploy_workflow_promote "$APP_SHA" || {
+  echo "Post-flip overlap record failed; rolling back the promotion so no unrecorded worker tree stays live." >&2
+  if rollback_worker_release; then
+    echo "Rollback complete; recording restore-window runs so the runs that read the rolled-back candidate refuse at publish." >&2
+    if record_deploy_workflow_promote "$APP_SHA" restore; then
+      echo "Restore-window record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
+    else
+      echo "RESTORE-WINDOW RECORD FAILED: the rollback landed but its readers are unrecorded and this deploy's promote barrier is stuck (blocking all publishes). Manually confirm no production deploy published off the rolled-back candidate reads, clear the stale barrier per the cutover runbook, then rerun deploy.sh." >&2
+    fi
+  else
+    echo "ROLLBACK FAILED: the live tree may be mixed and the promote is unrecorded. Follow the emergency rollback runbook NOW, then confirm no production deploy published off stale reads." >&2
+  fi
+  exit 1
+}
+# The promote snapshot is no longer needed: the refresh landed, so no
+# rollback can follow. (A crashed deploy's orphaned snapshot retires
+# by age on later promotes.)
+ssh "$VPS" "rm -rf '$STAGING_DIR.pre-promote-backup'"
+
+# The cron transition runs AFTER the recorded promote (never before
+# any live mutation can be refused): promote's quiesce therefore sees
+# only legacy entries — candidate ticks cannot exist mid-promote — and
+# the transition's own deploy lock plus per-job/global takes serialize
+# it against everything else. Its candidates stage from STAGING_DIR
+# (still present; cleanup runs on EXIT), so placement after the sync
+# changes nothing it installs.
+install_remediation_cron_transition
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
@@ -124,6 +179,7 @@ $CRON_BLOCK_START
 20 *   * * * flock -n $REMOTE_DIR/locks/reconcile-gateway-paid-orders.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/reconcile-gateway-paid-orders' >> $REMOTE_DIR/logs/reconcile-gateway-paid-orders.log 2>&1
 # process-redvault-refunds stays unscheduled (manual CRON_SECRET route only) until restricted-role recovery approval.
 * *    * * * flock -n $REMOTE_DIR/locks/petrock-reconcile.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=petrock-reconciliation && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 5m $REMOTE_DIR/bin/process-petrock-reconciliation.sh' >> $REMOTE_DIR/logs/petrock-reconcile.log 2>&1
+*/5 *  * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd $REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m $REMOTE_DIR/bin/process-gigl-tracking.sh' >> $REMOTE_DIR/logs/gigl-tracking.log 2>&1
 */5 * * * * flock -n $REMOTE_DIR/locks/order-notifications.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-web-cron.mjs /api/cron/order-notifications?batchSize=5' >> $REMOTE_DIR/logs/order-notifications.log 2>&1
 */2 * * * * flock -n $REMOTE_DIR/locks/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=$REMOTE_DIR/state/cache-invalidations.json && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1
 */15 * * * * flock -n $REMOTE_DIR/locks/vercel-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE BACI_CODEX_CONTAINER_BIN=$CODEX_CONTAINER_BIN BACI_CODEX_READONLY_SECCOMP_PROFILE=$CODEX_READONLY_SECCOMP_PROFILE && cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/vercel-error-remediator.mjs' >> $REMOTE_DIR/logs/vercel-error-remediator.log 2>&1
@@ -239,62 +295,4 @@ rm -f "$fragment_path"
 REMOTE_SH
 
 echo "==> Done."
-echo "    Reminder: create $REMOTE_DIR/.env if not already present:"
-echo "         NEXT_PUBLIC_SUPABASE_URL=..."
-echo "         NEXT_PUBLIC_SUPABASE_ANON_KEY=..."
-echo "         SUPABASE_SERVICE_ROLE_KEY=..."
-echo "         SUPABASE_JUMIA_CREDENTIAL_KEY=..."
-echo "         IMEI_IDENTIFIER_ENCRYPTION_KEY=..."
-echo "         PETROCK_API_TOKEN=..."
-echo "         PETROCK_API_BASE_URL=https://api.petrock.biz/api/reseller/v1"
-echo "         PETROCK_ENABLED=true"
-echo "         PETROCK_ENABLED_TIERS=..."
-echo "         PETROCK_REMEDIATION_ENABLED=true"
-echo "         QUIZ_PHASE=1a"
-echo "         QUIZ_PRODUCTION_APPROVED=false"
-echo "         QUIZ_RPC_SERVER_SECRET=..."
-echo "         QUIZ_DEVICE_HASH_PEPPER=..."
-echo "         BACI_REPO_DIR=/opt/baci/app"
-echo "         GIGL_BASE_URL=..."
-echo "         GIGL_EMAIL=..."
-echo "         GIGL_PASSWORD=..."
-echo "         EXPO_ACCESS_TOKEN=..."
-echo "         JUMIA_CLIENT_ID=..."
-echo "         JUMIA_AUTHORIZATION_ENCRYPTION_KEY=..."
-echo "         BACI_WEB_BASE_URL=..."
-echo "         CRON_SECRET=..."
-echo "         VERCEL_ERROR_LOG_PATH=$REMOTE_DIR/logs/vercel-drain.jsonl"
-echo "         BACI_REMEDIATION_OUTPUT_DIR=$REMOTE_DIR/logs/vercel-error-remediator"
-echo "         BACI_SENTRY_REMEDIATION_OUTPUT_DIR=$REMOTE_DIR/logs/sentry-mobile-error-remediator"
-echo "         BACI_REMEDIATION_AUTOFIX_ENABLED=0"
-echo "         BACI_REMEDIATION_CANARY_ENABLED=1 # opt in to the daily no-change Codex canary"
-echo "         SENTRY_REMEDIATION_AUTH_TOKEN=... # dedicated token with event:read"
-echo "         SENTRY_ORG=..."
-echo "         SENTRY_PROJECT=..."
-echo "         VERCEL_LOG_DRAIN_SECRET=..."
-echo "         VERCEL_LOG_DRAIN_RECEIVER_PORT=8787"
-echo "         OLLAMA_STOREFRONT_BASE_URL=http://localhost:11434"
-echo "         AI_STOREFRONT_GENERATION_ENABLED=false"
-echo "         AI_STOREFRONT_TRIGGER_SECRET=..."
-echo "         AI_STOREFRONT_TRIGGER_HOST=127.0.0.1"
-echo "         AI_STOREFRONT_TRIGGER_PORT=3917"
-echo "         IMPORT_JOB_TRIGGER_SECRET=..."
-echo "         IMPORT_JOB_TRIGGER_HOST=127.0.0.1"
-echo "         IMPORT_JOB_TRIGGER_PORT=3918"
-echo "         EVENT_PIPELINE_ENQUEUE_ENABLED=false"
-echo "         EVENT_PIPELINE_ROUTING_MODE=disabled"
-echo "         EVENT_PIPELINE_ACTIVE_DESTINATIONS="
-echo "         EVENT_PIPELINE_CANARY_MERCHANT_IDS="
-echo "         EVENT_PIPELINE_DELIVERY_ENABLED=false"
-echo "         EVENT_PIPELINE_DISABLE_LEGACY_FANOUT=false"
-echo "         EVENT_PIPELINE_ALLOW_UNVERIFIED_TELEMETRY=false"
-echo "         EVENT_PIPELINE_MAX_DELIVERY_ATTEMPTS=8"
-echo "         EVENT_PIPELINE_DELIVERY_CONCURRENCY=5"
-echo "         EVENT_PIPELINE_INGRESS_MAX_READS=5"
-echo "         EVENT_DELIVERY_ATTEMPT_RETENTION=\"30 days\""
-echo "         EVENT_QUEUE_ARCHIVE_RETENTION=\"30 days\""
-echo "    Note: the storefront-update-nudge cron reads its config from the WEB"
-echo "          (Vercel) env, NOT this worker .env: MOBILE_STOREFRONT_UPDATES_ENABLED,"
-echo "          MOBILE_STOREFRONT_{ANDROID,IOS}_LATEST_BUILD and _STORE_URL, plus"
-echo "          optional MOBILE_STOREFRONT_UPDATE_MESSAGE (overrides the copy)."
-echo "          A missing LATEST_BUILD or _STORE_URL silently skips that platform."
+print_worker_env_reminder "$REMOTE_DIR"

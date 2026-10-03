@@ -201,6 +201,14 @@ describe('remediation cron transition', () => {
     assert.match(outcome.crontab, /locks\/custom-global\.lock/);
   });
 
+  it('honors a colon-separated dotenv global lock setting', () => {
+    const outcome = runTransition('custom-global-lock-colon');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(outcome.locks.join('\n'), /locks\/custom-global\.lock/);
+    assert.match(outcome.crontab, /locks\/custom-global\.lock/);
+  });
+
   it('reports a rollback failure when an empty crontab cannot be removed', () => {
     const outcome = runTransition('rollback-remove-error');
 
@@ -248,5 +256,18 @@ describe('remediation cron transition', () => {
 
     assert.equal(outcome.result.status, 0, outcome.result.stderr);
     assert.match(outcome.crontab, /&& \.\/node /);
+  });
+
+  it('resolves a duplicate global-lock path to the last assignment', () => {
+    // An appended override must beat a stale line above it, matching
+    // dotenv and every other reader. Behavioral: the shared reader
+    // provides last-wins, so this runs the transition instead of
+    // pinning its former awk.
+    const outcome = runTransition('custom-global-lock-duplicate');
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.match(outcome.locks.join('\n'), /locks\/custom-global\.lock/);
+    assert.doesNotMatch(outcome.locks.join('\n'), /stale-global/);
+    assert.match(outcome.crontab, /locks\/custom-global\.lock/);
   });
 });

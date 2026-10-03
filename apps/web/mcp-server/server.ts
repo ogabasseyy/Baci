@@ -1725,7 +1725,7 @@ function createOgabasseyServer() {
         .select(`
           id, name, slug, price, compare_at_price, images, description, stock_quantity, manage_stock,
           condition, condition_detail, brand, category, has_variants, has_condition_offers,
-          weight_value, weight_unit, dimensions, schema_markup
+          color, color_images, weight_value, weight_unit, dimensions, schema_markup
         `)
         .eq('merchant_id', merchantId)
         .eq('status', 'active');
@@ -1940,7 +1940,7 @@ function createOgabasseyServer() {
         };
       }
 
-      return loadMcpProductVariants({ args, merchantId, supabase, sanitizeString, formatPrice });
+      return loadMcpProductVariants({ args, merchantId, supabase, sanitizeString, formatPrice, getSafeCatalogImageUrl });
     }
   );
 

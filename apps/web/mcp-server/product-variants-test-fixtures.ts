@@ -11,6 +11,8 @@ type ProductLookup = {
   manage_stock: boolean;
   has_variants: boolean;
   has_condition_offers: boolean;
+  color: string | null;
+  color_images: Record<string, unknown> | null;
 };
 
 export function createSupabase() {
@@ -29,6 +31,8 @@ export function createSupabase() {
           manage_stock: true,
           has_variants: true,
           has_condition_offers: false,
+          color: null,
+          color_images: null,
         },
         error: null,
       }),

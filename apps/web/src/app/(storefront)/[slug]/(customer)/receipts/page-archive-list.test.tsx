@@ -260,4 +260,76 @@ describe('ReceiptsPage archive list', () => {
       '/api/storefront/account/orders/order-imported-receipt/receipt?merchantSlug=default'
     );
   });
+
+  it('dates archive cards by the document date, not record creation', async () => {
+    // A backdated invoice must show its issue date and a completed
+    // receipt its completion-backed transaction date — the same
+    // issue → transaction → creation fallback the API sorts by.
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+    const issueText = formatter.format(new Date('2026-03-15T12:00:00.000Z'));
+    const completionText = formatter.format(
+      new Date('2026-10-20T12:00:00.000Z')
+    );
+    vi.mocked(fetch).mockResolvedValue(
+      createJsonResponse({
+        orders: [
+          {
+            id: 'manual-backdated',
+            order_number: 'MANUAL-BACKDATED',
+            created_at: '2026-09-30T09:00:00Z',
+            invoice_issue_date: '2026-03-15T12:00:00.000Z',
+            transaction_date: null,
+            total: 100,
+            shipping_status: 'pending',
+            current_document_kind: 'invoice',
+            is_manual_order: true,
+            manual_document_available: true,
+            receipt_eligible: false,
+            items: [
+              {
+                id: 'manual-item',
+                name: 'Manual Device',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
+          {
+            id: 'manual-completed',
+            order_number: 'MANUAL-COMPLETED',
+            created_at: '2026-01-10T09:00:00Z',
+            invoice_issue_date: null,
+            transaction_date: '2026-10-20T12:00:00.000Z',
+            total: 100,
+            shipping_status: 'pending',
+            current_document_kind: 'receipt',
+            is_manual_order: true,
+            manual_document_available: true,
+            receipt_eligible: true,
+            items: [
+              {
+                id: 'manual-item-2',
+                name: 'Manual Device',
+                quantity: 1,
+                price: 100,
+              },
+            ],
+          },
+        ],
+      })
+    );
+
+    render(<ReceiptsPage />);
+
+    expect(await screen.findByText('#MANUAL-BACKDATED')).toBeInTheDocument();
+    expect(screen.getByText('#MANUAL-COMPLETED')).toBeInTheDocument();
+    const dateLine = (text: string) => (_: string, el: Element | null) =>
+      el?.textContent?.startsWith(text) ?? false;
+    expect(screen.getByText(dateLine(issueText))).toBeInTheDocument();
+    expect(screen.getByText(dateLine(completionText))).toBeInTheDocument();
+  });
 });

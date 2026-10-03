@@ -80,6 +80,14 @@ export interface StorefrontOrder {
   order_number: string;
   created_at: string;
   updated_at?: string;
+  /**
+   * Normalized document dates from the orders API: transaction_date is
+   * completion-backed for paid-renderer rows, invoice_issue_date is
+   * present for invoice rows only. Cards render the issue → transaction
+   * → creation fallback, never created_at alone.
+   */
+  transaction_date?: string | null;
+  invoice_issue_date?: string | null;
 
   /**
    * Status field used in realtime updates

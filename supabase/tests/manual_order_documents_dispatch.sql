@@ -139,6 +139,18 @@ SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.o
 DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990003333';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'account delete preserves the receipt marker');
 DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt';
+-- A no-op touch or non-rendered-column edit of the selected virtual
+-- account keeps the marker: the rendered card is unchanged, so
+-- resetting would duplicate an accepted send. Rendered-field edits
+-- still reset.
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+UPDATE public.order_payment_accounts SET bank_name = bank_name WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'no-op account touch preserves the marker');
+UPDATE public.order_payment_accounts SET expires_at = now() + interval '2 hours' WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'non-rendered account edit preserves the marker');
+UPDATE public.order_payment_accounts SET bank_name = 'Renamed VA' WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'rendered account edit resets the marker');
+UPDATE public.order_payment_accounts SET bank_name = 'Paystack-Titan', expires_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990002222';
 -- A snapshot-relevant merchant edit resets in-flight markers like an
 -- order edit does; cosmetic edits leave them intact.
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';

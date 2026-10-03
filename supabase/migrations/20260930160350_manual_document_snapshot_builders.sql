@@ -163,3 +163,32 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.manual_document_renders_payment_account(uuid, public.order_payment_accounts)
   FROM PUBLIC, anon, authenticated;
+-- True when a same-order payment-account UPDATE moves the rendered
+-- instructions. The OLD state is evaluated against the current sibling
+-- rows, so an update that unselects the account still resets — but a
+-- selected row touched in a non-rendered column (or a no-op update)
+-- keeps the same rendered card, and resetting would push an accepted
+-- invoice into a corrective duplicate.
+CREATE OR REPLACE FUNCTION private.manual_document_payment_account_output_changed(
+  p_order_id uuid, p_old public.order_payment_accounts, p_new public.order_payment_accounts)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_old_renders boolean;
+  v_new_renders boolean;
+BEGIN
+  v_old_renders := private.manual_document_renders_payment_account(p_order_id, p_old);
+  v_new_renders := private.manual_document_renders_payment_account(p_order_id, p_new);
+  RETURN (v_old_renders OR v_new_renders)
+    AND NOT (v_old_renders AND v_new_renders
+      AND p_old.account_number IS NOT DISTINCT FROM p_new.account_number
+      AND p_old.bank_name IS NOT DISTINCT FROM p_new.bank_name
+      AND p_old.account_name IS NOT DISTINCT FROM p_new.account_name);
+END;
+$$;
+REVOKE ALL ON FUNCTION private.manual_document_payment_account_output_changed(uuid, public.order_payment_accounts, public.order_payment_accounts)
+  FROM PUBLIC, anon, authenticated;

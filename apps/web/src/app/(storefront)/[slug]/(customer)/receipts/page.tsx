@@ -1,5 +1,6 @@
 'use client';
 
+import { selectReceiptDisplayDate } from '@baci/shared/receipt';
 import {
   ArrowLeft,
   Download,
@@ -31,7 +32,10 @@ const ARCHIVE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
-function formatArchiveDate(value: string) {
+function formatArchiveDate(value: string | null | undefined) {
+  if (!value) {
+    return '-';
+  }
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -294,7 +298,7 @@ function StandardReceiptsPage({
                         #{order.order_number}
                       </CardTitle>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {formatArchiveDate(order.created_at)} •{' '}
+                        {formatArchiveDate(selectReceiptDisplayDate(order))} •{' '}
                         {order.items[0]?.product_name ||
                           order.items[0]?.name ||
                           'Order'}

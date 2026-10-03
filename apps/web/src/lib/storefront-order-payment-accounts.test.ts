@@ -193,12 +193,15 @@ describe('resolveStorefrontOrderPaymentAccounts', () => {
           ...manualRow,
           shipping_status: 'cancelled',
         },
+        // Zero-paid candidates load too: a sender-rejected settled row
+        // can hide behind a zero balance.
+        { id: 'zero-manual', ...manualRow, amount_paid: 0 },
       ],
       new Date('2026-09-30T13:00:00Z')
     );
 
     expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
-      p_order_ids: ['partial-manual'],
+      p_order_ids: ['partial-manual', 'zero-manual'],
     });
     expect(result.transactionsByOrderId.has('cancelled-manual')).toBe(false);
   });

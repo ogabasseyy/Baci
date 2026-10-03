@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantColorValue } from './variant-color-value';
+import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
+import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -8,12 +13,14 @@ export async function loadMcpProductVariants({
   supabase,
   sanitizeString,
   formatPrice,
+  getSafeCatalogImageUrl,
 }: {
   args: { product_id?: string; product_name?: string };
   merchantId: string;
   supabase: SupabaseClient;
   sanitizeString: (value: string, maxLength: number) => string;
   formatPrice: (price: number) => string;
+  getSafeCatalogImageUrl?: (imageUrl: string | null | undefined) => string | undefined;
 }) {
   const sanitizedProductId = args.product_id
     ? sanitizeString(args.product_id, 80)
@@ -28,7 +35,7 @@ export async function loadMcpProductVariants({
       content: [
         {
           type: 'text',
-          text: 'Please provide a valid product ID or product name.',
+          text: `Please provide a valid product ID or product name. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
     };
@@ -37,7 +44,7 @@ export async function loadMcpProductVariants({
   // First find the product
   let productQuery = supabase
     .from('products')
-    .select('id, name, has_variants, has_condition_offers, manage_stock')
+    .select('id, name, has_variants, has_condition_offers, manage_stock, color, color_images')
     .eq('merchant_id', merchantId)
     .eq('status', 'active');
 
@@ -61,17 +68,41 @@ export async function loadMcpProductVariants({
     }
     return {
       content: [
-        { type: 'text', text: `Product "${lookupLabel}" not found.` },
+        { type: 'text', text: `Product "${lookupLabel}" not found. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` },
       ],
     };
   }
+
+  const catalogColors = getMcpProductCatalogColors({
+    color: product.color,
+    colorImages: product.color_images,
+    getSafeCatalogImageUrl,
+  });
+  let variantLookupFailed = false;
+  let offerLookupFailed = false;
+  const unavailableOptions = (message: string) => {
+    const hasCatalogColors = catalogColors.colors.length > 0;
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `${message}${hasCatalogColors ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+      }],
+      ...(hasCatalogColors ? {
+        structuredContent: {
+          product_name: product.name,
+          catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish variant stock or combinations.'),
+          variant_lookup_failed: variantLookupFailed,
+          offer_lookup_failed: offerLookupFailed,
+        },
+      } : {}),
+    };
+  };
 
   let variants: Array<{
     attributes: Record<string, string> | null;
     price_override: number | null;
     stock_quantity: number;
   }> = [];
-  let variantLookupFailed = false;
   if (product.has_variants) {
     const { data, error } = await supabase.rpc(
       'get_storefront_product_variants',
@@ -80,7 +111,8 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product variants:', error);
       if (!product.has_condition_offers) {
-        return { content: [{ type: 'text', text: 'Product variants are temporarily unavailable.' }] };
+        variantLookupFailed = true;
+        return unavailableOptions('Product variants are temporarily unavailable.');
       }
       variantLookupFailed = true;
     } else {
@@ -95,7 +127,6 @@ export async function loadMcpProductVariants({
     stock_quantity: number;
     condition_notes: string | null;
   }> = [];
-  let offerLookupFailed = false;
   if (product.has_condition_offers) {
     const { data, error } = await supabase.rpc('get_product_offers', {
       p_product_id: product.id,
@@ -103,7 +134,8 @@ export async function loadMcpProductVariants({
     if (error) {
       console.error('Failed to fetch public product offers:', error);
       if (!product.has_variants) {
-        return { content: [{ type: 'text', text: 'Product offers are temporarily unavailable.' }] };
+        offerLookupFailed = true;
+        return unavailableOptions('Product offers are temporarily unavailable.');
       }
       offerLookupFailed = true;
     } else {
@@ -116,19 +148,28 @@ export async function loadMcpProductVariants({
     (!offers || offers.length === 0)
   ) {
     if (variantLookupFailed || offerLookupFailed) {
-      return { content: [{ type: 'text', text: 'Product options are temporarily unavailable.' }] };
+      return unavailableOptions('Product options are temporarily unavailable.');
     }
     return {
       content: [
         {
           type: 'text',
-          text: `No variants available for "${product.name}".`,
+          text: `No variant options were returned for "${product.name}".${catalogColors.colors.length > 0 ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
+      structuredContent: {
+        product_name: product.name,
+        catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
+        variants: [],
+        condition_offers: [],
+      },
     };
   }
 
-  let text = `**Variants for ${product.name}:**\n\n`;
+  let text = `**Variants for ${product.name}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
+  if (catalogColors.colors.length > 0) {
+    text += `${formatMcpCatalogColors(catalogColors)}\n\n`;
+  }
   if (variantLookupFailed) text += 'Variant options are temporarily unavailable.\n';
   if (offerLookupFailed) text += 'Condition offers are temporarily unavailable.\n';
 
@@ -138,7 +179,7 @@ export async function loadMcpProductVariants({
       : variants;
     // Group by attribute type
     const colors = [
-      ...new Set(displayVariants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => getMcpVariantColorValue(v.attributes)).filter(Boolean)),
     ];
     const storages = [
       ...new Set(
@@ -187,6 +228,7 @@ export async function loadMcpProductVariants({
     content: [{ type: 'text', text }],
     structuredContent: {
       product_name: product.name,
+      catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
       variants: (variants || []).map((variant) => ({
         ...variant,
         stock_quantity: product.manage_stock ? variant.stock_quantity : null,

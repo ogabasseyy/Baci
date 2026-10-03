@@ -1,43 +1,17 @@
 #!/usr/bin/env node
 
 import { pathToFileURL } from 'node:url';
+import {
+  DEFAULT_REQUIRED_TOOLS,
+  DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS,
+} from './mcp-tool-contracts.mjs';
+
+export { DEFAULT_REQUIRED_TOOLS, DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS };
 
 const DEFAULT_HEALTH_URL = 'https://mcp.ogabassey.com/health';
 const DEFAULT_MCP_URL = 'https://mcp.ogabassey.com/mcp';
 const FETCH_ATTEMPTS = 5;
 const FETCH_RETRY_DELAY_MS = 2000;
-const DEFAULT_REQUIRED_TOOLS = [
-  'add_to_cart',
-  'browse_categories',
-  'get_brands',
-  'get_product',
-  'get_product_variants',
-  'get_recommendations',
-  'get_shipping_quote',
-  'get_store_info',
-  'search_products',
-];
-export const DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS = {
-  create_agentic_checkout_session: {
-    itemArrayProperty: 'items',
-    itemProperties: ['id', 'quantity'],
-    properties: ['currency', 'idempotency_key', 'items', 'shipping_address'],
-    required: ['items'],
-  },
-  update_agentic_checkout_session: {
-    itemArrayProperty: 'items',
-    itemProperties: ['id', 'quantity'],
-    properties: [
-      'fulfillment_option_id',
-      'idempotency_key',
-      'items',
-      'session_id',
-      'shipping_address',
-    ],
-    required: ['session_id'],
-  },
-};
-
 let timeoutMs = 15000;
 const healthUrl = process.env.MCP_HEALTH_URL || DEFAULT_HEALTH_URL;
 const mcpUrl = process.env.MCP_SMOKE_URL || DEFAULT_MCP_URL;

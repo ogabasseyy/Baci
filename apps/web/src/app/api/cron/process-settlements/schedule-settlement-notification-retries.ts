@@ -20,8 +20,14 @@ export interface SettlementNotificationRetryItem {
  * Defer unnotified rows with backoff, grouped by next attempt count.
  * Past the cap the rows leave the bounded queue (the fetch excludes
  * them) and the dead-letter log is operations' backstop. Failures
- * only log: the row retries on the next run, and the caller already
- * counted the outcome.
+ * only log — including transport throws, so callers can invoke this
+ * from error paths without a second catch: the row retries on the
+ * next run, and the caller already counted the outcome.
+ *
+ * The 'delivered-unmarked' reason skips the backoff ladder and
+ * dead-letters immediately: the email was already sent (or may have
+ * been), so deferring would resend a delivered message on the next
+ * run. Operations verifies delivery out of band.
  */
 export async function scheduleSettlementNotificationRetries({
   items,
@@ -31,31 +37,40 @@ export async function scheduleSettlementNotificationRetries({
 }: {
   items: SettlementNotificationRetryItem[];
   logScope: { merchantId: string } | { merchantIds: string[] };
-  reason: 'error' | 'missing-email' | 'rejected';
+  reason: 'delivered-unmarked' | 'error' | 'missing-email' | 'rejected';
   supabase: SupabaseClient;
 }): Promise<void> {
   const retryGroups = new Map<number, string[]>();
   for (const item of items) {
-    const attempts = item.notificationAttempts + 1;
+    const attempts =
+      reason === 'delivered-unmarked'
+        ? SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS
+        : item.notificationAttempts + 1;
     const ids = retryGroups.get(attempts) ?? [];
     ids.push(item.id);
     retryGroups.set(attempts, ids);
   }
   for (const [attempts, ids] of retryGroups) {
     const deadLettered = attempts >= SETTLEMENT_NOTIFICATION_MAX_ATTEMPTS;
-    const { error: retryError } = await supabase
-      .from('merchant_settlements')
-      .update({
-        notification_attempts: attempts,
-        notification_next_retry_at: deadLettered
-          ? null
-          : new Date(
-              Date.now() + notificationRetryDelayMs(attempts)
-            ).toISOString(),
-      })
-      .eq('status', 'settled')
-      .eq('settlement_notified', false)
-      .in('id', ids);
+    let retryError: unknown = null;
+    try {
+      const { error } = await supabase
+        .from('merchant_settlements')
+        .update({
+          notification_attempts: attempts,
+          notification_next_retry_at: deadLettered
+            ? null
+            : new Date(
+                Date.now() + notificationRetryDelayMs(attempts)
+              ).toISOString(),
+        })
+        .eq('status', 'settled')
+        .eq('settlement_notified', false)
+        .in('id', ids);
+      retryError = error;
+    } catch (transportError) {
+      retryError = transportError;
+    }
     if (retryError) {
       logger.error({
         message: 'Failed to schedule settlement notification retry',
@@ -69,7 +84,9 @@ export async function scheduleSettlementNotificationRetries({
             ? 'Settlement notification dead-lettered after repeated rejections'
             : reason === 'error'
               ? 'Settlement notification dead-lettered after repeated errors'
-              : 'Settlement notification dead-lettered: merchant email missing',
+              : reason === 'delivered-unmarked'
+                ? 'Settlement notification dead-lettered after delivery without a notified mark'
+                : 'Settlement notification dead-lettered: merchant email missing',
         ...logScope,
         settlementIds: ids,
         attempts,

@@ -716,4 +716,66 @@ describe('zeptomail audit logging', () => {
       'explicit-merchant'
     );
   });
+
+  it('still resolves success when the accepted-audit write throws', async () => {
+    sendMailMock.mockResolvedValue({ request_id: 'zepto-accepted' });
+    const adminModule = await import('@/lib/supabase/admin');
+    vi.mocked(adminModule.createAdminClient).mockImplementation((() => ({
+      from: () => ({
+        insert: () => ({
+          select: () =>
+            Promise.resolve({ data: [{ id: 'attempt-1' }], error: null }),
+        }),
+        update: () => ({
+          in: () => Promise.reject(new Error('audit store down')),
+        }),
+      }),
+    })) as never);
+    const { sendEmail } = await import('./zeptomail');
+
+    // The provider already accepted: a throw here would corrupt the
+    // outcome into a failure and make the caller resend. Audit
+    // writes resolve every failure so the accept survives.
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Test',
+      htmlContent: '<p>Hello</p>',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      messageId: 'zepto-accepted',
+    });
+  });
+
+  it('still resolves failure when the failure-audit write throws', async () => {
+    sendMailMock.mockRejectedValue(
+      Object.assign(new Error('provider rejected'), { code: 'TM_4001' })
+    );
+    const adminModule = await import('@/lib/supabase/admin');
+    vi.mocked(adminModule.createAdminClient).mockImplementation((() => ({
+      from: () => ({
+        insert: () => ({
+          select: () =>
+            Promise.resolve({ data: [{ id: 'attempt-1' }], error: null }),
+        }),
+        update: () => ({
+          in: () => Promise.reject(new Error('audit store down')),
+        }),
+      }),
+    })) as never);
+    const { sendEmail } = await import('./zeptomail');
+
+    // Dispatch was attempted: per the dispatch-boundary contract a
+    // throw would wrongly read as pre-dispatch (safe to retry at
+    // once), so the outcome resolves as a definite rejection.
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Test',
+      htmlContent: '<p>Hello</p>',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).not.toHaveProperty('deliveryOutcome');
+  });
 });

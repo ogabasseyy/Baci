@@ -304,7 +304,7 @@ describe('processCancellationDrain', () => {
     );
   });
 
-  it('returns 503 when notifications dead-lettered even with zero send failures', async () => {
+  it('warns instead of 503ing when notifications dead-lettered with zero send failures', async () => {
     mocks.drainPaystackRefundNotifications.mockResolvedValueOnce({
       claimed: 0,
       exhausted: 2,
@@ -318,16 +318,22 @@ describe('processCancellationDrain', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(503);
-    expect(payload).toEqual({
-      error: 'Cancellation and refund background work incomplete',
-    });
-    expect(mocks.loggerError).toHaveBeenCalledWith(
+    // Dead letters need manual review with no ack path: 503ing would
+    // pin the cron red until a human clears them, masking fresh
+    // failures. They stay visible via the warn log and payload count.
+    expect(response.status).toBe(200);
+    expect(payload).toEqual(
       expect.objectContaining({
-        notificationExhausted: 2,
-        notificationFailed: true,
+        success: true,
+        paystackRefundNotifications: expect.objectContaining({
+          exhausted: 2,
+        }),
       })
     );
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationExhausted: 2 })
+    );
+    expect(mocks.loggerError).not.toHaveBeenCalled();
   });
 
   it('logs a missing exhausted count as zero on the failure path', async () => {

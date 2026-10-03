@@ -15,18 +15,18 @@ export function getMcpProductCatalogColors({
   const isPlainObject = typeof colorImages === 'object' && colorImages !== null && !Array.isArray(colorImages) &&
     (Object.getPrototypeOf(colorImages) === Object.prototype || Object.getPrototypeOf(colorImages) === null);
   const storedLabels = isPlainObject
-    ? Object.keys(colorImages).filter((label) => {
-      const value = (colorImages as Record<string, unknown>)[label];
-      return label.trim().length > 0 && Array.isArray(value) && value.every((item) => typeof item === 'string');
-    })
+    ? Object.keys(colorImages).filter((label) => label.trim().length > 0)
     : [];
-  const scalarColor = typeof color === 'string' && color.trim() ? color.trim() : undefined;
-  const labels = [...(scalarColor ? [scalarColor] : []), ...storedLabels.map((label) => label.trim())];
+  const scalarColors = typeof color === 'string' ? color.split(',').map((label) => label.trim()).filter(Boolean) : [];
+  const labels = [...scalarColors, ...storedLabels.map((label) => label.trim())];
   const colors = labels.filter((label, index) => labels.findIndex((candidate) => candidate.toLowerCase() === label.toLowerCase()) === index);
   const imagesByColor = Object.fromEntries(colors.map((label) => {
     const images = isPlainObject
       ? storedLabels.filter((mappingLabel) => mappingLabel.trim().toLowerCase() === label.toLowerCase())
-        .flatMap((mappingLabel) => (colorImages as Record<string, unknown>)[mappingLabel] as string[])
+        .flatMap((mappingLabel) => {
+          const value = (colorImages as Record<string, unknown>)[mappingLabel];
+          return Array.isArray(value) ? value.filter((image): image is string => typeof image === 'string') : [];
+        })
       : [];
     const safeImages = getSafeCatalogImageUrl
       ? images.flatMap((image) => {
@@ -39,9 +39,26 @@ export function getMcpProductCatalogColors({
   }));
   return {
     colors,
-    source: colors.length === 0 ? null : scalarColor && storedLabels.length > 0
+    source: colors.length === 0 ? null : scalarColors.length > 0 && storedLabels.length > 0
       ? 'product.color+color_images'
-      : scalarColor ? 'product.color' : 'product.color_images',
+      : scalarColors.length > 0 ? 'product.color' : 'product.color_images',
     imagesByColor,
+  };
+}
+
+
+type CatalogColors = ReturnType<typeof getMcpProductCatalogColors>;
+
+/** Shared catalog-choice wording; availability remains tied to returned variants. */
+export function formatMcpCatalogColors(colors: CatalogColors): string {
+  return `**Catalog Colors:** ${colors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed)`;
+}
+
+export function buildMcpCatalogColorsPayload(colors: CatalogColors, meaning: string) {
+  return {
+    labels: colors.colors,
+    source: colors.source,
+    images_by_color: colors.imagesByColor,
+    meaning,
   };
 }

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
-import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { buildMcpCatalogColorsPayload, formatMcpCatalogColors, getMcpProductCatalogColors } from './product-catalog-colors';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -83,17 +83,12 @@ export async function loadMcpProductVariants({
     return {
       content: [{
         type: 'text' as const,
-        text: `${message}${hasCatalogColors ? `\n\n**Catalog Colors:** ${catalogColors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed).` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+        text: `${message}${hasCatalogColors ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       }],
       ...(hasCatalogColors ? {
         structuredContent: {
           product_name: product.name,
-          catalog_colors: {
-            labels: catalogColors.colors,
-            source: catalogColors.source,
-            images_by_color: catalogColors.imagesByColor,
-            meaning: 'Stored product color labels do not establish variant stock or combinations.',
-          },
+          catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish variant stock or combinations.'),
           variant_lookup_failed: variantLookupFailed,
           offer_lookup_failed: offerLookupFailed,
         },
@@ -157,17 +152,12 @@ export async function loadMcpProductVariants({
       content: [
         {
           type: 'text',
-          text: `No variant options were returned for "${product.name}".${catalogColors.colors.length > 0 ? `\n\n**Catalog Colors:** ${catalogColors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed).` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+          text: `No variant options were returned for "${product.name}".${catalogColors.colors.length > 0 ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
       structuredContent: {
         product_name: product.name,
-        catalog_colors: {
-          labels: catalogColors.colors,
-          source: catalogColors.source,
-          images_by_color: catalogColors.imagesByColor,
-          meaning: 'Stored product color labels do not establish selectable variant or stock combinations.',
-        },
+        catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
         variants: [],
         condition_offers: [],
       },
@@ -176,7 +166,7 @@ export async function loadMcpProductVariants({
 
   let text = `**Variants for ${product.name}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
   if (catalogColors.colors.length > 0) {
-    text += `**Catalog Colors:** ${catalogColors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed)\n\n`;
+    text += `${formatMcpCatalogColors(catalogColors)}\n\n`;
   }
   if (variantLookupFailed) text += 'Variant options are temporarily unavailable.\n';
   if (offerLookupFailed) text += 'Condition offers are temporarily unavailable.\n';
@@ -236,12 +226,7 @@ export async function loadMcpProductVariants({
     content: [{ type: 'text', text }],
     structuredContent: {
       product_name: product.name,
-      catalog_colors: {
-        labels: catalogColors.colors,
-        source: catalogColors.source,
-        images_by_color: catalogColors.imagesByColor,
-        meaning: 'Stored product color labels do not establish selectable variant or stock combinations.',
-      },
+      catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
       variants: (variants || []).map((variant) => ({
         ...variant,
         stock_quantity: product.manage_stock ? variant.stock_quantity : null,

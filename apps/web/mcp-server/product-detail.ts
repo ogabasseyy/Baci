@@ -4,7 +4,7 @@ import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
-import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { buildMcpCatalogColorsPayload, formatMcpCatalogColors, getMcpProductCatalogColors } from './product-catalog-colors';
 
 interface ProductDetailSource {
   id: string;
@@ -160,7 +160,7 @@ export async function buildMcpProductDetail({
   if (product.brand) text += `**Brand:** ${product.brand}\n`;
   if (product.category) text += `**Category:** ${product.category}\n`;
   if (catalogColors.colors.length > 0) {
-    text += `**Catalog Colors:** ${catalogColors.colors.join(', ')} (stored catalog color choices; stock and specific color/storage/price pairings are unconfirmed)\n`;
+    text += `${formatMcpCatalogColors(catalogColors)}\n`;
   }
 
   // Rating
@@ -216,12 +216,7 @@ export async function buildMcpProductDetail({
     content: [{ type: 'text', text }],
     structuredContent: {
       products: [formatted],
-      catalog_colors: {
-        labels: catalogColors.colors,
-        source: catalogColors.source,
-        images_by_color: catalogColors.imagesByColor,
-        meaning: 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.',
-      },
+      catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.'),
       variants: variants.map((v) => ({
         attributes: v.attributes,
         price: v.price_override,

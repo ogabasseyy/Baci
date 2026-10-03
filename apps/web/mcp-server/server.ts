@@ -50,7 +50,6 @@ import { resolveMcpPaystackDvaAccess } from './mcp-paystack-dva-access';
 import { registerAgenticUcpTools } from './agentic-ucp-tools';
 import { discoverMcpProducts } from './discover-products';
 import { formatSearchProductsResponse } from './format-search-products-response';
-import { mcpDiscoveryIntentSchema } from '../src/schemas/mcp-discovery-intent';
 import { embedDiscoveryText } from './gemini-discovery-embedding';
 import { loadSemanticDiscoveryCandidateIds } from './semantic-discovery-candidates';
 import { getMcpOfferAvailability } from './product-offer-availability';
@@ -60,6 +59,7 @@ import { serveProductImage } from './product-image-proxy';
 import { checkProductImageRateLimit } from './product-image-rate-limit-singleton';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { createSearchProductsToolConfig } from './search-products-tool-config';
 import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
 
 // =============================================================================
@@ -1223,44 +1223,7 @@ function createOgabasseyServer() {
   // Tool: Search products
   server.registerTool(
     'search_products',
-    {
-      title: 'Search Products',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        `Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. Set an explicit category when the buyer names one (Smartphones, Tablets, Laptops, or Accessories). Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE} When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.`,
-      inputSchema: {
-        // Optional at the transport layer so a missing intent reaches the friendly
-        // invalidIntentMessage branch instead of a generic schema validation error.
-        intent: mcpDiscoveryIntentSchema.describe('Supply structured intent for shopper searches. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints. Unknown catalog facts cannot satisfy explicit constraints.').optional(),
-        query: z
-          .string()
-          .max(100)
-          .optional()
-          .describe('Retrieval keywords only: product name, model, or use case. Put hard constraints in intent and price fields; do not encode a whole sentence grammar in query.'),
-        condition: z
-          .enum(['new', 'used', 'open_box', 'refurbished'])
-          .optional()
-          .describe('Product condition'),
-        category: z
-          .string()
-          .max(50)
-          .optional()
-          .describe('Catalog category. Use Smartphones for phone requests, Tablets for tablet requests, and Laptops for laptop requests.'),
-        brand: z.string().max(50).optional().describe('Brand name'),
-        min_price: z.number().min(0).optional(),
-        max_price: z.number().min(0).optional(),
-        sort: z
-          .enum(['price_asc', 'price_desc', 'newest', 'relevance'])
-          .optional()
-          .default('relevance'),
-        limit: z.number().min(1).max(20).optional().default(10),
-      },
-      _meta: {
-        'openai/outputTemplate': STORE_WIDGET_URI,
-        'openai/toolInvocation/invoking': 'Searching catalog...',
-        'openai/toolInvocation/invoked': 'Search complete',
-      },
-    },
+    createSearchProductsToolConfig(STORE_WIDGET_URI),
     async (args) => {
       try {
         const merchantId = await getMerchantId();

@@ -10,6 +10,7 @@ import {
   type MerchantRefundPushSender,
   type RefundEmailSender,
 } from './deliver-claimed-refund-notification';
+import { PER_SEND_WORST_MS } from './notification-drain-limit';
 
 export type { MerchantRefundPushSender, RefundEmailSender };
 
@@ -45,8 +46,16 @@ export async function drainPaystackRefundNotifications(
   const uncertain = await countUnresolvedUncertainRefundNotifications(supabase);
   // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {
-    // Reserve time for the provider call and outcome write.
-    if (deadlineMs !== undefined && deadlineMs - Date.now() < 45_000) break;
+    // Reserve a full per-send slot before claiming: the claim
+    // increments attempts, and the customer-email admission check
+    // (145s four-attempt sender budget) throws past this point — so a
+    // row claimed short of a slot burns one of its five attempts per
+    // invocation until a healthy notification dead-letters. The
+    // slot's 5s slack covers the claim plus the order, merchant, and
+    // ledger reads; unclaimed rows keep their budget for a tick with
+    // room.
+    if (deadlineMs !== undefined && deadlineMs - Date.now() < PER_SEND_WORST_MS)
+      break;
     const { data, error } = await supabase.rpc(
       'claim_paystack_cancellation_refund_notifications_v1',
       { p_limit: 1 }

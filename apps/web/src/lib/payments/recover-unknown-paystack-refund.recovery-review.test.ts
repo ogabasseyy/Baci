@@ -292,7 +292,13 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(1);
+    // The recovery review plus the stalled-path watch open: a payment
+    // completing between the scans must still find a watch to claim.
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(rpc).toHaveBeenCalledWith(
       'file_paystack_refund_recovery_review_v1',
       expect.objectContaining({

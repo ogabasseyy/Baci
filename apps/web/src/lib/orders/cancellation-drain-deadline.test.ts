@@ -18,17 +18,18 @@ describe('cancellationDrainDeadlineMs', () => {
 
 describe('cancellationEmailDrainDeadlineMs', () => {
   it('extends past a full reconcile phase plus the email budget and claim allowance', () => {
-    expect(cancellationEmailDrainDeadlineMs(1_000_000)).toBe(1_116_000);
+    expect(cancellationEmailDrainDeadlineMs(1_000_000)).toBe(1_120_000);
   });
 
   it('keeps the live sender budget fittable with the reserve intact', () => {
     // The serial drain starts after the 60s reconcile phase: the
     // email cutoff must leave the live admission budget plus the
-    // claim-write allowance the post-lookup guard requires, and the
-    // 150s notification reserve plus 30s safety must still fit the
-    // 300s invocation. Fails if any shared budget drifts.
+    // claim-write allowance the post-lookup guard requires plus margin
+    // for the order/merchant reads ahead of it, and the 150s
+    // notification reserve plus 30s safety must still fit the 300s
+    // invocation. Fails if any shared budget drifts.
     const emailWindow = cancellationEmailDrainDeadlineMs(0) - 60_000;
-    expect(emailWindow).toBeGreaterThanOrEqual(
+    expect(emailWindow).toBeGreaterThan(
       zeptomailSendAdmissionBudgetMs(EMAIL_ATTEMPTS_PER_SENDER) +
         CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS
     );

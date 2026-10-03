@@ -76,6 +76,78 @@ describe('resolveContradictoryRefundFailure', () => {
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 
+  it('spends the narrowest replacement first regardless of scan order', async () => {
+    const failedRows = [
+      {
+        amount: 50,
+        created_at: '2026-09-27T12:00:00Z',
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-1',
+        id: 'refund-1',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+      {
+        amount: 50,
+        created_at: '2026-09-27T14:00:00Z',
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'RFD-2',
+        id: 'refund-3',
+        metadata: {
+          payment_transaction_id: 'payment-1',
+          provider_refund_status: 'failed',
+        },
+      },
+    ];
+    // Returned newest-first: the 15:00 replacement matches both
+    // failures, the 13:00 one only the earlier failure. Spending in
+    // scan order exhausts the shared replacement on the first failure
+    // and starves the second into a false alert.
+    const replacement = chain(
+      {
+        data: [
+          {
+            amount: 50,
+            created_at: '2026-09-27T15:00:00Z',
+            currency: 'NGN',
+            gateway: 'paystack',
+            id: 'refund-4',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'processed',
+            },
+          },
+          {
+            amount: 50,
+            created_at: '2026-09-27T13:00:00Z',
+            currency: 'NGN',
+            gateway: 'paystack',
+            id: 'refund-2',
+            metadata: {
+              payment_transaction_id: 'payment-1',
+              provider_refund_status: 'processed',
+            },
+          },
+        ],
+        error: null,
+      },
+      'limit'
+    );
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: failedRows, error: null }, 'limit'))
+      .mockReturnValueOnce(replacement);
+
+    await expect(
+      resolveContradictoryRefundFailure({ from } as never, row, order)
+    ).resolves.toBe(true);
+    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
+  });
+
   it('requires provider verification for a padded legacy Paystack replacement', async () => {
     const failedRows = [
       {

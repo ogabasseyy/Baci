@@ -85,18 +85,29 @@ export async function executeOrderCancellationSideEffect({
     supabase,
     transactions,
   });
-  const linkedPaymentId = (row: { metadata: unknown }): string | null => {
+  const claimedPaymentId = (row: { metadata: unknown }): string | null => {
     const metadata = row.metadata as {
       payment_transaction_id?: unknown;
     } | null;
     const paymentId = metadata?.payment_transaction_id;
-    return typeof paymentId === 'string' &&
-      transactions.some((transaction) => transaction.id === paymentId)
-      ? paymentId
+    return typeof paymentId === 'string' ? paymentId : null;
+  };
+  const linkedPaymentId = (row: { metadata: unknown }): string | null => {
+    const claimed = claimedPaymentId(row);
+    return claimed !== null &&
+      transactions.some((transaction) => transaction.id === claimed)
+      ? claimed
       : null;
   };
   const unlinkedRefunds = (refundRows ?? []).filter(
-    (row) => linkedPaymentId(row) === null
+    (row) => claimedPaymentId(row) === null
+  );
+  // A link naming a payment id outside this order's legs is corruption
+  // (stale backfill, cross-order write) — not a legacy unlinked refund
+  // the sole-payment rule may attribute. It must quarantine with the
+  // claimed target named, never route into the unlinked path.
+  const invalidLinkRefunds = (refundRows ?? []).filter(
+    (row) => claimedPaymentId(row) !== null && linkedPaymentId(row) === null
   );
   // Mirror the claim gate's sole-completed-leg attribution: an unlinked
   // legacy refund covering the only completed leg must not terminalize
@@ -125,6 +136,26 @@ export async function executeOrderCancellationSideEffect({
     soleCompletedLeg !== null &&
     (refundedPaymentIds.has(soleCompletedLeg.id) ||
       unverifiedLinkedLegIds.has(soleCompletedLeg.id));
+  if (invalidLinkRefunds.length > 0) {
+    const claimedIds = [
+      ...new Set(
+        invalidLinkRefunds
+          .map((row) => claimedPaymentId(row))
+          .filter((id): id is string => id !== null)
+      ),
+    ];
+    await quarantineRefund({
+      metadata: {
+        invalid_link_claimed_payment_ids: claimedIds,
+        invalid_link_refund_count: invalidLinkRefunds.length,
+      },
+      order,
+      preflight: true,
+      reason: `An existing refund links to payment legs outside this order (${claimedIds.join(', ')}); verify it before another provider refund`,
+      supabase,
+      transactions,
+    });
+  }
   if (
     unattributedUnlinkedCount > 0 ||
     (unlinkedRefunds.length > 0 && !soleLegCovered)

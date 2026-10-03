@@ -35,27 +35,28 @@ export async function fileTerminalAttemptEvidenceMismatch({
   evidence: TerminalAttemptMismatchEvidence;
   supabase: SupabaseClient;
 }): Promise<boolean> {
+  const review = {
+    issue_type: 'abandoned_attempt_evidence_mismatch',
+    order_id: attempt.order_id,
+    merchant_id: attempt.merchant_id,
+    txn_id: attempt.id,
+    paystack_ref: attempt.gateway_reference,
+    reason: `Stale Paystack attempt ${attempt.gateway_reference} is terminal (${evidence.providerStatus}) but its provider evidence does not match the local row (${evidence.mismatchKind}: ${evidence.mismatchDetail})`,
+    metadata: {
+      payment_transaction_id: attempt.id,
+      provider_status: evidence.providerStatus,
+      provider_reference: evidence.providerReference,
+      provider_amount: evidence.providerAmount,
+      provider_currency: evidence.providerCurrency,
+      local_amount: attempt.amount,
+      local_currency: attempt.currency,
+      local_reference: attempt.gateway_reference,
+      evidence_mismatch: evidence.mismatchKind,
+    },
+  };
   const { error: reviewError } = await supabase
     .from('reconciliation_review')
-    .insert({
-      issue_type: 'abandoned_attempt_evidence_mismatch',
-      order_id: attempt.order_id,
-      merchant_id: attempt.merchant_id,
-      txn_id: attempt.id,
-      paystack_ref: attempt.gateway_reference,
-      reason: `Stale Paystack attempt ${attempt.gateway_reference} is terminal (${evidence.providerStatus}) but its provider evidence does not match the local row (${evidence.mismatchKind}: ${evidence.mismatchDetail})`,
-      metadata: {
-        payment_transaction_id: attempt.id,
-        provider_status: evidence.providerStatus,
-        provider_reference: evidence.providerReference,
-        provider_amount: evidence.providerAmount,
-        provider_currency: evidence.providerCurrency,
-        local_amount: attempt.amount,
-        local_currency: attempt.currency,
-        local_reference: attempt.gateway_reference,
-        evidence_mismatch: evidence.mismatchKind,
-      },
-    });
+    .insert(review);
   if (reviewError && (reviewError as { code?: string }).code !== '23505') {
     return false;
   }
@@ -70,7 +71,18 @@ export async function fileTerminalAttemptEvidenceMismatch({
         p_reason: `terminal ${evidence.providerStatus} ${evidence.mismatchKind} (${evidence.mismatchDetail})`,
       }
     );
-    if (mergeError || merged !== true) return false;
+    if (mergeError || merged !== true) {
+      // The merge only absorbs into this order's open review: a 23505
+      // it cannot absorb means another order owns the global
+      // (issue_type, paystack_ref) slot (shared reference). Persist
+      // this order's review without occupying paystack_ref — as the
+      // refund filers do — so the evidence lands and the stamp below
+      // still retires the row instead of reselecting it forever.
+      const { error: retryError } = await supabase
+        .from('reconciliation_review')
+        .insert({ ...review, paystack_ref: null });
+      if (retryError) return false;
+    }
   }
   const { data: stamped, error: stampError } = await supabase.rpc(
     'stamp_abandoned_sweep_resolution_v1',

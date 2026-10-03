@@ -67,6 +67,32 @@ describe('Paystack refund notifications', () => {
     );
   });
 
+  it('skips claiming when less than a full send slot remains', async () => {
+    const db = database('processed_customer_email');
+    // Above the old 45s reserve but below the 150s worst-case slot:
+    // claiming here would burn an attempt the 145s admission check
+    // then rejects.
+    const deadlineMs = Date.now() + 100_000;
+
+    await expect(
+      drainPaystackRefundNotifications(
+        db as never,
+        mocks.sendEmail,
+        20,
+        undefined,
+        deadlineMs
+      )
+    ).resolves.toEqual({
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      exhausted: 0,
+      uncertain: 0,
+    });
+    expect(db.rpc).not.toHaveBeenCalled();
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+
   it('does not email before every payment leg is refunded', async () => {
     const db = database('processed_customer_email', 'paid');
     await drainPaystackRefundNotifications(db as never, mocks.sendEmail);

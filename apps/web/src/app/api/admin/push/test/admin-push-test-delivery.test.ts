@@ -136,6 +136,29 @@ describe('deliverAdminPushTest', () => {
     expect(result).toEqual({ failed: 0, sent: 0, uncertain: 1 });
   });
 
+  it('keeps definitive token failures out of uncertain counts', async () => {
+    mockTokenQuery({
+      data: [{ token: 'bad-token' }, { token: 'ExponentPushToken[one]' }],
+      error: null,
+    });
+    mocks.sendChunks.mockResolvedValue({
+      deliveryUncertain: true,
+      tickets: [
+        { status: 'error', details: { error: 'DeviceNotRegistered' } },
+        { status: 'error', details: { error: 'ExpoError' } },
+      ],
+    });
+
+    const result = await deliverAdminPushTest(
+      { from: mocks.from } as never,
+      'user-1',
+      'Push test',
+      'Delivery check'
+    );
+
+    expect(result).toEqual({ failed: 1, sent: 0, uncertain: 1 });
+  });
+
   it('reports a post-dispatch throw as uncertain', async () => {
     mockTokenQuery({
       data: [{ token: 'ExponentPushToken[one]' }],

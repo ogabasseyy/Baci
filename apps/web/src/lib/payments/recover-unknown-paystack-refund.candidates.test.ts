@@ -75,8 +75,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     });
   });
 
-  function reviewRpc(error: unknown = null) {
-    return vi.fn().mockResolvedValue({ data: 'review-1', error });
+  function reviewRpc(error: unknown = null, watchRows: unknown = []) {
+    // The stalled path opens the recovery watch and rescans: default
+    // to an empty rescan so stalled tests return after filing.
+    return vi.fn((fn: string) => {
+      if (fn === 'open_paystack_refund_recovery_watch_v1') {
+        return Promise.resolve({ data: watchRows, error: null });
+      }
+      return Promise.resolve({ data: 'review-1', error });
+    });
   }
 
   it('files ambiguous reviews only for cancelled orders', async () => {
@@ -264,7 +271,15 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     await recoverUnknownPaystackRefund(supabase, 202, 'PSK-1');
 
-    expect(rpc).toHaveBeenCalledTimes(3);
+    // Three recovery reviews plus the watch open: a payment completing
+    // after the first scan but before the stalled scan appears in
+    // neither, so the stalled path rescans under the reference lock
+    // before returning.
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
   });
 
   it('files every order when stalled matches span more than one page', async () => {
@@ -308,7 +323,11 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
     // and skip a match with no watch to catch it.
     expect(firstStalledLimit).toHaveBeenCalledWith(10);
     expect(secondStalled.gt).toHaveBeenCalledWith('id', 'pay-stalled-10');
-    expect(rpc).toHaveBeenCalledTimes(11);
+    expect(rpc).toHaveBeenCalledTimes(12);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     for (let index = 1; index <= 11; index++) {
       expect(rpc).toHaveBeenCalledWith(
         'file_paystack_refund_recovery_review_v1',
@@ -476,8 +495,14 @@ describe('recoverUnknownPaystackRefund ambiguous candidates', () => {
 
     // Withheld from the cancellation queue so it cannot absorb a future
     // genuine cancellation's evidence — but retained for operations, or
-    // a later charge recovery could mark the refunded order paid.
-    expect(rpc).not.toHaveBeenCalled();
+    // a later charge recovery could mark the refunded order paid. The
+    // only rpc call opens the recovery watch for the stalled-path
+    // rescan.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'open_paystack_refund_recovery_watch_v1',
+      expect.objectContaining({ p_paystack_ref: 'PSK-1' })
+    );
     expect(reviewInsert).toHaveBeenCalledWith(
       expect.objectContaining({
         issue_type: 'provider_refund_outside_cancellation',

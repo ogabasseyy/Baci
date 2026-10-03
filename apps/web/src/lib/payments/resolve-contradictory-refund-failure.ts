@@ -122,6 +122,20 @@ function allFailedLegsCoveredByReplacements(
   const ordered = [...failedRows].sort(
     (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)
   );
+  // Spend oldest replacement first: a replacement matching only the
+  // earlier failure is older than one matching both, so oldest-first
+  // spending consumes the narrowest match before the shared pool. In
+  // scan order a later shared replacement could be spent on the
+  // earlier failure first, starving the later failure into a false
+  // alert. Rows with unparseable dates sort last and never match.
+  const orderedReplacements = [...replacements].sort((a, b) => {
+    const aAt = Date.parse(a.created_at);
+    const bAt = Date.parse(b.created_at);
+    return (
+      (Number.isFinite(aAt) ? aAt : Number.POSITIVE_INFINITY) -
+      (Number.isFinite(bAt) ? bAt : Number.POSITIVE_INFINITY)
+    );
+  });
   // Replacement index to its unconsumed amount; entries materialize on
   // first match so an unrelated malformed row cannot fail the scan.
   const remaining = new Map<number, number>();
@@ -133,8 +147,8 @@ function allFailedLegsCoveredByReplacements(
     // replacement exists. Fail closed so the alert still sends.
     if (!Number.isFinite(failedAmount) || failedAmount <= 0) return false;
     let need = failedAmount;
-    for (let i = 0; i < replacements.length && need > 0; i++) {
-      const replacement = replacements[i] as ReplacementRefundRow;
+    for (let i = 0; i < orderedReplacements.length && need > 0; i++) {
+      const replacement = orderedReplacements[i] as ReplacementRefundRow;
       if (!replacementMatchesFailedLeg(replacement, failed)) continue;
       let left = remaining.get(i);
       if (left === undefined) {

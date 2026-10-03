@@ -205,13 +205,25 @@ $CRON_BLOCK_START
 15 4   * * * flock -n $REMOTE_DIR/locks/sync-gigl-service-centres.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/sync-gigl-service-centres.mjs' >> $REMOTE_DIR/logs/sync-gigl-service-centres.log 2>&1
 $CRON_BLOCK_END
 EOF
-ssh "$VPS" "bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END'" <<'REMOTE_SH'
+# shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
+ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR/crontab.fragment' '$REMOTE_DIR' '$CRON_BLOCK_START' '$CRON_BLOCK_END' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
 fragment_path="$1"
 remote_dir="$2"
 cron_block_start="$3"
 cron_block_end="$4"
+expected_sha="$5"
+# The crontab carries this deployment's identity (the pinned remediator
+# image tag): installing it after a concurrent promote would point live
+# cron at this deployment's image under another deployment's marker.
+# The deploy lock serializes with promotes; the marker check inside it
+# refuses the stale write. Before ANY mutation (even mktemp/python).
+live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
+if [ "$live_sha" != "$expected_sha" ]; then
+  echo "Refusing crontab install: live worker ${live_sha:-<missing>} is not this deployment ($expected_sha); a concurrent promote superseded it. Rerun deploy.sh from current main." >&2
+  exit 1
+fi
 tmp_file="$(mktemp /tmp/baci-crontab.XXXXXX)"
 
 cleanup() {

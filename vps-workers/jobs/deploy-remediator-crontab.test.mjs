@@ -60,6 +60,25 @@ describe('remediation deploy crontab', () => {
     );
   });
 
+  it('refuses the final crontab install when a concurrent promote superseded this deployment', () => {
+    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const cronBlock = deployScript.slice(
+      deployScript.indexOf('Installing crontab entries on VPS (idempotent)')
+    );
+
+    // The crontab carries this deployment's pinned image tag: the
+    // locked, marker-checked install refuses a stale write after a
+    // concurrent promote instead of mixing schedules under B's marker.
+    assert.match(cronBlock, /flock -x \/tmp\/baci-workers-deploy\.lock bash -s/);
+    assert.match(cronBlock, /expected_sha="\$5"/);
+    assert.match(cronBlock, /cat "\$remote_dir\/app-checkout\.sha"/);
+    assert.ok(
+      cronBlock.indexOf('is not this deployment') <
+        cronBlock.indexOf('crontab "$tmp_file"'),
+      'expected the marker refusal before the crontab install'
+    );
+  });
+
   it('keeps the canary wait window while leaving global acquisition to its entrypoint', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const canaryCronLine = deployScript

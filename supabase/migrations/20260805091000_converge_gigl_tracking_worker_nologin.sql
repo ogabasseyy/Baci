@@ -1,12 +1,12 @@
--- Converge the worker role to NOLOGIN with no password at the earliest
--- migration step. An earlier revision of this file enabled interim
--- direct LOGIN, but nothing consumes it: the poller authenticates by
--- worker JWT over PostgREST, and a LOGIN-capable role inherits every
--- EXECUTE grant made to PUBLIC while forging request.jwt.claim.* at
--- will, so "five wrappers only" cannot hold for a direct session.
--- Enforcing NOLOGIN here (not only in the later restore migration)
--- closes that stall window: if application stops after this file, the
--- role still cannot log in.
+-- Re-assert the worker role as NOLOGIN with no password and revoke
+-- any interim membership. The add migration converges before granting
+-- (first defense); this file is the backstop, so a stall anywhere in
+-- the chain still leaves no login window. An earlier revision of this
+-- file enabled interim direct LOGIN, but nothing consumes it: the
+-- poller authenticates by worker JWT over PostgREST, and a LOGIN-capable
+-- role inherits every EXECUTE grant made to PUBLIC while forging
+-- request.jwt.claim.* at will, so "five wrappers only" cannot hold for
+-- a direct session.
 
 DO $$
 BEGIN

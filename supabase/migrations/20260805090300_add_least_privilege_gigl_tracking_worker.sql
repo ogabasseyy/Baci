@@ -10,6 +10,19 @@ BEGIN
 END
 $$;
 
+-- Converge a pre-existing worker role BEFORE granting wrapper access.
+-- Production is mid-rollout with interim LOGIN (see the deploy.yml
+-- final-state step), and the applier commits per file: without this, a
+-- stall before the converge migration would leave direct login + fresh
+-- EXECUTE grants indefinitely. A direct session can SET
+-- request.jwt.claim.role to pass the auth.role() wrapper guard while
+-- the PostgREST scope hook never runs — so "five wrappers only" would
+-- not hold. NOLOGIN + PASSWORD NULL (a later accidental LOGIN cannot
+-- resurrect password auth); a no-op on fresh chains, where the role
+-- was just created NOLOGIN above. The converge migration re-asserts
+-- this and additionally revokes any interim membership.
+ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
+
 -- No GRANT to authenticator here: membership lands atomically with the
 -- pre-request hook in 20260805170000_isolate_gigl_tracking_postgrest_capability.
 -- Granting it here would leave the worker JWT usable without the hook if a

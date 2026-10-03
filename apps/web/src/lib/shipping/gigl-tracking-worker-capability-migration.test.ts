@@ -38,6 +38,22 @@ describe('GIGL tracking worker capability migration', () => {
     );
   });
 
+  it('disables direct login before granting wrapper access', () => {
+    // Production is mid-rollout with interim LOGIN and the applier
+    // commits per file: converging here (not only in the later
+    // converge migration) leaves no stall window where direct login
+    // coexists with fresh EXECUTE grants.
+    expect(migration).toMatch(
+      /ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL/
+    );
+    expect(migration).not.toMatch(/ALTER ROLE gigl_tracking_worker LOGIN /);
+    expect(
+      migration.indexOf(
+        'ALTER ROLE gigl_tracking_worker NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL'
+      )
+    ).toBeLessThan(migration.indexOf('GRANT EXECUTE ON FUNCTION'));
+  });
+
   it('grants only the five tracking wrapper procedures to the worker role', () => {
     const grants = migration.match(
       /GRANT EXECUTE ON FUNCTION public\.gigl_worker_[\s\S]*?TO gigl_tracking_worker;/g

@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ACTIVE_TEXT_MODEL_NAME, activeTextModel } from '../../src/ai/provider';
 import { runCategoryGuidanceModelEval } from './category-guidance-model-eval';
 
-const repositoryRoot = resolve(__dirname, '../../../..');
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 async function main() {
   const outputPath = process.argv[2];

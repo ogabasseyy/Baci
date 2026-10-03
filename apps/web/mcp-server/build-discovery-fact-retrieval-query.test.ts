@@ -24,6 +24,15 @@ it('recalls both exact manufacturer-qualified and unqualified model facts withou
   );
 });
 
+it('correlates manufacturer-specific model aliases across multiple brands', () => {
+  const acme = buildDiscoveryFactRetrievalQuery(intent({ brands: ['Acme'], model: 'Acme X' })).slice(1, -1);
+  const beta = buildDiscoveryFactRetrievalQuery(intent({ brands: ['Beta'], model: 'Acme X' })).slice(1, -1);
+  expect(buildDiscoveryFactRetrievalQuery(intent({
+    product_type: 'phone', brands: ['Acme', 'Beta'], model: 'Acme X',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
+  }))).toBe(`(typephone & ((${acme}) | (${beta})) & storage256gb)`);
+});
+
 it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
@@ -133,6 +142,9 @@ it('digests brand, model, and compatibility at any length so queries stay under 
   const worst = buildDiscoveryFactRetrievalQuery({ alternatives: Array.from({ length: 5 }, () => ({
     product_type: 'b'.repeat(100), brands: Array.from({ length: 10 }, () => 'c'.repeat(100)),
     model: 'd'.repeat(100), compatible_with: 'e'.repeat(100),
+    attributes: Array.from({ length: 10 }, (_, index) => ({
+      key: `feature${index}`, operator: 'eq' as const, value: 'f'.repeat(100),
+    })),
   })) });
   expect(worst?.length).toBeLessThan(16384);
   expect(worst).not.toContain('b'.repeat(65));

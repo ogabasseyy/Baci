@@ -1,6 +1,5 @@
 -- Match verified manufacturer prefixes exactly as the MCP identity matcher.
 -- Preserve suffixes, RLS/publication boundaries, recall windows and signature.
-CREATE OR REPLACE, no drop.
 CREATE OR REPLACE FUNCTION public.search_product_variant_recall(
   p_merchant_id uuid,
   p_filters jsonb DEFAULT '[]'::jsonb,

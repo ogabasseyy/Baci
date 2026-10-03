@@ -198,6 +198,19 @@ test('validateInventoryUniqueness rejects duplicate slots and assets', async () 
       .ok,
     true
   );
+  // Slot-less records never collide as "merchant/undefined", but asset
+  // uniqueness still applies to every record.
+  const noSlots = validateInventoryUniqueness([
+    record({ slot: undefined, assetId: 'logo-a' }),
+    record({ slot: '', assetId: 'logo-b' }),
+  ]);
+  assert.equal(noSlots.ok, true);
+  const dupAssetNoSlots = validateInventoryUniqueness([
+    record({ slot: undefined, assetId: 'logo-a' }),
+    record({ slot: '', assetId: 'logo-a' }),
+  ]);
+  assert.equal(dupAssetNoSlots.ok, false);
+  assert.match(dupAssetNoSlots.errors.join('\n'), /duplicate asset/);
 });
 
 test('readInventoryJobs refuses route-rejected duplicates', async () => {

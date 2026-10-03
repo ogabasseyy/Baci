@@ -124,6 +124,14 @@ export function parsePreflightArgs(argv) {
       throw new Error(`missing required flag --${key}`);
     }
   }
+  let timeoutMs = 10_000;
+  if (options['timeout-ms'] !== undefined) {
+    const parsed = Number(options['timeout-ms']);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error('flag "--timeout-ms" needs a positive integer');
+    }
+    timeoutMs = parsed;
+  }
   return {
     acceptances: options.acceptances,
     inputRoot: options['input-root'],
@@ -133,7 +141,7 @@ export function parsePreflightArgs(argv) {
     publicDir: options['public-dir'],
     recipe: options.recipe ?? RECIPE_ID,
     storeMap: options['store-map'] ?? null,
-    timeoutMs: options['timeout-ms'] ? Number(options['timeout-ms']) : 10_000,
+    timeoutMs,
   };
 }
 

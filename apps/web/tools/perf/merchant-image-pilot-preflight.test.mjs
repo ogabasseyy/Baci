@@ -261,6 +261,30 @@ describe('parsePreflightArgs', () => {
     ]);
     expect(explicit.recipe).toBe('pilot/other');
   });
+
+  it('defaults the fetch timeout and rejects non-positive values', () => {
+    const base = [
+      '--inventory',
+      'inv.json',
+      '--acceptances',
+      'acc.json',
+      '--input-root',
+      'in',
+      '--output-root',
+      'out',
+      '--public-dir',
+      'pub',
+    ];
+    expect(parsePreflightArgs(base).timeoutMs).toBe(10_000);
+    expect(
+      parsePreflightArgs([...base, '--timeout-ms', '1500']).timeoutMs
+    ).toBe(1500);
+    for (const bad of ['soon', '0', '-5', '1.5']) {
+      expect(() => parsePreflightArgs([...base, '--timeout-ms', bad])).toThrow(
+        /positive integer/
+      );
+    }
+  });
 });
 
 describe('assertManifestContract', () => {

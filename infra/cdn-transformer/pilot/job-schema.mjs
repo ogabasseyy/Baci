@@ -128,17 +128,23 @@ export function validateInventoryUniqueness(records) {
   const seenSlots = new Set();
   const seenAssets = new Set();
   records.forEach((entry, index) => {
-    const slotKey = `${entry?.merchantId}/${entry?.slot}`;
-    const assetKey = `${entry?.merchantId}/${entry?.assetId}`;
-    if (seenSlots.has(slotKey)) {
-      errors.push(`record ${index}: duplicate slot "${slotKey}"`);
-      return;
+    // Slot keys only exist for records carrying a non-empty slot: two
+    // slot-less records must never collide as "merchant/undefined".
+    // Asset uniqueness still applies to every record.
+    const slot = entry?.slot;
+    if (typeof slot === 'string' && slot.length > 0) {
+      const slotKey = `${entry?.merchantId}/${slot}`;
+      if (seenSlots.has(slotKey)) {
+        errors.push(`record ${index}: duplicate slot "${slotKey}"`);
+        return;
+      }
+      seenSlots.add(slotKey);
     }
+    const assetKey = `${entry?.merchantId}/${entry?.assetId}`;
     if (seenAssets.has(assetKey)) {
       errors.push(`record ${index}: duplicate asset "${assetKey}"`);
       return;
     }
-    seenSlots.add(slotKey);
     seenAssets.add(assetKey);
   });
   if (errors.length > 0) {

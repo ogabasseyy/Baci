@@ -31,6 +31,13 @@ it('refreshes only selected identities scoped to the active merchant and public 
   expect(mocks.query.eq).toHaveBeenCalledWith('status', 'active');
   expect(mocks.query.in).toHaveBeenCalledWith('id', ['p1', 'p2']);
 });
+it('dedupes and drops empty ids before the facts query', async () => {
+  mocks.query.abortSignal.mockResolvedValue({ data: [], error: null });
+  renderHook(() => useSearchComparisonFacts('m1', ['p1', '', 'p1'], true));
+  await waitFor(() =>
+    expect(mocks.query.in).toHaveBeenCalledWith('id', ['p1'])
+  );
+});
 it('retains selection externally and suppresses unverified facts on a refresh failure', async () => {
   mocks.query.abortSignal.mockResolvedValue({
     data: null,

@@ -134,6 +134,31 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
   });
 
+  it('ignores corrupt entries in the pre-hydration membership read', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
+      JSON.stringify([baseProduct, null, 'not-an-object', { name: 'No id' }])
+    );
+
+    function MembershipConsumer() {
+      const { isInCompare } = useV2Comparison();
+      return (
+        <div>
+          <span data-testid="member">{String(isInCompare('product-1'))}</span>
+          <span data-testid="nonmember">{String(isInCompare('missing'))}</span>
+        </div>
+      );
+    }
+
+    render(
+      <V2ComparisonProvider>
+        <MembershipConsumer />
+      </V2ComparisonProvider>
+    );
+
+    expect(screen.getByTestId('member')).toHaveTextContent('true');
+    expect(screen.getByTestId('nonmember')).toHaveTextContent('false');
+  });
+
   it('drops corrupt or foreign entries when hydrating stored items', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
       JSON.stringify([

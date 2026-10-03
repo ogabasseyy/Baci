@@ -32,7 +32,7 @@ export function useSearchComparisonFacts(
           .select(STOREFRONT_PRODUCTS_SELECT)
           .eq('merchant_id', merchantId)
           .eq('status', 'active')
-          .in('id', key.split(','))
+          .in('id', [...new Set(key.split(',').filter((id) => id.length > 0))])
           .abortSignal(controller.signal);
         if (error) throw new Error('Comparison unavailable');
         if (active)

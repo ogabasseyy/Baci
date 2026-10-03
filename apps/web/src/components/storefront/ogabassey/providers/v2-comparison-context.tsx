@@ -27,6 +27,23 @@ function getComparisonStorageKey(storageNamespace?: string | null) {
     : COMPARISON_STORAGE_KEY;
 }
 
+// Only objects with a usable id can hydrate the tray, so stale-schema or
+// tampered rows never render as comparison facts or crash id lookups.
+// Shared by the stateful hydrate path and the pre-hydration read used
+// during card renders.
+function hasUsableComparisonId(entry: unknown): entry is Product {
+  if (typeof entry !== 'object' || entry === null) return false;
+  const id = (entry as { id?: unknown }).id;
+  return (typeof id === 'string' && id.length > 0) || typeof id === 'number';
+}
+
+function readValidStoredComparisonItems(stored: string): Product[] {
+  const parsed: unknown = JSON.parse(stored);
+  return Array.isArray(parsed)
+    ? parsed.filter(hasUsableComparisonId)
+    : [];
+}
+
 export const useV2Comparison = () => {
   const context = use(V2ComparisonContext);
   if (!context) {
@@ -63,19 +80,7 @@ export const V2ComparisonProvider: React.FC<{
     const stored = sessionStorage.getItem(storageKey);
     if (stored) {
       try {
-        const parsed: unknown = JSON.parse(stored);
-        // Drop corrupt or foreign entries: only objects with a usable id
-        // can hydrate the tray, so stale-schema or tampered rows never
-        // render as comparison facts.
-        if (Array.isArray(parsed)) {
-          nextComparisonItems = parsed.filter(
-            (entry): entry is Product =>
-              typeof entry === 'object' &&
-              entry !== null &&
-              (typeof (entry as { id?: unknown }).id === 'string' ||
-                typeof (entry as { id?: unknown }).id === 'number')
-          );
-        }
+        nextComparisonItems = readValidStoredComparisonItems(stored);
       } catch (error) {
         console.error('Failed to parse comparison items', error);
       }
@@ -190,8 +195,7 @@ export const V2ComparisonProvider: React.FC<{
     const stored = sessionStorage.getItem(storageKey);
     if (!stored) return [];
     try {
-      const parsed: unknown = JSON.parse(stored);
-      return Array.isArray(parsed) ? (parsed as Product[]) : [];
+      return readValidStoredComparisonItems(stored);
     } catch {
       return [];
     }

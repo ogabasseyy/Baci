@@ -158,3 +158,42 @@ exec "$@"
 
   return { attemptsFile, binDir, promotedFile, tempDir };
 }
+
+// Fake curl answering the previous-production capture: writes
+// CURL_BODY to the -o file and prints CURL_CODE (no trailing
+// newline, like curl -w). CURL_EXIT nonzero fails without output.
+export function writeFakeCurl(binDir, tempDir) {
+  const callsPath = `${tempDir}/curl-calls`;
+  writeFileSync(
+    `${binDir}/curl`,
+    `#!/usr/bin/env bash
+calls=0
+if [ -f "${callsPath}" ]; then calls="$(cat "${callsPath}")"; fi
+printf '%s\\n' "$((calls + 1))" >"${callsPath}"
+if [ "\${CURL_EXIT:-0}" != "0" ]; then exit "$CURL_EXIT"; fi
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then out="$arg"; fi
+  prev="$arg"
+done
+printf '%s' "\${CURL_BODY:-}" > "$out"
+printf '%s' "\${CURL_CODE:-200}"
+`,
+    { mode: 0o755 }
+  );
+  return callsPath;
+}
+
+export const vercelEnv = {
+  VERCEL_TOKEN: 'test-token',
+  VERCEL_PROJECT_ID: 'prj_test',
+  VERCEL_ORG_ID: 'team_test',
+};
+
+export const prevProdEnv = {
+  ...vercelEnv,
+  CURL_BODY:
+    '{"deployments":[{"uid":"dpl_previous123","url":"baci-previous.vercel.app"}]}',
+  CURL_CODE: '200',
+};

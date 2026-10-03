@@ -22,21 +22,29 @@ _run_vercel_promote() {
   fi
 }
 
-# Prints the uid of the deployment currently holding production (the
-# rollback target if the post-promote overlap verification fails), or
-# nothing when no production deployment exists yet (first deploy —
-# the caller warns and proceeds without a net). Returns 1 when the
-# answer is unknowable: the caller refuses the promote rather than
-# promoting a deployment it could not roll back. Response shape
-# `{"deployments":[{"uid":"dpl_...",...}]}` (newest first, so the
-# first dpl_ uid is the current production deployment); an explicitly
-# empty array means first deploy, anything else unparseable fails
-# closed (an API shape change must never read as "no previous").
+# Prints `uid|url` for the deployment currently holding production
+# (the rollback target if the post-promote overlap verification
+# fails), or nothing when no production deployment exists yet (first
+# deploy — the caller warns and proceeds without a net). Returns 1
+# when the answer is unknowable: the caller fails the attempt rather
+# than staging a deployment it could not roll back. CALL BEFORE THE
+# FIRST STAGING: `vercel deploy --prod` creates a staged
+# production-target deployment, after which newest-production
+# queries return our own candidate. Response shape
+# `{"deployments":[{"uid":"dpl_...","url":"...vercel.app",...}]}`
+# (newest first); the url half lets the verifier refuse a rollback
+# to the just-promoted candidate itself. An explicitly empty array
+# means first deploy, anything else unparseable fails closed (an API
+# shape change must never read as "no previous"). Residual: an
+# orphaned staged candidate from a past failed run (staged but never
+# promoted) also reads as newest — only an alias-resolved query
+# could exclude those, and its fields are unverified.
 capture_previous_production_deployment() {
   local capture_query
   local capture_body
   local capture_code
   local capture_uid
+  local capture_url
 
   if [ -z "${VERCEL_TOKEN:-}" ] || [ -z "${VERCEL_PROJECT_ID:-}" ]; then
     echo "Cannot capture the current production deployment: VERCEL_TOKEN or VERCEL_PROJECT_ID is unset." >&2
@@ -57,18 +65,19 @@ capture_previous_production_deployment() {
       ;;
   esac
   capture_uid="$(grep -o '"uid":"dpl_[^"]*"' "$capture_body" 2>/dev/null | head -n 1 | cut -d'"' -f4 || true)"
-  if [ -n "$capture_uid" ]; then
+  if [ -z "$capture_uid" ]; then
+    if grep -q '"deployments":[[:space:]]*\[\]' "$capture_body" 2>/dev/null; then
+      rm -f "$capture_body"
+      return 0
+    fi
+    echo "Cannot capture the current production deployment: unparseable Vercel API response." >&2
     rm -f "$capture_body"
-    printf '%s\n' "$capture_uid"
-    return 0
+    return 1
   fi
-  if grep -q '"deployments":[[:space:]]*\[\]' "$capture_body" 2>/dev/null; then
-    rm -f "$capture_body"
-    return 0
-  fi
-  echo "Cannot capture the current production deployment: unparseable Vercel API response." >&2
+  capture_url="$(grep -o '"url":"[^"]*"' "$capture_body" 2>/dev/null | head -n 1 | cut -d'"' -f4 || true)"
   rm -f "$capture_body"
-  return 1
+  printf '%s|%s\n' "$capture_uid" "$capture_url"
+  return 0
 }
 
 # Durable half of the overlap exclusion. Runs AFTER a successful
@@ -78,10 +87,13 @@ capture_previous_production_deployment() {
 # deployment (retried; the raw promote bypasses the overlap check the
 # rolled-back run is listed in) and returns 1. With no previous
 # deployment (first deploy), fails loud with a manual-reconcile
-# directive instead of an automatic rollback.
+# directive instead of an automatic rollback. previous_capture is
+# `uid|url` (either half missing still verifies against the other).
 verify_post_promote_overlap() {
   local new_target="$1"
-  local previous_target="$2"
+  local previous_capture="$2"
+  local previous_uid
+  local previous_url
   local rollback_attempt
   local rollback_ok
 
@@ -89,15 +101,25 @@ verify_post_promote_overlap() {
     return 0
   fi
   echo "::error::A worker promote overlapped the production promotion of ${new_target}." >&2
-  if [ -z "$previous_target" ]; then
+  if [ -z "$previous_capture" ]; then
     echo "::error::No previous production deployment to roll back to; manually reconcile the overlapped publish, then re-run." >&2
+    return 1
+  fi
+  previous_uid="${previous_capture%%|*}"
+  previous_url="${previous_capture#*|}"
+  # Never restore the just-promoted candidate itself: with correct
+  # pre-staging capture timing this is unreachable (our candidates
+  # postdate the capture), so reaching it means the timing regressed
+  # or the API misled us — fail loud instead of a no-op restore.
+  if [ "$previous_uid" = "$new_target" ] || [ "$new_target" = "https://${previous_url}" ]; then
+    echo "::error::Refusing overlap rollback: the captured previous deployment IS the just-promoted candidate; manually reconcile, then re-run." >&2
     return 1
   fi
   rollback_ok=0
   rollback_attempt=0
   while [ "$rollback_attempt" -lt "$PROMOTE_ATTEMPTS" ]; do
     rollback_attempt=$((rollback_attempt + 1))
-    if _run_vercel_promote "$previous_target"; then
+    if _run_vercel_promote "$previous_uid"; then
       rollback_ok=1
       break
     fi
@@ -106,9 +128,9 @@ verify_post_promote_overlap() {
     fi
   done
   if [ "$rollback_ok" = "1" ]; then
-    echo "Rolled production back to ${previous_target} after the overlapped promotion of ${new_target}; re-run the workflow." >&2
+    echo "Rolled production back to ${previous_uid} after the overlapped promotion of ${new_target}; re-run the workflow." >&2
   else
-    echo "::error::Rollback of ${new_target} to ${previous_target} failed; manually promote ${previous_target} in the Vercel dashboard, then re-run." >&2
+    echo "::error::Rollback of ${new_target} to ${previous_uid} failed; manually promote ${previous_uid} in the Vercel dashboard, then re-run." >&2
   fi
   return 1
 }

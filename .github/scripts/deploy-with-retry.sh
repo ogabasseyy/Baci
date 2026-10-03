@@ -57,6 +57,11 @@ last_deployment_target=""
 retry_lib_dir="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=deploy-with-retry-overlap.sh
 . "$retry_lib_dir/deploy-with-retry-overlap.sh"
+# Rollback target for the post-promote overlap exclusion: captured
+# ONCE before the first staging (see the attempt loop) and reused by
+# every promote in this process.
+captured_previous_production_target=""
+previous_production_captured=0
 
 run_current_main_guard() {
   if [ -z "$DEPLOY_CURRENT_MAIN_GUARD" ]; then
@@ -114,7 +119,6 @@ remember_deployment_target() {
 
 run_promote_command() {
   local overlap_bound
-  local previous_production_target
 
   if ! run_current_main_guard; then
     echo "The current-main deployment guard refused to promote ${last_deployment_target}." >&2
@@ -130,31 +134,16 @@ run_promote_command() {
     fi
   fi
 
-  # Capture the rollback target BEFORE promoting: the pre-check above
-  # is point-in-time, and a worker flip recorded during the promote
-  # below lands too late for any pre-promote read. Without a captured
-  # target there is nothing to roll back to, so refuse instead.
-  previous_production_target=""
-  if [ "$overlap_bound" = "1" ]; then
-    if ! previous_production_target="$(capture_previous_production_deployment)"; then
-      echo "The worker-promote overlap check refused to promote ${last_deployment_target}: no rollback target could be captured." >&2
-      return 1
-    fi
-    if [ -z "$previous_production_target" ]; then
-      echo "WARNING: no previous production deployment found; promoting ${last_deployment_target} without a rollback target." >&2
-    fi
-  fi
-
   if ! _run_vercel_promote "$last_deployment_target"; then
     return 1
   fi
 
   # Durable half of the exclusion (helper): a promote recorded DURING
-  # the promote above rolls back here. Retries re-enter above and
-  # refuse at the pre-check (the record now lists this run), so the
-  # rollback runs exactly once.
+  # the promote above rolls back to the pre-staging capture here.
+  # Retries re-enter above and refuse at the pre-check (the record
+  # now lists this run), so the rollback runs exactly once.
   if [ "$overlap_bound" = "1" ]; then
-    if ! verify_post_promote_overlap "$last_deployment_target" "$previous_production_target"; then
+    if ! verify_post_promote_overlap "$last_deployment_target" "$captured_previous_production_target"; then
       return 1
     fi
   fi
@@ -202,6 +191,26 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     exit "$guard_status"
   fi
   echo "Deploy attempt $attempt/$MAX_ATTEMPTS..."
+  # Capture the rollback target BEFORE the first staging: `vercel
+  # deploy --prod` creates a staged production-target deployment,
+  # after which newest-production queries return our own candidate
+  # instead of the deployment serving production. Once per process:
+  # later attempts reuse it (their own staged candidates would
+  # pollute a fresh read). A failed capture fails the attempt
+  # WITHOUT staging anything, so the retry re-captures cleanly.
+  if [ -n "$DEPLOY_PROMOTE_OVERLAP_CHECK" ] && [ "$previous_production_captured" = "0" ]; then
+    if ! captured_previous_production_target="$(capture_previous_production_deployment)"; then
+      echo "The worker-promote overlap check refused deploy attempt ${attempt}: no rollback target could be captured." >&2
+      if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+        sleep "$BACKOFF_SECONDS"
+      fi
+      continue
+    fi
+    previous_production_captured=1
+    if [ -z "$captured_previous_production_target" ]; then
+      echo "WARNING: no previous production deployment found; overlap rollbacks in this run will fail loud instead." >&2
+    fi
+  fi
   attempt_log="$(mktemp)"
 
   set +e

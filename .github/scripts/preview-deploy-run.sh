@@ -28,7 +28,7 @@ vercel_runner="$1"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT must be set}"
 : "${GITHUB_STEP_SUMMARY:?GITHUB_STEP_SUMMARY must be set}"
 
-# CLI 57 prints READY then hangs on some CI deploys (production wraps
+# The CLI prints READY then hangs on some CI deploys (production wraps
 # attempts the same way in deploy-with-retry.sh): cap the deploy at 45m
 # (47m worst case with the KILL grace) so the 5m readiness inspect and
 # job setup still fit the 60m deploy-job budget with margin. Merge

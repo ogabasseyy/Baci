@@ -60,7 +60,7 @@ export interface DispatchMerchantIdentitySnapshot {
   businessName: string | null;
   legalEntityName: string | null;
   businessAddress: string | null;
-  registeredAddress: Record<string, unknown> | null;
+  registeredAddress: unknown;
   cacRcNumber: string | null;
   taxIdentificationNumber: string | null;
   vatRegistrationStatus: string | null;
@@ -208,7 +208,7 @@ interface DispatchMerchantRow {
   business_name: string | null;
   legal_entity_name: string | null;
   business_address: string | null;
-  registered_address: Record<string, unknown> | null;
+  registered_address: unknown;
   cac_rc_number: string | null;
   tax_identification_number: string | null;
   vat_registration_status: string | null;

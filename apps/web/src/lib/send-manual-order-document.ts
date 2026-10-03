@@ -83,6 +83,7 @@ export async function sendManualOrderDocument({
     return { status: 'skipped', reason: 'merchant_validation_failed' };
   const order = orderParsed.data;
   const merchant = merchantParsed.data;
+  const rawMerchantRegisteredAddress = merchantResult.data.registered_address;
   // Neither status column has a database constraint: normalize legacy
   // spellings (Paid, CANCELLED, padded, spaced) exactly like the enqueue
   // trigger so the sender agrees with the trigger on what is terminal,
@@ -208,7 +209,14 @@ export async function sendManualOrderDocument({
       },
       taxSubtotals,
       transactions,
-      merchant,
+      {
+        ...merchant,
+        // Snapshot the RAW stored address: the schema normalizes malformed
+        // scalars to null and strips legacy keys for rendering, but the
+        // RPC compares against raw JSONB — snapshotting the normalized
+        // value would report stale on every attempt for such merchants.
+        registered_address: rawMerchantRegisteredAddress,
+      },
       started
     );
     dispatchStarted = started;

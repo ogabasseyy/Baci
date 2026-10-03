@@ -1,12 +1,16 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
 describe('public product placeholder asset', () => {
   it('is a browser-decodable PNG with a complete pixel buffer', async () => {
     const image = readFileSync(
-      resolve(process.cwd(), 'public/placeholder.png')
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../public/placeholder.png'
+      )
     );
     const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 

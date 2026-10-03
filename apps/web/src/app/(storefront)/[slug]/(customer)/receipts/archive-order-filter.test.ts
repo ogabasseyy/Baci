@@ -21,6 +21,23 @@ describe('isArchiveOrder', () => {
     ).toBe(false);
   });
 
+  it('fails closed when the manual flag is missing but a document is set', () => {
+    expect(
+      isArchiveOrder({
+        ...baseOrder,
+        receipt_eligible: true,
+        manual_document_available: true,
+      })
+    ).toBe(false);
+    expect(
+      isArchiveOrder({
+        ...baseOrder,
+        shipping_status: 'delivered',
+        manual_document_available: true,
+      })
+    ).toBe(false);
+  });
+
   it('includes shipped, delivered, and invoice-method orders', () => {
     expect(isArchiveOrder({ ...baseOrder, shipping_status: 'shipped' })).toBe(
       true

@@ -18,6 +18,7 @@ import {
 import { renderManualOrderDocumentPdf } from '@/lib/render-manual-order-document-pdf';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
+import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
 import {
   assertManualDocumentClaimMatchesOrder,
@@ -71,10 +72,9 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document data unavailable');
   if (!orderResult.data || !merchantResult.data)
     return { status: 'skipped', reason: 'order_or_merchant_missing' };
-  // Deterministic shape failures skip (order-side fixes re-arm via a later
-  // trigger; the merchant schema stays lenient on cosmetic JSONB for the
-  // same reason) instead of throwing into max_attempts retries; only
-  // transient fetch errors above and RPC failures below keep throw/retry.
+  // Deterministic shape failures skip (later triggers re-arm) instead of
+  // throwing into max_attempts retries; only transient fetch/RPC failures
+  // keep throw/retry.
   const orderParsed = manualDocumentOrderSchema.safeParse(orderResult.data);
   if (!orderParsed.success)
     return { status: 'skipped', reason: 'order_validation_failed' };
@@ -113,17 +113,15 @@ export async function sendManualOrderDocument({
   if (!order.order_items.length)
     return { status: 'skipped', reason: 'missing_order_items' };
   // A fully-covered balance is substantively paid even under a non-paid
-  // label (e.g. an over-amount partial): mirror the trigger so a settled
-  // order renders a receipt, never a zero-balance invoice.
+  // label: mirror the trigger so settled orders render receipts.
   const isPaid = paymentStatus === 'paid' || order.amount_paid >= order.total;
   const documentKind = isPaid ? 'receipt' : 'invoice';
   if ((row.event_type === 'manual_order_receipt') !== isPaid)
     return { status: 'skipped', reason: 'document_state_changed' };
   if (isPaid && order.amount_paid < order.total)
     return { status: 'skipped', reason: 'paid_balance_outstanding' };
-  // Match the canonical invoice surfaces: invoice-method orders render as
-  // proforma (Peppol type 325) so the emailed document agrees with the
-  // customer's account view.
+  // Invoice-method orders render as proforma (Peppol 325) like the
+  // account view, so the emailed document agrees with it.
   const invoiceTypeCode = isPaid
     ? null
     : resolveInvoiceTypeCode({
@@ -136,8 +134,7 @@ export async function sendManualOrderDocument({
       });
   const pdfDocumentKind =
     invoiceTypeCode === '325' ? 'proforma_invoice' : documentKind;
-  // Attach the assigned virtual account so invoice payment instructions name
-  // the exact account instead of generic merchant bank details.
+  // Attach the assigned virtual account so instructions name the exact account.
   const invoicePaymentAccount = isPaid
     ? null
     : await resolveInvoicePaymentAccount(supabase, order.id, false);
@@ -145,9 +142,11 @@ export async function sendManualOrderDocument({
     throw new Error('Manual document payment account unavailable');
   }
   const preferredPaymentAccount = invoicePaymentAccount?.paymentAccount ?? null;
-  // Staff-recorded orders may omit the customer name; greet with the import
-  // sender's fallback instead of throwing through every retry.
-  const displayCustomerName = order.customer_name || 'there';
+  // Staff-recorded orders may omit the customer name; fall back instead of
+  // throwing. The name is header-adjacent (toName): strip line breaks.
+  const displayCustomerName = sanitizeEmailDisplayName(
+    order.customer_name || 'there'
+  );
   const { pdf, taxSubtotals, transactions } =
     await renderManualOrderDocumentPdf({
       supabase,
@@ -225,8 +224,12 @@ export async function sendManualOrderDocument({
         },
       ],
       emailType: 'orders',
-      fromName:
-        merchant.email_sender_name || merchant.business_name || merchant.slug,
+      fromName: sanitizeEmailDisplayName(
+        merchant.email_sender_name ||
+          merchant.business_name ||
+          merchant.slug ||
+          ''
+      ),
       // merchant.email is the private login address: never a reply target.
       replyTo: resolveNotificationReplyTo(merchant.support_email),
       clientReference: `order:${order.id}:${row.event_type}`,
@@ -243,8 +246,7 @@ export async function sendManualOrderDocument({
       // A definite rejection never reached the customer: clear the marker so
       // the bounded retry re-claims cleanly. Unknown outcomes keep the marker.
       if (result.deliveryOutcome !== 'unknown') {
-        // The clear retries inline and the worker reclaims a stranded marker
-        // before the next claim, so the retry re-sends instead of skipping.
+        // Inline clear retries + worker reclaim precede the next claim, so retries re-send.
         try {
           await persistDispatch(false);
         } catch {
@@ -260,9 +262,8 @@ export async function sendManualOrderDocument({
       };
     }
     providerAccepted = true;
-    // A data change that landed after the dispatch marker reset it: the
-    // just-sent PDF is stale, so fail for a bounded corrective retry
-    // instead of recording a clean sent.
+    // A data change reset the marker after dispatch: the PDF is stale,
+    // so fail for a bounded corrective retry instead of recording sent.
     const lease = await checkManualDocumentDispatchLease(supabase, row.id);
     if (lease === 'unknown')
       return {

@@ -78,7 +78,11 @@ describe('order notification outbox status', () => {
     const live = { sent_document_kind: 'receipt' };
     builder.maybeSingle
       .mockResolvedValueOnce({
-        data: { id: row.id, metadata: live },
+        data: {
+          id: row.id,
+          metadata: live,
+          updated_at: '2026-10-03T00:00:00Z',
+        },
         error: null,
       })
       .mockResolvedValueOnce({ data: { id: row.id }, error: null });
@@ -87,6 +91,10 @@ describe('order notification outbox status', () => {
     await markManualOutboxNotificationSent(supabase as never, row, 'msg-1');
 
     expect(builder.eq).toHaveBeenCalledWith('metadata', JSON.stringify(live));
+    expect(builder.eq).toHaveBeenCalledWith(
+      'updated_at',
+      '2026-10-03T00:00:00Z'
+    );
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: { sent_document_kind: 'receipt', message_id: 'msg-1' },
@@ -98,7 +106,11 @@ describe('order notification outbox status', () => {
     const { builder } = createBuilder();
     builder.maybeSingle
       .mockResolvedValueOnce({
-        data: { id: row.id, metadata: { sent_document_kind: 'receipt' } },
+        data: {
+          id: row.id,
+          metadata: { sent_document_kind: 'receipt' },
+          updated_at: '2026-10-03T00:00:00Z',
+        },
         error: null,
       })
       .mockResolvedValueOnce({ data: null, error: null })
@@ -114,6 +126,7 @@ describe('order notification outbox status', () => {
         data: {
           id: row.id,
           metadata: { sent_document_kind: 'receipt', late: 'key' },
+          updated_at: '2026-10-03T00:00:01Z',
         },
         error: null,
       })

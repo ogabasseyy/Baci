@@ -37,7 +37,9 @@ function createSupabaseRpcMock(response: { data: unknown; error: unknown }) {
 
 function mockAuthenticatedSupabase(
   supabase: ReturnType<typeof createSupabaseRpcMock>,
-  user: { email_confirmed_at?: string | null } = {}
+  user: { email_confirmed_at?: string | null } = {
+    email_confirmed_at: '2026-01-01T00:00:00Z',
+  }
 ) {
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
@@ -69,7 +71,11 @@ describe('POST /api/storefront/receipts/claims/[token] status mapping', () => {
         data: { redirectPath: '/receipts', status: 'ok' },
         error: null,
       }),
-      user: { email: 'basseybjohn@yahoo.co.uk', id: 'user-1' },
+      user: {
+        email: 'basseybjohn@yahoo.co.uk',
+        id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00Z',
+      },
     });
     mockCheckCsrfProtection.mockResolvedValue({ response: null, valid: true });
   });
@@ -129,13 +135,10 @@ describe('POST /api/storefront/receipts/claims/[token] status mapping', () => {
     expect(await response.json()).toEqual({ error: 'Unauthorized' });
   });
 
-  it('fails closed for unverified users when v2 is not deployed yet', async () => {
+  it('rejects unverified users before calling either redeem RPC', async () => {
     const supabase = createSupabaseRpcMock({
-      data: null,
-      error: {
-        code: 'PGRST202',
-        message: 'Could not find redeem_receipt_claim_v2',
-      },
+      data: { redirectPath: '/receipts', status: 'ok' },
+      error: null,
     });
     mockAuthenticatedSupabase(supabase, { email_confirmed_at: null });
 
@@ -146,11 +149,9 @@ describe('POST /api/storefront/receipts/claims/[token] status mapping', () => {
       error: 'Verify your email address before claiming this receipt',
       code: 'EMAIL_UNVERIFIED',
     });
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
-    expect(supabase.rpc).toHaveBeenCalledWith(
-      'redeem_receipt_claim_v2',
-      expect.anything()
-    );
+    // The pre-deploy v2 validates only the JWT email, so the gate must run
+    // before the call — a missing-function check alone never triggers.
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it('falls back to legacy redemption for verified users during rollout', async () => {

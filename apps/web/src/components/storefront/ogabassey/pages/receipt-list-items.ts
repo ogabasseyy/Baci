@@ -222,8 +222,11 @@ export async function fetchReceiptListItems(
       return {
         id: order.id as string,
         order_number: rawOrder.order_number,
+        // A paid card shows the completing payment like the preview;
+        // otherwise the issued invoice date, the sale date, creation.
         date: formatReceiptListDate(
-          (order.invoice_issue_date as string | null | undefined) ||
+          (isPaidRenderer ? completionDate : null) ||
+            (order.invoice_issue_date as string | null | undefined) ||
             (order.transaction_date as string | null | undefined) ||
             (order.created_at as string)
         ),

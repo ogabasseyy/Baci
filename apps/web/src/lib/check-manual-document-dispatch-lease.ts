@@ -49,7 +49,12 @@ export async function clearManualDocumentDispatchMarker(
       );
     const { data: updated, error: updateError } = await supabase
       .from('order_notification_outbox')
-      .update({ dispatch_started_at: null })
+      // Bump updated_at like every other outbox writer: the sent
+      // transition guards on it as an optimistic version.
+      .update({
+        dispatch_started_at: null,
+        updated_at: new Date().toISOString(),
+      })
       .match({
         id: row.id,
         order_id: row.order_id,

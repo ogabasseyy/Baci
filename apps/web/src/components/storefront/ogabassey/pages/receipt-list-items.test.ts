@@ -127,6 +127,7 @@ describe('fetchReceiptListItems', () => {
     const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
     expect(item.rawOrder.transaction_date).toBe('2026-04-03T12:00:00.000Z');
     expect(item.rawOrder.invoice_issue_date).toBeUndefined();
+    expect(item.date).toBe('4/3/2026');
   });
 
   it('keeps order dates for unpaid previews', async () => {
@@ -145,6 +146,7 @@ describe('fetchReceiptListItems', () => {
     const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
     expect(item.rawOrder.transaction_date).toBe('2026-04-01T10:00:00.000Z');
     expect(item.rawOrder.invoice_issue_date).toBe('2026-04-01');
+    expect(item.date).toBe('4/1/2026');
   });
 
   it('falls back to NGN display for a malformed currency code', async () => {

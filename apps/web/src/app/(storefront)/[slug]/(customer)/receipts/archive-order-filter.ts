@@ -19,6 +19,13 @@ export function isArchiveOrder(order: StorefrontOrder): boolean {
       Boolean(order.manual_document_available)
     );
   }
+  // A manual document on a row whose manual flag is missing is
+  // inconsistent producer data (the API always projects both together):
+  // fail closed instead of letting the legacy branches below advertise a
+  // download the document routes may not be able to serve.
+  if (order.manual_document_available) {
+    return false;
+  }
   // manual_document_available is intentionally absent here: the API only
   // sets it for manual orders (handled above), so honoring it for
   // non-manual rows would advertise a download on inconsistent data.

@@ -26,6 +26,15 @@ export function registerDeliveryFeeInfoTool(
     async (args) => {
       const state = sanitizeString(args.state, 50);
       const city = args.city ? sanitizeString(args.city, 100) : null;
+      if (state.length < 2 || (args.city !== undefined && (!city || city.length < 2))) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Please provide a valid Nigerian state and, if supplied, a valid city name.',
+          }],
+          isError: true,
+        };
+      }
       const destination = city ? `${city}, ${state}` : state;
       const policyUrl = 'https://ogabassey.com/shipping';
       return {

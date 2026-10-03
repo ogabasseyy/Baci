@@ -73,4 +73,38 @@ describe('registerDeliveryFeeInfoTool', () => {
     expect(result.structuredContent).toMatchObject({ city: null, state: 'Ogun' });
     expect(result.content[0]?.text).toContain('for Ogun.');
   });
+
+  it.each([
+    { state: '<>', city: undefined, label: 'state stripped by sanitization' },
+    { state: 'Lagos', city: '<>', label: 'city stripped by sanitization' },
+    { state: '  ', city: undefined, label: 'whitespace-only state' },
+    { state: 'Lagos', city: '  ', label: 'whitespace-only city' },
+  ])('rejects $label after sanitization', async ({ state, city }) => {
+    let registeredHandler: ((args: { state: string; city?: string }) => Promise<unknown>) | undefined;
+    const server = {
+      registerTool: vi.fn((_name, _config, handler) => {
+        registeredHandler = handler;
+      }),
+    };
+    const sanitizeString = (value: string, maxLength: number) => value
+      .slice(0, maxLength)
+      .replace(/[<>]/g, '')
+      .trim();
+
+    registerDeliveryFeeInfoTool(server as never, sanitizeString);
+    const result = await registeredHandler?.({ state, city }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+      structuredContent?: unknown;
+    };
+
+    expect(result).toEqual({
+      content: [{
+        type: 'text',
+        text: 'Please provide a valid Nigerian state and, if supplied, a valid city name.',
+      }],
+      isError: true,
+    });
+    expect(result.structuredContent).toBeUndefined();
+  });
 });

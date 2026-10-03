@@ -274,7 +274,10 @@ test('manual QA scenario controls are opt-in and reset local checkout state', as
     name: 'Manual checkout QA fixtures',
   });
   await expect(controls).toBeVisible();
+  // Selecting a scenario updates the cookie and reloads the fixture page.
+  const scenarioReload = page.waitForEvent('load');
   await controls.getByLabel('Payment scenario').selectOption('provider-error');
+  await scenarioReload;
   await expect(controls.getByLabel('Payment scenario')).toHaveValue(
     'provider-error'
   );

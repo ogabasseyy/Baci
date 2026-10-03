@@ -14,8 +14,8 @@ describe('public product placeholder asset', () => {
 
     const metadata = await sharp(image).metadata();
     expect(metadata.format).toBe('png');
-    expect(metadata.width).toBeGreaterThan(0);
-    expect(metadata.height).toBeGreaterThan(0);
+    expect(metadata.width).toBe(600);
+    expect(metadata.height).toBe(600);
 
     const { data, info } = await sharp(image)
       .ensureAlpha()

@@ -231,7 +231,10 @@ for file in "${sorted_files[@]}"; do
     continue
   fi
 
-  if [ -n "$migration_max_version" ] && [ "$version" \> "$migration_max_version" ]; then
+  # LC_ALL=C: both sides are validated 14-digit versions (ordering
+  # coincides either way), but byte collation removes the locale
+  # dependence entirely.
+  if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
     echo "⏸ deferred above MIGRATION_MAX_VERSION $migration_max_version: $version  ${name}"
     deferred_count=$((deferred_count + 1))
     continue
@@ -243,7 +246,7 @@ for file in "${sorted_files[@]}"; do
   atomic_group_exceeds_max=0
   while next_base="$(atomic_migration_group_next_base "$atomic_group_cursor")"; do
     next_file="$migrations_dir/${next_base}.sql"
-    if [ -n "$migration_max_version" ] && [ "${next_base%%_*}" \> "$migration_max_version" ]; then
+    if [ -n "$migration_max_version" ] && LC_ALL=C [ "${next_base%%_*}" \> "$migration_max_version" ]; then
       atomic_group_exceeds_max=1
       break
     fi

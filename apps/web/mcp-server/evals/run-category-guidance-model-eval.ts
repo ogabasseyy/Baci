@@ -7,7 +7,7 @@ import { runCategoryGuidanceModelEval } from './category-guidance-model-eval';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
-async function main() {
+export async function runCategoryGuidanceModelCli() {
   const outputPath = process.argv[2];
   if (!outputPath || !isAbsolute(outputPath) || !outputPath.endsWith('.json')) {
     console.error('Usage: tsx mcp-server/evals/run-category-guidance-model-eval.ts /absolute/evidence.json');
@@ -36,4 +36,6 @@ async function main() {
   }
 }
 
-void main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void runCategoryGuidanceModelCli();
+}

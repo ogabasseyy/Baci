@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it, vi } from 'vitest';
 import { PUBLIC_MCP_TOOLS } from '../../src/config/mcp-server-card-tools';
 import { gradeCategoryGuidanceArguments } from './category-guidance-arguments';
 import { runCategoryGuidanceModelEval } from './category-guidance-model-eval';
 import observedAfter from './category-guidance-model-observed-after.json';
+import observedShared from './category-guidance-model-observed-shared.json';
 import observedBefore from './category-guidance-model-observed-before.json';
 import { prepareCategoryGuidanceModelSchema } from './category-guidance-model-schema';
 
@@ -11,6 +13,15 @@ const mocks = vi.hoisted(() => ({ generateText: vi.fn() }));
 vi.mock('ai', async (importOriginal) => ({ ...await importOriginal<typeof import('ai')>(), generateText: mocks.generateText }));
 
 describe('genuine captured model planning arguments', () => {
+  it('records all three passing actual calls against the current complete shared descriptor', () => {
+    const descriptor = PUBLIC_MCP_TOOLS.find((item) => item.name === 'search_products');
+    expect(observedShared.schemaSha256).toBe(createHash('sha256').update(JSON.stringify(descriptor)).digest('hex'));
+    expect(observedShared.provenance.worktreeDirty).toBe(true);
+    expect(observedShared.cases.map((item) => item.caseId).sort()).toEqual(['camera', 'explicitCategory', 'tecno']);
+    for (const item of observedShared.cases) {
+      expect(gradeCategoryGuidanceArguments(item.caseId as 'camera' | 'tecno' | 'explicitCategory', item.calls[0].input).passed).toBe(true);
+    }
+  });
   it('rejects the actual before-guidance omissions and accepts all actual after calls', () => {
     const before = observedBefore.cases.map((item) => gradeCategoryGuidanceArguments(item.caseId as 'camera' | 'tecno' | 'explicitCategory', item.calls[0].input));
     expect(before.map((result) => result.passed)).toEqual([false, true, false]);

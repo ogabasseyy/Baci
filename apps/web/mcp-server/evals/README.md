@@ -69,3 +69,5 @@ This is actual Gemini model planning evidence, not executed MCP product results
 or proof of ChatGPT behavior. The original actual ChatGPT camera failure remains
 RED. Post-deployment ChatGPT first-call/browser evaluations above are still
 PENDING and required before recording; no ChatGPT live pass is claimed here.
+
+The complete search description is now shared by runtime registration and public discovery. A fresh three-case planning run against that exact shared descriptor passed; `category-guidance-model-observed-shared.json` records the actual calls and descriptor hash, and a regression checks that current guidance still matches this evidence. This remains Gemini planning evidence, not executed MCP or live ChatGPT verification. The CLI has colocated mocked boundary coverage for arguments, missing credentials, provenance, writing evidence, RED exit status and redacted provider/Git/write errors.

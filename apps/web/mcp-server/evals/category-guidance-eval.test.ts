@@ -71,3 +71,13 @@ describe('returned product identity', () => {
     expect(gradeCategoryGuidance('camera', captured).passed).toBe(false);
   });
 });
+
+// The grader must accept the same normalized intent that production executes.
+describe('production intent normalization', () => {
+  it('accepts canonicalized product types and trimmed manufacturer names', () => {
+    expect(gradeCategoryGuidanceArguments('camera', { intent: { alternatives: [{ product_type: 'security-camera', brands: [' Xiaomi '], model: ' C300 ' }] } }).passed).toBe(true);
+  });
+  it('rejects intent branches rejected by the production schema', () => {
+    expect(gradeCategoryGuidanceArguments('camera', { intent: { alternatives: [{ product_type: 'security_camera', brands: ['Xiaomi'], model: 'C300', unsupported: true }] } }).passed).toBe(false);
+  });
+});

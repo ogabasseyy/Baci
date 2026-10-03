@@ -1,3 +1,4 @@
+import { mcpDiscoveryIntentSchema } from '../../src/schemas/mcp-discovery-intent';
 import { categoryGuidanceCases } from './category-guidance-cases';
 
 function record(value: unknown): Record<string, unknown> {
@@ -20,7 +21,8 @@ export function gradeCategoryGuidanceArguments(caseId: keyof typeof categoryGuid
   } else if (typeof input.category !== 'string' || input.category.trim().toLowerCase() !== testCase.category.toLowerCase()) {
     failures.push('First emitted arguments must preserve the explicitly requested category');
   }
-  const alternatives = record(input.intent).alternatives;
+  const parsedIntent = mcpDiscoveryIntentSchema.safeParse(input.intent);
+  const alternatives = parsedIntent.success ? parsedIntent.data.alternatives : [];
   if (!Array.isArray(alternatives) || !alternatives.some((value) => {
     const alternative = record(value);
     const model = alternative.model;

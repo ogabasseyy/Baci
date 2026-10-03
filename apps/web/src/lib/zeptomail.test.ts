@@ -348,6 +348,45 @@ describe('zeptomail audit logging', () => {
     });
   });
 
+  it('reports the definite rejection when an in-loop marker reset fails', async () => {
+    const beforeTransportDispatch = vi.fn().mockResolvedValue(undefined);
+    const resetTransportDispatch = vi
+      .fn()
+      .mockRejectedValue(new Error('marker clear failed'));
+    sendMailMock.mockRejectedValue({
+      error: { message: 'Server overloaded', code: 'TM_5001', details: null },
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Reset failure test',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      beforeTransportDispatch,
+      resetTransportDispatch,
+      auditContext: {
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+      },
+    });
+
+    // The reset throw must not convert the definite provider rejection
+    // into an unknown outcome: no retry storm, no throw, no unknown flag.
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TM_5001');
+    expect('deliveryOutcome' in result).toBe(false);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    expect(resetTransportDispatch).toHaveBeenCalledTimes(1);
+    expect(auditState.updates[0]).toMatchObject({
+      patch: {
+        status: 'failed',
+        attempt_count: 1,
+        provider_error_code: 'TM_5001',
+      },
+    });
+  });
+
   it('marks transport failures as having an unknown delivery outcome', async () => {
     const transportError = Object.assign(new Error('socket closed'), {
       code: 'ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN',

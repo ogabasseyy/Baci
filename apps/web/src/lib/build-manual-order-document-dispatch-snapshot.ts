@@ -25,7 +25,8 @@ export function buildDispatchPaymentSnapshot(
 
 export function buildDispatchMerchantSnapshot(
   merchant: ManualDocumentMerchant,
-  rawRegisteredAddress: unknown
+  rawRegisteredAddress: unknown,
+  rawBrandColors: unknown
 ): DispatchMerchantRow {
   return {
     ...merchant,
@@ -34,5 +35,8 @@ export function buildDispatchMerchantSnapshot(
     // compares against raw JSONB — snapshotting the normalized value
     // would report stale on every attempt for such merchants.
     registered_address: rawRegisteredAddress,
+    // Same for brand colors: legacy shapes are normalized for the PDF,
+    // but the RPC compares against the raw stored JSONB.
+    brand_colors: rawBrandColors,
   };
 }

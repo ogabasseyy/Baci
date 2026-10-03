@@ -238,13 +238,10 @@ BEGIN
     AND n.status = 'skipped'
     AND n.skip_reason = 'merchant_validation_failed'
     AND n.dispatch_started_at IS NULL;
-  -- A snapshot-relevant merchant edit landing mid-dispatch invalidates the
-  -- in-flight send the same way an order/item edit does: reset every
-  -- processing marker for the merchant's manual rows so the post-transport
-  -- lease check aborts instead of recording stale issuer, contact, or
-  -- payment details as sent. The slug rides along (the emailed claim link
-  -- embeds it) even though the snapshot does not compare it; cosmetic-only
-  -- edits leave markers intact.
+  -- A snapshot-relevant merchant edit landing mid-dispatch resets every
+  -- processing marker so the lease check aborts instead of recording a
+  -- stale document as sent. Rendered branding (logo, colors) and the
+  -- From display name invalidate alongside issuer/contact/payment fields.
   IF OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
@@ -261,6 +258,9 @@ BEGIN
     OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
     OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
     OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name
+    OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
+    OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
+    OR OLD.brand_colors IS DISTINCT FROM NEW.brand_colors
   THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()

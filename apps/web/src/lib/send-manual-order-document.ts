@@ -86,10 +86,9 @@ export async function sendManualOrderDocument({
   const order = orderParsed.data;
   const merchant = merchantParsed.data;
   const rawMerchantRegisteredAddress = merchantResult.data.registered_address;
-  // Neither status column has a database constraint: normalize legacy
-  // spellings (Paid, CANCELLED, padded, spaced) exactly like the enqueue
-  // trigger so the sender agrees with the trigger on what is terminal,
-  // paid, or eligible.
+  const rawMerchantBrandColors = merchantResult.data.brand_colors;
+  // No DB constraint on either status column: normalize legacy spellings
+  // exactly like the enqueue trigger so both agree on terminal/paid/eligible.
   const paymentStatus = order.payment_status
     .trim()
     .toLowerCase()
@@ -203,7 +202,11 @@ export async function sendManualOrderDocument({
       buildDispatchPaymentSnapshot(merchant, preferredPaymentAccount),
       taxSubtotals,
       transactions,
-      buildDispatchMerchantSnapshot(merchant, rawMerchantRegisteredAddress),
+      buildDispatchMerchantSnapshot(
+        merchant,
+        rawMerchantRegisteredAddress,
+        rawMerchantBrandColors
+      ),
       customDomain,
       started
     );
@@ -237,14 +240,11 @@ export async function sendManualOrderDocument({
       },
     });
     if (!result.success) {
-      // A definite rejection never reached the customer: clear the dispatch
-      // marker so the bounded retry re-claims cleanly instead of skipping
-      // forever on a stale marker. Unknown outcomes keep the marker to
-      // preserve at-most-once delivery.
+      // A definite rejection never reached the customer: clear the marker so
+      // the bounded retry re-claims cleanly. Unknown outcomes keep the marker.
       if (result.deliveryOutcome !== 'unknown') {
-        // The rejection is definite but the clear retries inline and the
-        // worker reclaims a still-stranded marker before the next claim,
-        // so the bounded retry re-sends instead of skipping at the claim.
+        // The clear retries inline and the worker reclaims a stranded marker
+        // before the next claim, so the retry re-sends instead of skipping.
         try {
           await persistDispatch(false);
         } catch {

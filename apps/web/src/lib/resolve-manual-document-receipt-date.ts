@@ -34,3 +34,34 @@ export async function resolveManualDocumentReceiptDate(
     ? paymentTransaction.data.created_at
     : null;
 }
+
+interface ReceiptCompletionCandidate {
+  created_at?: string | null;
+  status?: string | null;
+  transaction_type?: string | null;
+}
+
+/**
+ * In-memory twin of the lookup above for callers that already hold the
+ * customer-visible transaction rows (the customer client cannot read the
+ * merchant-only ledger directly). Same semantics: settled payment rows
+ * only, newest first, null timestamps last.
+ */
+export function selectReceiptCompletionDate(
+  rows: readonly ReceiptCompletionCandidate[]
+): string | null {
+  let newest: string | null = null;
+  let newestTime = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    if (row.transaction_type !== 'payment') continue;
+    if (row.status !== 'completed' && row.status !== 'success') continue;
+    if (typeof row.created_at !== 'string') continue;
+    const time = Date.parse(row.created_at);
+    if (!Number.isFinite(time)) continue;
+    if (time > newestTime) {
+      newestTime = time;
+      newest = row.created_at;
+    }
+  }
+  return newest;
+}

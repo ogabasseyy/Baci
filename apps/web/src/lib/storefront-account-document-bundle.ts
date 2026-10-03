@@ -2,6 +2,7 @@ import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
 import { buildAssuranceReceiptItem } from '@/lib/insurance-assurance-line';
 import type { InvoiceData } from '@/lib/invoice-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
+import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
 import type {
   StorefrontAccountDocumentCustomerRow,
   StorefrontAccountDocumentItemRow,
@@ -261,5 +262,8 @@ export function buildStorefrontAccountDocumentBundle({
     invoiceData,
     receiptOrder,
     receiptMerchant,
+    // Canonical paid-receipt date shared with the emailed PDF: the newest
+    // settled payment, so downloads agree with the attachment header.
+    receiptCompletionDate: selectReceiptCompletionDate(transactions),
   };
 }

@@ -71,6 +71,9 @@ export interface DispatchMerchantIdentitySnapshot {
   supportPhone: string | null;
   phone: string | null;
   slug: string | null;
+  emailSenderName: string | null;
+  logoUrl: string | null;
+  brandColors: unknown;
 }
 
 export interface DispatchTaxSubtotal {
@@ -210,6 +213,9 @@ export async function markManualDocumentDispatchStarted(
       p_merchant_support_phone: merchant.supportPhone,
       p_merchant_phone: merchant.phone,
       p_merchant_slug: merchant.slug,
+      p_merchant_email_sender_name: merchant.emailSenderName,
+      p_merchant_logo_url: merchant.logoUrl,
+      p_merchant_brand_colors: merchant.brandColors,
       p_order_created_at: order.created_at,
     }
   );
@@ -233,6 +239,9 @@ export interface DispatchMerchantRow {
   support_phone: string | null;
   phone: string | null;
   slug: string | null;
+  email_sender_name: string | null;
+  logo_url: string | null;
+  brand_colors: unknown;
 }
 
 /**
@@ -274,6 +283,9 @@ export async function persistManualDocumentDispatch(
         supportPhone: merchant.support_phone,
         phone: merchant.phone,
         slug: merchant.slug,
+        emailSenderName: merchant.email_sender_name,
+        logoUrl: merchant.logo_url,
+        brandColors: merchant.brand_colors,
       },
       claimDomain
     );

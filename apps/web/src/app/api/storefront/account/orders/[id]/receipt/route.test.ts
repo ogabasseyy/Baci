@@ -72,9 +72,8 @@ function createDocumentData(
     receiptOrder: {
       order_number: order.order_number,
     } as StorefrontAccountDocumentData['receiptOrder'],
-    receiptMerchant: {
-      business_name: 'Ogabassey',
-    } as StorefrontAccountDocumentData['receiptMerchant'],
+    receiptMerchant: {} as StorefrontAccountDocumentData['receiptMerchant'],
+    receiptCompletionDate: '2026-04-02T10:00:00.000Z',
   } as StorefrontAccountDocumentData;
 }
 
@@ -213,7 +212,7 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
     expect(vi.mocked(generateReceiptBlob)).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      { documentKind: 'receipt' }
+      { documentKind: 'receipt', documentDate: '2026-04-02T10:00:00.000Z' }
     );
   });
 

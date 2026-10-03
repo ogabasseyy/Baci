@@ -174,4 +174,42 @@ describe('notifyStorefrontUpdateAvailable', () => {
       sentMessages[0]?.data.notification_id
     );
   });
+
+  it('stamps the whole batch when dispatch is uncertain', async () => {
+    const selectChain = createChainableMock([
+      { id: 'token-row-1', token: 'ExponentPushToken[1]' },
+      { id: 'token-row-2', token: 'ExponentPushToken[2]' },
+    ]);
+    const stampChain = createChainableMock();
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(selectChain)
+      .mockReturnValueOnce(stampChain);
+    mocks.createAdminClient.mockReturnValue({ from });
+    // No 'ok' tickets, but the provider may have delivered: leaving
+    // the batch unstamped would reselect and duplicate the nudge on
+    // the next run.
+    mocks.sendPushNotifications.mockResolvedValueOnce({
+      deliveryUncertain: true,
+      tickets: [{ status: 'error', id: 'ticket-1' }, null],
+    });
+
+    const { notifyStorefrontUpdateAvailable } = await import(
+      './mobile-update-nudge'
+    );
+
+    await notifyStorefrontUpdateAvailable({
+      platform: 'android',
+      latestBuild: 125,
+      now: new Date('2026-06-28T12:00:00.000Z'),
+    });
+
+    expect(stampChain.update).toHaveBeenCalledWith({
+      last_update_push_at: '2026-06-28T12:00:00.000Z',
+    });
+    expect(stampChain.in).toHaveBeenCalledWith('id', [
+      'token-row-1',
+      'token-row-2',
+    ]);
+  });
 });

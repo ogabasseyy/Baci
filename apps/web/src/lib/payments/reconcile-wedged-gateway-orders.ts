@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { finalizeVerifiedWedge } from '@/lib/payments/finalize-verified-wedge';
+import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import type {
   WedgedCandidate,
   WedgedOrderSweepSummary,
@@ -229,10 +231,11 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
       if (
-        candidate.gateway !== 'juicyway' &&
+        normalizePaymentGateway(candidate.gateway) !== 'JUICYWAY' &&
         candidate.currency &&
         verification.currency &&
-        candidate.currency.toUpperCase() !== verification.currency.toUpperCase()
+        normalizeCurrencyCode(candidate.currency) !==
+          normalizeCurrencyCode(verification.currency)
       ) {
         summary.skipped.push({
           reason: 'currency_mismatch',

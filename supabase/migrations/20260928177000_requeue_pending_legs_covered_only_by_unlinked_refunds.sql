@@ -32,8 +32,8 @@ UPDATE public.order_cancellation_side_effects AS side_effect
         -- matches the claim rule.
         AND payment.status = 'refund_pending'
         AND payment.amount > 0
-        AND COALESCE(payment.gateway, '') NOT IN (
-          'wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery'
+        AND COALESCE(public.normalized_gateway_name_v1(payment.gateway), '') NOT IN (
+          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
         )
         AND NOT EXISTS (
           SELECT 1 FROM public.transactions refund
@@ -43,42 +43,12 @@ UPDATE public.order_cancellation_side_effects AS side_effect
              -- Normalize gateways exactly like the aggregate coverage
              -- gate (whitespace-trimmed, uppercased; missing gateways
              -- never match).
-             AND NULLIF(
-               upper(
-                 regexp_replace(
-                   COALESCE(refund.gateway, ''),
-                   '^\s+|\s+$',
-                   '',
-                   'g'
-                 )
-               ),
-               ''
-             ) = NULLIF(
-               upper(
-                 regexp_replace(
-                   COALESCE(payment.gateway, ''),
-                   '^\s+|\s+$',
-                   '',
-                   'g'
-                 )
-               ),
-               ''
-             )
+             AND public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)
              AND refund.status = 'completed'
              AND refund.amount > 0
-             AND upper(refund.currency) = upper(payment.currency)
+             AND upper(btrim(refund.currency)) = upper(btrim(payment.currency))
              AND (
-               NULLIF(
-                 upper(
-                   regexp_replace(
-                     COALESCE(refund.gateway, ''),
-                     '^\s+|\s+$',
-                     '',
-                     'g'
-                   )
-                 ),
-                 ''
-               ) <> 'PAYSTACK'
+               public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'
                OR refund.metadata->>'provider_refund_status' = 'processed'
              )
              -- No unlinked fallback: unlike a completed leg, a pending leg

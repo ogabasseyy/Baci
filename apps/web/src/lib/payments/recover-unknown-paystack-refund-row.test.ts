@@ -37,15 +37,21 @@ const refund = {
 function lookupQuery(data: unknown, error: unknown = null) {
   const query: {
     eq: ReturnType<typeof vi.fn>;
+    gt: ReturnType<typeof vi.fn>;
     ilike: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
+    order: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(),
+    gt: vi.fn(),
     ilike: vi.fn(),
     limit: vi.fn().mockResolvedValue({ data, error }),
+    order: vi.fn(),
   };
   query.eq.mockReturnValue(query);
+  query.gt.mockReturnValue(query);
   query.ilike.mockReturnValue(query);
+  query.order.mockReturnValue(query);
   return query;
 }
 
@@ -87,10 +93,12 @@ describe('lookupLocalRefundByProviderId', () => {
   });
 
   it('throws when duplicate audit rows share the provider id', async () => {
-    const { supabase } = database([
-      refund,
-      { ...refund, gateway: ' Paystack ', id: 'refund-2' },
-    ]);
+    const { query, supabase } = database([]);
+    // Full first page, empty second page: terminates the keyset scan.
+    query.limit.mockResolvedValueOnce({
+      data: [refund, { ...refund, gateway: ' Paystack ', id: 'refund-2' }],
+      error: null,
+    });
 
     await expect(lookupLocalRefundByProviderId(supabase, 202)).rejects.toThrow(
       'refund_event_lookup_failed'

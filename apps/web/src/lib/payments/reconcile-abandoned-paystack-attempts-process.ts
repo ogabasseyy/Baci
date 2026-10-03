@@ -8,6 +8,7 @@ import { fileInvalidAttemptReference } from './file-invalid-attempt-reference';
 import { fileUnresolvedAttemptReference } from './file-unresolved-attempt-reference';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { guardAbandonedPaystackAttempt } from './guard-abandoned-paystack-attempt';
+import { normalizeCurrencyCode } from './normalize-currency-code';
 import { processMissingReferenceAttempt } from './process-missing-reference-attempt';
 import type { AbandonedPaystackAttemptSummary } from './reconcile-abandoned-paystack-attempts';
 import { resolveAbandonedAttemptMismatch } from './resolve-abandoned-attempt-mismatch';
@@ -196,8 +197,8 @@ export async function processAbandonedPaystackAttempt(
       Number(attempt.amount) <= 0 ||
       result.data.amount !== Math.round(Number(attempt.amount) * 100) ||
       typeof result.data.currency !== 'string' ||
-      result.data.currency.toUpperCase() !==
-        String(attempt.currency).toUpperCase()
+      normalizeCurrencyCode(result.data.currency) !==
+        normalizeCurrencyCode(attempt.currency)
     ) {
       mismatchKind = 'payment_evidence_mismatch';
     }

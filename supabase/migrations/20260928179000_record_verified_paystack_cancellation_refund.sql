@@ -31,7 +31,7 @@ BEGIN
   END IF;
 
   SELECT * INTO v_refund FROM public.transactions
-    WHERE id = p_refund_id AND transaction_type = 'refund' AND gateway = 'paystack'
+    WHERE id = p_refund_id AND transaction_type = 'refund' AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
       AND gateway_reference ~ '^[0-9]+$' FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'refund_not_found'; END IF;
   SELECT * INTO v_order FROM public.orders WHERE id = v_refund.order_id FOR UPDATE;
@@ -42,7 +42,7 @@ BEGIN
   SELECT * INTO v_payment FROM public.transactions
     WHERE id = (v_refund.metadata->>'payment_transaction_id')::uuid
       AND order_id = v_order.id AND merchant_id = v_order.merchant_id
-      AND transaction_type = 'payment' AND gateway = 'paystack'
+      AND transaction_type = 'payment' AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'
       AND status = 'completed';
   IF NOT FOUND AND v_refund.metadata->>'payment_transaction_id' IS NULL THEN
     -- Legacy refunds carry no payment link. Mirror the cancellation claim
@@ -54,8 +54,8 @@ BEGIN
       WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
         AND transaction_type = 'payment' AND status = 'completed'
         AND amount > 0
-        AND coalesce(gateway, '') NOT IN
-          ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery');
+        AND COALESCE(public.normalized_gateway_name_v1(gateway), '') NOT IN
+          ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY');
     IF v_external_payments = 1 THEN
       -- Normalize gateways like the aggregate coverage gate: a legacy
       -- `Paystack` leg and its `paystack` refund must verify together.
@@ -63,33 +63,13 @@ BEGIN
         WHERE order_id = v_order.id AND merchant_id = v_order.merchant_id
           AND transaction_type = 'payment' AND status = 'completed'
           AND amount > 0
-          AND NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          ) = NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(v_refund.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          )
+          AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(v_refund.gateway)
           AND amount >= v_refund.amount;
     END IF;
   END IF;
   IF NOT FOUND OR v_payment.gateway_reference IS NULL
     OR v_refund.amount > v_payment.amount
-    OR upper(v_refund.currency) <> upper(p_currency)
+    OR upper(btrim(v_refund.currency)) <> upper(btrim(p_currency))
     OR round(v_refund.amount * 100)::bigint <> p_amount_kobo
     OR (v_refund.metadata ? 'provider_payment_transaction_id' AND
         CASE WHEN coalesce(v_refund.metadata->>'provider_payment_transaction_id', '') ~ '^[0-9]+$'
@@ -170,8 +150,8 @@ BEGIN
     WHERE p.order_id = v_order.id AND p.merchant_id = v_order.merchant_id
       AND p.transaction_type = 'payment' AND p.status IN ('completed', 'refund_pending')
       AND p.amount > 0
-      AND coalesce(p.gateway, '') NOT IN
-        ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+      AND COALESCE(public.normalized_gateway_name_v1(p.gateway), '') NOT IN
+        ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       AND NOT EXISTS (
         SELECT 1 FROM public.transactions r
         WHERE r.order_id = v_order.id AND r.merchant_id = v_order.merchant_id
@@ -179,44 +159,14 @@ BEGIN
           -- Normalize gateways exactly like the aggregate coverage
           -- gate (whitespace-trimmed, uppercased; missing gateways
           -- never match).
-          AND NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(r.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          ) = NULLIF(
-            upper(
-              regexp_replace(
-                COALESCE(p.gateway, ''),
-                '^\s+|\s+$',
-                '',
-                'g'
-              )
-            ),
-            ''
-          )
+          AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
           AND r.status = 'completed'
           AND r.amount > 0
-          AND upper(r.currency) = upper(p.currency)
+          AND upper(btrim(r.currency)) = upper(btrim(p.currency))
           -- A locally completed Paystack refund counts only after this RPC
           -- provider-verified it; other gateways keep local-status trust.
           AND (
-            NULLIF(
-              upper(
-                regexp_replace(
-                  COALESCE(r.gateway, ''),
-                  '^\s+|\s+$',
-                  '',
-                  'g'
-                )
-              ),
-              ''
-            ) <> 'PAYSTACK'
+            public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'
             OR r.metadata->>'provider_refund_status' = 'processed'
           )
           AND (
@@ -237,9 +187,9 @@ BEGIN
                    AND only_payment.transaction_type = 'payment'
                    AND only_payment.status = 'completed'
                    AND only_payment.amount > 0
-                   AND coalesce(only_payment.gateway, '') NOT IN (
-                     'wallet', 'savings', 'store_credit', 'cash', 'manual',
-                     'pay_on_delivery'
+                   AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
+                     'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+                     'PAY_ON_DELIVERY'
                    )
               )
             )
@@ -261,8 +211,8 @@ BEGIN
         WHERE funded.order_id = v_order.id AND funded.merchant_id = v_order.merchant_id
           AND funded.transaction_type = 'payment' AND funded.status = 'completed'
           AND funded.amount > 0
-          AND coalesce(funded.gateway, '') NOT IN
-            ('wallet', 'savings', 'store_credit', 'cash', 'manual', 'pay_on_delivery')
+          AND COALESCE(public.normalized_gateway_name_v1(funded.gateway), '') NOT IN
+            ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       )
     )
   ) THEN

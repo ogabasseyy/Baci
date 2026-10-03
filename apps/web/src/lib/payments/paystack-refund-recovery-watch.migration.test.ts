@@ -42,7 +42,9 @@ describe('refund-recovery watch migration', () => {
     expect(migrationSql).toContain("'baci_paystack_refund_watch:'");
     // The confirming scan mirrors fetchCompletedPaymentsByReference —
     // same filter, same stable id order.
-    expect(migrationSql).toContain("t.gateway = 'paystack'");
+    expect(migrationSql).toContain(
+      "public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'"
+    );
     expect(migrationSql).toContain("t.transaction_type = 'payment'");
     expect(migrationSql).toContain("t.status = 'completed'");
     expect(migrationSql).toContain('jsonb_agg(row ORDER BY');

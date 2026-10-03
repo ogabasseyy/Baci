@@ -21,10 +21,10 @@ describe('requeue falsely completed cancellation refunds migration', () => {
     // Exact equality would miss refunds for a legacy leg the claim
     // gate finalized, leaving falsely completed rows unrequeued.
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(payment.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      'AND public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)'
     );
     expect(migrationSql).toContain(
-      "NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
+      "public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'"
     );
   });
 });

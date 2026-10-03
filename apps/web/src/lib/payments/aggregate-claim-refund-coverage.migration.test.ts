@@ -32,17 +32,17 @@ describe('aggregate claim refund coverage migration', () => {
 
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
-    // Trimmed, uppercased comparison with missing gateways never
-    // matching: exact equality would leave a legacy `Paystack` leg
-    // uncovered here while the executor treats its `paystack` refund
-    // as covering it.
+    // Canonical normalizer (trimmed, uppercased, blanks to NULL so
+    // missing gateways never match): exact equality would leave a
+    // legacy `Paystack` leg uncovered here while the executor treats
+    // its `paystack` refund as covering it.
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(payment.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      'AND public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)'
     );
     // The Paystack verification gate normalizes too, so a legacy
     // `Paystack` row cannot slip through unverified.
     expect(migrationSql).toContain(
-      "NULLIF( upper( regexp_replace( COALESCE(refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
+      "public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'"
     );
   });
 });

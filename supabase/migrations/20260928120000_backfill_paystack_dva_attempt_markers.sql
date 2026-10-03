@@ -16,7 +16,11 @@ UPDATE public.transactions t
 SET metadata = coalesce(t.metadata, '{}'::jsonb) || '{"paystack_payment_type": "dva"}'::jsonb,
     updated_at = now()
 WHERE t.transaction_type = 'payment'
-  AND t.gateway = 'paystack'
+  -- Inline trim-and-uppercase: legacy ` Paystack ` rows must be
+  -- marked too, and normalized_gateway_name_v1 does not exist yet
+  -- at this point in history (a top-level statement cannot defer
+  -- the reference the way plpgsql bodies do).
+  AND NULLIF(upper(regexp_replace(coalesce(t.gateway, ''), '^\s+|\s+$', '', 'g')), '') = 'PAYSTACK'
   AND t.status IN ('pending', 'processing')
   AND coalesce(t.metadata->>'paystack_payment_type', '') = ''
   AND EXISTS (

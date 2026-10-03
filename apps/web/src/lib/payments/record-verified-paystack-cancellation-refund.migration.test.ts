@@ -28,7 +28,7 @@ describe('verified paystack cancellation refund migration', () => {
     );
     expect(migrationSql).toContain('IF v_external_payments = 1 THEN');
     expect(migrationSql).toContain(
-      "COALESCE(v_refund.gateway, ''), '^\\s+|\\s+$', '', 'g'"
+      'AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(v_refund.gateway)'
     );
   });
 
@@ -80,7 +80,9 @@ describe('verified paystack cancellation refund migration', () => {
 
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
-    expect(migrationSql).toContain('AND upper(r.currency) = upper(p.currency)');
+    expect(migrationSql).toContain(
+      'AND upper(btrim(r.currency)) = upper(btrim(p.currency))'
+    );
   });
 
   it('requires provider verification on counted Paystack refunds', () => {
@@ -204,13 +206,20 @@ describe('verified paystack cancellation refund migration', () => {
     // with the claim gate on a legacy `Paystack` leg and its
     // `paystack` refund.
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(v_refund.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
+      'AND public.normalized_gateway_name_v1(gateway) = public.normalized_gateway_name_v1(v_refund.gateway)'
+    );
+    // The external-leg count normalizes too: a raw gateway against an
+    // uppercase internal list would count wallet legs as external and
+    // misfire the sole-payment rule.
+    expect(migrationSql).toContain(
+      "AND COALESCE(public.normalized_gateway_name_v1(gateway), '') NOT IN ("
+    );
+    expect(migrationSql).not.toContain("coalesce(gateway, '') NOT IN");
+    expect(migrationSql).toContain(
+      'AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)'
     );
     expect(migrationSql).toContain(
-      "AND NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) = NULLIF( upper( regexp_replace( COALESCE(p.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' )"
-    );
-    expect(migrationSql).toContain(
-      "NULLIF( upper( regexp_replace( COALESCE(r.gateway, ''), '^\\s+|\\s+$', '', 'g' ) ), '' ) <> 'PAYSTACK'"
+      "public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'"
     );
   });
 });

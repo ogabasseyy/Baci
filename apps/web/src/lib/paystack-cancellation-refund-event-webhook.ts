@@ -2,14 +2,21 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { fileRefundEvidenceReview } from '@/lib/payments/file-refund-evidence-review';
+import { findPaystackRefundRowsByProviderId } from '@/lib/payments/find-paystack-refund-rows-by-provider-id';
 import { holdPaystackRefundForReview } from '@/lib/payments/hold-paystack-refund-for-review';
 import { isDeterministicRefundError } from '@/lib/payments/is-deterministic-paystack-refund-error';
-import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import type { RefundRow } from '@/lib/payments/paystack-cancellation-refund-row';
 import { reconcilePaystackCancellationRefund } from '@/lib/payments/reconcile-paystack-cancellation-refund';
 import { reconcilePaystackRefundEvent } from '@/lib/payments/reconcile-paystack-refund-event';
 import { recoverUnknownPaystackRefund } from '@/lib/payments/recover-unknown-paystack-refund';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
+
+type WebhookRefundRow = RefundRow & {
+  cancel_order?: {
+    cancelled_at?: string | null;
+    shipping_status?: string | null;
+  } | null;
+};
 
 export async function handlePaystackCancellationRefundEvent(
   supabase: SupabaseClient,
@@ -45,21 +52,17 @@ export async function handlePaystackCancellationRefundEvent(
     Number.isSafeInteger(refundId) &&
     refundId > 0
   ) {
-    // Legacy rows may pad or re-case the gateway (` Paystack `): an
-    // exact match misses a held legacy row, enters unknown-refund
-    // recovery, and collides with the existing audit row on insert
-    // while the held row never reaches its transition. Prefilter
-    // case-insensitively server-side, then exact-normalize.
-    const { data: refundRows, error: lookupError } = await supabase
-      .from('transactions')
-      .select(
+    // The shared lookup keyset-scans past corrupt prefilter matches
+    // and legacy gateway variants; it returns at most two genuine
+    // rows so this branch still detects duplicate audit rows.
+    let refunds: WebhookRefundRow[];
+    try {
+      refunds = await findPaystackRefundRowsByProviderId<WebhookRefundRow>(
+        supabase,
+        refundId,
         'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, metadata, status, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
-      )
-      .eq('transaction_type', 'refund')
-      .ilike('gateway', '%paystack%')
-      .eq('gateway_reference', String(refundId))
-      .limit(2);
-    if (lookupError) {
+      );
+    } catch (lookupError) {
       logger.error({
         message: 'Paystack refund lookup failed',
         error: lookupError,
@@ -69,11 +72,6 @@ export async function handlePaystackCancellationRefundEvent(
         { status: 503 }
       );
     }
-    const refunds = (refundRows ?? []).filter(
-      (row) =>
-        normalizePaymentGateway((row as { gateway?: unknown }).gateway) ===
-        'PAYSTACK'
-    );
     if (refunds.length > 1) {
       // Duplicate audit rows for one provider refund: never guess —
       // 503 for redelivery like the old maybeSingle multi-row error.
@@ -204,8 +202,20 @@ export async function handlePaystackCancellationRefundEvent(
     // filed for it must not block a later genuine cancellation as if
     // money moved. Coerced — a non-string verdict fails closed as
     // non-failed rather than poisoning the exclusion check.
+    // When data.status is absent, derive the verdict from the event
+    // name: a bare refund.failed still means no money moved, and
+    // coercing it to 'unknown' strands the reference — failed-only
+    // evidence exclusion can't match 'unknown', so a later genuine
+    // refund for the same reference stays blocked.
+    const eventName = typeof payload.event === 'string' ? payload.event : '';
     const eventStatus =
-      typeof data?.status === 'string' ? data.status : 'unknown';
+      typeof data?.status === 'string'
+        ? data.status
+        : eventName === 'refund.failed'
+          ? 'failed'
+          : eventName === 'refund.processed'
+            ? 'processed'
+            : 'unknown';
     try {
       await reconcilePaystackRefundEvent(
         supabase,

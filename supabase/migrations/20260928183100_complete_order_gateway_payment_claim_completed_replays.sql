@@ -176,7 +176,7 @@ BEGIN
     SELECT
       COALESCE(sum(COALESCE(t.amount, 0)), 0)::numeric,
       COALESCE(sum(COALESCE(t.amount, 0)) FILTER (
-        WHERE lower(COALESCE(t.gateway, '')) IN ('wallet', 'store_credit')
+        WHERE public.normalized_gateway_name_v1(t.gateway) IN ('WALLET', 'STORE_CREDIT')
       ), 0)::numeric
     INTO v_completed_transaction_paid, v_completed_wallet_paid
     FROM public.transactions AS t

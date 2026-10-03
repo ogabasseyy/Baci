@@ -68,12 +68,13 @@ BEGIN
       FROM public.transactions p
       LEFT JOIN public.transactions r
         ON r.order_id = p.order_id AND r.merchant_id = p.merchant_id
-       AND r.transaction_type = 'refund' AND r.gateway = p.gateway
+       AND r.transaction_type = 'refund'
+       AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
        AND r.status = 'completed'
        AND r.amount > 0
-       AND upper(r.currency) = upper(p.currency)
+       AND upper(btrim(r.currency)) = upper(btrim(p.currency))
        AND (
-         r.gateway <> 'paystack'
+         public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'
          OR r.metadata->>'provider_refund_status' = 'processed'
        )
        AND (
@@ -87,9 +88,9 @@ BEGIN
                 AND only_payment.transaction_type = 'payment'
                 AND only_payment.status = 'completed'
                 AND only_payment.amount > 0
-                AND coalesce(only_payment.gateway, '') NOT IN (
-                  'wallet', 'savings', 'store_credit', 'cash', 'manual',
-                  'pay_on_delivery'
+                AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
+                  'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+                  'PAY_ON_DELIVERY'
                 )
            )
          )
@@ -98,9 +99,9 @@ BEGIN
        AND p.transaction_type = 'payment'
        AND p.status IN ('completed', 'refund_pending')
        AND p.amount > 0
-       AND coalesce(p.gateway, '') NOT IN (
-         'wallet', 'savings', 'store_credit', 'cash', 'manual',
-         'pay_on_delivery'
+       AND COALESCE(public.normalized_gateway_name_v1(p.gateway), '') NOT IN (
+         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+         'PAY_ON_DELIVERY'
        )
      GROUP BY p.id, p.gateway_reference, p.amount, p.currency
     HAVING coalesce(sum(r.amount), 0) > p.amount

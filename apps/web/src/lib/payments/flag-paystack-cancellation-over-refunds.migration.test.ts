@@ -31,6 +31,24 @@ describe('flag paystack cancellation over refunds migration', () => {
     expect(migrationSql).toContain('ON CONFLICT DO NOTHING');
   });
 
+  it('normalizes gateways exactly like the aggregate coverage gate', () => {
+    expect(existsSync(migrationPath)).toBe(true);
+    if (!existsSync(migrationPath)) return;
+
+    const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
+
+    // Exact equality would miss refunds for a legacy leg the claim
+    // gate finalized, hiding excess provider debits — and an exact
+    // Paystack gate would let a legacy `Paystack` row count without
+    // provider verification.
+    expect(migrationSql).toContain(
+      'AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)'
+    );
+    expect(migrationSql).toContain(
+      "public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'"
+    );
+  });
+
   it('wires the over-refund flag into the shared finalizer', () => {
     const finalizePath = resolve(
       __dirname,

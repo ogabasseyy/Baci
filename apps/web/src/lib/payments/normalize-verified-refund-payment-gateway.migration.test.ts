@@ -24,6 +24,13 @@ describe('verified refund payment gateway normalization migration', () => {
     expect(migrationSql).toContain(
       'public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)'
     );
+    // The external-leg count normalizes too: a raw gateway against an
+    // uppercase internal list would count wallet legs as external and
+    // misfire the sole-payment rule.
+    expect(migrationSql).toContain(
+      "AND COALESCE(public.normalized_gateway_name_v1(gateway), '') NOT IN ("
+    );
+    expect(migrationSql).not.toContain("coalesce(gateway, '') NOT IN");
   });
 
   it('keeps no exact gateway match on the linked payment lookup', () => {
@@ -32,14 +39,17 @@ describe('verified refund payment gateway normalization migration', () => {
 
     const migrationSql = normalizeSql(readFileSync(migrationPath, 'utf8'));
 
-    // The refund-row lookup keeps its exact match (refund rows are
-    // written by this feature); only the linked payment lookup — a
-    // legacy row the feature never wrote — must normalize.
+    // Both lookups normalize: the refund row may itself be a
+    // legacy padded row the ilike prefilter surfaced, and an exact
+    // match here would reject it after the prefilter accepted it.
     expect(migrationSql).not.toContain(
       "transaction_type = 'payment' AND gateway = 'paystack'"
     );
-    expect(migrationSql).toContain(
+    expect(migrationSql).not.toContain(
       "transaction_type = 'refund' AND gateway = 'paystack'"
+    );
+    expect(migrationSql).toContain(
+      "transaction_type = 'refund' AND public.normalized_gateway_name_v1(gateway) = 'PAYSTACK'"
     );
   });
 

@@ -120,50 +120,20 @@ BEGIN
             -- match): exact equality would leave a legacy `Paystack` leg
             -- uncovered here while the executor treats its `paystack`
             -- refund as covering it, stranding the order paid with no
-            -- aggregate finalization. regexp_replace mirrors JS
-            -- String.trim, which strips all whitespace, not just spaces.
-            AND NULLIF(
-              upper(
-                regexp_replace(
-                  COALESCE(refund.gateway, ''),
-                  '^\s+|\s+$',
-                  '',
-                  'g'
-                )
-              ),
-              ''
-            ) = NULLIF(
-              upper(
-                regexp_replace(
-                  COALESCE(payment.gateway, ''),
-                  '^\s+|\s+$',
-                  '',
-                  'g'
-                )
-              ),
-              ''
-            )
+            -- aggregate finalization.
+            AND public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)
             AND refund.status = 'completed'
             AND refund.amount > 0
-            AND upper(refund.currency) = upper(payment.currency)
+            AND upper(btrim(refund.currency)) = upper(btrim(payment.currency))
             -- A locally completed Paystack refund counts only after it is
             -- provider-verified; other gateways keep local-status trust.
             -- Normalized like the gateway match above so a legacy
             -- `Paystack` row cannot slip through unverified while the
             -- executor (which normalizes) waits for verification. The
-            -- NULLIF keeps missing gateways strict, as before.
+            -- normalizer maps missing gateways to NULL, keeping them
+            -- strict, as before.
             AND (
-              NULLIF(
-                upper(
-                  regexp_replace(
-                    COALESCE(refund.gateway, ''),
-                    '^\s+|\s+$',
-                    '',
-                    'g'
-                  )
-                ),
-                ''
-              ) <> 'PAYSTACK'
+              public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'
               OR refund.metadata->>'provider_refund_status' = 'processed'
             )
             AND (

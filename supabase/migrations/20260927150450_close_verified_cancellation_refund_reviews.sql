@@ -32,7 +32,7 @@ BEGIN
         OR EXISTS (
           SELECT 1 FROM public.transactions r
           WHERE r.order_id = p_order_id AND r.merchant_id = p_merchant_id
-            AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
+            AND r.transaction_type = 'refund' AND public.normalized_gateway_name_v1(r.gateway) = 'PAYSTACK'
             AND r.status = 'completed'
             -- A locally completed row resolves audit-failed evidence only
             -- after provider verification: other writers can complete a
@@ -84,7 +84,7 @@ BEGIN
           AND NOT EXISTS (
             SELECT 1 FROM public.transactions r
             WHERE r.order_id = p_order_id AND r.merchant_id = p_merchant_id
-              AND r.transaction_type = 'refund' AND r.gateway = 'paystack'
+              AND r.transaction_type = 'refund' AND public.normalized_gateway_name_v1(r.gateway) = 'PAYSTACK'
               AND r.status = 'completed'
               AND r.metadata->>'provider_refund_status' = 'processed'
               AND r.gateway_reference = split_part(e.key, ':', 2)

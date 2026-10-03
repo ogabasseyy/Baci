@@ -93,7 +93,7 @@ BEGIN
         'amount', t.amount
       ) AS row
       FROM public.transactions AS t
-      WHERE t.gateway = 'paystack'
+      WHERE public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
         AND t.gateway_reference = v_reference
         AND t.transaction_type = 'payment'
         AND t.status = 'completed'

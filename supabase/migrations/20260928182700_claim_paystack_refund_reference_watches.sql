@@ -40,7 +40,12 @@ BEGIN
   INTO v_txn_gateway, v_txn_reference, v_txn_amount
   FROM public.transactions AS t
   WHERE t.id = p_transaction_id;
-  IF NOT FOUND OR v_txn_gateway IS DISTINCT FROM 'paystack'
+  -- Normalized like the watch opener's confirming scan: an exact
+  -- match would claim nothing for a legacy ` Paystack ` payment the
+  -- opener already matched, stranding its watch open forever.
+  IF NOT FOUND
+    OR public.normalized_gateway_name_v1(v_txn_gateway)
+      IS DISTINCT FROM 'PAYSTACK'
     OR v_txn_reference IS NULL THEN
     RETURN 0;
   END IF;

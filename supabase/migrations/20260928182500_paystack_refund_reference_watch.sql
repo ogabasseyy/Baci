@@ -94,7 +94,7 @@ BEGIN
       ) AS row
       FROM public.transactions AS t
       LEFT JOIN public.orders AS o ON o.id = t.order_id
-      WHERE t.gateway = 'paystack'
+      WHERE public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
         AND t.gateway_reference = v_reference
         AND t.transaction_type = 'payment'
         AND t.status = 'completed'

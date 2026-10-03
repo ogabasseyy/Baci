@@ -35,42 +35,12 @@ BEGIN
        -- (whitespace-trimmed, uppercased; missing gateways never
        -- match): exact equality would drop every refund for a legacy
        -- leg the claim gate finalized, hiding excess provider debits.
-       AND NULLIF(
-         upper(
-           regexp_replace(
-             COALESCE(r.gateway, ''),
-             '^\s+|\s+$',
-             '',
-             'g'
-           )
-         ),
-         ''
-       ) = NULLIF(
-         upper(
-           regexp_replace(
-             COALESCE(p.gateway, ''),
-             '^\s+|\s+$',
-             '',
-             'g'
-           )
-         ),
-         ''
-       )
+       AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
        AND r.status = 'completed'
        AND r.amount > 0
-       AND upper(r.currency) = upper(p.currency)
+       AND upper(btrim(r.currency)) = upper(btrim(p.currency))
        AND (
-         NULLIF(
-           upper(
-             regexp_replace(
-               COALESCE(r.gateway, ''),
-               '^\s+|\s+$',
-               '',
-               'g'
-             )
-           ),
-           ''
-         ) <> 'PAYSTACK'
+         public.normalized_gateway_name_v1(r.gateway) <> 'PAYSTACK'
          OR r.metadata->>'provider_refund_status' = 'processed'
        )
        AND (

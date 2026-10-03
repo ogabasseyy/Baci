@@ -23,10 +23,12 @@ describe('handlePaystackCancellationRefundEvent unknown-refund recovery', () => 
   function database(refund: unknown) {
     const query = {
       eq: vi.fn().mockReturnThis(),
+      gt: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       limit: vi
         .fn()
         .mockResolvedValue({ data: refund == null ? [] : [refund] }),
+      order: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
     };
     return { from: vi.fn(() => query) } as unknown as SupabaseClient;

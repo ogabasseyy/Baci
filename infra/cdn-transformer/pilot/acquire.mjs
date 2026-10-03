@@ -5,6 +5,7 @@ import {
   readFile,
   rename,
   rm,
+  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises';
@@ -252,16 +253,25 @@ export async function acquireSnapshot(options) {
 
 const INVENTORY_LOCK_TIMEOUT_MS = 10_000;
 const INVENTORY_LOCK_STALE_MS = 60_000;
+// Crash window between lock mkdir and the owner write: a holder that dies
+// there leaves an ownerless directory. Fresh ownerless dirs are
+// mid-acquire holders; ones older than this grace are crashed holders and
+// recover like any other stale lock.
+const INVENTORY_LOCK_OWNER_GRACE_MS = 5_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function isStaleInventoryLock(lockDir) {
+export async function isStaleInventoryLock(lockDir) {
   const owner = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
     () => null
   );
-  // No owner file yet: a holder is mid-acquire, not stale.
   if (owner === null) {
-    return false;
+    const info = await stat(lockDir).catch(() => null);
+    if (!info) {
+      // Raced with a release: the next loop iteration retries the mkdir.
+      return false;
+    }
+    return Date.now() - info.mtimeMs > INVENTORY_LOCK_OWNER_GRACE_MS;
   }
   let parsed;
   try {

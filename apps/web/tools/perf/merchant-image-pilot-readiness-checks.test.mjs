@@ -225,6 +225,108 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
     ).toEqual(['slot "header-logo" has no visible box']);
   });
 
+  it('inverts mobile-only mounts on desktop profiles', () => {
+    const hero = {
+      binding: 'merchant/hero-s0',
+      merchantId: 'merchant',
+      slotId: 'mobile-hero-slide-0',
+    };
+    const hidden = {
+      binding: 'merchant/hero-s0',
+      // Undecoded: a display:none image owes the gate no element verdict —
+      // the mobile profiles own decode for this binding.
+      img: { complete: false, currentSrc: '', naturalWidth: 0 },
+      rect: { height: 0, width: 0, x: 0, y: 0 },
+      slotId: 'mobile-hero-slide-0',
+      status: null,
+    };
+    expect(
+      slotMountProblems(hidden, hero, {
+        arm: 'pilot',
+        expectHidden: true,
+        viewportWidth: 1280,
+      })
+    ).toEqual([]);
+    // Absent and reported mounts still fail when hidden is expected.
+    expect(
+      slotMountProblems(null, hero, {
+        arm: 'pilot',
+        expectHidden: true,
+        viewportWidth: 1280,
+      })
+    ).toEqual(['slot "mobile-hero-slide-0" mount is absent']);
+    expect(
+      slotMountProblems({ ...hidden, status: 'not-optimized' }, hero, {
+        arm: 'pilot',
+        expectHidden: true,
+        viewportWidth: 1280,
+      })
+    ).toEqual(['slot "mobile-hero-slide-0" renders only "not-optimized"']);
+    // A visible hero on a desktop profile breaks the responsive contract.
+    expect(
+      slotMountProblems(
+        { ...hidden, rect: { height: 192, width: 390, x: 0, y: 0 } },
+        hero,
+        { arm: 'pilot', expectHidden: true, viewportWidth: 1280 }
+      )
+    ).toEqual(['slot "mobile-hero-slide-0" should be hidden on this profile']);
+  });
+
+  it('keeps route coverage but skips decode when mounts hide', () => {
+    const hero = {
+      binding: 'merchant/hero-s0',
+      merchantId: 'merchant',
+      slotId: 'mobile-hero-slide-0',
+    };
+    const hidden = {
+      binding: 'merchant/hero-s0',
+      img: { complete: false, currentSrc: '', naturalWidth: 0 },
+      rect: { height: 0, width: 0, x: 0, y: 0 },
+      slotId: 'mobile-hero-slide-0',
+      status: null,
+    };
+    const collected = {
+      consoleErrors: [],
+      failedRequests: [],
+      geometry: {
+        gridDisplay: 'n/a-hero',
+        heading: { height: 1, width: 1, x: 0, y: 0 },
+        imgObjectFit: 'contain',
+        selected: { height: 0, width: 0, x: 0, y: 0 },
+        selectedImg: { complete: false, currentSrc: '', naturalWidth: 0 },
+        slots: [hidden],
+        stylesheetBytes: 1200,
+        stylesheetCount: 1,
+        viewportWidth: 1280,
+      },
+      imageUrls: ['https://lab/__pilot/abc/x.avif'],
+    };
+    expect(
+      surfaceProblems(collected, {
+        arm: 'pilot',
+        expectHiddenMounts: true,
+        expectedFit: 'contain',
+        expectedMounts: [hero],
+        surface: 'hero',
+      })
+    ).toEqual([]);
+    // Network-level purity still applies to hidden surfaces: a pilot
+    // original fetch fails on desktop too.
+    const leaked = {
+      ...collected,
+      imageUrls: ['https://lab/__pilot/originals/x.png'],
+    };
+    expect(
+      surfaceProblems(leaked, {
+        arm: 'pilot',
+        expectHiddenMounts: true,
+        expectedFit: 'contain',
+        expectedMounts: [hero],
+        surface: 'hero',
+      })
+    ).toEqual(['pilot requested a selected original']);
+  });
+
   it('compares every expected slot across arms', () => {
     const left = {
       heading: { height: 1, width: 1, x: 0, y: 0 },

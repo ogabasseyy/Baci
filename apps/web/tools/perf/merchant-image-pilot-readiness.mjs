@@ -18,7 +18,9 @@
 // --mounts is the offline preflight accepted list (preflight
 // --write-mounts): every expected bound slot per store is validated in the
 // browser — visibility, decode, arm-correct staged URL, cross-arm layout —
-// not just the primary surface.
+// not just the primary surface. Mobile-only bindings (the md:hidden hero)
+// invert on desktop profiles: the section must render, but hidden —
+// decode verdicts stay with the mobile profiles that show it.
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import {
@@ -242,6 +244,8 @@ async function run() {
             surfaces[arm] = collected;
             const problems = surfaceProblems(collected, {
               arm,
+              expectHiddenMounts:
+                surface === 'hero' && profile.startsWith('desktop'),
               expectedFit,
               expectedMounts: mounts,
               surface,

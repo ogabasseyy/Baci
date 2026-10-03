@@ -382,6 +382,49 @@ test('appendInventoryRecord rejects route-rejected duplicates', async () => {
   assert.equal(stored.length, 2);
 });
 
+test('isStaleInventoryLock recovers ownerless locks past the creation grace', async () => {
+  const { mkdir, utimes } = await import('node:fs/promises');
+  const { isStaleInventoryLock } = await import('./acquire.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-lock-'));
+  // Fresh ownerless dir: a holder is mid-acquire, not stale.
+  const fresh = join(dir, 'fresh.lock');
+  await mkdir(fresh);
+  assert.equal(await isStaleInventoryLock(fresh), false);
+  // Aged ownerless dir: the holder crashed between mkdir and the owner
+  // write — recoverable like any other stale lock.
+  const aged = join(dir, 'aged.lock');
+  await mkdir(aged);
+  const past = new Date(Date.now() - 30_000);
+  await utimes(aged, past, past);
+  assert.equal(await isStaleInventoryLock(aged), true);
+  // Missing dir (raced with a release): not stale; the loop retries.
+  assert.equal(await isStaleInventoryLock(join(dir, 'gone.lock')), false);
+});
+
+test('appendInventoryRecord recovers a crashed ownerless lock', async () => {
+  const { mkdir, utimes } = await import('node:fs/promises');
+  const { appendInventoryRecord } = await import('./acquire.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-append-lock-'));
+  const path = join(dir, 'inventory.json');
+  await writeFile(path, JSON.stringify([]));
+  const lockDir = `${path}.lock`;
+  await mkdir(lockDir);
+  const past = new Date(Date.now() - 30_000);
+  await utimes(lockDir, past, past);
+  const sha = createHash('sha256').update('x').digest('hex');
+  const count = await appendInventoryRecord(path, {
+    assetId: 'logo-a',
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: 'header-logo',
+    sourcePath: 'snapshots/logo-a.png',
+    url: 'https://cdn.example.com/media/logo-a.png',
+  });
+  assert.equal(count, 1);
+});
+
 test('removes a newly written snapshot when the probe rejects it', async () => {
   const inputRoot = await makeInputRoot();
   const failingProbe = async () => {

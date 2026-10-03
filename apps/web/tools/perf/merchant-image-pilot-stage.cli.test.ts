@@ -124,7 +124,7 @@ async function setupStageFiles() {
 }
 
 describe('parseStageArgs', () => {
-  it('reads space-separated roots and ignores unknown flags', () => {
+  it('reads space-separated roots and rejects malformed tokens', () => {
     expect(
       parseStageArgs([
         '--input-root',
@@ -140,11 +140,21 @@ describe('parseStageArgs', () => {
       outputRoot: undefined,
       publicDir: undefined,
     });
-    expect(parseStageArgs(['--input-root'])).toEqual({
-      inputRoot: undefined,
-      outputRoot: undefined,
-      publicDir: undefined,
-    });
+    // The motivating typo: --public-di must abort, never stage the wrong
+    // tree behind an ok:true.
+    expect(() => parseStageArgs(['--public-di', 'pub'])).toThrow(
+      /unknown staging flag "--public-di"/
+    );
+    expect(() => parseStageArgs(['--input-root'])).toThrow(
+      /flag "--input-root" requires a value/
+    );
+    // A missing value must not consume the next flag as a path.
+    expect(() =>
+      parseStageArgs(['--input-root', '--output-root', 'out'])
+    ).toThrow(/flag "--input-root" requires a value/);
+    expect(() =>
+      parseStageArgs(['--input-root', 'a', '--input-root', 'b'])
+    ).toThrow(/duplicate flag "--input-root"/);
   });
 });
 

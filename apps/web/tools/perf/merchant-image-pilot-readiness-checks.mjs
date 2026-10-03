@@ -64,7 +64,17 @@ export function selectedImageProblems(image, arm) {
 // the viewport, and decode its arm-correct staged image. `slot` is the
 // collected [data-pilot-lab-slot] section for the mount's binding, or
 // nullish when that binding rendered nothing.
-export function slotMountProblems(slot, mount, { arm, viewportWidth }) {
+//
+// Mobile-only bindings (the md:hidden hero) invert on desktop profiles:
+// the slot must still render its bound section, but hidden — decode and
+// URL verdicts stay with the mobile profiles that actually show it, while
+// the network-level purity checks below still catch hidden original
+// fetches on every profile.
+export function slotMountProblems(
+  slot,
+  mount,
+  { arm, expectHidden, viewportWidth }
+) {
   const label = `slot "${mount.slotId}" image`;
   if (!slot) {
     return [`slot "${mount.slotId}" mount is absent`];
@@ -73,7 +83,14 @@ export function slotMountProblems(slot, mount, { arm, viewportWidth }) {
     return [`slot "${mount.slotId}" renders only "${slot.status}"`];
   }
   const rect = slot.rect ?? {};
-  if ((rect.width ?? 0) < 1 || (rect.height ?? 0) < 1) {
+  const visible = (rect.width ?? 0) >= 1 && (rect.height ?? 0) >= 1;
+  if (expectHidden) {
+    if (visible) {
+      return [`slot "${mount.slotId}" should be hidden on this profile`];
+    }
+    return [];
+  }
+  if (!visible) {
     return [`slot "${mount.slotId}" has no visible box`];
   }
   if ((rect.x ?? 0) + (rect.width ?? 0) > (viewportWidth ?? 0) + 1) {
@@ -89,7 +106,7 @@ export function slotMountProblems(slot, mount, { arm, viewportWidth }) {
 // driver under the repo line ceiling.
 export function surfaceProblems(
   collected,
-  { arm, expectedFit, expectedMounts, surface }
+  { arm, expectHiddenMounts, expectedFit, expectedMounts, surface }
 ) {
   const problems = [];
   if (collected.consoleErrors.length > 0) {
@@ -118,7 +135,13 @@ export function surfaceProblems(
       `selected image object-fit is ${g.imgObjectFit ?? 'missing'}, expected ${expectedFit}`
     );
   }
-  problems.push(...selectedImageProblems(g.selectedImg, arm));
+  // A hidden primary surface (desktop hero) cannot prove element decode;
+  // the mobile profiles own that verdict. Network-level purity below
+  // still applies: hidden images fetch, so a pilot original fetch fails
+  // on every profile.
+  if (!expectHiddenMounts) {
+    problems.push(...selectedImageProblems(g.selectedImg, arm));
+  }
   if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
     problems.push('pilot requested a selected original');
   }
@@ -133,7 +156,11 @@ export function surfaceProblems(
       (entry) => entry.binding === mount.binding
     );
     problems.push(
-      ...slotMountProblems(slot, mount, { arm, viewportWidth: g.viewportWidth })
+      ...slotMountProblems(slot, mount, {
+        arm,
+        expectHidden: expectHiddenMounts,
+        viewportWidth: g.viewportWidth,
+      })
     );
   }
   return problems;

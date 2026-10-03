@@ -18,23 +18,34 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stageLabConfigFromText } from '@/app/pilot-lab/lab-route';
 
+const STAGE_FLAGS = new Set(['--input-root', '--output-root', '--public-dir']);
+
 export function parseStageArgs(argv: readonly string[]): {
   inputRoot?: string;
   outputRoot?: string;
   publicDir?: string;
 } {
+  // Fail closed on every malformed token: pilot:stage is the sole
+  // pre-start writer, so a mistyped override must abort — never stage the
+  // wrong tree and print ok:true.
   const args: Record<string, string> = {};
   for (let i = 0; i < argv.length; i += 1) {
-    const flag = argv[i];
-    if (
-      (flag === '--input-root' ||
-        flag === '--output-root' ||
-        flag === '--public-dir') &&
-      argv[i + 1] !== undefined
-    ) {
-      args[flag.slice(2)] = argv[i + 1] as string;
-      i += 1;
+    const flag = argv[i] as string;
+    if (!STAGE_FLAGS.has(flag)) {
+      throw new Error(
+        `merchant image pilot: unknown staging flag "${flag}" (expected --input-root, --output-root, --public-dir)`
+      );
     }
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`merchant image pilot: flag "${flag}" requires a value`);
+    }
+    const key = flag.slice(2);
+    if (args[key] !== undefined) {
+      throw new Error(`merchant image pilot: duplicate flag "${flag}"`);
+    }
+    args[key] = value;
+    i += 1;
   }
   return {
     inputRoot: args['input-root'],

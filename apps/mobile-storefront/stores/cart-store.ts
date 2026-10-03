@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { CONFIG } from '@/lib/config';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
@@ -95,7 +96,11 @@ export const useCartStore = create<CartState>()(
               ...state.items,
               {
                 ...itemToAdd,
-                hasAssurance: itemToAdd.hasAssurance ?? true,
+                // Default-on assurance is Ogabassey-scoped, mirroring web
+                // (StorefrontCartProvider). Other merchants keep opt-in.
+                hasAssurance:
+                  itemToAdd.hasAssurance ??
+                  (CONFIG.MERCHANT_SLUG || 'ogabassey') === 'ogabassey',
                 id: createCartLineId(itemToAdd, lineSequence),
               },
             ];

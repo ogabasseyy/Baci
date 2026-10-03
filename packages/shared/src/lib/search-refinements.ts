@@ -119,6 +119,23 @@ export function buildRefinedSearchHref(
   return params.size ? `${path}?${params}` : path;
 }
 
+export function hasActiveSearchRefinements(
+  criteria: SearchRefinements
+): boolean {
+  // Sort order never empties a result set, so only filter-bearing fields
+  // count. Used to suppress product-request intake on refinement-only
+  // zero-result pages.
+  return (
+    criteria.brands.length > 0 ||
+    criteria.categoryId !== undefined ||
+    criteria.condition !== undefined ||
+    criteria.minPrice !== undefined ||
+    criteria.maxPrice !== undefined ||
+    criteria.minRating !== undefined ||
+    criteria.processor !== undefined
+  );
+}
+
 export function resetRefinementsForQuery(
   previous: string,
   next: string,

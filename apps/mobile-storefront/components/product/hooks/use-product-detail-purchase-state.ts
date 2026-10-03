@@ -17,20 +17,23 @@ export function useProductDetailPurchaseState(
       routeData.product ?? null,
       routeData.currentVariantDisplaySelection,
       routeData.effectiveSelectedCondition,
-      negotiatedPrice
+      negotiatedPrice,
+      routeData.routeOfferId
     );
   const { price: calculatedPrice } = useEffectivePrice(
     routeData.product ?? null,
     routeData.currentVariantDisplaySelection,
     routeData.effectiveSelectedCondition,
-    null
+    null,
+    routeData.routeOfferId
   );
   useTrackProductRouteViewed(routeData.product, effectivePrice);
 
   const selectedConditionOffer = !routeData.product?.has_variants
     ? findMatchingConditionOffer(
         routeData.product?.offers,
-        routeData.offerConditionKey
+        routeData.offerConditionKey,
+        routeData.routeOfferId
       )
     : null;
   const resolvedVariantPurchaseSelection =

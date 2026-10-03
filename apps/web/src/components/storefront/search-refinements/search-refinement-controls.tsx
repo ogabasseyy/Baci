@@ -5,7 +5,6 @@ import {
   getSearchQuickFilterGroups,
   getSearchRefinementChips,
   parseSearchRefinements,
-  SEARCH_SORT_OPTIONS,
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { ArrowDownUp, ChevronDown, SlidersHorizontal } from 'lucide-react';
@@ -24,6 +23,7 @@ import {
   SearchRefinementFields,
 } from './search-refinement-fields';
 import { SearchRefinementSheet } from './search-refinement-sheet';
+import { getSearchSortLabel, SearchSortSelect } from './search-sort-select';
 import { SearchToolbarReveal } from './search-toolbar-reveal';
 import { useDesktopRefinementDraft } from './use-desktop-refinement-draft';
 
@@ -134,12 +134,10 @@ export function SearchRefinementControls({
         brands: [...next.brands].sort(),
         categoryId: next.categoryId,
         condition: next.condition,
+        processor: next.processor,
       });
     }
   };
-  const selectedSort = SEARCH_SORT_OPTIONS.find(
-    (option) => option.value === criteria.sort
-  )?.label;
   const chips = getSearchRefinementChips(criteria, categories);
 
   return (
@@ -186,7 +184,9 @@ export function SearchRefinementControls({
             }}
           >
             <ArrowDownUp size={18} aria-hidden="true" />
-            <span className="truncate text-sm font-medium">{selectedSort}</span>
+            <span className="truncate text-sm font-medium">
+              {getSearchSortLabel(criteria.sort)}
+            </span>
           </button>
           <button
             type="button"
@@ -198,30 +198,11 @@ export function SearchRefinementControls({
             Filters{chips.length ? ` (${chips.length})` : ''}
           </button>
         </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3 lg:mt-5">
-          <p className="hidden text-sm lg:block">
-            {pending ? 'Updating results…' : `Sort: ${selectedSort}`}
-          </p>
-          <label className="hidden lg:block">
-            Sort by{' '}
-            <select
-              aria-label="Sort by"
-              value={criteria.sort}
-              onChange={(e) =>
-                commit({
-                  ...criteria,
-                  sort: e.target.value as SearchRefinements['sort'],
-                })
-              }
-            >
-              {SEARCH_SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <SearchSortSelect
+          sort={criteria.sort}
+          pending={pending}
+          onSortChange={(sort) => commit({ ...criteria, sort })}
+        />
         {(chips.length > 0 || invalidFilters) && (
           <fieldset
             aria-label="Applied filters"

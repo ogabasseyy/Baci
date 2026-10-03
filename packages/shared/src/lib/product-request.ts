@@ -15,7 +15,8 @@ export const productRequestSchema = z
       .refine(
         (value) =>
           /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ||
-          /^\+?[\d ()-]{7,25}$/.test(value),
+          (/^\+?[\d ()-]{7,25}$/.test(value) &&
+            value.replace(/\D/g, '').length >= 7),
         'Enter an email address or phone number.'
       ),
     requestId: z.string().uuid(),
@@ -28,21 +29,36 @@ export const productRequestSchema = z
   })
   .strict();
 export type ProductRequest = z.infer<typeof productRequestSchema>;
-export async function sendProductRequest(
-  client: {
-    rpc: (
-      name: string,
-      args: Record<string, string>
-    ) => PromiseLike<{ error: unknown }>;
-  },
+export class ProductRequestSubmitError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+// Submits through POST /api/storefront/product-requests. The submit RPC is
+// service-role only, so callers must never invoke it directly: the API route
+// adds a trusted per-IP network gate in front of the DB budgets.
+export async function submitProductRequest(
+  endpoint: string,
   input: ProductRequest
 ): Promise<void> {
   const request = productRequestSchema.parse(input);
-  const { error } = await client.rpc('submit_storefront_product_request', {
-    p_query: request.query,
-    p_contact: request.contact,
-    p_request_id: request.requestId,
-    p_merchant_slug: request.merchantSlug,
-  });
-  if (error) throw new Error('Couldn’t send your request. Please try again.');
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new Error('Couldn’t send your request. Please try again.');
+  }
+  if (response.ok) return;
+  if (response.status === 429)
+    throw new ProductRequestSubmitError(
+      429,
+      'Too many requests. Please try again later.'
+    );
+  throw new Error('Couldn’t send your request. Please try again.');
 }

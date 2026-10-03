@@ -23,7 +23,8 @@ DECLARE v_merchant uuid; v_existing public.storefront_product_requests; v_query 
 BEGIN
   IF p_request_id IS NULL OR v_query IS NULL OR char_length(v_query) NOT BETWEEN 2 AND 120 OR v_query !~ '[[:alnum:]]'
     OR v_contact IS NULL OR char_length(v_contact) NOT BETWEEN 5 AND 160
-    OR NOT (v_contact ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' OR v_contact ~ '^\+?[0-9 ()-]{7,25}$') THEN
+    OR NOT (v_contact ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+      OR (v_contact ~ '^\+?[0-9 ()-]{7,25}$' AND char_length(regexp_replace(v_contact, '[^0-9]', '', 'g')) >= 7)) THEN
     RAISE EXCEPTION 'Invalid product request' USING ERRCODE = '22023';
   END IF;
   SELECT id INTO v_merchant FROM public.merchants WHERE slug = p_merchant_slug AND is_published = true AND user_id IS NOT NULL;
@@ -42,10 +43,17 @@ BEGIN
   END IF;
   INSERT INTO public.storefront_product_requests(id, merchant_id, query, contact) VALUES (p_request_id, v_merchant, v_query, v_contact);
 END; $$;
-REVOKE ALL ON FUNCTION public.submit_storefront_product_request(text,text,text,uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.submit_storefront_product_request(text,text,text,uuid) TO anon, authenticated;
+-- Intake is service-role only: all callers go through POST
+-- /api/storefront/product-requests, which adds Zod validation and a trusted
+-- per-IP network gate (see rate-limit-routes) in front of these DB budgets.
+REVOKE ALL ON FUNCTION public.submit_storefront_product_request(text,text,text,uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_storefront_product_request(text,text,text,uuid) TO service_role;
 
 -- Trusted DB worker delivers durable inbox rows; customer calls cannot mutate platform notifications.
+-- Retention policy: delivery copies the query and contact into the merchant's
+-- notification row, and notification_id is ON DELETE SET NULL, so deleting a
+-- request row does not erase the merchant inbox/audit copy. The intake forms
+-- disclose this before submission.
 CREATE FUNCTION private.deliver_storefront_product_requests()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_request record; v_notification uuid; v_count integer := 0;

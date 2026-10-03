@@ -165,8 +165,31 @@ export const V2ComparisonProvider: React.FC<{
     );
   };
 
+  // Pre-hydration read without state updates: isInCompare runs during card
+  // renders, where hydrateComparisonItems()' setState calls would warn.
+  // The scheduled hydration effect still syncs state afterwards.
+  const readStoredComparisonItems = (): Product[] | null => {
+    if (typeof window === 'undefined') return null;
+    if (
+      hasHydratedStorageRef.current &&
+      hydratedStorageKeyRef.current === storageKey
+    )
+      return null;
+    const stored = sessionStorage.getItem(storageKey);
+    if (!stored) return [];
+    try {
+      const parsed: unknown = JSON.parse(stored);
+      return Array.isArray(parsed) ? (parsed as Product[]) : [];
+    } catch {
+      return [];
+    }
+  };
+
   const isInCompare = (productId: number | string) => {
-    return compareItems.some((p) => String(p.id) === String(productId));
+    const stored = readStoredComparisonItems();
+    return (stored ?? compareItems).some(
+      (p) => String(p.id) === String(productId)
+    );
   };
 
   const clearCompare = () => {

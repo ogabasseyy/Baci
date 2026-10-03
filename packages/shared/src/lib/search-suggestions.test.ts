@@ -34,4 +34,12 @@ describe('catalog search suggestions', () => {
       ])
     ).toEqual([]);
   });
+  it('recognizes catalog condition aliases via canonical mapping', () => {
+    expect(
+      buildCatalogSearchSuggestions('iphone', 'iphone', [
+        { price: 250000, condition: 'uk_used' },
+        { price: 400000, condition: 'refurbished' },
+      ]).map((s) => s.label)
+    ).toEqual(['Used iphone', 'Open-box iphone', 'iphone up to ₦300,000']);
+  });
 });

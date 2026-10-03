@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from './product-condition';
 import { buildProductSearchQuery } from './product-search';
 import type { SearchAssistanceProposal } from './shopping-assistance';
 
@@ -26,7 +27,16 @@ export function buildCatalogSearchSuggestions(
     return [];
   const suggestions: SearchSuggestion[] = [];
   for (const condition of ['used', 'new', 'open_box'] as const) {
-    if (!products.some((product) => product.condition === condition)) continue;
+    // The RPC returns raw matched conditions including catalog aliases
+    // (uk_used, refurbished); canonicalize before comparing so aliased
+    // rows still surface their Used / Open-box suggestion.
+    if (
+      !products.some(
+        (product) =>
+          normalizeCanonicalProductCondition(product.condition) === condition
+      )
+    )
+      continue;
     const prefix =
       condition === 'open_box'
         ? 'Open-box'

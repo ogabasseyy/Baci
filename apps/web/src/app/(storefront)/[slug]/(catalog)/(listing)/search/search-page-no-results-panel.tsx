@@ -6,6 +6,7 @@ interface SearchPageNoResultsPanelProps {
   allProductsHref: string;
   contactHref: string;
   searchQuery: string;
+  hasActiveRefinements?: boolean;
   merchantSlug?: string;
 }
 
@@ -13,6 +14,7 @@ export function SearchPageNoResultsPanel({
   allProductsHref,
   contactHref,
   searchQuery,
+  hasActiveRefinements = false,
   merchantSlug,
 }: SearchPageNoResultsPanelProps) {
   return (
@@ -23,7 +25,7 @@ export function SearchPageNoResultsPanel({
       <p className="mt-2 text-sm text-store-background-text/55">
         We could not find any products matching “{searchQuery}”.
       </p>
-      {merchantSlug && (
+      {merchantSlug && !hasActiveRefinements && (
         <ProductRequest
           key={searchQuery}
           query={searchQuery}

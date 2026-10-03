@@ -1,4 +1,8 @@
-import { sendProductRequest } from '@baci/shared/lib';
+import {
+  ProductRequestSubmitError,
+  submitProductRequest,
+} from '@baci/shared/lib';
+import Constants from 'expo-constants';
 import { randomUUID } from 'expo-crypto';
 import { useRef, useState } from 'react';
 import {
@@ -14,7 +18,11 @@ import {
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import type Colors from '@/constants/Colors';
 import { MERCHANT_SLUG } from '@/hooks/product-utils';
-import { supabase } from '@/lib/supabase';
+import { resolveApiBaseUrl } from '@/lib/api-url';
+
+const PRODUCT_REQUESTS_ENDPOINT = `${resolveApiBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL || Constants.expoConfig?.extra?.apiUrl
+)}/api/storefront/product-requests`;
 export default function ProductRequest({
   query,
   colors,
@@ -40,7 +48,7 @@ export default function ProductRequest({
     if (request.current.key !== key)
       request.current = { key, id: randomUUID() };
     try {
-      await sendProductRequest(supabase, {
+      await submitProductRequest(PRODUCT_REQUESTS_ENDPOINT, {
         query: product,
         contact,
         merchantSlug: MERCHANT_SLUG,
@@ -49,9 +57,11 @@ export default function ProductRequest({
       setSent(true);
       setOpen(false);
       Keyboard.dismiss();
-    } catch {
+    } catch (error) {
       setError(
-        'Couldn’t send. Check the product name and email or phone number, then try again.'
+        error instanceof ProductRequestSubmitError && error.status === 429
+          ? 'Too many requests. Please try again later.'
+          : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {
       sending.current = false;
@@ -120,7 +130,8 @@ export default function ProductRequest({
               </Text>
               <Text style={{ color: colors.textSecondary }}>
                 Share what you need and how the store can contact you. This is a
-                request, not an order.
+                request, not an order. Your request and contact details stay in
+                the store’s inbox so the merchant can follow up.
               </Text>
               <TextInput
                 accessibilityLabel="Requested product"

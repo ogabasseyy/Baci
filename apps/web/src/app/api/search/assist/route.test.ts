@@ -8,7 +8,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
   resolveAgenticChatTenant: mocks.tenant,
 }));
-vi.mock('@/ai/provider', () => ({ checkRateLimit: mocks.limit }));
+vi.mock('@/lib/rate-limiter', () => ({ checkRateLimit: mocks.limit }));
+vi.mock('@/lib/supabase/service', () => ({
+  createServiceClient: () => ({}),
+}));
 vi.mock('@/ai/generate-text-with-chain', () => ({
   generateTextWithChain: mocks.generate,
 }));
@@ -29,7 +32,7 @@ const input = {
 beforeEach(() => {
   vi.stubEnv('STOREFRONT_SEARCH_ASSIST_ENABLED', 'true');
   mocks.tenant.mockReset().mockResolvedValue({ merchantId: 'm1' });
-  mocks.limit.mockReset().mockReturnValue({ allowed: true });
+  mocks.limit.mockReset().mockResolvedValue(true);
   mocks.generate.mockReset().mockResolvedValue({
     text: JSON.stringify({
       query: 'iphone',
@@ -66,8 +69,15 @@ describe('assisted search', () => {
     expect(mocks.generate).not.toHaveBeenCalled();
   });
   it('bounds rate and fails invalid model output safely', async () => {
-    mocks.limit.mockReturnValueOnce({ allowed: false });
+    mocks.limit.mockResolvedValueOnce(false);
     expect((await POST(request(input))).status).toBe(429);
+    expect(mocks.limit).toHaveBeenCalledWith(
+      {},
+      'm1',
+      'search_assist_tenant',
+      60,
+      1
+    );
     mocks.generate.mockResolvedValue({ text: '{"action":"pay"}' });
     const frames = (await (await POST(request(input))).text())
       .trim()

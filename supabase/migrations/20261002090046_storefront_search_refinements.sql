@@ -30,17 +30,17 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   WHERE v.tracking = 'serialized_then_unlimited'
      OR (v.tracking = 'serialized_strict' AND EXISTS (SELECT 1 FROM serialized s WHERE s.variant_id = v.id AND s.public_available_units > 0))
      OR (v.tracking NOT IN ('serialized_strict', 'serialized_then_unlimited')
-         AND (p.manage_stock IS NOT TRUE OR COALESCE(v.stock_quantity, CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END) > 0))
+         AND (p.manage_stock IS FALSE OR COALESCE(v.stock_quantity, CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END) > 0))
   UNION ALL
   SELECT NULL::uuid, o.id, o.condition, o.price FROM parent p CROSS JOIN offers o
-  WHERE NOT EXISTS (SELECT 1 FROM variants) AND (p.manage_stock IS NOT TRUE OR o.stock_quantity > 0)
+  WHERE NOT EXISTS (SELECT 1 FROM variants) AND (p.manage_stock IS FALSE OR COALESCE(o.stock_quantity, 0) > 0)
   UNION ALL
   SELECT NULL::uuid, NULL::uuid, COALESCE(p.condition, 'new'), p.price FROM parent p
   WHERE NOT EXISTS (SELECT 1 FROM variants) AND p.has_condition_offers IS NOT TRUE
     AND (p.inventory_tracking_policy = 'serialized_then_unlimited'
       OR (p.inventory_tracking_policy = 'serialized_strict' AND EXISTS (SELECT 1 FROM serialized s WHERE s.variant_id IS NULL AND s.public_available_units > 0))
       OR (COALESCE(p.inventory_tracking_policy, 'legacy') NOT IN ('serialized_strict', 'serialized_then_unlimited')
-        AND (p.manage_stock IS NOT TRUE OR CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END > 0)));
+        AND (p.manage_stock IS FALSE OR CASE WHEN COALESCE(p.stock_quantity,0)=0 AND COALESCE(p.stock,0)>0 THEN p.stock ELSE COALESCE(p.stock_quantity,p.stock,0) END > 0)));
 $$;
 REVOKE ALL ON FUNCTION public.get_storefront_search_price_options(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_storefront_search_price_options(uuid, uuid) TO anon, authenticated;
@@ -139,7 +139,7 @@ BEGIN
         END
         + coalesce(ts_rank_cd(fp.search_vector, search_terms), 0) * 4.0
         + CASE
-          WHEN coalesce(fp.manage_stock, false) = false
+          WHEN fp.manage_stock IS FALSE
             OR coalesce(fp.stock_quantity, 0) > 0 THEN 0.12
           ELSE 0
         END

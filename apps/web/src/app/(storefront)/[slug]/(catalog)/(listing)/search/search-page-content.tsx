@@ -1,6 +1,7 @@
 import {
   buildRefinedSearchHref,
   emptySearchRefinements,
+  hasActiveSearchRefinements,
 } from '@baci/shared/lib';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -269,6 +270,9 @@ export async function SearchPageContent({
                       allProductsHref={allProductsHref}
                       contactHref={contactHref}
                       searchQuery={searchQuery}
+                      hasActiveRefinements={hasActiveSearchRefinements(
+                        refinements
+                      )}
                     />
                   )
                 ) : (

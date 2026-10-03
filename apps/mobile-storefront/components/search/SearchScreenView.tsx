@@ -2,11 +2,8 @@ import type {
   SearchAssistanceProposal,
   SearchRefinements,
 } from '@baci/shared/lib';
-import Ionicons, {
-  type IoniconsIconName,
-} from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -18,25 +15,12 @@ import { useSearchToolbarVisibility } from '@/hooks/use-search-toolbar-visibilit
 import type { Category, Product } from '@/types/product';
 import { SearchRefinementControls } from './refinements/SearchRefinementControls';
 import SearchAssistance from './SearchAssistance';
-import { SearchShoppingActions } from './SearchComparisonControls';
 import { SearchComparisonSession } from './SearchComparisonSession';
-import SearchLoadingCards from './SearchLoadingCards';
-import SearchResultsEmptyState from './SearchResultsEmptyState';
-import SearchResultsErrorState from './SearchResultsErrorState';
 import SearchResultsHeader from './SearchResultsHeader';
-import SearchResultsList from './SearchResultsList';
+import SearchScreenBody from './SearchScreenBody';
+import { SearchScreenTopBar } from './SearchScreenTopBar';
 import { SearchToolbarReveal } from './SearchToolbarReveal';
 import styles from './search-screen.styles';
-
-const CATEGORY_ICONS: Record<string, IoniconsIconName> = {
-  phones: 'phone-portrait-outline',
-  gaming: 'game-controller-outline',
-  accessories: 'headset-outline',
-  laptops: 'laptop-outline',
-  audio: 'musical-notes-outline',
-  tablets: 'tablet-portrait-outline',
-  smartwatches: 'watch-outline',
-};
 
 interface SearchScreenViewProps {
   processors?: string[];
@@ -179,147 +163,6 @@ export default function SearchScreenView({
       !!searchError ||
       !!invalidFilters
   );
-  const renderResults = () => {
-    if (invalidFilters)
-      return (
-        <View style={styles.loadingContainer}>
-          <Text accessibilityRole="alert" style={{ color: colors.text }}>
-            Invalid filters. Edit or clear filters to continue.
-          </Text>
-        </View>
-      );
-    if (!isOnline) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="cloud-offline-outline"
-            size={64}
-            color={colors.textSecondary}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            You're offline
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Connect to the internet to search products
-          </Text>
-        </View>
-      );
-    }
-
-    if (isLoading) return <SearchLoadingCards colors={colors} />;
-
-    // A failed search is never reported as "no results": it keeps the retry
-    // path and the query input visible instead. When earlier pages already
-    // loaded, the list stays visible and the failure surfaces as a footer.
-    if (searchError && products.length === 0) {
-      return (
-        <SearchResultsErrorState
-          colors={colors}
-          committedQuery={committedQuery}
-          isRetrying={isRetrying}
-          onCategoryPress={onCategoryPress}
-          onRetry={onRetry}
-        />
-      );
-    }
-
-    if (products.length === 0) {
-      return (
-        <SearchResultsEmptyState
-          categories={categories}
-          colors={colors}
-          committedQuery={committedQuery}
-          onCategoryPress={onCategoryPress}
-        />
-      );
-    }
-
-    // Result-set identity: remounts the list whenever the committed
-    // query or any refinement changes. Without this, a cached query B
-    // renders in the same FlashList instance (isLoading stays false) and
-    // inherits A's scroll offset — landing the shopper mid-list, where a
-    // retained near-end position can immediately fire onEndReached and
-    // load page two. Returning from a product keeps the identity (and
-    // the scroll position) because neither side changes.
-
-    return (
-      <SearchResultsList
-        bottomSpace={
-          isKeyboardVisible
-            ? keyboardHeight + 100
-            : Math.max(100 + insets.bottom, bottomSpace)
-        }
-        colors={colors}
-        committedQuery={committedQuery}
-        isLoadingMore={isLoadingMore}
-        isNextPageError={isNextPageError}
-        isRetrying={isRetrying}
-        listError={searchError}
-        onEndReached={onEndReached}
-        onProductPress={onProductPress}
-        onRetry={onRetry}
-        onRetryNextPage={onRetryNextPage}
-        products={products}
-        resultsKey={resultsKey}
-        totalCount={totalCount}
-        onScroll={toolbar.onScroll}
-      />
-    );
-  };
-
-  const renderSuggestions = () => (
-    <View style={styles.suggestionsContainer}>
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Recent Searches
-        </Text>
-        <View style={styles.recentList}>
-          {recentSearches.map((search) => (
-            <Pressable
-              key={`${search}-${search.toLowerCase()}`}
-              style={[styles.recentItem, { borderBottomColor: colors.border }]}
-              onPress={() => onRecentSearch(search)}
-              accessibilityRole="button"
-              accessibilityLabel={`Recent search: ${search}`}
-            >
-              <Ionicons name="time-outline" size={16} color={colors.icon} />
-              <Text style={[styles.recentText, { color: colors.text }]}>
-                {search}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Popular Categories
-        </Text>
-        <View style={styles.categoriesGrid}>
-          {categories.slice(0, 4).map((category) => (
-            <Pressable
-              key={category.slug}
-              style={[
-                styles.categoryCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-              onPress={() => onCategoryPress(category.slug)}
-              accessibilityRole="button"
-              accessibilityLabel={`Category: ${category.name}`}
-            >
-              <Ionicons
-                name={CATEGORY_ICONS[category.slug] || 'cube-outline'}
-                size={24}
-                color={colors.primary}
-              />
-              <Text style={[styles.categoryName, { color: colors.text }]}>
-                {category.name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
 
   return (
     <SearchComparisonSession scope={committedQuery}>
@@ -331,35 +174,11 @@ export default function SearchScreenView({
             setViewportHeight(event.nativeEvent.layout.height);
         }}
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 16,
-          }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            onPress={onBack}
-            style={{
-              minHeight: 48,
-              minWidth: 48,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <SearchShoppingActions
-              colors={colors}
-              showComparison={
-                hasSearchQuery && products.length > 0 && !searchError
-              }
-            />
-          </View>
-        </View>
+        <SearchScreenTopBar
+          colors={colors}
+          onBack={onBack}
+          showComparison={hasSearchQuery && products.length > 0 && !searchError}
+        />
         <SearchResultsHeader
           suggestions={
             isKeyboardVisible &&
@@ -433,7 +252,35 @@ export default function SearchScreenView({
               />
             ))}
         </SearchToolbarReveal>
-        {hasSearchQuery ? renderResults() : renderSuggestions()}
+        <SearchScreenBody
+          bottomSpace={bottomSpace}
+          categories={categories}
+          colors={colors}
+          committedQuery={committedQuery}
+          hasSearchQuery={hasSearchQuery}
+          insetsBottom={insets.bottom}
+          invalidFilters={invalidFilters}
+          isKeyboardVisible={isKeyboardVisible}
+          isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
+          isNextPageError={isNextPageError}
+          isOnline={isOnline}
+          isRetrying={isRetrying}
+          keyboardHeight={keyboardHeight}
+          onCategoryPress={onCategoryPress}
+          onEndReached={onEndReached}
+          onProductPress={onProductPress}
+          onRecentSearch={onRecentSearch}
+          onRetry={onRetry}
+          onRetryNextPage={onRetryNextPage}
+          onScroll={toolbar.onScroll}
+          products={products}
+          recentSearches={recentSearches}
+          refinements={refinements}
+          resultsKey={resultsKey}
+          searchError={searchError}
+          totalCount={totalCount}
+        />
       </SafeAreaView>
     </SearchComparisonSession>
   );

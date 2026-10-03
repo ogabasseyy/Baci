@@ -9,6 +9,7 @@ interface SearchResultsEmptyStateProps {
   categories: Category[];
   colors: (typeof Colors)['light'];
   committedQuery: string;
+  hasActiveRefinements?: boolean;
   onCategoryPress: (slug: string) => void;
 }
 
@@ -16,6 +17,7 @@ export default function SearchResultsEmptyState({
   categories,
   colors,
   committedQuery,
+  hasActiveRefinements = false,
   onCategoryPress,
 }: SearchResultsEmptyStateProps) {
   return (
@@ -29,7 +31,7 @@ export default function SearchResultsEmptyState({
           ? `No products match “${committedQuery}”. Try a different spelling or browse a category.`
           : 'Try searching for something else'}
       </Text>
-      {committedQuery.trim().length >= 2 && (
+      {committedQuery.trim().length >= 2 && !hasActiveRefinements && (
         <ProductRequest
           key={committedQuery}
           query={committedQuery}

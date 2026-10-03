@@ -46,8 +46,17 @@ it('explains the existing three-product limit without replacing a selection', ()
   expect(mockToggle).not.toHaveBeenCalled();
   expect(alert).toHaveBeenCalledWith(
     'Comparison full',
-    'Remove one product before adding another. You can compare up to 3 products.'
+    'Remove one product before adding another. You can compare up to 3 products.',
+    expect.arrayContaining([
+      expect.objectContaining({ text: 'View comparison' }),
+    ])
   );
+  const buttons = alert.mock.calls[0][2] as {
+    text: string;
+    onPress?: () => void;
+  }[];
+  buttons.find((button) => button.text === 'View comparison')?.onPress?.();
+  expect(mockPush).toHaveBeenCalledWith('/compare');
   alert.mockRestore();
 });
 

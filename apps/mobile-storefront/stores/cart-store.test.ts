@@ -1,5 +1,16 @@
 import { jest } from '@jest/globals';
 
+const mockMerchantSlug: { current: string | undefined } = {
+  current: undefined,
+};
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    get MERCHANT_SLUG() {
+      return mockMerchantSlug.current;
+    },
+  },
+}));
+
 jest.mock('../lib/storage', () => ({
   syncStorage: {
     getItem: jest.fn(() => null),
@@ -64,6 +75,22 @@ describe('cart-store', () => {
       hasAssurance: false,
     });
     expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+  });
+
+  it('keeps assurance opt-in for non-Ogabassey merchants', () => {
+    mockMerchantSlug.current = 'other-store';
+    try {
+      useCartStore.getState().addItem({
+        product_id: 'other-store-phone',
+        slug: 'other-store-phone',
+        name: 'Phone',
+        price: 100000,
+        quantity: 1,
+      });
+      expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+    } finally {
+      mockMerchantSlug.current = undefined;
+    }
   });
 
   it('refreshes image and variant metadata when the same cart line is added again', () => {

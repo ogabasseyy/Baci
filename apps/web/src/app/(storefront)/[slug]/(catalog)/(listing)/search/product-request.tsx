@@ -1,7 +1,9 @@
 'use client';
-import { sendProductRequest } from '@baci/shared/lib';
+import {
+  ProductRequestSubmitError,
+  submitProductRequest,
+} from '@baci/shared/lib';
 import { useRef, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 export function ProductRequest({
   query,
   merchantSlug,
@@ -26,7 +28,7 @@ export function ProductRequest({
     if (key !== request.current.key)
       request.current = { key, id: crypto.randomUUID() };
     try {
-      await sendProductRequest(createClient(), {
+      await submitProductRequest('/api/storefront/product-requests', {
         query: product,
         contact,
         merchantSlug,
@@ -34,9 +36,11 @@ export function ProductRequest({
       });
       setSent(true);
       setOpen(false);
-    } catch {
+    } catch (error) {
       setError(
-        'Couldn’t send. Check the product name and email or phone number, then try again.'
+        error instanceof ProductRequestSubmitError && error.status === 429
+          ? 'Too many requests. Please try again later.'
+          : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {
       sending.current = false;
@@ -70,7 +74,8 @@ export function ProductRequest({
           <h3 className="font-semibold">Request a product</h3>
           <p className="text-sm">
             Share what you need and how the store can contact you. This is a
-            request, not an order.
+            request, not an order. Your request and contact details stay in the
+            store’s inbox so the merchant can follow up.
           </p>
           <label className="block">
             Requested product

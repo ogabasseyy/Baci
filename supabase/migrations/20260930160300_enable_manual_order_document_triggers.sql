@@ -15,6 +15,7 @@ ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_ite
 ALTER TABLE public.order_items ENABLE TRIGGER enqueue_manual_documents_after_item_deletes;
 ALTER TABLE public.orders ENABLE TRIGGER enqueue_manual_document_after_order_update;
 ALTER TABLE public.merchants ENABLE TRIGGER rearm_manual_documents_after_merchant_update;
+ALTER TABLE public.customers ENABLE TRIGGER rearm_manual_documents_after_customer_restore;
 ALTER TABLE public.order_tax_subtotals ENABLE TRIGGER reset_manual_markers_after_tax_write;
 ALTER TABLE public.transactions ENABLE TRIGGER reset_manual_markers_after_transaction_write;
 ALTER TABLE public.order_payment_accounts ENABLE TRIGGER reset_manual_markers_after_payment_account_write;

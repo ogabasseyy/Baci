@@ -164,6 +164,73 @@ describe('useReceipts', () => {
     ]);
   });
 
+  it('projects the promoted kind for covered manual balances', async () => {
+    const { useReceipts } = await import('@/hooks/use-receipts');
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          shipping_status: 'processing',
+          recorded_by_user_id: 'staff-1',
+          import_job_id: null,
+          external_source: null,
+          total: 500,
+          subtotal: 500,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          amount_paid: 500,
+          currency: 'NGN',
+          created_at: '2026-07-08T12:33:00.000Z',
+          order_items: [
+            { id: 'item-1', name: 'Phone', quantity: 1, price: 500 },
+          ],
+        },
+        {
+          id: 'order-2',
+          order_number: 'ORD-2',
+          payment_status: 'pending',
+          shipping_status: 'processing',
+          recorded_by_user_id: null,
+          import_job_id: null,
+          external_source: null,
+          total: 500,
+          subtotal: 500,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          amount_paid: 0,
+          currency: 'NGN',
+          created_at: '2026-07-08T12:33:00.000Z',
+          order_items: [
+            { id: 'item-2', name: 'Cable', quantity: 1, price: 500 },
+          ],
+        },
+      ],
+      error: null,
+    });
+
+    function Probe() {
+      useReceipts('auth-user-1');
+      return <View testID="probe" />;
+    }
+
+    render(<Probe />);
+    const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const receipts = (await options.queryFn()) as Array<{
+      document_kind: string;
+    }>;
+
+    // The covered manual row opens a receipt in the preview, so the list
+    // must badge it receipt — never "View Invoice" into a receipt.
+    expect(receipts.map((row) => row.document_kind)).toEqual([
+      'receipt',
+      'invoice',
+    ]);
+  });
+
   it('files a backdated invoice by its issue date, not its transaction date', async () => {
     const { useReceipts } = await import('@/hooks/use-receipts');
     mockOrder.mockResolvedValue({

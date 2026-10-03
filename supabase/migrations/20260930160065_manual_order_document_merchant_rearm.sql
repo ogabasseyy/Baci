@@ -9,6 +9,8 @@
 
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_bank_changed boolean;
 BEGIN
   -- Completing a merchant profile (slug, VAT rate) re-arms rows the worker
   -- terminally skipped as merchant_validation_failed: only order and item
@@ -29,7 +31,15 @@ BEGIN
   -- A snapshot-relevant merchant edit landing mid-dispatch resets every
   -- processing marker so the lease check aborts instead of recording a
   -- stale document as sent. Rendered branding (logo, colors) and the
-  -- From display name invalidate alongside issuer/contact/payment fields.
+  -- From display name invalidate alongside issuer/contact fields. Bank
+  -- fields reset invoice markers only: receipts render no payment
+  -- instructions and the dispatch RPC compares none for them, so a
+  -- bank edit must not park an in-flight receipt as stale.
+  v_bank_changed :=
+    OLD.bank_code IS DISTINCT FROM NEW.bank_code
+    OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
+    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
+    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name;
   IF OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
@@ -42,10 +52,6 @@ BEGIN
     OR OLD.support_email IS DISTINCT FROM NEW.support_email
     OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
     OR OLD.phone IS DISTINCT FROM NEW.phone
-    OR OLD.bank_code IS DISTINCT FROM NEW.bank_code
-    OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
-    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
-    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name
     OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
     OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
     OR OLD.brand_colors IS DISTINCT FROM NEW.brand_colors
@@ -54,6 +60,12 @@ BEGIN
     SET dispatch_started_at = NULL, updated_at = now()
     WHERE n.merchant_id = NEW.id
       AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+  ELSIF v_bank_changed THEN
+    UPDATE public.order_notification_outbox AS n
+    SET dispatch_started_at = NULL, updated_at = now()
+    WHERE n.merchant_id = NEW.id
+      AND n.event_type = 'manual_order_invoice'
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   END IF;
   RETURN NEW;
@@ -67,3 +79,37 @@ CREATE TRIGGER rearm_manual_documents_after_merchant_update
 
 -- Ship disabled like the 60000 triggers; 60300 enables post-deploy.
 ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_merchant_update;
+CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_customer_restore()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- Restoring a soft-deleted customer (clearing deleted_at) re-arms rows
+  -- the worker terminally skipped as document_claim_unavailable: the
+  -- claim gates on a live customers row, so without this a restored
+  -- document is permanently lost. Other skip reasons keep their own
+  -- re-arm paths; sent and possibly-dispatched rows stay terminal. The
+  -- worker re-validates the claim on the next attempt, so a still-broken
+  -- link simply skips again.
+  IF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN
+    UPDATE public.order_notification_outbox AS n
+    SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+      locked_by = NULL, locked_at = NULL, last_error = NULL,
+      skip_reason = NULL, skipped_at = NULL, updated_at = now()
+    FROM public.orders AS o
+    WHERE o.customer_id = NEW.id
+      AND o.merchant_id = NEW.merchant_id
+      AND n.order_id = o.id
+      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'skipped'
+      AND n.skip_reason = 'document_claim_unavailable'
+      AND n.dispatch_started_at IS NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.rearm_manual_documents_after_customer_restore()
+  FROM PUBLIC, anon, authenticated;
+CREATE TRIGGER rearm_manual_documents_after_customer_restore
+  AFTER UPDATE ON public.customers
+  FOR EACH ROW EXECUTE FUNCTION private.rearm_manual_documents_after_customer_restore();
+-- Ship disabled like the merchant trigger; 60300 enables post-deploy.
+ALTER TABLE public.customers DISABLE TRIGGER rearm_manual_documents_after_customer_restore;

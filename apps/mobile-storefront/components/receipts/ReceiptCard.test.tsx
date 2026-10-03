@@ -55,6 +55,38 @@ const receiptItem: ReceiptListItem = {
 };
 
 describe('ReceiptCard', () => {
+  it('badges a covered manual balance as a receipt under a non-paid label', () => {
+    // The preview promotes covered manual balances to receipts, so the
+    // card must agree — never "View Invoice" into a receipt artifact.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'pending',
+          document_kind: 'receipt',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Receipt')).toBeTruthy();
+    expect(screen.getByText('View Receipt')).toBeTruthy();
+    expect(screen.getByText('Paid')).toBeTruthy();
+  });
+
+  it('falls back to the raw status when the effective kind is absent', () => {
+    render(
+      <ReceiptCard
+        item={{ ...receiptItem, payment_status: 'pending' }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+  });
+
   it('renders the receipt product title', () => {
     render(
       <ReceiptCard

@@ -55,11 +55,18 @@ describe('receipt detail covered-manual transaction failures', () => {
     mockOrderSingle.mockResolvedValue({
       data: {
         payment_status: 'pending',
+        shipping_status: 'processing',
         recorded_by_user_id: 'staff-1',
         import_job_id: null,
         external_source: null,
         total: 500,
+        subtotal: 500,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
         amount_paid: 500,
+        currency: 'NGN',
+        order_items: [{ name: 'Phone', quantity: 1, price: 500 }],
       },
       error: null,
     });
@@ -81,6 +88,42 @@ describe('receipt detail covered-manual transaction failures', () => {
         external_source: null,
         total: 500,
         amount_paid: 100,
+      },
+      error: null,
+    });
+    mockTransactionsRpc.mockResolvedValue({
+      data: null,
+      error: new Error('customer transaction lookup failed'),
+    });
+
+    const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
+    expect(detail.transactions).toEqual([]);
+  });
+
+  it.each([
+    ['cancelled', { shipping_status: 'cancelled' }],
+    ['unknown-status', { payment_status: 'on_hold' }],
+    ['content-invalid', { order_items: [] }],
+  ])('tolerates transaction lookup failures for covered-manual %s rows', async (_label, override) => {
+    // Fail-closed dating follows the preview promotion gate: a covered
+    // row that previews as an invoice resolves with empty history like
+    // any unpaid row instead of blocking the preview.
+    mockOrderSingle.mockResolvedValue({
+      data: {
+        payment_status: 'pending',
+        shipping_status: 'processing',
+        recorded_by_user_id: 'staff-1',
+        import_job_id: null,
+        external_source: null,
+        total: 500,
+        subtotal: 500,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 500,
+        currency: 'NGN',
+        order_items: [{ name: 'Phone', quantity: 1, price: 500 }],
+        ...override,
       },
       error: null,
     });

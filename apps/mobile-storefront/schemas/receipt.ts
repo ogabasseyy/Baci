@@ -77,15 +77,27 @@ export const ReceiptListItemSchema = z.object({
   id: z.string(),
   order_number: z.string(),
   payment_status: z.string(),
+  shipping_status: z.string().nullable().optional(),
   total: z.number(),
+  subtotal: z.number().nullable().optional(),
+  shipping_fee: z.number().nullable().optional(),
+  tax_amount: z.number().nullable().optional(),
+  discount_amount: z.number().nullable().optional(),
   amount_paid: z.number(),
   // Nullish like the detail schema: a null currency falls back to NGN at
   // display instead of failing list validation.
   currency: z.string().nullish(),
+  recorded_by_user_id: z.string().nullable().optional(),
+  import_job_id: z.string().nullable().optional(),
+  external_source: z.string().nullable().optional(),
   created_at: z.string(),
   transaction_date: z.string().nullable().optional(),
   invoice_issue_date: z.string().nullable().optional(),
   items: z.array(OrderItemSchema),
+  // Effective document kind behind the badge/action: a covered manual
+  // balance under a non-paid label opens a receipt, so the card must say
+  // receipt instead of "View Invoice".
+  document_kind: z.enum(['receipt', 'invoice']).optional(),
 });
 
 // ============================================

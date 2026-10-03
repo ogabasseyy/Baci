@@ -24,16 +24,21 @@
  * previously paid.
  */
 export function resolveInvoiceTypeCode(input: {
-  paymentMethod?: string | null;
+  paymentMethod?: unknown;
   isPaid: boolean;
   wasPaid?: boolean;
-  paymentStatus?: string | null;
+  paymentStatus?: unknown;
   amountPaid?: number | null;
-  storedTypeCode?: string | null;
+  storedTypeCode?: unknown;
 }): string {
-  const method = input.paymentMethod?.trim().toLowerCase();
-  const stored = input.storedTypeCode?.trim();
-  const status = input.paymentStatus?.trim().toLowerCase();
+  // Typeof-guarded trims: mobile detail fetches only warn on schema
+  // failure, so corrupt numeric markers reach here at runtime and must
+  // fail closed to undefined instead of throwing on .trim().
+  const cleanText = (value: unknown) =>
+    typeof value === 'string' ? value.trim() : undefined;
+  const method = cleanText(input.paymentMethod)?.toLowerCase();
+  const stored = cleanText(input.storedTypeCode);
+  const status = cleanText(input.paymentStatus)?.toLowerCase();
   const creditedAmount = Number(input.amountPaid ?? 0);
   const previouslyPaid =
     input.wasPaid ||

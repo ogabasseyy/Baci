@@ -108,6 +108,8 @@ describe('useReceiptPreview manual promotion', () => {
     ['null item entry', { items: [null] }],
     ['numeric provenance marker', { external_source: 7 }],
     ['numeric import marker', { import_job_id: 42 }],
+    ['numeric payment status', { payment_status: 7 }],
+    ['numeric shipping status', { shipping_status: 3 }],
   ])('fails closed without crashing on %s', (_label, override) => {
     // The warn-only fetch can hand back unvalidated shapes; corrupt rows
     // must preview as invoices, never crash the render.

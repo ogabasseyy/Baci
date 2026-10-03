@@ -199,8 +199,10 @@ describe('deploy promotion guards', () => {
       restoreIndex > promotionSource.indexOf('flip-immutable-checkout.sh'),
       'expected the restore on the flip-failure path'
     );
-    // Both legs converge: the backup is removed on success and after
-    // a restore, and a crashed run's residue is cleared up front.
+    // The backup is removed after a flip-failure restore, survives a
+    // successful promote (rollback_worker_release needs it if the
+    // post-flip record fails; deploy.sh removes it after a successful
+    // refresh), and a crashed run's residue is cleared up front.
     assert.match(promotionSource, /rm -rf "\$pre_promote_backup"/);
   });
 });

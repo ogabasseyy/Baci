@@ -172,10 +172,7 @@ test('exits 1 when the branch cannot be pushed', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /NOT recorded/);
   assert.match(result.stderr, /after 3 attempts/);
-  assert.match(
-    result.stderr,
-    new RegExp(`record_deploy_workflow_promote '${SHA}'`)
-  );
+  assert.match(result.stderr, /must not stay unrecorded/);
 });
 
 test('exits 1 when the run list cannot be fetched', () => {

@@ -157,10 +157,12 @@ quiesce_worker_release "$remote_dir" || exit 1
 # services against that mixed release. Entries that do not exist yet
 # (first deploy) are skipped on both legs; a snapshot failure refuses
 # the promote before anything is mutated. The backup sits BESIDE the
-# live dir (never inside the synced tree) and is removed on both the
-# success and the restore paths; a crashed run's residue is cleared
-# by the next promote before snapshotting (the deploy lock above
-# serializes promotes, so no live backup is ever clobbered).
+# live dir (never inside the synced tree). It SURVIVES a successful
+# promote: the post-flip overlap record may still fail, and
+# rollback_worker_release below restores this snapshot then. deploy.sh
+# removes it after a successful record; a crashed run's residue is
+# cleared by the next promote before snapshotting (the deploy lock
+# above serializes promotes, so no live backup is ever clobbered).
 pre_promote_backup="${remote_dir}.pre-promote-backup"
 rm -rf "$pre_promote_backup"
 mkdir -p "$pre_promote_backup"
@@ -194,6 +196,63 @@ if ! bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected
   fi
   rm -rf "$pre_promote_backup"
   exit 1
+fi
+# No snapshot cleanup on success: rollback_worker_release needs it if
+# the post-flip overlap record fails (deploy.sh removes it after a
+# successful record).
+REMOTE_SH
+}
+
+# Restores the pre-promote live tree after a failed post-flip overlap
+# record. Call ONLY from deploy.sh's record-failure branch, which runs
+# before the cron transition and the service/crontab installs: at that
+# point the promote is the sole live mutation, so restoring the
+# snapshot plus the checkout pointer returns the VPS to its exact
+# pre-deploy state — and the standing pre-flip record (which lists
+# every run in flight at flip time) is once again complete, so no
+# workflow can publish off stale reads. A missing snapshot fails
+# loudly: the operator follows the emergency rollback runbook.
+rollback_worker_release() {
+  echo "==> Rolling back the unrecorded worker promotion on $VPS:$REMOTE_DIR"
+  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR'" <<'REMOTE_SH'
+set -euo pipefail
+
+staging_dir="$1"
+remote_dir="$2"
+pre_promote_backup="${remote_dir}.pre-promote-backup"
+if [ ! -d "$pre_promote_backup" ]; then
+  echo "Rollback refused: no pre-promote snapshot at $pre_promote_backup; follow the emergency rollback runbook." >&2
+  exit 1
+fi
+
+# Same quiesce as promote (locks plus persistent services): ticks must
+# skip across the restore, and the EXIT trap restarts services after
+# the old tree is back — never against a half-restored mix.
+# shellcheck source=quiesce-worker-release.sh
+. "$staging_dir/lib/quiesce-worker-release.sh"
+quiesce_worker_release "$remote_dir" || exit 1
+
+for entry in bin jobs lib config node_modules; do
+  if [ -e "$pre_promote_backup/$entry" ]; then
+    rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
+  else
+    rm -rf "$remote_dir/$entry"
+  fi
+done
+if [ -e "$pre_promote_backup/app-checkout.sha" ]; then
+  cp "$pre_promote_backup/app-checkout.sha" "$remote_dir/app-checkout.sha"
+  # Flip the checkout pointer back: the old per-SHA worktree survives
+  # (promote GC keeps the previous release), so the standard flip —
+  # with its symlink verification — converges back exactly. A poll
+  # that launched against the new checkout keeps executing it (GC
+  # keeps the just-replaced target too); only new ticks see old code.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$(cat "$remote_dir/app-checkout.sha")"
+else
+  # First deploy (no previous tree): nothing to flip back to. Leave
+  # the .env and checkouts alone (the flip's one-time migration may
+  # have created app-live; the next deploy re-flips normally) — the
+  # worker is simply not installed, as before.
+  rm -f "$remote_dir/app-checkout.sha"
 fi
 rm -rf "$pre_promote_backup"
 REMOTE_SH

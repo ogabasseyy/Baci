@@ -128,6 +128,19 @@ bypass `BACI_DEPLOY_SKIP_INFLIGHT_CHECK=1`, then re-verify the latch):
 bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && check_deploy_workflow_inflight'
 ```
 
+Then write the pre-rollback overlap record, before touching anything
+(the same fail-closed gate as `deploy.sh`: if this fails — cannot
+list runs or push the ops branch — STOP, nothing is mutated yet). The
+post-rollback refresh below covers restore-window runs; if THAT fails,
+this record still stands and blocks every run in flight at restore
+time:
+
+```sh
+bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && record_deploy_workflow_promote "<full-sha>" pre'
+```
+
+(Use the rollback TARGET's full 40-hex SHA in both record commands.)
+
 Then, under the deploy lock with the GIGL runtime lock nested inside
 (promote's order), quiesce EVERY worker via the shared helper before
 touching the shared trees — this restore replaces `bin/`/`jobs/`/`lib/`
@@ -199,12 +212,13 @@ failure is safe, except the merge consumes the fragment — re-render
 it first if re-running past that point. Deleting the latch is
 required — it certified the newer revision, and without this a later
 non-tracking push would bypass on a stale proof while cron runs the
-old code. Record the rollback afterwards so the workflow's
-pre-publish overlap check sees it (same record as a promote, with
-the restored full 40-hex SHA — a deploy that started after the
-pre-rollback check reads post-rollback files and needs no warning,
-but one that was already in flight must refuse to publish off its
-pre-rollback latch/SHA read):
+old code. Refresh the overlap record afterwards so the workflow's
+pre-publish overlap check sees restore-window runs (same record as a
+promote, with the restored full 40-hex SHA). If this refresh fails,
+the pre-rollback record above still stands and blocks every run in
+flight at restore time — re-run the refresh once the record path
+works, then confirm no production deploy published off its
+pre-rollback latch/SHA read:
 
 ```sh
 bash -c '. vps-workers/lib/check-deploy-workflow-inflight.sh && record_deploy_workflow_promote "<full-sha>"'
@@ -245,9 +259,11 @@ API, in both directions:
   fail-closed gate (a broken record path refuses the promote before
   anything is mutated, so a promote can never land that no workflow
   can see) and immediately after as a refresh with flip-window runs.
-  If the refresh fails, the pre-flip record still stands and durably
-  blocks every run whose reads predate the flip; the deploy still
-  fails honestly because the overlap proof is degraded. The
+  If the refresh fails, the promotion is ROLLED BACK (tree + checkout
+  pointer + marker, from the promote snapshot) and the deploy exits
+  before the transition or any install runs — no unrecorded tree may
+  stay live, because a slow promote lets flip-window runs read
+  pre-flip state the standing pre-flip record cannot list. The
   workflow's last pre-publish step reads that file live and refuses
   to publish when its own run id is in the record — so even a run
   that was invisible to the pre-promote query cannot publish off a

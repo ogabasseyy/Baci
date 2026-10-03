@@ -8,7 +8,7 @@ const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CODEX_JOB_COUNT = 3;
 
 describe('remediation deploy crontab', () => {
-  it('installs the remediation lock handoff before full promotion', () => {
+  it('installs the remediation lock handoff after the recorded promotion', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const transitionScript = readFileSync(
       join(workerRoot, 'lib/install-remediation-cron-transition.sh'),
@@ -50,8 +50,13 @@ describe('remediation deploy crontab', () => {
     const finalCron = deployScript.indexOf(
       'Installing crontab entries on VPS (idempotent)'
     );
+    // The transition runs after the recorded promote (and its
+    // rollback-on-refresh-failure): promote's quiesce then sees only
+    // legacy entries — candidate ticks cannot exist mid-promote — and
+    // a refresh failure rolls back a tree the transition never touched.
     assert.ok(
-      transition > 0 && transition < promotion && promotion < finalCron
+      promotion > 0 && promotion < transition && transition < finalCron,
+      'expected promote, then the cron transition, then the final schedule'
     );
   });
 

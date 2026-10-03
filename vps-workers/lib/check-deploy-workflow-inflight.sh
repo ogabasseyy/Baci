@@ -34,10 +34,11 @@
 #   write is the fail-closed half: when the record path is broken
 #   (auth, network, permissions), the promote is refused before
 #   anything is mutated, so a promote can never land that no workflow
-#   can see. If the post-flip refresh fails, the pre-flip record still
-#   stands and durably blocks every run whose reads predate the flip;
-#   runs born later read post-flip state (or fail closed on a torn
-#   read via the latch marker-mismatch check). Run ids, not
+#   can see. If the post-flip refresh fails, deploy.sh rolls the
+#   promotion back (tree + checkout pointer + marker) and exits
+#   before any install runs — a slow promote lets flip-window runs
+#   read pre-flip state the standing pre-flip record cannot list, so
+#   no unrecorded tree may stay live. Run ids, not
 #   timestamps: no clocks, no TTL, no stale state — a record only ever
 #   matches live runs. The store is a branch (not an Actions variable)
 #   because GITHUB_TOKEN cannot be granted the Variables permission;
@@ -196,7 +197,7 @@ record_deploy_workflow_promote() {
       ;;
     post)
       record_refused="Worker promotion is NOT recorded"
-      record_aftermath="The promote already landed; re-run record_deploy_workflow_promote '$record_sha' once the cause is fixed, then confirm no production deploy published off the pre-promote latch/SHA."
+      record_aftermath="The promote already landed and must not stay unrecorded: deploy.sh rolls it back automatically, while a manual rollback operator must re-run this refresh once the cause is fixed. Then confirm no production deploy published off stale reads."
       ;;
     *)
       echo "Refusing to record worker promotion: unknown phase '$record_phase' (want 'pre' or 'post')." >&2

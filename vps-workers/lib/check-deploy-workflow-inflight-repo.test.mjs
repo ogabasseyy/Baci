@@ -103,23 +103,41 @@ test('deploy.sh checks for in-flight deploys before staging and before promote',
   // The overlap record is written TWICE: a bare pre-flip gate (a
   // broken record path refuses under set -e before anything is
   // mutated — a promote can never land that no workflow can see) and
-  // a captured post-flip refresh (a failed refresh completes the
-  // installs below, then fails honestly; the pre-flip record still
-  // stands and blocks every run in flight at flip time).
+  // a post-flip refresh that ROLLS BACK on failure (no unrecorded
+  // tree may stay live: a slow promote lets flip-window runs read
+  // pre-flip state the standing pre-flip record cannot list).
   assert.match(deploy, /^record_deploy_workflow_promote "\$APP_SHA" pre$/m);
-  assert.match(
-    deploy,
-    /^record_deploy_workflow_promote "\$APP_SHA" \|\| record_status=\$\?$/m
-  );
+  assert.match(deploy, /^record_deploy_workflow_promote "\$APP_SHA" \|\| \{$/m);
   const promoteIndex = deploy.indexOf('promote_worker_release');
   assert.ok(
     deploy.indexOf('record_deploy_workflow_promote "$APP_SHA" pre') <
       promoteIndex,
     'expected the fail-closed record gate before the flip'
   );
+  const refreshIndex = deploy.indexOf(
+    'record_deploy_workflow_promote "$APP_SHA" ||'
+  );
   assert.ok(
-    deploy.indexOf('record_deploy_workflow_promote "$APP_SHA" ||') >
-      promoteIndex,
+    refreshIndex > promoteIndex,
     'expected the record refresh after the flip'
+  );
+  // Refresh failure rolls back and exits before the cron transition
+  // or any install runs — never completes installs over an unrecorded
+  // tree.
+  const transitionIndex = deploy.indexOf('install_remediation_cron_transition');
+  const failureSlice = deploy.slice(refreshIndex, transitionIndex);
+  assert.ok(
+    failureSlice.includes('rollback_worker_release'),
+    'expected rollback on refresh failure'
+  );
+  assert.ok(failureSlice.includes('exit 1'), 'expected exit after rollback');
+  assert.doesNotMatch(
+    failureSlice,
+    /Installing crontab entries/,
+    'expected no installs between refresh failure and exit'
+  );
+  assert.ok(
+    transitionIndex > refreshIndex,
+    'expected the transition after the recorded promote'
   );
 });

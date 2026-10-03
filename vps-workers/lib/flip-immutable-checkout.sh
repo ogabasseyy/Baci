@@ -110,6 +110,14 @@ for old_checkout in "$checkout_base"/app-*; do
     continue
   fi
   if [ -n "$(find "$old_checkout" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
-    git -C "$immutable_dir" worktree remove --force "$old_checkout"
+    # Best-effort: GC is disk hygiene, not flip correctness — a locked
+    # or unremovable old worktree must not fail the flip (app-live is
+    # already repointed, so the caller would restore the tree against
+    # the new checkout: a mixed release over a cleanup hiccup). The
+    # residue is retried on the next flip; warn loudly so deploy logs
+    # surface a stuck removal before disk pressure bites.
+    if ! git -C "$immutable_dir" worktree remove --force "$old_checkout"; then
+      echo "WARNING: could not retire old checkout during GC (left for the next flip or manual removal): $old_checkout" >&2
+    fi
   fi
 done

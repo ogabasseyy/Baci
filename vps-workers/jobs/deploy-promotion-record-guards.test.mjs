@@ -32,40 +32,63 @@ describe('deploy promotion record guards', () => {
     }
   });
 
-  it('completes installation when the promote record fails', () => {
-    // deploy.sh runs under set -e with the record AFTER the flip: a
-    // bare record call would exit there, leaving the live tree
-    // without services or schedule. The record status is captured,
-    // every install completes, and the deploy fails honestly at the
-    // end (before the "Done" marker, so success is never printed on
-    // a failed deploy).
+  it('rolls back the promotion when the post-flip record fails', () => {
+    // A failed refresh must not strand an unrecorded tree: deploy.sh
+    // restores the pre-promote snapshot (tree + checkout pointer +
+    // marker) and exits before the transition or any install runs —
+    // superseding the old complete-installs behavior, which assumed
+    // the flipped tree would stay live. The standing pre-flip record
+    // is then complete again.
     const deploySource = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
-    const captureIndex = deploySource.indexOf(
-      'record_deploy_workflow_promote "$APP_SHA" || record_status=$?'
+    const refreshIndex = deploySource.indexOf(
+      'record_deploy_workflow_promote "$APP_SHA" ||'
     );
-    const installIndex = deploySource.indexOf(
-      '==> Installing crontab entries on VPS'
+    const transitionIndex = deploySource.indexOf(
+      'install_remediation_cron_transition'
     );
-    const failIndex = deploySource.indexOf(
-      'if [ "$record_status" -ne 0 ]; then'
-    );
-    const doneIndex = deploySource.indexOf('echo "==> Done."');
+    assert.ok(refreshIndex !== -1 && transitionIndex !== -1);
+    const failureSlice = deploySource.slice(refreshIndex, transitionIndex);
     assert.ok(
-      captureIndex !== -1 &&
-        installIndex !== -1 &&
-        failIndex !== -1 &&
-        doneIndex !== -1
+      failureSlice.includes('rollback_worker_release'),
+      'expected rollback on refresh failure'
     );
-    assert.ok(
-      captureIndex < installIndex &&
-        installIndex < failIndex &&
-        failIndex < doneIndex,
-      'expected record-capture, then installs, then end-failure, then Done'
+    assert.ok(failureSlice.includes('exit 1'), 'expected exit after rollback');
+    assert.match(failureSlice, /ROLLBACK FAILED/);
+    assert.doesNotMatch(
+      failureSlice,
+      /Installing crontab entries/,
+      'expected no installs between refresh failure and exit'
     );
-    assert.match(deploySource, /exit "\$record_status"/);
-    // The capture only works because the serialization functions
-    // return instead of exiting (an exit inside a sourced function
-    // would kill deploy.sh before the capture runs).
+    // The rollback restores the exact pre-promote state under the same
+    // locks as promote: snapshot entries, marker, and (except first
+    // deploys) the checkout pointer via the standard flip — leaving no
+    // snapshot behind.
+    const releaseSource = readFileSync(
+      join(workerRoot, 'lib', 'prepare-worker-release.sh'),
+      'utf8'
+    );
+    const rollbackSlice = releaseSource.slice(
+      releaseSource.indexOf('rollback_worker_release()')
+    );
+    assert.match(
+      rollbackSlice,
+      /quiesce_worker_release "\$remote_dir" \|\| exit 1/
+    );
+    assert.match(
+      rollbackSlice,
+      /for entry in bin jobs lib config node_modules/
+    );
+    assert.match(
+      rollbackSlice,
+      /flip-immutable-checkout\.sh" "\$remote_dir" "\$\(cat/
+    );
+    assert.match(rollbackSlice, /rm -rf "\$pre_promote_backup"/);
+    // The promote snapshot survives success for exactly this path;
+    // deploy.sh removes it once the refresh lands.
+    assert.match(deploySource, /rm -rf '\$REMOTE_DIR\.pre-promote-backup'/);
+    // The failure branch only runs because the serialization
+    // functions return instead of exiting (an exit inside a sourced
+    // function would kill deploy.sh before the branch runs).
     const libSource = readFileSync(
       join(workerRoot, 'lib', 'check-deploy-workflow-inflight.sh'),
       'utf8'
@@ -158,6 +181,32 @@ describe('deploy promotion record guards', () => {
         '$REMOTE_DIR',
       ],
       'unexpected template variable: extend the rollback render step'
+    );
+  });
+
+  it('records the rollback overlap before and after the restore', () => {
+    // The manual rollback mirrors deploy.sh: a pre-restore record gate
+    // (failure stops the operator before anything is mutated) plus a
+    // post-restore refresh (failure leaves the pre-restore record
+    // standing). Pin both one-liners and their order around the
+    // restore block.
+    const runbook = readFileSync(
+      join(workerRoot, 'docs', 'gigl-tracking-cutover-runbook.md'),
+      'utf8'
+    );
+    const preIndex = runbook.indexOf(
+      'record_deploy_workflow_promote "<full-sha>" pre'
+    );
+    const restoreIndex = runbook.indexOf(
+      'flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c'
+    );
+    const postIndex = runbook.indexOf(
+      'record_deploy_workflow_promote "<full-sha>"\''
+    );
+    assert.ok(preIndex !== -1 && restoreIndex !== -1 && postIndex !== -1);
+    assert.ok(
+      preIndex < restoreIndex && restoreIndex < postIndex,
+      'expected pre-rollback record, then restore, then refresh'
     );
   });
 });

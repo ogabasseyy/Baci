@@ -45,27 +45,18 @@ fi
 echo "==> Building isolated Codex remediator image"
 ssh "$VPS" "docker build -f $STAGING_DIR/Dockerfile.codex-remediator -t $CODEX_REMEDIATOR_IMAGE $STAGING_DIR"
 
-# Final refusal BEFORE the transition below mutates live cron: staging
-# and the image build take minutes, and a workflow that started in that
-# window publishes off the pre-promote latch/SHA. Refusing here leaves
-# live cron untouched (refusing after the transition would strand
-# candidate jobs against the old unsynchronized tree until an operator
-# retries). A workflow that starts during the transition/promote itself
-# is still covered in the other direction: the post-promote record makes
-# its pre-publish overlap check refuse.
+# Final refusal BEFORE anything below mutates live state: staging and
+# the image build take minutes, and a workflow that started in that
+# window publishes off the pre-promote latch/SHA. Workflows that start
+# during the promote itself are covered in the other direction: the
+# overlap record makes their pre-publish overlap check refuse.
 check_deploy_workflow_inflight
-
-install_remediation_cron_transition
 
 # Fail-closed overlap gate BEFORE the flip: write the overlap record
 # listing runs in flight right now. If the record path is broken (auth,
 # network, permissions), this bare call refuses under set -e before
 # anything is mutated — a promote can never land that no workflow can
-# see. The post-flip record below refreshes this with runs born during
-# the flip; if THAT write fails, this pre-flip record still stands and
-# durably blocks every run whose reads predate the flip (runs born
-# later read post-flip state, or fail closed on a torn read via the
-# latch marker-mismatch check).
+# see.
 record_deploy_workflow_promote "$APP_SHA" pre
 
 promote_worker_release
@@ -73,14 +64,32 @@ promote_worker_release
 # Refresh the overlap record for the workflow's pre-publish overlap
 # check (the other half of the serialization): runs that appeared
 # during the promote must refuse to publish off their pre-promote
-# latch/SHA read. If this refresh fails, the pre-flip record above
-# still stands and blocks every run in flight at flip time — but the
-# overlap proof is degraded, so the deploy still fails honestly below.
-# A failed record must NOT abort the installation below (set -e would
-# exit here, leaving the flipped tree without services or schedule):
-# capture the status, complete every install, and fail at the end.
-record_status=0
-record_deploy_workflow_promote "$APP_SHA" || record_status=$?
+# latch/SHA read. If this refresh fails, the promotion is ROLLED BACK
+# (no unrecorded tree may stay live — a slow promote lets flip-window
+# runs read pre-flip state the standing pre-flip record cannot list)
+# and the deploy exits before the transition or any install runs.
+record_deploy_workflow_promote "$APP_SHA" || {
+  echo "Post-flip overlap record failed; rolling back the promotion so no unrecorded worker tree stays live." >&2
+  if rollback_worker_release; then
+    echo "Rollback complete; the pre-flip record stands. Rerun deploy.sh once the record path works, then re-verify the latch." >&2
+  else
+    echo "ROLLBACK FAILED: the live tree may be mixed and the promote is unrecorded. Follow the emergency rollback runbook NOW, then confirm no production deploy published off stale reads." >&2
+  fi
+  exit 1
+}
+# The promote snapshot is no longer needed: the refresh landed, so no
+# rollback can follow. (A crashed deploy's residue is cleared by the
+# next promote before snapshotting.)
+ssh "$VPS" "rm -rf '$REMOTE_DIR.pre-promote-backup'"
+
+# The cron transition runs AFTER the recorded promote (never before
+# any live mutation can be refused): promote's quiesce therefore sees
+# only legacy entries — candidate ticks cannot exist mid-promote — and
+# the transition's own deploy lock plus per-job/global takes serialize
+# it against everything else. Its candidates stage from STAGING_DIR
+# (still present; cleanup runs on EXIT), so placement after the sync
+# changes nothing it installs.
+install_remediation_cron_transition
 
 ssh "$VPS" "install -d -m 700 $REMOTE_DIR/locks && touch $REMOTE_DIR/locks/error-remediator-global.lock && chmod 600 $REMOTE_DIR/locks/error-remediator-global.lock"
 
@@ -279,16 +288,6 @@ fi
 crontab "$tmp_file"
 rm -f "$fragment_path"
 REMOTE_SH
-
-# The post-flip record refresh failed above: every install is now
-# complete, so fail the deployment honestly. The pre-flip record still
-# stands and blocks runs in flight at flip time — but re-run the record
-# from this checkout to refresh the listing, then re-verify the latch
-# before relying on the poller.
-if [ "$record_status" -ne 0 ]; then
-  echo "Worker promotion record failed; installation completed but the deploy is FAILED. Re-run record_deploy_workflow_promote $APP_SHA, then re-verify the latch." >&2
-  exit "$record_status"
-fi
 
 echo "==> Done."
 print_worker_env_reminder "$REMOTE_DIR"

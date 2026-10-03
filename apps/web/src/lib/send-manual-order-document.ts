@@ -3,16 +3,14 @@ import {
   buildDispatchMerchantSnapshot,
   buildDispatchPaymentSnapshot,
 } from '@/lib/build-manual-order-document-dispatch-snapshot';
+import { checkManualDocumentDispatchLease } from '@/lib/check-manual-document-dispatch-lease';
 import {
   buildReceiptClaimUrl,
   createReceiptClaimToken,
 } from '@/lib/import-notifications/receipt-claim-links';
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
-import {
-  checkManualDocumentDispatchLease,
-  persistManualDocumentDispatch,
-} from '@/lib/mark-manual-document-dispatch-started';
+import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
 import {
   resolveNotificationReplyTo,
   resolveOrderNotificationRecipient,

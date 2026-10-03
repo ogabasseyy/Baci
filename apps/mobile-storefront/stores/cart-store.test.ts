@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
-const mockMerchantSlug: { current: string | undefined } = {
-  current: undefined,
+const mockMerchantSlug: { current: string } = {
+  current: 'ogabassey',
 };
 jest.mock('@/lib/config', () => ({
   CONFIG: {
@@ -89,7 +89,7 @@ describe('cart-store', () => {
       });
       expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
     } finally {
-      mockMerchantSlug.current = undefined;
+      mockMerchantSlug.current = 'ogabassey';
     }
   });
 

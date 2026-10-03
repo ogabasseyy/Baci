@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  rpc: vi.fn(),
+  submit: vi.fn(),
 }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => ({ rpc: mocks.rpc }),
+vi.mock('@/lib/storefront/server-intake-client', () => ({
+  submitStorefrontProductRequest: mocks.submit,
 }));
 
 import { POST } from './route';
@@ -23,44 +23,41 @@ function request(body: unknown) {
   });
 }
 beforeEach(() => {
-  mocks.rpc.mockReset().mockResolvedValue({ error: null });
+  mocks.submit.mockReset().mockResolvedValue({ error: null });
 });
 describe('product request intake', () => {
-  it('validates with Zod before calling the service-only RPC', async () => {
+  it('validates with Zod before calling the intake helper', async () => {
     const response = await POST(request(input));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
-    expect(mocks.rpc).toHaveBeenCalledWith(
-      'submit_storefront_product_request',
-      {
-        p_query: 'iPhone 20',
-        p_contact: 'shopper@example.com',
-        p_merchant_slug: 'ogabassey',
-        p_request_id: input.requestId,
-      }
-    );
+    expect(mocks.submit).toHaveBeenCalledWith({
+      p_query: 'iPhone 20',
+      p_contact: 'shopper@example.com',
+      p_merchant_slug: 'ogabassey',
+      p_request_id: input.requestId,
+    });
   });
   it('rejects invalid payloads without touching the database', async () => {
     expect((await POST(request({ ...input, contact: '---' }))).status).toBe(
       400
     );
     expect((await POST(request({ ...input, query: '!' }))).status).toBe(400);
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
   });
   it('maps RPC outcomes to status codes without leaking details', async () => {
-    mocks.rpc.mockResolvedValueOnce({
+    mocks.submit.mockResolvedValueOnce({
       error: { code: '54000', message: 'Request limit reached' },
     });
     expect((await POST(request(input))).status).toBe(429);
-    mocks.rpc.mockResolvedValueOnce({
+    mocks.submit.mockResolvedValueOnce({
       error: { code: '22023', message: 'Store unavailable' },
     });
     expect((await POST(request(input))).status).toBe(404);
-    mocks.rpc.mockResolvedValueOnce({
+    mocks.submit.mockResolvedValueOnce({
       error: { code: '22023', message: 'Invalid product request' },
     });
     expect((await POST(request(input))).status).toBe(400);
-    mocks.rpc.mockResolvedValueOnce({
+    mocks.submit.mockResolvedValueOnce({
       error: { code: 'XX000', message: 'private database detail' },
     });
     const response = await POST(request(input));

@@ -97,10 +97,13 @@ export const useCartStore = create<CartState>()(
               {
                 ...itemToAdd,
                 // Default-on assurance is Ogabassey-scoped, mirroring web
-                // (StorefrontCartProvider). Other merchants keep opt-in.
+                // (StorefrontCartProvider). CONFIG.MERCHANT_SLUG is the
+                // fully-resolved build identity (config.ts defaults
+                // unconfigured builds to Ogabassey, as do requests and
+                // repairs); anything else stays opt-in.
                 hasAssurance:
                   itemToAdd.hasAssurance ??
-                  (CONFIG.MERCHANT_SLUG || 'ogabassey') === 'ogabassey',
+                  CONFIG.MERCHANT_SLUG === 'ogabassey',
                 id: createCartLineId(itemToAdd, lineSequence),
               },
             ];

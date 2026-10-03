@@ -23,6 +23,9 @@ const piggyvestIntakeClientBrand: unique symbol = Symbol(
 const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
   'baci.immediate-notification-completion.service-role-client'
 );
+const storefrontPublicIntakeClientBrand: unique symbol = Symbol(
+  'baci.storefront-public-intake.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -101,6 +104,18 @@ export type ImmediateNotificationCompletionServiceClient =
   };
 
 /**
+ * A service-role client reserved for public product-request intake.
+ *
+ * Keep this type distinct so the intake helper cannot be passed into
+ * unrelated privileged boundaries. The submit RPC is service-role only so
+ * direct anon calls cannot bypass the intake route's proxy IP gate; this
+ * brand confines the single approved call graph to exactly that RPC.
+ */
+export type StorefrontPublicIntakeServiceClient = SupabaseClient<Database> & {
+  readonly [storefrontPublicIntakeClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -130,6 +145,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'immediate-notification-completion'
 ): ImmediateNotificationCompletionServiceClient;
+export function createServiceClient(
+  sentinel: 'storefront-public-intake'
+): StorefrontPublicIntakeServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -140,6 +158,7 @@ export function createServiceClient(
     | 'shipping-quote-booking-economics'
     | 'piggyvest-intake'
     | 'immediate-notification-completion'
+    | 'storefront-public-intake'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -152,7 +171,10 @@ export function createServiceClient(
         process.env.SUPABASE_SERVICE_ROLE_KEY
       : sentinel === 'jumia-credentials'
         ? process.env.SUPABASE_JUMIA_CREDENTIAL_KEY
-        : process.env.SUPABASE_SERVICE_ROLE_KEY;
+        : sentinel === 'storefront-public-intake'
+          ? process.env.SUPABASE_STOREFRONT_INTAKE_KEY ||
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          : process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url) {
     throw new Error(
@@ -166,7 +188,9 @@ export function createServiceClient(
         ? 'SUPABASE_ADS_CREDENTIAL_KEY or SUPABASE_SERVICE_ROLE_KEY is missing. This is required for Ads credential handlers.'
         : sentinel === 'jumia-credentials'
           ? 'SUPABASE_JUMIA_CREDENTIAL_KEY is missing. This is required for Jumia credential handlers.'
-          : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
+          : sentinel === 'storefront-public-intake'
+            ? 'SUPABASE_STOREFRONT_INTAKE_KEY or SUPABASE_SERVICE_ROLE_KEY is missing. This is required for product-request intake.'
+            : 'SUPABASE_SERVICE_ROLE_KEY is missing. This is required for webhook handlers.'
     );
   }
 
@@ -205,6 +229,11 @@ export function createServiceClient(
   if (sentinel === 'piggyvest-intake') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'storefront-public-intake') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [storefrontPublicIntakeClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

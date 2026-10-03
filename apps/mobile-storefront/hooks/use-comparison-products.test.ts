@@ -79,3 +79,21 @@ it('suppresses deleted products rather than reporting their saved price as curre
   expect(result.current.products[0].compare_at_price).toBeUndefined();
   expect(result.current.products[0].rating).toBeUndefined();
 });
+it('reports nothing unavailable while the refresh is still loading', () => {
+  mockResolve.mockReturnValue(new Promise(() => {}));
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        { id: 'p1', slug: 'p1', name: 'Phone', price: 100 } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  expect(result.current.unavailableIds).toEqual([]);
+  expect(result.current.status).toContain('Refreshing');
+});

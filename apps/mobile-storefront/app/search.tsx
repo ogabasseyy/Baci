@@ -14,6 +14,8 @@ import {
 } from '@/constants/search';
 import { useCategories, useProducts } from '@/hooks';
 import { isSearchableQuery } from '@/hooks/is-searchable-query';
+import { CONSTANT_MERCHANT_ID } from '@/hooks/product-utils';
+import { useMerchant } from '@/hooks/use-merchant';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { useSearchFacetOptions } from '@/hooks/use-search-facet-options';
 import { useSearchMinLengthHint } from '@/hooks/use-search-min-length-hint';
@@ -77,6 +79,8 @@ export default function SearchScreen() {
   const selectedCondition = refinements.condition ?? 'All';
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
+  const { data: merchant } = useMerchant();
+  const merchantId = merchant?.id || CONSTANT_MERCHANT_ID;
   const { data: categories = [] } = useCategories();
   const selectedCategory =
     categories.find((category) => category.id === refinements.categoryId)
@@ -110,7 +114,8 @@ export default function SearchScreen() {
   const availableFacets = useSearchFacetOptions(
     debouncedQuery,
     hasSearchQuery && !invalidFilters && !isRestoring,
-    refinements.categoryId
+    refinements.categoryId,
+    merchantId
   );
   const brandNames = availableFacets.data?.brands ?? [];
   const facetError = availableFacets.error?.message ?? null;

@@ -68,5 +68,11 @@ await db.query('SELECT private.deliver_storefront_product_requests()');
 // The earlier backlog occupies the first batch of fifty.
 await db.query('SELECT private.deliver_storefront_product_requests()');
 assert.equal((await db.query("SELECT in_app_visible FROM public.merchant_notifications WHERE merchant_id = '10000000-0000-4000-8000-000000000002'")).rows[0].in_app_visible, false);
+// Privacy erasure: deleting a delivered request removes its inbox copy
+// (notification + merchant link) while leaving other merchants untouched.
+await db.exec("DELETE FROM public.storefront_product_requests WHERE merchant_id = '10000000-0000-4000-8000-000000000002'");
+assert.equal((await db.query('SELECT count(*)::integer AS count FROM public.notifications')).rows[0].count, 50);
+assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.merchant_notifications WHERE merchant_id = '10000000-0000-4000-8000-000000000002'")).rows[0].count, 0);
+assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.merchant_notifications WHERE merchant_id = '10000000-0000-4000-8000-000000000003'")).rows[0].count, 50);
 await db.close();
-console.log('SQL request validation, deduplication, contact rate limit, RLS, service-role-only intake, worker-only delivery, recipient isolation and delivery replay: passed. Cron scheduling is stubbed; live scheduler and push delivery are unverified.');
+console.log('SQL request validation, deduplication, contact rate limit, RLS, service-role-only intake, worker-only delivery, recipient isolation, delivery replay and erasure propagation: passed. Cron scheduling is stubbed; live scheduler and push delivery are unverified.');

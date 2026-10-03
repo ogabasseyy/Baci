@@ -8,9 +8,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
   resolveAgenticChatTenant: mocks.tenant,
 }));
-vi.mock('@/lib/rate-limiter', () => ({ checkRateLimit: mocks.limit }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => ({}),
+vi.mock('@/lib/tenant-rate-limit', () => ({
+  checkTenantRateLimit: mocks.limit,
 }));
 vi.mock('@/ai/generate-text-with-chain', () => ({
   generateTextWithChain: mocks.generate,
@@ -71,13 +70,10 @@ describe('assisted search', () => {
   it('bounds rate and fails invalid model output safely', async () => {
     mocks.limit.mockResolvedValueOnce(false);
     expect((await POST(request(input))).status).toBe(429);
-    expect(mocks.limit).toHaveBeenCalledWith(
-      {},
-      'm1',
-      'search_assist_tenant',
-      60,
-      1
-    );
+    expect(mocks.limit).toHaveBeenCalledWith('search_assist', 'm1', {
+      maxRequests: 60,
+      windowMs: 60_000,
+    });
     mocks.generate.mockResolvedValue({ text: '{"action":"pay"}' });
     const frames = (await (await POST(request(input))).text())
       .trim()

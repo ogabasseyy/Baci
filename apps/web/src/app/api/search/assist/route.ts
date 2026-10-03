@@ -5,8 +5,7 @@ import {
 import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { logger } from '@/lib/logger';
-import { checkRateLimit } from '@/lib/rate-limiter';
-import { createServiceClient } from '@/lib/supabase/service';
+import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
 import { searchAssistanceRequestSchema } from '@/schemas/search-assistance';
 import { parseModelProposal } from './parse-model-proposal';
 
@@ -47,13 +46,13 @@ export async function POST(request: Request) {
   // Per-IP budget (5/min) is enforced distributively by the proxy
   // (rate-limit-routes '/api/search/assist'). This tenant-wide budget bounds
   // use even when the caller's network identifier is absent or changes, and
-  // is Supabase-backed so it holds across Vercel instances.
-  const tenantAllowed = await checkRateLimit(
-    createServiceClient(),
+  // runs on Upstash Redis (same backend as the proxy) so it holds across
+  // Vercel instances with no Supabase client at all. It fails closed: an
+  // unverifiable budget must not silently unlock an expensive AI route.
+  const tenantAllowed = await checkTenantRateLimit(
+    'search_assist',
     tenant.merchantId,
-    'search_assist_tenant',
-    60,
-    1
+    { maxRequests: 60, windowMs: 60_000 }
   );
   if (!tenantAllowed)
     return Response.json(

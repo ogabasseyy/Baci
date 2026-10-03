@@ -16,9 +16,14 @@ const facets = {
   minPrice: 100,
   maxPrice: 200,
 };
-function options(query: string, enabled = true, categoryId?: string) {
+function options(
+  query: string,
+  enabled = true,
+  categoryId?: string,
+  merchantId?: string
+) {
   const { result } = renderHook(() =>
-    useSearchFacetOptions(query, enabled, categoryId)
+    useSearchFacetOptions(query, enabled, categoryId, merchantId)
   );
   return result.current as unknown as {
     queryKey: string[];
@@ -55,6 +60,21 @@ it.each([
   );
 });
 
+it('resolves facets against the active merchant and stays idle without one', async () => {
+  mockRpc.mockResolvedValue({ data: facets, error: null });
+  const resolved = options('iphone', true, undefined, 'merchant-2');
+  expect(resolved.queryKey).toEqual([
+    'search-available-facets',
+    'merchant-2',
+    'iphone',
+  ]);
+  await resolved.queryFn();
+  expect(mockRpc).toHaveBeenCalledWith(
+    'get_storefront_search_available_facets',
+    { search_query: 'iphone', merchant_id_param: 'merchant-2' }
+  );
+  expect(options('iphone', true, undefined, '').enabled).toBe(false);
+});
 it('adapts facets to category without reusing another category cache', async () => {
   mockRpc.mockResolvedValue({
     data: { ...facets, processors: ['Intel Core i7'] },

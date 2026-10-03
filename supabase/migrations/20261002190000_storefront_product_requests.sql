@@ -51,9 +51,11 @@ GRANT EXECUTE ON FUNCTION public.submit_storefront_product_request(text,text,tex
 
 -- Trusted DB worker delivers durable inbox rows; customer calls cannot mutate platform notifications.
 -- Retention policy: delivery copies the query and contact into the merchant's
--- notification row, and notification_id is ON DELETE SET NULL, so deleting a
--- request row does not erase the merchant inbox/audit copy. The intake forms
--- disclose this before submission.
+-- notification row. Deleting a request row erases its delivered inbox copy
+-- via erase_storefront_product_request_inbox (privacy erasure path), while
+-- the FK stays ON DELETE SET NULL so deleting a notification never removes
+-- the request itself. The intake forms disclose inbox storage before
+-- submission.
 CREATE FUNCTION private.deliver_storefront_product_requests()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_request record; v_notification uuid; v_count integer := 0;
@@ -69,5 +71,18 @@ BEGIN
   RETURN v_count;
 END; $$;
 REVOKE ALL ON FUNCTION private.deliver_storefront_product_requests() FROM PUBLIC, anon, authenticated, service_role;
+-- Privacy erasure: removing a request also removes its delivered inbox copy
+-- (merchant_notifications rows cascade from the notification delete).
+CREATE FUNCTION private.erase_storefront_product_request_inbox()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  DELETE FROM public.notifications WHERE id = OLD.notification_id;
+  RETURN OLD;
+END; $$;
+REVOKE ALL ON FUNCTION private.erase_storefront_product_request_inbox() FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER erase_storefront_product_request_inbox
+AFTER DELETE ON public.storefront_product_requests
+FOR EACH ROW WHEN (OLD.notification_id IS NOT NULL)
+EXECUTE FUNCTION private.erase_storefront_product_request_inbox();
 SELECT cron.schedule('storefront-product-request-inbox', '* * * * *', 'SELECT private.deliver_storefront_product_requests();');
 COMMIT;

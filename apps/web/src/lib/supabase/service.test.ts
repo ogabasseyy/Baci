@@ -68,6 +68,7 @@ describe('service Supabase client factory', () => {
     vi.clearAllMocks();
     delete process.env.SUPABASE_ADS_CREDENTIAL_KEY;
     delete process.env.SUPABASE_JUMIA_CREDENTIAL_KEY;
+    delete process.env.SUPABASE_STOREFRONT_INTAKE_KEY;
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
   });
 
@@ -156,6 +157,30 @@ describe('service Supabase client factory', () => {
 
     expect(() => createServiceClient('jumia-credentials')).toThrow(
       'SUPABASE_JUMIA_CREDENTIAL_KEY is missing'
+    );
+  });
+
+  it('prefers the dedicated intake key and brands that authority separately', () => {
+    process.env.SUPABASE_STOREFRONT_INTAKE_KEY = 'intake-key';
+
+    const client = createServiceClient('storefront-public-intake');
+
+    expect(Reflect.ownKeys(client)).toContainEqual(expect.any(Symbol));
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://example.supabase.co',
+      'intake-key',
+      expect.any(Object)
+    );
+  });
+
+  it('falls back to the service-role key until intake key migration', () => {
+    const client = createServiceClient('storefront-public-intake');
+
+    expect(Reflect.ownKeys(client)).toContainEqual(expect.any(Symbol));
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://example.supabase.co',
+      'service-role-key',
+      expect.any(Object)
     );
   });
 });

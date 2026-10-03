@@ -9,16 +9,17 @@ import { CONSTANT_MERCHANT_ID } from './product-utils';
 export function useSearchFacetOptions(
   query: string,
   enabled: boolean,
-  categoryId?: string
+  categoryId?: string,
+  merchantId: string = CONSTANT_MERCHANT_ID
 ) {
   return useQuery<AvailableSearchFacets>({
     queryKey: [
       'search-available-facets',
-      CONSTANT_MERCHANT_ID,
+      merchantId,
       query,
       ...(categoryId ? [categoryId] : []),
     ],
-    enabled,
+    enabled: enabled && !!merchantId,
     staleTime: 60000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc(
@@ -27,7 +28,7 @@ export function useSearchFacetOptions(
           : 'get_storefront_search_available_facets',
         {
           search_query: query,
-          merchant_id_param: CONSTANT_MERCHANT_ID,
+          merchant_id_param: merchantId,
           ...(categoryId ? { category_id_param: categoryId } : {}),
         }
       );

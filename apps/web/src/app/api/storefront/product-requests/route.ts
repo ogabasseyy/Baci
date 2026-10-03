@@ -1,12 +1,14 @@
 import { productRequestSchema } from '@baci/shared/lib';
 import { logger } from '@/lib/logger';
-import { createServiceClient } from '@/lib/supabase/service';
+import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
 
 // Public intake for storefront product requests. The submit RPC is
 // service-role only, so all callers come through here: the proxy adds a
 // trusted per-IP network gate (rate-limit-routes) in front of the DB's
-// per-contact and per-merchant budgets. No session is involved, so there is
-// no ambient authority for CSRF to abuse.
+// per-contact and per-merchant budgets. The route never constructs a
+// service client itself; the server-only intake helper owns the single
+// branded RPC call. No session is involved, so there is no ambient
+// authority for CSRF to abuse.
 export async function POST(request: Request) {
   let input: unknown;
   try {
@@ -17,15 +19,12 @@ export async function POST(request: Request) {
   const parsed = productRequestSchema.safeParse(input);
   if (!parsed.success)
     return Response.json({ error: 'Invalid request' }, { status: 400 });
-  const { error } = await createServiceClient().rpc(
-    'submit_storefront_product_request',
-    {
-      p_query: parsed.data.query,
-      p_contact: parsed.data.contact,
-      p_merchant_slug: parsed.data.merchantSlug,
-      p_request_id: parsed.data.requestId,
-    }
-  );
+  const { error } = await submitStorefrontProductRequest({
+    p_query: parsed.data.query,
+    p_contact: parsed.data.contact,
+    p_merchant_slug: parsed.data.merchantSlug,
+    p_request_id: parsed.data.requestId,
+  });
   if (!error) return Response.json({ ok: true });
   const info = error as { code?: string; message?: string };
   if (info.code === '54000' || info.message?.includes('Request limit reached'))

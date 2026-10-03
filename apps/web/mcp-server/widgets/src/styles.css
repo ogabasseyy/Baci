@@ -24,6 +24,8 @@
 }
 
 /* Light theme override */
+html:has(.mode-fullscreen.theme-light),
+body:has(.mode-fullscreen.theme-light),
 .theme-light {
   --background: #fafafa;
   --surface: #ffffff;

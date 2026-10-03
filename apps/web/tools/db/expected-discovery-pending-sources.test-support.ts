@@ -329,4 +329,9 @@ export const EXPECTED_DISCOVERY_PENDING_SOURCES = [
       'supabase/migrations/20261003163000_variant_recall_manufacturer_prefix.sql',
     sha256: '16114d25abb0fd52f71da339cf75d76e6376465a7c1c158934f63ad5707ed021',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003170000_discovery_model_alias_facts.sql',
+    sha256: 'dc5a2804b0b27618970ad512b3ea9915059de25f8c91a77ac09fec5db0067816',
+  },
 ] as const;

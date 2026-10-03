@@ -99,6 +99,17 @@ describe('Ogabassey inline result presentation', () => {
     expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
   });
 
+  it('qualifies an empty search with partial coverage', () => {
+    window.openai = {
+      toolOutput: { products: [], status: 'empty', coverage: 'partial' },
+    };
+    render(<App />);
+    expect(screen.getByRole('status').textContent).toBe(
+      'No verified match was found among the checked products. Other products may match.'
+    );
+    expect(screen.queryByText('No verified products match this search.')).toBeNull();
+  });
+
   it('preserves the search error message in the widget', () => {
     window.openai = {
       toolOutput: {

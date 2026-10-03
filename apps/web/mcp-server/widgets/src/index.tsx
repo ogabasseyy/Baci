@@ -12,6 +12,7 @@ export function App() {
   const toolOutput = useOpenAiGlobal('toolOutput') as {
     products?: Product[];
     status?: string;
+    coverage?: string;
     message?: string;
   } | null;
   const theme = useOpenAiGlobal('theme') || 'dark';
@@ -25,7 +26,9 @@ export function App() {
       ? toolOutput.message || 'Product search is temporarily unavailable.'
       : toolOutput.status === 'incomplete'
         ? toolOutput.message || 'Narrow your search to check prices accurately.'
-        : 'No verified products match this search.';
+        : toolOutput.coverage === 'partial'
+          ? 'No verified match was found among the checked products. Other products may match.'
+          : 'No verified products match this search.';
   const { cart, cartError, handleAddToCart, handleRemoveItem, handleViewCart } =
     useCartHandoff();
 

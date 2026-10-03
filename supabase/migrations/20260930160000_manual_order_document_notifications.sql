@@ -176,8 +176,9 @@ BEGIN
   -- invalidated. Every other order field the dispatch snapshot compares
   -- (money breakdown, currency, order number, shipping address, recipient
   -- names, payment method, invoice type/note, notes, transaction and issue
-  -- dates) re-arms the same way when staff repair a database-permitted
-  -- invalid value, and — equally important — invalidates an in-flight
+  -- dates, creation timestamp) re-arms the same way when staff repair
+  -- a database-permitted invalid value, and — equally important —
+  -- invalidates an in-flight
   -- send when staff edit a rendered field the snapshot already covered;
   -- only immutable ids and item-owned fields stay outside this list.
   -- Re-evaluation is idempotent, so shipping transitions that change
@@ -201,6 +202,7 @@ BEGIN
     OR NEW.notes IS DISTINCT FROM OLD.notes
     OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
     OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
     OR NEW.currency IS DISTINCT FROM OLD.currency
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
     OR NEW.import_job_id IS DISTINCT FROM OLD.import_job_id
@@ -214,7 +216,7 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_document_after_order_update()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER enqueue_manual_document_after_order_update
-  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
+  AFTER UPDATE OF payment_status, amount_paid, total, subtotal, shipping_fee, tax_amount, discount_amount, order_number, shipping_address, customer_email, customer_id, customer_name, customer_phone, payment_method, invoice_type_code, invoice_note, notes, transaction_date, invoice_issue_date, created_at, currency, recorded_by_user_id, import_job_id, external_source, shipping_status ON public.orders
   FOR EACH ROW EXECUTE FUNCTION private.enqueue_manual_document_after_order_update();
 
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()

@@ -222,6 +222,17 @@ baseline. Record relevant-result rate, false-positive rate, and response time.
 The semantic call only runs when lexical discovery returns fewer than the
 requested limit and falls back to lexical results on provider failure.
 
+## Catalog colour evidence
+
+The storefront records colours in variant attributes and in explicit product
+colour/image mappings (`color_images`). MCP must preserve these catalog labels
+so image-backed colour choices remain visible to ChatGPT. A product colour or
+colour-image label does not establish stock or a specific colour/storage/price
+combination; only an actual variant can establish that combination.
+
+Image pixels, filenames, and description text do not establish a colour choice.
+When no explicit catalog colour is returned, report it as unconfirmed.
+
 ## Testing
 
 Test the MCP server with the official inspector:

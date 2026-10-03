@@ -159,7 +159,11 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
     expect(result.content[0].text).toContain(
       'color is unconfirmed; do not guess.',
     );
-    expect(result.structuredContent).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      catalog_colors: { labels: [], source: null, images_by_color: {} },
+      variants: [],
+      condition_offers: [],
+    });
   });
 
   it('keeps color unconfirmed when both variant and offer lookups fail', async () => {

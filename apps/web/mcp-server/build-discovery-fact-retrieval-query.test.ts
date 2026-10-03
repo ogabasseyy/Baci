@@ -4,6 +4,35 @@ import { buildDiscoveryFactRetrievalQuery } from './build-discovery-fact-retriev
 
 const intent = (...alternatives: McpDiscoveryIntent['alternatives']): McpDiscoveryIntent => ({ alternatives });
 
+it('recalls both exact manufacturer-qualified and unqualified model facts without a text query', () => {
+  const query = buildDiscoveryFactRetrievalQuery(
+    intent({ product_type: 'phone', brands: ['Tecno'], model: 'Spark 50' })
+  );
+  const qualified = buildDiscoveryFactRetrievalQuery(
+    intent({ model: 'TECNO SPARK 50' })
+  ).slice(1, -1);
+  const bare = buildDiscoveryFactRetrievalQuery(
+    intent({ model: 'Spark 50' })
+  ).slice(1, -1);
+  expect(query).toContain(`(${bare} | ${qualified})`);
+  expect(query).toContain('typephone &');
+  expect(query).not.toContain(
+    buildDiscoveryFactRetrievalQuery(intent({ model: 'Spark 50 5G' })).slice(
+      1,
+      -1
+    )
+  );
+});
+
+it('correlates manufacturer-specific model aliases across multiple brands', () => {
+  const acme = buildDiscoveryFactRetrievalQuery(intent({ brands: ['Acme'], model: 'Acme X' })).slice(1, -1);
+  const beta = buildDiscoveryFactRetrievalQuery(intent({ brands: ['Beta'], model: 'Acme X' })).slice(1, -1);
+  expect(buildDiscoveryFactRetrievalQuery(intent({
+    product_type: 'phone', brands: ['Acme', 'Beta'], model: 'Acme X',
+    attributes: [{ key: 'storage_gb', operator: 'eq', value: 256 }],
+  }))).toBe(`(typephone & ((${acme}) | (${beta})) & storage256gb)`);
+});
+
 it('builds grouped tsquery text with brand alternation', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({
     product_type: 'phone', brands: ['Samsung', 'Google'],
@@ -82,7 +111,7 @@ it('falls back to sanitized shopper wording and never emits empty syntax', () =>
 
 it('digests brand, model, and compatibility exactly like the final matcher', () => {
   expect(buildDiscoveryFactRetrievalQuery(intent({ brands: ['Mömax'], model: 'Café Pro | !' })))
-    .toBe('(fact455c26834d2c251dd3fda344c39c862ea241e0a7eda56896c649b8c55f83be8a & fact5d9ee8daa29fc3d263c7d4aeb210ddae271c9aa0480c57c5d87ec5c87c3efa56)');
+    .toBe('(fact455c26834d2c251dd3fda344c39c862ea241e0a7eda56896c649b8c55f83be8a & (fact5d9ee8daa29fc3d263c7d4aeb210ddae271c9aa0480c57c5d87ec5c87c3efa56 | factfd13f5ffddc0151f0e2f3a02ffea455bbc915484e2cdcb5a936b6cc36a5f6d59))');
   expect(buildDiscoveryFactRetrievalQuery(intent({ model: '三星手机' })))
     .toBe('(fact1dcf18b552623ad2401d64b631bd9f4fa97e9fc1a0aa174514dfbdd406e452a2)');
   expect(buildDiscoveryFactRetrievalQuery(intent({ compatible_with: '三星' })))
@@ -113,6 +142,9 @@ it('digests brand, model, and compatibility at any length so queries stay under 
   const worst = buildDiscoveryFactRetrievalQuery({ alternatives: Array.from({ length: 5 }, () => ({
     product_type: 'b'.repeat(100), brands: Array.from({ length: 10 }, () => 'c'.repeat(100)),
     model: 'd'.repeat(100), compatible_with: 'e'.repeat(100),
+    attributes: Array.from({ length: 10 }, (_, index) => ({
+      key: `feature${index}`, operator: 'eq' as const, value: 'f'.repeat(100),
+    })),
   })) });
   expect(worst?.length).toBeLessThan(16384);
   expect(worst).not.toContain('b'.repeat(65));
@@ -126,7 +158,7 @@ it('keeps every constraint in retrieval past the old twelve-term budget', () => 
       { key: 'ram_gb', operator: 'gte', value: 16 },
       { key: 'color', operator: 'eq', value: 'midnight blue deep dark shade tone' },
     ],
-  }))).toBe('(typelaptop & fact77b6e11805e6ddb7923895b0ef16dd0ef14e332643dba34f5d5a0681e45dcc87 & fact121b1470695917b8dc77cf320173ccc7d06e16f7ec8f7d0db6c873a5efa6bf3f & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
+  }))).toBe('(typelaptop & fact77b6e11805e6ddb7923895b0ef16dd0ef14e332643dba34f5d5a0681e45dcc87 & (fact121b1470695917b8dc77cf320173ccc7d06e16f7ec8f7d0db6c873a5efa6bf3f | fact7c7db422ccfd469ea5b798bbd2a9bed50b961c82aeee9e9c46fdecadf41f1747) & storage256gb & ramgb & fact9d4b15b3a2abd3add7dda96fe84fa0be4bbb8666e10bb3c3fc807d7c68e9ddc8)');
 });
 
 it('keeps the maximum structured text-attribute query under the database length bound', () => {

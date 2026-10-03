@@ -91,7 +91,7 @@ export default function ReceiptClaimPageClient({
           return;
         }
         if (!response.ok || !data.success) {
-          setError(data.error || 'Unable to claim receipt');
+          setError(data.error || `Unable to claim ${documentLabel}`);
           return;
         }
         setRedeemedToken(token);
@@ -106,7 +106,7 @@ export default function ReceiptClaimPageClient({
         );
       } catch {
         if (!cancelled) {
-          setError('Unable to claim receipt');
+          setError(`Unable to claim ${documentLabel}`);
         }
       } finally {
         if (redemptionInFlightToken.current === token) {
@@ -124,6 +124,7 @@ export default function ReceiptClaimPageClient({
   }, [
     authLoading,
     basePath,
+    documentLabel,
     error,
     isAuthenticated,
     merchantLoading,
@@ -198,7 +199,7 @@ export default function ReceiptClaimPageClient({
               <CardDescription className="mt-2 text-base">
                 {preview
                   ? `Your ${preview.merchantName} purchase is ready to link to your account.`
-                  : 'Loading your receipt claim.'}
+                  : `Loading your ${documentLabel} claim.`}
               </CardDescription>
             </div>
           </CardHeader>
@@ -256,7 +257,7 @@ export default function ReceiptClaimPageClient({
                     <span>
                       {isRedeeming
                         ? `Claiming ${documentLabel}...`
-                        : 'Preparing receipts...'}
+                        : `Preparing ${documentLabel}s...`}
                     </span>
                   </div>
                 ) : (

@@ -29,6 +29,16 @@ export function parsePositiveNumber(value, name) {
   return parsed;
 }
 
+// Iteration counts must be positive integers: --expect-iterations=0 would
+// let an empty HAR pass the iteration and connectivity checks vacuously.
+export function parsePositiveInteger(value, name) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`bad --${name}: ${value}`);
+  }
+  return parsed;
+}
+
 // CRC-32 (ISO 3309) for PNG chunk validation. No image deps.
 const PNG_CRC_TABLE = (() => {
   const table = new Uint32Array(256);

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   harUserAgent,
   parseArgs,
+  parsePositiveInteger,
   parsePositiveNumber,
   pngDimensions,
 } from './merchant-image-pilot-settings-helpers.mjs';
@@ -76,6 +77,17 @@ describe('merchant-image-pilot-settings helpers', () => {
     for (const bad of ['abc', '', '0', '-2', 'NaN', 'Infinity']) {
       expect(() => parsePositiveNumber(bad, 'expect-dpr')).toThrow(
         /bad --expect-dpr/
+      );
+    }
+  });
+
+  it('requires a positive integer iteration count', () => {
+    // --expect-iterations=0 would let an empty HAR pass the iteration
+    // and connectivity checks vacuously.
+    expect(parsePositiveInteger('2', 'expect-iterations')).toBe(2);
+    for (const bad of ['0', '-1', '1.5', 'abc', '', 'NaN']) {
+      expect(() => parsePositiveInteger(bad, 'expect-iterations')).toThrow(
+        /bad --expect-iterations/
       );
     }
   });

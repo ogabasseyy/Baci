@@ -5,7 +5,7 @@ import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadGeneration } from './manifest.mjs';
+import { loadGeneration } from './manifest-store.mjs';
 import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));

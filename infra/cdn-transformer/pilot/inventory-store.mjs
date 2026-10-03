@@ -94,8 +94,22 @@ async function acquireInventoryLock(lockDir) {
       }
     }
     // Steal a crashed holder's lock instead of wedging every future append.
+    // The steal is atomic-by-rename: two processes can both judge the same
+    // lock stale, but only one wins the rename — the loser sees ENOENT and
+    // retries instead of deleting the winner's replacement (an unchecked
+    // rm here would admit two concurrent holders). Each stealer removes
+    // only the directory IT renamed, never the live lock path.
     if (await isStaleInventoryLock(lockDir)) {
-      await rm(lockDir, { force: true, recursive: true });
+      const claimed = `${lockDir}.stale.${process.pid}.${randomUUID()}`;
+      try {
+        await rename(lockDir, claimed);
+      } catch (error) {
+        if (error?.code !== 'ENOENT') {
+          throw error;
+        }
+        continue;
+      }
+      await rm(claimed, { force: true, recursive: true });
       continue;
     }
     if (Date.now() > deadline) {

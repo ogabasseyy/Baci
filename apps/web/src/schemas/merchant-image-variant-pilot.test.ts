@@ -77,7 +77,7 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     ).toEqual({ ok: true });
   });
 
-  it('compares deduplicated tiers as a set', async () => {
+  it('binds capped rungs positionally, not as a set', async () => {
     const fixtures = await loadFixtures();
     const shared = fixtures.validManifest.tiers[0].sha256;
     const deduped = {
@@ -87,12 +87,39 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
         sha256: shared,
       })),
     };
-    const record = { ...fixtures.validAcceptance, outputHashes: [shared] };
+    // One hash per tier position: each rung stays bound even when capped
+    // rungs share bytes.
+    const record = {
+      ...fixtures.validAcceptance,
+      outputHashes: fixtures.validManifest.tiers.map(() => shared),
+    };
     expect(
       matchPilotAcceptance({ acceptance: record, manifest: deduped })
     ).toEqual({
       ok: true,
     });
+    const short = { ...fixtures.validAcceptance, outputHashes: [shared] };
+    expect(
+      matchPilotAcceptance({ acceptance: short, manifest: deduped }).ok
+    ).toBe(false);
+  });
+
+  it('rejects swapped tier hashes with an unchanged set', async () => {
+    const fixtures = await loadFixtures();
+    const tiers = fixtures.validManifest.tiers;
+    const swapped = {
+      ...fixtures.validManifest,
+      tiers: tiers.map((tier: { sha256: string }, index: number) => ({
+        ...tier,
+        sha256: tiers[(index + 2) % tiers.length].sha256,
+      })),
+    };
+    expect(
+      matchPilotAcceptance({
+        acceptance: fixtures.validAcceptance,
+        manifest: swapped,
+      })
+    ).toEqual({ ok: false, reason: 'encoded output bytes changed' });
   });
 
   it('rejects every shared invalid acceptance schema', async () => {

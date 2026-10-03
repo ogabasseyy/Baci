@@ -3,10 +3,8 @@
 // pilot/manifest.mjs). Every rule is cross-checked by the shared
 // contract-fixtures corpus consumed by all three suites, so drift breaks
 // loudly. Returns the issue list (empty = valid).
-import {
-  RECIPE_ID,
-  TIERS,
-} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { ladderCoverageIssues } from './merchant-image-pilot-preflight-manifest-ladder.mjs';
 import {
   DELIVERIES,
   ENCODER_KEYS,
@@ -181,32 +179,7 @@ export function assertManifestContract(manifest, { recipeId, role }) {
       issues.push(`tier ${index} width must equal the encoded width`);
     }
   }
-  const expectedLadder = new Set();
-  for (const width of TIERS[role] ?? []) {
-    for (const format of ['avif', 'webp']) {
-      expectedLadder.add(`${width}:${format}`);
-    }
-  }
-  const seenLadder = new Set();
-  let ladderOk = expectedLadder.size > 0;
-  for (const tier of tiers) {
-    // Non-object entries were already reported above; mark the ladder
-    // invalid and stop so the check reports a contract failure instead of
-    // throwing on the property reads below.
-    if (!isPlainObject(tier)) {
-      ladderOk = false;
-      break;
-    }
-    const key = `${tier.requestedWidth}:${tier.format}`;
-    if (!expectedLadder.has(key) || seenLadder.has(key)) {
-      ladderOk = false;
-      break;
-    }
-    seenLadder.add(key);
-  }
-  if (!ladderOk || seenLadder.size !== expectedLadder.size) {
-    issues.push(`tiers do not cover the ${role} ladder exactly once`);
-  }
+  issues.push(...ladderCoverageIssues(tiers, role));
   // Per-disposition invariants hold only where a disposition is recorded;
   // legacy tiers without one are exempt (frozen r1 keeps its meaning).
   // 'generated' is capped at source bytes; 'generated-over-source' must

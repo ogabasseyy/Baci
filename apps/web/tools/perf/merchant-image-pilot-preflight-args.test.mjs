@@ -53,6 +53,29 @@ describe('preflight args', () => {
     expect(explicit.writeMounts).toBe('mounts.json');
   });
 
+  it('rejects unknown and duplicate flags instead of degrading silently', () => {
+    const base = [
+      '--inventory',
+      'inv.json',
+      '--acceptances',
+      'acc.json',
+      '--input-root',
+      'in',
+      '--output-root',
+      'out',
+      '--public-dir',
+      'pub',
+    ];
+    // The motivating typo: --orgin must abort, never null the origin and
+    // skip every served check behind an offline-only ok:true.
+    expect(() => parsePreflightArgs([...base, '--orgin', 'http://x'])).toThrow(
+      /unknown preflight flag "--orgin"/
+    );
+    expect(() =>
+      parsePreflightArgs([...base, '--inventory', 'other.json'])
+    ).toThrow(/duplicate preflight flag "--inventory"/);
+  });
+
   it('defaults the fetch timeout and rejects non-positive values', () => {
     const base = [
       '--inventory',

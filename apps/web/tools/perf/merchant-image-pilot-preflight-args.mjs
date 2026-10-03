@@ -3,6 +3,22 @@
 import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { UUID } from './merchant-image-pilot-preflight-shared.mjs';
 
+// Every documented preflight flag: a typoed key must abort, never degrade
+// the gate silently (e.g. --orgin would null the origin and skip every
+// served check behind an offline-only ok:true).
+const PREFLIGHT_FLAGS = new Set([
+  'acceptances',
+  'input-root',
+  'inventory',
+  'origin',
+  'output-root',
+  'public-dir',
+  'recipe',
+  'store-map',
+  'timeout-ms',
+  'write-mounts',
+]);
+
 export function parsePreflightArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -11,6 +27,12 @@ export function parsePreflightArgs(argv) {
       throw new Error(`unexpected argument "${flag}"`);
     }
     const key = flag.slice(2);
+    if (!PREFLIGHT_FLAGS.has(key)) {
+      throw new Error(`unknown preflight flag "${flag}"`);
+    }
+    if (options[key] !== undefined) {
+      throw new Error(`duplicate preflight flag "${flag}"`);
+    }
     const value = argv[index + 1];
     if (value === undefined || value.startsWith('--')) {
       throw new Error(`flag "${flag}" requires a value`);

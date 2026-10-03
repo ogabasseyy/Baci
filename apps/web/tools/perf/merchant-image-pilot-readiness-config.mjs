@@ -1,7 +1,8 @@
 // Readiness gate input config: CLI parsing plus the required browser
 // profile matrix. The gate must qualify every profile that selects
-// different image tiers or lays out differently — mobile DPR 1/2/3 and
-// desktop — never a single hardcoded viewport.
+// different image tiers or lays out differently — the spec coverage
+// matrix (design 2026-10-01: mobile 360/390/412 at DPR 1/2/3, desktop
+// 1365 at DPR 1/2) — never a single hardcoded viewport.
 //
 // Every CLI token must be a known --key=value: a typoed flag (or a stray
 // value from a space-separated `--flag value`) is rejected instead of
@@ -68,39 +69,39 @@ export function parseStoreMap(value) {
     });
 }
 
-// Every profile runs both arms. Mobile DPR 1/3 select different tiers
-// than DPR 2; desktop lays out differently and must not overflow.
+// Every profile runs both arms. Widths and DPRs follow the spec coverage
+// matrix: a responsive source, crop, or layout regression that appears
+// only at an edge width must still fail the gate.
+function mobileProfile(width, deviceScaleFactor) {
+  return {
+    deviceScaleFactor,
+    hasTouch: true,
+    isMobile: true,
+    viewport: { height: 844, width },
+  };
+}
+
+function desktopProfile(deviceScaleFactor) {
+  return {
+    deviceScaleFactor,
+    hasTouch: false,
+    isMobile: false,
+    viewport: { height: 800, width: 1365 },
+  };
+}
+
 export const READINESS_PROFILES = {
-  'desktop-dpr1': {
-    deviceScaleFactor: 1,
-    hasTouch: false,
-    isMobile: false,
-    viewport: { height: 800, width: 1280 },
-  },
-  'desktop-dpr2': {
-    deviceScaleFactor: 2,
-    hasTouch: false,
-    isMobile: false,
-    viewport: { height: 800, width: 1280 },
-  },
-  'mobile-dpr1': {
-    deviceScaleFactor: 1,
-    hasTouch: true,
-    isMobile: true,
-    viewport: { height: 844, width: 390 },
-  },
-  'mobile-dpr2': {
-    deviceScaleFactor: 2,
-    hasTouch: true,
-    isMobile: true,
-    viewport: { height: 844, width: 390 },
-  },
-  'mobile-dpr3': {
-    deviceScaleFactor: 3,
-    hasTouch: true,
-    isMobile: true,
-    viewport: { height: 844, width: 390 },
-  },
+  'desktop-1365-dpr1': desktopProfile(1),
+  'desktop-1365-dpr2': desktopProfile(2),
+  'mobile-360-dpr1': mobileProfile(360, 1),
+  'mobile-360-dpr2': mobileProfile(360, 2),
+  'mobile-360-dpr3': mobileProfile(360, 3),
+  'mobile-390-dpr1': mobileProfile(390, 1),
+  'mobile-390-dpr2': mobileProfile(390, 2),
+  'mobile-390-dpr3': mobileProfile(390, 3),
+  'mobile-412-dpr1': mobileProfile(412, 1),
+  'mobile-412-dpr2': mobileProfile(412, 2),
+  'mobile-412-dpr3': mobileProfile(412, 3),
 };
 
 export const DEFAULT_READINESS_PROFILES = Object.keys(READINESS_PROFILES);

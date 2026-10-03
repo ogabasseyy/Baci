@@ -56,15 +56,31 @@ export function validInventoryRecord(record) {
   );
 }
 
-// Exact mirror of lab-route isSafeRelativePath: non-empty relative path,
-// no backslashes, no empty/dot/dot-dot segments. Offline must never report
-// ok for an inventory the route rejects.
+// Exact mirror of lab-route isSafeRelativePath: 1-256 chars, no
+// backslashes, no control characters, no encoded separators, no
+// empty/dot/dot-dot segments. Offline must never report ok for an
+// inventory the route rejects.
+const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
+
+function hasControlCharacter(value) {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 32 || code === 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isSafeRelativePath(value) {
   if (
     typeof value !== 'string' ||
-    value.length === 0 ||
+    value.length < 1 ||
+    value.length > 256 ||
     value.startsWith('/') ||
-    value.includes('\\')
+    value.includes('\\') ||
+    hasControlCharacter(value) ||
+    ENCODED_SEPARATOR_PATTERN.test(value)
   ) {
     return false;
   }

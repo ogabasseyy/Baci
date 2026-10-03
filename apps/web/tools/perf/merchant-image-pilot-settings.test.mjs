@@ -121,6 +121,17 @@ describe('merchant-image-pilot-settings gate', () => {
     ]);
     expect(wrongDpr.error).not.toBe(null);
     expect(wrongDpr.stdout).toMatch(/har\.geometry/);
+    // A zero iteration count fails closed instead of passing an empty
+    // HAR vacuously.
+    const zeroIterations = await run([
+      '--expect-iterations=0',
+      '--expect-connectivity=native',
+      '--expect-chrome-major=154',
+      '--expect-viewport=375x667',
+      '--expect-dpr=2',
+    ]);
+    expect(zeroIterations.error).not.toBe(null);
+    expect(zeroIterations.stdout).toMatch(/bad --expect-iterations/);
     const matched = await run([
       `--lighthouse=${lhPath}`,
       '--expect-iterations=1',

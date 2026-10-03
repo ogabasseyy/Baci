@@ -140,6 +140,26 @@ export const pilotManifestSchema = z
         message: 'tiers must cover the full role ladder exactly once',
       });
     }
+    // Canonical order (requestedWidth ascending, avif before webp): the
+    // acceptance binds output hashes positionally, so a reordered ladder
+    // would let swapped tier claims certify against the wrong rung.
+    const rank = (tier: { format: string; requestedWidth: number }): number =>
+      tier.requestedWidth * 10 + (tier.format === 'avif' ? 0 : 1);
+    for (let index = 1; index < manifest.tiers.length; index += 1) {
+      const previous = manifest.tiers[index - 1];
+      const current = manifest.tiers[index];
+      if (
+        previous !== undefined &&
+        current !== undefined &&
+        rank(current) < rank(previous)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          message: 'tiers must list the role ladder in canonical order',
+        });
+        break;
+      }
+    }
     for (const tier of manifest.tiers) {
       for (const message of tierContractIssues(
         tier,
@@ -158,6 +178,9 @@ export const pilotAcceptanceSchema = z
     generationId: z.string().regex(SHA256_PATTERN),
     merchantId: z.uuid(),
     note: z.string().min(1).max(500),
+    // Tier sha256 in canonical manifest tier order (requestedWidth
+    // ascending, avif before webp): matchPilotAcceptance compares
+    // positionally, so each hash pins one rung's format, width, and bytes.
     outputHashes: z.array(z.string().regex(SHA256_PATTERN)).min(1).max(24),
     recipeId: z.string().min(1).max(64),
     reviewedAt: z.iso.datetime({ offset: true }),
@@ -244,14 +267,17 @@ export function matchPilotAcceptance(input: {
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };
   }
-  const manifestHashes = [
-    ...new Set(manifest.tiers.map((tier) => tier.sha256)),
-  ].sort();
-  const recordHashes = [...new Set(acceptance.outputHashes)].sort();
-  if (
-    manifestHashes.length !== recordHashes.length ||
-    manifestHashes.some((hash, index) => hash !== recordHashes[index])
-  ) {
+  // Positional binding: outputHashes lists tier sha256 in canonical
+  // manifest tier order, so each accepted hash pins one rung's format,
+  // width, and bytes. A sorted-set comparison would let swapped tier
+  // claims (or deduped capped rungs) certify unchanged.
+  if (acceptance.outputHashes.length !== manifest.tiers.length) {
+    return { ok: false, reason: 'encoded output bytes changed' };
+  }
+  const swapped = manifest.tiers.findIndex(
+    (tier, index) => tier.sha256 !== acceptance.outputHashes[index]
+  );
+  if (swapped !== -1) {
     return { ok: false, reason: 'encoded output bytes changed' };
   }
   return { ok: true };

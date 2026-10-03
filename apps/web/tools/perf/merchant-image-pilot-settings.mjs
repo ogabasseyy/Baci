@@ -16,19 +16,16 @@
 // --expect-lh-viewport, --expect-lh-dpr and --expect-cpu-slowdown to also
 // verify a Lighthouse report. Exits 0 with a JSON report on stdout when
 // every setting matches. --cache-provenance is REQUIRED for the cold-cache
-// claim: HAR converters (chrome-har drops disk-cached resources by default)
-// can omit cache hits entirely, so zero recorded hits alone never proves
-// cold. --browser-version stays an optional unknown-removing attestation.
+// claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold; --browser-version stays optional.
 import { readFile } from 'node:fs/promises';
 import {
   harUserAgent,
   parseArgs,
   parseDimensions,
+  parsePositiveInteger,
   parsePositiveNumber,
   pngDimensions,
 } from './merchant-image-pilot-settings-helpers.mjs';
-
-export { harUserAgent, parsePositiveNumber, pngDimensions };
 
 async function checkHar(args, pass, fail, warn, recorded) {
   let har;
@@ -39,7 +36,10 @@ async function checkHar(args, pass, fail, warn, recorded) {
     return;
   }
   const pages = har?.log?.pages ?? [];
-  const iterations = Number(args['expect-iterations']);
+  const iterations = parsePositiveInteger(
+    args['expect-iterations'],
+    'expect-iterations'
+  );
   if (pages.length !== iterations) {
     fail(
       'har.iterations',

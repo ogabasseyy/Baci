@@ -7,7 +7,8 @@ import {
   generationIdFor,
 } from './generation-identity.mjs';
 import { readInputSnapshot, verifySnapshotHash } from './input-store.mjs';
-import { loadGeneration, parsePilotManifest, PilotManifestError } from './manifest.mjs';
+import { parsePilotManifest, PilotManifestError } from './manifest.mjs';
+import { loadGeneration } from './manifest-store.mjs';
 
 export class PilotSheetError extends Error {
   constructor(message) {

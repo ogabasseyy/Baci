@@ -89,15 +89,24 @@ test('matchAcceptance binds every identity and output hash', () => {
   });
 });
 
-test('matchAcceptance compares deduplicated tiers as a set', () => {
+test('matchAcceptance binds capped rungs positionally, not as a set', () => {
   const deduped = manifest();
-  // Small sources share one file across requested tiers; the record lists it once.
+  // Small sources share one file across requested tiers; the record still
+  // lists one hash per tier position so each rung stays bound.
   deduped.tiers = deduped.tiers.map((tier) => ({ ...tier, sha256: tierHashes()[0] }));
-  const record = acceptance({ outputHashes: [tierHashes()[0]] });
+  const record = acceptance({ outputHashes: Array(6).fill(tierHashes()[0]) });
   assert.deepEqual(matchAcceptance({ acceptance: record, manifest: deduped }), { ok: true });
+  const short = acceptance({ outputHashes: [tierHashes()[0]] });
+  const result = matchAcceptance({ acceptance: short, manifest: deduped });
+  assert.equal(result.ok, false);
 });
 
 test('matchAcceptance invalidates on any drift or rejection', () => {
+  const swapped = manifest();
+  swapped.tiers = swapped.tiers.map((tier, index, tiers) => ({
+    ...tier,
+    sha256: tiers[(index + 2) % tiers.length].sha256,
+  }));
   const cases = [
     ['rejected verdict', acceptance({ verdict: 'rejected' }), manifest()],
     ['changed source', acceptance(), manifest({ source: { sha256: 'd'.repeat(64) } })],
@@ -105,15 +114,13 @@ test('matchAcceptance invalidates on any drift or rejection', () => {
     ['changed merchant', acceptance(), manifest({ merchantId: 'de968340-de02-4aa8-95f9-9d5f7d2b1f20' })],
     ['changed asset', acceptance(), manifest({ assetId: 'logo-2' })],
     ['changed output bytes', acceptance({ outputHashes: ['e'.repeat(64)] }), manifest()],
-    ['reordered hashes still match', acceptance({ outputHashes: [...tierHashes()].reverse() }), manifest()],
+    // Same hash set, wrong rungs: positional binding rejects the swap.
+    ['swapped tier hashes', acceptance(), swapped],
+    ['reordered record hashes', acceptance({ outputHashes: [...tierHashes()].reverse() }), manifest()],
   ];
   for (const [label, record, manifestValue] of cases) {
     const result = matchAcceptance({ acceptance: record, manifest: manifestValue });
-    if (label === 'reordered hashes still match') {
-      assert.equal(result.ok, true, label);
-    } else {
-      assert.equal(result.ok, false, label);
-      assert.ok(result.reason.length > 0, label);
-    }
+    assert.equal(result.ok, false, label);
+    assert.ok(result.reason.length > 0, label);
   }
 });

@@ -24,11 +24,11 @@ import { takePeakWorkerRssBytes } from './worker-pool.mjs';
 import { readInputSnapshot, verifySnapshotHash } from './input-store.mjs';
 import {
   buildEncoderIdentity,
-  commitGeneration,
   currentRecipeId,
   generationIdFor,
   outputFileName,
 } from './manifest.mjs';
+import { commitGeneration } from './manifest-store.mjs';
 
 export class PilotGenerateError extends Error {
   constructor(code, message) {

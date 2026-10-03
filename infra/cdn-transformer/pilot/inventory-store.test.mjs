@@ -117,6 +117,40 @@ test('serializes concurrent inventory appends without loss', async () => {
   assert.deepEqual(await readdir(dir), ['inventory.json']);
 });
 
+test('appendInventoryRecord atomically steals a stale owned lock', async () => {
+  const { mkdir, readdir, writeFile: write } = await import('node:fs/promises');
+  const { appendInventoryRecord } = await import('./inventory-store.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-steal-'));
+  const path = join(dir, 'inventory.json');
+  await writeFile(path, JSON.stringify([]));
+  // Crashed holder: ancient owner with a dead pid.
+  const lockDir = `${path}.lock`;
+  await mkdir(lockDir);
+  await write(
+    join(lockDir, 'owner.json'),
+    JSON.stringify({
+      pid: 999_999_999,
+      startedAt: new Date(Date.now() - 300_000).toISOString(),
+      token: 'dead-holder',
+    })
+  );
+  const sha = createHash('sha256').update('x').digest('hex');
+  const count = await appendInventoryRecord(path, {
+    assetId: 'logo-a',
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: 'header-logo',
+    sourcePath: 'snapshots/logo-a.png',
+    url: 'https://cdn.example.com/media/logo-a.png',
+  });
+  assert.equal(count, 1);
+  // The steal renames before removing, so neither the live lock nor
+  // steal debris remains beside the inventory.
+  assert.deepEqual(await readdir(dir), ['inventory.json']);
+});
+
 test('releaseInventoryLock removes only its own owner token', async () => {
   const { mkdir, readdir, writeFile: write } = await import('node:fs/promises');
   const { releaseInventoryLock } = await import('./inventory-store.mjs');

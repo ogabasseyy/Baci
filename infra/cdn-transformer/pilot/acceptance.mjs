@@ -7,6 +7,8 @@ export const PilotAcceptanceSchema = z
     generationId: z.string().regex(/^[0-9a-f]{64}$/),
     merchantId: z.string().uuid(),
     note: z.string().min(1).max(500),
+    // Tier sha256 in canonical manifest tier order (requestedWidth
+    // ascending, avif before webp): matchAcceptance compares positionally.
     outputHashes: z.array(z.string().regex(/^[0-9a-f]{64}$/)).min(1).max(24),
     recipeId: z.string().min(1).max(64),
     reviewedAt: z.string().datetime({ offset: true }),
@@ -28,10 +30,6 @@ export function parsePilotAcceptance(value) {
   return { ok: true, record: parsed.data };
 }
 
-function sortedUniqueHashes(hashes) {
-  return [...new Set(hashes)].sort();
-}
-
 // A changed source, recipe, merchant, asset, or encoded byte invalidates the
 // acceptance. Only a matching `accepted` record permits lab use; anything
 // else leaves the original control active.
@@ -51,14 +49,18 @@ export function matchAcceptance({ acceptance, manifest }) {
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };
   }
-  const manifestHashes = sortedUniqueHashes(
-    (manifest.tiers ?? []).map((tier) => tier.sha256)
+  // Positional binding: outputHashes lists tier sha256 in canonical
+  // manifest tier order, so each accepted hash pins one rung's format,
+  // width, and bytes. A sorted-set comparison would let swapped tier
+  // claims (or deduped capped rungs) certify unchanged.
+  const recordHashes = acceptance.outputHashes ?? [];
+  if (recordHashes.length !== (manifest.tiers ?? []).length) {
+    return { ok: false, reason: 'encoded output bytes changed' };
+  }
+  const swapped = (manifest.tiers ?? []).findIndex(
+    (tier, index) => tier.sha256 !== recordHashes[index]
   );
-  const recordHashes = sortedUniqueHashes(acceptance.outputHashes ?? []);
-  if (
-    manifestHashes.length !== recordHashes.length ||
-    manifestHashes.some((hash, index) => hash !== recordHashes[index])
-  ) {
+  if (swapped !== -1) {
     return { ok: false, reason: 'encoded output bytes changed' };
   }
   return { ok: true };

@@ -257,6 +257,9 @@ const fixtures = {
         index === 0 ? { ...tier, quality: 0 } : tier
       ),
     },
+    // Same ladder, wrong order: acceptance hashes bind positionally, so a
+    // reordered ladder must fail the contract on every suite.
+    reorderedTiers: { ...manifest, tiers: [...logoTiers()].reverse() },
     sourceExtraField: {
       ...manifest,
       source: { ...manifest.source, extra: true },
@@ -310,6 +313,11 @@ const fixtures = {
     changedOutput: {
       ...acceptance,
       outputHashes: [...acceptance.outputHashes.slice(1), 'e'.repeat(64)],
+    },
+    // Same hash set, wrong positions: positional binding rejects the swap.
+    swappedOutput: {
+      ...acceptance,
+      outputHashes: [...acceptance.outputHashes].reverse(),
     },
     changedRecipe: { ...acceptance, recipeId: 'pilot-r1-other' },
     changedSource: { ...acceptance, sourceSha256: 'd'.repeat(64) },

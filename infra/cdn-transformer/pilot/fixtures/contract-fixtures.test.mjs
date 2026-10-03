@@ -94,6 +94,7 @@ test('corpus pins the invalid-manifest key set (no silent case loss)', async () 
     'qualityZero',
     'r2MissingDelivery',
     'remoteUrlPath',
+    'reorderedTiers',
     'sourceExtraField',
     'tierBytesZero',
     'tierExtraField',

@@ -12,7 +12,7 @@
 //   node merchant-image-pilot-readiness.mjs --origin=http://localhost:3122 \
 //     --store-map='merchant-uuid=slug,...' --hero-stores='ogabassey' \
 //     --mounts=<preflight-accepted.json> --chrome='/path/to/Chrome' \
-//     [--profiles=mobile-dpr2,desktop-dpr1]
+//     [--profiles=mobile-390-dpr2,desktop-1365-dpr1]
 // Exits 0 with a JSON report on stdout when ready; exit 1 otherwise.
 //
 // --mounts is the offline preflight accepted list (preflight

@@ -84,6 +84,12 @@ describe('isSafeRelativePath', () => {
       'a\\b.png',
       '..',
       '.',
+      // Route parity: length cap, control characters, encoded separators.
+      `${'a'.repeat(253)}.png`,
+      'a\nb.png',
+      'a%2fb.png',
+      'a%5cb.png',
+      'a%00.png',
       null,
       undefined,
       42,

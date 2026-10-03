@@ -10,31 +10,48 @@ import {
 } from './merchant-image-pilot-readiness-config.mjs';
 
 describe('merchant-image-pilot-readiness profiles', () => {
-  it('covers mobile DPR 1/2/3 and desktop by default', () => {
+  it('covers the spec matrix by default', () => {
+    // Design 2026-10-01: mobile 360/390/412 at DPR 1/2/3, desktop 1365
+    // at DPR 1/2.
     expect(DEFAULT_READINESS_PROFILES).toEqual([
-      'desktop-dpr1',
-      'desktop-dpr2',
-      'mobile-dpr1',
-      'mobile-dpr2',
-      'mobile-dpr3',
+      'desktop-1365-dpr1',
+      'desktop-1365-dpr2',
+      'mobile-360-dpr1',
+      'mobile-360-dpr2',
+      'mobile-360-dpr3',
+      'mobile-390-dpr1',
+      'mobile-390-dpr2',
+      'mobile-390-dpr3',
+      'mobile-412-dpr1',
+      'mobile-412-dpr2',
+      'mobile-412-dpr3',
     ]);
     expect(parseProfiles(undefined)).toEqual(DEFAULT_READINESS_PROFILES);
     expect(parseProfiles('')).toEqual(DEFAULT_READINESS_PROFILES);
-    expect(READINESS_PROFILES['mobile-dpr3'].deviceScaleFactor).toBe(3);
-    expect(READINESS_PROFILES['desktop-dpr1'].isMobile).toBe(false);
-    expect(READINESS_PROFILES['desktop-dpr1'].viewport).toEqual({
+    expect(READINESS_PROFILES['mobile-412-dpr3'].deviceScaleFactor).toBe(3);
+    expect(READINESS_PROFILES['mobile-360-dpr1'].viewport).toEqual({
+      height: 844,
+      width: 360,
+    });
+    expect(READINESS_PROFILES['desktop-1365-dpr1'].isMobile).toBe(false);
+    expect(READINESS_PROFILES['desktop-1365-dpr1'].viewport).toEqual({
       height: 800,
-      width: 1280,
+      width: 1365,
     });
   });
 
   it('accepts an explicit profile subset and rejects unknowns', () => {
-    expect(parseProfiles('mobile-dpr2,desktop-dpr1')).toEqual([
-      'mobile-dpr2',
-      'desktop-dpr1',
+    expect(parseProfiles('mobile-390-dpr2,desktop-1365-dpr1')).toEqual([
+      'mobile-390-dpr2',
+      'desktop-1365-dpr1',
     ]);
-    expect(parseProfiles('mobile-dpr2,mobile-dpr2')).toEqual(['mobile-dpr2']);
-    expect(() => parseProfiles('mobile-dpr2,watch')).toThrow(/bad --profiles/);
+    expect(parseProfiles('mobile-390-dpr2,mobile-390-dpr2')).toEqual([
+      'mobile-390-dpr2',
+    ]);
+    expect(() => parseProfiles('mobile-390-dpr2,watch')).toThrow(
+      /bad --profiles/
+    );
+    expect(() => parseProfiles('mobile-dpr2')).toThrow(/bad --profiles/);
     expect(() => parseProfiles(',,,')).toThrow(/bad --profiles/);
   });
 });

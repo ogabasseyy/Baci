@@ -196,6 +196,46 @@ describe('GET /api/cron/order-notifications dead-letter', () => {
     );
   });
 
+  it.each([
+    [{ merchant_id: null, order_id: 'order-1' }],
+    [{ merchant_id: 'merchant-1', order_id: null }],
+  ])('dead-letters stored rows missing exactly one identity (%#)', async (storedIdentity) => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          attempt_count: 1,
+          event_type: 'manual_order_receipt',
+          id: 'outbox-half-corrupt',
+          max_attempts: 5,
+        },
+      ],
+      error: null,
+    });
+    mockSupabase.from.mockReturnValue(
+      createUpdateBuilder({
+        event_type: 'manual_order_receipt',
+        ...storedIdentity,
+      })
+    );
+
+    const response = await GET(cronRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      claimed: 1,
+      skipped: 1,
+      unparseable: 1,
+    });
+    const updateBuilder = mockSupabase.from.mock.results[0]?.value;
+    expect(updateBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip_reason: 'unparseable',
+        status: 'skipped',
+      })
+    );
+  });
+
   it('loops when the claim projection drops fields the stored row still has', async () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [

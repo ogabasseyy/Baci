@@ -70,8 +70,8 @@ async function deadLetterCorruptOutboxRow(
       readError ||
       !stored ||
       !isManualOutboxEventType(stored.event_type) ||
-      hasUsableIdentity(stored.merchant_id) ||
-      hasUsableIdentity(stored.order_id)
+      (hasUsableIdentity(stored.merchant_id) &&
+        hasUsableIdentity(stored.order_id))
     )
       return false;
     const { data, error } = await supabase

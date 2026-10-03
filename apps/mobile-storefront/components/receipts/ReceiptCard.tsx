@@ -30,11 +30,19 @@ const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
 function getPriceFormatter(currency: string): Intl.NumberFormat {
   let formatter = PRICE_FORMATTER_CACHE.get(currency);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    });
+    try {
+      formatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+      });
+    } catch {
+      // Malformed or unknown currency codes (legacy rows the sender
+      // would skip) degrade to NGN instead of crashing the list render
+      // with RangeError. A regex alone cannot cover well-formed but
+      // unassigned codes, so construction itself is guarded.
+      formatter = getPriceFormatter('NGN');
+    }
     PRICE_FORMATTER_CACHE.set(currency, formatter);
   }
   return formatter;

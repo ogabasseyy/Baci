@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { ReceiptListItem } from '@/types/receipt';
-import { ReceiptCard } from './ReceiptCard';
+import { formatPrice, ReceiptCard } from './ReceiptCard';
 
 jest.mock('@react-native-vector-icons/ionicons', () => () => null);
 
@@ -109,6 +109,24 @@ describe('ReceiptCard', () => {
     );
 
     expect(screen.getByText(/16 Jul 2026/)).toBeTruthy();
+  });
+
+  it('degrades malformed currencies to NGN instead of crashing', () => {
+    // Legacy rows can carry codes the sender would skip; Intl throws
+    // RangeError for them, which must not crash the list render.
+    for (const currency of ['NAIRA', '', 'ZZZ']) {
+      const { unmount } = render(
+        <ReceiptCard
+          item={{ ...receiptItem, currency }}
+          colors={Colors.light}
+          onPress={jest.fn()}
+        />
+      );
+      expect(screen.getByText(/150,000/)).toBeTruthy();
+      unmount();
+    }
+    expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
+    expect(formatPrice(150000, '')).toBe(formatPrice(150000, 'NGN'));
   });
 
   describe('bugfix: animated order product images on receipts', () => {

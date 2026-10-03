@@ -70,5 +70,24 @@ describe('manual-order document gates', () => {
     expect(isSettledManualBalance({ total: Number.NaN, amountPaid: 100 })).toBe(
       false
     );
+    // Booleans and blank strings fail closed: they coerce through Number()
+    // (true -> 1, '' -> 0) but the database never produces them for money
+    // columns, so only genuine money settles.
+    expect(isSettledManualBalance({ total: '', amountPaid: '' })).toBe(false);
+    expect(isSettledManualBalance({ total: '  ', amountPaid: 100 })).toBe(
+      false
+    );
+    expect(
+      isSettledManualBalance({
+        total: true as unknown as number,
+        amountPaid: 100,
+      })
+    ).toBe(false);
+    expect(
+      isSettledManualBalance({
+        total: 100,
+        amountPaid: false as unknown as number,
+      })
+    ).toBe(false);
   });
 });

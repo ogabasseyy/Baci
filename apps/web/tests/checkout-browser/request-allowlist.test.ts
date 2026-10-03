@@ -12,6 +12,12 @@ it('permits fixture navigation and Next RSC navigation', () => {
   expect(
     isFixtureAssetRequest({
       ...request,
+      url: 'http://127.0.0.1:3217/cart-navigation-start',
+    })
+  ).toBe(true);
+  expect(
+    isFixtureAssetRequest({
+      ...request,
       url: 'http://127.0.0.1:3217/crypto-payment-modal',
     })
   ).toBe(true);
@@ -19,6 +25,12 @@ it('permits fixture navigation and Next RSC navigation', () => {
     isFixtureAssetRequest({
       ...request,
       url: 'http://127.0.0.1:3217/dva-modal',
+    })
+  ).toBe(true);
+  expect(
+    isFixtureAssetRequest({
+      ...request,
+      url: 'http://127.0.0.1:3217/products/test-phone',
     })
   ).toBe(true);
   expect(

@@ -1,15 +1,29 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Cart from './page';
+
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: string }) => (
     <a href={href}>{children}</a>
   ),
 }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
-    cart: [{ cartItemId: 'fixture-item', name: 'Checkout fixture phone' }],
+    cart: [
+      {
+        cartItemId: 'fixture-item',
+        name: 'Checkout fixture phone',
+        price: 100_000,
+        quantity: 2,
+        negotiatedPrice: 90_000,
+      },
+    ],
+    cartTotal: 180_000,
   }),
 }));
 
@@ -35,6 +49,7 @@ function expectStorageCleared() {
 }
 
 beforeEach(() => {
+  routerPush.mockClear();
   localStorage.clear();
   sessionStorage.clear();
   window.history.replaceState({}, '', '/cart');
@@ -53,6 +68,12 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
+    const checkoutButton = screen.getByRole('button', {
+      name: /Proceed to Checkout/,
+    });
+    expect(checkoutButton).toHaveTextContent('₦180,000');
+    fireEvent.click(checkoutButton);
+    expect(routerPush).toHaveBeenCalledWith('/checkout');
   });
 
   it('propagates the explicit manual QA query to checkout without clearing state', async () => {
@@ -67,6 +88,12 @@ describe('fixture cart page', () => {
     expect(sessionStorage.getItem(storageKeys.form)).not.toBeNull();
     expect(sessionStorage.getItem(storageKeys.pending)).not.toBeNull();
     expect(localStorage.getItem(storageKeys.idempotency)).not.toBeNull();
+    const checkoutButton = screen.getByRole('button', {
+      name: /Proceed to Checkout/,
+    });
+    expect(checkoutButton).toHaveTextContent('₦180,000');
+    fireEvent.click(checkoutButton);
+    expect(routerPush).toHaveBeenCalledWith('/checkout?qa=manual');
   });
 
   it('clears every checkout fixture key immediately and after deferred cleanup', async () => {

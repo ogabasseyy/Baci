@@ -144,7 +144,7 @@ def audit_agent_runner(drift):
         # Resolve top-level literal variables first: a constructed
         # path (MUSE_BIN=...muse; "${MUSE_BIN}" exec ...) must count
         # as an invocation, not slip past the literal match.
-        varmap, _, namerefs = _collect_vars(runner_raw)
+        varmap, _, namerefs, _ = _collect_vars(runner_raw)
         expanded = [_resolve(line, varmap, namerefs)
                     for line in logical]
         # Command-position words (quote-glued, env-peeled): prose

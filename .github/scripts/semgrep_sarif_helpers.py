@@ -19,7 +19,8 @@ from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
                                    audit_github_cmdfile_writes)
 from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
-from semgrep_sarif_scan import (arith_regions, extract_subshells,
+from semgrep_sarif_scan import (arith_command_regions,
+                                arith_regions, extract_subshells,
                                 has_proc_environ,
                                 subscript_cmdsubst, _write_zone)
 from semgrep_sarif_segments import logical_lines
@@ -112,7 +113,8 @@ def _strip_case_patterns(nosub):
     return "; ".join(kept)
 
 
-def _audit_expansions(line, drift, src="", stale=frozenset()):
+def _audit_expansions(line, drift, src="", stale=frozenset(),
+                      opaque=frozenset()):
     # Unquoted-heredoc-body audit: words are stdin data (never
     # commands), but expansions execute. Extracted commands
     # audit fully; arithmetic regions for nested $/backtick.
@@ -120,11 +122,12 @@ def _audit_expansions(line, drift, src="", stale=frozenset()):
     # cannot fuse with another body's text into a phantom.
     _, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, src, stale)
+        _audit_line(inner, drift, src, stale, opaque)
     if any("$" in body or "`" in body
            for body in arith_regions(line)) \
-            and "helper-arithmetic-sub" not in drift:
-        drift.append("helper-arithmetic-sub")
+            or _arith_opaque_hit(line, opaque):
+        if "helper-arithmetic-sub" not in drift:
+            drift.append("helper-arithmetic-sub")
 
 
 def _strip_redirects(words):
@@ -142,12 +145,35 @@ def _strip_redirects(words):
     return kept
 
 
-def _audit_line(line, drift, src="", stale=frozenset()):
+def _arith_opaque_hit(line, opaque):
+    # Bare opaque names in arithmetic: bash re-evaluates the
+    # value as an expression, so a crafted subscript shape
+    # (arr[$(...)]) executes (verified on bash 3.2 and 5.1).
+    # $((...)) bodies scan whole; ((...)) bodies strip $(...)
+    # spans first (single-expansion output, audited where the
+    # substitution sits; its own re-parse is a residual saved
+    # in practice by the $(wc ...) numeric idiom).
+    if not opaque:
+        return False
+    for body in arith_regions(line):
+        if any(w in opaque
+               for w in re.findall(r"[A-Za-z_]\w*", body)):
+            return True
+    for body in arith_command_regions(line):
+        stripped, _ = extract_subshells(body)
+        if any(w in opaque
+               for w in re.findall(r"[A-Za-z_]\w*", stripped)):
+            return True
+    return False
+
+
+def _audit_line(line, drift, src="", stale=frozenset(),
+                opaque=frozenset()):
     cleaned, inners = extract_subshells(line)
     for inner in inners:
-        _audit_line(inner, drift, src, stale)
+        _audit_line(inner, drift, src, stale, opaque)
     for inner in subscript_cmdsubst(line):
-        _audit_line(inner, drift, src, stale)
+        _audit_line(inner, drift, src, stale, opaque)
     if DEFERRED_RE.search(line) \
             and "helper-deferred-exec" not in drift:
         drift.append("helper-deferred-exec")
@@ -159,8 +185,9 @@ def _audit_line(line, drift, src="", stale=frozenset()):
     # $( and would blind this rule to its own construct.
     if any("$" in body or "`" in body
            for body in arith_regions(line)) \
-            and "helper-arithmetic-sub" not in drift:
-        drift.append("helper-arithmetic-sub")
+            or _arith_opaque_hit(line, opaque):
+        if "helper-arithmetic-sub" not in drift:
+            drift.append("helper-arithmetic-sub")
     if BARE_POISON_RE.search(line) \
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
@@ -262,11 +289,11 @@ def _audit_line(line, drift, src="", stale=frozenset()):
         if argv0 == "trap":
             handler = _trap_handler(rest)
             if handler is not None:
-                _audit_line(handler, drift, src, stale)
+                _audit_line(handler, drift, src, stale, opaque)
         elif argv0 in ("mapfile", "readarray"):
             cb = _mapfile_callback(rest)
             if cb is not None:
-                _audit_line(cb, drift, src, stale)
+                _audit_line(cb, drift, src, stale, opaque)
         if re.match(r"^[\*\?\[]", argv0) \
                 or re.match(r"^\d*[<>]", argv0):
             continue
@@ -285,15 +312,15 @@ def _audit_shell_file(path, drift):
     except OSError:
         drift.append("helper-unreadable")
         return
-    varmap, stale, namerefs = _collect_vars(raw)
+    varmap, stale, namerefs, opaque = _collect_vars(raw)
     src = os.path.basename(path)
     code, bodies, env_bodies = _strip_heredocs(raw)
     for line in logical_lines(code):
         _audit_line(_resolve(line, varmap, namerefs), drift,
-                    src, stale)
+                    src, stale, opaque)
     for line in bodies:
         _audit_expansions(_resolve(line, varmap, namerefs),
-                           drift, src, stale)
+                           drift, src, stale, opaque)
     for kind, quoted, line in env_bodies:
         audit_github_cmdfile_body(
             kind, _resolve(line, varmap, namerefs), drift,

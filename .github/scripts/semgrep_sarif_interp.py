@@ -71,11 +71,12 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "poetry", "remake", "rustc", "sbt", "snap", "task",
              "terraform", "tofu", "tox", "uv", "vagrant", "winget",
              "yarn", "yum", "zypper", "composer", "conan", "pmake",
-             "java", "javac", "run-parts"}
+             "java", "javac", "run-parts", "sqlite3"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
-# eligible executable in its directory operand.
+# eligible executable in its directory operand; sqlite3 runs
+# .shell commands and -init files (dot-command execution).
 
 
 def _check_command(argv0, rest, pre, drift, src=""):

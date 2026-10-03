@@ -71,6 +71,18 @@ def audit_install_binding(installer, first_cmd, drift):
                 and MUSE_DEST_MARK in line \
                 and "muse-installer-overwrite" not in drift:
             drift.append("muse-installer-overwrite")
+        # A shell function or alias named install/cp/mv/ln/tee
+        # shadows the audited install line: the verified tmp
+        # binary never lands and attacker bytes do instead.
+        # All three function spellings (name(), function name,
+        # function name()) plus alias defs drift.
+        if re.match(r"^(?:function\s+)?(install|cp|mv|ln|tee)"
+                    r"(?:\s*\(\s*\))?\s*(\{|$|;)",
+                    line.strip()) \
+                or re.match(r"^alias\s+(install|cp|mv|ln|tee)=",
+                            line.strip()):
+            if "muse-installer-shadow" not in drift:
+                drift.append("muse-installer-shadow")
         for tgt in redirect_targets(line):
             if MUSE_DEST_MARK in tgt \
                     and "muse-installer-overwrite" not in drift:
@@ -211,7 +223,10 @@ def _compare_block_ok(installer, at):
         if re.match(r"^(echo|printf|:|true)\b", s):
             continue
         if re.match(r"^exit\b", s):
-            if re.match(r"^exit\s+[1-9][0-9]*\s*(?:;|$)",
+            # Statuses wrap mod 256 (exit 256 exits 0!), so
+            # only 1-255 prove the mismatch branch fails.
+            if re.match(r"^exit\s+(25[0-5]|2[0-4][0-9]|"
+                        r"1[0-9][0-9]|[1-9][0-9]?)\s*(?:;|$)",
                         s):
                 saw_exit = True
                 continue

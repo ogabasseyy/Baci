@@ -46,7 +46,8 @@ def _split_top(text, delims):
     return parts
 
 
-def nameref_decl(piece, record, varmap, stale, namerefs):
+def nameref_decl(piece, record, varmap, stale, namerefs,
+                 opaque):
     # record is False for volatile/indented pieces: the edge
     # is uncertain, so edges clear and names stale. Returns
     # True when the piece is a nameref declaration (every
@@ -74,6 +75,7 @@ def nameref_decl(piece, record, varmap, stale, namerefs):
                 namerefs.pop(name, None)
                 varmap.pop(name, None)
                 stale.add(name)
+                opaque.add(name)
         return True
     for word in rest:
         if "=" not in word:
@@ -82,6 +84,7 @@ def nameref_decl(piece, record, varmap, stale, namerefs):
                 namerefs.pop(name, None)
                 varmap.pop(name, None)
                 stale.add(name)
+                opaque.add(name)
             continue
         name, tgt = word.split("=", 1)
         name = name.strip("\"'")
@@ -89,6 +92,7 @@ def nameref_decl(piece, record, varmap, stale, namerefs):
         if not re.fullmatch(r"[A-Za-z_]\w*", name):
             continue
         varmap.pop(name, None)
+        opaque.add(name)
         if re.fullmatch(r"[A-Za-z_]\w*", tgt):
             namerefs[name] = tgt
             stale.discard(name)

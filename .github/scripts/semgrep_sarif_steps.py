@@ -233,6 +233,48 @@ def audit_step_commands(ctx, drift):
                         drift.append("secret-step-untrusted-command")
 
 
+def _splice_yaml_aliases(scan_lines, all_lines):
+    # YAML aliases splice anchored content invisibly: env:
+    # *agent_env carries the anchor's entries without showing
+    # them. Defs (&name in mapping/sequence value position)
+    # map to their def line plus deeper-indented block; every
+    # *ref in scan value position splices all its def blocks.
+    # Iterated to fixpoint (bounded) for nested aliases.
+    # Returns (lines, unresolved): unknown refs fail closed.
+    anchors = {}
+    for i, line in enumerate(all_lines):
+        for dm in re.finditer(r"(?:^|[:\-\[,{])\s*&"
+                             r"([A-Za-z_][A-Za-z0-9_-]*)",
+                             line):
+            name = dm.group(1)
+            indent = len(line) - len(line.lstrip(" "))
+            block = [line]
+            for nxt in all_lines[i + 1:]:
+                if not nxt.strip():
+                    continue
+                if len(nxt) - len(nxt.lstrip(" ")) <= indent:
+                    break
+                block.append(nxt)
+            anchors.setdefault(name, []).append(block)
+    out = list(scan_lines)
+    for _ in range(8):
+        grown = False
+        for line in list(out):
+            for ref in re.findall(
+                    r"(?:^|[:\-\[,{])\s*\*"
+                    r"([A-Za-z_][A-Za-z0-9_-]*)", line):
+                if ref not in anchors:
+                    return out, True
+                for block in anchors[ref]:
+                    for bl in block:
+                        if bl not in out:
+                            out.append(bl)
+                            grown = True
+        if not grown:
+            return out, False
+    return out, True
+
+
 def audit_agent_env(ctx, drift):
     # The runner scrubs only the two conventional token variable
     # names: a token passed to the agent step under another key (or
@@ -274,16 +316,23 @@ def audit_agent_env(ctx, drift):
     for line in ctx.code_lines:
         # Job-level env: is 4-space (jobs.<name>.env); step-level
         # is 8-space and must not start a job-env region. Quoted
-        # ("env":) opens a region too.
+        # ("env":) opens a region too. The opener line itself is
+        # always scanned: env: *alias and env: {flow} forms
+        # carry values on the opener with no block after.
         indented = len(line) - len(line.lstrip(" ")) == 4
         key, val = map_key_value(line.strip()) if indented else (None, None)
-        if key == "env" and not val:
-            in_env = True
+        if key == "env":
+            job_env.append(line)
+            in_env = not val
         elif re.match(r"^  \S|^    \S", line):
             in_env = False
         elif in_env:
             job_env.append(line)
-    for line in agent_span + job_env:
+    scan, unresolved = _splice_yaml_aliases(
+        agent_span + job_env, ctx.workflow_lines)
+    if unresolved and "agent-env-alias" not in drift:
+        drift.append("agent-env-alias")
+    for line in scan:
         if token_expr.search(line):
             drift.append("agent-token-expression")
             break

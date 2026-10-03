@@ -177,6 +177,35 @@ def arith_regions(text):
     return regions
 
 
+def arith_command_regions(text):
+    # Bodies of ((...)) compound commands ($((...)) excluded:
+    # arith_regions covers those). Bare names here recurse
+    # exactly like $((...)), so the opaque-name rule applies;
+    # quoted spans are literal text, never commands, and are
+    # skipped. Residual: [[ ]]/case globs with (( over-match.
+    regions = []
+    i, quote, n = 0, None, len(text)
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == quote:
+                quote = None
+            i += 1
+        elif ch in ("'", '"'):
+            quote, i = ch, i + 1
+        elif ch == "\\" and i + 1 < n:
+            i += 2
+        elif text[i:i + 2] == "((" \
+                and (i == 0 or text[i - 1] != "$"):
+            j = _paren_end(text, i + 1)
+            regions.append(text[i + 2:j - 1]
+                           if j < len(text) else text[i + 2:])
+            i = j + 1 if j < len(text) else j
+        else:
+            i += 1
+    return regions
+
+
 def github_cmdfile_kind(target):
     # "env"/"path" when a redirect/copy target is a runner
     # command file ($GITHUB_ENV/$GITHUB_PATH, braced or bare;

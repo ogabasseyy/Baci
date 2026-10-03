@@ -521,5 +521,25 @@ t promptfile-assign 1 "helper-promptfile-rebind" happy.sarif "$PR${FS}set -euo p
 # --- installer errexit tracking (CodeRabbit: set -o pipefail FP) ---
 t errexit-pipefail-fp 0 "" happy.sarif "$I${FS}set -euo pipefail${FS}r${FS}set -euo pipefail${FS}set -e -o pipefail"
 
+# --- sqlite3 loader (Codex P1: .shell execution) ---
+t loader-sqlite3 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sqlite3 :memory: \".shell bash evil.sh\""
+
+# --- installer shadow (Codex P1: install() function override) ---
+t installer-shadow-fn 1 "muse-installer-shadow" happy.sarif "$I${FS}install -m 0755${FS}b${FS}install() { cp evil \"\${@: -1}\"; }"
+t installer-shadow-alias 1 "muse-installer-shadow" happy.sarif "$I${FS}install -m 0755${FS}b${FS}alias install=evil"
+
+# --- installer exit range (Codex P1: exit 256 wraps to 0) ---
+t installer-exit-256 1 "muse-installer-no-compare" happy.sarif "$I${FS}3:exit 1${FS}r${FS}exit 1${FS}exit 256"
+t installer-exit-255-fp 0 "" happy.sarif "$I${FS}3:exit 1${FS}r${FS}exit 1${FS}exit 255"
+
+# --- arithmetic recursion (Codex P1: printf-built subscript) ---
+t arith-recurse-printf 1 "helper-arithmetic-sub" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v payload 'arr[\044(bash evil.sh)]'${RS}$H${FS}printf -v payload 'arr[\044(bash evil.sh)]'${FS}a${FS}: \$(( payload++ ))"
+t arith-recurse-cmdform 1 "helper-arithmetic-sub" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}read payload${RS}$H${FS}read payload${FS}a${FS}(( payload > 0 ))"
+t arith-counter-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}n=\$(wc -c < /dev/null)${RS}$H${FS}n=\$(wc -c < /dev/null)${FS}a${FS}: \$(( n + 1 ))"
+
+# --- env alias smuggle (Codex P1: env: *agent_env) ---
+t agent-env-alias 1 "agent-token-expression" happy.sarif "$S${FS}GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}${FS}a${FS}          LEAKED_GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}${RS}$S${FS}5:        env:${FS}r${FS}        env:${FS}        env: *agent_env${RS}$S${FS}2:        env:${FS}r${FS}        env:${FS}        env: &agent_env${RS}$S${FS}          META_API_KEY: \${{ secrets.META_API_KEY }}${FS}d${RS}$S${FS}          PROMPT_FILE: \${{ steps.diff.outputs.prompt_file }}${FS}d${RS}$S${FS}          MUSE_MODEL: \${{ env.MUSE_MODEL_RESOLVED }}${FS}d${RS}$S${FS}          MUSE_EFFORT: \${{ env.MUSE_EFFORT_RESOLVED }}${FS}d${RS}$S${FS}4:          SCRIPT_DIR: \${{ steps.scriptdir.outputs.dir }}${FS}d"
+t agent-env-alias-unresolved 1 "agent-env-alias" happy.sarif "$S${FS}5:        env:${FS}r${FS}        env:${FS}        env: *missing_anchor"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

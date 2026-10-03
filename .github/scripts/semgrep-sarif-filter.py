@@ -148,8 +148,14 @@ def main():
                           "re-open. Audit: " + AUDITED_PATH + ".")
                     break
         run["results"] = kept
-    with open("semgrep.sarif", "w") as fh:
+    # Atomic replace: a truncate-then-write crash (disk-full,
+    # preemption) would leave an empty/truncated report and
+    # lose unrelated findings, so stage aside and rename.
+    with open("semgrep.sarif.tmp", "w") as fh:
         json.dump(sarif, fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace("semgrep.sarif.tmp", "semgrep.sarif")
     return 0
 
 

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantColorValue } from './variant-color-value';
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -139,7 +140,7 @@ export async function loadMcpProductVariants({
       : variants;
     // Group by attribute type
     const colors = [
-      ...new Set(displayVariants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => getMcpVariantColorValue(v.attributes)).filter(Boolean)),
     ];
     const storages = [
       ...new Set(

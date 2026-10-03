@@ -132,6 +132,23 @@ describe('buildMcpProductDetail', () => {
     });
   });
 
+  it.each([
+    { key: 'Colour', value: 'Rose Gold' },
+    { key: 'colour', value: 'Midnight Green' },
+  ])('includes stocked legacy $key option values in Available Colors', async ({ key, value }) => {
+    const attributes = { [key]: value };
+    const supabase = { rpc: vi.fn(async () => ({
+      data: [{ attributes, price_override: null, stock_quantity: 2, condition: 'new', images: [] }],
+      error: null,
+    })) } as unknown as SupabaseClient;
+    const result = await buildMcpProductDetail({
+      product, supabase, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+
+    expect(result.content[0].text).toContain(`**Available Colors:** ${value}`);
+    expect(result.structuredContent).toMatchObject({ variants: [{ attributes }] });
+  });
+
   it('does not infer selectable color from a Midnight Black product image filename', async () => {
     const supabase = { rpc: vi.fn(async () => ({
       data: [{

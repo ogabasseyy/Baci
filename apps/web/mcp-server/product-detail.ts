@@ -3,6 +3,7 @@ import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantColorValue } from './variant-color-value';
 
 interface ProductDetailSource {
   id: string;
@@ -169,7 +170,7 @@ export async function buildMcpProductDetail({
       ? variants.filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
       : variants;
     const colors = [
-      ...new Set(availableVariants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(availableVariants.map((v) => getMcpVariantColorValue(v.attributes)).filter(Boolean)),
     ];
     const storageOptions = [
       ...new Set(

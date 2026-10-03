@@ -1,3 +1,6 @@
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
+import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
+
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
 
 const PRODUCT_LOOKUP_INPUT_SCHEMA = {
@@ -26,9 +29,6 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   openWorldHint: false,
   readOnlyHint: true,
 } as const;
-
-import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
-import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 export const PUBLIC_MCP_TOOLS = [
   {

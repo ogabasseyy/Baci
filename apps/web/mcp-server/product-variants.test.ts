@@ -171,6 +171,28 @@ describe('loadMcpProductVariants', () => {
     expect(result.structuredContent?.variants?.[0]).not.toHaveProperty('attributes.color');
   });
 
+  it.each([
+    { key: 'Colour', value: 'Rose Gold' },
+    { key: 'colour', value: 'Midnight Green' },
+  ])('includes stocked legacy $key option values in Colors', async ({ key, value }) => {
+    const supabase = createSupabase();
+    const attributes = { [key]: value };
+    supabase.rpc.mockResolvedValue({
+      data: [{ attributes, price_override: null, stock_quantity: 2 }],
+      error: null,
+    });
+    const result = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' },
+      merchantId: 'merchant-1',
+      supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (input) => input,
+      formatPrice: String,
+    });
+
+    expect(result.content[0].text).toContain(`**Colors:** ${value}`);
+    expect(result.structuredContent?.variants?.[0]?.attributes).toEqual(attributes);
+  });
+
   it('does not claim availability when the public variant RPC fails', async () => {
     const supabase = createSupabase();
     supabase.rpc.mockResolvedValue({ data: null, error: { message: 'unavailable' } });

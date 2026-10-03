@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   loadLabConfig,
@@ -44,14 +44,52 @@ function isSafeRelativePath(value: string): boolean {
 
 const LAB_LOOPBACK_ORIGIN = 'http://localhost:3000';
 
-// Request origin for the card path's absolute staged URLs. Forwarded headers
-// are untrusted: only the first proto token survives (http/https, else http),
-// and the host is normalized through URL so paths, userinfo, casing, and
-// malformed values cannot reach the rendered image URLs.
+// Request origin for the card path's absolute staged URLs (the original
+// card renderer rejects relative URLs, so the lockup's relative form is
+// not an option here). Host/proto headers are untrusted input and must
+// never be reflected: an attacker-controlled Host would otherwise be
+// embedded in rendered image URLs (cache-poisoning/phishing input on any
+// shared deployment with the lab flag on). Resolution order:
+// 1. BACI_IMAGE_PILOT_ORIGIN when set to a valid http(s) origin
+//    (operator allowlist for staged/shared origins).
+// 2. The request Host, but ONLY when it parses to loopback
+//    (localhost, *.localhost, 127.0.0.1, ::1) — the lab's local runs.
+// 3. The loopback default. Anything else is untrusted and ignored.
+function labAssetOriginOverride(): string | null {
+  const configured = (process.env.BACI_IMAGE_PILOT_ORIGIN ?? '').trim();
+  if (!configured) {
+    return null;
+  }
+  try {
+    const parsed = new URL(configured);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.+$/, '');
+  return (
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized === '[::1]'
+  );
+}
+
 export function labRequestOrigin(headers: {
   host: string | null;
   proto: string | null;
 }): string {
+  const override = labAssetOriginOverride();
+  if (override) {
+    return override;
+  }
   const first = (headers.proto ?? '').split(',')[0]?.trim().toLowerCase();
   const scheme = first === 'http' || first === 'https' ? first : 'http';
   const host = (headers.host ?? '').trim();
@@ -59,7 +97,11 @@ export function labRequestOrigin(headers: {
     return LAB_LOOPBACK_ORIGIN;
   }
   try {
-    return new URL(`${scheme}://${host}`).origin;
+    const url = new URL(`${scheme}://${host}`);
+    if (!isLoopbackHostname(url.hostname)) {
+      return LAB_LOOPBACK_ORIGIN;
+    }
+    return url.origin;
   } catch {
     return LAB_LOOPBACK_ORIGIN;
   }
@@ -142,6 +184,26 @@ function loadLabConfigFromText(input: {
   });
 }
 
+// Existence check over the staged tier/original paths. Hash verification
+// stays in the staging step (per-request re-hashing would be pure waste);
+// drift without deletion resolves on the next input change or restart.
+export async function verifyStagedPaths(
+  paths: readonly string[]
+): Promise<void> {
+  const missing = (
+    await Promise.all(
+      paths.map(async (path) =>
+        (await stat(path).catch(() => null)) === null ? path : null
+      )
+    )
+  ).filter((path): path is string => path !== null);
+  if (missing.length > 0) {
+    throw new Error(
+      `merchant image pilot: ${missing.length} staged lab asset(s) missing (e.g. ${missing[0]}); re-run pnpm pilot:stage and restart the origin`
+    );
+  }
+}
+
 export async function getLabConfig(): Promise<PilotLabConfig> {
   const inputRoot = process.env.BACI_IMAGE_PILOT_INPUT_ROOT;
   const outputRoot = process.env.BACI_IMAGE_PILOT_OUTPUT_ROOT;
@@ -176,6 +238,12 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
     )
     .digest('hex');
   if (cachedConfig?.key === key) {
+    // The cache key commits to input bytes, not staged bytes: deleted or
+    // never-staged public/__pilot files would otherwise keep serving URLs
+    // for 404s. Fail closed with the operator fix instead. (Re-staging
+    // here cannot help: files written after `next start` are not served,
+    // so only re-stage + restart restores the lab.)
+    await verifyStagedPaths(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
   if (inflightLoad?.key === key) {

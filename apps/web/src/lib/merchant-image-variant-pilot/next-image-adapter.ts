@@ -39,6 +39,14 @@ export function projectPilotNextImage(input: {
   if (!avif || !webp) {
     return null;
   }
+  // Per-format scope (known limitation, not a defect): the fallback is the
+  // smallest WebP tier, and the never-larger guard holds per rung/format.
+  // For AVIF-original bindings whose WebP ladder stays larger (the
+  // generated-over-source disposition), a no-AVIF browser is served a
+  // larger-than-original fallback — there is no smaller same-codec
+  // alternative, and the AVIF original is undecodable there. Byte-saving
+  // comparisons must therefore be scoped per-format; merchant-wide
+  // protection needs that limitation handled first (see PR description).
   const fallback = [...input.tiers]
     .filter((tier) => tier.format === 'webp')
     .sort((left, right) => left.width - right.width)[0];

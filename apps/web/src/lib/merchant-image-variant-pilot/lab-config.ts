@@ -26,6 +26,10 @@ export interface PilotLabConfig {
     merchantId: string;
     slotId: string;
   }) => string | null;
+  // Absolute staged file paths (tiers + originals). The route layer
+  // re-verifies their existence on the cached-config path so deleted or
+  // never-staged bytes fail closed instead of serving URLs for 404s.
+  stagedPaths: readonly string[];
   statuses: PilotBindingStatus[];
 }
 
@@ -157,10 +161,12 @@ export async function loadLabConfig(input: {
   // complete BEFORE `next start`: files added to public/ after the server
   // starts are not served, so operators run the pre-start stage CLI
   // (tools/perf/merchant-image-pilot-stage.cli.ts) and then start the
-  // origin. Request-time loads re-verify and self-heal missing or drifted
-  // files for the NEXT restart; preflight's served-byte checks fail closed
-  // when staged bytes are not actually servable.
+  // origin. Request-time loads still write missing files to disk, but those
+  // bytes only become servable after a restart — so the route layer fails
+  // closed when staged bytes go missing instead of serving URLs for 404s,
+  // and preflight's served-byte checks verify servability end to end.
   const stagedOriginals = new Map<string, string>();
+  const stagedPaths: string[] = [];
   for (const status of statuses) {
     if (status.status !== 'accepted' || !status.generationId) {
       continue;
@@ -186,8 +192,9 @@ export async function loadLabConfig(input: {
       sourceSha256: status.binding.sourceSha256,
     });
     for (const tier of tiers ?? []) {
+      const tierDest = join(generationStage, tier.fileName);
       await stageVerifiedTier({
-        destPath: join(generationStage, tier.fileName),
+        destPath: tierDest,
         expectedBytes: tier.bytes,
         expectedSha256: tier.sha256,
         sourcePath: join(
@@ -197,6 +204,7 @@ export async function loadLabConfig(input: {
           tier.fileName
         ),
       });
+      stagedPaths.push(tierDest);
     }
     const originalsStage = join(input.publicDir, '__pilot', 'originals');
     await mkdir(originalsStage, { recursive: true });
@@ -210,6 +218,7 @@ export async function loadLabConfig(input: {
     if (!(await destMatches(originalDest, snapshot))) {
       await writeFile(originalDest, snapshot);
     }
+    stagedPaths.push(originalDest);
     stagedOriginals.set(
       `${status.binding.merchantId}/${status.binding.slotId}`,
       `${baseUrl}/originals/${fileName}`
@@ -221,6 +230,7 @@ export async function loadLabConfig(input: {
     index,
     originalUrlFor: (slot) =>
       stagedOriginals.get(`${slot.merchantId}/${slot.slotId}`) ?? null,
+    stagedPaths,
     statuses,
   };
 }

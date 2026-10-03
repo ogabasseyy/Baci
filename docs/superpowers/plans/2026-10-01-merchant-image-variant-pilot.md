@@ -399,6 +399,10 @@ node pilot/quality-sheet.mjs --output-root .pilot-output \
 BACI_IMAGE_PILOT_LAB=1 corepack pnpm pilot:stage \
   --input-root <dir> --output-root <dir> --public-dir <public>
 corepack pnpm exec next start -p 3122   # only after staging succeeds
+# Card image URLs are absolute (the original renderer rejects relative
+# ones) but Host headers are untrusted: only loopback Hosts are reflected.
+# For a shared/staged lab origin, set BACI_IMAGE_PILOT_ORIGIN=https://… —
+# otherwise card URLs fall back to http://localhost:3000.
 
 # Final validation (Task 7)
 pnpm turbo lint

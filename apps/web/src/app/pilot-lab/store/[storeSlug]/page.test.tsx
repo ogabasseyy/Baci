@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('next/headers', () => ({
-  headers: vi.fn(async () => new Headers({ host: 'lab.invalid:3101' })),
+  headers: vi.fn(async () => new Headers({ host: 'localhost:3101' })),
 }));
 
 vi.mock('react-dom', async (importOriginal) => {
@@ -253,8 +253,20 @@ describe('pilot-lab store routes', () => {
     expect(html).toContain('stagger-4');
     // Card path serves absolute staged URLs (the original card renderer
     // rejects relative ones); the lockup stays relative.
-    expect(html).toContain(`http://lab.invalid:3101/__pilot/${OMNI_CARD_GEN}/`);
+    expect(html).toContain(`http://localhost:3101/__pilot/${OMNI_CARD_GEN}/`);
     expect(html).toContain(`src="/__pilot/${LOGO_GEN}/`);
+  });
+
+  it('never reflects a spoofed Host into card image URLs', async () => {
+    await setupFullRoots();
+    const { headers } = await import('next/headers');
+    vi.mocked(headers).mockResolvedValueOnce(
+      new Headers({ host: 'evil.invalid' })
+    );
+    const html = await renderStore('omnimart', 'pilot');
+    expect(html).not.toContain('evil.invalid');
+    // Untrusted hosts fall back to the loopback default.
+    expect(html).toContain(`http://localhost:3000/__pilot/${OMNI_CARD_GEN}/`);
   });
 
   it('gives the pilot candidate no consumer of the selected original', async () => {
@@ -302,7 +314,7 @@ describe('pilot-lab store routes', () => {
     // URLs would render /placeholder.svg instead); the lockup stays
     // relative.
     expect(html).toContain(
-      `http://lab.invalid:3101/__pilot/originals/${OMNIMART}-omnimart-earbuds`
+      `http://localhost:3101/__pilot/originals/${OMNIMART}-omnimart-earbuds`
     );
     expect(html).not.toContain('/placeholder.svg');
     expect(html).toContain(`src="/__pilot/originals/${OMNIMART}-omnimart-logo`);

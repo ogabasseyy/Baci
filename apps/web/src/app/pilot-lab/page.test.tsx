@@ -113,6 +113,17 @@ describe('pilot-lab route', () => {
     expect(html).toContain('data-pilot-lab-picture="pilot"');
   });
 
+  it('404s unknown ?arm values instead of silently rendering pilot', async () => {
+    const roots = await setupLabRoots();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    for (const arm of ['Pilot', 'CONTROL', 'both', '', 'pilot ']) {
+      await expect(renderPage(arm)).rejects.toThrow('NEXT_NOT_FOUND');
+    }
+  });
+
   it('marks every binding so the served gate can prove coverage', async () => {
     const roots = await setupLabRoots();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

@@ -37,4 +37,14 @@ describe('verifyStagedBytes', () => {
       ])
     ).rejects.toThrow(/pilot:stage and restart/);
   });
+
+  it('refuses staged sets beyond the per-request verification budget', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-budget-'));
+    const file = join(dir, 'tier.avif');
+    await writeFile(file, 'bytes');
+    const entry = { path: file, sha256: '0'.repeat(64) };
+    await expect(
+      verifyStagedBytes(Array.from({ length: 257 }, () => entry))
+    ).rejects.toThrow(/257 staged lab asset\(s\) exceed the 256-entry/);
+  });
 });

@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,10 +61,7 @@ export async function setupLabRoots(input: {
   accepted: readonly LabTestAsset[];
   unreviewed?: readonly LabTestAsset[];
 }): Promise<LabTestRoots> {
-  const base = join(
-    tmpdir(),
-    `pilot-route-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  const base = await mkdtemp(join(tmpdir(), 'pilot-route-'));
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   const publicDir = join(base, 'public');
@@ -187,13 +190,16 @@ export async function setupLabRoots(input: {
       join(outputRoot, 'acceptances.json'),
       'utf8'
     );
-    await loadLabConfig({
-      acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
-      inputRoot,
-      inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
-      outputRoot,
-      publicDir,
-    });
+    await loadLabConfig(
+      {
+        acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
+        inputRoot,
+        inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
+        outputRoot,
+        publicDir,
+      },
+      { stage: true }
+    );
   } finally {
     if (flagWas === undefined) {
       delete process.env.BACI_IMAGE_PILOT_LAB;

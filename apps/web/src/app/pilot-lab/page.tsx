@@ -188,6 +188,15 @@ export default async function PilotLabPage({
     notFound();
   }
   const params = await searchParams;
+  // Unknown ?arm values are 404, not silent pilot: a mistyped arm must
+  // never render (and measure) the wrong comparison arm.
+  if (
+    params.arm !== undefined &&
+    params.arm !== 'control' &&
+    params.arm !== 'pilot'
+  ) {
+    notFound();
+  }
   const arm: PilotLabArm = params.arm === 'control' ? 'control' : 'pilot';
   const config = await getLabConfig();
   return (

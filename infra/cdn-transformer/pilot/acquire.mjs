@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { parseCliArgs } from './cli-args.mjs';
 import { MAX_INPUT_BYTES, OP_TIMEOUT_MS, ROLES } from './constants.mjs';
+import { assertPublicFetchUrl } from './fetch-policy.mjs';
 import {
   ASSET_ID_PATTERN,
   resolveNewSnapshotPath,
@@ -63,7 +64,10 @@ async function defaultProbe() {
   return probeImageFile;
 }
 
-async function fetchBoundedBytes(url, { maxBytes, timeoutMs }) {
+async function fetchBoundedBytes(
+  url,
+  { allowPrivateHosts, maxBytes, timeoutMs }
+) {
   let parsed;
   try {
     parsed = new URL(url);
@@ -72,6 +76,11 @@ async function fetchBoundedBytes(url, { maxBytes, timeoutMs }) {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new PilotAcquireError(`acquire: only http(s) URLs are allowed`);
+  }
+  // Loopback fixtures (node:http test servers) opt in explicitly; the
+  // operator CLI never does, so a mistyped inventory URL fails closed.
+  if (!allowPrivateHosts) {
+    assertPublicFetchUrl(url);
   }
   let response;
   try {
@@ -85,7 +94,9 @@ async function fetchBoundedBytes(url, { maxBytes, timeoutMs }) {
     );
   }
   if (!response.ok) {
-    throw new PilotAcquireError(`acquire: origin returned HTTP ${response.status}`);
+    throw new PilotAcquireError(
+      `acquire: origin returned HTTP ${response.status}`
+    );
   }
   const contentType = (response.headers.get('content-type') ?? '')
     .split(';', 1)[0]
@@ -126,6 +137,7 @@ async function fetchBoundedBytes(url, { maxBytes, timeoutMs }) {
 
 export async function acquireSnapshot(options) {
   const {
+    allowPrivateHosts = false,
     assetId,
     inputRoot,
     maxBytes = MAX_INPUT_BYTES,
@@ -156,6 +168,7 @@ export async function acquireSnapshot(options) {
     );
   }
   const { bytes, contentType } = await fetchBoundedBytes(url, {
+    allowPrivateHosts,
     maxBytes,
     timeoutMs,
   });
@@ -197,8 +210,7 @@ export async function acquireSnapshot(options) {
   }
   // The origin's label must agree with the decoded bytes: JPEG bytes filed
   // as image/png would stage a mismatched snapshot and control URL.
-  const decodedContentType =
-    CONTENT_TYPE_FOR_DECODED_FORMAT[geometry?.format];
+  const decodedContentType = CONTENT_TYPE_FOR_DECODED_FORMAT[geometry?.format];
   if (decodedContentType !== contentType) {
     if (wroteSnapshot) {
       await unlink(target).catch(() => {});
@@ -231,7 +243,9 @@ export async function acquireSnapshot(options) {
     sourcePath: fileName,
   });
   if (!job.ok) {
-    throw new PilotAcquireError(`acquire: built invalid job (${job.issues.join('; ')})`);
+    throw new PilotAcquireError(
+      `acquire: built invalid job (${job.issues.join('; ')})`
+    );
   }
   return record;
 }
@@ -275,7 +289,10 @@ async function acquireInventoryLock(lockDir) {
       await mkdir(lockDir);
       await writeFile(
         join(lockDir, 'owner.json'),
-        JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
+        JSON.stringify({
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        })
       );
       return;
     } catch (error) {
@@ -384,7 +401,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     });
     const count = await appendInventoryRecord(args.inventory, record);
     console.log(
-      JSON.stringify({ count, sha256: record.sha256, sourcePath: record.sourcePath })
+      JSON.stringify({
+        count,
+        sha256: record.sha256,
+        sourcePath: record.sourcePath,
+      })
     );
   })().catch((error) => {
     console.error(error instanceof Error ? error.message : error);

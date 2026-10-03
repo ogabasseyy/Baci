@@ -86,6 +86,17 @@ describe('parseRawAcceptances', () => {
     expect(() => parseRawAcceptances({})).toThrow(/must be an array/);
     expect(parseRawAcceptances([{ verdict: 'accepted' }])).toHaveLength(1);
   });
+
+  it('rejects non-object elements with input-validation errors', () => {
+    for (const element of [null, 42, 'accepted', []]) {
+      expect(() => parseRawAcceptances([element])).toThrow(
+        /acceptances\[0\] must be an object/
+      );
+    }
+    expect(() => parseRawAcceptances([{ verdict: 'accepted' }, null])).toThrow(
+      /acceptances\[1\] must be an object/
+    );
+  });
 });
 
 describe('getLabConfig', () => {
@@ -117,13 +128,16 @@ describe('getLabConfig', () => {
       join(lab.outputRoot, 'acceptances.json'),
       'utf8'
     );
-    await loadLabConfig({
-      acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
-      inputRoot: lab.inputRoot,
-      inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
-      outputRoot: lab.outputRoot,
-      publicDir: lab.publicDir,
-    });
+    await loadLabConfig(
+      {
+        acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
+        inputRoot: lab.inputRoot,
+        inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
+        outputRoot: lab.outputRoot,
+        publicDir: lab.publicDir,
+      },
+      { stage: true }
+    );
     const first = await getLabConfig();
     expect(first.stagedPaths.length).toBeGreaterThan(0);
     // Same frozen inputs: the second load takes the cached path.

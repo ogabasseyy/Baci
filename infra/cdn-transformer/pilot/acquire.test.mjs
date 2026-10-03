@@ -1,10 +1,10 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import test from 'node:test';
 import { acquireSnapshot } from './acquire.mjs';
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -44,6 +44,7 @@ test('acquires a public image into a hashed snapshot record', async () => {
     },
     async (url) => {
       const record = await acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'logo-1',
         inputRoot,
         merchantId: MERCHANT,
@@ -64,6 +65,57 @@ test('acquires a public image into a hashed snapshot record', async () => {
   );
 });
 
+test('refuses loopback fetches by default without touching the network', async () => {
+  const inputRoot = await makeInputRoot();
+  let fetches = 0;
+  await withServer(
+    (_request, response) => {
+      fetches += 1;
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            assetId: 'logo-1',
+            inputRoot,
+            merchantId: MERCHANT,
+            probe: stubProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /refusing non-public fetch destination/
+      );
+      assert.equal(fetches, 0);
+    }
+  );
+});
+
+test('refuses metadata and localhost URLs by default', async () => {
+  const inputRoot = await makeInputRoot();
+  for (const url of [
+    'http://169.254.169.254/latest/meta-data/',
+    'http://localhost:8080/a.png',
+    'http://[::1]/a.png',
+  ]) {
+    await assert.rejects(
+      () =>
+        acquireSnapshot({
+          assetId: 'logo-1',
+          inputRoot,
+          merchantId: MERCHANT,
+          probe: stubProbe,
+          role: 'logo',
+          slot: 'header-logo',
+          url,
+        }),
+      /refusing (non-public|loopback) fetch destination/
+    );
+  }
+});
+
 test('isolates identical asset ids across merchants', async () => {
   const inputRoot = await makeInputRoot();
   const otherMerchant = 'de968340-de02-4aa8-95f9-9d5f7d2b1f20';
@@ -75,6 +127,7 @@ test('isolates identical asset ids across merchants', async () => {
     },
     async (url) => {
       const first = await acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'logo-1',
         inputRoot,
         merchantId: MERCHANT,
@@ -95,6 +148,7 @@ test('isolates identical asset ids across merchants', async () => {
       // Same asset id, different merchant and bytes: must not collide with
       // (or falsely accuse) the first tenant's snapshot.
       const second = await acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'logo-1',
         inputRoot,
         merchantId: otherMerchant,
@@ -105,7 +159,9 @@ test('isolates identical asset ids across merchants', async () => {
       });
       assert.equal(second.sourcePath, `${otherMerchant}-logo-1.png`);
       assert.equal(second.sha256, sha256(otherBytes));
-      const stored = await readFile(join(inputRoot, `${otherMerchant}-logo-1.png`));
+      const stored = await readFile(
+        join(inputRoot, `${otherMerchant}-logo-1.png`)
+      );
       assert.deepEqual(stored, otherBytes);
     }
   );
@@ -116,6 +172,7 @@ test('rejects non-http URLs and unsupported content types', async () => {
   await assert.rejects(
     () =>
       acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'x',
         inputRoot,
         merchantId: MERCHANT,
@@ -135,6 +192,7 @@ test('rejects non-http URLs and unsupported content types', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'x',
             inputRoot,
             merchantId: MERCHANT,
@@ -154,6 +212,7 @@ test('rejects bad identity fields before fetching', async () => {
   await assert.rejects(
     () =>
       acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'x',
         inputRoot,
         merchantId: 'not-a-uuid',
@@ -167,6 +226,7 @@ test('rejects bad identity fields before fetching', async () => {
   await assert.rejects(
     () =>
       acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'x',
         inputRoot,
         merchantId: MERCHANT,
@@ -190,6 +250,7 @@ test('aborts oversized bodies', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'big',
             inputRoot,
             maxBytes: 1024,
@@ -215,6 +276,7 @@ test('times out a hanging origin', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'hang',
             inputRoot,
             merchantId: MERCHANT,
@@ -240,6 +302,7 @@ test('re-acquisition is idempotent for identical bytes only', async () => {
     },
     async (url) => {
       const first = await acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'stable',
         inputRoot,
         merchantId: MERCHANT,
@@ -249,6 +312,7 @@ test('re-acquisition is idempotent for identical bytes only', async () => {
         url,
       });
       const second = await acquireSnapshot({
+        allowPrivateHosts: true,
         assetId: 'stable',
         inputRoot,
         merchantId: MERCHANT,
@@ -262,6 +326,7 @@ test('re-acquisition is idempotent for identical bytes only', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'stable',
             inputRoot,
             merchantId: MERCHANT,
@@ -331,6 +396,7 @@ test('removes a newly written snapshot when the probe rejects it', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'logo-1',
             inputRoot,
             merchantId: MERCHANT,
@@ -365,6 +431,7 @@ test('keeps a pre-existing snapshot when the probe rejects it', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'logo-1',
             inputRoot,
             merchantId: MERCHANT,
@@ -393,6 +460,7 @@ test('rejects a null response body as an acquire error', async () => {
     await assert.rejects(
       () =>
         acquireSnapshot({
+          allowPrivateHosts: true,
           assetId: 'logo-1',
           inputRoot,
           merchantId: MERCHANT,
@@ -419,6 +487,7 @@ test('rejects unsafe or over-long asset ids before fetching', async () => {
     },
     async (url) => {
       const base = {
+        allowPrivateHosts: true,
         inputRoot,
         merchantId: MERCHANT,
         probe: stubProbe,
@@ -438,6 +507,7 @@ test('rejects unsafe or over-long asset ids before fetching', async () => {
       );
       // 91 chars is the longest stem-safe id.
       const record = await acquireSnapshot({
+        allowPrivateHosts: true,
         ...base,
         assetId: 'a'.repeat(91),
       });
@@ -459,6 +529,7 @@ test('rejects content-type and decoded-format mismatches', async () => {
       await assert.rejects(
         () =>
           acquireSnapshot({
+            allowPrivateHosts: true,
             assetId: 'logo-1',
             inputRoot,
             merchantId: MERCHANT,

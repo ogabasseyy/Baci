@@ -431,5 +431,10 @@ coderabbit review --agent -t uncommitted
   (design fixes quality/budgets, and both tiers still pass budgets).
 - Product-card `sizes` (50vw mobile) disagrees with the actual 1-col
   mobile box (~380px). Pre-existing; disclosed, not changed.
+- Never-larger guard is conditional per rung/format: when a rung exceeds
+  source bytes but the source codec is incompatible with the rung branch,
+  delivery keeps `generated-over-source` (e.g. OgaBassey WebP fallback
+  larger than its AVIF original). Disclosed; merchant-wide protection is
+  a production follow-up, not a pilot change.
 - (Log further deviations here as they occur; material design deviations
   return to the owner/reviewer instead of being assumed approved.)

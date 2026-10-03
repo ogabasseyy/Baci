@@ -162,7 +162,7 @@ describe('loadLabConfig', () => {
   it('validates, indexes, and stages derivatives plus originals same-origin', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();
-    const config = await loadLabConfig({ ...lab });
+    const config = await loadLabConfig({ ...lab }, { stage: true });
     expect(config.statuses).toHaveLength(1);
     expect(config.statuses[0]?.status).toBe('accepted');
     expect(config.baseUrl).toBe('/__pilot');
@@ -186,10 +186,10 @@ describe('loadLabConfig', () => {
     ).toBeNull();
   });
 
-  it('loads read-only with stage:false: validates, writes nothing', async () => {
+  it('loads read-only by default: validates, writes nothing', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();
-    const config = await loadLabConfig({ ...lab }, { stage: false });
+    const config = await loadLabConfig({ ...lab });
     expect(config.statuses[0]?.status).toBe('accepted');
     expect(config.stagedPaths.length).toBeGreaterThan(0);
     // No __pilot tree was created: request rendering never writes.

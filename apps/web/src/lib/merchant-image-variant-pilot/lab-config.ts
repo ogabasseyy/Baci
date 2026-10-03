@@ -139,9 +139,10 @@ export async function loadLabConfig(
   if (!isPilotLabEnabled()) {
     throw new Error('merchant image pilot: refusing to load outside lab mode');
   }
-  // Request-time loads are read-only (stage: false): staging runs
-  // exclusively in the pre-start CLI, so a GET never writes to disk. The
-  // route layer fails closed when staged bytes are missing or drifted.
+  // Read-only unless explicitly asked: staging runs exclusively in the
+  // pre-start CLI, so a GET (or any future direct caller that forgets the
+  // option) never writes to disk. The route layer fails closed when
+  // staged bytes are missing or drifted.
   const baseUrl = PILOT_LAB_BASE_URL;
   const parsed = parsePilotInventory(
     input.inventoryRecords.map((record) => ({
@@ -165,14 +166,12 @@ export async function loadLabConfig(
   });
   // Stage approved derivatives plus original snapshots under the lab base
   // URL so both comparison arms serve bytes from the same lab asset origin.
-  // This runs once at lab setup, never on a shopper request. Staging must
-  // complete BEFORE `next start`: files added to public/ after the server
-  // starts are not served, so operators run the pre-start stage CLI
-  // (tools/perf/merchant-image-pilot-stage.cli.ts) and then start the
-  // origin. Request-time loads still write missing files to disk, but those
-  // bytes only become servable after a restart — so the route layer fails
-  // closed when staged bytes go missing instead of serving URLs for 404s,
-  // and preflight's served-byte checks verify servability end to end.
+  // This runs once at lab setup (pre-start CLI with stage: true), never on
+  // a shopper request. Staging must complete BEFORE `next start`: files
+  // added to public/ after the server starts are not served. Request-time
+  // loads are read-only, so the route layer fails closed when staged
+  // bytes go missing instead of serving URLs for 404s, and preflight's
+  // served-byte checks verify servability end to end.
   const stagedOriginals = new Map<string, string>();
   const stagedPaths: { path: string; sha256: string }[] = [];
   for (const status of statuses) {
@@ -194,7 +193,7 @@ export async function loadLabConfig(
     );
     // Read-only loads still validate every input (manifests, hashes,
     // snapshots) but write nothing; stagedPaths lets the caller verify.
-    const shouldStage = options?.stage !== false;
+    const shouldStage = options?.stage === true;
     if (shouldStage) {
       await mkdir(generationStage, { recursive: true });
     }

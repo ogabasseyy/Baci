@@ -150,6 +150,20 @@ export function parseRawAcceptances(value: unknown): unknown[] {
   if (!Array.isArray(value)) {
     throw new Error('merchant image pilot: acceptances.json must be an array');
   }
+  // Elements stay unknown (the lab-index schema validates their shape),
+  // but non-objects fail here with an input-validation error instead of
+  // an incidental TypeError deeper in the loader.
+  for (const [index, element] of value.entries()) {
+    if (
+      typeof element !== 'object' ||
+      element === null ||
+      Array.isArray(element)
+    ) {
+      throw new Error(
+        `merchant image pilot: acceptances[${index}] must be an object`
+      );
+    }
+  }
   return value;
 }
 

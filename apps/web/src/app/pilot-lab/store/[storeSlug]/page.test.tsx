@@ -229,6 +229,15 @@ describe('pilot-lab store routes', () => {
     );
   });
 
+  it('404s unknown ?arm values instead of silently rendering pilot', async () => {
+    await setupFullRoots();
+    for (const arm of ['Pilot', 'both', '']) {
+      await expect(renderStore('omnimart', arm)).rejects.toThrow(
+        'NEXT_NOT_FOUND'
+      );
+    }
+  });
+
   it('mounts the omnimart lockup and grid through pilot derivatives', async () => {
     await setupFullRoots();
     const html = await renderStore('omnimart', 'pilot');

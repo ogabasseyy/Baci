@@ -38,6 +38,15 @@ export default async function PilotLabStoreRoute({
     notFound();
   }
   const query = await searchParams;
+  // Unknown ?arm values are 404, not silent pilot: a mistyped arm must
+  // never render (and measure) the wrong comparison arm.
+  if (
+    query.arm !== undefined &&
+    query.arm !== 'control' &&
+    query.arm !== 'pilot'
+  ) {
+    notFound();
+  }
   const arm: PilotLabArm = query.arm === 'control' ? 'control' : 'pilot';
   const config = await getLabConfig();
   // Request origin for the card path's absolute staged URLs (the original

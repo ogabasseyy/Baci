@@ -204,7 +204,7 @@ export async function markManualDocumentDispatchStarted(
     throw new Error('Manual document dispatch lease lost');
 }
 
-interface DispatchMerchantRow {
+export interface DispatchMerchantRow {
   business_name: string | null;
   legal_entity_name: string | null;
   business_address: string | null;

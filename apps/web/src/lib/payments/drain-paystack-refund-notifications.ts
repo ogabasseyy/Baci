@@ -10,7 +10,6 @@ import {
   type MerchantRefundPushSender,
   type RefundEmailSender,
 } from './deliver-claimed-refund-notification';
-import { PER_SEND_WORST_MS } from './notification-drain-limit';
 
 export type { MerchantRefundPushSender, RefundEmailSender };
 
@@ -46,16 +45,12 @@ export async function drainPaystackRefundNotifications(
   const uncertain = await countUnresolvedUncertainRefundNotifications(supabase);
   // Claim serially so a route timeout cannot strand an unsent batch.
   for (let remaining = limit; remaining > 0; remaining -= 1) {
-    // Reserve a full per-send slot before claiming: the claim
-    // increments attempts, and the customer-email admission check
-    // (145s four-attempt sender budget) throws past this point — so a
-    // row claimed short of a slot burns one of its five attempts per
-    // invocation until a healthy notification dead-letters. The
-    // slot's 5s slack covers the claim plus the order, merchant, and
-    // ledger reads; unclaimed rows keep their budget for a tick with
-    // room.
-    if (deadlineMs !== undefined && deadlineMs - Date.now() < PER_SEND_WORST_MS)
-      break;
+    // Reserve time for the provider call and outcome write. Rows the
+    // post-claim admission check then refuses are released back to
+    // pending without burning the attempt (see the deferred finish
+    // below), so this reserve stays a pure efficiency backstop rather
+    // than a second admission gate that would starve smaller rows.
+    if (deadlineMs !== undefined && deadlineMs - Date.now() < 45_000) break;
     const { data, error } = await supabase.rpc(
       'claim_paystack_cancellation_refund_notifications_v1',
       { p_limit: 1 }
@@ -74,14 +69,28 @@ export async function drainPaystackRefundNotifications(
     // A failure recorded mid-claim bumps the generation: concluding
     // on the stale read would lose the fresh contradiction, so the
     // finish is generation-pinned and a miss requeues instead.
+    // A deferred row was never attempted: release it back to pending
+    // and un-burn the attempt the claim just added (the returned row
+    // already includes the increment), so five tight-budget ticks
+    // cannot dead-letter a healthy notification without ever sending
+    // it. The fresh claimed_at backs the row off, so the loop cannot
+    // reclaim it into a spin.
     const persistFinish = () =>
       supabase
         .from('paystack_cancellation_refund_notifications')
-        .update({
-          status: outcome,
-          last_error: lastError,
-          sent_at: outcome === 'sent' ? new Date().toISOString() : null,
-        })
+        .update(
+          outcome === 'deferred'
+            ? {
+                status: 'pending',
+                attempts: Math.max(0, row.attempts - 1),
+                last_error: lastError,
+              }
+            : {
+                status: outcome,
+                last_error: lastError,
+                sent_at: outcome === 'sent' ? new Date().toISOString() : null,
+              }
+        )
         .eq('id', row.id)
         .eq('claim_token', row.claim_token)
         .eq('status', 'processing')
@@ -173,8 +182,11 @@ export async function drainPaystackRefundNotifications(
       failed++;
       continue;
     }
+    // A deferred row was released unattempted: it counts as claimed
+    // work but neither sent nor failed, so tight budgets do not read
+    // as delivery failures.
     if (outcome === 'sent') sent++;
-    else failed++;
+    else if (outcome !== 'deferred') failed++;
   }
   return { claimed, sent, failed, exhausted, uncertain };
 }

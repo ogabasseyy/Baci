@@ -49,6 +49,8 @@ export function database(
     claim_token: 'claim-1',
     created_at: '2026-09-27T12:00:00Z',
     generation: 0,
+    // As returned by the claim RPC, which already incremented it.
+    attempts: 1,
   };
   const finish = {
     update: vi.fn().mockReturnThis(),

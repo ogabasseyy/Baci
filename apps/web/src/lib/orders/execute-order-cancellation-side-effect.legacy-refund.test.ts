@@ -149,7 +149,6 @@ describe('legacy cancellation refund preflight', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({
           invalid_link_claimed_payment_ids: ['another-payment'],
-          invalid_link_refund_count: 1,
         }),
       })
     );

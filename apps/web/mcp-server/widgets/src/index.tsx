@@ -26,9 +26,11 @@ export function App() {
       ? toolOutput.message || 'Product search is temporarily unavailable.'
       : toolOutput.status === 'incomplete'
         ? toolOutput.message || 'Narrow your search to check prices accurately.'
-        : toolOutput.coverage === 'partial'
-          ? 'No verified match was found among the checked products. Other products may match.'
-          : 'No verified products match this search.';
+        : toolOutput.status === 'empty'
+          ? toolOutput.coverage === 'partial'
+            ? 'No verified match was found among the checked products. Other products may match.'
+            : 'No verified products match this search.'
+          : toolOutput.message || 'View the tool response in the conversation.';
   const { cart, cartError, handleAddToCart, handleRemoveItem, handleViewCart } =
     useCartHandoff();
 
@@ -53,7 +55,7 @@ export function App() {
     const observer = new ResizeObserver(reportHeight);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [displayMode, toolOutput]);
+  }, [displayMode, toolOutput, cart, cartError]);
 
   return (
     <div

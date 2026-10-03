@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
 
@@ -130,6 +130,44 @@ describe('Ogabassey inline result presentation', () => {
     expect(screen.queryByText(
       'Results cover only the products checked. Other products may match.'
     )).toBeNull();
+  });
+
+  it('keeps a successful non-search tool output neutral', () => {
+    window.openai = { toolOutput: { order: { status: 'processing' } } };
+    render(<App />);
+    expect(screen.getByRole('status').textContent).toBe('View the tool response in the conversation.');
+    expect(screen.queryByText('No verified products match this search.')).toBeNull();
+  });
+
+  it('reports height for local cart additions, removals, errors and error clearing without ResizeObserver', async () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const height = 180 + (this.querySelector('.cart-summary') ? 100 : 0) + (this.querySelector('[role="alert"]') ? 40 : 0);
+      return { height } as DOMRect;
+    });
+    const notifyIntrinsicHeight = vi.fn();
+    const callTool = vi.fn().mockResolvedValue({ structuredContent: {
+      success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
+    } });
+    window.openai = { toolOutput: { products }, displayMode: 'inline', notifyIntrinsicHeight, callTool, openExternal: vi.fn() };
+    render(<App />);
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(180);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
+    expect(screen.getByRole('button', { name: 'Remove Phone One' })).toBeTruthy();
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Remove Phone One' })); });
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(180);
+    callTool.mockRejectedValueOnce(new Error('offline'));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(220);
+    let finish: ((value: unknown) => void) | undefined;
+    callTool.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    act(() => { fireEvent.click(screen.getByRole('button', { name: 'Add to cart' })); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(180);
+    await act(async () => { finish?.({ structuredContent: { success: true, cart_url: 'https://ogabassey.com/cart?item_id=phone-1' } }); });
+    expect(notifyIntrinsicHeight).toHaveBeenLastCalledWith(280);
   });
 
   it('preserves the search error message in the widget', () => {

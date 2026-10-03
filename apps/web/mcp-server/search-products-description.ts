@@ -1,0 +1,6 @@
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { MCP_SEARCH_CATEGORY_GUIDANCE } from './search-category-guidance';
+
+/** Complete description shared by runtime and public discovery. */
+export const MCP_SEARCH_PRODUCTS_DESCRIPTION =
+  `Use this when a buyer wants to find real Ogabassey products. Always supply intent with explicit shopper constraints and query with retrieval keywords. Use alternatives: [{}] for an unconstrained catalog browse. If the requested product type or constraints are unclear, ask the buyer to clarify before calling this tool. Search by product name, brand, category, condition, and price. For a broad use case such as work, gaming, or photography, ask which product type they want before searching if it is unclear. ${MCP_SEARCH_CATEGORY_GUIDANCE} Do not present unrelated catalog items as recommendations. Returns listed prices, matching options, and reported availability; it does not reserve stock. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE} When coverage is partial, explain that other matches may exist and never claim the globally cheapest product.`;

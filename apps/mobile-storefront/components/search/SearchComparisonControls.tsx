@@ -34,9 +34,24 @@ export function SearchCompareButton({
         onPress={(event) => {
           event?.stopPropagation();
           if (!selected && count >= 3) {
+            // The intent may have reset on a query change while the store kept
+            // all three selections. Activate before returning so the header
+            // comparison action stays reachable, and offer a direct path to
+            // the comparison screen where an item can be removed.
+            intent.activate();
             Alert.alert(
               'Comparison full',
-              'Remove one product before adding another. You can compare up to 3 products.'
+              'Remove one product before adding another. You can compare up to 3 products.',
+              [
+                {
+                  text: 'View comparison',
+                  onPress: () => {
+                    Keyboard.dismiss();
+                    router.push('/compare');
+                  },
+                },
+                { text: 'OK', style: 'cancel' },
+              ]
             );
             return;
           }

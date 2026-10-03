@@ -3,9 +3,10 @@ import {
   type SearchAssistanceFrame,
 } from '@baci/shared/lib';
 import { generateTextWithChain } from '@/ai/generate-text-with-chain';
-import { checkRateLimit } from '@/ai/provider';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { logger } from '@/lib/logger';
+import { checkRateLimit } from '@/lib/rate-limiter';
+import { createServiceClient } from '@/lib/supabase/service';
 import { searchAssistanceRequestSchema } from '@/schemas/search-assistance';
 import { parseModelProposal } from './parse-model-proposal';
 
@@ -43,25 +44,18 @@ export async function POST(request: Request) {
   const tenant = await resolveAgenticChatTenant(tenantRequest);
   if (!tenant)
     return Response.json({ error: 'Assistance unavailable' }, { status: 503 });
-  const identity =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  if (
-    !checkRateLimit(`search-assist:${tenant.merchantId}:${identity}`, {
-      requests: 5,
-      windowMs: 60000,
-    }).allowed
-  )
-    return Response.json(
-      { error: 'Please wait before trying again' },
-      { status: 429 }
-    );
-  // Tenant-wide budget bounds use even when the caller's network identifier is absent or changes.
-  if (
-    !checkRateLimit(`search-assist:${tenant.merchantId}`, {
-      requests: 60,
-      windowMs: 60000,
-    }).allowed
-  )
+  // Per-IP budget (5/min) is enforced distributively by the proxy
+  // (rate-limit-routes '/api/search/assist'). This tenant-wide budget bounds
+  // use even when the caller's network identifier is absent or changes, and
+  // is Supabase-backed so it holds across Vercel instances.
+  const tenantAllowed = await checkRateLimit(
+    createServiceClient(),
+    tenant.merchantId,
+    'search_assist_tenant',
+    60,
+    1
+  );
+  if (!tenantAllowed)
     return Response.json(
       { error: 'Please try again shortly' },
       { status: 429 }

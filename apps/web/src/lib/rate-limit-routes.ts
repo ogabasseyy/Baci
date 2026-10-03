@@ -11,6 +11,9 @@ interface RateLimitMatch {
 const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Submission writes have their own budget; typing and result reads do not consume it.
   '/api/search/submissions': { maxRequests: 20, windowMs: 60_000 },
+  // Search assistance is an expensive public AI call — keep it at the same
+  // per-IP budget as quiz generation instead of the generic 50/min default.
+  '/api/search/assist': { maxRequests: 5, windowMs: 60_000 },
   // Migration preview validation polls the active job about once per second.
   // Keep this prefix above the default ceiling so the UI can stream progress
   // without tripping middleware rate limiting during normal use.
@@ -34,6 +37,15 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   '/api/storefront/imei-check': { maxRequests: 10, windowMs: 60_000 },
   '/api/storefront/auth/send-code': { maxRequests: 3, windowMs: 60_000 },
   '/api/storefront/auth/verify-code': { maxRequests: 5, windowMs: 60_000 },
+  // Product-request intake writes to the merchant inbox. The DB also caps
+  // each merchant at 50/hour, so bound one IP to 10/hour: a single caller
+  // can no longer exhaust the merchant-wide budget, while genuine
+  // zero-result requests (rare, form-gated) stay well under the ceiling
+  // even behind carrier NAT.
+  '/api/storefront/product-requests': {
+    maxRequests: 10,
+    windowMs: 3_600_000,
+  },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },
   '/api/wallet': { maxRequests: 5, windowMs: 60_000 },

@@ -137,7 +137,11 @@ export function useProductDetailCartActions(
     // server verifies against products.price. Retain the catalog basis so
     // quote subtotals match the canonical subtotal.
     const conditionOffer = !product.has_variants
-      ? findMatchingConditionOffer(product.offers, routeData.offerConditionKey)
+      ? findMatchingConditionOffer(
+          product.offers,
+          routeData.offerConditionKey,
+          routeData.routeOfferId
+        )
       : null;
     cartState.addItem({
       product_id: product.id,

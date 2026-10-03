@@ -51,6 +51,18 @@ export function useProductDetailRouteData({
       (!usesVariantRouteSelection ? routeConditionParam : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
+  // Search/compare entry points forward the advertised matched offer id.
+  // Accept it only when it names one of this product's own offers; the
+  // condition-compatibility check happens at selection time so a later
+  // condition change on the PDP is never pinned to a stale offer.
+  const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
+  const routeOfferId =
+    routeOfferIdParam &&
+    product?.offers?.some(
+      (offer) => String(offer.id) === String(routeOfferIdParam)
+    )
+      ? routeOfferIdParam
+      : null;
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(
       Object.entries(routeSelectionAttributes).sort(([a], [b]) =>
@@ -166,6 +178,7 @@ export function useProductDetailRouteData({
     refetch,
     resolvedColorImages,
     reviewsState,
+    routeOfferId,
     routeParams,
     slug,
     ...selection,

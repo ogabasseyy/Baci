@@ -1,4 +1,4 @@
-import { sendProductRequest } from '@baci/shared/lib';
+import { submitProductRequest } from '@baci/shared/lib';
 import {
   fireEvent,
   render,
@@ -10,21 +10,20 @@ import ProductRequest from './ProductRequest';
 
 jest.mock('@baci/shared/lib', () => ({
   ...jest.requireActual('@baci/shared/lib'),
-  sendProductRequest: jest.fn(),
+  submitProductRequest: jest.fn(),
 }));
-jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 jest.mock('expo-crypto', () => ({
   randomUUID: () => '11111111-1111-4111-8111-111111111111',
 }));
 beforeEach(() => {
-  jest.mocked(sendProductRequest).mockReset();
+  jest.mocked(submitProductRequest).mockReset();
 });
 it('prefills the searched product and sends only after explicit submission', async () => {
-  jest.mocked(sendProductRequest).mockResolvedValue();
+  jest.mocked(submitProductRequest).mockResolvedValue();
   render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
   fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
   expect(screen.getByDisplayValue('iPhone 20')).toBeTruthy();
-  expect(sendProductRequest).not.toHaveBeenCalled();
+  expect(submitProductRequest).not.toHaveBeenCalled();
   fireEvent.changeText(
     screen.getByLabelText('Email or phone number'),
     'shopper@example.com'
@@ -37,8 +36,8 @@ it('prefills the searched product and sends only after explicit submission', asy
       )
     ).toBeTruthy()
   );
-  expect(sendProductRequest).toHaveBeenCalledWith(
-    expect.anything(),
+  expect(submitProductRequest).toHaveBeenCalledWith(
+    expect.stringContaining('/api/storefront/product-requests'),
     expect.objectContaining({
       query: 'iPhone 20',
       contact: 'shopper@example.com',
@@ -47,7 +46,7 @@ it('prefills the searched product and sends only after explicit submission', asy
   );
 });
 it('retains the form and request identity after a failed submission', async () => {
-  jest.mocked(sendProductRequest).mockRejectedValue(new Error('offline'));
+  jest.mocked(submitProductRequest).mockRejectedValue(new Error('offline'));
   render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
   fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
   fireEvent.changeText(
@@ -58,8 +57,8 @@ it('retains the form and request identity after a failed submission', async () =
   await waitFor(() => expect(screen.getByText(/Couldn’t send/)).toBeTruthy());
   expect(screen.queryByText(/Request sent to the store/)).toBeNull();
   fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
-  await waitFor(() => expect(sendProductRequest).toHaveBeenCalledTimes(2));
-  expect(jest.mocked(sendProductRequest).mock.calls[0][1].requestId).toBe(
-    jest.mocked(sendProductRequest).mock.calls[1][1].requestId
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+  expect(jest.mocked(submitProductRequest).mock.calls[0][1].requestId).toBe(
+    jest.mocked(submitProductRequest).mock.calls[1][1].requestId
   );
 });

@@ -3,7 +3,7 @@ import {
   resolveDefaultVariantSelection,
 } from '@baci/shared/lib';
 import { router } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useWindowDimensions } from 'react-native';
 import {
   useAnimatedStyle,
@@ -14,10 +14,6 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { SPRING_CONFIG } from '@/constants/Colors';
 import { useHaptics } from '@/hooks/use-haptics';
 import { resolveCartItemImageUrl } from '@/lib/cart-display';
-import {
-  getProductCardImageAttempt,
-  normalizeProductImages,
-} from '@/lib/product-normalization';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { selectCartQuantities, useCartStore } from '@/stores/cart-store';
 import { selectSavedProductIds, useSavedStore } from '@/stores/saved-store';
@@ -26,6 +22,7 @@ import EditorialProductCard from './product-card/EditorialProductCard';
 import GridProductCard from './product-card/GridProductCard';
 import ListProductCard from './product-card/ListProductCard';
 import SearchGridProductCard from './product-card/SearchGridProductCard';
+import { useProductCardImage } from './product-card/use-product-card-image';
 import { trackCartAdd, trackWishlistAdd } from './product-card-tracking';
 
 const DEFAULT_BLURHASH = 'L6PZfSi_.AyE_3t7t7RjE1%MWBR*';
@@ -138,48 +135,8 @@ export function ProductCard({
     onWishlistToggle?.(product);
   };
 
-  const imageCandidates = normalizeProductImages(
-    product.image
-      ? [
-          product.image,
-          ...(Array.isArray(product.images) ? product.images : []),
-        ]
-      : product.images
-  );
-  const imageCandidatesKey = imageCandidates.join('|');
-  const [imageAttempt, setImageAttempt] = useState(0);
-  const [showLocalPlaceholder, setShowLocalPlaceholder] = useState(false);
-
-  // FlashList recycles card instances, so reset the image-fallback state when
-  // the product (its image set) changes — otherwise a recycled card would show
-  // the previous product's placeholder/attempt. (Render-time adjustment, not an
-  // effect, so it lands before paint without a flash.)
-  const [prevImageCandidatesKey, setPrevImageCandidatesKey] =
-    useState(imageCandidatesKey);
-  if (prevImageCandidatesKey !== imageCandidatesKey) {
-    setPrevImageCandidatesKey(imageCandidatesKey);
-    setImageAttempt(0);
-    setShowLocalPlaceholder(false);
-  }
-
-  const imageProps = {
-    placeholder: { blurhash },
-    transition: 300,
-    cachePolicy: 'memory-disk' as const,
-    contentFit: 'cover' as const,
-    recyclingKey: product.id,
-    allowDownscaling: true,
-    enforceEarlyResizing: true,
-    autoplay: false,
-    onError: () => {
-      if (imageAttempt < imageCandidates.length) {
-        setImageAttempt((current) => current + 1);
-        return;
-      }
-
-      setShowLocalPlaceholder(true);
-    },
-  };
+  const { imageAttemptUri, imageProps, showLocalPlaceholder } =
+    useProductCardImage(product, blurhash);
 
   const imageWidth =
     variant === 'list'
@@ -187,10 +144,6 @@ export function ProductCard({
       : variant === 'editorial'
         ? screenWidth - 32
         : gridWidth;
-  const imageAttemptUri = getProductCardImageAttempt(
-    imageCandidates,
-    imageAttempt
-  );
   const imageSource = createSafeBoundedImageSource({
     fit: modernSearch ? 'inside' : 'cover',
     height: variant === 'editorial' ? imageWidth / 0.8 : imageWidth,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRefinedSearchHref,
+  emptySearchRefinements,
+  hasActiveSearchRefinements,
   parseSearchRefinements,
   resetRefinementsForQuery,
 } from './search-refinements';
@@ -37,6 +39,25 @@ describe('search refinements', () => {
     expect(
       parseSearchRefinements({ sort: 'rating', minPrice: '', maxPrice: ' ' })
     ).toEqual({ success: true, data: { brands: [], sort: 'relevance' } });
+  });
+  it('detects filter-bearing refinements but ignores sort alone', () => {
+    expect(hasActiveSearchRefinements(emptySearchRefinements())).toBe(false);
+    expect(
+      hasActiveSearchRefinements({ brands: [], sort: 'price_asc' })
+    ).toBe(false);
+    expect(
+      hasActiveSearchRefinements({
+        brands: [],
+        sort: 'relevance',
+        maxPrice: 0,
+      })
+    ).toBe(true);
+    expect(
+      hasActiveSearchRefinements({
+        brands: ['Apple'],
+        sort: 'relevance',
+      })
+    ).toBe(true);
   });
   it('preserves same normalized query refinements and resets a different query', () => {
     const current = {

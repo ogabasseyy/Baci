@@ -32,7 +32,8 @@ export * from './product-inventory';
 export {
   type ProductRequest,
   productRequestSchema,
-  sendProductRequest,
+  ProductRequestSubmitError,
+  submitProductRequest,
 } from './product-request';
 export * from './product-search';
 export * from './product-selection-param-resolution';

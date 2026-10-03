@@ -214,4 +214,27 @@ describe('V2ComparisonProvider', () => {
       expect.any(String)
     );
   });
+
+  it('reports stored selections from isInCompare before hydration fires', () => {
+    sessionStorage.setItem(
+      'ogabassey_v2_compare',
+      JSON.stringify([baseProduct])
+    );
+    function SelectedProbe() {
+      const { isInCompare } = useV2Comparison();
+      return (
+        <span data-testid="selected-state">
+          {isInCompare(baseProduct.id) ? 'selected' : 'unselected'}
+        </span>
+      );
+    }
+    render(
+      <V2ComparisonProvider>
+        <SelectedProbe />
+      </V2ComparisonProvider>
+    );
+    // No timer advance and no interaction: the scheduled hydration has not
+    // fired, yet the stored selection must already read as selected.
+    expect(screen.getByTestId('selected-state')).toHaveTextContent('selected');
+  });
 });

@@ -1,12 +1,10 @@
 import {
   emptySearchRefinements,
-  getSearchQuickFilterGroups,
   getSearchRefinementChips,
   parseSearchRefinements,
   SEARCH_SORT_OPTIONS,
   type SearchRefinements,
 } from '@baci/shared/lib';
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
 import {
   Modal,
@@ -21,6 +19,7 @@ import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import type Colors from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { SearchRefinementFields } from './SearchRefinementFields';
+import { SearchRefinementToolbar } from './SearchRefinementToolbar';
 import { styles } from './search-refinement-styles';
 
 interface Props {
@@ -127,107 +126,19 @@ export function SearchRefinementControls({
       </Text>
     </Pressable>
   );
-  const quickGroups = getSearchQuickFilterGroups(
-    criteria,
-    categories,
-    processors
-  );
   const chips = getSearchRefinementChips(criteria, categories);
   return (
     <>
-      <View style={styles.toolbar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quick}
-        >
-          {quickGroups.map(({ label, key, active }) => {
-            return (
-              <Pressable
-                key={label}
-                hitSlop={{ top: 2, bottom: 2 }}
-                accessibilityRole="button"
-                accessibilityLabel={label}
-                accessibilityState={{
-                  selected: active,
-                  expanded: panel === 'filters' && group.current === key,
-                }}
-                onPress={() => open('filters', key)}
-                style={[
-                  styles.quickPill,
-                  {
-                    flexGrow: quickGroups.length <= 3 ? 1 : 0,
-                    flexBasis: quickGroups.length <= 3 ? 0 : undefined,
-                    width: quickGroups.length > 3 ? 112 : undefined,
-                  },
-                  {
-                    backgroundColor: colors.muted,
-                    borderColor: active ? colors.primary : 'transparent',
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: active ? colors.primary : colors.text,
-                  }}
-                >
-                  {label}
-                  {label === 'Brand' && criteria.brands.length
-                    ? ` (${criteria.brands.length})`
-                    : ''}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={14}
-                  color={active ? colors.primary : colors.text}
-                />
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <View
-          style={[styles.actionHeader, { backgroundColor: colors.card }]}
-          accessibilityLabel="Sort and filter results"
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sort"
-            onPress={() => open('sort')}
-            style={styles.headerAction}
-          >
-            <Ionicons
-              name="swap-vertical-outline"
-              size={18}
-              color={colors.text}
-            />
-            <Text
-              numberOfLines={1}
-              style={[styles.headerDetail, { color: colors.text }]}
-            >
-              {
-                SEARCH_SORT_OPTIONS.find(
-                  (option) => option.value === criteria.sort
-                )?.label
-              }
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Filters"
-            onPress={() => open('filters')}
-            style={[
-              styles.headerAction,
-              { borderLeftWidth: 1, borderColor: colors.border },
-            ]}
-          >
-            <Ionicons name="options-outline" size={18} color={colors.text} />
-            <Text style={labelStyle}>
-              Filters{chips.length ? ` (${chips.length})` : ''}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+      <SearchRefinementToolbar
+        criteria={criteria}
+        categories={categories}
+        processors={processors}
+        colors={colors}
+        chipsCount={chips.length}
+        filtersExpandedKey={panel === 'filters' ? group.current : null}
+        onOpenSort={() => open('sort')}
+        onOpenFilters={(focus) => open('filters', focus)}
+      />
       {(chips.length > 0 || invalidFilters) && (
         <ScrollView
           accessibilityLabel="Applied filters"
@@ -309,9 +220,12 @@ export function SearchRefinementControls({
                       option.label,
                       () => {
                         setPanel(null);
-                        onCommit({ ...criteria, sort: option.value });
+                        // Commit from the prepared draft, not the stale
+                        // criteria prop: onPrepare may have committed a new
+                        // query and reset refinements for it.
+                        onCommit({ ...draft, sort: option.value });
                       },
-                      criteria.sort === option.value,
+                      draft.sort === option.value,
                       'radio'
                     )
                   )
@@ -350,7 +264,7 @@ export function SearchRefinementControls({
                     {action('Clear', () => {
                       setDraft({
                         ...emptySearchRefinements(),
-                        sort: criteria.sort,
+                        sort: draft.sort,
                       });
                       setMinimum('');
                       setMaximum('');

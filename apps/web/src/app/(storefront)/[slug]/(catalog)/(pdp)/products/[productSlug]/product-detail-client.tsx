@@ -244,15 +244,32 @@ export default function ProductDetailClient({
       'new'
   );
 
+  // Search/compare entry points forward the advertised matched offer id.
+  // Honor it only when it names one of this product's own offers and matches
+  // the selected condition, so the PDP charges the price the card displayed.
+  const offerIdParam = searchParams.get('offer_id');
+  const routeOfferId =
+    offerIdParam &&
+    product.offers?.some((o: { id: string }) => String(o.id) === offerIdParam)
+      ? offerIdParam
+      : null;
   const selectedOffer =
     !usesVariantConditions &&
     selectedCondition !==
       (normalizeCanonicalProductCondition(product.condition) || 'new')
-      ? product.offers?.find(
+      ? (routeOfferId &&
+          product.offers?.find(
+            (o: { id: string; condition: string }) =>
+              String(o.id) === routeOfferId &&
+              normalizeCanonicalProductCondition(o.condition) ===
+                selectedCondition
+          )) ||
+        product.offers?.find(
           (o: { condition: string }) =>
             normalizeCanonicalProductCondition(o.condition) ===
             selectedCondition
-        )
+        ) ||
+        null
       : null;
   const conditionLabels: Record<string, string> = {
     new: 'New',

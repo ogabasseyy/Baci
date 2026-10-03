@@ -92,7 +92,7 @@ describe('send manual order document provider and validation', () => {
     );
     expect(db.updates).toContainEqual({
       table: 'order_notification_outbox',
-      values: { dispatch_started_at: null },
+      values: expect.objectContaining({ dispatch_started_at: null }),
     });
   });
 
@@ -109,7 +109,7 @@ describe('send manual order document provider and validation', () => {
     );
     expect(db.updates).toContainEqual({
       table: 'order_notification_outbox',
-      values: { dispatch_started_at: null },
+      values: expect.objectContaining({ dispatch_started_at: null }),
     });
   });
 
@@ -122,10 +122,12 @@ describe('send manual order document provider and validation', () => {
     expect(await sendManualOrderDocument({ supabase: db.client, row })).toEqual(
       { status: 'failed', error: 'timeout', deliveryOutcome: 'unknown' }
     );
-    expect(db.updates).not.toContainEqual({
-      table: 'order_notification_outbox',
-      values: { dispatch_started_at: null },
-    });
+    expect(db.updates).not.toContainEqual(
+      expect.objectContaining({
+        table: 'order_notification_outbox',
+        values: expect.objectContaining({ dispatch_started_at: null }),
+      })
+    );
   });
 
   it('never promotes Ogabassey app links for another merchant', async () => {

@@ -25,12 +25,20 @@ function createSupabase(
 ) {
   const updateErrors = [...errors];
   const select = vi.fn();
-  // The sent path re-reads the live row (select metadata) before the status
-  // update (select id); resolve each from its own source.
+  // The sent path re-reads the live row (select metadata + updated_at)
+  // before the status update (select id); resolve each from its own source.
   const maybeSingle = vi.fn(async () => {
     const calls = select.mock.calls;
-    if (calls[calls.length - 1]?.[0] === 'metadata') {
-      return { data: { id: row.id, metadata: liveMetadata }, error: null };
+    const lastSelect = calls[calls.length - 1]?.[0];
+    if (lastSelect === 'metadata' || lastSelect === 'metadata, updated_at') {
+      return {
+        data: {
+          id: row.id,
+          metadata: liveMetadata,
+          updated_at: '2026-10-03T00:00:00Z',
+        },
+        error: null,
+      };
     }
     const error = updateErrors.shift();
     return { data: error ? null : { id: row.id }, error: error ?? null };

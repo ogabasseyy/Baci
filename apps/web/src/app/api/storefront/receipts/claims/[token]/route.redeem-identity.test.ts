@@ -37,12 +37,13 @@ function createSupabaseRpcMock(response: { data: unknown; error: unknown }) {
 
 function mockAuthenticatedSupabase(
   supabase: ReturnType<typeof createSupabaseRpcMock>,
-  email = 'basseybjohn@yahoo.co.uk'
+  email = 'basseybjohn@yahoo.co.uk',
+  emailConfirmedAt: string | null = '2026-01-01T00:00:00Z'
 ) {
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
     supabase,
-    user: { email, id: 'user-1' },
+    user: { email, id: 'user-1', email_confirmed_at: emailConfirmedAt },
   });
 }
 

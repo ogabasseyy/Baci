@@ -59,12 +59,17 @@ export function buildManualOrderDocumentPdfInput({
     shipping_address: order.shipping_address
       ? {
           ...order.shipping_address,
+          // Nullish locality (mobile-admin "same as customer") normalizes
+          // to undefined-absent: the receipt input ships no nulls.
+          city: order.shipping_address.city ?? undefined,
+          state: order.shipping_address.state ?? undefined,
           address_line1:
             order.shipping_address.address_line1 ||
             order.shipping_address.address,
           postal_code:
             order.shipping_address.postal_code ||
-            order.shipping_address.postalCode,
+            order.shipping_address.postalCode ||
+            undefined,
         }
       : null,
     items: order.order_items.map((item) => ({

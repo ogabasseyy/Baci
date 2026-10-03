@@ -78,6 +78,29 @@ const paymentAccount = {
 };
 
 describe('buildManualOrderDocumentPdfInput', () => {
+  it('normalizes null locality to undefined-absent addresses', () => {
+    const order = manualDocumentOrderSchema.parse({
+      ...orderRow,
+      shipping_address: {
+        city: null,
+        state: null,
+        postal_code: null,
+        postalCode: null,
+      },
+    });
+    const merchant = manualDocumentMerchantSchema.parse(merchantRow);
+    const { receiptOrder } = buildManualOrderDocumentPdfInput({
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+    });
+
+    expect(receiptOrder.shipping_address?.city).toBeUndefined();
+    expect(receiptOrder.shipping_address?.state).toBeUndefined();
+    expect(receiptOrder.shipping_address?.postal_code).toBeUndefined();
+  });
+
   it('maps items, balance, and the preferred virtual account', () => {
     const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
       order: manualDocumentOrderSchema.parse(orderRow),

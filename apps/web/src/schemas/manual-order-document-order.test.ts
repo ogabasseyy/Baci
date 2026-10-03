@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { manualDocumentOrderSchema } from './manual-order-document-order';
+import {
+  isManualOrderDocumentContentValid,
+  manualDocumentOrderSchema,
+} from './manual-order-document-order';
 
 const baseOrder = {
   id: 'order-1',
@@ -94,6 +97,57 @@ describe('manualDocumentOrderSchema', () => {
         order_items: [{ ...baseOrder.order_items[0], price: null }],
       })
     ).toThrow();
+  });
+
+  it('accepts explicit null locality from the mobile-admin edit path', () => {
+    const parsed = manualDocumentOrderSchema.parse({
+      ...baseOrder,
+      shipping_address: {
+        city: null,
+        state: null,
+        postal_code: null,
+        postalCode: null,
+      },
+    });
+    expect(parsed.shipping_address?.city).toBeNull();
+    expect(parsed.shipping_address?.state).toBeNull();
+  });
+
+  it('keeps the archive gate in lockstep with the sender on item finances', () => {
+    const money = {
+      total: 5000,
+      subtotal: 4500,
+      shipping_fee: 500,
+      tax_amount: 0,
+      discount_amount: 0,
+      amount_paid: 5000,
+      currency: 'NGN',
+    };
+    const item = { name: 'Phone', quantity: 1, price: 4500 };
+    expect(isManualOrderDocumentContentValid(money, [item])).toBe(true);
+    for (const field of [
+      'assurance_fee',
+      'line_extension_amount',
+      'line_id',
+      'vat_rate',
+      'vat_amount',
+    ] as const) {
+      // The sender rejects the negative value, so the archive must not
+      // advertise the document either.
+      expect(
+        manualDocumentOrderSchema.safeParse({
+          ...baseOrder,
+          order_items: [{ ...baseOrder.order_items[0], [field]: -1 }],
+        }).success
+      ).toBe(false);
+      expect(
+        isManualOrderDocumentContentValid(money, [{ ...item, [field]: -1 }])
+      ).toBe(false);
+      // Null stays valid on both sides.
+      expect(
+        isManualOrderDocumentContentValid(money, [{ ...item, [field]: null }])
+      ).toBe(true);
+    }
   });
 
   it('requires an exact three-letter currency code', () => {

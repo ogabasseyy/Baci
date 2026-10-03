@@ -97,6 +97,16 @@ SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'kind change queues the receipt');
 DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt';
 UPDATE public.orders SET payment_status = 'partially_paid', amount_paid = 50 WHERE id = '10000000-0000-4000-8000-000000000017';
+-- Account writes reset only the invoice marker: receipts compare no
+-- payment fields, so a parked receipt snapshot stays valid.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now(), dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+INSERT INTO public.order_notification_outbox (order_id, merchant_id, event_type, status, locked_by, locked_at, dispatch_started_at, fulfillment_cycle_id) SELECT order_id, merchant_id, 'manual_order_receipt', 'processing', 'acct-scope', now(), now(), fulfillment_cycle_id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider, expires_at, created_at) VALUES ('10000000-0000-4000-8000-000000000017', '9990003333', 'Paystack-Titan', 'Shop Ltd/ORD17B', 'paystack', NULL, now());
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice'), 'account write resets the invoice marker');
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'account write preserves the receipt marker');
+DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000017' AND account_number = '9990003333';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt'), 'account delete preserves the receipt marker');
+DELETE FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_receipt';
 -- A snapshot-relevant merchant edit resets in-flight markers like an
 -- order edit does; cosmetic edits leave them intact.
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
@@ -144,8 +154,9 @@ DELETE FROM public.transactions WHERE id = '10000000-0000-4000-8000-000000000c02
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name, account_name, provider, expires_at) VALUES ('10000000-0000-4000-8000-000000000003', '9990003333', 'Paystack', 'Shop Ltd/003', 'paystack', now() + interval '2 hours');
-SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'account assignment resets the in-flight marker');
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'account assignment preserves the receipt marker');
 DELETE FROM public.order_payment_accounts WHERE order_id = '10000000-0000-4000-8000-000000000003' AND account_number = '9990003333';
+UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 UPDATE public.order_notification_outbox SET dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000017' AND event_type = 'manual_order_invoice';
 -- The dispatch marker snapshots the rendered payment history: a payment
 -- inserted or corrected mid-dispatch aborts the stale send. Unsettled rows

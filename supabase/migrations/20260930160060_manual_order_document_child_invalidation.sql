@@ -75,6 +75,21 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_document_markers_for_order(uuid)
   FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.reset_manual_invoice_markers_for_order(p_order_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- Receipts embed no payment instructions (the mark-started RPC compares
+  -- no account fields for receipts), so account writes reset only invoice
+  -- markers; in-flight receipt snapshots stay valid.
+  UPDATE public.order_notification_outbox AS n
+  SET dispatch_started_at = NULL, updated_at = now()
+  WHERE n.order_id = p_order_id
+    AND n.event_type = 'manual_order_invoice'
+    AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.reset_manual_invoice_markers_for_order(uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -155,20 +170,21 @@ CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_payment_account_wr
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- Any account write can change the preferred pick, so every write locks
-  -- and resets; assignments are rare admin operations.
+  -- and resets the invoice marker; assignments are rare admin operations
+  -- and receipt markers are untouched (receipts embed no accounts).
   IF TG_OP = 'DELETE' THEN
     PERFORM private.lock_manual_document_gate('order', OLD.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
     PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
-    PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
+    PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
     RETURN NEW;
   END IF;
   PERFORM private.lock_manual_document_gate('order', NEW.order_id);
-  PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
+  PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
   RETURN NEW;
 END;
 $$;

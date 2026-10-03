@@ -138,6 +138,48 @@ describe('renderItemRows', () => {
     expect(html).toContain('cell-item-description');
   });
 
+  it('honors explicit line extensions and renders SKU/Unit/VAT detail lines', () => {
+    const html = renderItemRows(
+      createReceiptOrder({
+        items: [
+          {
+            price: 1000,
+            product_name: 'Samsung Galaxy Fold 5',
+            quantity: 2,
+            line_extension_amount: 1500,
+            sellers_item_id: 'SKU-1',
+            unit_code: 'EA',
+            vat_category_code: 'S',
+            vat_rate: 7.5,
+            vat_amount: 112.5,
+          },
+        ],
+      }),
+      formatMoney
+    );
+
+    // The explicit extension wins over quantity x price like the emailed PDF.
+    expect(html).toContain('NGN 1,500');
+    expect(html).not.toContain('NGN 2,000');
+    expect(html).toContain('cell-line-meta');
+    expect(html).toContain('SKU: SKU-1');
+    expect(html).toContain('Unit: EA');
+    expect(html).toContain('VAT: 7.50%');
+    expect(html).toContain('NGN 112.5');
+  });
+
+  it('falls back to quantity x price without an extension or meta lines', () => {
+    const html = renderItemRows(
+      createReceiptOrder({
+        items: [{ price: 1000, product_name: 'Cable', quantity: 2 }],
+      }),
+      formatMoney
+    );
+
+    expect(html).toContain('NGN 2,000');
+    expect(html).not.toContain('cell-line-meta');
+  });
+
   it('omits duplicate item descriptions already visible as labels or fulfillment', () => {
     const html = renderItemRows(
       createReceiptOrder({

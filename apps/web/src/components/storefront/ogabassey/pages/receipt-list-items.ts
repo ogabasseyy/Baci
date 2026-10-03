@@ -102,6 +102,16 @@ function getReceiptItemQuantity(item: Record<string, unknown>) {
   return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 }
 
+function getOptionalReceiptItemNumber(
+  item: Record<string, unknown>,
+  key: string
+): number | undefined {
+  const value = item[key];
+  if (value === null || value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function getAdditionalDeviceCount(items: Array<Record<string, unknown>>) {
   const totalDeviceCount = items.reduce(
     (count, item) => count + getReceiptItemQuantity(item),
@@ -175,16 +185,36 @@ export async function fetchReceiptListItems(
       const isPaidRenderer = rendererPaymentStatus === 'paid';
       const completionDate = getStringValue(order.receipt_completion_date);
 
+      // Project the line details the emailed PDF renders: without them
+      // the preview computes quantity x price and drops VAT/SKU/unit, so it
+      // can disagree with the sent document on explicit extensions.
       const rawItems: Array<{
         product_name: string;
         variant_name?: string | null | undefined;
         quantity: number;
         price: number;
+        description?: string | null | undefined;
+        line_extension_amount?: number | undefined;
+        unit_code?: string | null | undefined;
+        vat_category_code?: string | null | undefined;
+        vat_rate?: number | null | undefined;
+        vat_amount?: number | null | undefined;
+        sellers_item_id?: string | null | undefined;
       }> = items.map((item) => ({
         product_name: getReceiptItemName(item),
         variant_name: getReceiptItemVariantName(item) || undefined,
         quantity: getReceiptItemQuantity(item),
         price: Number(item.price) || 0,
+        description: getStringValue(item.item_description) ?? undefined,
+        line_extension_amount: getOptionalReceiptItemNumber(
+          item,
+          'line_extension_amount'
+        ),
+        unit_code: getStringValue(item.unit_code),
+        vat_category_code: getStringValue(item.vat_category_code),
+        vat_rate: getOptionalReceiptItemNumber(item, 'vat_rate') ?? null,
+        vat_amount: getOptionalReceiptItemNumber(item, 'vat_amount') ?? null,
+        sellers_item_id: getStringValue(item.sellers_item_id),
       }));
       // Itemize the premium like the emailed PDF and download so the
       // preview lines reconcile with the displayed total.

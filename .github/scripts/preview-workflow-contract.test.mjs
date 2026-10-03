@@ -47,6 +47,24 @@ test('preview deploy stays prebuilt with the required archive flag', () => {
   assert.match(executable, /deploy\s+--yes\s+--prebuilt\s+--archive=tgz/);
 });
 
+test('only the preview deploy job moves to the turbo-capable CLI', () => {
+  // 60.1.3 is the oldest CLI whose `deploy` accepts --turbo. The build
+  // stays on 57 so preview output uses the same builder as production;
+  // only the upload client moves.
+  assert.match(
+    jobBlock('deploy'),
+    /VERCEL_CLI_VERSION:\s*"60\.1\.3"/
+  );
+  assert.match(
+    jobBlock('build'),
+    /VERCEL_CLI_VERSION:\s*"57\.0\.0"/
+  );
+  assert.match(
+    jobBlock('prepare'),
+    /VERCEL_CLI_VERSION:\s*"57\.0\.0"/
+  );
+});
+
 test('preview workflow runs on github-hosted runners only', () => {
   assert.match(workflow, /runs-on:\s*ubuntu-24\.04/);
   assert.doesNotMatch(workflow, /self-hosted/);

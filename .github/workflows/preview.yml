@@ -233,7 +233,10 @@ jobs:
       cancel-in-progress: false
     environment: preview
     env:
-      VERCEL_CLI_VERSION: "57.0.0"
+      # Deploy-only CLI 60: the oldest CLI whose `deploy` accepts --turbo.
+      # Build stays on 57 (same builder output as production); only the
+      # upload client moves, for the one-shot Turbo finalize machine below.
+      VERCEL_CLI_VERSION: "60.1.3"
       # Fix OOM error on runner (mirrors deploy-production).
       NODE_OPTIONS: "--max_old_space_size=8192"
     steps:
@@ -252,7 +255,7 @@ jobs:
         with:
           node-version: "24"
       - name: Setup pnpm for the pinned CLI installer
-        # run-pinned-vercel.sh installs vercel@57 via pnpm; fresh runners
+        # run-pinned-vercel.sh installs the job-pinned vercel CLI via pnpm;
         # carry no repo toolchain, so bootstrap it explicitly (same pin the
         # repo's install action uses). Helper-only: no repo deps installed.
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -281,6 +284,11 @@ jobs:
         # trusted-ops/ and .vercel/ reach the deploy root.
         run: node trusted-ops/.github/scripts/materialize-preview-prebuilt-refs.mjs
       # IMPORTANT: --archive=tgz is required to prevent Vercel upload rate limiting.
+      # --turbo rents a one-shot Turbo finalize machine (64GB disk) for this
+      # deployment only: preview uploads are 100% cold files, and the vhs/erofs
+      # finalize step ENOSPCs on the standard machine even for the capped
+      # ~30k-file output (production survives on warm incremental finalizes).
+      # Billed per CPU-minute per preview run; production deploys are untouched.
       - name: Deploy preview to Vercel
         id: deploy
         timeout-minutes: 55
@@ -291,7 +299,7 @@ jobs:
           PREVIEW_REF: ${{ inputs.ref }}
         # Shell logic lives in the trusted helper (300-line rule); the step
         # stays a thin invocation pinned exactly by the contract suite.
-        run: trusted-ops/.github/scripts/preview-deploy-run.sh trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz
+        run: trusted-ops/.github/scripts/preview-deploy-run.sh trusted-ops/.github/scripts/run-pinned-vercel.sh deploy --yes --prebuilt --archive=tgz --turbo
       - name: Clean up Vercel secrets
         if: always()
         run: |

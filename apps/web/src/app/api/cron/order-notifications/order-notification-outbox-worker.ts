@@ -197,11 +197,7 @@ async function processClaimedRow(
           return;
         }
         if (!(error instanceof OutboxStatusUpdateError)) throw error;
-        await markDeliveryOutcomeUnknown(
-          supabase,
-          row,
-          'sent_outcome_persistence_failed'
-        );
+        await markDeliveryOutcomeUnknown(supabase, row, error.reason);
         // The durable state is skipped/outcome-unknown, not sent: count the
         // terminalized fallback like the other unknown-delivery branch.
         summary.skipped += 1;

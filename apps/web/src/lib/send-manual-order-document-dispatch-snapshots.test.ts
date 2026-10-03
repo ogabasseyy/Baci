@@ -41,6 +41,28 @@ describe('send manual order document dispatch snapshots', () => {
     });
   });
 
+  it('snapshots the rendered seller support contacts in the dispatch marker', async () => {
+    const db = database(
+      {},
+      {
+        merchantOverride: {
+          support_email: 'support@shop.example.com',
+          support_phone: '+2348000000001',
+          phone: '+2348000000002',
+        },
+      }
+    );
+    await sendManualOrderDocument({ supabase: db.client, row });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_merchant_support_email: 'support@shop.example.com',
+      p_merchant_support_phone: '+2348000000001',
+      p_merchant_phone: '+2348000000002',
+    });
+  });
+
   it('snapshots the rendered payment instructions in the dispatch marker', async () => {
     const db = database(
       { payment_status: 'partially_paid', amount_paid: 100000 },

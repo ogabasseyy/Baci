@@ -22,7 +22,8 @@ import {
 function createSupabase(
   errors: unknown[],
   liveMetadata: Record<string, unknown> = {},
-  classifyRow: Record<string, unknown> | null = null
+  classifyRow: Record<string, unknown> | null = null,
+  classifyError: unknown = null
 ) {
   const updateErrors = [...errors];
   const select = vi.fn();
@@ -35,7 +36,7 @@ function createSupabase(
       return { data: { id: row.id, metadata: liveMetadata }, error: null };
     }
     if (typeof lastSelect === 'string' && lastSelect.includes('locked_by')) {
-      return { data: classifyRow, error: null };
+      return { data: classifyError ? null : classifyRow, error: classifyError };
     }
     const error = updateErrors.shift();
     if (error === 'zero-rows') {
@@ -120,6 +121,33 @@ describe('order notification outbox worker manual documents', () => {
       expect.objectContaining({
         last_error: 'document_changed_during_send',
         status: 'pending',
+      })
+    );
+  });
+
+  it('terminalizes an unclassifiable manual send instead of retrying blind', async () => {
+    const { client, builder } = createSupabase(
+      ['zero-rows', null],
+      {},
+      null,
+      new Error('read failed')
+    );
+    sendDocument.mockResolvedValue({
+      status: 'sent',
+      messageId: 'document-message',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [{ ...row, event_type: 'manual_order_receipt' }],
+      summary
+    );
+    expect(summary).toMatchObject({ failed: 0, sent: 0, retried: 0 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: 'sent_outcome_classify_failed',
+        skip_reason: 'delivery_outcome_unknown',
+        status: 'skipped',
       })
     );
   });

@@ -62,6 +62,7 @@ BEGIN
     AND OLD.amount IS NOT DISTINCT FROM NEW.amount
     AND OLD.description IS NOT DISTINCT FROM NEW.description
     AND OLD.metadata IS NOT DISTINCT FROM NEW.metadata
+    AND OLD.created_at IS NOT DISTINCT FROM NEW.created_at
     AND OLD.order_id IS NOT DISTINCT FROM NEW.order_id THEN
     RETURN NEW;
   END IF;

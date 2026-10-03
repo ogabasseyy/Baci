@@ -65,6 +65,9 @@ export interface DispatchMerchantIdentitySnapshot {
   taxIdentificationNumber: string | null;
   vatRegistrationStatus: string | null;
   vatRate: number | null;
+  supportEmail: string | null;
+  supportPhone: string | null;
+  phone: string | null;
 }
 
 export interface DispatchTaxSubtotal {
@@ -99,8 +102,9 @@ export interface DispatchTransaction {
  * but only for invoice and proforma kinds: receipts render no payment
  * instructions, so comparing them would spuriously abort every receipt for
  * an order with an assigned account. The rendered issuer identity (business
- * name, legal entity, addresses, RC/TIN, VAT registration) is compared for
- * every kind instead since receipts print the issuer header too. The
+ * name, legal entity, addresses, support contacts, RC/TIN, VAT
+ * registration) is compared for every kind instead since receipts print
+ * the issuer header too. The
  * rendered VAT subtotals are covered too (count plus canonical rows) since
  * a same-total category correction would otherwise email a stale tax
  * breakdown, as is the rendered payment history: a payment inserted or
@@ -199,6 +203,9 @@ export async function markManualDocumentDispatchStarted(
       p_merchant_vat_registration_status: merchant.vatRegistrationStatus,
       p_merchant_vat_rate: merchant.vatRate,
       p_claim_domain: claimDomain,
+      p_merchant_support_email: merchant.supportEmail,
+      p_merchant_support_phone: merchant.supportPhone,
+      p_merchant_phone: merchant.phone,
     }
   );
   if (error) throw new Error('Manual document dispatch state unavailable');
@@ -217,6 +224,9 @@ export interface DispatchMerchantRow {
   tax_identification_number: string | null;
   vat_registration_status: string | null;
   vat_rate: number | null;
+  support_email: string | null;
+  support_phone: string | null;
+  phone: string | null;
 }
 
 /**
@@ -254,6 +264,9 @@ export async function persistManualDocumentDispatch(
         taxIdentificationNumber: merchant.tax_identification_number,
         vatRegistrationStatus: merchant.vat_registration_status,
         vatRate: merchant.vat_rate,
+        supportEmail: merchant.support_email,
+        supportPhone: merchant.support_phone,
+        phone: merchant.phone,
       },
       claimDomain
     );

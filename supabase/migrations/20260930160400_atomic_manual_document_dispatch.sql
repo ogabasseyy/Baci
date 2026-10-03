@@ -7,43 +7,24 @@
 -- tax-rebuild trigger's parent-to-child order; any other sequence
 -- deadlocks against concurrent staff edits. A payment, contact
 -- correction, or item edit landing mid-dispatch aborts instead of sending
--- a stale document. The snapshot
--- covers every order-row input the renderer reads (identity, money
--- breakdown, notes, address, dates, and item contents including
--- descriptions) plus the manual-order origin fields: a same-total money
--- redistribution, address correction, or eligibility change
--- (recorded_by cleared, import/external set) aborts too.
--- The rendered document kind is snapshotted into the row metadata so claim
--- previews keep showing the sent kind after later payments. The rendered
--- payment instructions are snapshotted too (merchant bank fields plus the
--- preferred virtual account): a bank-detail edit landing mid-dispatch would
--- otherwise email obsolete instructions and misdirect the customer's
--- transfer. Receipts render no payment instructions, so the payment
--- comparison (including the virtual-account lookup) only runs for invoice
--- and proforma kinds; otherwise every receipt for an order with an assigned
--- account would spuriously abort. The rendered issuer identity (business
--- name, legal entity, addresses, RC/TIN, VAT registration) is compared for
--- every kind instead: receipts print the issuer header too, so a committed
--- correction must abort rather than email stale issuer or tax data.
--- Cosmetic merchant fields (logo, colors) stay outside the snapshot, as do
--- ledger rows, which derive from the covered payment state. The rendered
--- VAT subtotals are snapshotted (count plus canonical rows) since a
--- same-total category correction would otherwise email a stale tax
--- breakdown. The worker retries after an abort and converges (fresh send
--- or document_state_changed skip). Safe predeploy: only the new worker
--- calls it. The rendered payment-history rows are snapshotted the same way
--- (count plus canonical rows over the sender's settled-status filter): a
--- payment inserted or corrected mid-dispatch would otherwise email a stale
--- Payment table.
--- Every child-table read below locks its rows FOR SHARE first (locking
--- clauses are illegal on aggregates, so a bare PERFORM takes the locks and
--- the count/canonical-row aggregates re-read the locked rows), so a
--- concurrent item, tax, transaction, or account UPDATE/DELETE blocks until
--- this comparison commits instead of slipping between the re-read and the
--- mark; the writer's trigger then sees the set marker and resets it, and
--- the worker's post-transport lease check aborts the stale send for a
--- bounded retry. Pure INSERTs during this function's own microseconds
--- cannot take a row lock, so a same-instant insert can still miss both the
+-- a stale document. The snapshot covers every order-row input the renderer
+-- reads (identity, money, notes, address, dates, item contents) plus the
+-- manual-order origin fields. The sent kind is stored in row metadata so
+-- claim previews survive later payments. Payment instructions (merchant
+-- bank fields plus the preferred virtual account) compare for invoice and
+-- proforma kinds only: receipts render none, so comparing them would
+-- spuriously abort. The issuer identity (business name, legal entity,
+-- addresses, support contacts, RC/TIN, VAT registration) compares for
+-- every kind since receipts print the issuer header too. Cosmetic merchant
+-- fields (logo, colors) and derived ledger rows stay outside. VAT
+-- subtotals, payment history (settled filter), and the claim-link domain
+-- compare as count plus canonical rows. The worker retries after an abort
+-- and converges. Safe predeploy: only the new worker calls it.
+-- Every child-table read locks its rows FOR SHARE first via a bare PERFORM
+-- (aggregates forbid locking clauses), so a concurrent UPDATE/DELETE blocks
+-- until this comparison commits; the writer's trigger then sees the set
+-- marker and resets it, and the post-transport lease check aborts the stale
+-- send for a bounded retry. Same-instant INSERTs can still miss both the
 -- comparison and the reset; that residual is bounded by this transaction's
 -- duration (no I/O inside) rather than the whole send window.
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
@@ -95,7 +76,10 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_tax_identification_number text,
   p_merchant_vat_registration_status text,
   p_merchant_vat_rate numeric,
-  p_claim_domain text
+  p_claim_domain text,
+  p_merchant_support_email text,
+  p_merchant_support_phone text,
+  p_merchant_phone text
 )
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -126,6 +110,9 @@ DECLARE
   v_merchant_vat_registration_status text;
   v_merchant_vat_rate numeric;
   v_claim_domain text;
+  v_merchant_support_email text;
+  v_merchant_support_phone text;
+  v_merchant_phone text;
 BEGIN
   IF p_document_kind NOT IN ('receipt', 'invoice', 'proforma_invoice') THEN
     RAISE EXCEPTION 'unknown manual document kind: %', p_document_kind;
@@ -153,12 +140,14 @@ BEGIN
   -- non-legacy paystack row); a missing row leaves NULLs, matching null.
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.cac_rc_number, m.tax_identification_number,
-    m.vat_registration_status, m.vat_rate,
-    m.bank_code, m.bank_account_number, m.bank_name, m.bank_account_name
+    m.vat_registration_status, m.vat_rate, m.support_email, m.support_phone,
+    m.phone, m.bank_code, m.bank_account_number, m.bank_name,
+    m.bank_account_name
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
     v_merchant_cac_rc_number, v_merchant_tax_identification_number,
     v_merchant_vat_registration_status, v_merchant_vat_rate,
+    v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
     v_merchant_bank_code, v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
@@ -266,6 +255,9 @@ BEGIN
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_vat_registration_status IS DISTINCT FROM p_merchant_vat_registration_status
     OR v_merchant_vat_rate IS DISTINCT FROM p_merchant_vat_rate
+    OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
+    OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone
+    OR v_merchant_phone IS DISTINCT FROM p_merchant_phone
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
     OR (v_compare_payment AND (
       v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
@@ -290,7 +282,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text)
+REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text)
   TO service_role;

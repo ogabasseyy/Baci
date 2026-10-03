@@ -147,8 +147,8 @@ export async function processCancellationDrain(
     notificationResult[0].status === 'fulfilled'
       ? (notificationResult[0].value.exhausted ?? 0)
       : 0;
-  // Terminal rows awaiting operations review: visible in the failure
-  // log and the success payload, but not a 503 — there is no
+  // Terminal rows awaiting operations review: visible in the warn
+  // logs and the success payload, but not a 503 — there is no
   // acknowledgement primitive yet, so paging on them would red-light
   // the route forever and mask fresh failures behind stale ones.
   const notificationUncertain =
@@ -157,14 +157,20 @@ export async function processCancellationDrain(
       : 0;
   // Dead-lettered rows need the same treatment as uncertain ones:
   // manual operations review with no ack path. They stay visible via
-  // this warn log plus the success-payload count, but must not 503 —
-  // otherwise the first dead letter pins the cron red until a human
-  // clears it, masking fresh failures behind the stale row.
+  // these warn logs plus the success-payload counts, but must not
+  // 503 — otherwise the first dead letter pins the cron red until a
+  // human clears it, masking fresh failures behind the stale row.
   if (notificationExhausted > 0) {
     logger.warn({
       message:
         'Cancellation drain has dead-lettered notifications awaiting review',
       notificationExhausted,
+    });
+  }
+  if (notificationUncertain > 0) {
+    logger.warn({
+      message: 'Cancellation drain has uncertain notifications awaiting review',
+      notificationUncertain,
     });
   }
   if (

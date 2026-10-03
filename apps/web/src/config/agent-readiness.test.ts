@@ -23,7 +23,7 @@ const PUBLIC_MCP_TOOL_NAMES = [
   'get_store_info',
   'browse_categories',
   'get_brands',
-  'get_shipping_quote',
+  'get_delivery_fee_info',
 ];
 
 function importAgentReadiness(

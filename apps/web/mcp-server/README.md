@@ -143,7 +143,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `get_ucp_cart` | Read a UCP cart session |
 | `get_product` | Get detailed product information |
 | `get_product_variants` | Get variants, conditions, prices, and availability for a product |
-| `get_shipping_quote` | Explain where to confirm the final delivery fee at checkout |
+| `get_delivery_fee_info` | Explain where to confirm the final delivery fee at checkout |
 | `get_store_info` | Shipping, returns, payment info |
 | `lookup_ucp_catalog_items` | Fetch exact product IDs through the UCP catalog lookup route |
 | `search_ucp_catalog` | Search Ogabassey products using the UCP catalog route |

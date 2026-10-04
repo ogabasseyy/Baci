@@ -69,5 +69,24 @@ describe('inter-naira-font.css', () => {
         )
       )
     ).toBe(true);
+    // The checkout-browser harness ships its own public/ dir; pin it to the
+    // same bytes or harness runs silently render different glyphs.
+    expect(
+      bytes.equals(
+        readFileSync(
+          join(
+            repoRoot,
+            'apps',
+            'web',
+            'tests',
+            'checkout-browser',
+            'harness',
+            'public',
+            'fonts',
+            basename(filename)
+          )
+        )
+      )
+    ).toBe(true);
   });
 });

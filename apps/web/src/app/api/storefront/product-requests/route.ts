@@ -35,8 +35,18 @@ export async function POST(request: Request) {
   const { error } = result;
   if (!error) return Response.json({ ok: true });
   const info = error as { code?: string; message?: string };
-  if (info.code === '54000' || info.message?.includes('Request limit reached'))
+  if (
+    info.code === '54000' ||
+    info.message?.includes('Request limit reached')
+  ) {
+    // Merchant-scoped spike signal for budget-abuse alerting. The contact
+    // stays out of logs; per-contact rotation is visible only as volume.
+    logger.warn({
+      message: 'Product request intake rate limited',
+      merchantSlug: parsed.data.merchantSlug,
+    });
     return Response.json({ error: 'Request limit reached' }, { status: 429 });
+  }
   if (info.message?.includes('Store unavailable'))
     return Response.json({ error: 'Store unavailable' }, { status: 404 });
   if (info.message?.includes('Request conflict'))

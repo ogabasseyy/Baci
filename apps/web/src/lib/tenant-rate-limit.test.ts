@@ -20,6 +20,15 @@ vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
 
+const mockWarn = vi.hoisted(() => vi.fn());
+vi.mock('./logger', () => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: (...args: unknown[]) => mockWarn(...args),
+  },
+}));
+
 describe('checkTenantRateLimit', () => {
   beforeEach(() => {
     mockGetRedis.mockReturnValue({});
@@ -66,5 +75,21 @@ describe('checkTenantRateLimit', () => {
         windowMs: 60_000,
       })
     ).resolves.toBe(false);
+  });
+
+  it('pages once per outage instead of warning per denied request', async () => {
+    vi.resetModules();
+    mockWarn.mockClear();
+    mockGetRedis.mockReturnValue(null);
+    const { checkTenantRateLimit: freshCheck } = await import(
+      './tenant-rate-limit'
+    );
+    const config = { maxRequests: 60, windowMs: 60_000 };
+    await freshCheck('search_assist', 'm1', config);
+    await freshCheck('search_assist', 'm1', config);
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: 'search_assist', tenantId: 'm1' })
+    );
   });
 });

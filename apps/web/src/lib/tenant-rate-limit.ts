@@ -1,4 +1,5 @@
 import { Ratelimit } from '@upstash/ratelimit';
+import { logger } from './logger';
 import { getRedis } from './redis';
 
 // Route-level tenant budgets on Upstash Redis (the same backend as the proxy
@@ -11,6 +12,11 @@ import { getRedis } from './redis';
 // the budget this guard exists to protect.
 
 const tenantLimiters = new Map<string, Ratelimit>();
+// Outage signals fire once per process: every request denies closed during
+// a Redis outage, and per-request warnings would flood the log instead of
+// paging once.
+let warnedRedisUnavailable = false;
+let warnedRedisError = false;
 
 export async function checkTenantRateLimit(
   namespace: string,
@@ -18,7 +24,17 @@ export async function checkTenantRateLimit(
   config: { maxRequests: number; windowMs: number }
 ): Promise<boolean> {
   const redis = getRedis();
-  if (!redis) return false;
+  if (!redis) {
+    if (!warnedRedisUnavailable) {
+      warnedRedisUnavailable = true;
+      logger.warn({
+        message: 'Tenant rate limit Redis unavailable; denying closed',
+        namespace,
+        tenantId,
+      });
+    }
+    return false;
+  }
 
   const windowSeconds = `${Math.ceil(config.windowMs / 1000)} s` as const;
   const cacheKey = `${config.maxRequests}:${windowSeconds}`;
@@ -36,6 +52,14 @@ export async function checkTenantRateLimit(
     const result = await limiter.limit(`${namespace}:${tenantId}`);
     return result.success;
   } catch {
+    if (!warnedRedisError) {
+      warnedRedisError = true;
+      logger.warn({
+        message: 'Tenant rate limit error; denying closed',
+        namespace,
+        tenantId,
+      });
+    }
     return false;
   }
 }

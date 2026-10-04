@@ -2,9 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
+  warn: vi.fn(),
 }));
 vi.mock('@/lib/storefront/server-intake-client', () => ({
   submitStorefrontProductRequest: mocks.submit,
+}));
+vi.mock('@/lib/logger', () => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: (...args: unknown[]) => mocks.warn(...args),
+  },
 }));
 
 import { POST } from './route';
@@ -24,6 +32,7 @@ function request(body: unknown) {
 }
 beforeEach(() => {
   mocks.submit.mockReset().mockResolvedValue({ error: null });
+  mocks.warn.mockReset();
 });
 describe('product request intake', () => {
   it('validates with Zod before calling the intake helper', async () => {
@@ -49,6 +58,12 @@ describe('product request intake', () => {
       error: { code: '54000', message: 'Request limit reached' },
     });
     expect((await POST(request(input))).status).toBe(429);
+    expect(mocks.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantSlug: 'ogabassey' })
+    );
+    expect(JSON.stringify(mocks.warn.mock.calls)).not.toContain(
+      'shopper@example.com'
+    );
     mocks.submit.mockResolvedValueOnce({
       error: { code: '22023', message: 'Store unavailable' },
     });

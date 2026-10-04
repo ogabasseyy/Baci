@@ -16,6 +16,13 @@ export const piggyvestProvisioningConfigurationSchema =
       provisioningApproved: z.literal(true),
       syntheticIdentityApproved: z.literal(true),
       defaultInterestRoutingVerified: z.boolean().default(false),
+      defaultInterestRoutingAttestation: z
+        .strictObject({
+          attestationId: z.string().trim().min(1).max(128),
+          businessId: piggyvestProviderIdSchema,
+          globalSplit: z.literal('9%/3%'),
+        })
+        .optional(),
       fingerprintKey: z.string().min(32).max(512),
       verifiedInterestPayoutWalletId: piggyvestProviderIdSchema.optional(),
     })

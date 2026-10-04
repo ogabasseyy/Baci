@@ -1,16 +1,20 @@
 import { piggyvestPolicyReviewSchemas } from '@baci/shared/contracts';
 import { z } from 'zod';
 import { piggyvestGoalPolicySchemas } from './piggyvest-goal-policy';
+import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 import { piggyvestSavingsLedgerSnapshotSchema } from './piggyvest-savings-ledger-snapshot';
 
 const uuid = z.uuid().transform((value) => value.toLowerCase());
 
 const capability = z.strictObject({
   identity: z.strictObject({
+    environment: z.literal('staging'),
     integrationId: uuid,
     merchantId: uuid,
     customerId: uuid,
     goalId: uuid,
+    providerWalletId: piggyvestProviderIdSchema,
+    providerCustomerId: piggyvestProviderIdSchema,
   }),
   policy: z
     .strictObject({

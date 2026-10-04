@@ -239,6 +239,37 @@ describe('login resume state', () => {
     expect(mockDeleteItemAsync).not.toHaveBeenCalled();
   });
 
+  it('migrates a legacy web value to the prefixed key and deletes it', async () => {
+    setPlatformOS('web');
+    jest
+      .spyOn(storefrontStoragePrefix, 'getStorefrontStoragePrefix')
+      .mockReturnValue('baci-test.');
+    const sessionStorage = mockWebSessionStorage();
+    (sessionStorage.getItem as jest.Mock)
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          email: 'shopper@example.com',
+          returnTo: '/checkout',
+          savedAt: Date.now(),
+          step: 'otp',
+        })
+      );
+
+    await expect(getAuthLoginResumeState('/checkout')).resolves.toEqual({
+      email: 'shopper@example.com',
+      returnTo: '/checkout',
+      step: 'otp',
+    });
+    expect(sessionStorage.setItem).toHaveBeenCalledWith(
+      'baci-test.auth-login-resume-state',
+      expect.stringContaining('shopper@example.com')
+    );
+    expect(sessionStorage.removeItem).toHaveBeenCalledWith(
+      'auth-login-resume-state'
+    );
+  });
+
   it('handles web sessionStorage errors without falling back to native storage', async () => {
     setPlatformOS('web');
     const sessionStorage = mockWebSessionStorage({
@@ -321,6 +352,15 @@ describe('login resume state', () => {
       'baci-test.auth-login-resume-state',
       'auth-login-resume-state',
     ]);
+    // One-time migration: the legacy value moves to the resolved key and
+    // the shared key is deleted so no later prefix can resurface it.
+    expect(mockSetItemAsync).toHaveBeenCalledWith(
+      'baci-test.auth-login-resume-state',
+      expect.stringContaining('shopper@example.com')
+    );
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith(
+      'auth-login-resume-state'
+    );
   });
 
   it('fails closed without touching storage when prefix resolution throws', async () => {

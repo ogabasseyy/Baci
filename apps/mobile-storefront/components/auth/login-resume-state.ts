@@ -56,13 +56,20 @@ function removeWebStorageValue(key: string) {
 
 // Reads the resolved key first, then the legacy unprefixed key, so resume
 // state saved before the storage-prefix migration (10-minute TTL) survives an
-// upgrade instead of dropping a mid-OTP resume.
+// upgrade instead of dropping a mid-OTP resume. A legacy hit is migrated to
+// the resolved key and deleted immediately: the shared legacy key must not
+// linger where a later read under another tenant/mode prefix could surface it.
 function readWebResumeValue(primaryKey: string): string | null {
   const rawValue = readWebStorageValue(primaryKey);
   if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
     return rawValue;
   }
-  return readWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+  const legacyValue = readWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+  if (legacyValue !== null) {
+    writeWebStorageValue(primaryKey, legacyValue);
+    removeWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+  }
+  return legacyValue;
 }
 
 async function readNativeResumeValue(primaryKey: string): Promise<string | null> {
@@ -70,7 +77,14 @@ async function readNativeResumeValue(primaryKey: string): Promise<string | null>
   if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
     return rawValue;
   }
-  return SecureStore.getItemAsync(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+  const legacyValue = await SecureStore.getItemAsync(
+    LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY
+  );
+  if (legacyValue !== null) {
+    await SecureStore.setItemAsync(primaryKey, legacyValue);
+    await SecureStore.deleteItemAsync(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+  }
+  return legacyValue;
 }
 
 function hasControlCharacters(value: string): boolean {

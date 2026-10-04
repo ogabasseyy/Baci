@@ -83,7 +83,7 @@ export function startGatewayServer(
 
   // Bounded rejection auditing: at most one 429 row per client per
   // window, so a flood of denied requests cannot turn into a flood of
-  // audit INSERTs. First rejection still records full forensics.
+  // audit INSERTs. Sampling stops for new identities when the cache is full.
   const shouldAuditRejection = createRejectionSampler(config.rateLimitWindowMs);
 
   // Durable audit: grant id, route, status, latency only. Failures are

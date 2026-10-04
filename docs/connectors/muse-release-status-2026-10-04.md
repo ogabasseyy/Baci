@@ -169,3 +169,11 @@ At capacity, new identities are not individually audited until space is
 reclaimed; requests remain rate limited. ADR-003 now explicitly states that the
 trusted gateway database credential has broader authority than individual
 merchant bearer grants; credential-compromise containment is not claimed.
+
+Follow-up review adds hard capacities to both rate-limit identity maps,
+transaction-local audit timeouts with at most one outstanding audit write, and
+version-conditional credential reissue. Saturated audit drops do not block reads.
+The oversized-test finding cites an obsolete mandatory rule; current repository
+instructions set a modularity aim and do not require unrelated test churn.
+ADR-002 now distinguishes the completed invited pilot from the subsequently
+authorized owner self-service production/directory rollout.

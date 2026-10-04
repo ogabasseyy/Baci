@@ -323,7 +323,7 @@ describe('/api/integrations/muse', () => {
     expect(rpcCalls).toHaveLength(1);
     expect(rpcCalls[0]).toMatchObject({
       name: 'reissue_connector_grant_tokens',
-      args: { p_grant_id: GRANT_ID },
+      args: { p_grant_id: GRANT_ID, p_expected_version: grantRow.version },
     });
     const args = rpcCalls[0].args as Record<string, unknown>;
     expect(args.p_new_token_hash).toMatch(/^[0-9a-f]{64}$/);

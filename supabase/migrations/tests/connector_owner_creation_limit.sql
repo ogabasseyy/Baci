@@ -34,6 +34,18 @@ DO $$ BEGIN
     RAISE EXCEPTION 'Unexpected connection count';
   END IF;
 END $$;
+DO $$ DECLARE v_id uuid; BEGIN
+  SELECT id INTO v_id FROM public.connector_grants WHERE connection_id='owner-cap-50';
+  IF NOT public.reissue_connector_grant_tokens(v_id,repeat('c',64),repeat('d',64),1) THEN
+    RAISE EXCEPTION 'Matching version reissue failed';
+  END IF;
+  IF public.reissue_connector_grant_tokens(v_id,repeat('e',64),repeat('f',64),1) THEN
+    RAISE EXCEPTION 'Stale version reissue replaced credentials';
+  END IF;
+  IF (SELECT version FROM public.connector_grants WHERE id=v_id) <> 2 THEN
+    RAISE EXCEPTION 'Stale version changed grant';
+  END IF;
+END $$;
 -- Staff cannot inspect owner credential metadata through direct table reads.
 SELECT set_config('request.jwt.claim.sub','e8130000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN

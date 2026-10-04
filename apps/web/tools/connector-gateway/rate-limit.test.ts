@@ -172,3 +172,24 @@ describe('createRateLimiter', () => {
     );
   });
 });
+
+it('rejects new identities at capacity and recovers after expiry', () => {
+  const limiter = createRateLimiter({
+    windowMs: 1000,
+    maxPerKey: 10,
+    maxPerIp: 10,
+    maxIdentities: 2,
+  });
+  expect(limiter.check({ ip: 'a', keyId: 'a' }, 0).allowed).toBe(true);
+  expect(limiter.check({ ip: 'b', keyId: 'b' }, 0).allowed).toBe(true);
+  expect(limiter.check({ ip: 'c', keyId: 'c' }, 1)).toMatchObject({
+    allowed: false,
+    limitedBy: 'ip',
+  });
+  expect(limiter.check({ ip: 'a', keyId: 'c' }, 1)).toMatchObject({
+    allowed: false,
+    limitedBy: 'key',
+  });
+  expect(limiter.check({ ip: 'a', keyId: 'a' }, 2).allowed).toBe(true);
+  expect(limiter.check({ ip: 'c', keyId: 'c' }, 1001).allowed).toBe(true);
+});

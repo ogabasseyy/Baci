@@ -39,4 +39,9 @@ export const EXPECTED_CONNECTOR_PENDING_SOURCES = [
       'supabase/migrations/20261004220511_connector_owner_status_metadata.sql',
     sha256: 'f519b78439132b3f5cff4a074f4f5d2d494c9db0202a543de260bd750705556b',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004223600_connector_reissue_version_guard.sql',
+    sha256: 'b3b0bb350e0bbab2cf20390229904fdf5b30b5d12ed0bb1325bad87c8bd19e3b',
+  },
 ];

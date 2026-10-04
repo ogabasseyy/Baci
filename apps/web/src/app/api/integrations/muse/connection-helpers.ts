@@ -188,13 +188,17 @@ export async function reissueConnectionForRequest(
       { status: 409, headers: PRIVATE_NO_STORE }
     );
   }
-  const reissued = await reissueConnectionTokens(supabase, connection.grantId);
+  const reissued = await reissueConnectionTokens(
+    supabase,
+    connection.grantId,
+    connection.version
+  );
   if (!reissued.ok) return reissued.response;
   return NextResponse.json(
     {
       alreadyConnected: true,
       reissued: true,
-      grant: connection,
+      grant: { ...connection, version: connection.version + 1 },
       refreshToken: reissued.tokens.refreshToken,
       token: reissued.tokens.token,
     },
@@ -216,11 +220,13 @@ type ReissueResult =
 
 export async function reissueConnectionTokens(
   supabase: SupabaseClient,
-  grantId: string
+  grantId: string,
+  expectedVersion: number
 ): Promise<ReissueResult> {
   const tokens = newConnectorTokenPair();
   const { data, error } = await supabase.rpc('reissue_connector_grant_tokens', {
     p_grant_id: grantId,
+    p_expected_version: expectedVersion,
     p_new_token_hash: tokens.tokenHash,
     p_new_refresh_token_hash: tokens.refreshTokenHash,
   });

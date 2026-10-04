@@ -1,6 +1,11 @@
 # ADR 002: Private Custom Connector for the Muse Pilot
 
-Date: 1 October 2026. Status: Accepted for pilot.
+Date: 1 October 2026. Status: Accepted for the completed private pilot.
+
+The subsequent owner-authorized read-only production/directory rollout is
+recorded in ADR-003 and the release status. Its self-service cohort is merchant
+owners; the invited-only restriction below describes the earlier private pilot.
+It grants no staff access or store-data write operations.
 
 ## Context
 

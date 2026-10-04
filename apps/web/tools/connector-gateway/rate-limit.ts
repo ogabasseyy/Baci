@@ -12,6 +12,7 @@ export interface RateLimiterOptions {
   windowMs: number;
   maxPerKey: number;
   maxPerIp: number;
+  maxIdentities?: number;
 }
 
 export interface RateLimitInput {
@@ -69,9 +70,13 @@ function hit(
   id: string,
   now: number,
   windowMs: number,
-  max: number
+  max: number,
+  capacity: number
 ): { limited: boolean; retryAfterMs: number } {
   const entry = store.get(id);
+  if (entry === undefined && store.size >= capacity) {
+    return { limited: true, retryAfterMs: windowMs };
+  }
   if (entry === undefined || entry.resetAt <= now) {
     store.set(id, { count: 1, resetAt: now + windowMs });
     return { limited: false, retryAfterMs: 0 };
@@ -84,6 +89,7 @@ function hit(
 }
 
 export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
+  const capacity = options.maxIdentities ?? 20_000;
   const keyHits = new Map<string, WindowCounter>();
   const ipHits = new Map<string, WindowCounter>();
   const sweeps = [keyHits, ipHits].map((store) => ({
@@ -95,7 +101,7 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
     check(input: RateLimitInput, now: number = Date.now()): RateLimitDecision {
       // Resume each sweep across requests; never scan all live counters
       // on one request once the maps exceed the cleanup threshold.
-      if (keyHits.size + ipHits.size > 20_000) {
+      if (keyHits.size >= capacity || ipHits.size >= capacity) {
         for (const sweep of sweeps) {
           sweep.iterator ??= sweep.store[Symbol.iterator]();
           for (let scanned = 0; scanned < 128; scanned += 1) {
@@ -113,7 +119,14 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
       }
       // IP budget first: a request already denied by IP must not
       // allocate or advance a key counter.
-      const ip = hit(ipHits, input.ip, now, options.windowMs, options.maxPerIp);
+      const ip = hit(
+        ipHits,
+        input.ip,
+        now,
+        options.windowMs,
+        options.maxPerIp,
+        capacity
+      );
       if (ip.limited) {
         return {
           allowed: false,
@@ -129,7 +142,8 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
         `key:${input.keyId}`,
         now,
         options.windowMs,
-        options.maxPerKey
+        options.maxPerKey,
+        capacity
       );
       if (!key.limited) {
         return { allowed: true, retryAfterMs: 0, limitedBy: null };

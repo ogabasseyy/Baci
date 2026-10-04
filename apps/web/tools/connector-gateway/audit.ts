@@ -1,11 +1,12 @@
 /**
  * Durable gateway audit records (R1).
  *
- * One row per call in `public.connector_gateway_audit`: grant id (when a
+ * One row per recorded call in `public.connector_gateway_audit`: grant id (when a
  * grant was resolved), route, status, latency. The allowlist builder below
  * is the only writer shape: it picks exactly these fields and drops
  * everything else, so credentials and request/response payloads can never
- * reach the audit table even if a caller passes them in.
+ * reach the audit table even if a caller passes them in. Saturation/timeouts
+ * drop records to preserve the read path; this is not a complete access ledger.
  */
 
 import type postgres from 'postgres';
@@ -58,22 +59,31 @@ export async function recordGatewayAudit(
   sql: postgres.Sql,
   entry: GatewayAuditEntry
 ): Promise<void> {
-  await sql`
+  await sql.begin(async (transaction) => {
+    await transaction`SET LOCAL statement_timeout = '500ms'`;
+    await transaction`SET LOCAL lock_timeout = '250ms'`;
+    await transaction`
     INSERT INTO public.connector_gateway_audit
       (grant_id, route, status, latency_ms)
     VALUES (
       ${entry.grantId}::uuid, ${entry.route}, ${entry.status}, ${entry.latencyMs}
     )
   `;
+  });
 }
 
 export function createGatewayAudit(sql: postgres.Sql) {
+  let busy = false;
   async function audit(input: {
     grantId: string | null;
     route: string;
     status: number;
     started: number;
   }): Promise<void> {
+    // At most one audit write may use the shared pool; saturated audit drops
+    // are fail-open, while business reads retain the remaining connections.
+    if (busy) return;
+    busy = true;
     try {
       await recordGatewayAudit(
         sql,
@@ -88,6 +98,8 @@ export function createGatewayAudit(sql: postgres.Sql) {
       process.stderr.write(
         `${JSON.stringify({ event: 'gateway_audit_failed', route: input.route, status: input.status })}\n`
       );
+    } finally {
+      busy = false;
     }
   }
 

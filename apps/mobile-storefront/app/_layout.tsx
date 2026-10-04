@@ -127,10 +127,15 @@ export default function RootLayout() {
   // notification exists until its start date passes. The boot effect above
   // covers cold starts; this foreground listener covers an app that stays
   // installed and running across the start date, converting the request
-  // into the recurring series the next time the user foregrounds.
+  // into the recurring series the next time the user foregrounds. Gated on
+  // the same boot-readiness signals via ref (read fresh on every event) so
+  // logged-out and pre-init foregrounds skip the storage/capability work.
+  const bootReadyRef = useRef(false);
+  bootReadyRef.current =
+    isInitialized && isStorageReady && isTrackingAuthorizationSettled;
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
+      if (nextState === 'active' && bootReadyRef.current) {
         void activateDueSavingsReminderNotification();
       }
     });

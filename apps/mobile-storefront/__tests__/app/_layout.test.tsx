@@ -172,6 +172,43 @@ jest.mock('@/stores/auth-store', () => ({
 const { default: RootLayout, resetRootLayoutBootstrapStateForTest } =
   require('@/app/_layout') as typeof import('@/app/_layout');
 
+// Same pattern as memory-warning-diagnostics.test.ts: the RN preset's
+// AppState.addEventListener does not return a working subscription here,
+// so install a per-test mock (restored afterwards) instead of spying.
+function mockAppStateListener() {
+  const original = AppState.addEventListener;
+  const addEventListener = jest.fn(
+    (_event: string, _handler: (state: string) => void) => ({
+      remove: jest.fn(),
+    })
+  );
+  Object.defineProperty(AppState, 'addEventListener', {
+    configurable: true,
+    value: addEventListener,
+  });
+  return {
+    addEventListener,
+    restoreAppState: () => {
+      Object.defineProperty(AppState, 'addEventListener', {
+        configurable: true,
+        value: original,
+      });
+    },
+  };
+}
+
+function latestChangeHandler(
+  addEventListener: ReturnType<
+    typeof mockAppStateListener
+  >['addEventListener']
+) {
+  const handlers = addEventListener.mock.calls
+    .filter(([event]) => event === 'change')
+    .map(([, handler]) => handler);
+  expect(handlers.length).toBeGreaterThan(0);
+  return handlers[handlers.length - 1];
+}
+
 describe('RootLayout storage boot gate', () => {
   beforeEach(() => {
     resetRootLayoutBootstrapStateForTest();
@@ -321,7 +358,7 @@ describe('RootLayout storage boot gate', () => {
 
   it('activates due savings reminders when the app foregrounds', async () => {
     mockInitializeStorage.mockResolvedValue(undefined);
-    const addListenerSpy = jest.spyOn(AppState, 'addEventListener');
+    const { addEventListener, restoreAppState } = mockAppStateListener();
 
     try {
       render(<RootLayout />);
@@ -329,12 +366,7 @@ describe('RootLayout storage boot gate', () => {
         expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
       });
 
-      const changeHandlers = addListenerSpy.mock.calls
-        .filter(([event]) => event === 'change')
-        .map(([, handler]) => handler as (state: string) => void);
-      expect(changeHandlers.length).toBeGreaterThan(0);
-      const onChange = changeHandlers[changeHandlers.length - 1];
-
+      const onChange = latestChangeHandler(addEventListener);
       const before =
         mockActivateDueSavingsReminderNotification.mock.calls.length;
       act(() => {
@@ -350,7 +382,30 @@ describe('RootLayout storage boot gate', () => {
         mockActivateDueSavingsReminderNotification.mock.calls.length
       ).toBe(before + 1);
     } finally {
-      addListenerSpy.mockRestore();
+      restoreAppState();
+    }
+  });
+
+  it('skips foreground reminder activation before boot is ready', async () => {
+    mockAuthState.isInitialized = false;
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(addEventListener).toHaveBeenCalled();
+      });
+
+      mockActivateDueSavingsReminderNotification.mockClear();
+      act(() => {
+        latestChangeHandler(addEventListener)('active');
+      });
+      expect(
+        mockActivateDueSavingsReminderNotification
+      ).not.toHaveBeenCalled();
+    } finally {
+      restoreAppState();
     }
   });
 });

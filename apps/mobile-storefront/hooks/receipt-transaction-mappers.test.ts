@@ -11,6 +11,7 @@ describe('mapCustomerTransactionRpcRows', () => {
           description: 'Paystack transfer',
           dva_account_number: '1234567890',
           gateway: 'paystack',
+          order_id: 'order-1',
           status: 'completed',
           transaction_type: 'payment',
         },
@@ -22,6 +23,7 @@ describe('mapCustomerTransactionRpcRows', () => {
         description: 'Paystack transfer',
         gateway: 'paystack',
         metadata: { dva_account_number: '1234567890' },
+        order_id: 'order-1',
         status: 'completed',
         transaction_type: 'payment',
       },
@@ -34,9 +36,21 @@ describe('mapCustomerTransactionRpcRows', () => {
 
   it('coerces PostgREST decimal amounts strictly for the detail gate', () => {
     const mapped = mapCustomerTransactionRpcRows([
-      { amount: '1000.50', created_at: '2026-08-27T12:00:00.000Z' },
-      { amount: '', created_at: '2026-08-27T12:00:00.000Z' },
-      { amount: true, created_at: '2026-08-27T12:00:00.000Z' },
+      {
+        amount: '1000.50',
+        created_at: '2026-08-27T12:00:00.000Z',
+        order_id: 'order-1',
+      },
+      {
+        amount: '',
+        created_at: '2026-08-27T12:00:00.000Z',
+        order_id: 'order-1',
+      },
+      {
+        amount: true,
+        created_at: '2026-08-27T12:00:00.000Z',
+        order_id: 'order-1',
+      },
     ]);
 
     expect(mapped[0]?.amount).toBe(1000.5);
@@ -54,6 +68,7 @@ describe('mapCustomerTransactionRpcRows', () => {
           description: 'Manual payment note',
           dva_account_number: null,
           gateway: null,
+          order_id: 'order-1',
           payment_method: 'bank_transfer',
           status: 'completed',
           transaction_type: 'payment',
@@ -70,7 +85,7 @@ describe('mapCustomerTransactionRpcRows', () => {
     // transactions.created_at is nullable: the mapper keeps the null and
     // dating skips it like the emailed renderer, instead of dropping the row.
     const mapped = mapCustomerTransactionRpcRows([
-      { amount: 100, created_at: null },
+      { amount: 100, created_at: null, order_id: 'order-1' },
     ]);
 
     expect(mapped).toHaveLength(1);
@@ -86,6 +101,7 @@ describe('mapCustomerTransactionRpcRows', () => {
           description: 'Paystack transfer',
           dva_account_number: '1234567890',
           gateway: 'paystack',
+          order_id: 'order-1',
           payment_method: 'bank_transfer',
           status: 'completed',
           transaction_type: 'payment',
@@ -105,5 +121,15 @@ describe('mapCustomerTransactionRpcRows', () => {
     expect(mapCustomerTransactionRpcRows(null)).toEqual([]);
     expect(mapCustomerTransactionRpcRows({})).toEqual([]);
     expect(mapCustomerTransactionRpcRows([null, 7, []])).toEqual([]);
+  });
+
+  it('drops rows without a usable order_id instead of grouping undefined', () => {
+    expect(
+      mapCustomerTransactionRpcRows([
+        { amount: 100, created_at: null },
+        { amount: 100, created_at: null, order_id: '' },
+        { amount: 100, created_at: null, order_id: 7 },
+      ])
+    ).toEqual([]);
   });
 });

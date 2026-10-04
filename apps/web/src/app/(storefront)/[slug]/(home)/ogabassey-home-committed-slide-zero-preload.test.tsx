@@ -32,6 +32,11 @@ describe('OgabasseyHomeCommittedSlideZeroPreload', () => {
     expect(preload?.getAttribute('rel')).toBe('preload');
     expect(preload?.getAttribute('as')).toBe('image');
     expect(preload?.getAttribute('href')).toContain('loq-gaming-red-circle');
+    expect(preload?.getAttribute('fetchpriority')).toBe('high');
+    expect(preload?.getAttribute('imagesrcset')).toContain(
+      'loq-gaming-red-circle'
+    );
+    expect(preload?.getAttribute('imagesizes')).not.toBeNull();
   });
 
   it.each([

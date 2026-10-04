@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import 'server-only';
 import { unstable_rethrow } from 'next/navigation';
@@ -74,13 +75,8 @@ async function resolveShellSlides(): Promise<OgabasseyHomeHeroShellResult | null
  * the request-scoped publication boundary may render it as shopping UI.
  * Errors/timeouts degrade to `null`; a cold cache miss or transient query
  * failure must never take down the page.
- *
- * Twin-call contract: the committed preload slot and the static page content
- * both await this in the same render. The `'use cache'` legs dedupe to one
- * fetch, so both owners settle on the same result — a split needs backend
- * latency inside the millisecond gap between the two budget timers.
  */
-export async function resolveOgabasseyHomeHeroShell(): Promise<OgabasseyHomeHeroShellResult | null> {
+async function resolveOgabasseyHomeHeroShellUncached(): Promise<OgabasseyHomeHeroShellResult | null> {
   let budgetTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     const budget = new Promise<null>((resolve) => {
@@ -95,3 +91,17 @@ export async function resolveOgabasseyHomeHeroShell(): Promise<OgabasseyHomeHero
     clearTimeout(budgetTimer);
   }
 }
+
+/**
+ * Request-memoized twin lookup for the home hero shell.
+ *
+ * The committed preload slot and the static page content both await this in
+ * the same render. Memoizing the whole race (including a budget-timeout
+ * `null`) gives both owners one shared promise, so the twin lookup can never
+ * split at the budget edge with one owner timed out and the other resolved.
+ * The memo is request-scoped: a timeout degrades this render only and the
+ * next request retries with a warm cache.
+ */
+export const resolveOgabasseyHomeHeroShell = cache(
+  resolveOgabasseyHomeHeroShellUncached
+);

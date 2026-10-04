@@ -19,17 +19,26 @@ export function buildDispatchPaymentSnapshot(
 ): DispatchPaymentSnapshot {
   // Mirror the jsPDF payment-section gate exactly: instructions render
   // only for invoices with an outstanding balance, only in NGN, and the
-  // virtual account suppresses the merchant-bank fallback. Snapshotting
-  // hidden fields would let an unrelated bank edit mark an accepted,
-  // visually unchanged invoice stale and resend it as a corrective
-  // duplicate; the dispatch RPC compares the same rendered-only sides.
+  // virtual account suppresses the merchant-bank fallback. The fallback
+  // additionally requires an account number to render at all
+  // (virtual_account || merchant.bank_account_number), so without one
+  // every fallback field snapshots null — a lone bank-name edit while
+  // the section is hidden must not mark an accepted invoice stale.
+  // bank_code is never printed (name/number/account name only), so it is
+  // omitted entirely; the RPC keeps its positional parameter reserved.
+  // Snapshotting hidden fields would resend an accepted, visually
+  // unchanged invoice as a corrective duplicate; the dispatch RPC
+  // compares the same rendered-only sides.
   const instructionsRendered =
     documentKind !== 'receipt' &&
     order.total - order.amount_paid > 0 &&
     showMerchantBankDetails(order.currency);
-  const merchantBankRendered = instructionsRendered && !preferredPaymentAccount;
+  const merchantBankRendered =
+    instructionsRendered &&
+    !preferredPaymentAccount &&
+    Boolean(merchant.bank_account_number);
   return {
-    merchantBankCode: merchantBankRendered ? merchant.bank_code : null,
+    merchantBankCode: null,
     merchantBankAccountNumber: merchantBankRendered
       ? merchant.bank_account_number
       : null,

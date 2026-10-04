@@ -60,13 +60,6 @@ export interface StorefrontOrderListRowInput {
   customer_email?: string | null;
   customer_phone?: string | null;
   order_items?: readonly StorefrontOrderListItemInput[] | null;
-  order_tax_subtotals?:
-    | readonly {
-        vat_rate?: number | string | null;
-        taxable_amount?: number | string | null;
-        tax_amount?: number | string | null;
-      }[]
-    | null;
 }
 
 export interface StorefrontOrderListLookups {
@@ -75,6 +68,16 @@ export interface StorefrontOrderListLookups {
     readonly StorefrontCustomerTransaction[]
   >;
   paymentAccountsByOrderId: ReadonlyMap<string, OrderPaymentAccountLike | null>;
+  // Ownership-checked customer projection: the embedded tax relation
+  // returns [] under customer RLS, so the route loads this via RPC.
+  taxSubtotalsByOrderId: ReadonlyMap<
+    string,
+    readonly {
+      vat_rate?: unknown;
+      taxable_amount?: unknown;
+      tax_amount?: unknown;
+    }[]
+  >;
 }
 
 interface JoinedProduct {
@@ -135,7 +138,7 @@ export function transformStorefrontOrdersForDisplay(
       },
       items: order.order_items ?? [],
       payments: lookups.transactionsByOrderId.get(order.id) ?? [],
-      taxSubtotals: order.order_tax_subtotals ?? [],
+      taxSubtotals: lookups.taxSubtotalsByOrderId.get(order.id) ?? [],
     };
     // A fully-covered manual balance is a receipt in substance even under
     // a non-paid label; resolve the type code from the same boolean so a
@@ -146,12 +149,14 @@ export function transformStorefrontOrdersForDisplay(
       lookups.transactionsByOrderId.get(order.id)
     );
     // The receipt list sorts by the display-date fallback (issue →
-    // transaction → creation), while the Ogabassey mapper dates paid
-    // receipts by their completing payment. Normalize the sortable dates
-    // for paid-renderer rows here — the same kind-or-paid condition the
-    // mapper uses — so the server sort files a receipt under the date the
-    // card displays instead of a stale issue date.
-    const paidRenderer = receiptEligible || paymentStatus === 'paid';
+    // transaction → creation), while receipts are dated by their
+    // completing payment. Normalize the sortable dates only for
+    // receipt-eligible rows: a paid-but-ineligible order (unshipped, no
+    // import provenance) stays an invoice, so replacing its transaction
+    // date and dropping its issue date would file and display it under a
+    // different date from the downloaded PDF. Any Ogabassey-specific
+    // legacy paid-row presentation stays local to that mapper.
+    const paidRenderer = receiptEligible;
 
     return {
       id: order.id,

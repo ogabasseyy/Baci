@@ -72,6 +72,9 @@ REVOKE ALL ON FUNCTION private.manual_document_transaction_snapshot(uuid)
 -- non-legacy provider row; NULLs match null. Extracted so 60400 stays
 -- under the split rule; NULLS LAST mirrors the sender (missing
 -- created_at sorts last): a null-created row never beats a dated one.
+-- The IS TRUE provider rank matches the shared selector too: a NULL
+-- legacy provider ties with other non-Paystack rows (date decides)
+-- instead of sorting ahead of Paystack under a bare DESC comparison.
 CREATE OR REPLACE FUNCTION private.manual_document_payment_account_snapshot(p_order_id uuid)
 RETURNS TABLE (
   account_number text, bank_name text, account_name text
@@ -89,7 +92,7 @@ AS $$
     AND (opa.expires_at IS NULL OR opa.expires_at > now() + interval '15 minutes')
     AND (COALESCE(opa.assigned_at, opa.created_at) IS NULL
       OR COALESCE(opa.assigned_at, opa.created_at) <= now())
-  ORDER BY (opa.provider = 'paystack') DESC,
+  ORDER BY ((opa.provider = 'paystack') IS TRUE) DESC,
     opa.created_at DESC NULLS LAST, opa.account_number DESC, opa.id DESC
   LIMIT 1;
 $$;

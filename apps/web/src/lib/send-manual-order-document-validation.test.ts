@@ -78,4 +78,46 @@ describe('send manual order document child-row validation', () => {
     });
     expect(sendEmail).not.toHaveBeenCalled();
   });
+
+  it('sends when an unsafe legacy slug is rescued by a custom domain', async () => {
+    sendEmail.mockImplementation(async (message) => {
+      await message.beforeTransportDispatch?.();
+      return { success: true, messageId: 'message-1' };
+    });
+    const db = database(
+      {},
+      {
+        merchantOverride: { slug: 'Legacy Slug With Spaces!' },
+        primaryDomain: 'shop.example.com',
+      }
+    );
+
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+
+    expect(result.status).toBe('sent');
+    expect(sendEmail.mock.calls[0][0].textContent).toContain(
+      'https://shop.example.com/receipts/claim/'
+    );
+  });
+
+  it('skips an unsafe slug only when the fallback must supply the host', async () => {
+    const db = database(
+      {},
+      { merchantOverride: { slug: 'Legacy Slug With Spaces!' } }
+    );
+
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+
+    expect(result).toEqual({
+      status: 'skipped',
+      reason: 'merchant_validation_failed',
+    });
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
 });

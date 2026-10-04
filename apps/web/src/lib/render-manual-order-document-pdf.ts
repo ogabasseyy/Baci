@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
 import type {
@@ -9,7 +8,7 @@ import {
   generateReceiptPDF,
   resolveReceiptLogoDataUri,
 } from '@/lib/receipt-pdf-generator';
-import { resolveManualDocumentReceiptDate } from '@/lib/resolve-manual-document-receipt-date';
+import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
 import type { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
 import type { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
@@ -29,20 +28,35 @@ export class ManualDocumentValidationError extends Error {
   }
 }
 
+type SnapshotChildRow = {
+  id?: unknown;
+  amount?: unknown;
+  created_at?: unknown;
+  description?: unknown;
+  metadata?: unknown;
+  status?: unknown;
+  transaction_type?: unknown;
+  gateway?: unknown;
+  vat_category_code?: unknown;
+  vat_rate?: unknown;
+  taxable_amount?: unknown;
+  tax_amount?: unknown;
+  exemption_reason?: unknown;
+};
+
 /**
  * Renders the emailed PDF from the canonical document data: the payment
  * history behind the receipt's Payment table, the VAT subtotal rows behind
- * the invoice's tax breakdown, and the merchant's invoice notes. A failed
- * lookup throws into outbox retry like the receipt-date lookup: a sent
- * document is terminal, so swallowing the error would permanently mis-render
- * a financial document. The normalized tax and payment-history rows are
+ * the invoice's tax breakdown, and the merchant's invoice notes. Rows arrive
+ * from the claim-bound dispatch snapshot (one RPC, no table reads): the
+ * snapshot is atomic, so a mid-dispatch correction cannot land between the
+ * render and the marker. The normalized tax and payment-history rows are
  * returned alongside the PDF so the dispatch marker snapshots exactly what
- * was rendered; a separate sender-side re-read could land on either side
- * of a mid-dispatch correction and either miss the staleness or cry stale
- * on a fresh render.
+ * was rendered.
  */
 export async function renderManualOrderDocumentPdf({
-  supabase,
+  taxRows,
+  transactionRows,
   order,
   merchant,
   recipientEmail,
@@ -51,7 +65,8 @@ export async function renderManualOrderDocumentPdf({
   pdfDocumentKind,
   invoiceTypeCode,
 }: {
-  supabase: SupabaseClient;
+  taxRows: readonly unknown[];
+  transactionRows: readonly unknown[];
   order: z.infer<typeof manualDocumentOrderSchema>;
   merchant: z.infer<typeof manualDocumentMerchantSchema>;
   recipientEmail: string;
@@ -64,49 +79,30 @@ export async function renderManualOrderDocumentPdf({
   pdfDocumentKind: 'invoice' | 'proforma_invoice' | 'receipt';
   invoiceTypeCode: string | null;
 }) {
-  const [historyResult, taxResult] = await Promise.all([
-    supabase
-      .from('transactions')
-      .select('id, amount, created_at, description, metadata')
-      .eq('order_id', order.id)
-      .eq('transaction_type', 'payment')
-      // Paystack-backed payments settle as 'success', manual ones as
-      // 'completed': the DVA reservation paths treat both as settled.
-      .in('status', ['completed', 'success'])
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('order_tax_subtotals')
-      .select(
-        'id, vat_category_code, vat_rate, taxable_amount, tax_amount, exemption_reason'
-      )
-      .eq('order_id', order.id),
-  ]);
-  if (historyResult.error)
-    throw new Error('Manual document payment history unavailable');
-  if (taxResult.error)
-    throw new Error('Manual document tax breakdown unavailable');
-  const taxSubtotals: DispatchTaxSubtotal[] = (taxResult.data ?? []).map(
-    (row) => ({
-      id: String(row.id ?? ''),
-      exemption_reason: (row.exemption_reason as string | null) ?? null,
-      taxable_amount: Number(row.taxable_amount ?? 0),
-      tax_amount: Number(row.tax_amount ?? 0),
-      vat_category_code: String(row.vat_category_code ?? ''),
-      vat_rate: Number(row.vat_rate ?? 0),
-    })
-  );
+  // Snapshot order (created_at, id), settled payments only: the RPC
+  // filters once, so every reader shares the set. Order is preserved for
+  // the PDF table; the dispatch params re-sort by id before the mark.
+  const settledHistory = transactionRows as SnapshotChildRow[];
+  const taxSubtotals: DispatchTaxSubtotal[] = (
+    taxRows as SnapshotChildRow[]
+  ).map((row) => ({
+    id: String(row.id ?? ''),
+    exemption_reason: (row.exemption_reason as string | null) ?? null,
+    taxable_amount: Number(row.taxable_amount ?? 0),
+    tax_amount: Number(row.tax_amount ?? 0),
+    vat_category_code: String(row.vat_category_code ?? ''),
+    vat_rate: Number(row.vat_rate ?? 0),
+  }));
   // Null-preserving, unlike the PDF input below: the snapshot must compare
   // exactly what the database holds, so display fallbacks stay out.
-  const transactions: DispatchTransaction[] = (historyResult.data ?? []).map(
-    (row) => ({
-      id: String(row.id ?? ''),
-      amount: (row.amount as number | null) ?? null,
-      created_at: (row.created_at as string | null) ?? null,
-      description: (row.description as string | null) ?? null,
-      metadata: (row.metadata as Record<string, unknown> | null) ?? null,
-    })
-  );
-  const renderTransactions = (historyResult.data ?? []).map((row) => ({
+  const transactions: DispatchTransaction[] = settledHistory.map((row) => ({
+    id: String(row.id ?? ''),
+    amount: (row.amount as number | null) ?? null,
+    created_at: (row.created_at as string | null) ?? null,
+    description: (row.description as string | null) ?? null,
+    metadata: (row.metadata as Record<string, unknown> | null) ?? null,
+  }));
+  const renderTransactions = settledHistory.map((row) => ({
     amount: Number(row.amount ?? 0),
     created_at: String(row.created_at ?? ''),
     description: (row.description as string | null) ?? null,
@@ -137,11 +133,15 @@ export async function renderManualOrderDocumentPdf({
     preferredPaymentAccount,
     transactions: renderTransactions,
   });
-  const receiptDate = await resolveManualDocumentReceiptDate(
-    supabase,
-    order.id,
-    isPaid
-  );
+  const receiptDate = isPaid
+    ? selectReceiptCompletionDate(
+        settledHistory as {
+          created_at?: string | null;
+          status?: string | null;
+          transaction_type?: string | null;
+        }[]
+      )
+    : null;
   const logoDataUri = await resolveReceiptLogoDataUri(receiptMerchant);
   const pdf = generateReceiptPDF(receiptOrder, receiptMerchant, {
     buyerReference: order.buyer_reference,

@@ -27,7 +27,9 @@ describe('send manual order document dispatch', () => {
       { status: 'skipped', reason: 'missing_order_items' }
     );
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      'get_manual_order_document_snapshot',
+    ]);
   });
 
   it('skips an obsolete invoice if the order is now paid', async () => {
@@ -42,11 +44,10 @@ describe('send manual order document dispatch', () => {
   });
 
   it('fails closed when claim creation fails, before provider dispatch', async () => {
-    const db = database();
-    db.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { message: 'unavailable' },
-    });
+    const db = database(
+      {},
+      { claimResult: { data: null, error: { message: 'unavailable' } } }
+    );
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow();
@@ -54,8 +55,10 @@ describe('send manual order document dispatch', () => {
   });
 
   it('requires a claim ID before sending', async () => {
-    const db = database();
-    db.rpc.mockResolvedValueOnce({ data: { status: 'created' }, error: null });
+    const db = database(
+      {},
+      { claimResult: { data: { status: 'created' }, error: null } }
+    );
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
     ).resolves.toEqual({
@@ -66,20 +69,24 @@ describe('send manual order document dispatch', () => {
   });
 
   it('does not send a stale PDF/recipient if the customer changed during claim preparation', async () => {
-    const db = database();
-    db.rpc.mockResolvedValueOnce({
-      data: {
-        status: 'created',
-        claim_id: 'claim-1',
-        customer_id: 'customer-2',
-        customer_email: 'another@example.com',
-        order_total: 950000,
-        order_amount_paid: 950000,
-        order_item_count: 1,
-        order_payment_status: 'paid',
-      },
-      error: null,
-    });
+    const db = database(
+      {},
+      {
+        claimResult: {
+          data: {
+            status: 'created',
+            claim_id: 'claim-1',
+            customer_id: 'customer-2',
+            customer_email: 'another@example.com',
+            order_total: 950000,
+            order_amount_paid: 950000,
+            order_item_count: 1,
+            order_payment_status: 'paid',
+          },
+          error: null,
+        },
+      }
+    );
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow('recipient changed');
@@ -87,20 +94,24 @@ describe('send manual order document dispatch', () => {
   });
 
   it('retries instead of dispatching when the order changed during preparation', async () => {
-    const db = database();
-    db.rpc.mockResolvedValueOnce({
-      data: {
-        status: 'created',
-        claim_id: 'claim-1',
-        customer_id: 'customer-1',
-        customer_email: 'ada@example.com',
-        order_total: 960000,
-        order_amount_paid: 950000,
-        order_item_count: 1,
-        order_payment_status: 'paid',
-      },
-      error: null,
-    });
+    const db = database(
+      {},
+      {
+        claimResult: {
+          data: {
+            status: 'created',
+            claim_id: 'claim-1',
+            customer_id: 'customer-1',
+            customer_email: 'ada@example.com',
+            order_total: 960000,
+            order_amount_paid: 950000,
+            order_item_count: 1,
+            order_payment_status: 'paid',
+          },
+          error: null,
+        },
+      }
+    );
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
     ).rejects.toThrow('changed during preparation');
@@ -139,7 +150,9 @@ describe('send manual order document dispatch', () => {
       { status: 'skipped', reason: 'paid_balance_outstanding' }
     );
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      'get_manual_order_document_snapshot',
+    ]);
   });
 
   it('treats a fully-covered partial balance as a paid receipt', async () => {

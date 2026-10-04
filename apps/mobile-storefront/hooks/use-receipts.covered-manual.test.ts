@@ -66,7 +66,7 @@ describe('receipt detail covered-manual transaction failures', () => {
         discount_amount: 0,
         amount_paid: 500,
         currency: 'NGN',
-        order_items: [{ name: 'Phone', quantity: 1, price: 500 }],
+        order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 500 }],
       },
       error: null,
     });
@@ -78,16 +78,34 @@ describe('receipt detail covered-manual transaction failures', () => {
   });
 
   it('tolerates transaction lookup failures for uncovered manual invoices', async () => {
-    // Uncovered invoices are not dated from payments, so a failed lookup
-    // still resolves (empty history) instead of blocking the preview.
+    // Uncovered invoices (zero payment progress) are not dated from
+    // payments, so a failed lookup still resolves (empty history)
+    // instead of blocking the preview. Any progress would require the
+    // history table and fail closed instead.
     mockOrderSingle.mockResolvedValue({
       data: {
+        id: 'order-1',
+        order_number: 'ORD-1',
         payment_status: 'pending',
+        payment_method: 'paystack',
         recorded_by_user_id: 'staff-1',
         import_job_id: null,
         external_source: null,
         total: 500,
-        amount_paid: 100,
+        subtotal: 500,
+        shipping_fee: 0,
+        tax_amount: 0,
+        discount_amount: 0,
+        amount_paid: 0,
+        currency: 'NGN',
+        is_credit_order: false,
+        created_at: '2026-09-30T09:00:00.000Z',
+        notes: null,
+        customer_name: 'Buyer',
+        customer_email: 'buyer@example.com',
+        customer_phone: null,
+        shipping_address: null,
+        order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 500 }],
       },
       error: null,
     });
@@ -97,7 +115,27 @@ describe('receipt detail covered-manual transaction failures', () => {
     });
 
     const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
-    expect(detail.transactions).toEqual([]);
+    expect(detail?.transactions).toEqual([]);
+  });
+
+  it('fails closed when the detail row fails schema validation', async () => {
+    // A schema-invalid row (missing identity/money fields) must resolve
+    // null instead of rendering unvalidated money/dates in the preview.
+    mockOrderSingle.mockResolvedValue({
+      data: {
+        payment_status: 'pending',
+        recorded_by_user_id: 'staff-1',
+        import_job_id: null,
+        external_source: null,
+        total: 500,
+        amount_paid: 0,
+      },
+      error: null,
+    });
+    mockTransactionsRpc.mockResolvedValue({ data: [], error: null });
+
+    const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
+    expect(detail).toBeNull();
   });
 
   it.each([
@@ -115,11 +153,21 @@ describe('receipt detail covered-manual transaction failures', () => {
     // any unpaid row instead of blocking the preview.
     mockOrderSingle.mockResolvedValue({
       data: {
+        id: 'order-1',
+        order_number: 'ORD-1',
         payment_status: 'pending',
+        payment_method: 'paystack',
         shipping_status: 'processing',
         recorded_by_user_id: 'staff-1',
         import_job_id: null,
         external_source: null,
+        is_credit_order: false,
+        created_at: '2026-09-30T09:00:00.000Z',
+        notes: null,
+        customer_name: 'Buyer',
+        customer_email: 'buyer@example.com',
+        customer_phone: null,
+        shipping_address: null,
         total: 500,
         subtotal: 500,
         shipping_fee: 0,
@@ -127,7 +175,7 @@ describe('receipt detail covered-manual transaction failures', () => {
         discount_amount: 0,
         amount_paid: 500,
         currency: 'NGN',
-        order_items: [{ name: 'Phone', quantity: 1, price: 500 }],
+        order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 500 }],
         ...override,
       },
       error: null,
@@ -138,6 +186,6 @@ describe('receipt detail covered-manual transaction failures', () => {
     });
 
     const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
-    expect(detail.transactions).toEqual([]);
+    expect(detail?.transactions).toEqual([]);
   });
 });

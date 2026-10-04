@@ -51,6 +51,9 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_document_kind text,
   p_item_count integer,
   p_items jsonb,
+  -- Reserved: bank_code is never printed, so the snapshot sends NULL and
+  -- the stale check ignores this positional slot (kept for signature
+  -- stability across the SQL call sites).
   p_merchant_bank_code text,
   p_merchant_bank_account_number text,
   p_merchant_bank_name text,
@@ -97,7 +100,6 @@ DECLARE
   v_merchant_id uuid;
   v_item_count bigint;
   v_items jsonb;
-  v_merchant_bank_code text;
   v_merchant_bank_account_number text;
   v_merchant_bank_name text;
   v_merchant_bank_account_name text;
@@ -148,14 +150,14 @@ BEGIN
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.cac_rc_number, m.tax_identification_number,
     m.vat_registration_status, m.vat_rate, m.support_email, m.support_phone,
-    m.phone, m.bank_code, m.bank_account_number, m.bank_name,
+    m.phone, m.bank_account_number, m.bank_name,
     m.bank_account_name, m.slug, m.email_sender_name, m.logo_url, m.brand_colors
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
     v_merchant_cac_rc_number, v_merchant_tax_identification_number,
     v_merchant_vat_registration_status, v_merchant_vat_rate,
     v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
-    v_merchant_bank_code, v_merchant_bank_account_number,
+    v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug,
     v_merchant_email_sender_name, v_merchant_logo_url, v_merchant_brand_colors
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
@@ -255,7 +257,10 @@ BEGIN
     OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
-    OR v_merchant_brand_colors IS DISTINCT FROM p_merchant_brand_colors
+    -- Only the primary brand color renders: accent/background edits leave
+    -- the attachment and email byte-identical, so comparing raw JSONB
+    -- would schedule identical duplicates.
+    OR (v_merchant_brand_colors->>'primary') IS DISTINCT FROM (p_merchant_brand_colors->>'primary')
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
     -- Rendered instructions only (non-NGN none, VA-only when
     -- selected, else merchant-bank card); either-side presence
@@ -267,8 +272,8 @@ BEGIN
           OR v_va_bank_name IS DISTINCT FROM p_va_bank_name
           OR v_va_account_name IS DISTINCT FROM p_va_account_name)
         OR (v_va_account_number IS NULL AND p_va_account_number IS NULL)
-          AND (v_merchant_bank_code IS DISTINCT FROM p_merchant_bank_code
-            OR v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
+          AND (v_merchant_bank_account_number IS NOT NULL OR p_merchant_bank_account_number IS NOT NULL)
+          AND (v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
             OR v_merchant_bank_name IS DISTINCT FROM p_merchant_bank_name
             OR v_merchant_bank_account_name IS DISTINCT FROM p_merchant_bank_account_name)))
     OR (v_compare_invoice_only AND (
@@ -276,11 +281,13 @@ BEGIN
       OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
-    -- Customer liveness under the row lock above: a delete committed
-    -- before the mark aborts; one racing the mark blocks, then its
-    -- trigger resets the marker.
-    OR EXISTS (SELECT 1 FROM public.customers AS c
-      WHERE c.id = v_order.customer_id AND c.deleted_at IS NOT NULL)
+    -- Customer liveness and scope under the row lock above: a missing,
+    -- deleted, or merchant-reassigned customer aborts, since redemption
+    -- requires a live customer scoped to the order's merchant. A delete
+    -- racing the mark blocks, then its trigger resets the marker.
+    OR NOT EXISTS (SELECT 1 FROM public.customers AS c
+      WHERE c.id = v_order.customer_id AND c.deleted_at IS NULL
+        AND c.merchant_id = v_order.merchant_id)
   THEN
     RETURN jsonb_build_object('status', 'stale');
   END IF;

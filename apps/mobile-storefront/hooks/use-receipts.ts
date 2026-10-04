@@ -208,9 +208,20 @@ export function useReceipts(userId: string | undefined) {
         if (row.document_kind !== 'receipt') return row;
         const entry = completionByOrderId.get(row.id);
         // Settled-payment validity arrives with the completion lookup: a
-        // promoted row whose history the sender rejects demotes to
+        // promoted MANUAL row whose history the sender rejects demotes to
         // invoice, matching the archive gate and the emailed document.
-        if (entry && !entry.settledPaymentsValid) {
+        // Non-manual paid rows skip this: the preview and the web gate
+        // never apply manual payment validation to them, so demoting here
+        // would card an invoice that opens a receipt.
+        if (
+          entry &&
+          !entry.settledPaymentsValid &&
+          isManualOrderRecord({
+            recordedByUserId: row.recorded_by_user_id,
+            importJobId: row.import_job_id,
+            externalSource: row.external_source,
+          })
+        ) {
           return { ...row, document_kind: 'invoice' };
         }
         return {

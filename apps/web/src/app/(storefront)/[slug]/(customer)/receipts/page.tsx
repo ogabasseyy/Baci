@@ -32,9 +32,28 @@ const ARCHIVE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
 });
 
+const ARCHIVE_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+
 function formatArchiveDate(value: string | null | undefined) {
   if (!value) {
     return '-';
+  }
+  // Date-only values are calendar dates with no time component: midnight
+  // UTC plus a local formatter would show the previous day west of UTC,
+  // so format them in UTC like the shared receipt date handling.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const day = new Date(`${value}T00:00:00.000Z`);
+
+    if (Number.isNaN(day.getTime())) {
+      return '-';
+    }
+
+    return ARCHIVE_DATE_ONLY_FORMATTER.format(day);
   }
   const date = new Date(value);
 

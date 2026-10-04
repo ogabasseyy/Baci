@@ -214,4 +214,64 @@ describe('useReceipts settled history', () => {
     // Valid history still dates the receipt by its completing payment.
     expect(receipts[0]?.transaction_date).toBe('2026-07-08T12:34:00.000Z');
   });
+
+  it('keeps non-manual paid rows promoted despite corrupt history', async () => {
+    const { useReceipts } = await import('@/hooks/use-receipts');
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: 'order-9',
+          order_number: 'ORD-9',
+          payment_status: 'paid',
+          shipping_status: 'delivered',
+          recorded_by_user_id: null,
+          import_job_id: null,
+          external_source: null,
+          total: 500,
+          subtotal: 500,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          amount_paid: 500,
+          currency: 'NGN',
+          created_at: '2026-07-08T12:33:00.000Z',
+          order_items: [
+            { id: 'item-9', name: 'Phone', quantity: 1, price: 500 },
+          ],
+        },
+      ],
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          order_id: 'order-9',
+          amount: -50,
+          status: 'completed',
+          transaction_type: 'payment',
+          created_at: '2026-07-08T12:34:00.000Z',
+          description: null,
+          dva_account_number: null,
+          gateway: null,
+        },
+      ],
+      error: null,
+    });
+
+    function Probe() {
+      useReceipts('auth-user-1');
+      return <View testID="probe" />;
+    }
+
+    render(<Probe />);
+    const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
+    const receipts = (await options.queryFn()) as Array<{
+      document_kind: string;
+    }>;
+
+    // Manual payment validation never applies to non-manual rows: the
+    // preview and web gate treat this order as a receipt, so the card
+    // must too instead of demoting to an invoice that opens a receipt.
+    expect(receipts.map((row) => row.document_kind)).toEqual(['receipt']);
+  });
 });

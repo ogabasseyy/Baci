@@ -7,8 +7,10 @@ import { checkManualDocumentDispatchLease } from '@/lib/check-manual-document-di
 import {
   buildReceiptClaimUrl,
   createReceiptClaimToken,
+  isSafeClaimDomain,
 } from '@/lib/import-notifications/receipt-claim-links';
-import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
+import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-slug';
+import { selectInvoicePaymentAccountForRows } from '@/lib/invoice-payment-account';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
 import {
@@ -42,8 +44,21 @@ export type ManualOrderDocumentResult =
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string; deliveryOutcome?: 'unknown' };
 
+type ManualDocumentSnapshot = {
+  order: unknown;
+  merchant: unknown;
+  tax_subtotals: unknown[];
+  transactions: unknown[];
+  payment_accounts: unknown[];
+  claim_domain: string | null;
+};
+
 // Only a CRON_SECRET-authenticated outbox worker calls this helper. No customer
 // request constructs a privileged client or chooses the recipient/tenant.
+// The worker's service-role client touches no table directly here: one
+// claim-bound snapshot RPC returns the exact projections the render,
+// validate, and snapshot path consumes, and every helper below selects
+// from those rows in memory.
 export async function sendManualOrderDocument({
   supabase,
   row,
@@ -51,42 +66,38 @@ export async function sendManualOrderDocument({
   supabase: SupabaseClient;
   row: DocumentRow;
 }): Promise<ManualOrderDocumentResult> {
-  const [orderResult, merchantResult] = await Promise.all([
-    supabase
-      .from('orders')
-      .select(
-        'id, merchant_id, customer_id, recorded_by_user_id, import_job_id, external_source, order_number, created_at, transaction_date, invoice_issue_date, currency, total, subtotal, shipping_fee, tax_amount, discount_amount, amount_paid, payment_status, payment_method, shipping_status, customer_name, customer_email, customer_phone, shipping_address, invoice_type_code, invoice_note, payment_due_date, payment_terms, buyer_reference, firs_irn, firs_csid, notes, order_items(id, line_id, name, quantity, price, variant_name, condition, item_description, assurance_fee, unit_code, line_extension_amount, vat_category_code, vat_rate, vat_amount, sellers_item_id)'
-      )
-      .eq('id', row.order_id)
-      .eq('merchant_id', row.merchant_id)
-      .maybeSingle(),
-    supabase
-      .from('merchants')
-      .select(
-        'id, slug, business_name, email_sender_name, logo_url, email, phone, support_email, support_phone, business_address, registered_address, cac_rc_number, tax_identification_number, legal_entity_name, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, brand_colors'
-      )
-      .eq('id', row.merchant_id)
-      .maybeSingle(),
-  ]);
-  if (orderResult.error || merchantResult.error)
-    throw new Error('Manual document data unavailable');
-  if (!orderResult.data || !merchantResult.data)
+  const { data: snapshotData, error: snapshotError } = await supabase.rpc(
+    'get_manual_order_document_snapshot',
+    { p_outbox_id: row.id, p_claim_owner: row.claim_owner }
+  );
+  if (snapshotError) throw new Error('Manual document data unavailable');
+  // A re-arm stole the claim between claim and send: fail for a bounded
+  // retry (the row is pending again) instead of emailing from a snapshot
+  // the worker no longer owns.
+  if (!snapshotData)
+    return { status: 'failed', error: 'dispatch_claim_superseded' };
+  const snapshot = snapshotData as unknown as ManualDocumentSnapshot;
+  if (!snapshot.order || !snapshot.merchant)
     return { status: 'skipped', reason: 'order_or_merchant_missing' };
   // Deterministic shape failures skip (later triggers re-arm) instead of
   // throwing into max_attempts retries; only transient fetch/RPC failures
   // keep throw/retry.
-  const orderParsed = manualDocumentOrderSchema.safeParse(orderResult.data);
+  const orderParsed = manualDocumentOrderSchema.safeParse(snapshot.order);
   if (!orderParsed.success)
     return { status: 'skipped', reason: 'order_validation_failed' };
   const merchantParsed = manualDocumentMerchantSchema.safeParse(
-    merchantResult.data
+    snapshot.merchant
   );
   if (!merchantParsed.success)
     return { status: 'skipped', reason: 'merchant_validation_failed' };
   const order = orderParsed.data;
   const merchant = merchantParsed.data;
-  const rawMerchantRegisteredAddress = merchantResult.data.registered_address;
-  const rawMerchantBrandColors = merchantResult.data.brand_colors;
+  const rawMerchantRegisteredAddress = (
+    snapshot.merchant as { registered_address?: unknown }
+  ).registered_address;
+  const rawMerchantBrandColors = (
+    snapshot.merchant as { brand_colors?: unknown }
+  ).brand_colors;
   // No DB constraint on either status column: normalize legacy spellings
   // exactly like the enqueue trigger so both agree on terminal/paid/eligible.
   const paymentStatus = order.payment_status
@@ -135,13 +146,19 @@ export async function sendManualOrderDocument({
   const pdfDocumentKind =
     invoiceTypeCode === '325' ? 'proforma_invoice' : documentKind;
   // Attach the assigned virtual account so instructions name the exact account.
-  const invoicePaymentAccount = isPaid
+  const preferredPaymentAccount = isPaid
     ? null
-    : await resolveInvoicePaymentAccount(supabase, order.id, false);
-  if (invoicePaymentAccount?.error) {
-    throw new Error('Manual document payment account unavailable');
-  }
-  const preferredPaymentAccount = invoicePaymentAccount?.paymentAccount ?? null;
+    : selectInvoicePaymentAccountForRows(
+        snapshot.payment_accounts ?? [],
+        (snapshot.transactions ?? []) as {
+          created_at?: string | null;
+          gateway?: string | null;
+          metadata?: unknown;
+          status?: string | null;
+          transaction_type?: string | null;
+        }[],
+        false
+      );
   // Staff-recorded orders may omit the customer name; fall back instead of
   // throwing. The name is header-adjacent (toName): strip line breaks.
   const displayCustomerName = sanitizeEmailDisplayName(
@@ -150,7 +167,8 @@ export async function sendManualOrderDocument({
   let rendered: Awaited<ReturnType<typeof renderManualOrderDocumentPdf>>;
   try {
     rendered = await renderManualOrderDocumentPdf({
-      supabase,
+      taxRows: snapshot.tax_subtotals ?? [],
+      transactionRows: snapshot.transactions ?? [],
       order,
       merchant,
       recipientEmail: recipient.email,
@@ -175,9 +193,25 @@ export async function sendManualOrderDocument({
     order,
     recipientEmail: recipient.email,
     claim: createReceiptClaimToken(),
+    claimDomain: snapshot.claim_domain ?? null,
   });
   if (claimStep.status === 'skipped') return claimStep;
   const { prepared, claim, customDomain } = claimStep;
+  // The slug supplies the claim host only when no safe custom domain
+  // wins (mirroring buildReceiptClaimUrl's normalization): an unsafe
+  // legacy slug skips only on the fallback path, never when the custom
+  // domain resolves.
+  const customDomainHost = customDomain
+    ?.trim()
+    .toLowerCase()
+    .replace(/\/+$/, '')
+    .replace(/\.$/, '');
+  if (
+    !(customDomainHost && isSafeClaimDomain(customDomainHost)) &&
+    !isSafeClaimSlug(merchant.slug)
+  ) {
+    return { status: 'skipped', reason: 'merchant_validation_failed' };
+  }
   const content = buildManualOrderDocumentEmailContent({
     order,
     merchant,
@@ -263,13 +297,11 @@ export async function sendManualOrderDocument({
       };
     if (lease === 'reset')
       return { status: 'failed', error: 'document_changed_during_send' };
-    const { data: marked, error: markError } = await supabase
-      .from('receipt_claims')
-      .update({ notification_sent_at: new Date().toISOString() })
-      .match({ id: prepared.claim_id, merchant_id: row.merchant_id })
-      .select('id')
-      .maybeSingle();
-    if (markError || marked?.id !== prepared.claim_id)
+    const { data: markedClaimId, error: markError } = await supabase.rpc(
+      'mark_manual_document_claim_sent',
+      { p_claim_id: prepared.claim_id, p_merchant_id: row.merchant_id }
+    );
+    if (markError || markedClaimId !== prepared.claim_id)
       return {
         status: 'failed',
         error: 'sent_claim_marker_failed',

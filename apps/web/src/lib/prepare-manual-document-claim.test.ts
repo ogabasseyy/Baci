@@ -1,13 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prepareManualDocumentClaim } from './prepare-manual-document-claim';
-import { resolveManualDocumentClaimDomain } from './resolve-manual-document-claim-domain';
-
-vi.mock('./resolve-manual-document-claim-domain', () => ({
-  resolveManualDocumentClaimDomain: vi.fn(),
-}));
-
-const mockResolveDomain = vi.mocked(resolveManualDocumentClaimDomain);
 
 const claim = { token: 'tok', tokenHash: 'hash' };
 const row = { id: 'outbox-1', claim_owner: 'worker', merchant_id: 'm-1' };
@@ -36,7 +29,6 @@ function mockSupabase(rpcImpl: () => Promise<{ data: unknown; error: null }>) {
 describe('prepareManualDocumentClaim', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockResolveDomain.mockResolvedValue('shop.example.com');
   });
 
   it('returns ready with the prepared claim and custom domain', async () => {
@@ -50,6 +42,7 @@ describe('prepareManualDocumentClaim', () => {
       order,
       recipientEmail: 'buyer@example.com',
       claim,
+      claimDomain: 'shop.example.com',
     });
     expect(result).toEqual({
       status: 'ready',
@@ -61,7 +54,6 @@ describe('prepareManualDocumentClaim', () => {
       'create_manual_order_document_claim',
       { p_outbox_id: 'outbox-1', p_claim_owner: 'worker', p_token_hash: 'hash' }
     );
-    expect(mockResolveDomain).toHaveBeenCalledWith(supabase, 'm-1');
   });
 
   it('skips when the claim payload fails validation', async () => {
@@ -75,12 +67,12 @@ describe('prepareManualDocumentClaim', () => {
       order,
       recipientEmail: 'buyer@example.com',
       claim,
+      claimDomain: 'shop.example.com',
     });
     expect(result).toEqual({
       status: 'skipped',
       reason: 'claim_validation_failed',
     });
-    expect(mockResolveDomain).not.toHaveBeenCalled();
   });
 
   it('skips when the claim is unavailable', async () => {
@@ -94,6 +86,7 @@ describe('prepareManualDocumentClaim', () => {
       order,
       recipientEmail: 'buyer@example.com',
       claim,
+      claimDomain: 'shop.example.com',
     });
     expect(result).toEqual({
       status: 'skipped',
@@ -113,6 +106,7 @@ describe('prepareManualDocumentClaim', () => {
         order,
         recipientEmail: 'buyer@example.com',
         claim,
+        claimDomain: 'shop.example.com',
       })
     ).rejects.toThrow('Manual document order changed during preparation');
   });

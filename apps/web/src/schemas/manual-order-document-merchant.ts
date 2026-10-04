@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-slug';
 
 const number = z.coerce.number().finite().nonnegative();
 const nullableText = z.string().nullable();
@@ -25,11 +24,13 @@ function normalizeLegacyBrandColors(value: unknown): unknown {
 
 export const manualDocumentMerchantSchema = z.object({
   id: z.string(),
-  // The slug becomes a claim-URL subdomain label, validated by the same
-  // predicate the URL builder enforces so the sender never throws below.
-  // Rejections fail closed as merchant_validation_failed and recover
-  // through the merchant re-arm.
-  slug: z.string().refine(isSafeClaimSlug, 'Invalid merchant slug'),
+  // The slug becomes a claim-URL subdomain label only when no safe custom
+  // domain wins: the sender validates it conditionally after claim prep
+  // (see send-manual-order-document.ts), so a legacy unsafe slug must not
+  // sink a merchant whose custom domain resolves. Kept as a plain string
+  // here; slug-fallback failures still skip as merchant_validation_failed
+  // and recover through the merchant re-arm.
+  slug: z.string(),
   business_name: nullableText,
   email_sender_name: nullableText,
   logo_url: nullableText,

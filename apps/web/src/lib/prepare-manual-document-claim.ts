@@ -1,5 +1,4 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { resolveManualDocumentClaimDomain } from '@/lib/resolve-manual-document-claim-domain';
 import {
   assertManualDocumentClaimMatchesOrder,
   type ManualDocumentClaimOrderSnapshot,
@@ -42,8 +41,9 @@ export async function prepareManualDocumentClaim(input: {
   order: ManualDocumentClaimOrderSnapshot;
   recipientEmail: string;
   claim: ManualDocumentClaimToken;
+  claimDomain: string | null;
 }): Promise<PreparedManualDocumentClaim> {
-  const { supabase, row, order, recipientEmail, claim } = input;
+  const { supabase, row, order, recipientEmail, claim, claimDomain } = input;
   const { data, error } = await supabase.rpc(
     'create_manual_order_document_claim',
     {
@@ -60,9 +60,7 @@ export async function prepareManualDocumentClaim(input: {
   if (prepared.status !== 'created')
     return { status: 'skipped', reason: 'document_claim_unavailable' };
   assertManualDocumentClaimMatchesOrder(prepared, order, recipientEmail);
-  const customDomain = await resolveManualDocumentClaimDomain(
-    supabase,
-    row.merchant_id
-  );
-  return { status: 'ready', prepared, claim, customDomain };
+  // The claim domain arrives in the snapshot: no second domains read, so
+  // the claim URL cannot disagree with the snapshot the mark compares.
+  return { status: 'ready', prepared, claim, customDomain: claimDomain };
 }

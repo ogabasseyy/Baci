@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { getStorefrontAccountDocumentData } from '@/lib/storefront-account-document-data';
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
+import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
 
 vi.mock('@/lib/storefront-customer-transactions', () => ({
@@ -9,6 +10,9 @@ vi.mock('@/lib/storefront-customer-transactions', () => ({
 }));
 vi.mock('@/lib/storefront-customer-payment-accounts', () => ({
   loadStorefrontCustomerPaymentAccounts: vi.fn(),
+}));
+vi.mock('@/lib/storefront-customer-tax-subtotals', () => ({
+  loadStorefrontCustomerTaxSubtotals: vi.fn(),
 }));
 
 function createSupabaseMock(options?: {
@@ -136,7 +140,6 @@ describe('storefront account document data fetching', () => {
         if (table === 'customers') return queryFor({ id: 'customer-1' });
         if (table === 'orders') return queryFor(order);
         if (table === 'order_items') return queryFor(items);
-        if (table === 'order_tax_subtotals') return queryFor([]);
         throw new Error(`Unexpected table: ${table}`);
       },
       rpc: async () => ({ data: false, error: null }),
@@ -158,6 +161,10 @@ describe('storefront account document data fetching', () => {
       error: null,
     });
     vi.mocked(loadStorefrontCustomerPaymentAccounts).mockResolvedValue({
+      data: [],
+      error: null,
+    });
+    vi.mocked(loadStorefrontCustomerTaxSubtotals).mockResolvedValue({
       data: [],
       error: null,
     });

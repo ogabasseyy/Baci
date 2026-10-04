@@ -344,11 +344,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // Base URL for the merchant's storefront
     // Use custom domain if available, otherwise fall back to slug-based URL
     const baseUrl = getAppUrl();
+    const safeMerchantSlug = xmlSafeFeedPathSegment(merchant.slug);
     const storeUrl = merchant.custom_domain
       ? `https://${merchant.custom_domain}`
-      : `${baseUrl}/${merchant.slug}`;
+      : `${baseUrl}/${safeMerchantSlug}`;
     const feedUrl = new URL(
-      `/api/blog/feed/${merchant.slug}`,
+      `/api/blog/feed/${safeMerchantSlug}`,
       storeUrl
     ).toString();
 

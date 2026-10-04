@@ -3,8 +3,9 @@ import { Feed } from 'feed';
 import { describe, expect, it } from 'vitest';
 import { sanitizeForFeed } from './sanitize';
 import {
+  neutralizeForbiddenXml10Entities,
+  normalizeXml10ForHtmlParsing,
   stripInvalidXml10Characters,
-  stripInvalidXml10CharactersAndEntities,
 } from './sanitize-xml-10';
 
 describe('RSS XML character safety', () => {
@@ -85,9 +86,9 @@ describe('RSS XML character safety', () => {
     );
 
     expect(html).not.toContain('javascript:');
-    expect(
-      stripInvalidXml10CharactersAndEntities('java&#xFF\u001aFE;script:')
-    ).toBe('javascript:');
+    expect(normalizeXml10ForHtmlParsing('java&#xFF\u001aFE;script:')).toBe(
+      'java&amp;#xFFFE;script:'
+    );
   });
 
   it('preserves literal character references in plain feed text', () => {
@@ -96,15 +97,19 @@ describe('RSS XML character safety', () => {
     );
   });
 
-  it('removes character references that decode to XML-forbidden code points', () => {
-    expect(
-      stripInvalidXml10CharactersAndEntities('Fish &#x1A; Chips &#241;')
-    ).toBe('Fish  Chips &#241;');
-    expect(stripInvalidXml10CharactersAndEntities('a&#0;b&#65c')).toBe(
-      'ab&#65c'
+  it('defuses character references that decode to XML-forbidden code points', () => {
+    expect(neutralizeForbiddenXml10Entities('Fish &#x1A; Chips &#241;')).toBe(
+      'Fish &amp;#x1A; Chips &#241;'
     );
-    expect(stripInvalidXml10CharactersAndEntities('&#x1F4F1;')).toBe(
-      '&#x1F4F1;'
+    expect(neutralizeForbiddenXml10Entities('a&#0;b&#65c')).toBe(
+      'a&amp;#0;b&#65c'
+    );
+    expect(neutralizeForbiddenXml10Entities('&#x1F4F1;')).toBe('&#x1F4F1;');
+  });
+
+  it('neutralizes without rescanning so removals cannot join into fresh references', () => {
+    expect(neutralizeForbiddenXml10Entities('&&#x0;#x1A;')).toBe(
+      '&&amp;#x0;#x1A;'
     );
   });
 });

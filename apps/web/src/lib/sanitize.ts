@@ -8,8 +8,8 @@ import {
 } from '@/lib/sanitize-html-config';
 import { stripDisallowedRawTextBlocks } from '@/lib/sanitize-raw-text-blocks';
 import {
+  normalizeXml10ForHtmlParsing,
   stripInvalidXml10Characters,
-  stripInvalidXml10CharactersAndEntities,
 } from '@/lib/sanitize-xml-10';
 
 // Re-export removed as per knip analysis
@@ -125,7 +125,7 @@ export function sanitizeForFeed(dirty: string): string {
   // encoded) would look schemeless to the parser and then join into javascript:
   // under the outer strip. The outer strip stays to catch anything the
   // sanitizer re-emits.
-  const preNormalized = stripInvalidXml10CharactersAndEntities(dirty);
+  const preNormalized = normalizeXml10ForHtmlParsing(dirty);
   return stripInvalidXml10Characters(
     sanitizeLib(preNormalized, {
       allowedTags: [

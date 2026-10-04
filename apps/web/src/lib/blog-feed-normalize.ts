@@ -30,14 +30,25 @@ export function normalizeBlogFeedPostForFilter<
 }
 
 /**
- * Truncates already-sanitized feed text to maxLength code points. Code-point
- * (not UTF-16 unit) truncation keeps surrogate pairs intact so no lone
- * surrogate is produced at the cut boundary.
+ * Truncates already-sanitized feed text to maxLength grapheme clusters.
+ * Grapheme (not UTF-16 unit or bare code point) truncation keeps surrogate
+ * pairs, ZWJ sequences, and flags intact so no broken character is produced
+ * at the cut boundary. Falls back to code points where Intl.Segmenter is
+ * unavailable.
  */
+const feedGraphemeSegmenter =
+  typeof Intl.Segmenter === 'function'
+    ? new Intl.Segmenter('en', { granularity: 'grapheme' })
+    : null;
+
 export function truncateFeedText(value: string, maxLength: number): string {
-  return Array.from(stripInvalidXml10Characters(value))
-    .slice(0, maxLength)
-    .join('');
+  const stripped = stripInvalidXml10Characters(value);
+  const units = feedGraphemeSegmenter
+    ? [...feedGraphemeSegmenter.segment(stripped)].map(
+        (segment) => segment.segment
+      )
+    : Array.from(stripped);
+  return units.slice(0, maxLength).join('');
 }
 
 /**

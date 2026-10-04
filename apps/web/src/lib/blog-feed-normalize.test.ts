@@ -43,6 +43,15 @@ describe('truncateFeedText', () => {
   it('strips XML-forbidden characters before measuring length', () => {
     expect(truncateFeedText('ab\u001acd', 3)).toBe('abc');
   });
+
+  it('keeps flag and ZWJ grapheme clusters whole at the cut boundary', () => {
+    expect(truncateFeedText(`${'a'.repeat(299)}🇳🇬${'b'.repeat(10)}`, 300)).toBe(
+      `${'a'.repeat(299)}🇳🇬`
+    );
+    expect(truncateFeedText(`${'a'.repeat(299)}👨‍👩‍👧`, 300)).toBe(
+      `${'a'.repeat(299)}👨‍👩‍👧`
+    );
+  });
 });
 
 describe('xmlSafeFeedImageUrl', () => {

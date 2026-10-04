@@ -14,7 +14,16 @@ function isXml10CharCodePoint(codePoint: number): boolean {
 // points are removed; valid ones like &#241; pass through untouched.
 const FORBIDDEN_XML10_ENTITY_PATTERN = /&#([xX][\dA-Fa-f]+|\d+);?/g;
 
-function stripForbiddenXml10EntitiesOnce(value: string): string {
+/**
+ * Defuses numeric character references that decode to XML-forbidden code
+ * points by escaping their `&` (`&#xFFFE;` becomes `&amp;#xFFFE;`), so a
+ * single-pass HTML parser yields inert literal text instead of the decoded
+ * character. Single linear scan: escaping (unlike deleting) cannot join
+ * neighbors into a fresh reference, so no rescan loop — and no quadratic
+ * blowup on adversarial input — is needed. Valid references pass through
+ * untouched.
+ */
+export function neutralizeForbiddenXml10Entities(value: string): string {
   return value.replace(
     FORBIDDEN_XML10_ENTITY_PATTERN,
     (match: string, digits: string) => {
@@ -24,22 +33,9 @@ function stripForbiddenXml10EntitiesOnce(value: string): string {
           : Number.parseInt(digits, 10);
       return Number.isSafeInteger(codePoint) && isXml10CharCodePoint(codePoint)
         ? match
-        : '';
+        : `&amp;${match.slice(1)}`;
     }
   );
-}
-
-function stripForbiddenXml10Entities(value: string): string {
-  // Rescan to a fixpoint: one removal can join neighbors into a new
-  // reference (e.g. `&` + removed `&#x0;` + `#x1A;`). Removal-only, so each
-  // pass strictly shortens the string or the loop exits.
-  let previous = value;
-  let current = stripForbiddenXml10EntitiesOnce(previous);
-  while (current !== previous) {
-    previous = current;
-    current = stripForbiddenXml10EntitiesOnce(previous);
-  }
-  return current;
 }
 
 /**
@@ -67,19 +63,18 @@ export function stripInvalidXml10Characters(
 }
 
 /**
- * Pre-HTML-parsing variant: also removes numeric character references that
- * decode to XML-forbidden code points. Needed only before sanitize-html,
- * which decodes entities and would otherwise let `java&#xFFFE;script:`
- * slip past scheme validation and join into `javascript:` under the outer
- * strip. Raw characters go first so a control splitting a reference
- * (`&#xFF<U+001A>FE;`) joins before the entity scan sees it. Never use on
- * plain feed text — it would delete literal content.
+ * Pre-HTML-parsing normalization: removes raw forbidden characters first
+ * (so a control splitting a reference joins before the entity scan), then
+ * defuses surviving references that decode to forbidden code points.
+ * Needed only before sanitize-html, which decodes entities and would
+ * otherwise let `java&#xFFFE;script:` slip past scheme validation and join
+ * into `javascript:` under the outer strip. Never use on plain feed text.
  */
-export function stripInvalidXml10CharactersAndEntities(
+export function normalizeXml10ForHtmlParsing(
   value: string | null | undefined
 ): string {
   if (typeof value !== 'string') {
     return '';
   }
-  return stripForbiddenXml10Entities(stripInvalidXml10Characters(value));
+  return neutralizeForbiddenXml10Entities(stripInvalidXml10Characters(value));
 }

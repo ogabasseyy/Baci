@@ -11,7 +11,8 @@ import {
 } from './manual-order-document.test-utils';
 
 function clientReturning(snapshot: unknown, error: unknown = null) {
-  return { rpc: vi.fn(async () => ({ data: snapshot, error })) } as never;
+  const rpc = vi.fn(async () => ({ data: snapshot, error }));
+  return { rpc, client: { rpc } as never };
 }
 
 function snapshotWith(
@@ -30,9 +31,9 @@ function snapshotWith(
 
 describe('loadManualDocumentDispatch', () => {
   it('loads a ready dispatch through the claim-bound snapshot RPC', async () => {
-    const supabase = clientReturning(snapshotWith());
+    const { rpc, client: supabase } = clientReturning(snapshotWith());
     const result = await loadManualDocumentDispatch({ supabase, row });
-    expect(supabase.rpc).toHaveBeenCalledWith(
+    expect(rpc).toHaveBeenCalledWith(
       'get_manual_order_document_snapshot',
       { p_outbox_id: 'outbox-1', p_claim_owner: 'worker-1' }
     );
@@ -45,7 +46,7 @@ describe('loadManualDocumentDispatch', () => {
 
   it('fails when a re-arm stole the claim between claim and send', async () => {
     const result = await loadManualDocumentDispatch({
-      supabase: clientReturning(null),
+      supabase: clientReturning(null).client,
       row,
     });
     expect(result).toEqual({
@@ -57,7 +58,7 @@ describe('loadManualDocumentDispatch', () => {
   it('throws on transient snapshot fetch failures for retry', async () => {
     await expect(
       loadManualDocumentDispatch({
-        supabase: clientReturning(null, { message: 'db down' }),
+        supabase: clientReturning(null, { message: 'db down' }).client,
         row,
       })
     ).rejects.toThrow('Manual document data unavailable');
@@ -65,7 +66,7 @@ describe('loadManualDocumentDispatch', () => {
 
   it('skips when the order or merchant projection is missing', async () => {
     const result = await loadManualDocumentDispatch({
-      supabase: clientReturning(snapshotWith(null, merchantFixture)),
+      supabase: clientReturning(snapshotWith(null, merchantFixture)).client,
       row,
     });
     expect(result).toEqual({
@@ -78,7 +79,7 @@ describe('loadManualDocumentDispatch', () => {
     const result = await loadManualDocumentDispatch({
       supabase: clientReturning(
         snapshotWith({ ...orderFixture, total: 'not-money' }, merchantFixture)
-      ),
+      ).client,
       row,
     });
     expect(result).toEqual({
@@ -94,7 +95,7 @@ describe('loadManualDocumentDispatch', () => {
           { ...orderFixture, merchant_id: 'merchant-2' },
           merchantFixture
         )
-      ),
+      ).client,
       row,
     });
     expect(result).toEqual({
@@ -114,7 +115,7 @@ describe('loadManualDocumentDispatch', () => {
           },
           merchantFixture
         )
-      ),
+      ).client,
       row,
     });
     expect(result).toEqual({
@@ -127,7 +128,7 @@ describe('loadManualDocumentDispatch', () => {
     const noCustomer = await loadManualDocumentDispatch({
       supabase: clientReturning(
         snapshotWith({ ...orderFixture, customer_id: null }, merchantFixture)
-      ),
+      ).client,
       row,
     });
     expect(noCustomer).toEqual({
@@ -137,7 +138,7 @@ describe('loadManualDocumentDispatch', () => {
     const noItems = await loadManualDocumentDispatch({
       supabase: clientReturning(
         snapshotWith({ ...orderFixture, order_items: [] }, merchantFixture)
-      ),
+      ).client,
       row,
     });
     expect(noItems).toEqual({

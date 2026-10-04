@@ -12,8 +12,12 @@ const vatRow = {
 };
 
 function clientReturning(batches: { data: unknown[]; error: unknown }[]) {
-  const rpc = vi.fn(async () => batches.shift() ?? { data: [], error: null });
-  return { rpc, client: { rpc } as never };
+  const seen: { p_order_ids: string[] }[] = [];
+  const rpc = vi.fn(async (_fn: string, args: { p_order_ids: string[] }) => {
+    seen.push(args);
+    return batches.shift() ?? { data: [], error: null };
+  });
+  return { rpc, seen, client: { rpc } as never };
 }
 
 describe('loadStorefrontCustomerTaxSubtotals', () => {
@@ -50,14 +54,14 @@ describe('loadStorefrontCustomerTaxSubtotals', () => {
 
   it('pages lookups larger than the per-call cap', async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `order-${i}`);
-    const { rpc, client } = clientReturning([
+    const { rpc, seen, client } = clientReturning([
       { data: [], error: null },
       { data: [], error: null },
       { data: [], error: null },
     ]);
     await loadStorefrontCustomerTaxSubtotals(client, ids);
     expect(rpc).toHaveBeenCalledTimes(3);
-    expect(rpc.mock.calls[2][1].p_order_ids).toHaveLength(50);
+    expect(seen[2]?.p_order_ids).toHaveLength(50);
   });
 
   it('keeps fetched rows and surfaces the batch error', async () => {

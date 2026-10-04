@@ -17,6 +17,19 @@ it('keeps safe fallback fields and drops unvalidated fields', () => {
     })
   ).toEqual({ ...snapshot, slug: 'phone' });
 });
+it('retains brand and condition fallbacks for unrefreshed tray items', () => {
+  expect(
+    comparisonSnapshotSchema.parse({
+      ...snapshot,
+      brand: 'Acme',
+      condition: 'used',
+    })
+  ).toEqual({ ...snapshot, brand: 'Acme', condition: 'used' });
+  // Unknown stored conditions drop the field but keep the item.
+  expect(
+    comparisonSnapshotSchema.parse({ ...snapshot, condition: 'bogus' })
+  ).toEqual({ ...snapshot, condition: undefined });
+});
 it('preserves the matched-option basis for off-page tray items', () => {
   expect(
     comparisonSnapshotSchema.parse({

@@ -1,85 +1,21 @@
 import {
-  type CanonicalProductCondition,
-  getVariantConditionOptions,
-  hasVariantConditionAxis,
   normalizeCanonicalProductCondition,
   resolveDefaultVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
-  resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
-import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductVariant } from '@/lib/products';
-
-// Placeholder image for products without images
-export const PLACEHOLDER_IMAGE = '/placeholder.svg';
-
-const VALID_CONDITIONS = new Set<CanonicalProductCondition>([
-  'new',
-  'used',
-  'open_box',
-]);
-
-export type ProductCondition = CanonicalProductCondition;
-
-function getValidConditionOptions(values: string[]) {
-  return values
-    .map((value) => normalizeCanonicalProductCondition(value))
-    .filter(
-      (value): value is ProductCondition =>
-        value !== '' && VALID_CONDITIONS.has(value)
-    );
-}
-
-function areSelectionAttributesEqual(
-  left: Record<string, string>,
-  right: Record<string, string>
-) {
-  const leftEntries = Object.entries(left);
-  const rightEntries = Object.entries(right);
-
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  return leftEntries.every(([key, value]) => right[key] === value);
-}
-
-/**
- * Extract unique attribute types and their values from variants
- */
-function getAttributeOptions(
-  variants: ProductVariant[]
-): { key: string; values: string[] }[] {
-  const attributeMap = new Map<string, Set<string>>();
-
-  for (const variant of variants) {
-    for (const [key, value] of Object.entries(variant.attributes)) {
-      if (!attributeMap.has(key)) {
-        attributeMap.set(key, new Set());
-      }
-      attributeMap.get(key)?.add(value);
-    }
-  }
-
-  return Array.from(attributeMap.entries()).map(([key, values]) => ({
-    key,
-    values: Array.from(values).sort(),
-  }));
-}
-
-const conditionLabels: Record<string, string> = {
-  new: 'New',
-  used: 'Premium Used',
-  open_box: 'Open Box',
-};
-const conditionDescriptions: Record<string, string> = {
-  new: 'Factory sealed with full manufacturer warranty',
-  open_box: 'Opened but unused, all accessories included',
-  used: 'Fully tested and inspected, 30-day warranty',
-};
+import {
+  areSelectionAttributesEqual,
+  conditionDescriptions,
+  conditionLabels,
+  getAttributeOptions,
+  PLACEHOLDER_IMAGE,
+  type ProductCondition,
+  resolveSelectionPricing,
+} from './product-selection-utils';
+import { useProductRouteSelection } from './use-product-route-selection';
 
 /**
  * Route-driven offer, variant, condition, and image selection for the PDP,
@@ -102,32 +38,16 @@ export function useProductOfferSelection(product: Product) {
   >({});
 
   // Condition offer state
-  const searchParams = useSearchParams();
-  const conditionParam = searchParams.get('condition');
-  const usesVariantRouteSelection = Boolean(
-    product.has_variants && product.variants && product.variants.length > 0
-  );
-  const routeSelectionResolution = usesVariantRouteSelection
-    ? resolveVariantSelectionParamResolution(product, searchParams)
-    : null;
-  const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
-  const routeSelectionAttributes = (routeSelectionInput.attributes ??
-    {}) as Record<string, string>;
-  const routeConditionSource =
-    routeSelectionInput.condition ??
-    (!usesVariantRouteSelection ? conditionParam : undefined);
-  const routeCondition =
-    normalizeCanonicalProductCondition(routeConditionSource);
-  const routeVariantId = routeSelectionInput.variantId ?? undefined;
-  const defaultVariantSelection = usesVariantRouteSelection
-    ? resolveDefaultVariantSelection(product, { condition: routeCondition })
-    : null;
-  const usesVariantConditions = usesVariantRouteSelection
-    ? hasVariantConditionAxis(product)
-    : false;
-  const availableConditionOptions = usesVariantConditions
-    ? getValidConditionOptions(getVariantConditionOptions(product))
-    : [];
+  const {
+    availableConditionOptions,
+    defaultVariantSelection,
+    offerIdParam,
+    routeCondition,
+    routeSelectionAttributes,
+    routeVariantId,
+    usesVariantConditions,
+    usesVariantRouteSelection,
+  } = useProductRouteSelection(product);
   const [selectedCondition, setSelectedCondition] = useState<ProductCondition>(
     (routeCondition as ProductCondition | undefined) ||
       (defaultVariantSelection?.condition as ProductCondition | undefined) ||
@@ -138,7 +58,6 @@ export function useProductOfferSelection(product: Product) {
   // Search/compare entry points forward the advertised matched offer id.
   // Honor it only when it names one of this product's own offers and matches
   // the selected condition, so the PDP charges the price the card displayed.
-  const offerIdParam = searchParams.get('offer_id');
   const [ignoredRouteOfferId, setIgnoredRouteOfferId] = useState<string | null>(
     null
   );
@@ -276,33 +195,14 @@ export function useProductOfferSelection(product: Product) {
   const effectiveVariantId =
     currentVariantSelection?.variant.id ?? effectiveVariant?.id;
 
-  // Get current price based on condition offer or variant selection
-  const currentPrice =
-    selectedOffer?.price != null
-      ? Number(selectedOffer.price)
-      : (currentVariantDisplaySelection?.price ??
-        effectiveVariant?.price_override ??
-        product.price);
-  const currentCompareAtPrice =
-    currentVariantDisplaySelection?.compareAtPrice ?? product.compare_at_price;
-  const currentStock = isStockManaged
-    ? getEffectiveStock(
-        effectiveVariant
-          ? {
-              stock:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-              stock_quantity:
-                effectiveVariant.stock_quantity ?? product.stock ?? undefined,
-            }
-          : selectedOffer
-            ? {
-                stock: selectedOffer.stock_quantity ?? 0,
-                stock_quantity: selectedOffer.stock_quantity ?? 0,
-              }
-            : product
-      )
-    : Number.POSITIVE_INFINITY;
-  const isOutOfStock = isStockManaged ? currentStock === 0 : false;
+  const { currentPrice, currentCompareAtPrice, currentStock, isOutOfStock } =
+    resolveSelectionPricing({
+      product,
+      selectedOffer,
+      displaySelection: currentVariantDisplaySelection,
+      effectiveVariant,
+      isStockManaged,
+    });
 
   const handleAttributeChange = (attributeKey: string, value: string) => {
     const newAttributes = { ...selectedAttributes, [attributeKey]: value };

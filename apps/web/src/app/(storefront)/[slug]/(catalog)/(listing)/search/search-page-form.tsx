@@ -22,6 +22,7 @@ interface SearchPageFormProps {
   action: string;
   defaultQuery: string;
   pathPrefix: string;
+  currency: string;
   refinements?: SearchRefinements;
   suggestionProducts?: SearchSuggestionProduct[];
   redOutline?: boolean;
@@ -32,6 +33,7 @@ export function SearchPageForm({
   action,
   defaultQuery,
   pathPrefix,
+  currency,
   refinements,
   suggestionProducts = [],
   redOutline = false,
@@ -129,6 +131,7 @@ export function SearchPageForm({
             products={suggestionProducts}
             criteria={refinements}
             basePath={action}
+            currency={currency}
           />
           <AssistedSearchSuggestions
             query={query}

@@ -19,6 +19,21 @@ describe('applied search filters', () => {
     });
     expect(chips[2].next.maxPrice).toBeUndefined();
   });
+  it('shows a rating chip for a positive floor but none for zero', () => {
+    const rated = getSearchRefinementChips(
+      { brands: [], sort: 'relevance', minRating: 4 },
+      []
+    );
+    expect(rated.map((chip) => chip.key)).toEqual(['rating']);
+    expect(rated[0].next.minRating).toBeUndefined();
+    // Zero filters nothing, so no chip — matching hasActiveSearchRefinements.
+    expect(
+      getSearchRefinementChips(
+        { brands: [], sort: 'relevance', minRating: 0 },
+        []
+      )
+    ).toEqual([]);
+  });
 });
 
 it('adds only query-backed quick groups and keeps an active processor removable', async () => {

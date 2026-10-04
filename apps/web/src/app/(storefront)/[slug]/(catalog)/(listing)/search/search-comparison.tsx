@@ -208,9 +208,11 @@ export function SearchComparisonTray({
                   snapshot.matchOfferId ||
                   snapshot.matchCondition
                     ? 'Matched option — verify on product page'
-                    : (product?.condition ?? 'Condition not refreshed')}
+                    : (product?.condition ??
+                      snapshot.condition ??
+                      'Condition not refreshed')}
                 </p>
-                <p>Brand: {product?.brand ?? 'Unknown'}</p>
+                <p>Brand: {product?.brand ?? snapshot.brand ?? 'Unknown'}</p>
                 <p>Category: {product?.category ?? 'Unknown'}</p>
                 {rows.map((row) => (
                   <p key={row.label}>

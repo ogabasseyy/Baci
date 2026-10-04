@@ -131,7 +131,9 @@ export function hasActiveSearchRefinements(
     criteria.condition !== undefined ||
     criteria.minPrice !== undefined ||
     criteria.maxPrice !== undefined ||
-    criteria.minRating !== undefined ||
+    // A zero floor filters nothing (ratings are >= 0), so it counts as
+    // absent — matching the chips, which show no rating chip for zero.
+    (criteria.minRating ?? 0) > 0 ||
     criteria.processor !== undefined
   );
 }

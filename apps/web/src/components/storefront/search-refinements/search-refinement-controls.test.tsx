@@ -193,6 +193,7 @@ it('restores the committed query before applying a filter to its results', () =>
         action="/oga/search"
         defaultQuery="phone"
         pathPrefix="/oga"
+        currency="NGN"
       />
       <SearchRefinementControls {...props} />
     </SearchQueryDraftSession>

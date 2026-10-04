@@ -254,6 +254,37 @@ export function SearchRefinementFields({
           </select>
         </label>
       </RefinementGroup>
+      <RefinementGroup
+        group="rating"
+        title="Rating"
+        open={!focusGroup || expanded === 'rating'}
+        onToggle={
+          focusGroup
+            ? () => setExpanded(expanded === 'rating' ? '' : 'rating')
+            : undefined
+        }
+      >
+        <label>
+          <span className="sr-only">Rating</span>
+          <select
+            className={inputClass}
+            value={draft.minRating?.toString() ?? ''}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                minRating: e.target.value ? Number(e.target.value) : undefined,
+              })
+            }
+          >
+            <option value="">Any rating</option>
+            {[4, 3, 2, 1].map((rating) => (
+              <option key={rating} value={rating}>
+                {rating}+ stars
+              </option>
+            ))}
+          </select>
+        </label>
+      </RefinementGroup>
     </div>
   );
 }

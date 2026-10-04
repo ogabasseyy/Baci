@@ -27,8 +27,8 @@ import type { FAQItem } from '@/types/faq';
 import {
   PLACEHOLDER_IMAGE,
   type ProductCondition,
-  useProductOfferSelection,
-} from './use-product-offer-selection';
+} from './product-selection-utils';
+import { useProductOfferSelection } from './use-product-offer-selection';
 
 // Lazy load heavy components to reduce initial bundle size
 const ReviewsSection = dynamic(

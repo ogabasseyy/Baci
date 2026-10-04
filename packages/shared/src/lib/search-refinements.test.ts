@@ -42,9 +42,9 @@ describe('search refinements', () => {
   });
   it('detects filter-bearing refinements but ignores sort alone', () => {
     expect(hasActiveSearchRefinements(emptySearchRefinements())).toBe(false);
-    expect(
-      hasActiveSearchRefinements({ brands: [], sort: 'price_asc' })
-    ).toBe(false);
+    expect(hasActiveSearchRefinements({ brands: [], sort: 'price_asc' })).toBe(
+      false
+    );
     expect(
       hasActiveSearchRefinements({
         brands: [],
@@ -58,6 +58,22 @@ describe('search refinements', () => {
         sort: 'relevance',
       })
     ).toBe(true);
+    expect(
+      hasActiveSearchRefinements({
+        brands: [],
+        sort: 'relevance',
+        minRating: 4,
+      })
+    ).toBe(true);
+    // A zero floor filters nothing, so it counts as absent — matching the
+    // chips, which show no rating chip for zero.
+    expect(
+      hasActiveSearchRefinements({
+        brands: [],
+        sort: 'relevance',
+        minRating: 0,
+      })
+    ).toBe(false);
   });
   it('preserves same normalized query refinements and resets a different query', () => {
     const current = {

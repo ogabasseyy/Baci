@@ -12,17 +12,22 @@ export function SearchAssistance({
   products,
   criteria,
   basePath,
+  currency,
 }: {
   query: string;
   resultQuery: string;
   products: SearchSuggestionProduct[];
   criteria: SearchRefinements;
   basePath: string;
+  currency: string;
 }) {
   const suggestions = buildCatalogSearchSuggestions(
     query,
     resultQuery,
-    products
+    products,
+    {
+      currency,
+    }
   ).filter((suggestion) => {
     try {
       mergeAssistedRefinements(criteria, suggestion.proposal);

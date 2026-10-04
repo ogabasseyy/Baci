@@ -15,6 +15,7 @@ describe('search page form submission tracking', () => {
         action="/ogabassey/search"
         defaultQuery="old phone"
         pathPrefix="/ogabassey"
+        currency="NGN"
       />
     );
     const input = screen.getByRole('searchbox', { name: 'Search products' });
@@ -43,6 +44,7 @@ describe('search page form submission tracking', () => {
         action="/ogabassey/search"
         defaultQuery="phone"
         pathPrefix="/ogabassey"
+        currency="NGN"
       />
     );
     const input = screen.getByRole('searchbox', { name: 'Search products' });
@@ -64,6 +66,7 @@ it('shows catalog suggestions beside the focused input and hides them on blur', 
       action="/search"
       pathPrefix=""
       defaultQuery="iphone"
+      currency="NGN"
       refinements={{ brands: [], sort: 'relevance' }}
       suggestionProducts={[{ price: 250000, condition: 'used' }]}
     />
@@ -80,7 +83,12 @@ it('shows catalog suggestions beside the focused input and hides them on blur', 
 });
 
 it('keeps the requested red outline specific to Ogabassey', () => {
-  const props = { action: '/search', pathPrefix: '', defaultQuery: 'phone' };
+  const props = {
+    action: '/search',
+    pathPrefix: '',
+    defaultQuery: 'phone',
+    currency: 'NGN',
+  };
   const { rerender } = render(<SearchPageForm {...props} />);
   expect(screen.getByRole('searchbox')).toHaveClass('border-store-primary');
   rerender(<SearchPageForm {...props} redOutline />);

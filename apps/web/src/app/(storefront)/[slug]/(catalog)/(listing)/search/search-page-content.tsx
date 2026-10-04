@@ -158,6 +158,7 @@ export async function SearchPageContent({
                 action={searchBasePath}
                 defaultQuery={query}
                 pathPrefix={pathPrefix}
+                currency={merchantCurrency}
                 assistEnabled={
                   process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true'
                 }
@@ -189,16 +190,14 @@ export async function SearchPageContent({
                 </p>
               )}
 
-              {query &&
-                !searchFailed &&
-                effectiveResult.products.length > 0 && (
-                  <SearchComparisonTray
-                    currency={merchantCurrency}
-                    products={effectiveResult.products}
-                    pathPrefix={pathPrefix}
-                    merchantId={merchant.id}
-                  />
-                )}
+              {query && !searchFailed && (
+                <SearchComparisonTray
+                  currency={merchantCurrency}
+                  products={effectiveResult.products}
+                  pathPrefix={pathPrefix}
+                  merchantId={merchant.id}
+                />
+              )}
               {query && (
                 <SearchRefinementControls
                   currency={merchantCurrency}

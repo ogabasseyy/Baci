@@ -42,4 +42,28 @@ describe('SearchAssistance', () => {
     );
     expect(view.queryByTestId('search-suggestion-row')).toBeNull();
   });
+  it('scales the budget suggestion to the passed storefront currency', () => {
+    const onApply = jest.fn();
+    render(
+      <SearchAssistance
+        query="iphone"
+        resultQuery="iphone"
+        products={[
+          { price: 380, condition: 'used' },
+          { price: 1200, condition: 'new' },
+        ]}
+        onApply={onApply}
+        colors={colors}
+        currency="USD"
+      />
+    );
+    fireEvent.press(
+      screen.getByLabelText('Search suggestion: iphone up to US$400')
+    );
+    expect(onApply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: { maxPrice: 400 },
+      })
+    );
+  });
 });

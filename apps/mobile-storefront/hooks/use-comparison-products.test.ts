@@ -111,6 +111,68 @@ it('keeps a zero-raw-stock serialized option available when the projection inclu
   expect(result.current.unavailableIds).toEqual([]);
 });
 
+it('suppresses the parent strike-through when a matched option reprices', async () => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    compare_at_price: 1200,
+    manage_stock: true,
+    variants: [{ id: 'v1', price: 500, stock_quantity: 5 }],
+  });
+  mockRpc.mockResolvedValue({
+    data: [{ variant_id: 'v1', offer_id: null }],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { variantId: 'v1' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(500));
+  expect(result.current.products[0].compare_at_price).toBeUndefined();
+  expect(result.current.unavailableIds).toEqual([]);
+});
+
+it('keeps the parent strike-through when no option matched', async () => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    compare_at_price: 1200,
+    manage_stock: true,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        { id: 'p1', name: 'Phone', price: 100 } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(100));
+  expect(result.current.products[0].compare_at_price).toBe(1200);
+  expect(mockRpc).not.toHaveBeenCalled();
+});
+
 it('fails closed when the purchasable projection errors', async () => {
   mockResolve.mockResolvedValue({
     id: 'p1',

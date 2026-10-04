@@ -16,6 +16,7 @@ describe('SearchAssistance', () => {
         products={products}
         criteria={{ brands: [], sort: 'relevance' }}
         basePath="/oga/search"
+        currency="NGN"
       />
     );
     const group = screen.getByRole('group', { name: 'Search suggestions' });
@@ -31,6 +32,7 @@ describe('SearchAssistance', () => {
         products={products}
         criteria={{ brands: [], sort: 'relevance', minPrice: 800000 }}
         basePath="/oga/search"
+        currency="NGN"
       />
     );
     // The budget suggestion (max 300k) conflicts with min 800k; the
@@ -42,6 +44,23 @@ describe('SearchAssistance', () => {
       screen.getByRole('link', { name: 'Used iphone' })
     ).toBeInTheDocument();
   });
+  it('scales the budget suggestion to a non-naira storefront currency', () => {
+    render(
+      <SearchAssistance
+        query="iphone"
+        resultQuery="iphone"
+        products={[
+          { price: 380, condition: 'used' },
+          { price: 1200, condition: 'new' },
+        ]}
+        criteria={{ brands: [], sort: 'relevance' }}
+        basePath="/oga/search"
+        currency="USD"
+      />
+    );
+    const budget = screen.getByRole('link', { name: 'iphone up to US$400' });
+    expect(budget.getAttribute('href')).toContain('maxPrice=400');
+  });
   it('renders nothing while a different query is loading', () => {
     render(
       <SearchAssistance
@@ -50,6 +69,7 @@ describe('SearchAssistance', () => {
         products={products}
         criteria={{ brands: [], sort: 'relevance' }}
         basePath="/oga/search"
+        currency="NGN"
       />
     );
     expect(

@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
       id: string;
       name: string;
       slug: string;
+      brand?: string;
+      condition?: string;
       matchVariantId?: string;
       matchOfferId?: string;
       matchCondition?: string;
@@ -158,6 +160,24 @@ it('refreshes selected identities from other pages and displays real facts', () 
   expect(mocks.facts).toHaveBeenLastCalledWith('m1', ['1', '2'], true);
   expect(screen.getByText('storage: 128 GB')).toBeTruthy();
   expect(screen.getByText('Open product for current price')).toBeTruthy();
+});
+
+it('falls back to saved brand and condition when refresh misses an item', () => {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one', brand: 'Acme', condition: 'used' },
+    { id: '2', name: 'Two', slug: 'two' },
+  ];
+  mocks.facts.mockReturnValue({
+    products: [{ id: '2', name: 'Two', slug: 'two', price: 300 }],
+    pending: false,
+    error: false,
+  });
+  render(<SearchComparisonTray products={[]} pathPrefix="" merchantId="m1" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  expect(screen.getByText('Brand: Acme')).toBeTruthy();
+  expect(screen.getByText('used')).toBeTruthy();
+  expect(screen.getByText('Brand: Unknown')).toBeTruthy();
+  expect(screen.getByText('Condition not refreshed')).toBeTruthy();
 });
 
 it('flags off-page matched snapshots as verify-on-product-page', () => {

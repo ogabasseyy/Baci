@@ -28,6 +28,24 @@ it('keeps selected exact brands visible while searching other brands', () => {
   );
 });
 
+it('commits a minimum rating through the draft field', () => {
+  const onChange = vi.fn();
+  render(
+    <SearchRefinementFields
+      brands={[]}
+      categories={[]}
+      draft={createRefinementDraft({ brands: [], sort: 'relevance' })}
+      onChange={onChange}
+    />
+  );
+  fireEvent.change(screen.getByRole('combobox', { name: 'Rating' }), {
+    target: { value: '4' },
+  });
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ minRating: 4 })
+  );
+});
+
 it('shows only available conditions and collapses other mobile groups', () => {
   render(
     <SearchRefinementFields

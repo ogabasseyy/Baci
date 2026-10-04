@@ -11,17 +11,22 @@ export default function SearchAssistance({
   products,
   onApply,
   colors,
+  currency = 'NGN',
 }: {
   query: string;
   resultQuery: string;
   products: SearchSuggestionProduct[];
   onApply: (proposal: SearchAssistanceProposal) => void;
   colors: (typeof Colors)['light'];
+  currency?: string;
 }) {
   const suggestions = buildCatalogSearchSuggestions(
     query,
     resultQuery,
-    products
+    products,
+    {
+      currency,
+    }
   );
   if (!suggestions.length) return null;
   return (

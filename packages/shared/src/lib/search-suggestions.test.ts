@@ -34,6 +34,34 @@ describe('catalog search suggestions', () => {
       ])
     ).toEqual([]);
   });
+  it('scales the budget to the storefront currency instead of naira steps', () => {
+    const suggestions = buildCatalogSearchSuggestions(
+      'iphone',
+      'iphone',
+      [
+        { price: 380, condition: 'used' },
+        { price: 1200, condition: 'new' },
+      ],
+      { currency: 'USD' }
+    );
+    const budget = suggestions.find((item) => item.label.includes('up to'));
+    expect(budget?.label).toBe('iphone up to US$400');
+    expect(budget?.proposal.filters.maxPrice).toBe(400);
+  });
+  it('falls back to a plain code label for unknown currencies', () => {
+    const suggestions = buildCatalogSearchSuggestions(
+      'iphone',
+      'iphone',
+      [
+        { price: 380, condition: 'used' },
+        { price: 1200, condition: 'new' },
+      ],
+      { currency: 'XX' }
+    );
+    const budget = suggestions.find((item) => item.label.includes('up to'));
+    expect(budget?.label).toBe('iphone up to XX 400');
+    expect(budget?.proposal.filters.maxPrice).toBe(400);
+  });
   it('recognizes catalog condition aliases via canonical mapping', () => {
     expect(
       buildCatalogSearchSuggestions('iphone', 'iphone', [

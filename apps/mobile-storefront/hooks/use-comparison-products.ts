@@ -82,6 +82,10 @@ export function useComparisonProducts(selected: Product[]) {
               ...product,
               searchMatch: match,
               price: option?.price ?? product.price,
+              // A matched option price must never pair with the parent's
+              // strike-through: suppress it exactly as the search card does
+              // for matched items, so the table shows no false discount.
+              compare_at_price: match ? undefined : product.compare_at_price,
               condition: option?.condition ?? product.condition,
               specifications: {
                 ...product.specifications,

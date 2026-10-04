@@ -9,6 +9,8 @@ import {
 // Client boundary justified: the submit handler must intercept
 // sanitized-empty queries before the GET navigation fires.
 import { type FormEvent, useState } from 'react';
+import { AssistedSearchSuggestions } from '@/components/storefront/search-refinements/assisted-search-suggestions';
+import { useSearchQueryDraft } from '@/components/storefront/search-refinements/search-query-draft';
 import { recordSearchSubmission } from '@/lib/search-submission';
 import {
   parseStorefrontSearchQueryParam,
@@ -23,6 +25,7 @@ interface SearchPageFormProps {
   refinements?: SearchRefinements;
   suggestionProducts?: SearchSuggestionProduct[];
   redOutline?: boolean;
+  assistEnabled?: boolean;
 }
 
 export function SearchPageForm({
@@ -32,10 +35,16 @@ export function SearchPageForm({
   refinements,
   suggestionProducts = [],
   redOutline = false,
+  assistEnabled = false,
 }: SearchPageFormProps) {
-  const [query, setQuery] = useState(defaultQuery);
+  const draft = useSearchQueryDraft();
+  const [localQuery, setLocalQuery] = useState(defaultQuery);
+  const query = draft?.query ?? localQuery;
+  const setQuery = draft?.setQuery ?? setLocalQuery;
   const [focused, setFocused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const error = draft ? draft.error : localError;
+  const setError = draft?.setError ?? setLocalError;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const raw = new FormData(event.currentTarget).get('q');
@@ -93,7 +102,7 @@ export function SearchPageForm({
           id="search-page-input"
           name="q"
           type="search"
-          defaultValue={defaultQuery}
+          value={query}
           placeholder="Search or ask a question…"
           maxLength={STOREFRONT_SEARCH_MAX_QUERY_LENGTH}
           autoComplete="off"
@@ -113,13 +122,21 @@ export function SearchPageForm({
         </button>
       </form>
       {focused && refinements && (
-        <SearchAssistance
-          query={query}
-          resultQuery={defaultQuery}
-          products={suggestionProducts}
-          criteria={refinements}
-          basePath={action}
-        />
+        <>
+          <SearchAssistance
+            query={query}
+            resultQuery={defaultQuery}
+            products={suggestionProducts}
+            criteria={refinements}
+            basePath={action}
+          />
+          <AssistedSearchSuggestions
+            query={query}
+            enabled={assistEnabled}
+            criteria={refinements}
+            basePath={action}
+          />
+        </>
       )}
       {error === null ? null : (
         <p

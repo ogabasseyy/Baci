@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { asRoute } from '@/lib/routes';
 import { getSearchCurrencyFormatter } from './search-currency';
+import { useSearchQueryDraft } from './search-query-draft';
 import {
   createRefinementDraft,
   parseRefinementDraft,
@@ -54,6 +55,7 @@ export function SearchRefinementControls({
   invalidFilters,
   children,
 }: Props) {
+  const queryDraft = useSearchQueryDraft();
   const trigger = useRef<HTMLElement | null>(null);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -85,6 +87,7 @@ export function SearchRefinementControls({
       !invalidFilters
     )
       return;
+    queryDraft?.reset();
     startTransition(() =>
       router.push(asRoute(buildRefinedSearchHref(basePath, query, next)))
     );

@@ -337,6 +337,9 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                               'Device Protection (+5%)'
                             )}
                           </p>
+                          <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                            {item.hasAssurance ? 'Optional. Included in total; uncheck to remove.' : 'Optional. Check to add.'}
+                          </p>
                         </div>
                       </label>
 

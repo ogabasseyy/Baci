@@ -99,7 +99,7 @@ export default function SearchScreenBody({
         style={styles.suggestionsContainer}
         contentContainerStyle={{
           paddingBottom: isKeyboardVisible
-            ? keyboardHeight + 100
+            ? keyboardHeight + Math.max(100, bottomSpace)
             : Math.max(100 + insetsBottom, bottomSpace),
         }}
         keyboardShouldPersistTaps="handled"
@@ -228,7 +228,7 @@ export default function SearchScreenBody({
     <SearchResultsList
       bottomSpace={
         isKeyboardVisible
-          ? keyboardHeight + 100
+          ? keyboardHeight + Math.max(100, bottomSpace)
           : Math.max(100 + insetsBottom, bottomSpace)
       }
       colors={colors}

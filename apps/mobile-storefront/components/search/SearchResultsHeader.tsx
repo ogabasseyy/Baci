@@ -10,6 +10,7 @@ import styles from './search-screen.styles';
 
 interface SearchResultsHeaderProps {
   suggestions?: ReactNode;
+  onBottomSpaceChange?: (height: number) => void;
   showBackButton?: boolean;
   autoFocus?: boolean;
   availableHeight?: number;
@@ -24,6 +25,7 @@ interface SearchResultsHeaderProps {
 
 export default function SearchResultsHeader({
   suggestions,
+  onBottomSpaceChange,
   showBackButton = true,
   autoFocus,
   availableHeight = 0,
@@ -53,6 +55,7 @@ export default function SearchResultsHeader({
   return (
     <AppKeyboardDock
       availableHeight={availableHeight}
+      onBottomSpaceChange={onBottomSpaceChange}
       bottomInset={insets.bottom}
     >
       <View style={{ backgroundColor: colors.background }}>

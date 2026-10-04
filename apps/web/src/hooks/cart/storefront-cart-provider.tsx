@@ -376,6 +376,8 @@ export function StorefrontCartProvider({
       return;
     }
 
+    const assuranceEnabledByDefault =
+      enableSmartCartPro && merchantSlugRef.current === 'ogabassey';
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const cartItemId = generateCartItemId(
@@ -422,8 +424,7 @@ export function StorefrontCartProvider({
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',
             hasAssurance:
-              normalizedOptions?.hasAssurance ??
-              (enableSmartCartPro && merchantSlug === 'ogabassey'),
+              normalizedOptions?.hasAssurance ?? assuranceEnabledByDefault,
             assuranceRate: DEFAULT_ASSURANCE_RATE,
           },
         ];

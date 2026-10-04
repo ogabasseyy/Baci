@@ -14,7 +14,7 @@ import { useKeyboard } from '@/hooks/use-keyboard';
 import { useSearchToolbarVisibility } from '@/hooks/use-search-toolbar-visibility';
 import type { Category, Product } from '@/types/product';
 import { SearchRefinementControls } from './refinements/SearchRefinementControls';
-import SearchAssistance from './SearchAssistance';
+import SearchAssistanceSuggestions from './SearchAssistanceSuggestions';
 import { SearchComparisonSession } from './SearchComparisonSession';
 import SearchResultsHeader from './SearchResultsHeader';
 import SearchScreenBody from './SearchScreenBody';
@@ -185,7 +185,7 @@ export default function SearchScreenView({
             !isLoading &&
             !searchError &&
             onApplyAssistance ? (
-              <SearchAssistance
+              <SearchAssistanceSuggestions
                 query={query}
                 resultQuery={committedQuery}
                 products={products.map((product) => ({
@@ -198,6 +198,7 @@ export default function SearchScreenView({
               />
             ) : null
           }
+          onBottomSpaceChange={setBottomSpace}
           showBackButton={false}
           autoFocus={autoFocus}
           availableHeight={
@@ -218,7 +219,6 @@ export default function SearchScreenView({
             (refinements && onRefinementsChange ? (
               <SearchRefinementControls
                 onPanelOpenChange={setIsRefinementOpen}
-                onBottomSpaceChange={setBottomSpace}
                 criteria={refinements}
                 onCommit={onRefinementsChange}
                 brands={brandNames}

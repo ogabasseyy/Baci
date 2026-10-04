@@ -57,6 +57,11 @@ export default function AssuranceToggle({
             ? `Screen & Liquid Damage +${formatPrice(assuranceCost)}`
             : `Device Protection (+${DEFAULT_ASSURANCE_PERCENT_LABEL})`}
         </Text>
+        <Text style={[styles.assuranceDesc, { color: colors.textSecondary }]}>
+          {item.hasAssurance
+            ? 'Optional. Included in total; tap to remove.'
+            : 'Optional. Tap to add.'}
+        </Text>
       </View>
     </Pressable>
   );

@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 const mockResultsEvents: {
+  bottomSpace?: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 } = {};
 
@@ -41,14 +42,17 @@ jest.mock('./SearchResultsList', () => {
     __esModule: true,
     default: function MockSearchResultsList({
       listError,
+      bottomSpace,
       resultsKey,
       onScroll,
     }: {
+      bottomSpace?: number;
       onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
       listError?: string | null;
       resultsKey?: string;
     }) {
       mockResultsEvents.onScroll = onScroll;
+      mockResultsEvents.bottomSpace = bottomSpace;
       return (
         <View testID="mock-results-list">
           <Text>{listError ?? 'no-list-error'}</Text>
@@ -328,4 +332,19 @@ it('routes result scrolling to the toolbar and keeps filter sheets visible', () 
       .props.pointerEvents
   ).toBe('auto');
   expect(screen.getByLabelText('Apply filters')).toBeTruthy();
+});
+
+it('keeps the final cards above an enlarged keyboard search surface', () => {
+  mockKeyboard.isKeyboardVisible = true;
+  mockKeyboard.keyboardHeight = 320;
+  renderView({
+    hasSearchQuery: true,
+    query: 'iphone',
+    committedQuery: 'iphone',
+    products: [{ id: 'p1', name: 'Phone', price: 100 } as Product],
+  });
+  fireEvent(screen.getByTestId('keyboard-dock-surface'), 'layout', {
+    nativeEvent: { layout: { height: 240 } },
+  });
+  expect(mockResultsEvents.bottomSpace).toBe(594);
 });

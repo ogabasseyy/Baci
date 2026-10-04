@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { syncStorage } from '../lib/storage';
 
 const mockMerchantSlug: { current: string } = {
   current: 'ogabassey',
@@ -329,5 +330,39 @@ describe('cart-store', () => {
         price: 390000,
       }),
     ]);
+  });
+});
+
+it('retains a stored assurance opt-out through rehydration and a merge', async () => {
+  jest.mocked(syncStorage.getItem).mockReturnValueOnce(
+    JSON.stringify({
+      state: {
+        items: [
+          {
+            id: 'saved',
+            product_id: 'p1',
+            name: 'Phone',
+            slug: 'phone',
+            price: 100000,
+            quantity: 1,
+            hasAssurance: false,
+          },
+        ],
+      },
+      version: 0,
+    })
+  );
+  await useCartStore.persist.rehydrate();
+  expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+  useCartStore.getState().addItem({
+    product_id: 'p1',
+    name: 'Phone',
+    slug: 'phone',
+    price: 100000,
+    quantity: 1,
+  });
+  expect(useCartStore.getState().items[0]).toMatchObject({
+    hasAssurance: false,
+    quantity: 2,
   });
 });

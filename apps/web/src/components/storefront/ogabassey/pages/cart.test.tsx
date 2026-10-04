@@ -25,6 +25,7 @@ type MockCartItem = {
   image: string;
   category: string;
   brand: string;
+  hasAssurance?: boolean;
 };
 
 let mockCartItems: MockCartItem[] = [
@@ -131,6 +132,14 @@ describe('OgabasseyV2CartPage', () => {
         brand: 'Brand',
       },
     ];
+  });
+
+  it('discloses the optional Assurance fee and how to remove it', () => {
+    mockCartItems[0].hasAssurance = true;
+    render(<OgabasseyV2CartPage storeSlug="ogabassey" />);
+    expect(screen.getByText('Optional. Included in total; uncheck to remove.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    expect(screen.getByText('+₦2,000')).toBeInTheDocument();
   });
 
   it('renders cart items', () => {

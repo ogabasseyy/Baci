@@ -192,3 +192,48 @@ it('marks loading ids unverified so the zero fallback price is never shown as cu
   expect(result.current.unavailableIds).toEqual(['p1']);
   expect(result.current.status).toContain('Refreshing');
 });
+
+it.each([
+  'variant',
+  'offer',
+] as const)('refreshes a different matched %s for the same parent product', async (kind) => {
+  const row = {
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    manage_stock: true,
+    variants: [
+      { id: 'v1', price: 150, stock_quantity: 1 },
+      { id: 'v2', price: 250, stock_quantity: 1 },
+    ],
+    offers: [
+      { id: 'o1', price: 150, stock_quantity: 1 },
+      { id: 'o2', price: 250, stock_quantity: 1 },
+    ],
+  };
+  mockResolve.mockResolvedValue(row);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const selected = (n: number) => [
+    {
+      id: 'p1',
+      name: 'Phone',
+      price: 100,
+      searchMatch:
+        kind === 'variant' ? { variantId: `v${n}` } : { offerId: `o${n}` },
+    } as Product,
+  ];
+  const { result, rerender } = renderHook(
+    ({ items }: { items: Product[] }) => useComparisonProducts(items),
+    {
+      initialProps: { items: selected(1) },
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(150));
+  rerender({ items: selected(2) });
+  await waitFor(() => expect(result.current.products[0].price).toBe(250));
+  expect(mockResolve).toHaveBeenCalledTimes(2);
+});

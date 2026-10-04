@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 
+import { SearchPageForm } from '@/app/(storefront)/[slug]/(catalog)/(listing)/search/search-page-form';
+import { SearchQueryDraftSession } from './search-query-draft';
 import { SearchRefinementControls } from './search-refinement-controls';
 
 const props = {
@@ -182,4 +184,29 @@ it('uses merchant currency for applied chips, desktop fields and mobile fields',
     within(screen.getByRole('dialog')).getByLabelText(/Minimum price \(.*\$\)/)
   ).toHaveValue('100');
   expect(screen.queryByLabelText('Minimum price (₦)')).toBeNull();
+});
+
+it('restores the committed query before applying a filter to its results', () => {
+  render(
+    <SearchQueryDraftSession initialQuery="phone">
+      <SearchPageForm
+        action="/oga/search"
+        defaultQuery="phone"
+        pathPrefix="/oga"
+      />
+      <SearchRefinementControls {...props} />
+    </SearchQueryDraftSession>
+  );
+  const input = screen.getByRole('searchbox');
+  fireEvent.change(input, { target: { value: 'samsung' } });
+  expect(input).toHaveValue('samsung');
+  fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+  const dialog = screen.getByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Brand' }));
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Apple' }));
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Apply filters' })
+  );
+  expect(push).toHaveBeenLastCalledWith('/oga/search?q=phone&brand=Apple');
+  expect(input).toHaveValue('phone');
 });

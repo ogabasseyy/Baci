@@ -1,19 +1,24 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 
 /** Moves one mounted input surface from its bottom resting position to the keyboard. */
 export default function AppKeyboardDock({
   availableHeight,
+  onBottomSpaceChange,
   children,
   bottomInset = 0,
 }: {
   availableHeight: number;
+  onBottomSpaceChange?: (height: number) => void;
   children: ReactNode;
   bottomInset?: number;
 }) {
   const [surfaceHeight, setSurfaceHeight] = useState(72);
+  useEffect(() => {
+    onBottomSpaceChange?.(surfaceHeight + bottomInset);
+  }, [surfaceHeight, bottomInset, onBottomSpaceChange]);
   return (
     <View
       testID="keyboard-dock-space"
@@ -36,6 +41,7 @@ export default function AppKeyboardDock({
         style={styles.surface}
       >
         <View
+          testID="keyboard-dock-surface"
           onLayout={(event) => {
             const measured = event.nativeEvent.layout.height;
             if (measured > 0) setSurfaceHeight(measured);

@@ -6,7 +6,16 @@ import { useMerchant } from './use-merchant';
 export function useComparisonProducts(selected: Product[]) {
   const { data: merchant } = useMerchant();
   const query = useQuery({
-    queryKey: ['comparison-facts', merchant?.id, selected.map((p) => p.id)],
+    queryKey: [
+      'comparison-facts',
+      merchant?.id,
+      selected.map((p) => [
+        p.id,
+        p.searchMatch?.variantId ?? null,
+        p.searchMatch?.offerId ?? null,
+        p.searchMatch?.condition ?? null,
+      ]),
+    ],
     enabled: Boolean(merchant?.id && selected.length),
     staleTime: 0,
     queryFn: () => {

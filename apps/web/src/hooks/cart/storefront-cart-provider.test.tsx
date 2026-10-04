@@ -75,6 +75,43 @@ describe('StorefrontCartProvider', () => {
     }
   });
 
+  it('uses the explicitly switched merchant when adding in the same event', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => {
+      result.current.setMerchantSlug('ogabassey');
+      result.current.addToCart(mockProduct);
+    });
+    expect(result.current.cart[0].hasAssurance).toBe(true);
+    expect(result.current.cartTotal).toBe(105);
+  });
+
+  it('rehydrates a saved opt-out without charging Assurance on a subsequent merge', async () => {
+    localStorageMock.setItem(
+      'baci-cart-ogabassey-guest',
+      JSON.stringify([{ ...mockProduct, quantity: 1, hasAssurance: false }])
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+    act(() => result.current.addToCart(mockProduct));
+    expect(result.current.cart[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 2,
+    });
+    expect(result.current.cartTotal).toBe(200);
+  });
+
   it('respects an explicit assurance opt-out passed to addToCart', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>

@@ -34,7 +34,6 @@ interface Props {
   invalidFilters?: boolean;
   facetError?: string | null;
   onRetryFacets?: () => void;
-  onBottomSpaceChange?: (space: number) => void;
   onPrepare?: () => SearchRefinements | null;
 }
 export function SearchRefinementControls({

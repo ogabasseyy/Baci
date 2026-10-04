@@ -232,3 +232,19 @@ it('requests category-specific facets when a type is selected', async () => {
     }
   );
 });
+
+it('never renders a negative count when all matched rows disappear', async () => {
+  rpc.mockResolvedValue({
+    data: [{ product_id: 'p1', total_count: 0 }],
+    error: null,
+  });
+  read.mockResolvedValue({ data: [], error: null });
+  const result = await getStorefrontRefinedSearchProducts({
+    merchantId: 'm1',
+    query: 'phone',
+    limit: 20,
+    refinements: { brands: [], sort: 'relevance' },
+  });
+  expect(result.count).toBe(0);
+  expect(result.totalCount).toBe(0);
+});

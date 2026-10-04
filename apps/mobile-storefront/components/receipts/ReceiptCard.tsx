@@ -36,14 +36,18 @@ function getPriceFormatter(currency: string): Intl.NumberFormat {
         currency,
         minimumFractionDigits: 0,
       });
-    } catch {
+    } catch (error) {
       // Malformed or unknown currency codes (legacy rows the sender
       // would skip) degrade to NGN instead of crashing the list render
       // with RangeError. A regex alone cannot cover well-formed but
-      // unassigned codes, so construction itself is guarded. Malformed
-      // keys are deliberately not cached: every unique legacy code would
-      // otherwise add a Map entry pointing at the same NGN formatter.
-      return getPriceFormatter('NGN');
+      // unassigned codes, so construction itself is guarded. The NGN
+      // fallback caches under the bad key so a legacy code rethrows
+      // once, not every render; NGN itself rethrows instead of
+      // recursing, so a broken default fails fast instead of looping.
+      if (currency === 'NGN') throw error;
+      const fallback = getPriceFormatter('NGN');
+      PRICE_FORMATTER_CACHE.set(currency, fallback);
+      return fallback;
     }
     PRICE_FORMATTER_CACHE.set(currency, formatter);
   }

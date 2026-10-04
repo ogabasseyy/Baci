@@ -156,6 +156,8 @@ describe('ReceiptCard', () => {
     }
     expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
     expect(formatPrice(150000, '')).toBe(formatPrice(150000, 'NGN'));
+    // The fallback caches under the bad key: repeat renders rethrow nothing.
+    expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
   });
 
   describe('bugfix: animated order product images on receipts', () => {

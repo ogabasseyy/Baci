@@ -1,6 +1,7 @@
 import {
   isDecimalMoney,
   isManualOrderRecord,
+  isNonNegativeMoney,
   isSettledManualBalance,
 } from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
@@ -193,9 +194,16 @@ async function fetchReceiptDetail(
 
   const transactions = mapCustomerTransactionRpcRows(transactionRows);
 
+  // Corrupt money must fail the detail closed, never mask to a zero
+  // balance: null trips the required-number schema below and the
+  // preview releases the spinner through detailFailedClosed.
+  const balance =
+    isNonNegativeMoney(order.total) && isNonNegativeMoney(order.amount_paid)
+      ? Number(order.total) - Number(order.amount_paid)
+      : null;
   const detail = {
     ...order,
-    balance: (order.total ?? 0) - (order.amount_paid ?? 0),
+    balance,
     items: (order.order_items ?? []).map((item) =>
       item == null
         ? item

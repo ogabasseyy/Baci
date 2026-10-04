@@ -95,10 +95,9 @@ export async function SearchPageContent({
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
   // Pagination never advertises pages the bounded offset cannot serve.
-  // The empty guard stays on the visible count (no rows, no pages) while
-  // the division uses the unadjusted total: skipped rows stay ranked.
+  // Use the ranked total even when hydration drops every row on a page.
   const totalPages =
-    searchFailed || effectiveResult.count <= 0
+    searchFailed || (effectiveResult.totalCount ?? effectiveResult.count) <= 0
       ? 0
       : Math.min(
           Math.ceil(
@@ -225,48 +224,40 @@ export async function SearchPageContent({
                     />
                   ) : searchQuery ? (
                     effectiveResult.products.length > 0 ? (
-                      <>
-                        <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-3">
-                          {effectiveResult.products.map((product) => (
-                            <div key={product.id}>
-                              <ProductIndexCard
-                                formattedPrice={
-                                  product.searchMatch &&
-                                  product.searchMatch.price === undefined
-                                    ? 'Price unavailable'
-                                    : priceFormatter.format(product.price)
-                                }
-                                pathPrefix={pathPrefix}
-                                product={product}
-                                modern
-                                footer={
-                                  <SearchCompareButton
-                                    compact
-                                    product={product}
-                                    price={
-                                      product.searchMatch &&
-                                      product.searchMatch.price === undefined
-                                        ? 'Price unavailable'
-                                        : priceFormatter.format(product.price)
-                                    }
-                                  />
-                                }
-                              />
-                            </div>
-                          ))}
-                        </div>
-                        <StorefrontPagination
-                          ariaLabel="Search results pagination"
-                          basePath={buildRefinedSearchHref(
-                            searchBasePath,
-                            searchQuery,
-                            refinements,
-                            1
-                          )}
-                          currentPage={page}
-                          totalPages={totalPages}
-                        />
-                      </>
+                      <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-3">
+                        {effectiveResult.products.map((product) => (
+                          <div key={product.id}>
+                            <ProductIndexCard
+                              formattedPrice={
+                                product.searchMatch &&
+                                product.searchMatch.price === undefined
+                                  ? 'Price unavailable'
+                                  : priceFormatter.format(product.price)
+                              }
+                              pathPrefix={pathPrefix}
+                              product={product}
+                              modern
+                              footer={
+                                <SearchCompareButton
+                                  compact
+                                  product={product}
+                                  price={
+                                    product.searchMatch &&
+                                    product.searchMatch.price === undefined
+                                      ? 'Price unavailable'
+                                      : priceFormatter.format(product.price)
+                                  }
+                                />
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : totalPages > 0 ? (
+                      <p className="p-6">
+                        Products on this page are no longer available. Try
+                        another page.
+                      </p>
                     ) : (
                       <SearchPageNoResultsPanel
                         merchantSlug={merchant.slug}
@@ -280,6 +271,19 @@ export async function SearchPageContent({
                     )
                   ) : (
                     <SearchPageStartPanel />
+                  )}
+                  {searchQuery && !invalidFilters && !searchFailed && (
+                    <StorefrontPagination
+                      ariaLabel="Search results pagination"
+                      basePath={buildRefinedSearchHref(
+                        searchBasePath,
+                        searchQuery,
+                        refinements,
+                        1
+                      )}
+                      currentPage={page}
+                      totalPages={totalPages}
+                    />
                   )}
                 </SearchRefinementControls>
               )}

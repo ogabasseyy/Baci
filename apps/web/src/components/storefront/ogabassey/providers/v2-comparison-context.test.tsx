@@ -51,6 +51,28 @@ describe('V2ComparisonProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it('continues in memory when browser storage reads and writes are denied', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Denied', 'SecurityError'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Denied', 'SecurityError'); });
+    function MemoryConsumer() {
+      const { addToCompare, isInCompare, compareItems, clearCompare } = useV2Comparison();
+      return <div>
+        <span>{isInCompare(baseProduct.id) ? 'Selected' : 'Not selected'}</span>
+        <span data-testid="memory-count">{compareItems.length}</span>
+        <button type="button" onClick={() => addToCompare(baseProduct)}>Select product</button>
+        <button type="button" onClick={clearCompare}>Clear selection</button>
+      </div>;
+    }
+    render(<V2ComparisonProvider><MemoryConsumer /></V2ComparisonProvider>);
+    expect(screen.getByText('Not selected')).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1200));
+    fireEvent.click(screen.getByRole('button', {name: 'Select product'}));
+    expect(screen.getByText('Selected')).toBeInTheDocument();
+    expect(screen.getByTestId('memory-count')).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', {name: 'Clear selection'}));
+    expect(screen.getByText('Not selected')).toBeInTheDocument();
+  });
+
   it('ignores legacy selections from a previous browser session', () => {
     localStorage.setItem('ogabassey_v2_compare', JSON.stringify([baseProduct]));
     localStorage.setItem('ogabassey_v2_compare:merchant-a', JSON.stringify([baseProduct]));
@@ -135,7 +157,7 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
   });
 
-  it('ignores corrupt entries in the pre-hydration membership read', () => {
+  it('keeps initial membership empty until hydration and ignores corrupt entries', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
       JSON.stringify([baseProduct, null, 'not-an-object', { name: 'No id' }, { id: 'missing' }])
     );
@@ -156,6 +178,8 @@ describe('V2ComparisonProvider', () => {
       </V2ComparisonProvider>
     );
 
+    expect(screen.getByTestId('member')).toHaveTextContent('false');
+    act(() => vi.advanceTimersByTime(1200));
     expect(screen.getByTestId('member')).toHaveTextContent('true');
     expect(screen.getByTestId('nonmember')).toHaveTextContent('false');
   });

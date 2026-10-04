@@ -73,13 +73,11 @@ export const V2ComparisonProvider: React.FC<{
     }
 
     let nextComparisonItems: Product[] = [];
-    const stored = sessionStorage.getItem(storageKey);
-    if (stored) {
-      try {
-        nextComparisonItems = readValidStoredComparisonItems(stored);
-      } catch (error) {
-        console.error('Failed to parse comparison items', error);
-      }
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) nextComparisonItems = readValidStoredComparisonItems(stored);
+    } catch {
+      // Storage is optional: denied access starts an in-memory comparison.
     }
 
     hasHydratedStorageRef.current = true;
@@ -145,7 +143,11 @@ export const V2ComparisonProvider: React.FC<{
       hasHydratedStorage &&
       hydratedStorageKeyRef.current === storageKey
     ) {
-      sessionStorage.setItem(storageKey, JSON.stringify(compareItems));
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(compareItems));
+      } catch {
+        // The state remains usable when tab-session persistence is denied.
+      }
     }
   }, [compareItems, hasHydratedStorage, storageKey]);
 
@@ -191,31 +193,9 @@ export const V2ComparisonProvider: React.FC<{
     );
   };
 
-  // Pre-hydration read without state updates: isInCompare runs during card
-  // renders, where hydrateComparisonItems()' setState calls would warn.
-  // The scheduled hydration effect still syncs state afterwards.
-  const readStoredComparisonItems = (): Product[] | null => {
-    if (typeof window === 'undefined') return null;
-    if (
-      hasHydratedStorageRef.current &&
-      hydratedStorageKeyRef.current === storageKey
-    )
-      return null;
-    const stored = sessionStorage.getItem(storageKey);
-    if (!stored) return [];
-    try {
-      return readValidStoredComparisonItems(stored);
-    } catch {
-      return [];
-    }
-  };
-
-  const isInCompare = (productId: number | string) => {
-    const stored = readStoredComparisonItems();
-    return (stored ?? compareItems).some(
-      (p) => String(p.id) === String(productId)
-    );
-  };
+  // Match the empty server snapshot until scheduled hydration commits.
+  const isInCompare = (productId: number | string) =>
+    compareItems.some((p) => String(p.id) === String(productId));
 
   const clearCompare = () => {
     hydrateComparisonItems();

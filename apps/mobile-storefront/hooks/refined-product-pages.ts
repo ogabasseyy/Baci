@@ -10,7 +10,7 @@ import { PRODUCT_SELECT } from './product-select';
 import { transformProduct } from './product-transform';
 import type { ProductsPage } from './product-utils.types';
 
-export async function fetchRefinedProductsPage(
+async function fetchSingleRefinedProductsPage(
   merchantId: string,
   query: string,
   criteria: SearchRefinements,
@@ -80,4 +80,30 @@ export async function fetchRefinedProductsPage(
     total,
     nextOffset: offset + limit < matches[0].total ? offset + limit : null,
   };
+}
+
+/** Advance past empty hydrated pages so list-owned pagination can mount. */
+export async function fetchRefinedProductsPage(
+  merchantId: string,
+  query: string,
+  criteria: SearchRefinements,
+  limit: number,
+  offset: number
+): Promise<ProductsPage> {
+  let currentOffset = offset;
+  let skipped = 0;
+  for (;;) {
+    const page = await fetchSingleRefinedProductsPage(
+      merchantId,
+      query,
+      criteria,
+      limit,
+      currentOffset
+    );
+    if (page.products.length || page.nextOffset === null) {
+      return { ...page, total: Math.max(0, page.total - skipped) };
+    }
+    skipped += page.nextOffset - currentOffset;
+    currentOffset = page.nextOffset;
+  }
 }

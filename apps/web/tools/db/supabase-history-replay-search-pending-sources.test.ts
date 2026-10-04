@@ -21,6 +21,7 @@ describe('search pending replay sources', () => {
       '20261004130000_search_price_options_offer_base_rows.sql',
       '20261004150000_search_price_options_offer_scope_null_stock.sql',
       '20261004170000_restrict_storefront_product_request_intake.sql',
+      '20261004193000_private_purchasable_search_candidates.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

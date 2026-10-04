@@ -23,9 +23,63 @@ jest.mock('./product-transform', () => ({
 }));
 describe('refined native pages', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockHydrate.mockImplementation((rows: unknown) => rows);
     mockTransform.mockImplementation((row: unknown) => row);
+  });
+  it.each([
+    false,
+    true,
+  ])('advances when an entire hydrated page disappears (malformed=%s)', async (malformed) => {
+    mockRpc
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'gone', total_count: 2 }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'visible', total_count: 2 }],
+        error: null,
+      });
+    mockRead
+      .mockResolvedValueOnce({
+        data: malformed ? [{ id: 'gone' }] : [],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 'visible', price: 100 }],
+        error: null,
+      });
+    if (malformed) mockTransform.mockReturnValueOnce(null);
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      1,
+      0
+    );
+    expect(result.products.map((product) => product.id)).toEqual(['visible']);
+    expect(result.nextOffset).toBeNull();
+    expect(result.total).toBe(1);
+    expect(mockRpc).toHaveBeenLastCalledWith(
+      'search_storefront_products_refined',
+      expect.objectContaining({ result_offset: 1 })
+    );
+  });
+  it('stops after an empty final page', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ product_id: 'gone', total_count: 1 }],
+      error: null,
+    });
+    mockRead.mockResolvedValue({ data: [], error: null });
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      1,
+      0
+    );
+    expect(result).toEqual({ products: [], total: 0, nextOffset: null });
+    expect(mockRpc).toHaveBeenCalledTimes(1);
   });
   it('uses the matching option price and keeps ranked ordering and offset', async () => {
     mockRpc.mockResolvedValue({

@@ -32,6 +32,34 @@ afterEach(() => {
   mockKeyboard.keyboardHeight = 0;
 });
 
+jest.mock('./SearchScreenTopBar', () => ({
+  SearchScreenTopBar: ({
+    showComparison,
+    onBack,
+  }: {
+    showComparison: boolean;
+    onBack: () => void;
+  }) => {
+    const { Text, View, Pressable } = jest.requireActual(
+      'react-native'
+    ) as typeof import('react-native');
+    return (
+      <View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={onBack}
+        >
+          <Text>Back</Text>
+        </Pressable>
+        <Text testID="comparison-navigation">
+          {showComparison ? 'available' : 'hidden'}
+        </Text>
+      </View>
+    );
+  },
+}));
+
 jest.mock('./SearchResultsEmptyState', () => ({
   __esModule: true,
   default: () => null,
@@ -176,6 +204,9 @@ describe('SearchScreenView', () => {
     expect(screen.queryByText("Couldn't load results")).toBeNull();
     expect(screen.getByTestId('mock-results-list')).toBeTruthy();
     expect(screen.getByText('Search failed')).toBeTruthy();
+    expect(screen.getByTestId('comparison-navigation').props.children).toBe(
+      'available'
+    );
   });
 
   it('rekeys the results list when the committed query changes', () => {

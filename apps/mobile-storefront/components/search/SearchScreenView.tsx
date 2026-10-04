@@ -177,7 +177,7 @@ export default function SearchScreenView({
         <SearchScreenTopBar
           colors={colors}
           onBack={onBack}
-          showComparison={hasSearchQuery && products.length > 0 && !searchError}
+          showComparison={hasSearchQuery && products.length > 0}
         />
         <SearchResultsHeader
           suggestions={

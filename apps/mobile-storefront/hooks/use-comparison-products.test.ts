@@ -30,6 +30,50 @@ jest.mock('@/lib/api', () => ({
 import { useComparisonProducts } from './use-comparison-products';
 
 it.each([
+  false,
+  true,
+])('revalidates a matched base row (available=%s)', async (available) => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 175,
+    manage_stock: true,
+    stock_quantity: available ? 1 : 0,
+  });
+  mockRpc.mockResolvedValue({
+    data: available ? [{ variant_id: null, offer_id: null }] : [],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { price: 100, condition: 'new' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() =>
+    expect(result.current.status).not.toContain('Refreshing')
+  );
+  expect(result.current.unavailableIds).toEqual(available ? [] : ['p1']);
+  expect(result.current.products[0].price).toBe(available ? 175 : 0);
+  expect(mockRpc).toHaveBeenCalledWith('get_storefront_search_price_options', {
+    p_merchant_id: 'm1',
+    p_product_id: 'p1',
+  });
+});
+
+it.each([
   { kind: 'variant', rpcOptions: [] },
   { kind: 'variant', rpcOptions: [{ variant_id: 'v2', offer_id: null }] },
   { kind: 'offer', rpcOptions: [] },

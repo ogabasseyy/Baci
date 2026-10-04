@@ -50,7 +50,7 @@ export function useComparisonProducts(selected: Product[]) {
           // available=0, so raw stock math here would mark purchasable
           // serialized options unavailable on refresh.
           let optionAvailable = false;
-          if (option && match && (match.variantId || match.offerId)) {
+          if (match && (!(match.variantId || match.offerId) || option)) {
             const { data, error } = await withSupabaseRetry(async () =>
               supabase.rpc('get_storefront_search_price_options', {
                 p_merchant_id: merchant.id,
@@ -64,9 +64,13 @@ export function useComparisonProducts(selected: Product[]) {
             }[];
             optionAvailable = match.variantId
               ? options.some((o) => o.variant_id === match.variantId)
-              : options.some((o) => o.offer_id === match.offerId);
+              : match.offerId
+                ? options.some((o) => o.offer_id === match.offerId)
+                : options.some(
+                    (o) => o.variant_id === null && o.offer_id === null
+                  );
           }
-          if (match && (match.variantId || match.offerId) && !optionAvailable)
+          if (match && !optionAvailable)
             return {
               product: {
                 ...product,

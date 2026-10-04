@@ -14,9 +14,9 @@ BEGIN
   SELECT count(*) INTO n FROM public.search_storefront_products_refined('phone','00000000-0000-4000-8000-000000000001',NULL,NULL,NULL,NULL,0);
   IF n <> 0 THEN RAISE EXCEPTION 'explicit zero bound must not be dropped'; END IF;
   SELECT count(*) INTO n FROM public.get_storefront_search_brands('phone','00000000-0000-4000-8000-000000000001');
-  IF n <> 3 THEN RAISE EXCEPTION 'facet brands incorrect'; END IF;
+  IF n <> 2 THEN RAISE EXCEPTION 'facet brands incorrect'; END IF;
   SELECT count(*) INTO n FROM public.search_storefront_products_refined('sold phone','00000000-0000-4000-8000-000000000001',ARRAY['Sold']);
-  IF n <> 1 THEN RAISE EXCEPTION 'unrefined sold-out product must remain visible'; END IF;
+  IF n <> 0 THEN RAISE EXCEPTION 'unrefined sold-out product must be excluded'; END IF;
   SELECT count(*) INTO n FROM public.search_storefront_products_refined('sold phone','00000000-0000-4000-8000-000000000001',ARRAY['Sold'],NULL,NULL,1,500000);
   IF n <> 0 THEN RAISE EXCEPTION 'sold-out product has no purchasable matching price'; END IF;
 END $$;

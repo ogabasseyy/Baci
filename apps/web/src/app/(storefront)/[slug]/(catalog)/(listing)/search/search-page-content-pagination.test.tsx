@@ -121,6 +121,28 @@ describe('SearchPageContent', () => {
     mockNotFound.mockReset();
   });
 
+  it('keeps other pages reachable when every hydrated product disappears', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 20,
+      totalCount: 40,
+      products: [],
+      productIds: [],
+      query: 'iphone',
+      didYouMean: null,
+    });
+    render(await SearchPageContent(createSearchPageProps({ q: 'iphone' })));
+    expect(
+      screen.getByText(
+        'Products on this page are no longer available. Try another page.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('page=2')
+    );
+  });
+
   it('pages past the first 20 matches without recording a new submission', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({

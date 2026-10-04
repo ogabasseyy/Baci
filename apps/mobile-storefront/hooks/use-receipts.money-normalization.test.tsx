@@ -118,6 +118,18 @@ describe('useReceipts money normalization', () => {
           payment_status: 'unpaid',
           total: 'not-a-number',
         },
+        {
+          amount_paid: true,
+          created_at: '2026-04-04T10:00:00.000Z',
+          transaction_date: '2026-04-04T10:00:00.000Z',
+          invoice_issue_date: null,
+          currency: 'NGN',
+          id: 'order-loose-money',
+          order_items: [],
+          order_number: 'ORD-3005',
+          payment_status: 'unpaid',
+          total: '0x10',
+        },
       ],
       error: null,
     });
@@ -141,6 +153,10 @@ describe('useReceipts money normalization', () => {
       amount_paid: 95000,
     });
     expect(byId.get('order-bad-money')).toMatchObject({
+      total: 0,
+      amount_paid: 0,
+    });
+    expect(byId.get('order-loose-money')).toMatchObject({
       total: 0,
       amount_paid: 0,
     });

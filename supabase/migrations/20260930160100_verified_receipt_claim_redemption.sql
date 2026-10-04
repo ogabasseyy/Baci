@@ -197,7 +197,7 @@ BEGIN
     LIMIT 1 FOR UPDATE;
   END IF;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
-  IF v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
+  IF v_claim.expires_at IS NOT NULL AND v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
   IF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN
     RETURN jsonb_build_object('status', 'email_mismatch');
   END IF;

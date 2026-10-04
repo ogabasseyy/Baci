@@ -17,7 +17,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160065_manual_order_document_merchant_rearm.sql',
-    sha256: 'd9f43a34e0508d84d46c7a60edd5da0862cf277ff2fe0cb4b41d5752ef2528f3',
+    sha256: '0c99409437c5d23c169bb9aeb9e7d0f7e3f95f8345e880ee861898e0fe022288',
   },
   {
     repositoryPath:
@@ -57,7 +57,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: '99b2ae283db43591fbd87e34b24f5ca8a53f4064c6cd06f497d1458a8ca9b9f7',
+    sha256: 'c02c72bac9eff44116ba2720622adf566ce8106d6530705aafa0dc8297331564',
   },
   {
     repositoryPath:
@@ -77,6 +77,6 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160400_atomic_manual_document_dispatch.sql',
-    sha256: '14903c1542b41b8751e8d4382b637a9d8ff2b831804962d217cc6f24644bf9c8',
+    sha256: '7b7e7590a6111fa92372333a1e97f9a9531d2dc9ccf8e2b02852d9168347d31d',
   },
 ];

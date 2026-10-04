@@ -1,5 +1,5 @@
 import { compareReceiptListDesc } from '@baci/shared';
-import { isManualOrderRecord } from '@baci/shared/receipt';
+import { isDecimalMoney, isManualOrderRecord } from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
 import { createLogger } from '@/lib/logger';
@@ -22,10 +22,12 @@ const TRANSACTION_RPC_BATCH_SIZE = 100;
 
 // PostgREST numeric columns arrive as decimal strings while the card
 // formats numbers: normalize once here so the card never formats raw
-// unvalidated values. Unparseable totals degrade to 0 instead of NaN.
+// unvalidated values. Only strict decimals coerce — booleans, hex,
+// and padded strings degrade to 0 like the promotion gates reject
+// them instead of masking as confident money. Unparseable totals
+// degrade to 0 instead of NaN.
 function toDisplayMoney(value: unknown): number {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
+  return isDecimalMoney(value) ? Number(value) : 0;
 }
 
 interface ReceiptHistoryEntry {

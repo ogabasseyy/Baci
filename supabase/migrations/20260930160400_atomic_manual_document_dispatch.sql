@@ -235,17 +235,17 @@ BEGIN
     -- aborts an identical render.
     OR COALESCE(NULLIF(v_merchant_support_phone, ''), NULLIF(v_merchant_phone, ''))
       IS DISTINCT FROM COALESCE(NULLIF(p_merchant_support_phone, ''), NULLIF(p_merchant_phone, ''))
-    -- The slug renders only through the claim-host fallback (no safe
-    -- custom domain) or the From fallback (both names empty): skip the
-    -- raw compare when an identical safe domain pins the host and
-    -- populated names pin From on both sides, or a custom-domain
-    -- rename sends an identical corrective duplicate.
+    -- The slug renders via the host/From fallbacks or the ogabassey
+    -- app-link gate: skip the raw compare when a safe domain pins
+    -- the host, populated names pin From, and ogabassey-ness is
+    -- unchanged — else a rename sends an identical duplicate.
     OR (v_merchant_slug IS DISTINCT FROM p_merchant_slug
       AND NOT (
         v_claim_domain IS NOT DISTINCT FROM p_claim_domain
         AND private.manual_document_domain_is_safe(v_claim_domain)
         AND COALESCE(NULLIF(v_merchant_email_sender_name, ''), NULLIF(v_merchant_business_name, '')) IS NOT NULL
-        AND COALESCE(NULLIF(p_merchant_email_sender_name, ''), NULLIF(p_merchant_business_name, '')) IS NOT NULL))
+        AND COALESCE(NULLIF(p_merchant_email_sender_name, ''), NULLIF(p_merchant_business_name, '')) IS NOT NULL
+        AND (v_merchant_slug = 'ogabassey') IS NOT DISTINCT FROM (p_merchant_slug = 'ogabassey')))
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
     -- Only brand_colors.primary renders; raw JSONB would duplicate sends.

@@ -60,12 +60,14 @@ def main():
     if not ctx.pr_refs:
         # No PR-controlled checkout left to exempt (e.g. removed in
         # favor of API-fetched diffs): nothing to filter, and failing
-        # here would punish the safest possible change — unless the
-        # trusted tree itself changed, which always needs review.
+        # here would punish the safest possible change — unless drift
+        # was recorded (trusted-tree change, hidden flow/alias ref),
+        # which always needs review. Labels print (like the main
+        # drift exit) so the message names the actual cause.
         if drift:
             print("::error::No PR-controlled checkout left in "
-                  + AUDITED_PATH + " but the trusted tree changed; "
-                  "needs human review.")
+                  + AUDITED_PATH + " but drift was recorded ("
+                  + ", ".join(drift) + "); needs human review.")
             return 1
         print("::notice::No PR-controlled checkout in " + AUDITED_PATH
               + "; exemption inactive.")

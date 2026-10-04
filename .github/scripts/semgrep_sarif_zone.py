@@ -48,8 +48,9 @@ _GLOB_RE = re.compile(r"[*?\[]|[@+!]\(")
 
 def _write_zone(target):
     # Where a helper write lands: "trusted" (script tree, the
-    # installed muse binary, or its ancestor dirs -- a link
-    # swap there redirects the absolute-path invocation),
+    # installed muse binary, its ancestor dirs -- a link
+    # swap there redirects the absolute-path invocation -- or
+    # hosted tool-cache paths, runner-writable and executable),
     # "workspace" (the agent-readable checkout: token staging),
     # "glob" (a metacharacter destination matching neither
     # zone: bash expands trusted-* onto the trusted checkout,
@@ -64,6 +65,8 @@ def _write_zone(target):
             r"\$(\{)?SCRIPT_DIR\}?", t) is not None:
         return "trusted"
     if re.match(MUSE_BIN_RE, t) or re.match(MUSE_DIR_RE, t):
+        return "trusted"
+    if re.match(r"^/opt/hostedtoolcache(?:/|$)", t):
         return "trusted"
     if re.match(WS_RE, t):
         return "workspace"

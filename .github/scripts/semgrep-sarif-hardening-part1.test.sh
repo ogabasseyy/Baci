@@ -69,8 +69,9 @@ t unknown-format 1 "helper-unknown-format" happy.sarif "new:.github/scripts/muse
 t referenced-missing 1 "helper-referenced-missing" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          bash \"\${SCRIPT_DIR}/nonexistent.sh\""
 
 # --- trusted-set change signal through the no-checkout exit ---
-t no-checkout-trusted 1 "trusted tree changed" happy.sarif "rm:$S" "" "true"
-t ref-removed-trusted 1 "trusted tree changed" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d" "" "true"
+t no-checkout-trusted 1 "drift was recorded (trusted-tree-changed)" happy.sarif "rm:$S" "" "true"
+t ref-removed-trusted 1 "drift was recorded (trusted-tree-changed)" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d" "" "true"
+t no-checkout-flow-label 1 "drift was recorded (checkout-flow-with)" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d${RS}$S${FS}        with:${FS}r${FS}with:${FS}with: *head_inputs"
 t corrupt-sarif 1 "SARIF parse failed" corrupt.sarif "none"
 
 # --- scope-glob lockstep (every trusted path must trigger the job) ---

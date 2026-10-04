@@ -5,7 +5,8 @@ additionally return tagged (even quoted: literal content still
 lands in the file) for command-file value audit.
 """
 import re
-from semgrep_sarif_scan import (github_cmdfile_kind,
+from semgrep_sarif_scan import (_paren_end,
+                                github_cmdfile_kind,
                                 skip_braced)
 
 
@@ -102,6 +103,23 @@ def _strip_heredocs(raw_lines):
                 break
             elif ch == "$" and line[i:i + 2] == "${":
                 i = skip_braced(line, i)
+            elif ch == "$" and line[i:i + 3] == "$((":
+                # Arithmetic << (shift) is not a heredoc
+                # opener: skip the balanced region so
+                # x=$((1<<2)) cannot swallow later lines.
+                # Single ( stays: << in a subshell is real.
+                j = _paren_end(line, i + 2)
+                i = j + 1 if j < len(line) else j
+            elif ch == "(" and line[i:i + 2] == "((":
+                j = _paren_end(line, i + 1)
+                i = j + 1 if j < len(line) else j
+            elif ch == "$" and line[i:i + 2] == "$[":
+                # Obsolescent $[...] arithmetic: same shift
+                # hole (quotes inside are pathological; an
+                # early stop only risks missing a real
+                # opener, whose body then audits as code).
+                j = line.find("]", i + 2)
+                i = len(line) if j < 0 else j + 1
             elif ch == "<" and line[i:i + 2] == "<<" \
                     and line[i:i + 3] != "<<<":
                 j = i + 2

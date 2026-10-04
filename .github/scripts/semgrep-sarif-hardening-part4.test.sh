@@ -1,7 +1,7 @@
 # Hardening suite part 4/4 (sourced by semgrep-sarif-hardening.test.sh):
 # recent rounds: YAML/flow, freeze, binutils, secretbind, curl, rpm/m4.
 # Uses t/FS/RS/S/H/I/R/O/PR from the lib + entrypoint.
-# shellcheck shell=bash disable=SC2154
+# shellcheck shell=bash disable=SC2154,SC2007 # SC2007: deprecated $[] is an intentional attack payload
 # --- assign-prefix peel (self-found: a[0]=x prefixes commands) ---
 t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}a[0]=x muse --version"
 t runner-peel-pluseq 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}v+=x muse --version"
@@ -168,3 +168,14 @@ t rpm-eval 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${F
 t m4-syscmd 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}m4 \"\${GITHUB_WORKSPACE}/evil.m4\""
 t reviewfile-rebind 1 "helper-reviewfile-rebind" happy.sarif "$R${FS}echo \"review_file=${FS}r${FS}review_file=\${review_file}${FS}review_file=\${GITHUB_WORKSPACE}/evil.json"
 t reviewfile-assign 1 "helper-reviewfile-rebind" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}review_file=\${GITHUB_WORKSPACE}/evil.json"
+
+# --- round 10: arithmetic heredocs, hostedtoolcache writes, drift labels ---
+t arith-heredoc 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x=\$((1<<2))
+bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t arith-cmd-heredoc 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}((x = 1<<2))
+bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t arith-obsolete-heredoc 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x=$[1<<2]
+bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t opt-write-redirect 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo x > /opt/hostedtoolcache/evil"
+t opt-write-copy 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp evil /opt/hostedtoolcache/evil"
+t opt-write-step 1 "step-trusted-write" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          echo x > /opt/hostedtoolcache/evil"

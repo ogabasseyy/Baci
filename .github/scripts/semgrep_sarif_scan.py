@@ -204,6 +204,9 @@ def is_trusted_write_target(target):
     # The trusted tree is never legitimately written by audited
     # code: resolver and helpers only read it (writes go to
     # GITHUB_OUTPUT/GITHUB_PATH/RUNNER_TEMP). Either spelling of
-    # the tree root in a redirect target drifts.
+    # the tree root in a redirect target drifts, as does the
+    # runner-writable hosted tool cache (mirrors _write_zone).
     return "trusted-scripts" in target or re.search(
-        r"\$(\{)?SCRIPT_DIR\}?", target) is not None
+        r"\$(\{)?SCRIPT_DIR\}?", target) is not None \
+        or re.match(r"^/opt/hostedtoolcache(?:/|$)",
+                    target) is not None

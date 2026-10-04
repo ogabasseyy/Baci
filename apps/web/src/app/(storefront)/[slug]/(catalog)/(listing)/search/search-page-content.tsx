@@ -3,7 +3,6 @@ import {
   emptySearchRefinements,
   hasActiveSearchRefinements,
 } from '@baci/shared/lib';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
@@ -20,6 +19,7 @@ import { STOREFRONT_SEARCH_MAX_PAGE } from '@/lib/storefront-search-params';
 import { ProductIndexCard } from '../products/product-index-card';
 import { SearchCompareButton, SearchComparisonTray } from './search-comparison';
 import { SearchComparisonSession } from './search-comparison-session';
+import { SearchPageBreadcrumb } from './search-page-breadcrumb';
 import { loadSearchPageData } from './search-page-data';
 import { SearchPageErrorPanel } from './search-page-error-panel';
 import { SearchPageForm } from './search-page-form';
@@ -139,19 +139,7 @@ export async function SearchPageContent({
           />
           <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-8 pt-6">
             <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-              <nav className="flex items-center gap-2 text-sm text-store-background-text/55">
-                <Link
-                  href={asRoute(pathPrefix || '/')}
-                  prefetch={false}
-                  className="transition-colors hover:text-store-primary"
-                >
-                  Home
-                </Link>
-                <span aria-hidden="true">/</span>
-                <span className="font-medium text-store-background-text">
-                  Search
-                </span>
-              </nav>
+              <SearchPageBreadcrumb pathPrefix={pathPrefix} />
 
               <div className="mt-6 space-y-2">
                 <h1 className="text-3xl font-bold text-store-background-text md:text-4xl">

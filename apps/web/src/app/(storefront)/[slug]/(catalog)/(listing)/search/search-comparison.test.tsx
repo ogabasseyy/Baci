@@ -186,6 +186,17 @@ it('flags off-page matched snapshots as verify-on-product-page', () => {
   expect(
     screen.getByText('Matched option — verify on product page')
   ).toBeTruthy();
+  const detailLinks = screen.getAllByRole('link', {
+    name: 'View details and options',
+  });
+  expect(detailLinks[0]).not.toHaveAttribute(
+    'href',
+    expect.stringContaining('?')
+  );
+  expect(detailLinks[1].getAttribute('href')).toContain(
+    'offer_id=offer-open-box'
+  );
+  expect(detailLinks[1].getAttribute('href')).toContain('condition=open_box');
 });
 
 it('scrolls the card comparison action to the comparison details and clears from a centered action', () => {

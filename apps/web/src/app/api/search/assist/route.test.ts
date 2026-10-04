@@ -30,7 +30,12 @@ const input = {
 };
 beforeEach(() => {
   vi.stubEnv('STOREFRONT_SEARCH_ASSIST_ENABLED', 'true');
-  mocks.tenant.mockReset().mockResolvedValue({ merchantId: 'm1' });
+  mocks.tenant.mockReset().mockResolvedValue({
+    merchantId: 'm1',
+    merchantSlug: 'ogabassey',
+    businessName: 'Ogabassey',
+    currencyCode: 'NGN',
+  });
   mocks.limit.mockReset().mockResolvedValue(true);
   mocks.generate.mockReset().mockResolvedValue({
     text: JSON.stringify({
@@ -81,6 +86,20 @@ describe('assisted search', () => {
       .map((l) => JSON.parse(l));
     expect(frames.at(-1).event.kind).toBe('error');
     expect(frames.some((f) => f.event.kind === 'proposal')).toBe(false);
+  });
+  it('scopes the prompt to the resolved merchant currency and store', async () => {
+    mocks.tenant.mockResolvedValue({
+      merchantId: 'm2',
+      merchantSlug: 'konga',
+      businessName: 'Konga Furniture',
+      currencyCode: 'GHS',
+    });
+    await POST(request(input));
+    const system = mocks.generate.mock.calls[0][0].system as string;
+    expect(system).toContain('Konga Furniture');
+    expect(system).toContain('(GHS numbers)');
+    expect(system).not.toContain('NGN');
+    expect(system).not.toContain('electronics store');
   });
   it('does not reinterpret a production LAN Host', async () => {
     vi.stubEnv('NODE_ENV', 'production');

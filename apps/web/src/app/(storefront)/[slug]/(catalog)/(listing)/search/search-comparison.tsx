@@ -173,6 +173,20 @@ export function SearchComparisonTray({
         <div className="flex gap-4 overflow-x-auto py-4">
           {compareItems.map((snapshot) => {
             const product = current.get(String(snapshot.id));
+            // PDP deep link preserves the compared option: live match first,
+            // snapshot basis for off-page items (mirrors ProductIndexCard).
+            const liveMatch = matches.get(String(snapshot.id));
+            const matchParams = new URLSearchParams();
+            const variantId = liveMatch?.variantId ?? snapshot.matchVariantId;
+            const condition = liveMatch?.condition ?? snapshot.matchCondition;
+            const offerId = liveMatch?.offerId ?? snapshot.matchOfferId;
+            if (variantId) matchParams.set('variant_id', variantId);
+            if (condition) matchParams.set('condition', condition);
+            if (offerId) matchParams.set('offer_id', offerId);
+            const detailsPath = `${pathPrefix}${getProductUrl(product ?? { ...snapshot, id: String(snapshot.id) })}`;
+            const detailsHref = matchParams.size
+              ? `${detailsPath}?${matchParams}`
+              : detailsPath;
             return (
               <article key={snapshot.id} className="min-w-48 flex-1 space-y-2">
                 <h3 className="font-semibold">
@@ -204,9 +218,7 @@ export function SearchComparisonTray({
                 ))}
                 <Link
                   className="block min-h-11 underline"
-                  href={asRoute(
-                    `${pathPrefix}${getProductUrl(product ?? { ...snapshot, id: String(snapshot.id) })}`
-                  )}
+                  href={asRoute(detailsHref)}
                 >
                   View details and options
                 </Link>

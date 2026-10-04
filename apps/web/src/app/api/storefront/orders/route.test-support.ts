@@ -20,6 +20,7 @@ interface OrderPaymentAccountFixture {
 
 interface OrderTransactionFixture {
   order_id: string;
+  amount?: number | null;
   created_at: string | null;
   metadata: unknown;
   gateway?: string | null;

@@ -21,12 +21,19 @@ RESET ROLE;
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000057' AND event_type = 'manual_order_receipt'), 'trusted relink keeps the in-flight marker');
 UPDATE public.orders SET customer_id = '10000000-0000-4000-8000-000000000058' WHERE id = '10000000-0000-4000-8000-000000000057';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000057' AND event_type = 'manual_order_receipt'), 'staff customer change resets the marker');
--- Fulfillment-only item writes keep the marker; rendered edits reset it.
+-- Fulfillment-only item writes keep the marker; VAT-only edits keep the
+-- receipt marker (VAT columns print on invoices alone); both-kind edits
+-- reset it.
 UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 UPDATE public.order_items SET fulfillment_data = '{"courier":"DHL"}'::jsonb WHERE order_id = '10000000-0000-4000-8000-000000000003';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'fulfillment-only item update keeps the marker');
 UPDATE public.order_items SET vat_rate = 7.5 WHERE order_id = '10000000-0000-4000-8000-000000000003';
-SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'rendered item edit resets the marker');
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'VAT-only item edit keeps the receipt marker');
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
+UPDATE public.order_items SET price = 101 WHERE order_id = '10000000-0000-4000-8000-000000000003';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt'), 'both-kind item edit resets the marker');
+UPDATE public.order_items SET price = 100 WHERE order_id = '10000000-0000-4000-8000-000000000003';
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000003' AND event_type = 'manual_order_receipt';
 -- Webhook metadata enrichment keeps the marker (only payment_method is
 -- rendered); a payment_method correction resets it.

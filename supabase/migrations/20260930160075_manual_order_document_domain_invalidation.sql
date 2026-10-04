@@ -16,6 +16,28 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_document_markers_for_merchant(uuid)
   FROM PUBLIC, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_domain_write(p_merchant_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  -- A new or changed active primary can rescue rows skipped as
+  -- merchant_validation_failed (unsafe/null slug with no safe host):
+  -- re-arm them plus undispatched processing rows that read the stale
+  -- host. Callers run this BEFORE resetting markers so the undispatched
+  -- test reads the live marker. Sent and possibly-dispatched rows stay
+  -- terminal; the worker re-validates, so still-invalid rows skip again.
+  UPDATE public.order_notification_outbox AS n
+  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+    locked_by = NULL, locked_at = NULL, last_error = NULL,
+    skip_reason = NULL, skipped_at = NULL, updated_at = now()
+  WHERE n.merchant_id = p_merchant_id
+    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    AND ((n.status = 'skipped' AND n.skip_reason = 'merchant_validation_failed')
+      OR n.status = 'processing')
+    AND n.dispatch_started_at IS NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.rearm_manual_documents_after_domain_write(uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_domain_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -37,11 +59,15 @@ BEGIN
     AND NEW.is_primary = true AND NEW.status = 'active' THEN
     PERFORM private.lock_manual_document_gate_pair('merchant', OLD.merchant_id, NEW.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(OLD.merchant_id);
+    -- Only the gaining merchant can rescue validation-failed rows; the
+    -- losing merchant falls back to its slug, which fixes nothing.
+    PERFORM private.rearm_manual_documents_after_domain_write(NEW.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
     RETURN NEW;
   END IF;
   IF TG_OP <> 'DELETE' AND NEW.is_primary = true AND NEW.status = 'active' THEN
     PERFORM private.lock_manual_document_gate('merchant', NEW.merchant_id);
+    PERFORM private.rearm_manual_documents_after_domain_write(NEW.merchant_id);
     PERFORM private.reset_manual_document_markers_for_merchant(NEW.merchant_id);
   END IF;
   IF TG_OP <> 'INSERT' AND OLD.is_primary = true AND OLD.status = 'active' THEN

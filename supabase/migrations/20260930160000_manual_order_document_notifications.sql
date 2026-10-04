@@ -20,7 +20,7 @@ CREATE UNIQUE INDEX idx_order_notification_outbox_manual_document
   ON public.order_notification_outbox (order_id, event_type)
   WHERE event_type IN ('manual_order_invoice', 'manual_order_receipt');
 
-CREATE OR REPLACE FUNCTION private.enqueue_manual_order_document(p_order_id uuid)
+CREATE OR REPLACE FUNCTION private.enqueue_manual_order_document(p_order_id uuid, p_invoice_only boolean DEFAULT false)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
@@ -55,14 +55,17 @@ BEGIN
   -- flips the order ineligible (cancel, import attach, contact clear,
   -- last-item delete, unsupported status) must still invalidate the
   -- marked send, or the lease check records a now-invalid document as
-  -- sent. Every processing manual event resets, not just the newly
-  -- derived one: a payment arriving mid-invoice-send flips the kind,
-  -- and leaving the old invoice marker intact would record the stale
-  -- invoice as sent.
+  -- sent. Invoice-only edits (type code, notes, terms, item VAT) reset
+  -- invoice markers alone: receipts render none of them, so clearing a
+  -- receipt marker would retry an identical attachment as a corrective
+  -- duplicate. Otherwise every processing manual event resets, not just
+  -- the newly derived one: a payment arriving mid-invoice-send flips
+  -- the kind, and leaving the old invoice marker intact would record
+  -- the stale invoice as sent.
   UPDATE public.order_notification_outbox AS n
   SET dispatch_started_at = NULL, updated_at = now()
   WHERE n.order_id = p_order_id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+    AND (NOT p_invoice_only OR n.event_type = 'manual_order_invoice')
     AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   IF NOT v_order_found OR NOT v_order.manual_document_notification_eligible
     OR v_order.recorded_by_user_id IS NULL
@@ -145,11 +148,14 @@ BEGIN
     AND n.dispatch_started_at IS NULL;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid)
+REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid, boolean)
   FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_both_kind_changed boolean;
+  v_invoice_only_changed boolean;
 BEGIN
   -- The order-scoped redemption relink sets manual_document.trusted_relink
   -- around its customer_id UPDATE: customer_id is not rendered, so the
@@ -176,7 +182,12 @@ BEGIN
   -- or out of cancelled/canceled/returned/failed) re-evaluates:
   -- pending-to-shipped transitions must not reset an in-flight marker
   -- and retry an identical attachment as a corrective duplicate.
-  IF NEW.payment_status IS DISTINCT FROM OLD.payment_status
+  -- Invoice-only fields (type code, notes, method, terms, FIRS) print
+  -- nowhere on receipts: when nothing else changed, only invoice markers
+  -- reset. Every other listed field renders on both kinds or gates
+  -- eligibility, so those reset both.
+  v_both_kind_changed :=
+    NEW.payment_status IS DISTINCT FROM OLD.payment_status
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
     OR NEW.total IS DISTINCT FROM OLD.total
     OR NEW.subtotal IS DISTINCT FROM OLD.subtotal
@@ -189,25 +200,27 @@ BEGIN
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
     OR NEW.customer_name IS DISTINCT FROM OLD.customer_name
     OR NEW.customer_phone IS DISTINCT FROM OLD.customer_phone
-    OR NEW.payment_method IS DISTINCT FROM OLD.payment_method
-    OR NEW.invoice_type_code IS DISTINCT FROM OLD.invoice_type_code
-    OR NEW.invoice_note IS DISTINCT FROM OLD.invoice_note
-    OR NEW.notes IS DISTINCT FROM OLD.notes
     OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
     OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
-    OR NEW.payment_due_date IS DISTINCT FROM OLD.payment_due_date
-    OR NEW.payment_terms IS DISTINCT FROM OLD.payment_terms
-    OR NEW.buyer_reference IS DISTINCT FROM OLD.buyer_reference
-    OR NEW.firs_irn IS DISTINCT FROM OLD.firs_irn
-    OR NEW.firs_csid IS DISTINCT FROM OLD.firs_csid
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
     OR NEW.currency IS DISTINCT FROM OLD.currency
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
     OR NEW.import_job_id IS DISTINCT FROM OLD.import_job_id
     OR NEW.external_source IS DISTINCT FROM OLD.external_source
     OR (lower(btrim(COALESCE(OLD.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
-      IS DISTINCT FROM (lower(btrim(COALESCE(NEW.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')) THEN
-    PERFORM private.enqueue_manual_order_document(NEW.id);
+      IS DISTINCT FROM (lower(btrim(COALESCE(NEW.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'));
+  v_invoice_only_changed :=
+    NEW.payment_method IS DISTINCT FROM OLD.payment_method
+    OR NEW.invoice_type_code IS DISTINCT FROM OLD.invoice_type_code
+    OR NEW.invoice_note IS DISTINCT FROM OLD.invoice_note
+    OR NEW.notes IS DISTINCT FROM OLD.notes
+    OR NEW.payment_due_date IS DISTINCT FROM OLD.payment_due_date
+    OR NEW.payment_terms IS DISTINCT FROM OLD.payment_terms
+    OR NEW.buyer_reference IS DISTINCT FROM OLD.buyer_reference
+    OR NEW.firs_irn IS DISTINCT FROM OLD.firs_irn
+    OR NEW.firs_csid IS DISTINCT FROM OLD.firs_csid;
+  IF v_both_kind_changed OR v_invoice_only_changed THEN
+    PERFORM private.enqueue_manual_order_document(NEW.id, NOT v_both_kind_changed);
   END IF;
   RETURN NEW;
 END;

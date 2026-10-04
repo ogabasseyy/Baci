@@ -36,7 +36,7 @@ CREATE TRIGGER enqueue_manual_documents_after_items
   FOR EACH STATEMENT EXECUTE FUNCTION private.enqueue_manual_documents_after_item_inserts();
 CREATE OR REPLACE FUNCTION private.enqueue_manual_documents_after_item_updates()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE v_order_id uuid;
+DECLARE v_order_id uuid; v_invoice_only boolean;
 BEGIN
   -- Rendered-column gate (function-level: transition tables cannot combine
   -- with an UPDATE OF column list). Fulfillment-only writes such as
@@ -44,14 +44,33 @@ BEGIN
   -- provider dispatch resets the marker and pushes the accepted,
   -- still-current attachment into a corrective retry that can send a
   -- duplicate with a rotated link. order_id stays compared so lines moving
-  -- between orders re-enqueue both sides.
-  FOR v_order_id IN (
-    SELECT DISTINCT ids.order_id AS order_id
+  -- between orders re-enqueue both sides. Item VAT columns print on
+  -- invoices only, so a batch touching nothing else resets invoice
+  -- markers alone (bool_and: every changed line in the order must be
+  -- VAT-only for the receipt marker to survive).
+  FOR v_order_id, v_invoice_only IN (
+    SELECT ids.order_id AS order_id,
+      bool_and(
+        (n.vat_category_code IS DISTINCT FROM o.vat_category_code
+          OR n.vat_rate IS DISTINCT FROM o.vat_rate
+          OR n.vat_amount IS DISTINCT FROM o.vat_amount)
+        AND NOT (n.order_id IS DISTINCT FROM o.order_id
+          OR n.name IS DISTINCT FROM o.name
+          OR n.quantity IS DISTINCT FROM o.quantity
+          OR n.price IS DISTINCT FROM o.price
+          OR n.variant_name IS DISTINCT FROM o.variant_name
+          OR n.condition IS DISTINCT FROM o.condition
+          OR n.item_description IS DISTINCT FROM o.item_description
+          OR n.assurance_fee IS DISTINCT FROM o.assurance_fee
+          OR n.line_id IS DISTINCT FROM o.line_id
+          OR n.unit_code IS DISTINCT FROM o.unit_code
+          OR n.line_extension_amount IS DISTINCT FROM o.line_extension_amount
+          OR n.sellers_item_id IS DISTINCT FROM o.sellers_item_id))
     FROM inserted_items AS n
     FULL JOIN removed_items AS o ON o.id = n.id
     -- A line moving between orders emits BOTH sides: the source loses a
     -- rendered line and the destination gains one, so each order's
-    -- dispatch must be re-evaluated. Same-order edits dedup to one id.
+    -- dispatch must be re-evaluated. Same-order edits group to one id.
     CROSS JOIN LATERAL (
       VALUES (n.order_id), (o.order_id)
     ) AS ids(order_id)
@@ -72,9 +91,10 @@ BEGIN
       OR n.vat_amount IS DISTINCT FROM o.vat_amount
       OR n.sellers_item_id IS DISTINCT FROM o.sellers_item_id
       )
-    ORDER BY order_id
+    GROUP BY ids.order_id
+    ORDER BY ids.order_id
   ) LOOP
-    PERFORM private.enqueue_manual_order_document(v_order_id);
+    PERFORM private.enqueue_manual_order_document(v_order_id, v_invoice_only);
   END LOOP;
   RETURN NULL;
 END;

@@ -1,3 +1,4 @@
+import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
 import { generateSlug } from '@/lib/blog-utils';
 import {
   BLOG_INTENTS,
@@ -56,16 +57,15 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === 'string')
     : [];
-  const imageVariantKeys = new Set([
-    'square_1x1',
-    'standard_4x3',
-    'landscape_16x9',
-  ]);
   const imageVariants = isRecord(featuredImage.variants)
     ? Object.fromEntries(
         Object.entries(featuredImage.variants).filter(
           (entry): entry is [string, string] =>
-            imageVariantKeys.has(entry[0]) && isHttpsUrl(entry[1])
+            isHttpsUrl(entry[1]) &&
+            validateBlogImageVariantIntegrity(
+              { featured_image_variants: { [entry[0]]: entry[1] } },
+              { kind: 'platform' }
+            ).ready
         )
       )
     : {};
@@ -75,6 +75,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   const metadata = {
+    featured_image_alt: readText(featuredImage.alt),
     focus_keyword: readText(value.focus_keyword),
     seo_title: readText(value.seo_title),
     seo_description: readText(value.seo_description),
@@ -84,6 +85,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   };
   const validatedMetadata = blogPostSchema
     .pick({
+      featured_image_alt: true,
       focus_keyword: true,
       seo_title: true,
       seo_description: true,
@@ -102,7 +104,6 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     author_name: readText(value.author_name) || 'Baci Editorial',
     ...metadata,
     content,
-    featured_image_alt: readText(featuredImage.alt),
     featured_image_height: readDimension(featuredImage.height),
     featured_image_url: featuredImageUrl,
     featured_image_variants: imageVariants,

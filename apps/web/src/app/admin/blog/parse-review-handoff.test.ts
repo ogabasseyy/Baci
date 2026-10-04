@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import { parseReviewHandoff } from './parse-review-handoff';
 
+const managedVariant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/cover/landscape_16x9.webp`;
 const validHandoff = {
   schema_version: 'baci-blog-review-handoff/v1',
   status: 'published',
@@ -20,7 +22,7 @@ const validHandoff = {
     width: 1200,
     height: 675,
     variants: {
-      landscape_16x9: 'https://cdn.example.com/galaxy-a-landscape.webp',
+      landscape_16x9: managedVariant,
     },
   },
 };
@@ -83,7 +85,7 @@ describe('parseReviewHandoff', () => {
       featured_image_width: 1200,
       featured_image_height: 675,
       featured_image_variants: {
-        landscape_16x9: 'https://cdn.example.com/galaxy-a-landscape.webp',
+        landscape_16x9: managedVariant,
       },
       focus_keyword: 'Galaxy A buyer guide',
       intent: 'buying-guide',
@@ -118,22 +120,52 @@ describe('parseReviewHandoff', () => {
     ).toThrow('HTTPS featured-image URL');
   });
 
-  it('keeps only supported HTTPS image variants from the handoff', () => {
+  it('keeps only supported managed image variants from the handoff', () => {
     expect(
       parseReviewHandoff({
         ...validHandoff,
         featured_image: {
           ...validHandoff.featured_image,
           variants: {
-            landscape_16x9: 'https://cdn.example.com/landscape.webp',
+            landscape_16x9: managedVariant,
             attacker_field: 'https://cdn.example.com/extra.webp',
             square_1x1: 'javascript:alert(1)',
           },
         },
       }).featured_image_variants
     ).toEqual({
-      landscape_16x9: 'https://cdn.example.com/landscape.webp',
+      landscape_16x9: managedVariant,
     });
+  });
+
+  it.each([
+    'https://cdn.example.com/media/platform/blog/cover/landscape_16x9.webp',
+    `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/unmanaged/landscape_16x9.webp`,
+    `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/merchant-id/blog/cover/landscape_16x9.webp`,
+  ])('discards variants that the platform save API rejects: %s', (url) => {
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          variants: { landscape_16x9: url },
+        },
+      }).featured_image_variants
+    ).toEqual({});
+  });
+
+  it('validates the server alt-text limit before importing', () => {
+    const handoff = (length: number) => ({
+      ...validHandoff,
+      featured_image: {
+        ...validHandoff.featured_image,
+        alt: 'x'.repeat(length),
+      },
+    });
+    expect(parseReviewHandoff(handoff(200)).featured_image_alt).toHaveLength(
+      200
+    );
+    expect(() => parseReviewHandoff(handoff(201))).toThrow();
   });
 
   it('rejects oversized or incomplete untrusted objects', () => {

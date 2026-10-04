@@ -2,7 +2,10 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { Feed } from 'feed';
 import { describe, expect, it } from 'vitest';
 import { sanitizeForFeed } from './sanitize';
-import { stripInvalidXml10Characters } from './sanitize-xml-10';
+import {
+  stripInvalidXml10Characters,
+  stripInvalidXml10CharactersAndEntities,
+} from './sanitize-xml-10';
 
 describe('RSS XML character safety', () => {
   it('removes XML 1.0 forbidden controls while retaining valid Unicode text', () => {
@@ -76,11 +79,21 @@ describe('RSS XML character safety', () => {
     expect(html).not.toContain('javascript:');
   });
 
-  it('removes character references that decode to XML-forbidden code points', () => {
-    expect(stripInvalidXml10Characters('Fish &#x1A; Chips &#241;')).toBe(
-      'Fish  Chips &#241;'
+  it('preserves literal character references in plain feed text', () => {
+    expect(stripInvalidXml10Characters('Understanding &#x0; in XML')).toBe(
+      'Understanding &#x0; in XML'
     );
-    expect(stripInvalidXml10Characters('a&#0;b&#65c')).toBe('ab&#65c');
-    expect(stripInvalidXml10Characters('&#x1F4F1;')).toBe('&#x1F4F1;');
+  });
+
+  it('removes character references that decode to XML-forbidden code points', () => {
+    expect(
+      stripInvalidXml10CharactersAndEntities('Fish &#x1A; Chips &#241;')
+    ).toBe('Fish  Chips &#241;');
+    expect(stripInvalidXml10CharactersAndEntities('a&#0;b&#65c')).toBe(
+      'ab&#65c'
+    );
+    expect(stripInvalidXml10CharactersAndEntities('&#x1F4F1;')).toBe(
+      '&#x1F4F1;'
+    );
   });
 });

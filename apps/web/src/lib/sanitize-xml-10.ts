@@ -30,12 +30,12 @@ function stripForbiddenXml10Entities(value: string): string {
 }
 
 /**
- * Removes code points that XML 1.0 cannot represent, including numeric
- * character references that decode to them. The entity handling matters
- * before HTML parsing: sanitize-html decodes `&#xFFFE;` after a raw-only
- * strip, which can join split content (e.g. schemes) that its own checks
- * already approved. Nullish input yields an empty string so nullable DB
- * columns degrade gracefully instead of throwing inside feed builders.
+ * Removes raw code points that XML 1.0 cannot represent. Plain-text path
+ * for titles, excerpts, authors, and categories: the feed serializer
+ * escapes ampersands, so literal text like `&#x0;` stays valid output and
+ * must be preserved — only actual forbidden characters are removed.
+ * Nullish input yields an empty string so nullable DB columns degrade
+ * gracefully instead of throwing inside feed builders.
  */
 export function stripInvalidXml10Characters(
   value: string | null | undefined
@@ -44,11 +44,27 @@ export function stripInvalidXml10Characters(
     return '';
   }
   let result = '';
-  for (const character of stripForbiddenXml10Entities(value)) {
+  for (const character of value) {
     const codePoint = character.codePointAt(0);
     if (codePoint !== undefined && isXml10CharCodePoint(codePoint)) {
       result += character;
     }
   }
   return result;
+}
+
+/**
+ * Pre-HTML-parsing variant: also removes numeric character references that
+ * decode to XML-forbidden code points. Needed only before sanitize-html,
+ * which decodes entities and would otherwise let `java&#xFFFE;script:`
+ * slip past scheme validation and join into `javascript:` under the outer
+ * strip. Never use on plain feed text — it would delete literal content.
+ */
+export function stripInvalidXml10CharactersAndEntities(
+  value: string | null | undefined
+): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return stripInvalidXml10Characters(stripForbiddenXml10Entities(value));
 }

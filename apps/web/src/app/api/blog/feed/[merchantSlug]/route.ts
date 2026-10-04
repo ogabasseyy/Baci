@@ -41,7 +41,7 @@ interface BlogPost {
   title: string;
   slug: string;
   content: string;
-  excerpt: string;
+  excerpt: string | null;
   featured_image_url: string | null;
   featured_image_variants?: Record<string, unknown> | null;
   category: string | null;

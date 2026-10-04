@@ -7,7 +7,10 @@ import {
   type SanitizeHtmlOptions,
 } from '@/lib/sanitize-html-config';
 import { stripDisallowedRawTextBlocks } from '@/lib/sanitize-raw-text-blocks';
-import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
+import {
+  stripInvalidXml10Characters,
+  stripInvalidXml10CharactersAndEntities,
+} from '@/lib/sanitize-xml-10';
 
 // Re-export removed as per knip analysis
 // import from './sanitize-core' directly if needed
@@ -118,10 +121,11 @@ export function escapeHtmlAttribute(value: string): string {
  */
 export function sanitizeForFeed(dirty: string): string {
   // Strip BEFORE parsing: sanitize-html's scheme check only deletes U+0000–U+0020,
-  // so a forbidden char inside a scheme (java<U+FFFE>script:) would look schemeless
-  // to the parser and then join into javascript: under the outer strip. The outer
-  // strip stays to catch anything the sanitizer re-emits (e.g. decoded entities).
-  const preNormalized = stripInvalidXml10Characters(dirty);
+  // so a forbidden char inside a scheme (java<U+FFFE>script:, raw or &#xFFFE;-
+  // encoded) would look schemeless to the parser and then join into javascript:
+  // under the outer strip. The outer strip stays to catch anything the
+  // sanitizer re-emits.
+  const preNormalized = stripInvalidXml10CharactersAndEntities(dirty);
   return stripInvalidXml10Characters(
     sanitizeLib(preNormalized, {
       allowedTags: [

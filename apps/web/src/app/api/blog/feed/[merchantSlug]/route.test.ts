@@ -30,7 +30,7 @@ type FeedPostRow = {
   title: string;
   slug: string;
   content: string;
-  excerpt: string;
+  excerpt: string | null;
   featured_image_url: string | null;
   featured_image_variants?: Record<string, unknown> | null;
   category: string | null;
@@ -460,7 +460,7 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
           slug: 'public-feed-post',
           title: 'Launch guide',
           content: `<p>${'a'.repeat(299)}📱${'b'.repeat(10)}</p>`,
-          excerpt: '',
+          excerpt: null,
           featured_image_url: null,
           category: null,
           author_name: 'Ogabassey',

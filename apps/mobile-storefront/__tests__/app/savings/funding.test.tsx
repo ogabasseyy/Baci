@@ -301,6 +301,23 @@ describe('SavingsPlanFundingRoute', () => {
     expect(screen.getByText('Copied')).toBeOnTheScreen();
   });
 
+  it('shows an explicit error when copying the account number fails', async () => {
+    mockSetClipboardString.mockResolvedValueOnce(false);
+    render(<SavingsPlanFundingRoute />);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy plan account number' })
+      );
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText('Could not copy the account number. Please try again.')
+    ).toBeOnTheScreen();
+    expect(screen.queryByText('Copied')).toBeNull();
+  });
+
   it('withholds the copy button when the ready account number is empty', () => {
     mockPlanFundingAccounts = [
       {

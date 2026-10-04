@@ -100,7 +100,6 @@ describe('fetchReceiptListItems', () => {
 
   it('leaves absent line details out of the preview model', async () => {
     mockOrdersResponse([baseOrder()]);
-
     const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
     expect(item.rawOrder.items[0].line_extension_amount).toBeUndefined();
     expect(item.rawOrder.items[0].description).toBeUndefined();
@@ -293,8 +292,9 @@ describe('fetchReceiptListItems', () => {
     expect(items.map((item) => item.id)).toEqual(['order-available']);
   });
   it('forwards settled invoice terms into the preview model', async () => {
-    mockOrdersResponse([baseOrder({ invoice_note: 'Call first', notes: 'Fallback', payment_due_date: '2026-05-01', payment_terms: 'Net 30', buyer_reference: 'BR-9', firs_irn: 'IRN-9', firs_csid: 'CSID-9' })]);
+    mockOrdersResponse([baseOrder({ invoice_note: 'Call first', notes: 'Fallback', payment_due_date: '2026-05-01', payment_terms: 'Net 30', buyer_reference: 'BR-9', firs_irn: 'IRN-9', firs_csid: 'CSID-9', shipping_address: { address: '14 Allen', postalCode: '101233' } })]);
     const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
     expect(item.rawOrder).toMatchObject({ invoice_note: 'Call first', notes: 'Fallback', payment_due_date: '2026-05-01', payment_terms: 'Net 30', buyer_reference: 'BR-9', firs_irn: 'IRN-9', firs_csid: 'CSID-9' });
+    expect(item.rawOrder.shipping_address).toMatchObject({ address_line1: '14 Allen', postal_code: '101233' });
   });
 });

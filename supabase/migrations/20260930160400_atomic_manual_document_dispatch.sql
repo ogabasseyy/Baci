@@ -207,11 +207,11 @@ BEGIN
       OR v_order.notes IS DISTINCT FROM p_notes
       OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date))
     OR v_order.transaction_date IS DISTINCT FROM p_transaction_date
-    OR v_order.payment_due_date IS DISTINCT FROM p_payment_due_date
-    OR v_order.payment_terms IS DISTINCT FROM p_payment_terms
-    OR v_order.buyer_reference IS DISTINCT FROM p_buyer_reference
-    OR v_order.firs_irn IS DISTINCT FROM p_firs_irn
-    OR v_order.firs_csid IS DISTINCT FROM p_firs_csid
+    OR (v_compare_invoice_only AND (v_order.payment_due_date IS DISTINCT FROM p_payment_due_date
+      OR v_order.payment_terms IS DISTINCT FROM p_payment_terms
+      OR v_order.buyer_reference IS DISTINCT FROM p_buyer_reference
+      OR v_order.firs_irn IS DISTINCT FROM p_firs_irn
+      OR v_order.firs_csid IS DISTINCT FROM p_firs_csid))
     OR v_order.created_at IS DISTINCT FROM p_order_created_at
     OR private.rendered_shipping_address(v_order.shipping_address)
       IS DISTINCT FROM private.rendered_shipping_address(p_shipping_address)

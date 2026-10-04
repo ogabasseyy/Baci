@@ -1,3 +1,4 @@
+import { canonicalizeTransactionPaymentMethod } from '@baci/shared';
 import {
   type DispatchOrderItem,
   projectDispatchSnapshotItems,
@@ -176,14 +177,15 @@ export function buildDispatchRpcParams(input: DispatchRpcParamsInput) {
       .map((txn) => {
         // Narrowed to the rendered key like the server snapshot (->>
         // parity): webhook enrichments must not stale the comparison.
+        // Structured methods canonicalize to absent like SQL, never
+        // String() to '[object Object]' and stale every attempt.
         const paymentMethod = txn.metadata?.payment_method;
         return {
           amount: txn.amount,
           created_at: txn.created_at,
           description: txn.description,
           metadata: {
-            payment_method:
-              paymentMethod == null ? null : String(paymentMethod),
+            payment_method: canonicalizeTransactionPaymentMethod(paymentMethod),
           },
         };
       }),

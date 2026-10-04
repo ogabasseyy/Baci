@@ -131,7 +131,7 @@ export function isManualOrderDocumentAvailable(
     // database-permitted invalid values: validate the money breakdown and
     // per-item content through the sender's schemas so the archive never
     // advertises a document the sender terminally skips.
-    isManualOrderDocumentContentValid(input.money, input.items)
+    isManualOrderDocumentContentValid(input.money, input.items, invoiceKind)
   );
 }
 

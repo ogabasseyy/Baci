@@ -23,11 +23,10 @@ const TRANSACTION_RPC_BATCH_SIZE = 100;
 // PostgREST numeric columns arrive as decimal strings while the card
 // formats numbers: normalize once here so the card never formats raw
 // unvalidated values. Only strict decimals coerce — booleans, hex,
-// and padded strings degrade to 0 like the promotion gates reject
-// them instead of masking as confident money. Unparseable totals
-// degrade to 0 instead of NaN.
+// and padded strings propagate NaN so the card renders its neutral
+// placeholder instead of masking as a confident NGN 0.
 function toDisplayMoney(value: unknown): number {
-  return isDecimalMoney(value) ? Number(value) : 0;
+  return isDecimalMoney(value) ? Number(value) : Number.NaN;
 }
 
 interface ReceiptHistoryEntry {

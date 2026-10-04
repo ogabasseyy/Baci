@@ -183,4 +183,43 @@ describe('buildDispatchRpcParams', () => {
       },
     ]);
   });
+
+  it('snapshots structured methods as absent like the server builder', () => {
+    const params = buildDispatchRpcParams({
+      ...baseInput,
+      transactions: [
+        {
+          id: 'txn-9',
+          amount: 10,
+          created_at: '2026-09-30T09:00:00+00:00',
+          description: 'object',
+          metadata: { payment_method: { name: 'cash' } },
+        },
+        {
+          id: 'txn-10',
+          amount: 10,
+          created_at: '2026-09-30T09:00:00+00:00',
+          description: 'array',
+          metadata: { payment_method: ['cash'] },
+        },
+      ],
+    });
+
+    // String() would emit '[object Object]' while SQL ->> emits JSON
+    // text: both sides snapshot null so the comparison never stales.
+    expect(params.p_transactions).toEqual([
+      {
+        amount: 10,
+        created_at: '2026-09-30T09:00:00+00:00',
+        description: 'array',
+        metadata: { payment_method: null },
+      },
+      {
+        amount: 10,
+        created_at: '2026-09-30T09:00:00+00:00',
+        description: 'object',
+        metadata: { payment_method: null },
+      },
+    ]);
+  });
 });

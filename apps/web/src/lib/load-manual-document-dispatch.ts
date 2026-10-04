@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
-import { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
+import {
+  type manualDocumentOrderSchema,
+  manualDocumentOrderSchemaFor,
+} from '@/schemas/manual-order-document-order';
 import { resolveOrderNotificationRecipient } from './order-notification-recipient';
 
 export type ManualDocumentSnapshot = {
@@ -55,7 +58,11 @@ export async function loadManualDocumentDispatch(input: {
   const snapshot = snapshotData as unknown as ManualDocumentSnapshot;
   if (!snapshot.order || !snapshot.merchant)
     return { status: 'skipped', reason: 'order_or_merchant_missing' };
-  const orderParsed = manualDocumentOrderSchema.safeParse(snapshot.order);
+  // Receipts print no item VAT: validate the receipt shape so an
+  // unrendered negative rate never sinks an otherwise sendable receipt.
+  const orderParsed = manualDocumentOrderSchemaFor(
+    row.event_type === 'manual_order_receipt' ? 'receipt' : 'invoice'
+  ).safeParse(snapshot.order);
   if (!orderParsed.success)
     return { status: 'skipped', reason: 'order_validation_failed' };
   const merchantParsed = manualDocumentMerchantSchema.safeParse(

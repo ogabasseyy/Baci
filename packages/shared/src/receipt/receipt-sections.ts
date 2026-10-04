@@ -1,4 +1,5 @@
 import { escapeHtml, escapeJsString } from './escape-html';
+import { canonicalizeTransactionPaymentMethod } from './manual-order-document-gates';
 import {
   getReceiptDisplaySubtotal,
   getReceiptVatRate,
@@ -109,7 +110,10 @@ export function renderPaymentHistoryHtml(
               year: 'numeric',
               timeZone: 'Africa/Lagos',
             });
-      const method = tx.metadata?.payment_method || tx.description || 'Payment';
+      const method =
+        canonicalizeTransactionPaymentMethod(tx.metadata?.payment_method) ||
+        tx.description ||
+        'Payment';
       return `<tr><td>${txDate}</td><td>${escapeHtml(method)}</td><td style="text-align:right;font-weight:600;color:#059669;">${formatMoney(tx.amount)}</td></tr>`;
     })
     .join('');

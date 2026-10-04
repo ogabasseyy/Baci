@@ -21,6 +21,35 @@ export interface ManualOrderDocumentPaymentAccount {
   account_name: string | null;
 }
 
+// Legacy mobile-admin aliases (address, postalCode) collapse onto the
+// canonical keys like the SQL canonicalizer, and nullish keys normalize
+// to undefined-absent: every preview path builds through this so the
+// modal matches the emailed PDF instead of hand-mirroring the aliases.
+export function normalizeReceiptShippingAddress(
+  address: unknown
+): ReceiptOrder['shipping_address'] {
+  if (address == null || typeof address !== 'object') return null;
+  const record = address as {
+    address?: string | null;
+    address_line1?: string | null;
+    address_line2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postal_code?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  };
+  return {
+    ...(address as Record<string, unknown>),
+    city: record.city ?? undefined,
+    state: record.state ?? undefined,
+    address_line1: record.address_line1 || record.address || undefined,
+    address_line2: record.address_line2 ?? undefined,
+    country: record.country ?? undefined,
+    postal_code: record.postal_code || record.postalCode || undefined,
+  };
+}
+
 /**
  * Shapes the parsed order/merchant rows into the receipt renderer's view
  * models. Naira bank details (persisted accounts and the order-level virtual
@@ -57,25 +86,7 @@ export function buildManualOrderDocumentPdfInput({
             account_name: preferredPaymentAccount.account_name || '',
           }
         : null,
-    shipping_address: order.shipping_address
-      ? {
-          ...order.shipping_address,
-          // Nullish keys (mobile-admin "same as customer") normalize to
-          // undefined-absent: the receipt input ships no nulls.
-          city: order.shipping_address.city ?? undefined,
-          state: order.shipping_address.state ?? undefined,
-          address_line1:
-            order.shipping_address.address_line1 ||
-            order.shipping_address.address ||
-            undefined,
-          address_line2: order.shipping_address.address_line2 ?? undefined,
-          country: order.shipping_address.country ?? undefined,
-          postal_code:
-            order.shipping_address.postal_code ||
-            order.shipping_address.postalCode ||
-            undefined,
-        }
-      : null,
+    shipping_address: normalizeReceiptShippingAddress(order.shipping_address),
     items: order.order_items.map((item) => ({
       ...item,
       product_name: item.name,

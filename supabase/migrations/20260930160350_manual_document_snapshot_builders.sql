@@ -48,7 +48,8 @@ REVOKE ALL ON FUNCTION private.manual_document_tax_snapshot(uuid)
 -- Settled-status filter mirrors the sender exactly: a row flipping
 -- out changes the count and aborts; unsettled rows never count.
 -- Metadata snapshots payment_method only, mirroring the trigger: the
--- PDF renders no other key.
+-- PDF renders no other key. Structured methods (objects/arrays) have no
+-- TS String() twin, so both sides snapshot them as absent, never text.
 CREATE OR REPLACE FUNCTION private.manual_document_transaction_snapshot(p_order_id uuid)
 RETURNS jsonb
 LANGUAGE sql
@@ -59,7 +60,9 @@ AS $$
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'amount', t.amount, 'created_at', t.created_at,
     'description', t.description,
-    'metadata', jsonb_build_object('payment_method', t.metadata->>'payment_method')
+    'metadata', jsonb_build_object('payment_method',
+      CASE WHEN jsonb_typeof(t.metadata->'payment_method') IN ('object', 'array')
+        THEN NULL ELSE t.metadata->>'payment_method' END)
   ) ORDER BY t.id), '[]'::jsonb)
   FROM public.transactions AS t
   WHERE t.order_id = p_order_id AND t.transaction_type = 'payment'

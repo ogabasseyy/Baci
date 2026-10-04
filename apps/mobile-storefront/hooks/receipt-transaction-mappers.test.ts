@@ -100,4 +100,10 @@ describe('mapCustomerTransactionRpcRows', () => {
       }),
     ]);
   });
+
+  it('maps corrupt payloads and rows to nothing instead of throwing', () => {
+    expect(mapCustomerTransactionRpcRows(null)).toEqual([]);
+    expect(mapCustomerTransactionRpcRows({})).toEqual([]);
+    expect(mapCustomerTransactionRpcRows([null, 7, []])).toEqual([]);
+  });
 });

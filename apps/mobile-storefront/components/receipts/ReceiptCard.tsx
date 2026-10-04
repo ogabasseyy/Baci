@@ -23,7 +23,7 @@ const PAYMENT_STATUS_CONFIG: Record<
   refunded: { label: 'Refunded', color: '#6B7280', icon: 'refresh-circle' },
 };
 
-export function getPaymentConfig(status: string) {
+export function getPaymentConfig(status: unknown) {
   // Legacy spellings (Paid, Partially Paid) miss the map: normalize first.
   const key = `${status ?? ''}`.trim().toLowerCase().replace(/\s+/g, '_');
   return PAYMENT_STATUS_CONFIG[key] ?? PAYMENT_STATUS_CONFIG.unpaid;

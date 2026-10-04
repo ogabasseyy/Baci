@@ -4,7 +4,8 @@ import {
   isNonNegativeMoney,
   isSettledManualBalance,
   MANUAL_ORDER_CURRENCY_CODE_PATTERN,
-  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS,
+  MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
 
@@ -81,7 +82,10 @@ function isValidMoney(value: unknown): boolean {
   return isDecimalMoney(value) && Number(value) >= 0;
 }
 
-function hasValidContent(input: ManualReceiptPromotionInput): boolean {
+function hasValidContent(
+  input: ManualReceiptPromotionInput,
+  invoiceKind: boolean
+): boolean {
   const moneyValid = [
     input.total,
     input.subtotal,
@@ -122,17 +126,26 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
     ) {
       return false;
     }
-    // Sender-validated financial fields, from the shared gate list: absent
-    // is fine (nullish in the sender schema), but a present value must be
-    // genuine money exactly like the header totals — a negative extension,
-    // fee, or VAT row renders as an invoice, never a promoted receipt, so
-    // mobile cannot disagree with the emailed document.
+    // Sender-validated financial fields, from the shared gate lists:
+    // absent is fine (nullish in the sender schema), but a present value
+    // must be genuine money exactly like the header totals. Item VAT
+    // renders on invoices only, so receipts require it finite-decimal
+    // (sign-agnostic) while invoices require it nonnegative like the
+    // sender — mobile cannot disagree with the emailed document.
     const financial = item as Partial<
       Record<ManualOrderItemFinancialField, unknown>
     >;
-    return MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.every((field) => {
+    const receiptFieldsValid = MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS.every(
+      (field) => {
+        const value = financial[field];
+        return value == null || isValidMoney(value);
+      }
+    );
+    if (!receiptFieldsValid) return false;
+    return MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS.every((field) => {
       const value = financial[field];
-      return value == null || isValidMoney(value);
+      if (value == null) return true;
+      return invoiceKind ? isValidMoney(value) : isDecimalMoney(value);
     });
   });
 }
@@ -142,7 +155,8 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
 // failure is fatal, like the sender) from an invalid row rendering as an
 // invoice (history lookup failure is tolerated so it can still open).
 export function isPromotableManualDocument(
-  input: ManualReceiptPromotionInput
+  input: ManualReceiptPromotionInput,
+  invoiceKind = false
 ): boolean {
   if (
     !isManualOrderRecord({
@@ -174,7 +188,7 @@ export function isPromotableManualDocument(
   if (!hasValidSettledPayments(input.payments)) {
     return false;
   }
-  return hasValidContent(input);
+  return hasValidContent(input, invoiceKind);
 }
 
 export function isPromotedManualReceipt(

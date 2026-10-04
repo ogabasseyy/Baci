@@ -10,6 +10,7 @@ import {
   getReceiptListItemStringValue,
 } from './receipt-list-item-fields';
 import { isArchiveOrder } from '@/app/(storefront)/[slug]/(customer)/receipts/archive-order-filter';
+import { normalizeReceiptShippingAddress } from '@/lib/build-manual-order-document-pdf-input';
 import {
   buildAssuranceReceiptItem,
   sumAssuranceFees,
@@ -206,8 +207,10 @@ export async function fetchReceiptListItems(
           (order.customer_phone as string | null | undefined) ??
           customer?.phone ??
           null,
-        shipping_address:
-          (order.shipping_address as ReceiptOrder['shipping_address']) ?? null,
+        // Legacy mobile-admin aliases collapse like the emailed PDF.
+        shipping_address: normalizeReceiptShippingAddress(
+          order.shipping_address
+        ),
         virtual_account:
           (order.virtual_account as ReceiptOrder['virtual_account']) ?? null,
         fulfillment_details:

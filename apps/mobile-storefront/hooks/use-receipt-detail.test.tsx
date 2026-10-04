@@ -43,10 +43,10 @@ const mockFrom = jest.fn((_table: string) => mockQueryBuilder);
 // as empty so detail-prefetch tests exercise the query scoping, not the RPCs.
 const mockRpc = jest.fn(
   async (
-    _fn: string,
+    fn: string,
     _args?: unknown
   ): Promise<{ data: unknown; error: Error | null }> => ({
-    data: undefined,
+    data: fn === 'get_customer_order_tax_subtotals' ? [] : undefined,
     error: null,
   })
 );
@@ -248,23 +248,22 @@ describe('receipt detail loading', () => {
   it('fails manual invoices closed when history is unavailable', async () => {
     const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
     // Partial and zero-progress alike: the ledger need not reconcile with the aggregate.
-    for (const amount_paid of [50, 0]) { mockSingle.mockResolvedValue({ data: partialManualOrder({ amount_paid }), error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null }); mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') }); await expect((receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()).rejects.toThrow('tx down'); }
+    for (const amount_paid of [50, 0]) { mockSingle.mockResolvedValue({ data: partialManualOrder({ amount_paid }), error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null }); mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') }); await expect((receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()).rejects.toThrow('tx down'); }
   });
 
+  // biome-ignore format: compact mocks preserve the 300-line gate.
   it('opens zero-progress manual invoices on a successful empty fetch', async () => {
     const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
-    mockSingle.mockResolvedValue({
-      data: partialManualOrder({ amount_paid: 0 }),
-      error: null,
-    });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-
-    const detail = (await (
-      receiptDetailQueryOptions('order-9') as QueryOptions
-    ).queryFn()) as { transactions: unknown[] };
-
+    mockSingle.mockResolvedValue({ data: partialManualOrder({ amount_paid: 0 }), error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    const detail = (await (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()) as { transactions: unknown[] };
     expect(detail.transactions).toEqual([]);
+  });
+
+  // biome-ignore format: compact mocks preserve the 300-line gate.
+  it('withholds deliverable invoices with invalid tax subtotals', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({ data: partialManualOrder({ amount_paid: 0 }), error: null }); mockRpc.mockResolvedValueOnce({ data: [{ vat_rate: -1, taxable_amount: 100, tax_amount: 7.5 }], error: null });
+    expect(await (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()).toBeNull();
   });
 
   // biome-ignore format: compact loop preserves the 300-line gate.
@@ -288,6 +287,7 @@ describe('receipt detail loading', () => {
       data: partialManualOrder({ payment_status: 'paid' }),
       error: null,
     });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
     mockRpc.mockResolvedValueOnce({ data: [], error: null });
     mockRpc.mockResolvedValueOnce({ data: null, error: new Error('tx down') });
 

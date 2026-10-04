@@ -1,7 +1,9 @@
 import {
   isDecimalMoney,
   MANUAL_ORDER_CURRENCY_CODE_PATTERN,
+  MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderInvoiceOnlyItemFinancialField,
   type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
 import { z } from 'zod';
@@ -20,6 +22,12 @@ const positiveNumber = z.preprocess(
   (value) => (isDecimalMoney(value) ? value : Number.NaN),
   z.coerce.number().finite().positive()
 );
+// Receipts print no item VAT detail: the value only needs to be finite,
+// never nonnegative — an unrendered negative rate must not sink the send.
+const finiteNumber = z.preprocess(
+  (value) => (isDecimalMoney(value) ? value : Number.NaN),
+  z.coerce.number().finite()
+);
 const nullableText = z.string().nullable();
 
 // Sender-validated numeric item fields, derived from the shared gate
@@ -31,6 +39,18 @@ const manualDocumentOrderItemFinancialShape: Record<
 > = Object.fromEntries(
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS.map((field) => [field, number.nullish()])
 ) as Record<ManualOrderItemFinancialField, ReturnType<typeof number.nullish>>;
+const manualDocumentOrderReceiptVatShape: Record<
+  ManualOrderInvoiceOnlyItemFinancialField,
+  ReturnType<typeof finiteNumber.nullish>
+> = Object.fromEntries(
+  MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS.map((field) => [
+    field,
+    finiteNumber.nullish(),
+  ])
+) as Record<
+  ManualOrderInvoiceOnlyItemFinancialField,
+  ReturnType<typeof finiteNumber.nullish>
+>;
 const manualDocumentOrderItemSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -110,6 +130,22 @@ export const manualDocumentOrderSchema = z.object({
   order_items: z.array(manualDocumentOrderItemSchema),
 });
 
+// Invoices validate item VAT strictly; receipts print none, so the same
+// keys validate finite-only. Inferred types are identical (numbers), so
+// consumers keep the canonical invoice type for both.
+const manualDocumentReceiptOrderItemSchema =
+  manualDocumentOrderItemSchema.extend(manualDocumentOrderReceiptVatShape);
+
+export function manualDocumentOrderSchemaFor(
+  documentKind: 'receipt' | 'invoice' | 'proforma_invoice'
+) {
+  return documentKind === 'receipt'
+    ? manualDocumentOrderSchema.extend({
+        order_items: z.array(manualDocumentReceiptOrderItemSchema),
+      })
+    : manualDocumentOrderSchema;
+}
+
 // The archive/download predicate validates through the sender's own content
 // schemas, so the storefront can never advertise a document the sender
 // terminally skips as order_validation_failed: the money breakdown plus
@@ -135,6 +171,10 @@ const manualDocumentArchiveItemSchema = z.object({
   quantity: positiveNumber,
   ...manualDocumentOrderItemFinancialShape,
 });
+// Receipts print no item VAT: same keys, finite-only values, so the
+// archive agrees with the sender instead of hand-mirroring the split.
+const manualDocumentArchiveReceiptItemSchema =
+  manualDocumentArchiveItemSchema.extend(manualDocumentOrderReceiptVatShape);
 
 export interface ManualDocumentArchiveMoney {
   total?: number | string | null;
@@ -156,11 +196,15 @@ export type ManualDocumentArchiveItem = {
 
 export function isManualOrderDocumentContentValid(
   order: unknown,
-  items: unknown
+  items: unknown,
+  invoiceKind = true
 ): boolean {
   if (!Array.isArray(items) || items.length === 0) return false;
+  const itemSchema = invoiceKind
+    ? manualDocumentArchiveItemSchema
+    : manualDocumentArchiveReceiptItemSchema;
   return (
     manualDocumentArchiveMoneySchema.safeParse(order).success &&
-    z.array(manualDocumentArchiveItemSchema).safeParse(items).success
+    z.array(itemSchema).safeParse(items).success
   );
 }

@@ -1,4 +1,5 @@
 import {
+  canonicalizeTransactionPaymentMethod,
   formatOrderItemDisplayName,
   getReceiptItemLineTotal,
   getReceiptItemVatLines,
@@ -625,7 +626,9 @@ export function generateReceiptPDF(
       head: [['Payment Date', 'Method', 'Amount']],
       body: order.transactions.map((tx) => [
         formatReceiptDate(tx.created_at),
-        tx.metadata?.payment_method || tx.description || 'Payment',
+        canonicalizeTransactionPaymentMethod(tx.metadata?.payment_method) ||
+          tx.description ||
+          'Payment',
         formatReceiptCurrency(tx.amount, currency),
       ]),
       styles: {

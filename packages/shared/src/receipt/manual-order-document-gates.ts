@@ -5,16 +5,45 @@
 // and every gate picks it up. Text fields need no entry: both sides accept
 // any string, so they cannot diverge.
 
-export const MANUAL_ORDER_ITEM_FINANCIAL_FIELDS = [
+export const MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS = [
   'assurance_fee',
   'line_extension_amount',
   'line_id',
+] as const;
+
+// Item VAT renders on invoices only (the receipt line table suppresses
+// it): receipts validate the receipt list above while invoices validate
+// the full union below, so an unrendered negative rate can never sink
+// an otherwise renderable receipt.
+export const MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS = [
   'vat_amount',
   'vat_rate',
 ] as const;
 
+export const MANUAL_ORDER_ITEM_FINANCIAL_FIELDS = [
+  ...MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS,
+  ...MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS,
+] as const;
+
 export type ManualOrderItemFinancialField =
   (typeof MANUAL_ORDER_ITEM_FINANCIAL_FIELDS)[number];
+
+export type ManualOrderReceiptItemFinancialField =
+  (typeof MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS)[number];
+
+export type ManualOrderInvoiceOnlyItemFinancialField =
+  (typeof MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS)[number];
+
+// Structured methods (objects/arrays the jsonb column permits) have no
+// String() twin for PostgreSQL ->>: treat them as absent on every side
+// — the snapshot compares null like SQL, and renders fall through to
+// the description like a missing method.
+export function canonicalizeTransactionPaymentMethod(
+  value: unknown
+): string | null {
+  if (value == null || typeof value === 'object') return null;
+  return String(value);
+}
 
 // The sender schema and every promotion gate validate currency against
 // this one pattern (no global flag, so sharing the instance is stateless).

@@ -239,7 +239,7 @@ BEGIN
     -- so a fixed row requeues instead of staying terminally skipped.
     OR COALESCE(jsonb_typeof(OLD.shipping_address), 'null') IN ('object', 'null')
       IS DISTINCT FROM (COALESCE(jsonb_typeof(NEW.shipping_address), 'null') IN ('object', 'null'))
-    OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
+    OR lower(trim(both from COALESCE(NEW.customer_email, ''))) IS DISTINCT FROM lower(trim(both from COALESCE(OLD.customer_email, '')))
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
     OR NEW.customer_name IS DISTINCT FROM OLD.customer_name
     OR NEW.customer_phone IS DISTINCT FROM OLD.customer_phone

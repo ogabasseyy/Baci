@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  renderInvoiceTermsHtml,
   renderLogoHtml,
   renderPaymentHistoryHtml,
   renderTermsHtml,
@@ -164,5 +165,35 @@ describe('renderPaymentHistoryHtml', () => {
 
     expect(html).toContain('<td>-</td>');
     expect(html).not.toContain('1970');
+  });
+});
+
+describe('renderInvoiceTermsHtml', () => {
+  it('renders terms, resolved notes, and FIRS like the emailed PDF', () => {
+    const html = renderInvoiceTermsHtml(
+      {
+        invoice_note: 'Priority',
+        notes: 'Shadowed',
+        payment_due_date: '2026-05-20',
+        payment_terms: 'Net 30',
+        buyer_reference: 'PO-77',
+        firs_irn: 'IRN-1',
+        firs_csid: null,
+      } as ReceiptOrder,
+      false
+    );
+
+    expect(html).toContain('Invoice Terms');
+    expect(html).toContain('Due Date: 20 May 2026');
+    expect(html).toContain('Payment Terms: Net 30');
+    expect(html).toContain('Priority');
+    expect(html).not.toContain('Shadowed');
+    expect(html).toContain('FIRS IRN: IRN-1');
+  });
+
+  it('omits terms blocks on paid receipts', () => {
+    expect(
+      renderInvoiceTermsHtml({ payment_terms: 'Net 30' } as ReceiptOrder, true)
+    ).toBe('');
   });
 });

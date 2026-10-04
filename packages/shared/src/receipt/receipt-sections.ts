@@ -124,6 +124,51 @@ export function renderPaymentHistoryHtml(
       </div>`;
 }
 
+export function renderInvoiceTermsHtml(
+  order: ReceiptOrder,
+  isPaid: boolean
+): string {
+  // Receipts carry no terms: like the emailed PDF, terms/notes/FIRS
+  // render on invoices only so the preview matches the attachment.
+  if (isPaid) return '';
+  const dueTime = order.payment_due_date
+    ? Date.parse(order.payment_due_date)
+    : Number.NaN;
+  const dueDate = Number.isFinite(dueTime)
+    ? new Date(dueTime).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Africa/Lagos',
+      })
+    : '';
+  const note = (order.invoice_note || order.notes || '').trim();
+  const termLines = [
+    order.buyer_reference
+      ? `Buyer Reference: ${escapeHtml(order.buyer_reference)}`
+      : '',
+    dueDate ? `Due Date: ${dueDate}` : '',
+    order.payment_terms
+      ? `Payment Terms: ${escapeHtml(order.payment_terms)}`
+      : '',
+  ].filter(Boolean);
+  const firsLines = [
+    order.firs_irn?.trim()
+      ? `FIRS IRN: ${escapeHtml(order.firs_irn.trim())}`
+      : '',
+    order.firs_csid?.trim()
+      ? `FIRS CSID: ${escapeHtml(order.firs_csid.trim())}`
+      : '',
+  ].filter(Boolean);
+  const block = (label: string, lines: string[]) =>
+    `\n      <div class="section-block">\n        <div class="section-label">${label}</div>\n        ${lines.map((line) => `<div>${line}</div>`).join('')}\n      </div>`;
+  return (
+    (termLines.length > 0 ? block('Invoice Terms', termLines) : '') +
+    (note ? block('Notes', [escapeHtml(note)]) : '') +
+    (firsLines.length > 0 ? block('FIRS', firsLines) : '')
+  );
+}
+
 export function renderQrHtml(options: ReceiptOptions, isPaid: boolean): string {
   return options.qrCodeDataUri
     ? `<div class="qr-block"><img src="${escapeHtml(options.qrCodeDataUri)}" alt="QR Code" width="100" height="100"><div class="qr-caption">${isPaid ? 'Track your order' : 'Pay online'}</div></div>`

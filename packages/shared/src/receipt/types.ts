@@ -67,6 +67,15 @@ export interface ReceiptOrder {
   balance: number;
   payment_status: string;
   payment_method: string | null;
+  // Invoice-only terms/notes/FIRS: the preview renders them like the
+  // emailed PDF so the app never shows a materially incomplete invoice.
+  invoice_note?: string | null;
+  notes?: string | null;
+  payment_due_date?: string | null;
+  payment_terms?: string | null;
+  buyer_reference?: string | null;
+  firs_irn?: string | null;
+  firs_csid?: string | null;
   is_credit_order?: boolean;
   customer_name: string;
   customer_email: string;

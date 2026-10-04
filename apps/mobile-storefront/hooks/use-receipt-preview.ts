@@ -156,6 +156,14 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       balance: receiptDetail.balance,
       payment_status: isPaidReceipt ? 'paid' : receiptDetail.payment_status,
       payment_method: receiptDetail.payment_method,
+      // Invoice-only terms/notes/FIRS mirror the emailed attachment.
+      invoice_note: receiptDetail.invoice_note,
+      notes: receiptDetail.notes,
+      payment_due_date: receiptDetail.payment_due_date,
+      payment_terms: receiptDetail.payment_terms,
+      buyer_reference: receiptDetail.buyer_reference,
+      firs_irn: receiptDetail.firs_irn,
+      firs_csid: receiptDetail.firs_csid,
       is_credit_order: receiptDetail.is_credit_order,
       // Null names are sender-permitted (email fallback there): the
       // generator renders the name unconditionally, so fall back here too
@@ -180,6 +188,9 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
           undefined,
         city: receiptDetail.shipping_address.city ?? undefined,
         state: receiptDetail.shipping_address.state ?? undefined,
+        address_line2:
+          receiptDetail.shipping_address.address_line2 ?? undefined,
+        country: receiptDetail.shipping_address.country ?? undefined,
         postal_code:
           receiptDetail.shipping_address.postal_code ||
           receiptDetail.shipping_address.postalCode ||

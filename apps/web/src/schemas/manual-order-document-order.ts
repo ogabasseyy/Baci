@@ -89,19 +89,19 @@ export const manualDocumentOrderSchema = z.object({
   notes: z.string().nullish(),
   shipping_address: z
     .object({
-      address: z.string().optional(),
-      address_line1: z.string().optional(),
-      address_line2: z.string().optional(),
-      // Nullish: the mobile-admin "same as customer" edit path persists
-      // explicit nulls when no locality is preserved, and the renderer
-      // already filters falsy parts. Rejecting null here would terminally
-      // skip the document as order_validation_failed.
+      // Nullish throughout: the mobile-admin "same as customer" edit path
+      // persists explicit nulls, and every key renders null as empty like
+      // absent — rejecting null here would terminally skip the document
+      // as order_validation_failed with no re-arm on repair.
+      address: z.string().nullish(),
+      address_line1: z.string().nullish(),
+      address_line2: z.string().nullish(),
       city: z.string().nullish(),
       state: z.string().nullish(),
       postal_code: z.string().nullish(),
       // Mobile staff app persists camelCase; the PDF builder normalizes it.
       postalCode: z.string().nullish(),
-      country: z.string().optional(),
+      country: z.string().nullish(),
       // Passthrough: the dispatch marker compares the stored address key
       // set exactly, so unknown keys must survive parsing.
     })

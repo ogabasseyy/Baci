@@ -1,5 +1,9 @@
 import { Feed } from 'feed';
 import { type NextRequest, NextResponse } from 'next/server';
+import {
+  truncateFeedText,
+  xmlSafeFeedImageUrl,
+} from '@/lib/blog-feed-normalize';
 import { stripHtml } from '@/lib/blog-utils';
 import {
   getPlatformBlogFeedPosts,
@@ -36,7 +40,7 @@ export async function GET(_request: NextRequest) {
       id: feedText(blogUrl),
       link: feedText(blogUrl),
       language: 'en',
-      image: feedText(PLATFORM_BLOG_CONTEXT.logoUrl),
+      image: xmlSafeFeedImageUrl(PLATFORM_BLOG_CONTEXT.logoUrl),
       favicon: feedText(`${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`),
       copyright: feedText(
         `All rights reserved ${new Date().getFullYear()}, ${PLATFORM_BLOG_CONTEXT.businessName}`
@@ -58,7 +62,7 @@ export async function GET(_request: NextRequest) {
 
     for (const { post, publishedDate } of validPosts) {
       const excerpt =
-        post.excerpt || stripHtml(post.content || '').substring(0, 300);
+        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
       feed.addItem({
         title: feedText(post.title),
         id: `${feedText(blogUrl)}/${encodeURIComponent(post.slug)}`,
@@ -74,9 +78,7 @@ export async function GET(_request: NextRequest) {
           },
         ],
         date: publishedDate,
-        image: post.featured_image_url
-          ? feedText(post.featured_image_url)
-          : undefined,
+        image: xmlSafeFeedImageUrl(post.featured_image_url),
         category: post.category
           ? [{ name: feedText(post.category) }]
           : undefined,

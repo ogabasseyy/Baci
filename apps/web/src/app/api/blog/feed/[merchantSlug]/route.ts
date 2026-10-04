@@ -3,7 +3,11 @@ import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
-import { normalizeBlogFeedPostForFilter } from '@/lib/blog-feed-normalize';
+import {
+  normalizeBlogFeedPostForFilter,
+  truncateFeedText,
+  xmlSafeFeedImageUrl,
+} from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
 import {
@@ -249,8 +253,21 @@ async function fetchPublicFeedPosts(
     }
 
     const postBatch = Array.isArray(posts) ? (posts as BlogPost[]) : [];
+    // Judge visibility on fully normalized copies, but emit the raw slug:
+    // URLs percent-encode it (identity-preserving + XML-safe) while the
+    // predicate must see the same stripped text the feed renders.
     const normalizedBatch = postBatch.map(normalizeBlogFeedPostForFilter);
-    publicPosts.push(...filterPublicBlogPosts(normalizedBatch));
+    const visibleNormalized = new Set(filterPublicBlogPosts(normalizedBatch));
+    for (const [index, post] of postBatch.entries()) {
+      const judged = normalizedBatch[index];
+      if (judged && visibleNormalized.has(judged)) {
+        publicPosts.push({
+          ...post,
+          title: judged.title,
+          category: judged.category,
+        });
+      }
+    }
     hasMoreRows = postBatch.length === RSS_QUERY_BATCH_SIZE;
     offset += RSS_QUERY_BATCH_SIZE;
   }
@@ -357,7 +374,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       id: `${safeStoreUrl}/blog`,
       link: `${safeStoreUrl}/blog`,
       language: 'en',
-      image: merchant.logo_url ? feedText(merchant.logo_url) : undefined,
+      image: xmlSafeFeedImageUrl(merchant.logo_url),
       favicon: `${safeBaseUrl}/favicon.ico`,
       copyright: feedText(
         `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`
@@ -375,7 +392,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     for (const { post, publishedDate } of postsWithValidDates) {
       const postUrl = `${safeStoreUrl}/blog/${encodeURIComponent(post.slug)}`;
-      const excerpt = post.excerpt || stripHtml(post.content).substring(0, 300);
+      const excerpt =
+        post.excerpt || truncateFeedText(stripHtml(post.content), 300);
 
       const sanitizedContent = sanitizeForFeed(post.content);
       const imageUrls = getBlogStructuredDataImageUrls(post);
@@ -393,7 +411,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           },
         ],
         date: publishedDate,
-        image: imageUrls[0] ? feedText(imageUrls[0]) : undefined,
+        image: xmlSafeFeedImageUrl(imageUrls[0]),
         category:
           post.category && isPublicBlogCategory(post.category)
             ? [{ name: feedText(post.category) }]

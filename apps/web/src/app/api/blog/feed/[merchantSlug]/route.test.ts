@@ -393,6 +393,120 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     });
   });
 
+  it('excludes posts whose blocked slug part is split by a control character', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'agent-\u001aintegration-working',
+          title: 'Launch guide',
+          content: '<p>Body</p>',
+          excerpt: 'Excerpt',
+          featured_image_url: null,
+          category: null,
+          author_name: 'Ogabassey',
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: unknown[];
+    };
+    expect(payload.items).toHaveLength(0);
+  });
+
+  it('omits a blocked category whose value is split by a control character', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'public-feed-post',
+          title: 'Launch guide',
+          content: '<p>Body</p>',
+          excerpt: 'Excerpt',
+          featured_image_url: null,
+          category: 'te\u001ast',
+          author_name: 'Ogabassey',
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: Array<{ category?: Array<{ name: string }> }>;
+    };
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items[0]?.category).toBeUndefined();
+  });
+
+  it('truncates excerpts by code points without splitting surrogate pairs', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'public-feed-post',
+          title: 'Launch guide',
+          content: `<p>${'a'.repeat(299)}📱${'b'.repeat(10)}</p>`,
+          excerpt: '',
+          featured_image_url: null,
+          category: null,
+          author_name: 'Ogabassey',
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: Array<{ description: string }>;
+    };
+    expect(payload.items[0]?.description).toBe(`${'a'.repeat(299)}📱`);
+  });
+
+  it('omits the merchant logo when XML stripping would rewrite its URL', async () => {
+    const unsafeMerchant = {
+      ...merchant,
+      logo_url: 'https://usebaci.com/logo\u0008.png',
+    };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      options: { image?: string };
+    };
+    expect(payload.options.image).toBeUndefined();
+  });
+
   it('over-fetches additional ranges when early batches are fully filtered', async () => {
     const junkBatch = buildJunkFeedBatch();
     const publicPost = {

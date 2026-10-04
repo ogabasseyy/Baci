@@ -63,4 +63,10 @@ describe('RSS XML character safety', () => {
     expect(items[0]?.title).toBe('Phone guide');
     expect(items[0]?.author).toBe('Author Name');
   });
+
+  it('does not let XML-forbidden characters smuggle a javascript: scheme past the sanitizer', () => {
+    const html = sanitizeForFeed('<a href="java\uFFFEscript:alert(1)">x</a>');
+
+    expect(html).not.toContain('javascript:');
+  });
 });

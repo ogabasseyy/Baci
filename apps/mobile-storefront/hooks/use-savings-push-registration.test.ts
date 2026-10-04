@@ -14,8 +14,19 @@ const mockAcquire = jest.fn<Promise<string | null>, []>();
 const mockOptedOut = jest.fn<Promise<boolean>, [string]>();
 let mockTelemetryExcluded = false;
 const mockNativeRegistration = jest.fn();
-const mockGetRegisteredPushToken = jest.fn<Promise<string | null>, [string, string]>();
-const mockSetRegisteredPushToken = jest.fn<Promise<void>, [string, string, string]>();
+const mockReminderDelivery = jest.fn();
+jest.mock('./use-savings-reminder-delivery', () => ({
+  useSavingsReminderDelivery: (...args: unknown[]) =>
+    mockReminderDelivery(...args),
+}));
+const mockGetRegisteredPushToken = jest.fn<
+  Promise<string | null>,
+  [string, string]
+>();
+const mockSetRegisteredPushToken = jest.fn<
+  Promise<void>,
+  [string, string, string]
+>();
 const mockClearRegisteredPushToken = jest.fn<Promise<void>, [string, string]>();
 
 jest.mock('@/stores/auth-store', () => ({
@@ -71,6 +82,9 @@ function deferred<Value>() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest
+    .mocked(require('expo-notifications').getPermissionsAsync)
+    .mockResolvedValue({ status: 'granted' });
   mockTelemetryExcluded = false;
   mockNativeRegistration.mockReturnValue({ projectId: 'isolated-project' });
   mockAuth = { user: { id: 'user-1' }, merchantId: 'merchant-1' };
@@ -95,6 +109,11 @@ it('registers with the isolated native capability while telemetry stays excluded
   mockTelemetryExcluded = true;
   const { result } = renderHook(() => useSavingsPushRegistration());
   await waitFor(() => expect(result.current.isRegistered).toBe(true));
+  expect(mockReminderDelivery).toHaveBeenLastCalledWith(
+    'user-1',
+    'merchant-1',
+    true
+  );
   expect(mockSave).toHaveBeenCalledTimes(1);
 });
 

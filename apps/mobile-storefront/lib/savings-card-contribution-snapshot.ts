@@ -17,11 +17,9 @@ const writeTails = new Map<string, Promise<void>>();
 const uncertainWrites = new Set<string>();
 
 function keyFor(scope: Scope) {
-  return `${getStorefrontStoragePrefix()}savings-card-contribution:${JSON.stringify([
-    scope.userId,
-    scope.merchantId,
-    scope.goalId,
-  ])}`;
+  return `${getStorefrontStoragePrefix()}savings-card-contribution:${JSON.stringify(
+    [scope.userId, scope.merchantId, scope.goalId]
+  )}`;
 }
 
 async function withScopeLock<T>(key: string, action: () => Promise<T>) {
@@ -66,16 +64,21 @@ export async function saveSavingsCardContributionSnapshot(
   const key = keyFor(scope);
   return await withScopeLock(key, async () => {
     if (uncertainWrites.has(key))
-      throw new Error('Saved request state is uncertain. Check its status first.');
+      throw new Error(
+        'Saved request state is uncertain. Check its status first.'
+      );
     const existing = await readAtKey(key, scope.goalId);
     if (existing) {
-      const samePayload = existing.goalId === input.goalId &&
+      const samePayload =
+        existing.goalId === input.goalId &&
         existing.savedMethodId === input.savedMethodId &&
         existing.amountKobo === input.amountKobo &&
         existing.consent.version === input.consent.version &&
         existing.consent.oneTimeCharge === input.consent.oneTimeCharge;
       if (!samePayload)
-        throw new Error('An earlier contribution is unresolved. Check its status first.');
+        throw new Error(
+          'An earlier contribution is unresolved. Check its status first.'
+        );
       return existing;
     }
     const snapshot = SavingsCardContributionSnapshotSchema.parse({
@@ -86,7 +89,9 @@ export async function saveSavingsCardContributionSnapshot(
     await AsyncStorage.setItem(key, serialized);
     if ((await AsyncStorage.getItem(key)) !== serialized) {
       uncertainWrites.add(key);
-      throw new Error('Saved request state is uncertain. Check its status first.');
+      throw new Error(
+        'Saved request state is uncertain. Check its status first.'
+      );
     }
     return snapshot;
   });
@@ -100,7 +105,9 @@ export async function clearTerminalSavingsCardContributionSnapshot(
   const key = keyFor(scope);
   return await withScopeLock(key, async () => {
     if (status !== 'completed' && status !== 'collection_failed')
-      throw new Error('Only a confirmed terminal contribution can be replaced.');
+      throw new Error(
+        'Only a confirmed terminal contribution can be replaced.'
+      );
     const existing = await readAtKey(key, scope.goalId);
     if (!existing || existing.idempotencyKey !== expectedKey)
       throw new Error('Saved contribution changed. Check its status again.');

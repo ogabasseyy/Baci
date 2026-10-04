@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const hostedDraftEnvironmentSchema = z
   .object({
-    NODE_ENV: z.enum(["development", "production", "test"]),
+    NODE_ENV: z.enum(['development', 'production', 'test']),
     NEXT_PUBLIC_SUPABASE_URL: z.string().min(1),
     NEXT_PUBLIC_APP_URL: z.string().min(1),
     NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),

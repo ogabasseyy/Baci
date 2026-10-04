@@ -510,7 +510,10 @@ describe('POST event intake', () => {
       expect.objectContaining({
         event_id: outflowEvent.eventId,
         event_type: 'bank-transfer.outflow.success',
-        reference: JSON.stringify(['outflow-ref-001', 'outflow-third-party-001']),
+        reference: JSON.stringify([
+          'outflow-ref-001',
+          'outflow-third-party-001',
+        ]),
       }),
       { onConflict: 'event_id', ignoreDuplicates: true }
     );
@@ -525,7 +528,10 @@ describe('POST event intake', () => {
         event_category: 'bank-transfer',
         customer_id: outflowEvent.customer_id,
         wallet_id: null,
-        reference: JSON.stringify(['outflow-ref-001', 'outflow-third-party-001']),
+        reference: JSON.stringify([
+          'outflow-ref-001',
+          'outflow-third-party-001',
+        ]),
         amount_kobo: null,
       }
     );
@@ -534,7 +540,10 @@ describe('POST event intake', () => {
     });
     const rawBody = JSON.stringify({
       ...outflowEvent,
-      eventData: { ...outflowEvent.eventData, reference: 'outflow-ref-altered' },
+      eventData: {
+        ...outflowEvent.eventData,
+        reference: 'outflow-ref-altered',
+      },
     });
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));

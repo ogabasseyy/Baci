@@ -159,10 +159,12 @@ export function createIntakeHandler(deps: IntakeDependencies) {
         authTag: cipher.getAuthTag().toString('base64'),
         keyVersion: 'staging-v1',
       });
-      const receipt = await persist(signedIntakeSchemas.sealed.parse({
-        ...sealed,
-        originalSignature: signature,
-      }));
+      const receipt = await persist(
+        signedIntakeSchemas.sealed.parse({
+          ...sealed,
+          originalSignature: signature,
+        })
+      );
       if (
         !receipt ||
         typeof receipt.receiptId !== 'string' ||

@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
+import { FundingAccountDetails } from './FundingAccountDetails';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { TransferModalProps } from './start-savings-transfer-modal-props';
-import { FundingAccountDetails } from './FundingAccountDetails';
 
 export function PlanFundingFallback({
   colors,

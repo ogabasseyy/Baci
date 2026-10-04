@@ -20,6 +20,7 @@ let mockPlanFundingAccounts = defaultPlanFundingAccounts();
 const mockUseSavingsPlanFunding = jest.fn();
 const mockKeyboardAwareScrollViewSpy = jest.fn();
 let mockUserId: string | null = 'customer-1';
+let mockSavingsGoals: ReturnType<typeof defaultActiveGoal>[] = [];
 const mockAuthListeners = new Set<() => void>();
 let mockParams: Record<string, string | string[]> = {
   amount: '250000',
@@ -72,6 +73,7 @@ jest.mock('@/hooks/use-wallet', () => ({
     data: {
       wallet: {
         active_savings_goal: mockActiveGoal,
+        savings_goals: mockSavingsGoals,
       },
     },
     isLoading: false,
@@ -132,6 +134,7 @@ describe('SavingsPlanFundingRoute', () => {
     mockUserId = 'customer-1';
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
     mockActiveGoal = defaultActiveGoal();
+    mockSavingsGoals = [];
     mockPlanFundingAccounts = defaultPlanFundingAccounts();
     mockParams = {
       amount: '250000',
@@ -252,6 +255,20 @@ describe('SavingsPlanFundingRoute', () => {
     expect(mockFetchPlanFunding).not.toHaveBeenCalled();
     fireEvent.press(screen.getByRole('button', { name: 'Back to savings' }));
     expect(router.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads an owned requested goal when another goal is the default', () => {
+    mockSavingsGoals = [defaultActiveGoal()];
+    mockActiveGoal = {
+      ...defaultActiveGoal(),
+      id: '01932f3e-7a2d-7c1e-b4d5-9f8e7d6c5b4a',
+    };
+    render(<SavingsPlanFundingRoute />);
+
+    expect(screen.getByText('₦250,000')).toBeOnTheScreen();
+    expect(mockUseSavingsPlanFunding).toHaveBeenCalledWith(
+      expect.objectContaining({ goalId: mockParams.goalId, loadExisting: true })
+    );
   });
 
   it('accepts UUID v7 goal ids emitted by the backend', () => {

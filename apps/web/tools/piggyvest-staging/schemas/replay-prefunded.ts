@@ -5,8 +5,14 @@ export const replayPrefundedSchemas = {
   originalSignature: z
     .strictObject({
       receiptId: z.string().min(1),
-      payloadSha256: z.string().length(64).regex(/^[a-f0-9]+$/),
-      signature: z.string().length(128).regex(/^[a-f0-9]+$/i),
+      payloadSha256: z
+        .string()
+        .length(64)
+        .regex(/^[a-f0-9]+$/),
+      signature: z
+        .string()
+        .length(128)
+        .regex(/^[a-f0-9]+$/i),
     })
     .nullable(),
   outcome: z.discriminatedUnion('outcome', [

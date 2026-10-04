@@ -93,7 +93,9 @@ beforeEach(() => {
     customer: { id: customerId },
     merchant: { id: merchantId },
     supabase: {
-      from: vi.fn(() => goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })),
+      from: vi.fn(() =>
+        goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })
+      ),
     },
   });
   mockExecutePiggyvestPostgres.mockResolvedValue({

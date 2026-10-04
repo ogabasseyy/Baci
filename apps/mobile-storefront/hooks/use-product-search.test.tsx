@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react-native';
-import React from 'react';
+import type React from 'react';
 import { resolveAndEvictProduct } from '@/hooks/product-utils';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { Product } from '@/types/product';
@@ -71,8 +71,7 @@ describe('useProductSearch', () => {
 
   it('passes search options through and returns list state', () => {
     const { result } = renderHook(
-      () =>
-        useProductSearch({ enabled: true, limit: 8, search: 'iphone' }),
+      () => useProductSearch({ enabled: true, limit: 8, search: 'iphone' }),
       { wrapper }
     );
 

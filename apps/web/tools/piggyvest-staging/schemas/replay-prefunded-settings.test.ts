@@ -20,7 +20,8 @@ it('requires exact bundle and configuration digests with no configurable paths',
 it('requires the named factory and only receipt runtime callbacks', () => {
   expect(schemas.module.safeParse({ default: vi.fn() }).success).toBe(false);
   expect(
-    schemas.module.safeParse({ createPrefundedCardReplayRuntime: vi.fn() }).success
+    schemas.module.safeParse({ createPrefundedCardReplayRuntime: vi.fn() })
+      .success
   ).toBe(true);
   const runtime = { resolveEnrollment: vi.fn(), replay: vi.fn() };
   expect(schemas.runtime.parse(runtime)).toEqual(runtime);

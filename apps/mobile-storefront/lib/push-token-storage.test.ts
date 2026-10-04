@@ -174,7 +174,11 @@ describe('push-token-storage', () => {
   describe('registration receipt', () => {
     it('round-trips the confirmed token under the namespaced key', async () => {
       mockSetItem.mockResolvedValue(undefined);
-      await setRegisteredPushToken('user-1', 'merchant-1', 'ExponentPushToken[ok]');
+      await setRegisteredPushToken(
+        'user-1',
+        'merchant-1',
+        'ExponentPushToken[ok]'
+      );
       expect(mockSetItem).toHaveBeenCalledWith(
         pushRegisteredKey('user-1', 'merchant-1'),
         'ExponentPushToken[ok]'

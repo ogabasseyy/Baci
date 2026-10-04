@@ -7,6 +7,7 @@ import {
 } from '@/lib/piggyvest/event-quarantine';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
+import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
 import {
@@ -15,7 +16,6 @@ import {
 } from '@/lib/piggyvest/webhook-inbox';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
-import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,

@@ -41,7 +41,7 @@ export function useProductSearch({
       throw new Error('Product has no slug to resolve');
     }
     const slug = product.slug;
-    return queryClient.fetchQuery({
+    return await queryClient.fetchQuery({
       queryKey: buildProductQueryKey(slug, merchantId),
       queryFn: async () => {
         const row = await resolveAndEvictProduct(merchantId, slug, queryClient);

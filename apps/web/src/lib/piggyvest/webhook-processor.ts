@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 import type { PiggyvestClientConfig } from './client';
 import { recordQuarantineEvent } from './event-quarantine';
 import { InflowLedgerError, recordInflowCredit } from './inflow-ledger';

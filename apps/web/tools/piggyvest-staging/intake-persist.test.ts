@@ -70,10 +70,16 @@ describe('restricted receipt persistence', () => {
   });
 
   it('rejects an unsigned legacy acknowledgement rather than falling back', async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
-      receiptId: receipt.receiptId, duplicate: false, durable: true,
-    }));
-    await expect(createIntakePersistence('synthetic', fetcher)(sealed)).rejects.toThrow();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        receiptId: receipt.receiptId,
+        duplicate: false,
+        durable: true,
+      })
+    );
+    await expect(
+      createIntakePersistence('synthetic', fetcher)(sealed)
+    ).rejects.toThrow();
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

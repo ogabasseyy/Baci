@@ -394,7 +394,9 @@ describe('useWallet', () => {
       status: 'available',
       creditedInterestKobo: 125050,
       goalInterestKobo: [],
-    } as Awaited<ReturnType<typeof walletSavingsInterest.fetchWalletSavingsInterest>>);
+    } as Awaited<
+      ReturnType<typeof walletSavingsInterest.fetchWalletSavingsInterest>
+    >);
     setupWalletTableMocks({
       fundingAccountResult: createQueryResult({
         account_name: 'Ogabassey/Jane Doe',

@@ -26,9 +26,8 @@ const mockClearAvailable =
     }) => Promise<void>
   >();
 const mockCancelSavingsReminderNotification = jest.fn<() => Promise<boolean>>();
-const mockGetRegisteredPushToken = jest.fn<
-  (userId: string, merchantId: string) => Promise<string | null>
->();
+const mockGetRegisteredPushToken =
+  jest.fn<(userId: string, merchantId: string) => Promise<string | null>>();
 
 jest.mock('@/services/savings-notification-inbox', () => ({
   fetchSavingsNotificationInbox: mockFetchInbox,

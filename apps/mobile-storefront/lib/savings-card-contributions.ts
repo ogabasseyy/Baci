@@ -71,7 +71,10 @@ export async function submitSavingsCardContribution({
     signal,
   });
   const operation = SavingsCardContributionOperationSchema.parse(data);
-  if (operation.goalId !== body.goalId || operation.amountKobo !== body.amountKobo)
+  if (
+    operation.goalId !== body.goalId ||
+    operation.amountKobo !== body.amountKobo
+  )
     throw new Error('Card contribution response does not match this request.');
   return operation;
 }

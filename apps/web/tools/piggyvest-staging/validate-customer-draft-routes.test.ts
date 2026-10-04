@@ -14,10 +14,7 @@ function fixture(routes: FixtureRoute[]) {
 }
 
 function passing() {
-  return fixture([
-    ...customerDraftProxyRoutes(),
-    { handle: 'filesystem' },
-  ]);
+  return fixture([...customerDraftProxyRoutes(), { handle: 'filesystem' }]);
 }
 
 function failuresOf(config: { version: number; routes: FixtureRoute[] }) {

@@ -100,6 +100,7 @@ export function createHostedStorefrontAppFetch(
         '/api/storefront/customer/wallet/top-up/initialize',
         '/api/storefront/customer/wallet/top-up/confirm',
         '/api/storefront/customer/savings/contributions/manual',
+        '/api/storefront/customer/savings/card-contributions',
       ].includes(url.pathname);
     const stagingFirstCardMutation =
       firstCardCheckout &&

@@ -181,9 +181,9 @@ describe('recordInterestPayout', () => {
         mismatchedFields: ['amount_kobo'],
       }),
     });
-    expect(
-      (error as InterestLedgerError).conflict?.bodyDigest
-    ).toMatch(/^[0-9a-f]{64}$/);
+    expect((error as InterestLedgerError).conflict?.bodyDigest).toMatch(
+      /^[0-9a-f]{64}$/
+    );
   });
 
   it('fails closed when gross minus tax disagrees with net', async () => {

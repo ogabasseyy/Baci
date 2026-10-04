@@ -384,7 +384,10 @@ describe('recordInflowCredit', () => {
     });
   });
 
-  it('fails retryable-unresolved when goals are ambiguous', async () => {
+  it.each([
+    'no unique target',
+    'plan transfer exceeds remaining goal amount; reconciliation required',
+  ])('leaves the recorded inflow unresolved when projection refuses: %s', async (message) => {
     const { client } = mockSupabase(
       {
         data: [{ provider_transaction_id: 'provider-txn-synthetic-001' }],
@@ -392,7 +395,7 @@ describe('recordInflowCredit', () => {
       },
       { data: MAPPING_ROW, error: null },
       { data: STORED_CREDIT_ROW, error: null },
-      { data: null, error: { code: 'P0001', message: 'no unique target' } }
+      { data: null, error: { code: 'P0001', message } }
     );
 
     const error = await recordInflowCredit(client, inflowEvent).catch(

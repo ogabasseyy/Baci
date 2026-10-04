@@ -1023,9 +1023,7 @@ describe('WalletScreen', () => {
 
     render(<WalletScreen />);
 
-    expect(
-      screen.getByText('savings-contribution-amount:')
-    ).toBeOnTheScreen();
+    expect(screen.getByText('savings-contribution-amount:')).toBeOnTheScreen();
   });
 
   it('keeps the savings plan open if its wallet payment cannot start', async () => {

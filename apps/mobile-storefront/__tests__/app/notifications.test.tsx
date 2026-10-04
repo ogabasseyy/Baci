@@ -111,9 +111,7 @@ describe('NotificationsScreen', () => {
 
     render(<NotificationsScreen />);
 
-    expect(
-      screen.getByLabelText('Loading notifications')
-    ).toBeOnTheScreen();
+    expect(screen.getByLabelText('Loading notifications')).toBeOnTheScreen();
     expect(mockSavingsNotificationsScreen).not.toHaveBeenCalled();
   });
 });

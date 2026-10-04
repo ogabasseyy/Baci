@@ -52,7 +52,11 @@ function inRoundedRect(x, y, left, top, right, bottom, radius) {
   const dx = x - cx;
   const dy = y - cy;
   return (
-    x >= left && x < right && y >= top && y < bottom && dx * dx + dy * dy <= radius * radius
+    x >= left &&
+    x < right &&
+    y >= top &&
+    y < bottom &&
+    dx * dx + dy * dy <= radius * radius
   );
 }
 
@@ -65,10 +69,30 @@ const pixels = Buffer.alloc(WIDTH * HEIGHT * 4);
 for (let y = 0; y < HEIGHT; y += 1) {
   for (let x = 0; x < WIDTH; x += 1) {
     let color = BACKGROUND;
-    if (inRoundedRect(x, y, bodyBounds.left, bodyBounds.top, bodyBounds.right, bodyBounds.bottom, bodyBounds.radius)) {
+    if (
+      inRoundedRect(
+        x,
+        y,
+        bodyBounds.left,
+        bodyBounds.top,
+        bodyBounds.right,
+        bodyBounds.bottom,
+        bodyBounds.radius
+      )
+    ) {
       color = BODY;
     }
-    if (inRoundedRect(x, y, screenBounds.left, screenBounds.top, screenBounds.right, screenBounds.bottom, screenBounds.radius)) {
+    if (
+      inRoundedRect(
+        x,
+        y,
+        screenBounds.left,
+        screenBounds.top,
+        screenBounds.right,
+        screenBounds.bottom,
+        screenBounds.radius
+      )
+    ) {
       color = SCREEN;
     }
     const dx = x - camera.x;
@@ -83,7 +107,12 @@ for (let y = 0; y < HEIGHT; y += 1) {
 const scanlines = Buffer.alloc(HEIGHT * (1 + WIDTH * 4));
 for (let y = 0; y < HEIGHT; y += 1) {
   scanlines[y * (1 + WIDTH * 4)] = 0;
-  pixels.copy(scanlines, y * (1 + WIDTH * 4) + 1, y * WIDTH * 4, (y + 1) * WIDTH * 4);
+  pixels.copy(
+    scanlines,
+    y * (1 + WIDTH * 4) + 1,
+    y * WIDTH * 4,
+    (y + 1) * WIDTH * 4
+  );
 }
 
 const header = Buffer.alloc(13);
@@ -99,6 +128,9 @@ const png = Buffer.concat([
   chunk('IEND', Buffer.alloc(0)),
 ]);
 
-const outPath = join(dirname(fileURLToPath(import.meta.url)), 'synthetic-phone-preview.png');
+const outPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'synthetic-phone-preview.png'
+);
 writeFileSync(outPath, png);
 console.log(`wrote ${outPath} (${png.length} bytes)`);

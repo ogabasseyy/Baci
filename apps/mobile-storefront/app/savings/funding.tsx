@@ -43,6 +43,11 @@ export function parseRequestedAmount(value: string): number | null {
 }
 
 export default function SavingsPlanFundingRoute() {
+  // Client convenience only, not a boundary: the server stays authoritative
+  // for funding accounts. No returnTo is preserved on purpose — in a
+  // production build this branch always fires, so a returnTo would loop
+  // users back to this staging-only route after login; in a staging build
+  // the branch never fires. Money movement never depends on this gate.
   if (!isHostedStagingTestPaymentsEnabled()) {
     return <Redirect href="/wallet" />;
   }
@@ -64,7 +69,11 @@ function SavingsPlanFundingScreen() {
   const [copyFailed, setCopyFailed] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const goalId = stringParam(params.goalId);
-  const activeGoal = data?.wallet.active_savings_goal ?? null;
+  const activeGoal =
+    data?.wallet.savings_goals?.find((goal) => goal.id === goalId) ??
+    (data?.wallet.active_savings_goal?.id === goalId
+      ? data.wallet.active_savings_goal
+      : null);
   const remainingAmount = activeGoal
     ? Math.max(0, activeGoal.target_amount - activeGoal.current_amount)
     : 0;
@@ -138,7 +147,9 @@ function SavingsPlanFundingScreen() {
             <Text style={[styles.copy, { color: colors.error }]}>
               {amountExceedsCachedRemaining && activeMerchantId
                 ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'
-                : activeGoal === null && activeMerchantId
+                : !data?.wallet.active_savings_goal &&
+                    !data?.wallet.savings_goals?.length &&
+                    activeMerchantId
                   ? 'We could not find your active savings plan in the cached wallet. Refresh plan progress below — if the plan still does not appear, return to savings and choose the plan again.'
                   : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
             </Text>

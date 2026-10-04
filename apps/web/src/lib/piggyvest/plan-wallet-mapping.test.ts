@@ -76,4 +76,3 @@ describe('resolvePlanWalletMapping', () => {
     ).rejects.toThrow('Plan wallet mapping lookup failed');
   });
 });
-

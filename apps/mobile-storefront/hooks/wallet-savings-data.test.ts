@@ -196,26 +196,23 @@ describe('wallet savings data helpers', () => {
     ['deleted', { deleted_at: '2026-01-01T00:00:00.000Z' }],
     ['archived', { archived_at: '2026-01-01T00:00:00.000Z' }],
     ['non-active status', { status: 'draft' }],
-  ])(
-    'does not mark a product with only a %s variant unresolved',
-    (_label, visibility) => {
-      expect(
-        toActiveSavingsGoal({
-          goal: { ...activeGoal, variant_id: null },
-          product: {
-            id: 'product-1',
-            images: ['https://cdn.example.com/product.jpg'],
-            name: 'iPhone 15 Pro',
-            variants: [{ id: 'hidden-variant', ...visibility }],
-          },
-        })
-      ).toEqual(
-        expect.objectContaining({
-          selection_unresolved: false,
-        })
-      );
-    }
-  );
+  ])('does not mark a product with only a %s variant unresolved', (_label, visibility) => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [{ id: 'hidden-variant', ...visibility }],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: false,
+      })
+    );
+  });
 
   it('excludes hidden variants from re-selection options', () => {
     expect(

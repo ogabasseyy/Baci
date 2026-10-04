@@ -35,8 +35,7 @@ export function createPrefundedCardReplayEnrollment(options: {
         JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawPayload))
       );
       const bank = envelope.eventType === 'bank-transfer.inflow.success';
-      const native =
-        !bank && envelope.eventCategory === 'wallet_transfer';
+      const native = !bank && envelope.eventCategory === 'wallet_transfer';
       const inner = envelope.eventData;
       if (
         envelope.eventId !== request.eventId ||

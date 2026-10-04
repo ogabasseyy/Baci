@@ -1,8 +1,8 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import z from 'zod';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 
 /**
  * Durable quarantine for authentic deliveries that must never touch

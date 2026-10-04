@@ -375,9 +375,7 @@ describe('login resume state', () => {
       'baci-test.auth-login-resume-state',
       expect.stringContaining('shopper@example.com')
     );
-    expect(mockDeleteItemAsync).toHaveBeenCalledWith(
-      'auth-login-resume-state'
-    );
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith('auth-login-resume-state');
   });
 
   it('deletes an expired legacy value without migrating it to the prefixed key', async () => {
@@ -398,9 +396,7 @@ describe('login resume state', () => {
     // Stale payloads must not be copied into the tenant namespace ...
     expect(mockSetItemAsync).not.toHaveBeenCalled();
     // ... but the shared legacy key is still deleted so it cannot linger.
-    expect(mockDeleteItemAsync).toHaveBeenCalledWith(
-      'auth-login-resume-state'
-    );
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith('auth-login-resume-state');
   });
 
   it('fails closed without touching storage when prefix resolution throws', async () => {

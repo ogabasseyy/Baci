@@ -287,9 +287,9 @@ describe('runSavingsGoalSubmission', () => {
 
     await runSavingsGoalSubmission(input, validation);
 
-    expect(
-      mockCancelSavingsReminderNotification
-    ).toHaveBeenCalledWith('goal-1');
+    expect(mockCancelSavingsReminderNotification).toHaveBeenCalledWith(
+      'goal-1'
+    );
     expect(mockScheduleSavingsReminderNotification).not.toHaveBeenCalled();
   });
 

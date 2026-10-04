@@ -64,7 +64,10 @@ function removeWebStorageValue(key: string) {
 // into the current tenant's namespace.
 function readWebResumeValue(primaryKey: string): string | null {
   const rawValue = readWebStorageValue(primaryKey);
-  if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+  if (
+    rawValue !== null ||
+    primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY
+  ) {
     return rawValue;
   }
   const legacyValue = readWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
@@ -77,9 +80,14 @@ function readWebResumeValue(primaryKey: string): string | null {
   return legacyValue;
 }
 
-async function readNativeResumeValue(primaryKey: string): Promise<string | null> {
+async function readNativeResumeValue(
+  primaryKey: string
+): Promise<string | null> {
   const rawValue = await SecureStore.getItemAsync(primaryKey);
-  if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+  if (
+    rawValue !== null ||
+    primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY
+  ) {
     return rawValue;
   }
   const legacyValue = await SecureStore.getItemAsync(

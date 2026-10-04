@@ -82,10 +82,7 @@ export async function setRegisteredPushToken(
   token: string
 ): Promise<void> {
   try {
-    await AsyncStorage.setItem(
-      pushRegisteredKey(userId, merchantId),
-      token
-    );
+    await AsyncStorage.setItem(pushRegisteredKey(userId, merchantId), token);
   } catch {
     // Fail-open: the server save already succeeded; a missing receipt
     // only keeps (duplicate) local reminders scheduled.

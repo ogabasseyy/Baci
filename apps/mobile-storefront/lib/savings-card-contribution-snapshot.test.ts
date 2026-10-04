@@ -13,12 +13,18 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
       }
       return mockValues.get(key) ?? null;
     },
-    setItem: async (key: string, value: string) => { mockValues.set(key, value); },
-    removeItem: async (key: string) => { mockValues.delete(key); },
+    setItem: async (key: string, value: string) => {
+      mockValues.set(key, value);
+    },
+    removeItem: async (key: string) => {
+      mockValues.delete(key);
+    },
   },
 }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => mockUuid }));
-jest.mock('@/lib/storefront-storage-prefix', () => ({ getStorefrontStoragePrefix: () => 'test-store:' }));
+jest.mock('@/lib/storefront-storage-prefix', () => ({
+  getStorefrontStoragePrefix: () => 'test-store:',
+}));
 
 import {
   clearTerminalSavingsCardContributionSnapshot,
@@ -35,7 +41,10 @@ const request = {
   goalId: scope.goalId,
   savedMethodId: '00000000-0000-4000-8000-000000000002',
   amountKobo: 15050,
-  consent: { version: 'prefunded-card-v1' as const, oneTimeCharge: true as const },
+  consent: {
+    version: 'prefunded-card-v1' as const,
+    oneTimeCharge: true as const,
+  },
 };
 
 beforeEach(() => {
@@ -63,25 +72,52 @@ it('serializes concurrent writes per user, merchant, and goal and reuses the sam
 it('refuses changed payloads while an earlier operation is unresolved', async () => {
   const testScope = { ...scope, userId: 'customer-unresolved' };
   await saveSavingsCardContributionSnapshot(testScope, request);
-  await expect(saveSavingsCardContributionSnapshot(testScope, { ...request, amountKobo: 20000 })).rejects.toThrow(/unresolved/);
+  await expect(
+    saveSavingsCardContributionSnapshot(testScope, {
+      ...request,
+      amountKobo: 20000,
+    })
+  ).rejects.toThrow(/unresolved/);
 });
 
 it('does not replace uncertain persisted data after readback failure', async () => {
   const testScope = { ...scope, userId: 'customer-readback' };
   mockMismatchReadback = true;
-  await expect(saveSavingsCardContributionSnapshot(testScope, request)).rejects.toThrow(/uncertain/);
+  await expect(
+    saveSavingsCardContributionSnapshot(testScope, request)
+  ).rejects.toThrow(/uncertain/);
   const persisted = await readSavingsCardContributionSnapshot(testScope);
   expect(persisted?.idempotencyKey).toBe(mockUuid);
-  await expect(saveSavingsCardContributionSnapshot(testScope, { ...request, amountKobo: 30000 })).rejects.toThrow(/uncertain/);
-  expect((await readSavingsCardContributionSnapshot(testScope))?.amountKobo).toBe(15050);
+  await expect(
+    saveSavingsCardContributionSnapshot(testScope, {
+      ...request,
+      amountKobo: 30000,
+    })
+  ).rejects.toThrow(/uncertain/);
+  expect(
+    (await readSavingsCardContributionSnapshot(testScope))?.amountKobo
+  ).toBe(15050);
 });
 
 it('clears a prior key only after explicit confirmed terminal status', async () => {
   const testScope = { ...scope, userId: 'customer-terminal' };
   const saved = await saveSavingsCardContributionSnapshot(testScope, request);
-  await expect(clearTerminalSavingsCardContributionSnapshot(testScope, saved.idempotencyKey, 'reconciliation_required' as never)).rejects.toThrow(/terminal/);
-  await clearTerminalSavingsCardContributionSnapshot(testScope, saved.idempotencyKey, 'completed');
+  await expect(
+    clearTerminalSavingsCardContributionSnapshot(
+      testScope,
+      saved.idempotencyKey,
+      'reconciliation_required' as never
+    )
+  ).rejects.toThrow(/terminal/);
+  await clearTerminalSavingsCardContributionSnapshot(
+    testScope,
+    saved.idempotencyKey,
+    'completed'
+  );
   mockUuid = '00000000-0000-4000-8000-000000000010';
-  const next = await saveSavingsCardContributionSnapshot(testScope, { ...request, amountKobo: 20000 });
+  const next = await saveSavingsCardContributionSnapshot(testScope, {
+    ...request,
+    amountKobo: 20000,
+  });
   expect(next.idempotencyKey).not.toBe(saved.idempotencyKey);
 });

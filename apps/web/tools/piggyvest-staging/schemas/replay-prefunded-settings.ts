@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import type { PrefundedReceiptReplay } from '../replay-prefunded';
 
-type ReplayRuntime = Pick<PrefundedReceiptReplay, 'resolveEnrollment' | 'replay'>;
+type ReplayRuntime = Pick<
+  PrefundedReceiptReplay,
+  'resolveEnrollment' | 'replay'
+>;
 type RuntimeFactory = (input: {
   configuration: unknown;
   expectedAppSystemId: string;

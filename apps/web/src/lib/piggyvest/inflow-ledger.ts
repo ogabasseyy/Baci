@@ -249,14 +249,10 @@ async function projectPlanTransferOntoGoal(
     p_provider_customer_id: input.providerCustomerId,
   });
   if (!error) return;
-  // P0001 is the RPC's ambiguity raise: two or more allocatable manual
-  // goals, so no unique attribution target. Retryable, mirroring
-  // INFLOW_LEDGER_UNMAPPED — the processor marks the event failed and
-  // throws, and the provider redelivers after the goal set resolves.
   if (error.code === 'P0001') {
     throw new InflowLedgerError(
       'INFLOW_LEDGER_UNRESOLVED',
-      'Plan transfer matches more than one savings goal'
+      'Plan transfer requires reconciliation before goal projection'
     );
   }
   throw new InflowLedgerError(

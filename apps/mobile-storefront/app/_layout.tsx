@@ -24,8 +24,8 @@ import { offlineQueue } from '@/lib/offline-queue';
 import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
+import { activateDueSavingsReminderSafely } from '@/services/activate-savings-reminder-safely';
 import { initAnalytics } from '@/services/analytics';
-import { activateDueSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { useAuthStore } from '@/stores/auth-store';
 
 type ErrorBoundaryProps = { error: Error; retry: () => void };
@@ -119,7 +119,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isInitialized && isStorageReady && isTrackingAuthorizationSettled) {
-      void activateDueSavingsReminderNotification();
+      activateDueSavingsReminderSafely();
     }
   }, [isInitialized, isStorageReady, isTrackingAuthorizationSettled]);
 
@@ -140,7 +140,7 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active' && bootReadyRef.current) {
-        void activateDueSavingsReminderNotification();
+        activateDueSavingsReminderSafely();
       }
     });
     return () => subscription.remove();

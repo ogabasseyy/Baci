@@ -7,8 +7,8 @@ import { PlanFundingAccountDetails } from './PlanFundingAccountDetails';
 import { PlanFundingFallback } from './PlanFundingFallback';
 import { PlanFundingLookup } from './PlanFundingLookup';
 import { PlanTransferActions } from './PlanTransferActions';
-import { SummaryRow } from './start-savings-modal-parts';
 import { startSavingsStyles as styles } from './start-savings.styles';
+import { SummaryRow } from './start-savings-modal-parts';
 import type { TransferModalProps } from './start-savings-transfer-modal-props';
 
 export function PlanTransferMode({ colors, controller }: TransferModalProps) {

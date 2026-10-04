@@ -241,11 +241,13 @@ export async function fetchWalletData(
   // Confirmed per-goal interest credits adjust each goal's progress and
   // the savings/total balances before any selection or reduction, so plan
   // progress agrees with the Earnings cell.
-  const { goals: projectedSavingsGoalRows, savingsBalance: safeSavingsBalance } =
-    projectWalletSavingsInterest({
-      goals: savingsGoalRows,
-      goalInterestKobo: savingsInterest.goalInterestKobo,
-    });
+  const {
+    goals: projectedSavingsGoalRows,
+    savingsBalance: safeSavingsBalance,
+  } = projectWalletSavingsInterest({
+    goals: savingsGoalRows,
+    goalInterestKobo: savingsInterest.goalInterestKobo,
+  });
   const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
   let activeSavingsGoal: WalletActiveSavingsGoal | null = null;
 

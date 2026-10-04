@@ -114,10 +114,9 @@ export function useSavingsNotificationInbox({
         void (async () => {
           const registered =
             inbox.deliveryEnabled &&
-            (await getRegisteredPushToken(
-              activeUserId,
-              activeMerchantId
-            ).catch(() => null));
+            (await getRegisteredPushToken(activeUserId, activeMerchantId).catch(
+              () => null
+            ));
           if (!active || scopeRef.current !== scope) return;
           if (registered) {
             await savingsNotificationCapability

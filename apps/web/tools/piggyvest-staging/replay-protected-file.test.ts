@@ -41,10 +41,13 @@ function fixture() {
 
 it('opens a root-protected regular file without following its final symlink', async () => {
   const sample = fixture();
-  await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-    .resolves.toEqual(Buffer.from('{}'));
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).resolves.toEqual(Buffer.from('{}'));
   expect(sample.dependencies.inspect.mock.calls.map(([path]) => path)).toEqual([
-    '/run/pvb-replay', '/run', '/',
+    '/run/pvb-replay',
+    '/run',
+    '/',
   ]);
   expect(sample.dependencies.open).toHaveBeenCalledExactlyOnceWith(
     sample.input.path,
@@ -60,11 +63,16 @@ it.each([
   { isDirectory: () => false },
 ])('rejects unsafe ancestor metadata before opening: %j', async (override) => {
   const sample = fixture();
-  sample.dependencies.inspect.mockResolvedValue(facts({
-    mode: 0o755, isDirectory: () => true, ...override,
-  }));
-  await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-    .rejects.toThrow('Staging replay protected file unavailable');
+  sample.dependencies.inspect.mockResolvedValue(
+    facts({
+      mode: 0o755,
+      isDirectory: () => true,
+      ...override,
+    })
+  );
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
   expect(sample.dependencies.open).not.toHaveBeenCalled();
 });
 
@@ -79,38 +87,53 @@ it.each([
 ])('rejects unsafe file metadata before reading: %j', async (override) => {
   const sample = fixture();
   sample.handle.stat.mockResolvedValue(facts(override));
-  await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-    .rejects.toThrow('Staging replay protected file unavailable');
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
   expect(sample.handle.readFile).not.toHaveBeenCalled();
   expect(sample.handle.close).toHaveBeenCalledTimes(1);
 });
 
-it.each(['ino', 'dev', 'size', 'mtimeMs', 'ctimeMs', 'uid', 'mode', 'nlink'])(
-  'refuses %s changing during the read', async (property) => {
-    const sample = fixture();
-    sample.handle.stat.mockResolvedValueOnce(facts())
-      .mockResolvedValueOnce(facts({ [property]: 99 }));
-    await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-      .rejects.toThrow('Staging replay protected file unavailable');
-    expect(sample.handle.close).toHaveBeenCalledTimes(1);
-  }
-);
+it.each([
+  'ino',
+  'dev',
+  'size',
+  'mtimeMs',
+  'ctimeMs',
+  'uid',
+  'mode',
+  'nlink',
+])('refuses %s changing during the read', async (property) => {
+  const sample = fixture();
+  sample.handle.stat
+    .mockResolvedValueOnce(facts())
+    .mockResolvedValueOnce(facts({ [property]: 99 }));
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
+  expect(sample.handle.close).toHaveBeenCalledTimes(1);
+});
 
 it('refuses short reads and redacts open/read errors', async () => {
   const sample = fixture();
   sample.handle.readFile.mockResolvedValue(Buffer.from('{'));
-  await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-    .rejects.toThrow('Staging replay protected file unavailable');
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
   sample.dependencies.open.mockRejectedValue(new Error('secret=private'));
-  await expect(readProtectedReplayFile(sample.input, sample.dependencies))
-    .rejects.toThrow('Staging replay protected file unavailable');
+  await expect(
+    readProtectedReplayFile(sample.input, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
 });
 
-it.each(['relative', '/run/../secret', '/run/secret\0'])(
-  'rejects noncanonical paths: %s', async (path) => {
-    const sample = fixture();
-    await expect(readProtectedReplayFile({ ...sample.input, path }, sample.dependencies))
-      .rejects.toThrow('Staging replay protected file unavailable');
-    expect(sample.dependencies.inspect).not.toHaveBeenCalled();
-  }
-);
+it.each([
+  'relative',
+  '/run/../secret',
+  '/run/secret\0',
+])('rejects noncanonical paths: %s', async (path) => {
+  const sample = fixture();
+  await expect(
+    readProtectedReplayFile({ ...sample.input, path }, sample.dependencies)
+  ).rejects.toThrow('Staging replay protected file unavailable');
+  expect(sample.dependencies.inspect).not.toHaveBeenCalled();
+});

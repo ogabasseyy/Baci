@@ -1,5 +1,5 @@
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   deferredEvent,
   inflowEvent,
@@ -18,8 +18,7 @@ const mockApplyOutflow = vi.fn();
 const mockRecordQuarantine = vi.fn();
 
 vi.mock('./event-quarantine', () => ({
-  recordQuarantineEvent: (...args: unknown[]) =>
-    mockRecordQuarantine(...args),
+  recordQuarantineEvent: (...args: unknown[]) => mockRecordQuarantine(...args),
 }));
 
 vi.mock('./webhook-inbox', () => ({
@@ -136,22 +135,19 @@ describe('processPiggyvestEvent', () => {
   it.each([
     ['restriction-created', restrictionCreatedEvent, mockApplyCreated],
     ['restriction-lifted', restrictionLiftedEvent, mockApplyLifted],
-  ])(
-    'fails %s retryable when the wallet mapping is not committed yet',
-    async (_label, event, effect) => {
-      (effect as typeof mockApplyCreated).mockResolvedValue('unknown-wallet');
+  ])('fails %s retryable when the wallet mapping is not committed yet', async (_label, event, effect) => {
+    (effect as typeof mockApplyCreated).mockResolvedValue('unknown-wallet');
 
-      await expect(
-        processPiggyvestEvent(supabase, event as never)
-      ).rejects.toThrow('Restriction wallet has no committed plan-wallet');
-      expect(mockResolve).toHaveBeenCalledWith(supabase, {
-        eventId: (event as { eventId: string }).eventId,
-        claimToken,
-        status: 'failed',
-        lastError: 'restriction update failed',
-      });
-    }
-  );
+    await expect(
+      processPiggyvestEvent(supabase, event as never)
+    ).rejects.toThrow('Restriction wallet has no committed plan-wallet');
+    expect(mockResolve).toHaveBeenCalledWith(supabase, {
+      eventId: (event as { eventId: string }).eventId,
+      claimToken,
+      status: 'failed',
+      lastError: 'restriction update failed',
+    });
+  });
 
   it('acks unattributed restrictions only after failed persistence', async () => {
     const { pvb_wallet: _wallet, ...event } = restrictionCreatedEvent;
@@ -357,9 +353,7 @@ describe('processPiggyvestEvent', () => {
       bodyDigest: 'a'.repeat(64),
     };
     mockRecordInflow.mockRejectedValue(conflict);
-    mockRecordQuarantine.mockRejectedValue(
-      new Error('quarantine unavailable')
-    );
+    mockRecordQuarantine.mockRejectedValue(new Error('quarantine unavailable'));
     await expect(
       processPiggyvestEvent(supabase, inflowEvent as never)
     ).rejects.toThrow('quarantine unavailable');

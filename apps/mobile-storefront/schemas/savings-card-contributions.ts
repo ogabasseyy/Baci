@@ -11,15 +11,17 @@ export const SavingsCardContributionOptionsSchema = z
     newCardEnabled: z.literal(false),
     currency: z.literal('NGN'),
     maximumAmountKobo: SafeKoboSchema,
-    savedMethods: z.array(
-      z
-        .object({
-          id: UuidSchema,
-          brand: z.string().trim().min(1).max(64),
-          last4: z.string().regex(/^\d{4}$/),
-        })
-        .strict()
-    ).max(20),
+    savedMethods: z
+      .array(
+        z
+          .object({
+            id: UuidSchema,
+            brand: z.string().trim().min(1).max(64),
+            last4: z.string().regex(/^\d{4}$/),
+          })
+          .strict()
+      )
+      .max(20),
   })
   .strict();
 

@@ -23,7 +23,7 @@ const SAMPLE_WITHHOLDING_RATE = 0.1;
 export function createSampleInterestPreview(
   goal: SampleInterestPreviewGoal | null
 ): SampleInterestPreview | null {
-  if (!goal || goal.status !== 'active') return null;
+  if (goal?.status !== 'active') return null;
   if (!Number.isFinite(goal.current_amount) || goal.current_amount < 0)
     return null;
   const savingsBeforeKobo = Math.round(goal.current_amount * 100);

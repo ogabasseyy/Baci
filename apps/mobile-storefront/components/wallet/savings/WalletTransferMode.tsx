@@ -1,10 +1,10 @@
 import { Pressable, Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { SummaryRow } from './start-savings-modal-parts';
-import { startSavingsStyles as styles } from './start-savings.styles';
-import type { TransferModalProps } from './start-savings-transfer-modal-props';
 import { FundingAccountDetails } from './FundingAccountDetails';
+import { startSavingsStyles as styles } from './start-savings.styles';
+import { SummaryRow } from './start-savings-modal-parts';
+import type { TransferModalProps } from './start-savings-transfer-modal-props';
 import { TransferActions } from './TransferActions';
 
 export function WalletTransferMode({ colors, controller }: TransferModalProps) {

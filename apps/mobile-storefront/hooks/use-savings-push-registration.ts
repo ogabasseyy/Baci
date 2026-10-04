@@ -28,6 +28,7 @@ import {
 } from './savings-push-registration';
 import type { UsePushNotificationsReturn } from './use-push-notifications.types';
 import { usePushTokenRefresh } from './use-push-token-refresh';
+import { useSavingsReminderDelivery } from './use-savings-reminder-delivery';
 
 const log = createLogger('PushNotifications');
 const STOREFRONT_MERCHANT_ID = pickMerchantId(CONFIG.MERCHANT_ID);
@@ -63,6 +64,7 @@ export function useSavingsPushRegistration(): UsePushNotificationsReturn {
   const isRegistered = Boolean(
     currentKey && registeredIdentity?.key === currentKey
   );
+  useSavingsReminderDelivery(user?.id ?? null, activeMerchantId, isRegistered);
 
   const updateToken = (token: string | null) => {
     tokenRef.current = token;
@@ -110,7 +112,8 @@ export function useSavingsPushRegistration(): UsePushNotificationsReturn {
         }
       },
       hasPermission: async () => {
-        const Notifications = await import('expo-notifications');
+        const Notifications =
+          require('expo-notifications') as typeof import('expo-notifications');
         const permission = await Notifications.getPermissionsAsync();
         return permission.status === 'granted';
       },

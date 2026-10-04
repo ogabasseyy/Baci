@@ -9,7 +9,12 @@ const integrationToken = 'ab'.repeat(32);
 const providerSecret = 'synthetic-provider-secret';
 const encryptionKey = Buffer.alloc(32, 7);
 const receiptId = '4f8c66db-679d-4c38-9c26-b0871f6d0486';
-const receipt = { receiptId, duplicate: false, durable: true as const, signatureStored: true as const };
+const receipt = {
+  receiptId,
+  duplicate: false,
+  durable: true as const,
+  signatureStored: true as const,
+};
 const payload = Buffer.from([0xff, 0x00, 0x7b, 0x0a]);
 
 function setup() {
@@ -63,7 +68,9 @@ describe('encrypted durable staging intake', () => {
       createHash('sha256').update(payload).digest('hex')
     );
     expect(record.keyVersion).toBe('staging-v1');
-    expect(record.originalSignature).toBe(context.request.headers['x-pvb-signature']);
+    expect(record.originalSignature).toBe(
+      context.request.headers['x-pvb-signature']
+    );
     expect(Buffer.from(record.nonce, 'base64')).toHaveLength(12);
     expect(Buffer.from(record.authTag, 'base64')).toHaveLength(16);
     const decrypt = (aad: string) => {
@@ -110,7 +117,9 @@ describe('encrypted durable staging intake', () => {
 
   it('retains uppercase provider header and never echoes it publicly', async () => {
     const context = setup();
-    const signature = String(context.request.headers['x-pvb-signature']).toUpperCase();
+    const signature = String(
+      context.request.headers['x-pvb-signature']
+    ).toUpperCase();
     context.request.headers['x-pvb-signature'] = signature;
     const response = await context.run();
     expect(context.persist.mock.calls[0][0].originalSignature).toBe(signature);

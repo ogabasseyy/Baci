@@ -203,8 +203,9 @@ export function toActiveSavingsGoal({
   const snapshot = goal.product_snapshot ?? {};
   const productValidation = SavingsProductDataSchema.safeParse(product);
   const productData = productValidation.success ? productValidation.data : null;
-  const customerVariants =
-    productData?.variants?.filter(isSavingsVariantVisible);
+  const customerVariants = productData?.variants?.filter(
+    isSavingsVariantVisible
+  );
   const selectedVariant =
     goal.variant_id && customerVariants
       ? customerVariants.find((variant) => variant.id === goal.variant_id)

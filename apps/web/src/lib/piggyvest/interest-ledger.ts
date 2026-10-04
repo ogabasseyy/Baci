@@ -151,7 +151,8 @@ export async function recordInterestPayout(
     mismatchedFields.push('customer_id');
   if (stored.wallet_id !== mapping.wallet_id)
     mismatchedFields.push('wallet_id');
-  if (stored.amount_kobo !== detail.amount) mismatchedFields.push('amount_kobo');
+  if (stored.amount_kobo !== detail.amount)
+    mismatchedFields.push('amount_kobo');
   if (stored.gross_kobo !== gross_interest_payout)
     mismatchedFields.push('gross_kobo');
   if (stored.withholding_tax_kobo !== withholding_tax)
@@ -161,7 +162,9 @@ export async function recordInterestPayout(
   if (stored.reference !== detail.reference) mismatchedFields.push('reference');
   // Epoch compare: the stored timestamptz round-trips in a normalized
   // format that never string-equals the payload's ISO instant.
-  if (new Date(stored.paid_at).getTime() !== new Date(detail.timestamp).getTime())
+  if (
+    new Date(stored.paid_at).getTime() !== new Date(detail.timestamp).getTime()
+  )
     mismatchedFields.push('paid_at');
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')

@@ -24,7 +24,10 @@ export async function requireActiveSavingsGoal({
   // lookup with no row is a 404.
   if (error) {
     return NextResponse.json(
-      { code: 'SAVINGS_GOAL_LOOKUP_FAILED', error: 'Savings goal lookup failed' },
+      {
+        code: 'SAVINGS_GOAL_LOOKUP_FAILED',
+        error: 'Savings goal lookup failed',
+      },
       { status: 500 }
     );
   }

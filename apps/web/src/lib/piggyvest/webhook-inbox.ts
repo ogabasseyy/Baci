@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import z from 'zod';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 
 /**
  * Durable inbox for PiggyVest webhooks (Task 3).

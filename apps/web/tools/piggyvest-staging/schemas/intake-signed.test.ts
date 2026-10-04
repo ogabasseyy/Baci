@@ -15,16 +15,30 @@ describe('signed intake provenance', () => {
     expect(signedIntakeSchemas.sealed.parse(sealed)).toEqual(sealed);
   });
 
-  it.each([undefined, null, '', 'a'.repeat(127), 'g'.repeat(128), `${'a'.repeat(128)}\n`])(
-    'refuses missing or malformed signature provenance',
-    (originalSignature) => {
-      expect(signedIntakeSchemas.sealed.safeParse({ ...sealed, originalSignature }).success).toBe(false);
-    }
-  );
+  it.each([
+    undefined,
+    null,
+    '',
+    'a'.repeat(127),
+    'g'.repeat(128),
+    `${'a'.repeat(128)}\n`,
+  ])('refuses missing or malformed signature provenance', (originalSignature) => {
+    expect(
+      signedIntakeSchemas.sealed.safeParse({ ...sealed, originalSignature })
+        .success
+    ).toBe(false);
+  });
 
   it('refuses noncanonical encryption fields and additional input', () => {
-    expect(signedIntakeSchemas.sealed.safeParse({ ...sealed, nonce: 'bad' }).success).toBe(false);
-    expect(signedIntakeSchemas.sealed.safeParse({ ...sealed, signatureVerified: true }).success).toBe(false);
+    expect(
+      signedIntakeSchemas.sealed.safeParse({ ...sealed, nonce: 'bad' }).success
+    ).toBe(false);
+    expect(
+      signedIntakeSchemas.sealed.safeParse({
+        ...sealed,
+        signatureVerified: true,
+      }).success
+    ).toBe(false);
   });
 
   it('requires explicit durable signature storage acknowledgement', () => {
@@ -34,7 +48,14 @@ describe('signed intake provenance', () => {
       durable: true,
     };
     expect(signedIntakeSchemas.receipt.safeParse(receipt).success).toBe(false);
-    expect(signedIntakeSchemas.receipt.safeParse({ ...receipt, signatureStored: false }).success).toBe(false);
-    expect(signedIntakeSchemas.receipt.parse({ ...receipt, signatureStored: true })).toMatchObject({ signatureStored: true });
+    expect(
+      signedIntakeSchemas.receipt.safeParse({
+        ...receipt,
+        signatureStored: false,
+      }).success
+    ).toBe(false);
+    expect(
+      signedIntakeSchemas.receipt.parse({ ...receipt, signatureStored: true })
+    ).toMatchObject({ signatureStored: true });
   });
 });

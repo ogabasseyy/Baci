@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-const mockGetRegistered = jest.fn<
-  (userId: string, merchantId: string) => Promise<string | null>
->();
-const mockSetRegistered = jest.fn<
-  (userId: string, merchantId: string, token: string) => Promise<void>
->();
-const mockClearRegistered = jest.fn<
-  (userId: string, merchantId: string) => Promise<void>
->();
+const mockGetRegistered =
+  jest.fn<(userId: string, merchantId: string) => Promise<string | null>>();
+const mockSetRegistered =
+  jest.fn<
+    (userId: string, merchantId: string, token: string) => Promise<void>
+  >();
+const mockClearRegistered =
+  jest.fn<(userId: string, merchantId: string) => Promise<void>>();
 
 jest.mock('@/lib/push-token-storage', () => ({
   clearRegisteredPushToken: mockClearRegistered,
@@ -16,9 +15,8 @@ jest.mock('@/lib/push-token-storage', () => ({
   setRegisteredPushToken: mockSetRegistered,
 }));
 
-const {
-  retrySavingsPushRegistration,
-} = require('./savings-push-registration') as typeof import('./savings-push-registration');
+const { retrySavingsPushRegistration } =
+  require('./savings-push-registration') as typeof import('./savings-push-registration');
 type SavingsPushRegistrationIdentity =
   import('./savings-push-registration').SavingsPushRegistrationIdentity;
 

@@ -91,10 +91,12 @@ export function validateCustomerDraftRoutes(
   check(
     'routes-before-filesystem',
     filesystemIndex >= 0 &&
-      positions.every((position) => position >= 0 && position < filesystemIndex),
+      positions.every(
+        (position) => position >= 0 && position < filesystemIndex
+      ),
     `positions=${positions.join(',')} filesystem=${filesystemIndex}`
   );
-  const proxied: Array<[string, string, string]> = [
+  const proxied: [string, string, string][] = [
     ['GET', DRAFT_BASE, `https://staging-auth.ogabassey.com${DRAFT_BASE}`],
     ['POST', DRAFT_BASE, `https://staging-auth.ogabassey.com${DRAFT_BASE}`],
     [
@@ -121,7 +123,7 @@ export function validateCustomerDraftRoutes(
       JSON.stringify(resolution)
     );
   }
-  const filesystem: Array<[string, string]> = [
+  const filesystem: [string, string][] = [
     ['PUT', DRAFT_BASE],
     ['DELETE', DRAFT_BASE],
     ['PATCH', `${DRAFT_BASE}/policy`],

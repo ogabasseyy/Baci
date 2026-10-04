@@ -38,7 +38,11 @@ it('requires an explicit one-time confirmation and has no add-card action', () =
     />
   );
   expect(screen.getByText(/one-time charge of ₦250.50/)).toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Confirm one-time charge ₦250.50' })).toBeOnTheScreen();
+  expect(
+    screen.getByRole('button', { name: 'Confirm one-time charge ₦250.50' })
+  ).toBeOnTheScreen();
   expect(screen.queryByRole('button', { name: 'Add a card' })).toBeNull();
-  fireEvent.press(screen.getByRole('button', { name: 'Cancel card contribution review' }));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Cancel card contribution review' })
+  );
 });

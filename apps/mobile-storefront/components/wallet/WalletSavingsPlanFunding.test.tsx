@@ -13,7 +13,9 @@ jest.mock('@/lib/customer-savings', () => ({
   fetchSavingsPlanFunding: jest.fn(),
 }));
 jest.mock('@/lib/savings-card-contributions', () => ({
-  getSavingsCardContributionOptions: jest.fn().mockRejectedValue(new Error('Unavailable')),
+  getSavingsCardContributionOptions: jest
+    .fn()
+    .mockRejectedValue(new Error('Unavailable')),
   getSavingsCardContributionStatus: jest.fn(),
   submitSavingsCardContribution: jest.fn(),
 }));

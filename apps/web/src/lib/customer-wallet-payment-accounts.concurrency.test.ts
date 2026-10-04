@@ -210,8 +210,7 @@ describe('customer wallet payment account conflicts', () => {
       account_number: '1111111111',
       status: 'disabled',
     });
-    const { maybeSingle, neq, query: updateQuery } =
-      createUpdateQuery(null);
+    const { maybeSingle, neq, query: updateQuery } = createUpdateQuery(null);
     maybeSingle.mockResolvedValue({ data: null, error: null });
     const winnerRow = {
       ...existingAccountRow,

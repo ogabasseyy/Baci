@@ -15,12 +15,18 @@ interface CustomerTransactionRpcRow {
 export function mapCustomerTransactionRpcRows(transactionRows: unknown) {
   // A corrupt payload (or row) maps to nothing: the detail loader fails
   // the amount closed downstream instead of throwing on .map/.amount.
+  // A missing order_id is corrupt too: the list groups by it, so an
+  // undefined key would merge unrelated rows into a phantom bucket.
   if (!Array.isArray(transactionRows)) return [];
   const rows = (
     transactionRows as Array<CustomerTransactionRpcRow | null>
   ).filter(
     (row): row is CustomerTransactionRpcRow =>
-      row != null && typeof row === 'object' && !Array.isArray(row)
+      row != null &&
+      typeof row === 'object' &&
+      !Array.isArray(row) &&
+      typeof row.order_id === 'string' &&
+      row.order_id !== ''
   );
 
   // The recorded method rides as metadata.payment_method exactly like the

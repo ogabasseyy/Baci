@@ -145,6 +145,26 @@ describe('ReceiptCard', () => {
     ).toBeTruthy();
   });
 
+  it('renders a non-string status as unpaid instead of crashing', () => {
+    // The list warns yet still returns schema-invalid rows: an unguarded
+    // trim would throw during render and blank the whole archive.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 7 as unknown as string,
+          document_kind: 'invoice',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+    expect(screen.getByText('Total')).toBeTruthy();
+    expect(screen.queryByText('Paid')).toBeNull();
+  });
+
   it('hides the balance on corrupt totals instead of printing NGN 0', () => {
     render(
       <ReceiptCard

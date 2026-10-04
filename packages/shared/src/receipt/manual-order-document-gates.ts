@@ -54,6 +54,19 @@ export function isDecimalMoney(value: unknown): boolean {
   return typeof value === 'string' && DECIMAL_MONEY_PATTERN.test(value);
 }
 
+// Rendered money: present, decimal, finite, and non-negative. Nullish
+// and blank amounts fail closed (never coerced to a valid zero), and
+// non-decimal numeric strings fail like everywhere else money is read.
+// The sender, the web eligibility gate, and the mobile promotion gate
+// share this so a corrupt amount hides the document on every surface
+// instead of sending on web while demoting on mobile.
+export function isNonNegativeMoney(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  if (!isDecimalMoney(value)) return false;
+  return Number(value) >= 0;
+}
+
 // A manual balance is settled when finite payments cover a non-negative
 // total. Nulls fail closed (never coerced to zero through Number(null)),
 // and a negative total is data corruption, never a covered receipt.

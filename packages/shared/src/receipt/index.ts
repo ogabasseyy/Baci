@@ -4,6 +4,7 @@ export { generateReceiptHtml } from './generate-receipt-html';
 export {
   isDecimalMoney,
   isManualOrderRecord,
+  isNonNegativeMoney,
   isSettledManualBalance,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isDecimalMoney,
   isManualOrderRecord,
+  isNonNegativeMoney,
   isSettledManualBalance,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
 } from './manual-order-document-gates';
@@ -112,6 +113,21 @@ describe('manual-order document gates', () => {
     expect(isDecimalMoney(undefined)).toBe(false);
     expect(isDecimalMoney(Number.NaN)).toBe(false);
     expect(isDecimalMoney(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+
+  it('fails nullish and blank rendered money closed, never zero', () => {
+    expect(isNonNegativeMoney(100)).toBe(true);
+    expect(isNonNegativeMoney(0)).toBe(true);
+    expect(isNonNegativeMoney('100.50')).toBe(true);
+    expect(isNonNegativeMoney(null)).toBe(false);
+    expect(isNonNegativeMoney(undefined)).toBe(false);
+    expect(isNonNegativeMoney('')).toBe(false);
+    expect(isNonNegativeMoney('   ')).toBe(false);
+    expect(isNonNegativeMoney(-5)).toBe(false);
+    expect(isNonNegativeMoney('-5')).toBe(false);
+    expect(isNonNegativeMoney('0x10')).toBe(false);
+    expect(isNonNegativeMoney('1e3')).toBe(false);
+    expect(isNonNegativeMoney(Number.NaN)).toBe(false);
   });
 
   it('refuses to settle hex, exponent, and padded money strings', () => {

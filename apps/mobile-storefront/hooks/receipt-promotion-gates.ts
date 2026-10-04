@@ -1,6 +1,7 @@
 import {
   isDecimalMoney,
   isManualOrderRecord,
+  isNonNegativeMoney,
   isSettledManualBalance,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
@@ -31,10 +32,9 @@ export interface ManualReceiptPromotionInput {
 
 // Sender's settled-payment filter, mirrored exactly like the web
 // archive gate: transaction_type 'payment' with status completed/success,
-// each amount present, finite, and non-negative. A null/empty amount
-// must fail like the sender order schema (null maps to NaN and rejects),
-// never coerce to a valid zero that masks corrupt payment history.
-// Callers without child data pass nothing and keep the order/item verdict.
+// each amount through the shared strict predicate (nullish/blank fail
+// closed, never coerce to zero). Callers without child data pass nothing
+// and keep the order/item verdict.
 export function hasValidSettledPayments(payments: unknown): boolean {
   if (payments == null) return true;
   if (!Array.isArray(payments)) return false;
@@ -49,9 +49,7 @@ export function hasValidSettledPayments(payments: unknown): boolean {
     })
     .every((row) => {
       const raw = (row as { amount?: unknown }).amount;
-      if (raw == null || raw === '') return false;
-      const amount = Number(raw);
-      return Number.isFinite(amount) && amount >= 0;
+      return isNonNegativeMoney(raw);
     });
 }
 

@@ -5,6 +5,7 @@ import {
 import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import { logger } from '@/lib/logger';
+import { isLocalhost } from '@/lib/proxy/host';
 import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
 import { searchAssistanceRequestSchema } from '@/schemas/search-assistance';
 import { parseModelProposal } from './parse-model-proposal';
@@ -28,13 +29,15 @@ export async function POST(request: Request) {
   if (!parsed.success)
     return Response.json({ error: 'Invalid request' }, { status: 400 });
   // Phone LAN development uses the configured server tenant. Production always resolves the actual Host.
+  // Private-range detection is shared with the proxy host helper
+  // (192.168/10/172.16-31/loopback); only IP callers rewrite — localhost
+  // names already resolve to the server tenant.
   let tenantRequest = request;
   const host = request.headers.get('host') ?? '';
   if (
     process.env.NODE_ENV === 'development' &&
-    /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(
-      host
-    )
+    /^[\d.]+(:\d+)?$/.test(host) &&
+    isLocalhost(host)
   ) {
     const headers = new Headers(request.headers);
     headers.set('host', 'localhost');

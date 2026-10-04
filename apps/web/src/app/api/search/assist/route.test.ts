@@ -94,6 +94,24 @@ describe('assisted search', () => {
     await POST(request(input, '192.168.100.84:3001'));
     expect(mocks.tenant.mock.calls[0][0].headers.get('host')).toBe('localhost');
   });
+  it.each([
+    '172.16.5.4:3000',
+    '172.31.255.1',
+    '127.0.0.1:3000',
+  ])('rewrites %s to the configured dev tenant', async (host) => {
+    vi.stubEnv('NODE_ENV', 'development');
+    await POST(request(input, host));
+    expect(mocks.tenant.mock.calls[0][0].headers.get('host')).toBe('localhost');
+  });
+  it.each([
+    '172.32.0.1',
+    '203.0.113.9',
+    'shop.localhost',
+  ])('leaves %s untouched in development', async (host) => {
+    vi.stubEnv('NODE_ENV', 'development');
+    await POST(request(input, host));
+    expect(mocks.tenant.mock.calls[0][0].headers.get('host')).toBe(host);
+  });
 });
 it('accepts provider JSON fences while rejecting any extra action', async () => {
   mocks.generate.mockResolvedValue({

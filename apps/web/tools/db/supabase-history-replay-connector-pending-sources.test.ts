@@ -6,7 +6,7 @@ import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-
 
 it('binds connector migrations to their recorded bytes', () => {
   const rows = CONNECTOR_PENDING_REPLAY_SOURCE_ROWS.split('\n');
-  expect(rows).toHaveLength(7);
+  expect(rows).toHaveLength(8);
   for (const row of rows) {
     const [hash, name] = row.split(' ');
     const bytes = readFileSync(

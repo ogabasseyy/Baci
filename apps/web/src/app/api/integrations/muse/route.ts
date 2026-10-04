@@ -53,7 +53,8 @@ export async function GET(request: NextRequest) {
 
   const read = await readActiveConnections(
     resolved.context.supabase,
-    resolved.context.merchantId
+    resolved.context.merchantId,
+    resolved.context.userId
   );
   if (!read.ok) {
     return readFailureResponse();

@@ -4,6 +4,7 @@ import {
   connectorConnectRequestSchema,
   connectorDisconnectRequestSchema,
   connectorGrantRecordSchema,
+  connectorManagementQuerySchema,
   connectorScopeSchema,
   connectorToolNameSchema,
 } from '@/schemas/connector';
@@ -171,6 +172,20 @@ describe('connector schemas', () => {
         merchantId: 'not-a-uuid',
         grantId: '66666666-6666-6666-8666-666666666666',
       }).success
+    ).toBe(false);
+  });
+  it('validates optional merchant query scope and rejects unknown selectors', () => {
+    expect(connectorManagementQuerySchema.safeParse({}).success).toBe(true);
+    expect(
+      connectorManagementQuerySchema.safeParse({
+        merchantId: '11111111-1111-4111-8111-111111111111',
+      }).success
+    ).toBe(true);
+    expect(
+      connectorManagementQuerySchema.safeParse({ merchantId: 'bad' }).success
+    ).toBe(false);
+    expect(
+      connectorManagementQuerySchema.safeParse({ ownerId: 'other' }).success
     ).toBe(false);
   });
 });

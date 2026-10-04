@@ -28,3 +28,29 @@ it('requires confirmation and disconnects only the selected connection', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Confirm disconnect' }));
   expect(model.handleDisconnect).toHaveBeenCalledWith('grant-a');
 });
+
+it('labels an unusable unexpired grant inactive', () => {
+  render(
+    <ConnectionList
+      model={makeModel({
+        status: {
+          connections: [
+            {
+              grantId: 'former-owner',
+              connectionId: 'old-agent',
+              merchantId: 'merchant-a',
+              branchIds: [],
+              merchantWide: true,
+              scopes: ['orders:read'],
+              status: 'active',
+              version: 1,
+              expiresAt: null,
+              usable: false,
+            },
+          ],
+        },
+      })}
+    />
+  );
+  expect(screen.getByText('inactive')).toBeInTheDocument();
+});

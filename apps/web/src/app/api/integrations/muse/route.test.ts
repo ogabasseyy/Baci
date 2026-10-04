@@ -822,4 +822,17 @@ describe('/api/integrations/muse', () => {
     expect(parse).not.toHaveBeenCalled();
     expect(mockGetMerchantForApiRequest).not.toHaveBeenCalled();
   });
+  it('shows a previous owners active grant as unusable but still revocable', async () => {
+    queryResults.push({
+      data: [{ ...grantRow, user_id: OTHER_MERCHANT_ID }],
+      error: null,
+    });
+    const response = await GET(createRequest('GET'));
+    expect(response.status).toBe(200);
+    expect((await response.json()).connections[0]).toMatchObject({
+      grantId: GRANT_ID,
+      usable: false,
+      status: 'active',
+    });
+  });
 });

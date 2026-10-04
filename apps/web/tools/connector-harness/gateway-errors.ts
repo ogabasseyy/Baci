@@ -11,6 +11,14 @@ export function pgRaiseToHttp(message: string): HarnessHttpError {
           'Connector access is invalid, revoked, or expired.'
         ),
       };
+    case 'connector_user_suspended':
+      return {
+        status: 403,
+        body: connectorError(
+          'USER_SUSPENDED',
+          'The linked Baci account is inactive.'
+        ),
+      };
     case 'connector_grant_forbidden':
       return {
         status: 403,

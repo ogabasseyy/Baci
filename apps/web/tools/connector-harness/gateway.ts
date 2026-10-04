@@ -33,8 +33,8 @@ interface ResolveRow {
 
 /**
  * Validate the token and return the grant context. Callers must invoke this
- * inside the request transaction (before `establishUserContext`) so a
- * revocation racing the read cannot slip between two transactions.
+ * inside the request transaction before `establishUserContext`. Revocation
+ * denies subsequent resolutions; an already-authorized read may complete.
  */
 export async function resolveGrant(
   sql: HarnessSql | postgres.TransactionSql,

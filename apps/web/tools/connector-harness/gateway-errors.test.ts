@@ -45,4 +45,10 @@ describe('pgRaiseToHttp', () => {
     expect(pgErrorToHttp(null).status).toBe(500);
     expect(pgErrorToHttp('plain string').status).toBe(500);
   });
+  it('maps inactive linked accounts to the suspension contract', () => {
+    expect(pgRaiseToHttp('connector_user_suspended')).toMatchObject({
+      status: 403,
+      body: { code: 'USER_SUSPENDED' },
+    });
+  });
 });

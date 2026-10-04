@@ -24,6 +24,7 @@ export const PRIVATE_NO_STORE = {
 interface OwnerContext {
   supabase: SupabaseClient;
   merchantId: string;
+  userId: string;
 }
 
 export async function authenticateConnectorRequest(request: NextRequest) {
@@ -91,6 +92,7 @@ export async function resolveOwnerContext(
     context: {
       supabase: auth.supabase,
       merchantId: merchantContext.merchantId,
+      userId: auth.user.id,
     },
   };
 }
@@ -103,7 +105,8 @@ const MAX_CONNECTIONS_LISTED = 50;
 
 export async function readActiveConnections(
   supabase: SupabaseClient,
-  merchantId: string
+  merchantId: string,
+  ownerUserId: string
 ): Promise<ActiveConnectionsRead> {
   const { data, error } = await supabase
     .from('connector_grants')
@@ -125,7 +128,11 @@ export async function readActiveConnections(
     if (!parsed.success) {
       return { ok: false };
     }
-    connections.push(toConnectorConnectionView(parsed.data));
+    const view = toConnectorConnectionView(parsed.data);
+    connections.push({
+      ...view,
+      usable: view.usable && parsed.data.user_id === ownerUserId,
+    });
   }
   return { ok: true, connections };
 }

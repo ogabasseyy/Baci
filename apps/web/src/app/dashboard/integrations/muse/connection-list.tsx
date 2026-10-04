@@ -101,7 +101,9 @@ export function ConnectionList({
                     connection.expiresAt &&
                     Date.parse(connection.expiresAt) <= Date.now()
                       ? 'expired'
-                      : connection.status}
+                      : connection.status === 'active'
+                        ? 'inactive'
+                        : connection.status}
                   </Badge>
                 )}
               </div>

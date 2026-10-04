@@ -34,4 +34,9 @@ export const EXPECTED_CONNECTOR_PENDING_SOURCES = [
       'supabase/migrations/20261004213310_connector_owner_creation_limit.sql',
     sha256: '76cd8a58dead3b151d3554949864d7dc4d1059a908fd2c2a86d258eb6bb595c1',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004220511_connector_owner_status_metadata.sql',
+    sha256: 'f519b78439132b3f5cff4a074f4f5d2d494c9db0202a543de260bd750705556b',
+  },
 ];

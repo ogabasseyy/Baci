@@ -141,3 +141,23 @@ reissue through the authenticated, request-bound management API. Automatic Muse
 refresh is not claimed; an expired connection requires a new owner-authorized
 connection. The staging refresh proof does not establish a production refresh
 endpoint. No public access boundary was expanded as part of review fixes.
+
+## Final access review corrections
+
+An additional append-only migration limits direct grant metadata SELECT to the
+current merchant owner and makes the resolver reject banned or soft-deleted
+linked accounts. Management responses mark former-owner grants unusable, and
+the dashboard labels those rows inactive. Regression coverage exercises these
+paths, including restoration after an account suspension is removed.
+
+Revocation takes effect for grant resolutions after it commits. An already
+authorized read may finish; this release does not promise cancellation of
+in-flight responses. The misleading transaction comment was corrected. Holding
+a grant row lock through a read would serialize revocation but would not cancel
+a response already being returned, so that suggestion is not adopted.
+
+The preceding pushed revision passed the database replay, build, lint, typecheck,
+and the completed test shards. New access changes require fresh CI; the 55
+affected local UI/API/schema/error-mapping/manifest tests passed. CodeRabbit
+remains skipped as authorized when unavailable. Production and submission remain
+separate from these local and CI results.

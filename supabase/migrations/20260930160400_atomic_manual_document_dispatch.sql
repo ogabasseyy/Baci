@@ -59,7 +59,8 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_legal_entity_name text,
   p_merchant_business_address text,
   p_merchant_registered_address jsonb,
-  -- Reserved: cac/vat fields print nowhere; kept for signature stability.
+  -- Reserved: cac_rc_number prints nowhere. The VAT inputs below feed
+  -- the synthesis compare for rowless taxed invoices.
   p_merchant_cac_rc_number text,
   p_merchant_tax_identification_number text,
   p_merchant_vat_registration_status text,
@@ -103,6 +104,7 @@ DECLARE
   v_merchant_business_address text;
   v_merchant_registered_address jsonb;
   v_merchant_tax_identification_number text;
+  v_merchant_vat_registration_status text; v_merchant_vat_rate numeric;
   v_claim_domain text;
   v_merchant_support_email text;
   v_merchant_support_phone text;
@@ -132,12 +134,14 @@ BEGIN
   FOR SHARE;
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.tax_identification_number,
+    m.vat_registration_status, m.vat_rate,
     m.support_email, m.support_phone,
     m.phone, m.bank_code, m.bank_account_number, m.bank_name,
     m.bank_account_name, m.slug, m.email_sender_name, m.logo_url, m.brand_colors
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
     v_merchant_tax_identification_number,
+    v_merchant_vat_registration_status, v_merchant_vat_rate,
     v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
     v_merchant_bank_code, v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug,
@@ -229,7 +233,8 @@ BEGIN
       AND private.resolved_merchant_address_line(v_merchant_registered_address, v_merchant_business_address)
         IS DISTINCT FROM
         private.resolved_merchant_address_line(p_merchant_registered_address, p_merchant_business_address))
-    -- cac/vat fields print nowhere; the trigger and this check skip them.
+    -- cac_rc_number prints nowhere and stays skipped; the VAT inputs
+    -- print through synthesis (compared below for rowless taxed invoices).
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     -- The contact phone renders resolved (support_phone, else phone):
@@ -262,6 +267,13 @@ BEGIN
     OR (v_compare_invoice_only AND (
       v_tax_count IS DISTINCT FROM p_tax_count::bigint
       OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
+    -- Synthetic VAT inputs render only for rowless taxed invoices: the
+    -- renderer synthesizes the S breakdown from the registration gate
+    -- and rate exactly then, so only that case compares them here.
+    OR (v_compare_invoice_only AND v_tax_count = 0
+      AND COALESCE(p_tax_count, 0) = 0 AND COALESCE(v_order.tax_amount, 0) > 0
+      AND (v_merchant_vat_registration_status IS DISTINCT FROM p_merchant_vat_registration_status
+        OR v_merchant_vat_rate IS DISTINCT FROM p_merchant_vat_rate))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
     -- Customer liveness under the row lock; a racing delete then resets.

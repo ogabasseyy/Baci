@@ -89,12 +89,18 @@ DECLARE
   v_business_address_changed boolean;
   v_resolved_address_changed boolean;
   v_validation_changed boolean;
+  v_synthetic_vat_changed boolean;
   v_snapshot_changed boolean;
 BEGIN
   -- Change flags first: both re-arm halves below gate on them.
   v_validation_changed :=
     OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.email IS DISTINCT FROM NEW.email
+    OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
+  -- The synthetic VAT inputs print through the rowless-invoice
+  -- breakdown synthesis (registration gates it, rate displays).
+  v_synthetic_vat_changed :=
+    OLD.vat_registration_status IS DISTINCT FROM NEW.vat_registration_status
     OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
   -- The bank NAME compares resolved (stored name, else the code-map
   -- fallback): a code correction under a blank/placeholder name changes
@@ -130,34 +136,26 @@ BEGIN
     IS DISTINCT FROM
     private.resolved_merchant_address_line(NEW.registered_address, NEW.business_address);
   -- Rendered snapshot inputs: validation-repair fields plus every field
-  -- the renderers print. cac_rc_number and vat_registration_status print
-  -- nowhere, so edits confined to them re-arm nothing. (bank_code feeds
-  -- the resolved bank name via the code-map fallback, so it rides along
-  -- in v_bank_changed.) The bank half mirrors the invalidation below:
-  -- the fallback card requires an account number to render at all.
+  -- the renderers print, including the synthetic VAT inputs (over-broad
+  -- for receipts, but registration flips are one-shot, never starvation).
+  -- cac_rc_number prints nowhere, so edits confined to it re-arm nothing.
+  -- (bank_code rides in v_bank_changed via the code-map fallback; the
+  -- fallback card requires an account number to render at all.)
   v_snapshot_changed :=
     v_validation_changed
+    OR v_synthetic_vat_changed
     OR v_shared_changed
     OR v_business_address_changed
     OR v_resolved_address_changed
     OR (v_bank_changed
       AND (OLD.bank_account_number IS NOT NULL
         OR NEW.bank_account_number IS NOT NULL));
-  -- Completing a merchant profile re-arms rows the worker terminally
-  -- skipped as merchant_validation_failed: only order and item changes
-  -- invoke the order re-enqueue, so without this the corrected document
-  -- is permanently lost. The skipped-row re-arm gates on merchant-table
-  -- validation inputs ONLY: slug feeds the claim-host gate (the custom
-  -- domain itself lives in public.domains, covered by its own trigger),
-  -- email is the schema's only other required field, and the VAT rate is
-  -- its only other failable field (finite, non-negative) — every other
-  -- merchants column is nullable or catch-guarded. Re-arming skipped
-  -- rows on an unrelated profile save burns an attempt for a
-  -- re-validation that cannot change. Other skip reasons keep their own
-  -- re-arm paths; sent and possibly-dispatched rows stay terminal. The
-  -- worker re-validates the merchant on the next attempt, so a
-  -- still-invalid profile simply skips again until staff finish the
-  -- correction.
+  -- Completing a merchant profile re-arms validation-skipped rows
+  -- (nothing else re-enqueues them). Gates on merchant-table validation
+  -- inputs ONLY — slug (claim host), email (required), vat_rate (the
+  -- only other failable field); unrelated saves must not burn attempts.
+  -- Other skip reasons keep their own paths; sent and possibly-
+  -- dispatched rows stay terminal; still-invalid profiles skip again.
   IF v_validation_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
@@ -188,27 +186,14 @@ BEGIN
       AND n.status = 'processing'
       AND n.dispatch_started_at IS NULL;
   END IF;
-  -- A snapshot-relevant merchant edit landing mid-dispatch resets the
-  -- markers of the kinds that render it, so the lease check aborts
-  -- instead of recording a stale document as sent. Rendered branding
-  -- (logo, primary color) and the From display name invalidate alongside
-  -- issuer/contact fields. cac_rc_number, vat_registration_status, and
-  -- vat_rate print nowhere (validation inputs only), so they reset
-  -- nothing: an accepted, visually unchanged attachment must not go
-  -- corrective. Addresses resolve per kind like the renderer: receipts
-  -- print business_address, invoices print the registered line when it
-  -- renders nonempty (else business_address) — a business_address edit
-  -- under a nonempty registered address resets receipt markers alone.
-  -- Bank fields reset invoice markers only, and only for NGN orders
-  -- without a selected virtual account: receipts render no payment
-  -- instructions, foreign-currency invoices strip all bank details, and
-  -- a selected VA replaces the merchant-bank card. The name compares
-  -- resolved (stored name, else the code-map fallback), so a code
-  -- correction under a placeholder name resets while a code-only edit
-  -- under a valid name does not; numberless-merchant edits reset
-  -- nothing either. The dispatch RPC compares the same rendered-only
-  -- subset. Each kind resets independently so multi-field edits
-  -- invalidate the union, never a subset.
+  -- Mid-dispatch edits reset the markers of the kinds that render
+  -- them; each kind resets independently (union, never subset), and the
+  -- dispatch RPC compares the same rendered-only subset. Addresses and
+  -- bank names compare resolved like the renderer; bank fields reset
+  -- NGN VA-less invoices alone. cac_rc_number prints nowhere and resets
+  -- nothing. The VAT inputs reset rowless taxed invoices alone: stored
+  -- rows govern their own breakdown, untaxed orders synthesize nothing,
+  -- and receipts render no breakdown at all.
   IF v_shared_changed OR v_business_address_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
@@ -222,6 +207,17 @@ BEGIN
     WHERE n.merchant_id = NEW.id
       AND n.event_type = 'manual_order_invoice'
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+  END IF;
+  IF v_synthetic_vat_changed THEN
+    UPDATE public.order_notification_outbox AS n
+    SET dispatch_started_at = NULL, updated_at = now()
+    WHERE n.merchant_id = NEW.id
+      AND n.event_type = 'manual_order_invoice'
+      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL
+      AND EXISTS (SELECT 1 FROM public.orders AS o
+        WHERE o.id = n.order_id AND o.tax_amount > 0)
+      AND NOT EXISTS (SELECT 1 FROM public.order_tax_subtotals AS ts
+        WHERE ts.order_id = n.order_id);
   END IF;
   IF v_bank_changed
     AND (OLD.bank_account_number IS NOT NULL

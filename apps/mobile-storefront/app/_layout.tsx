@@ -9,6 +9,7 @@ import {
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { ErrorFallback } from '@/components/ErrorBoundary';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
@@ -121,6 +122,20 @@ export default function RootLayout() {
       void activateDueSavingsReminderNotification();
     }
   }, [isInitialized, isStorageReady, isTrackingAuthorizationSettled]);
+
+  // A future-dated manual plan stores only a pending request — no OS
+  // notification exists until its start date passes. The boot effect above
+  // covers cold starts; this foreground listener covers an app that stays
+  // installed and running across the start date, converting the request
+  // into the recurring series the next time the user foregrounds.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void activateDueSavingsReminderNotification();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const { isStartupAdTrackingReady } = useStartupAdTrackingInitialization({
     isInitialized,

@@ -70,8 +70,12 @@ export async function deliverSavingsExpoPush(
     headers.Authorization = `Bearer ${input.accessToken}`;
   }
 
+  // Transport failures (timeout, DNS, reset) are transient: classify them
+  // retryable so the bounded claim_push path redelivers instead of
+  // terminally discarding every notification hit by a network outage.
+  let response: Response;
   try {
-    const response = await fetch(EXPO_PUSH_ENDPOINT, {
+    response = await fetch(EXPO_PUSH_ENDPOINT, {
       method: 'POST',
       headers,
       redirect: 'error',
@@ -85,6 +89,10 @@ export async function deliverSavingsExpoPush(
       }),
       signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
     });
+  } catch {
+    return { outcome: 'retryable', ticketId: null };
+  }
+  try {
     // Classify transient HTTP status before parsing: a 429/5xx from Expo
     // or an intermediary may carry an empty or non-JSON body, and a parse
     // throw here would be recorded as terminal unknown instead of retried.

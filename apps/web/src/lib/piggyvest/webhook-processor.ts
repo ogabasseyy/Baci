@@ -93,11 +93,32 @@ async function applyEvent(
         'Restriction event has no wallet attribution'
       );
     }
+    // Unknown wallets fail retryable, mirroring the inflow
+    // INFLOW_LEDGER_UNMAPPED path: the provider wallet may exist while its
+    // piggyvest_plan_wallets mapping row is not committed yet. Resolving
+    // processed here would drop the restriction and expose the wallet as
+    // ready; throwing lets the provider redeliver after the mapping lands.
     if (event.eventType === 'restriction-created.success') {
-      await applyRestrictionCreated(supabase, walletId);
+      const outcome = await applyRestrictionCreated(supabase, walletId);
+      if (outcome === 'unknown-wallet') {
+        throw new PlanWalletRestrictionError(
+          'RESTRICTION_UNMAPPED',
+          'Restriction wallet has no committed plan-wallet mapping'
+        );
+      }
       return;
     }
-    await applyRestrictionLifted(supabase, config, walletId);
+    const liftedOutcome = await applyRestrictionLifted(
+      supabase,
+      config,
+      walletId
+    );
+    if (liftedOutcome === 'unknown-wallet') {
+      throw new PlanWalletRestrictionError(
+        'RESTRICTION_UNMAPPED',
+        'Restriction wallet has no committed plan-wallet mapping'
+      );
+    }
     return;
   }
   // Outflow eventData shapes are unpublished: attribute by reference

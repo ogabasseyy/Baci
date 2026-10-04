@@ -18,13 +18,17 @@ import { retrievePiggyvestWallet } from './wallets';
  *   to ready, anything else to provisioning) instead of assuming ready.
  *   Without provider config it falls back to provisioning, which the next
  *   snapshot read re-derives.
- * - Unknown wallets (e.g. restrictions on non-plan wallets) resolve
- *   without effect: the inbox keeps the audit trail, nothing flips.
+ * - Unknown wallets report 'unknown-wallet' without flipping; the
+ *   webhook processor converts that to a retryable RESTRICTION_UNMAPPED
+ *   failure (same mapping race as the inflow ledger's unmapped path) so a
+ *   restriction arriving before its mapping row commits is redelivered
+ *   rather than silently dropped.
  */
 
 export class PlanWalletRestrictionError extends Error {
   readonly code:
     | 'RESTRICTION_UNATTRIBUTED'
+    | 'RESTRICTION_UNMAPPED'
     | 'RESTRICTION_STORAGE_ERROR'
     | 'RESTRICTION_PROVIDER_ERROR';
 

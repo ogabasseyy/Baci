@@ -133,6 +133,26 @@ describe('processPiggyvestEvent', () => {
     );
   });
 
+  it.each([
+    ['restriction-created', restrictionCreatedEvent, mockApplyCreated],
+    ['restriction-lifted', restrictionLiftedEvent, mockApplyLifted],
+  ])(
+    'fails %s retryable when the wallet mapping is not committed yet',
+    async (_label, event, effect) => {
+      (effect as typeof mockApplyCreated).mockResolvedValue('unknown-wallet');
+
+      await expect(
+        processPiggyvestEvent(supabase, event as never)
+      ).rejects.toThrow('Restriction wallet has no committed plan-wallet');
+      expect(mockResolve).toHaveBeenCalledWith(supabase, {
+        eventId: (event as { eventId: string }).eventId,
+        claimToken,
+        status: 'failed',
+        lastError: 'restriction update failed',
+      });
+    }
+  );
+
   it('acks unattributed restrictions only after failed persistence', async () => {
     const { pvb_wallet: _wallet, ...event } = restrictionCreatedEvent;
     await expect(processPiggyvestEvent(supabase, event)).resolves.toBe(

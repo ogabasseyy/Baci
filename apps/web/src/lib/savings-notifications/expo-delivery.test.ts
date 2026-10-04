@@ -41,7 +41,7 @@ describe('deliverSavingsExpoPush', () => {
     expect(result).toEqual({ outcome: 'accepted', ticketId: 'ticket-1' });
   });
 
-  it('classifies provider rejection and malformed or network responses safely', async () => {
+  it('classifies provider rejection and malformed responses safely, network failures retryable', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -83,7 +83,7 @@ describe('deliverSavingsExpoPush', () => {
       ticketId: null,
     });
     await expect(deliverSavingsExpoPush(input)).resolves.toEqual({
-      outcome: 'unknown',
+      outcome: 'retryable',
       ticketId: null,
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);

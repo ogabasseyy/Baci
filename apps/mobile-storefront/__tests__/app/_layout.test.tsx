@@ -14,6 +14,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type React from 'react';
+import { AppState } from 'react-native';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
 
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
@@ -316,5 +317,40 @@ describe('RootLayout storage boot gate', () => {
       );
     });
     expect(screen.queryByTestId('animated-splash')).toBeNull();
+  });
+
+  it('activates due savings reminders when the app foregrounds', async () => {
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const addListenerSpy = jest.spyOn(AppState, 'addEventListener');
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
+      });
+
+      const changeHandlers = addListenerSpy.mock.calls
+        .filter(([event]) => event === 'change')
+        .map(([, handler]) => handler as (state: string) => void);
+      expect(changeHandlers.length).toBeGreaterThan(0);
+      const onChange = changeHandlers[changeHandlers.length - 1];
+
+      const before =
+        mockActivateDueSavingsReminderNotification.mock.calls.length;
+      act(() => {
+        onChange('active');
+      });
+      expect(
+        mockActivateDueSavingsReminderNotification.mock.calls.length
+      ).toBe(before + 1);
+      act(() => {
+        onChange('background');
+      });
+      expect(
+        mockActivateDueSavingsReminderNotification.mock.calls.length
+      ).toBe(before + 1);
+    } finally {
+      addListenerSpy.mockRestore();
+    }
   });
 });

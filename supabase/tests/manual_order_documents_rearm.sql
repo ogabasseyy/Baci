@@ -192,6 +192,24 @@ UPDATE public.orders SET shipping_address = shipping_address || '{"name": "Ade",
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'admin-only shipping edit keeps the marker');
 UPDATE public.orders SET shipping_address = shipping_address || '{"city": "Abuja"}' WHERE id = '10000000-0000-4000-8000-000000000077';
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'rendered shipping edit resets the marker');
+-- Legacy aliases canonicalize onto the rendered keys: an alias VALUE
+-- change resets, while moving the same value between alias and
+-- canonical keys (or collapsing null/'' per the falsy filter) keeps.
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address || '{"address": "14 Broad St"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'alias street change resets the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address - 'address' || '{"address_line1": "14 Broad St"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'alias-to-canonical move keeps the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address || '{"postalCode": "100001"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'alias postcode change resets the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address - 'postalCode' || '{"postal_code": "100001"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'alias-to-canonical postcode move keeps the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address || '{"state": ""}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'null-to-empty collapse keeps the invoice marker');
 -- A bank-code correction under a placeholder name resets the invoice
 -- marker (the emailed card changes); a code-only edit under a valid
 -- name keeps it. The fallback card needs an account number to render,

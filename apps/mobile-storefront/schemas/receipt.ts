@@ -61,10 +61,14 @@ const ShippingAddressSchema = z.object({
 // mobile-admin's "same as customer" edit persists explicit null locality,
 // which the sender accepts as nullish and the renderer filters as falsy.
 // Rejecting null here would fail the whole detail closed on a valid doc.
+// Legacy mobile-admin aliases ride along like the sender schema; the
+// preview normalizes them onto the canonical keys the generator reads.
 const ReceiptShippingAddressSchema = ShippingAddressSchema.extend({
+  address: z.string().nullish(),
   city: z.string().nullable().optional(),
   state: z.string().nullable().optional(),
   postal_code: z.string().nullable().optional(),
+  postalCode: z.string().nullish(),
 });
 
 const VirtualAccountSchema = z.object({

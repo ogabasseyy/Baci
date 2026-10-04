@@ -127,4 +127,21 @@ describe('receipt detail locality', () => {
       expect.objectContaining({ city: null, country: 'Nigeria' })
     );
   });
+
+  it('opens manual detail with a null credit-order flag as non-credit', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder({ is_credit_order: null }),
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as { is_credit_order: boolean } | null;
+
+    expect(detail).not.toBeNull();
+    expect(detail?.is_credit_order).toBe(false);
+  });
 });

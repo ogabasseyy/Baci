@@ -13,13 +13,17 @@ import type {
   StorefrontOrderItem,
 } from '@/types/storefront-order';
 
-// Statuses representing provider-confirmed value movement. Only these
-// belong in customer payment surfaces (history card, receipt listing):
-// pending/processing attempts never moved money, failed/cancelled ones
-// never will. Paystack-backed payments settle as 'success' (the sender's
-// history query includes it), so the archive must too or downloads omit
-// payments the emailed PDF shows. A refunded row is still a genuine
-// historical receipt — the order-level status already shows the reversal.
+// Payment-type rows with provider-confirmed statuses represent genuine
+// value movement. Only these belong in customer payment surfaces
+// (history card, receipt listing): pending/processing attempts never
+// moved money, failed/cancelled ones never will, and non-payment types
+// (a completed refund row) would render as a positive Payment entry —
+// the sender and orders-list preview both require transaction_type ===
+// 'payment', so the archive must too. Paystack-backed payments settle
+// as 'success' (the sender's history query includes it), so the archive
+// must too or downloads omit payments the emailed PDF shows. A refunded
+// payment row is still genuine history — the order-level status already
+// shows the reversal.
 const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = [
   'completed',
   'refunded',
@@ -28,8 +32,10 @@ const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = [
 
 export function isProviderConfirmedTransaction(row: {
   status?: string | null;
+  transaction_type?: string | null;
 }): boolean {
   return (
+    row.transaction_type === 'payment' &&
     typeof row.status === 'string' &&
     PROVIDER_CONFIRMED_TRANSACTION_STATUSES.includes(
       row.status.trim().toLowerCase()

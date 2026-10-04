@@ -203,6 +203,9 @@ async function fetchReceiptDetail(
       : null;
   const detail = {
     ...order,
+    // The column permits NULL but the renderers read a plain boolean:
+    // normalize absent to false so a valid order never fails closed.
+    is_credit_order: order.is_credit_order ?? false,
     balance,
     items: (order.order_items ?? []).map((item) =>
       item == null

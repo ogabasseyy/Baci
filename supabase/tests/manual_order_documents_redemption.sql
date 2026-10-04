@@ -137,6 +137,8 @@ SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SE
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('cd', 32) AND claimed_at IS NULL AND claimed_by_user_id IS NULL AND customer_email = 'corrected@example.com' FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'rotation clears the stale redemption for the new recipient');
 SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL AND delivered_token_hash IS NULL FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'recipient correction revokes historical hashes');
 SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('cb', 32)) IS NULL), 'revoked hash no longer previews the new recipient');
+SELECT public.record_receipt_claim_click_v2(repeat('cb', 32), 'web');
+SELECT pg_temp.assert_true((SELECT click_count = 0 FROM public.receipt_claims WHERE token_hash = repeat('cd', 32)), 'revoked hash records no activity');
 -- A retry rotation must not orphan the mailed link from the attempt before
 -- it: the earlier send may have been accepted with an unknown outcome. The
 -- replaced hash survives one rotation; redemption and preview honor it.
@@ -193,6 +195,14 @@ SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SE
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d5', 32))->>'status' = 'created'), 'second rejected rotation shifts the grace window again');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('d5', 32) AND previous_token_hash = repeat('d4', 32) AND delivered_token_hash = repeat('d2', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'rotation preserves the delivered hash while shifting grace');
 SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32)) IS NOT NULL), 'delivered hash previews past the grace window');
+-- Activity recording resolves fallback hashes like preview and
+-- redemption: the mailed link's funnel rows survive rotation.
+SELECT public.record_receipt_claim_click_v2(repeat('d2', 32), 'app');
+SELECT pg_temp.assert_true((SELECT last_click_source = 'app' FROM public.receipt_claims WHERE token_hash = repeat('d5', 32)), 'delivered hash records click activity');
+SELECT public.record_receipt_claim_login_started_v2(repeat('d4', 32), 'app');
+SELECT pg_temp.assert_true((SELECT last_login_started_source = 'app' FROM public.receipt_claims WHERE token_hash = repeat('d5', 32)), 'previous hash records login activity');
+SELECT public.record_receipt_claim_app_download_clicked_v2(repeat('d2', 32), 'play_store');
+SELECT pg_temp.assert_true((SELECT last_app_download_source = 'play_store' AND app_download_click_count = 1 FROM public.receipt_claims WHERE token_hash = repeat('d5', 32)), 'delivered hash records app-download activity');
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
 SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
 SET LOCAL ROLE authenticated;

@@ -184,4 +184,52 @@ describe('send manual order document dispatch', () => {
     ).toMatchObject({ status: 'skipped' });
     expect(sendEmail).not.toHaveBeenCalled();
   });
+
+  it('records the accepted token before failing on a mid-send reset', async () => {
+    const db = database({}, { dispatchLeaseReset: true });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    // The provider accepted the mail, so the token must be recorded as
+    // delivered even though the send fails for corrective retry — later
+    // rotations must not orphan the link the customer already holds.
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'document_changed_during_send',
+    });
+    const claimCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'create_manual_order_document_claim'
+    );
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_claim_sent'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_claim_id: 'claim-1',
+      p_mailed_token_hash: claimCall?.[1].p_token_hash,
+    });
+  });
+
+  it('records the accepted token before failing on a lease read error', async () => {
+    const db = database({}, { dispatchLeaseError: true });
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'dispatch_lease_check_failed',
+      deliveryOutcome: 'unknown',
+    });
+    expect(
+      db.rpc.mock.calls.some(([fn]) => fn === 'mark_manual_document_claim_sent')
+    ).toBe(true);
+  });
+
+  it('fails unknown when the accepted-token record fails after a reset', async () => {
+    const db = database(
+      {},
+      { dispatchLeaseReset: true, claimMarkerError: true }
+    );
+    const result = await sendManualOrderDocument({ supabase: db.client, row });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'sent_claim_marker_failed',
+      deliveryOutcome: 'unknown',
+    });
+  });
 });

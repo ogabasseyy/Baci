@@ -44,10 +44,10 @@ export default function ProductRequest({
     sending.current = true;
     setPending(true);
     setError('');
-    const key = JSON.stringify([product.trim(), contact.trim()]);
-    if (request.current.key !== key)
-      request.current = { key, id: randomUUID() };
     try {
+      const key = JSON.stringify([product.trim(), contact.trim()]);
+      if (request.current.key !== key)
+        request.current = { key, id: randomUUID() };
       await submitProductRequest(PRODUCT_REQUESTS_ENDPOINT, {
         query: product,
         contact,

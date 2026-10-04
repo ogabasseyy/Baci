@@ -134,6 +134,14 @@ describe('search refinements controls', () => {
     );
     expect(within(dialog).getByRole('alert')).toBeInTheDocument();
   });
+  it('commits the desktop rating selection to the results URL', () => {
+    push.mockClear();
+    render(<SearchRefinementControls {...props} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Rating' }), {
+      target: { value: '4' },
+    });
+    expect(push).toHaveBeenCalledWith(expect.stringContaining('minRating=4'));
+  });
 });
 
 it('puts smart chips above the toolbar and applies a query-backed processor', () => {

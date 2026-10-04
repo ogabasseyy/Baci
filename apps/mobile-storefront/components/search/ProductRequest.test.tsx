@@ -15,8 +15,9 @@ jest.mock('@baci/shared/lib', () => ({
   ...jest.requireActual('@baci/shared/lib'),
   submitProductRequest: jest.fn(),
 }));
+const mockRandomUUID = jest.fn(() => '11111111-1111-4111-8111-111111111111');
 jest.mock('expo-crypto', () => ({
-  randomUUID: () => '11111111-1111-4111-8111-111111111111',
+  randomUUID: () => mockRandomUUID(),
 }));
 beforeEach(() => {
   jest.mocked(submitProductRequest).mockReset();
@@ -64,6 +65,23 @@ it('retains the form and request identity after a failed submission', async () =
   expect(jest.mocked(submitProductRequest).mock.calls[0][1].requestId).toBe(
     jest.mocked(submitProductRequest).mock.calls[1][1].requestId
   );
+});
+it('surfaces an error and stays submittable when id generation throws', async () => {
+  mockRandomUUID.mockImplementationOnce(() => {
+    throw new Error('no crypto');
+  });
+  jest.mocked(submitProductRequest).mockResolvedValue();
+  render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.changeText(
+    screen.getByLabelText('Email or phone number'),
+    'shopper@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() => expect(screen.getByText(/Couldn’t send/)).toBeTruthy());
+  // The failed attempt releases the send guard, so a retry submits.
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(1));
 });
 it('shows a retry signal instead of a validation error on idempotency conflict', async () => {
   jest

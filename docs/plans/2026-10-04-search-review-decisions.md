@@ -42,3 +42,9 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Web refinement panel gains the minimum-rating filter mirroring native; `minRating=0` counts as absent everywhere (SQL treats it as a no-op floor, chips show nothing, intake suppression agrees).
 - Matched-option refresh suppresses the parent strike-through exactly like the search card, so the compare table shows no false discount.
 - Snapshot condition is a graceful enum mirroring the ogabassey Product union: unknown stored values drop to undefined (tray falls back) instead of failing hydration and losing the item.
+
+## Round 8 follow-ups (Codex on eebfafd78c)
+
+- Refinement fields split: `RefinementGroup` moves to its own module with a colocated suite (291 + 37 lines).
+- Desktop refinement commits carry `minRating`; native request-id generation moved inside the submit try (proven wedged on old code, recoverable on new).
+- New migration `20261004130000` relaxes the price-options predicates: product-level offers emit for attribute-variant products (still suppressed when variants carry canonical conditions, mirroring the PDP axis rule), and the inventory-qualified base row emits regardless of alternate offers. Validated on scratch Postgres across five catalog shapes (base+offer, storage-variants+offer, condition-axis+offer, plain, OOS parent); the `anon` GRANT noise is a scratch-role artifact. Registration against the live project stays author triage with the other unregistered PR migrations.

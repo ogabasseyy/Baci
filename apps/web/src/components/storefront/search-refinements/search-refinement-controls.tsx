@@ -129,6 +129,7 @@ export function SearchRefinementControls({
         categoryId: next.categoryId,
         condition: next.condition,
         processor: next.processor,
+        minRating: next.minRating,
       });
     }
   };

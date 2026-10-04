@@ -80,6 +80,28 @@ def audit_unresolved_argv(argv0, stale, drift):
     # dynamic by construction.
     if "helper-unresolved-command" in drift:
         return
+    if re.search(r"[*?\[]", argv0) \
+            and argv0 != "[" \
+            and not argv0.startswith("[[") \
+            and not re.match(r"[A-Za-z_]\w*(\[[^\]]*\])?"
+                             r"\+?=", argv0):
+        # Pathname expansion in command position (b[as][as]h
+        # becomes bash when a later PR adds a workspace file
+        # named bash; the shell expands before exec, so env/
+        # xargs/timeout-wrapped spellings are equally lethal
+        # and re-enter here). Exact [ is the test builtin (a
+        # glommed ["x is never test: no space, no builtin);
+        # [[ opens a conditional, never a command; name[sub]=
+        # assigns (non-nested) rather than executes. Quoted
+        # globs cannot expand but quotes are already
+        # stripped, so they fail closed harmlessly (same
+        # profile as the brace rule). Run blocks share the
+        # case-pattern stripper and confine argv0s to a
+        # command allowlist, so both dispatchers agree.
+        # Residual: globs inside multiline |-continued case
+        # patterns (one physical line each) over-flag.
+        drift.append("helper-unresolved-command")
+        return
     if re.search(r"(?<!\$)\{[^{}]*(\.\.|,)[^{}]*\}", argv0):
         # Brace expansion in command position ({bash,evil.sh}
         # becomes two words before command selection); quoted

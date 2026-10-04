@@ -10,6 +10,7 @@ import re
 from semgrep_sarif_pins import _safe_exec_path, _ws_rooted
 from semgrep_sarif_consts import (ENV_POISON,
                                   is_bash_func_key)
+from semgrep_sarif_varmap import audit_unresolved_argv
 
 
 def audit_xargs(rest, drift, src, dispatch):
@@ -68,4 +69,8 @@ def audit_xargs(rest, drift, src, dispatch):
         # Bare dotfile argv0 (no ./ prefix): execvp resolves
         # it through PATH, which the path rule cannot see.
         drift.append("helper-untrusted-exec")
+    # The shell expands the operand before xargs runs
+    # (xargs b[as]h executes bash), so dynamic argv0s
+    # re-enter here; stale is unknown on this path.
+    audit_unresolved_argv(cmd, frozenset(), drift)
     dispatch(cmd, list(rest[i + 1:]), [], drift, src)

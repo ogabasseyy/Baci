@@ -7,10 +7,8 @@
 # Harness lives in semgrep-sarif-test-lib.sh (sourced).
 #
 # Usage: bash semgrep-sarif-hardening.test.sh   (from any directory)
-# shellcheck source=semgrep-sarif-test-lib.sh disable=SC2154,SC2034 # O/PR consumed by sourced parts
+# shellcheck source=semgrep-sarif-test-lib.sh disable=SC2154
 . "$(dirname "$0")/semgrep-sarif-test-lib.sh"
-O='.github/scripts/muse-review/post.sh'
-PR='.github/scripts/muse-review/prompt.sh'
 . "$(dirname "$0")/semgrep-sarif-hardening-part1.test.sh"
 . "$(dirname "$0")/semgrep-sarif-hardening-part2.test.sh"
 . "$(dirname "$0")/semgrep-sarif-hardening-part3.test.sh"

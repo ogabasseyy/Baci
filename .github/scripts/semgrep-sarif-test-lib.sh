@@ -150,5 +150,7 @@ I="$INST"
 H='.github/scripts/muse-review/collect.sh'
 P='.github/scripts/muse-review/ranges.pl'
 C='.github/scripts/muse-review/clean.jq'
+O='.github/scripts/muse-review/post.sh'
+PR='.github/scripts/muse-review/prompt.sh'
 FS=$'\x1f'
 RS=$'\x1e'

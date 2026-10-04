@@ -5,7 +5,8 @@ expression rule for the agent step and job environment.
 import re
 from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
-from semgrep_sarif_scan import is_trusted_write_target
+from semgrep_sarif_scan import (is_trusted_write_target,
+                                 _strip_case_patterns)
 from semgrep_sarif_segments import run_segments
 from semgrep_sarif_consts import (ENV_POISON, RUNTIME_TOKEN_VARS,
                                   SHELL_KEYWORDS, STRICT_ALLOW)
@@ -219,6 +220,7 @@ def audit_step_commands(ctx, drift):
                 masked)
             masked = re.sub(
                 r"[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{?", "", masked)
+            masked = _strip_case_patterns(masked)
             for piece, after_open, at_close in \
                     split_commands2(masked):
                 if at_close and not after_open:
@@ -230,8 +232,9 @@ def audit_step_commands(ctx, drift):
                 if not argv0 or argv0 in SHELL_KEYWORDS \
                         or argv0 in ("for", "select", "case"):
                     continue
-                if re.match(r"^[\*\?\[]", argv0) \
-                        or re.match(r"^\d*[<>]", argv0):
+                # Patterns are stripped above: a leading glob
+                # is a command, not an alternative ([ is test).
+                if argv0 == "[" or re.match(r"^\d*[<>]", argv0):
                     continue
                 if argv0 not in allowed \
                         and "secret-step-untrusted-command" \

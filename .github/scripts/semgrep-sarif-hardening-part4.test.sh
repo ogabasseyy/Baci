@@ -1,6 +1,6 @@
 # Hardening suite part 4/4 (sourced by semgrep-sarif-hardening.test.sh):
 # recent rounds: YAML/flow, freeze, binutils, secretbind, curl, rpm/m4.
-# Uses t/FS/RS/S/H/I/R/O/PR from the lib + entrypoint.
+# Uses t/FS/RS/S/H/I/R/O/PR from the lib.
 # shellcheck shell=bash disable=SC2154,SC2007 # SC2007: deprecated $[] is an intentional attack payload
 # --- assign-prefix peel (self-found: a[0]=x prefixes commands) ---
 t runner-peel-subscript 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}a[0]=x muse --version"

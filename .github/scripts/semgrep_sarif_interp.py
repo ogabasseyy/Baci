@@ -22,6 +22,7 @@ from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
                                   _TCL_RE, _TIDY_RE)
 from semgrep_sarif_install import _installer_curl_ok
 from semgrep_sarif_peel import peel_prefix
+from semgrep_sarif_varmap import audit_unresolved_argv
 from semgrep_sarif_xargs import audit_xargs
 from semgrep_sarif_zone import audit_cd
 
@@ -271,6 +272,10 @@ def _check_env(rest, drift, src=""):
     argv0, cmd_rest = peel_prefix(tail)
     if not argv0:
         return
+    # The shell expands the operand before env runs (env
+    # b[as]h executes bash), so dynamic argv0s re-enter
+    # here; stale is unknown on this path (pre-existing).
+    audit_unresolved_argv(argv0, frozenset(), drift)
     pre = tail[:len(tail) - len(cmd_rest) - 1]
     _check_command(argv0, list(cmd_rest), list(pre), drift,
                    src)

@@ -20,7 +20,10 @@ from semgrep_sarif_cmdfile import (audit_github_cmdfile_body,
 from semgrep_sarif_redirect import (has_socket_redirect,
                                     redirect_targets)
 from semgrep_sarif_scan import (arith_command_regions,
-                                arith_regions, extract_subshells)
+                                arith_regions,
+                                blank_arith_commands,
+                                extract_subshells,
+                                _strip_case_patterns)
 from semgrep_sarif_subscript import subscript_cmdsubst
 from semgrep_sarif_zone import _write_zone, has_proc_environ
 from semgrep_sarif_segments import logical_lines
@@ -33,55 +36,6 @@ from semgrep_sarif_shell import (_bare_word, split_commands2,
                                  tokenize)
 from semgrep_sarif_varmap import (_collect_vars, _resolve,
                                   audit_unresolved_argv)
-
-
-
-def _strip_case_patterns(nosub):
-    # Drop case pattern prefixes clause by clause (;;-separated,
-    # quote-aware): the first ) at paren depth 0 ends the
-    # pattern; subshell closes sit deeper and never cut. Body
-    # commands after the ) are kept for analysis.
-    clauses, buf, quote = [], "", None
-    i = 0
-    while i < len(nosub):
-        ch = nosub[i]
-        if quote:
-            buf += ch
-            if ch == quote:
-                quote = None
-            i += 1
-        elif ch in ("'", '"'):
-            quote, buf, i = ch, buf + ch, i + 1
-        elif ch == ";" and nosub[i:i + 2] == ";;":
-            j = i + 2
-            if j < len(nosub) and nosub[j] in (";", "&"):
-                j += 1
-            clauses.append(buf)
-            buf, i = "", j
-        else:
-            buf, i = buf + ch, i + 1
-    clauses.append(buf)
-    kept = []
-    for clause in clauses:
-        depth, quote, cut = 0, None, None
-        i = 0
-        while i < len(clause):
-            ch = clause[i]
-            if quote:
-                if ch == quote:
-                    quote = None
-            elif ch in ("'", '"'):
-                quote = ch
-            elif ch == "(":
-                depth += 1
-            elif ch == ")":
-                if depth == 0:
-                    cut = i + 1
-                    break
-                depth -= 1
-            i += 1
-        kept.append(clause[cut:] if cut is not None else clause)
-    return "; ".join(kept)
 
 
 def _audit_expansions(line, drift, src="", stale=frozenset(),
@@ -224,6 +178,7 @@ def _audit_line(line, drift, src="", stale=frozenset(),
     nosub = re.sub(r"[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{?", "",
                    cleaned)
     nosub = _strip_case_patterns(nosub)
+    nosub = blank_arith_commands(nosub)
     # The splitter breaks &&/|| inside [[ ]], so operands
     # surface as phantom argv0s; [[ ]] executes nothing, so the
     # unresolved rule sleeps there. Markers come from raw

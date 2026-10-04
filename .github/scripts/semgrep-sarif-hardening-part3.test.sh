@@ -1,6 +1,6 @@
 # Hardening suite part 3/4 (sourced by semgrep-sarif-hardening.test.sh):
 # dispatch, escaping, wrappers, loaders, env and git rules.
-# Uses t/FS/RS/S/H/I/R/O/PR from the lib + entrypoint.
+# Uses t/FS/RS/S/H/I/R/O/PR from the lib.
 # shellcheck shell=bash disable=SC2154
 # --- trusted-path traversal (Codex P1: SCRIPT_DIR/../../evil) ---
 t traversal-script 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bash \"\${SCRIPT_DIR}/../../../../evil.sh\""
@@ -168,6 +168,8 @@ t loader-webpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${F
 t loader-webpack-dev 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}webpack-dev-server --config \"\${GITHUB_WORKSPACE}/evil.config.js\""
 t loader-cpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cpack --config \"\${GITHUB_WORKSPACE}/evil.cmake\""
 t loader-mono 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mono \"\${GITHUB_WORKSPACE}/evil.exe\""
+# --- bison loader (Codex P1: -S skeleton runs m4_esyscmd) ---
+t loader-bison 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bison -S \"\${GITHUB_WORKSPACE}/evil.m4\" \"\${GITHUB_WORKSPACE}/evil.y\""
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

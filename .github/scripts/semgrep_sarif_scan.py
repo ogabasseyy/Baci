@@ -183,6 +183,93 @@ def arith_command_regions(text):
     return regions
 
 
+def blank_arith_commands(text):
+    # Blank ((...)) compound commands (same opener scan as
+    # arith_command_regions, spans instead of bodies): their
+    # *?[] are operators, and dispatch would otherwise read
+    # the paren-split fragments as glob argv0s. Newlines
+    # survive (no line fusion); the arithmetic rules read
+    # the raw line, so nothing is lost. Mid-word (( over-
+    # matches like its sibling (dead code either way).
+    spans, i, quote, n = [], 0, None, len(text)
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == quote:
+                quote = None
+            i += 1
+        elif ch in ("'", '"'):
+            quote, i = ch, i + 1
+        elif ch == "\\" and i + 1 < n:
+            i += 2
+        elif text[i:i + 2] == "((" \
+                and (i == 0 or text[i - 1] != "$"):
+            j = _paren_end(text, i + 1)
+            end = j + 1 if j < n else j
+            spans.append((i, end))
+            i = end
+        else:
+            i += 1
+    if not spans:
+        return text
+    out = list(text)
+    for start, end in spans:
+        for k in range(start, end):
+            if out[k] != "\n":
+                out[k] = " "
+    return "".join(out)
+
+
+def _strip_case_patterns(nosub):
+    # Drop case pattern prefixes clause by clause (;;-separated,
+    # quote-aware): the first ) at paren depth 0 ends the
+    # pattern; subshell closes sit deeper and never cut. Body
+    # commands after the ) are kept for analysis. Shared by
+    # the helper and run-block dispatchers so both read the
+    # same command stream.
+    clauses, buf, quote = [], "", None
+    i = 0
+    while i < len(nosub):
+        ch = nosub[i]
+        if quote:
+            buf += ch
+            if ch == quote:
+                quote = None
+            i += 1
+        elif ch in ("'", '"'):
+            quote, buf, i = ch, buf + ch, i + 1
+        elif ch == ";" and nosub[i:i + 2] == ";;":
+            j = i + 2
+            if j < len(nosub) and nosub[j] in (";", "&"):
+                j += 1
+            clauses.append(buf)
+            buf, i = "", j
+        else:
+            buf, i = buf + ch, i + 1
+    clauses.append(buf)
+    kept = []
+    for clause in clauses:
+        depth, quote, cut = 0, None, None
+        i = 0
+        while i < len(clause):
+            ch = clause[i]
+            if quote:
+                if ch == quote:
+                    quote = None
+            elif ch in ("'", '"'):
+                quote = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                if depth == 0:
+                    cut = i + 1
+                    break
+                depth -= 1
+            i += 1
+        kept.append(clause[cut:] if cut is not None else clause)
+    return "; ".join(kept)
+
+
 def github_cmdfile_kind(target):
     # "env"/"path" when a redirect/copy target is a runner
     # command file ($GITHUB_ENV/$GITHUB_PATH, braced or bare;

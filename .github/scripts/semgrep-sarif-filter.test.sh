@@ -68,6 +68,12 @@ t node-loose 1 "secret-step-untrusted-command" happy.sarif "$S${FS}Trusted revie
 t eval-strict 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          eval evil"
 t sudo-strict 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          sudo id"
 t direct-exec 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          ./tool"
+# --- glob argv0 in run blocks (Codex P1: pathname expansion) ---
+t step-glob-mid 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          b[as][as]h \"\${GITHUB_WORKSPACE}/evil.sh\""
+t step-glob-leading 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          [bd]ash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t step-glob-star 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          *.sh"
+t step-glob-case-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          case \$x in *.sh|*.py) echo hi;; esac"
+t step-glob-test-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          if [ -n \"\$x\" ]; then echo hi; fi"
 t flow-step 1 "secret-step-untrusted-command" happy.sarif "$S${FS}      - name: Check prerequisites${FS}a${FS}      - {name: Flow leak, env: {META_API_KEY: \${{ secrets.META_API_KEY }}}, run: \"bash \${GITHUB_WORKSPACE}/evil.sh\"}"
 t step-flow-anchor 1 "secret-step-untrusted-command" happy.sarif "$S${FS}      - name: Check prerequisites${FS}a${FS}      - &evil { name: Evil, uses: attacker/action@0123456789012345678901234567890123456789 }"
 t step-flow-tag 1 "secret-step-untrusted-command" happy.sarif "$S${FS}      - name: Check prerequisites${FS}a${FS}      - !custom { name: Evil, uses: attacker/action@0123456789012345678901234567890123456789 }"

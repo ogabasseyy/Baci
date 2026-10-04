@@ -1,6 +1,6 @@
 # Hardening suite part 2/4 (sourced by semgrep-sarif-hardening.test.sh):
 # interpreters, indirection, aliases, namerefs, command files.
-# Uses t/FS/RS/S/H/I/R/O/PR from the lib + entrypoint.
+# Uses t/FS/RS/S/H/I/R/O/PR from the lib.
 # shellcheck shell=bash disable=SC2154
 # --- perl opens (paren-free, sysopen) ---
 t helper-perl-openfree 1 "helper-perl-danger" happy.sarif "$P${FS}open(my \$fh${FS}a${FS}open my \$fh2, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\"; close \$fh2;"
@@ -170,6 +170,22 @@ t varmap-default-op 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo p
 t varmap-at-op 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${@}\" -c true"
 t varmap-home-path-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${HOME}/.local/bin/muse\" --version"
 t varmap-assign-op-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}note=\"\${note} [done]\""
+
+# --- glob argv0 (Codex P1: b[as][as]h expands via workspace file) ---
+t glob-argv0 1 "helper-unresolved-command" happy.sarif "new:bash${FS}#!/bin/sh${RS}$H${FS}set -euo pipefail${FS}a${FS}b[as][as]h \"\${GITHUB_WORKSPACE}/evil.sh\""
+t glob-argv0-leading 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[bd]ash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t glob-argv0-star 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}*.sh"
+t glob-argv0-assign 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}b[as]h=x"
+t glob-argv0-env 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}env -u FOO b[as]h evil.sh"
+t glob-argv0-xargs 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf 'x\n' | xargs b[as]h"
+t glob-argv0-timeout 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}timeout 5 b[as]h evil.sh"
+t glob-argv0-subshell 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}(b[as]h evil.sh)"
+t glob-argv0-casebody 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}case \$x in a) b[as]h evil.sh;; esac"
+t glob-argv0-test-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[ -n \"\$x\" ]"
+t glob-argv0-dtest-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[[ \$x == foo* ]]"
+t glob-argv0-arith-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}((count*=2))"
+t glob-argv0-case-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}case \$x in *.sh|*.py) echo hi;; esac"
+t glob-argv0-arr-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}arr[0]=x"
 
 # --- predefined shell vars (Codex P1: ${BASH} in argv0) ---
 t varmap-bash 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${BASH}\" \"\${GITHUB_WORKSPACE}/evil.sh\""

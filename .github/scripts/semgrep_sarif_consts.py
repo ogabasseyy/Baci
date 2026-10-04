@@ -43,7 +43,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
              "runghc", "runhaskell", "ghc", "ghci",
              "cabal", "stack", "ant", "clang-tidy",
-             "webpack", "webpack-dev-server", "cpack", "mono"}
+             "webpack", "webpack-dev-server", "cpack", "mono",
+             "bison"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -90,7 +91,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # the config mechanism. cpack --config runs CMake-language
 # code (execute_process runs children; ships with CMake).
 # mono runs the managed-executable operand (ships on the
-# ubuntu runner).
+# ubuntu runner). bison -S runs the skeleton operand through
+# m4 (m4_esyscmd executes repo scripts; ships on the ubuntu
+# runner).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")

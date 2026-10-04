@@ -1,6 +1,6 @@
 # Hardening suite part 1/4 (sourced by semgrep-sarif-hardening.test.sh):
 # core steps, base lockstep, installer binding, copy/poison basics.
-# Uses t/FS/RS/S/H/I/R/O/PR from the lib + entrypoint.
+# Uses t/FS/RS/S/H/I/R/O/PR from the lib.
 # shellcheck shell=bash disable=SC2154
 # --- quoted YAML keys (normalization is semantic-preserving) ---
 t quoted-uses-count 1 "reviewer-action-count" happy.sarif "$S${FS}2:uses: actions/checkout@${FS}a${FS}        \"uses\": actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"

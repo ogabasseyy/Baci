@@ -234,12 +234,16 @@ BEGIN
     OR NEW.order_number IS DISTINCT FROM OLD.order_number
     OR private.rendered_shipping_address(NEW.shipping_address)
       IS DISTINCT FROM private.rendered_shipping_address(OLD.shipping_address)
+    -- A scalar address fails sender validation while {} passes, yet both
+    -- render empty: re-arm on any invalid-to-valid shape repair (or break)
+    -- so a fixed row requeues instead of staying terminally skipped.
+    OR COALESCE(jsonb_typeof(OLD.shipping_address), 'null') IN ('object', 'null')
+      IS DISTINCT FROM (COALESCE(jsonb_typeof(NEW.shipping_address), 'null') IN ('object', 'null'))
     OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
     OR NEW.customer_name IS DISTINCT FROM OLD.customer_name
     OR NEW.customer_phone IS DISTINCT FROM OLD.customer_phone
     OR NEW.transaction_date IS DISTINCT FROM OLD.transaction_date
-    OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
     OR NEW.currency IS DISTINCT FROM OLD.currency
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
@@ -250,8 +254,12 @@ BEGIN
   v_invoice_only_changed :=
     NEW.payment_method IS DISTINCT FROM OLD.payment_method
     OR NEW.invoice_type_code IS DISTINCT FROM OLD.invoice_type_code
-    OR NEW.invoice_note IS DISTINCT FROM OLD.invoice_note
-    OR NEW.notes IS DISTINCT FROM OLD.notes
+    -- Receipts date from the completing payment, never the issue date.
+    OR NEW.invoice_issue_date IS DISTINCT FROM OLD.invoice_issue_date
+    -- The renderer prints invoice_note || notes trimmed: compare the
+    -- resolved note so a shadowed edit resets nothing.
+    OR NULLIF(btrim(COALESCE(NULLIF(OLD.invoice_note, ''), NULLIF(OLD.notes, ''))), '')
+      IS DISTINCT FROM NULLIF(btrim(COALESCE(NULLIF(NEW.invoice_note, ''), NULLIF(NEW.notes, ''))), '')
     OR NEW.payment_due_date IS DISTINCT FROM OLD.payment_due_date
     OR NEW.payment_terms IS DISTINCT FROM OLD.payment_terms
     OR NEW.buyer_reference IS DISTINCT FROM OLD.buyer_reference

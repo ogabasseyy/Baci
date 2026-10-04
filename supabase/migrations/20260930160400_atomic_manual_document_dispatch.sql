@@ -52,8 +52,7 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_legal_entity_name text,
   p_merchant_business_address text,
   p_merchant_registered_address jsonb,
-  -- Reserved: cac_rc_number prints nowhere. The VAT inputs below feed
-  -- the synthesis compare for rowless taxed invoices.
+  -- Reserved cac (prints nowhere); VAT inputs feed the synthesis compare.
   p_merchant_cac_rc_number text,
   p_merchant_tax_identification_number text,
   p_merchant_vat_registration_status text,
@@ -200,7 +199,9 @@ BEGIN
     OR v_order.order_number IS DISTINCT FROM p_order_number
     OR v_order.payment_status IS DISTINCT FROM p_payment_status
     OR v_order.payment_method IS DISTINCT FROM p_payment_method
-    OR v_order.shipping_status IS DISTINCT FROM p_shipping_status
+    -- Shipping renders nowhere: only terminal transitions abort (trigger parity).
+    OR (lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
+      IS DISTINCT FROM (lower(btrim(COALESCE(p_shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
     OR v_order.invoice_type_code IS DISTINCT FROM p_invoice_type_code
     OR v_order.invoice_note IS DISTINCT FROM p_invoice_note
     OR v_order.notes IS DISTINCT FROM p_notes
@@ -226,8 +227,7 @@ BEGIN
       AND private.resolved_merchant_address_line(v_merchant_registered_address, v_merchant_business_address)
         IS DISTINCT FROM
         private.resolved_merchant_address_line(p_merchant_registered_address, p_merchant_business_address))
-    -- cac_rc_number prints nowhere and stays skipped; the VAT inputs
-    -- print through synthesis (compared below for rowless taxed invoices).
+    -- cac prints nowhere; VAT inputs compare below for rowless taxed invoices.
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     -- The contact phone renders resolved (support_phone, else phone):

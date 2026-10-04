@@ -274,6 +274,14 @@ describe('receipt detail loading', () => {
     for (const total of [null, -5]) { mockSingle.mockResolvedValue({ data: partialManualOrder({ total }), error: null }); expect(await (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()).toBeNull(); }
   });
 
+  // biome-ignore format: compact mocks preserve the 300-line gate.
+  it('opens details whose settled payment has a null timestamp', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({ data: partialManualOrder({ amount_paid: 100 }), error: null }); mockRpc.mockResolvedValueOnce({ data: [], error: null }); mockRpc.mockResolvedValueOnce({ data: [{ order_id: 'order-9', amount: 100, status: 'completed', transaction_type: 'payment', created_at: null, description: null, dva_account_number: null, gateway: null }], error: null });
+    const detail = (await (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()) as { transactions: Array<{ created_at: string | null }> } | null;
+    expect(detail?.transactions).toHaveLength(1); expect(detail?.transactions[0]?.created_at).toBeNull();
+  });
+
   it('opens paid-label-but-unsettled manual rows despite history errors', async () => {
     const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
     mockSingle.mockResolvedValue({

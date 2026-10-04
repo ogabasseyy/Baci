@@ -143,7 +143,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `get_ucp_cart` | Read a UCP cart session |
 | `get_product` | Get detailed product information |
 | `get_product_variants` | Get variants, conditions, prices, and availability for a product |
-| `get_shipping_quote` | Explain where to confirm the final delivery fee at checkout |
+| `get_delivery_fee_info` | Explain where to confirm the final delivery fee at checkout |
 | `get_store_info` | Shipping, returns, payment info |
 | `lookup_ucp_catalog_items` | Fetch exact product IDs through the UCP catalog lookup route |
 | `search_ucp_catalog` | Search Ogabassey products using the UCP catalog route |
@@ -221,6 +221,17 @@ accessory, price, condition, sold-out, and no-result cases against the lexical
 baseline. Record relevant-result rate, false-positive rate, and response time.
 The semantic call only runs when lexical discovery returns fewer than the
 requested limit and falls back to lexical results on provider failure.
+
+## Catalog colour evidence
+
+The storefront records colours in variant attributes and in explicit product
+colour/image mappings (`color_images`). MCP must preserve these catalog labels
+so image-backed colour choices remain visible to ChatGPT. A product colour or
+colour-image label does not establish stock or a specific colour/storage/price
+combination; only an actual variant can establish that combination.
+
+Image pixels, filenames, and description text do not establish a colour choice.
+When no explicit catalog colour is returned, report it as unconfirmed.
 
 ## Testing
 

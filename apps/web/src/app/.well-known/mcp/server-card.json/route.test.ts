@@ -6,9 +6,9 @@ const PUBLIC_TOOL_NAMES = [
   'add_to_cart',
   'browse_categories',
   'get_brands',
+  'get_delivery_fee_info',
   'get_product',
   'get_product_variants',
-  'get_shipping_quote',
   'get_store_info',
   'search_products',
 ];
@@ -132,5 +132,30 @@ describe('GET /.well-known/mcp/server-card.json', () => {
         value: { type: 'string' },
       },
     });
+  });
+
+  it('publishes checkout-only delivery fee information with the runtime schema shape', async () => {
+    const { GET } = await import('./route');
+    const body = await GET().json();
+    const tool = body.tools.find(
+      (candidate: { name: string }) =>
+        candidate.name === 'get_delivery_fee_info'
+    );
+
+    expect(tool).toMatchObject({
+      title: 'Check Delivery Fee Information',
+      description: expect.stringContaining(
+        'no fixed delivery fee is published'
+      ),
+      inputSchema: {
+        required: ['state'],
+        properties: {
+          state: expect.objectContaining({ type: 'string' }),
+          city: expect.objectContaining({ type: 'string' }),
+        },
+      },
+    });
+    expect(tool.inputSchema.properties).not.toHaveProperty('address');
+    expect(tool.inputSchema.properties).not.toHaveProperty('estimated_weight');
   });
 });

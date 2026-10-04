@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantColorValue } from './variant-color-value';
+import { getMcpProductCatalogColors } from './product-catalog-colors';
+import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
+import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
 
 interface ProductDetailSource {
   id: string;
@@ -19,6 +24,8 @@ interface ProductDetailSource {
   category: string | null;
   has_variants: boolean | null;
   has_condition_offers: boolean | null;
+  color?: string | null;
+  color_images?: unknown;
   schema_markup: { aggregateRating?: { ratingValue?: number; reviewCount?: number } } | null;
 }
 
@@ -85,6 +92,11 @@ export async function buildMcpProductDetail({
   // Get rating from schema_markup if available
   const rating = product.schema_markup?.aggregateRating?.ratingValue;
   const reviewCount = product.schema_markup?.aggregateRating?.reviewCount;
+  const catalogColors = getMcpProductCatalogColors({
+    color: product.color,
+    colorImages: product.color_images,
+    getSafeCatalogImageUrl,
+  });
 
   const stockSummary = getMcpProductStockSummary(
     product,
@@ -128,7 +140,7 @@ export async function buildMcpProductDetail({
   };
 
   // Build detailed text response
-  let text = `**${product.name}**\n\n`;
+  let text = `**${product.name}**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n`;
   text += `**Price:** ${formatPrice(displayPrice)}`;
   if (
     displayCompareAtPrice &&
@@ -149,6 +161,9 @@ export async function buildMcpProductDetail({
   // Brand & Category
   if (product.brand) text += `**Brand:** ${product.brand}\n`;
   if (product.category) text += `**Category:** ${product.category}\n`;
+  if (catalogColors.colors.length > 0) {
+    text += `${formatMcpCatalogColors(catalogColors)}\n`;
+  }
 
   // Rating
   if (rating) {
@@ -168,7 +183,7 @@ export async function buildMcpProductDetail({
       ? variants.filter((variant) => Number(variant.stock_quantity ?? 0) > 0)
       : variants;
     const colors = [
-      ...new Set(availableVariants.map((v) => v.attributes?.color).filter(Boolean)),
+      ...new Set(availableVariants.map((v) => getMcpVariantColorValue(v.attributes)).filter(Boolean)),
     ];
     const storageOptions = [
       ...new Set(
@@ -203,6 +218,7 @@ export async function buildMcpProductDetail({
     content: [{ type: 'text', text }],
     structuredContent: {
       products: [formatted],
+      catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.'),
       variants: variants.map((v) => ({
         attributes: v.attributes,
         price: v.price_override,

@@ -51,8 +51,15 @@ test('deploy step invokes the trusted runner with prebuilt flags', () => {
   const deploy = jobBlock('deploy');
   assert.match(
     deploy,
-    /run: trusted-ops\/\.github\/scripts\/preview-deploy-run\.sh trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh deploy --yes --prebuilt --archive=tgz\n/
+    /run: trusted-ops\/\.github\/scripts\/preview-deploy-run\.sh trusted-ops\/\.github\/scripts\/run-pinned-vercel\.sh deploy --yes --prebuilt --archive=tgz --turbo\n/
   );
+});
+
+test('deploy job rents the one-shot Turbo finalize machine', () => {
+  const deploy = jobBlock('deploy');
+  // --turbo is the last flag: the finalize container ENOSPCs on standard
+  // machines for cold preview outputs, so previews rent Turbo per run.
+  assert.match(deploy, /--archive=tgz --turbo\n/);
 });
 
 test('preview URL parsing anchors on the deploy assignment line', () => {

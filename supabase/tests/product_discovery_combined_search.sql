@@ -54,6 +54,23 @@ VALUES
    'Metadata only color', 'metadata-only-color', 50000, 'active', false, false,
    '{"attributes":{"color":"ÉBÈNE"}}'::jsonb);
 
+-- Model identities exist only in metadata, never in lexical search columns.
+INSERT INTO public.products
+  (id, merchant_id, name, slug, brand, price, status, has_variants, manage_stock, discovery_metadata)
+VALUES
+  ('cb58d110-0000-4000-8000-000000000214', 'cb58d110-0000-4000-8000-000000000201',
+   'Metadata model fixture', 'model-prefixed', 'Tecno', 50000, 'active', false, false,
+   '{"model":"TECNO SPARK 50"}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000215', 'cb58d110-0000-4000-8000-000000000201',
+   'Metadata model fixture', 'model-bare', 'Tecno', 50000, 'active', false, false,
+   '{"model":"Spark 50"}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000216', 'cb58d110-0000-4000-8000-000000000201',
+   'Metadata model fixture', 'model-pro', 'Tecno', 50000, 'active', false, false,
+   '{"model":"TECNO SPARK 50 Pro"}'::jsonb),
+  ('cb58d110-0000-4000-8000-000000000217', 'cb58d110-0000-4000-8000-000000000201',
+   'Metadata model fixture', 'model-no-brand', NULL, 50000, 'active', false, false,
+   '{"model":"TECNO SPARK 50"}'::jsonb);
+
 -- Exercise the RPC as its public storefront caller, under publication RLS.
 SET LOCAL ROLE anon;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'anon', true);
@@ -63,6 +80,23 @@ DECLARE
   or_ids uuid[];
   first_id uuid;
 BEGIN
+  SELECT array_agg(product_id ORDER BY product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    discovery.discovery_identity_lexeme('model', 'Spark 50'));
+  IF or_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000214',
+    'cb58d110-0000-4000-8000-000000000215']::uuid[] THEN
+    RAISE EXCEPTION 'Unbranded bare model must recall prefixed metadata without Pro or inferred brands';
+  END IF;
+  SELECT array_agg(product_id ORDER BY product_id) INTO or_ids
+  FROM public.search_product_discovery_facts('cb58d110-0000-4000-8000-000000000201',
+    discovery.discovery_identity_lexeme('model', 'Tecno Spark 50'));
+  IF or_ids IS DISTINCT FROM ARRAY[
+    'cb58d110-0000-4000-8000-000000000214',
+    'cb58d110-0000-4000-8000-000000000215',
+    'cb58d110-0000-4000-8000-000000000217']::uuid[] THEN
+    RAISE EXCEPTION 'Qualified model must recall stored bare metadata while preserving exact identities';
+  END IF;
   IF current_user <> 'anon' THEN
     RAISE EXCEPTION 'RPC regression must run as the public caller';
   END IF;

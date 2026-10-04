@@ -45,12 +45,12 @@ describe('MCP policy and widget responses', () => {
         await postMcpJsonRpc(server.baseUrl, {
           id: 0,
           method: 'resources/read',
-          params: { uri: 'ui://widget/store-v3.html' },
+          params: { uri: 'ui://widget/store-v4.html' },
         })
       );
       expect(resource.contents).toEqual([
         expect.objectContaining({
-          uri: 'ui://widget/store-v3.html',
+          uri: 'ui://widget/store-v4.html',
           _meta: expect.objectContaining({
             ui: expect.objectContaining({
               csp: {
@@ -70,7 +70,7 @@ describe('MCP policy and widget responses', () => {
         params: {},
       }));
       expect(tools.find((tool) => tool.name === 'search_products')?._meta)
-        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v3.html' });
+        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v4.html' });
     } finally {
       await server.close();
     }
@@ -82,7 +82,7 @@ describe('MCP policy and widget responses', () => {
       const resource = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 91,
         method: 'resources/read',
-        params: { uri: 'ui://widget/store-v3.html' },
+        params: { uri: 'ui://widget/store-v4.html' },
       }));
       const contents = resource.contents as Array<{ text: string }>;
       expect(contents[0].text).toContain('.mode-fullscreen .products-grid--single');
@@ -105,7 +105,7 @@ describe('MCP policy and widget responses', () => {
           params: {},
         })
       );
-      const shipping = tools.find((tool) => tool.name === 'get_shipping_quote');
+      const shipping = tools.find((tool) => tool.name === 'get_delivery_fee_info');
       expect(shipping?.description).toContain('cannot provide a numeric quote');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('address');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('estimated_weight');
@@ -115,7 +115,7 @@ describe('MCP policy and widget responses', () => {
           id: 2,
           method: 'tools/call',
           params: {
-            name: 'get_shipping_quote',
+            name: 'get_delivery_fee_info',
             arguments: { state: 'Lagos' },
           },
         })

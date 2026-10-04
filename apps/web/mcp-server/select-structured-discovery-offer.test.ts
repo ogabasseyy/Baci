@@ -23,6 +23,38 @@ function makeRow(overrides: Record<string, unknown> = {}): Row {
 
 const intent = (alternative: McpDiscoveryIntent['alternatives'][number]): McpDiscoveryIntent => ({ alternatives: [alternative] });
 
+it('selects the verified TECNO SPARK 50 option for the actual model spelling used by ChatGPT', () => {
+  const row = makeRow({
+    brand: 'Tecno',
+    has_variants: true,
+    discovery_metadata: { product_type: 'phone', model: 'TECNO SPARK 50' },
+  });
+  row.availableVariants = [
+    {
+      id: 'mint-128',
+      product_id: 'phone',
+      attributes: { color: 'Mint Green', storage: '128GB', ram: '4GB' },
+      price_override: 199600,
+      stock_quantity: 0,
+    },
+  ] as typeof row.availableVariants;
+  const selected = selectStructuredDiscoveryOffer(
+    row,
+    intent({ product_type: 'phone', brands: ['Tecno'], model: 'Spark 50' })
+  );
+  expect(selected?.selectedOption).toMatchObject({
+    kind: 'variant',
+    option_id: 'mint-128',
+    price: 199600,
+  });
+  expect(
+    selectStructuredDiscoveryOffer(
+      row,
+      intent({ product_type: 'phone', brands: ['Tecno'], model: 'Spark 50 5G' })
+    )
+  ).toBeUndefined();
+});
+
 it('requires one purchasable option to satisfy every attribute constraint', () => {
   const row = makeRow({ has_variants: true });
   row.availableVariants = [

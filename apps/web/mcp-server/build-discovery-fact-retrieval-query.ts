@@ -132,6 +132,20 @@ function typeTerms(productType: string): string[] {
   return [`type${cleaned}`];
 }
 
+function modelTerm(model: string, brand?: string): string | undefined {
+  const models = new Set([model]);
+  if (brand) {
+    const bare = structuredDiscoveryIdentity.modelWithoutBrand(model, brand);
+    if (bare) {
+      models.add(bare);
+      models.add(`${brand} ${bare}`);
+    }
+  }
+  const keys = [...new Set([...models].map((value) => identityKey('model', value))
+    .filter((key): key is string => key !== undefined))];
+  return keys.length > 1 ? `(${keys.join(' | ')})` : keys[0];
+}
+
 /** tsquery text for the facts index, built from structured alternatives so
  * shopper wording never constrains candidate recall. Groups join with OR and
  * terms with AND, matching the matcher's branch semantics; ranges retrieve
@@ -144,13 +158,26 @@ export function buildDiscoveryFactRetrievalQuery(intent: McpDiscoveryIntent, fal
     // Each manufacturer keys as one lexeme before brands OR together, so a
     // multi-word brand cannot broaden retrieval to either token alone and
     // exhaust the capped fact window with partial matches.
-    const brandBranches = (alternative.brands ?? []).map((brand) => identityKey('brand', brand))
-      .filter((branch): branch is string => branch !== undefined);
-    if (brandBranches.length === 1) terms.push(brandBranches[0]);
-    else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
-    if (alternative.model) {
-      const key = identityKey('model', alternative.model);
-      if (key) terms.push(key);
+    const model = alternative.model;
+    const brands = alternative.brands ?? [];
+    if (model && brands.length > 1) {
+      // Model spellings belong to their verified manufacturer: independent
+      // brand/model OR groups admit a cross-product the matcher rejects.
+      const branches = brands.map((brand) => {
+        const brandKey = identityKey('brand', brand);
+        const modelKey = modelTerm(model, brand);
+        return brandKey && modelKey ? groupQuery([brandKey, modelKey]) : undefined;
+      }).filter((branch): branch is string => branch !== undefined);
+      if (branches.length > 0) terms.push(`(${branches.join(' | ')})`);
+    } else {
+      const brandBranches = (alternative.brands ?? []).map((brand) => identityKey('brand', brand))
+        .filter((branch): branch is string => branch !== undefined);
+      if (brandBranches.length === 1) terms.push(brandBranches[0]);
+      else if (brandBranches.length > 1) terms.push(`(${brandBranches.join(' | ')})`);
+      if (alternative.model) {
+        const key = modelTerm(alternative.model, alternative.brands?.[0]);
+        if (key) terms.push(key);
+      }
     }
     if (alternative.compatible_with) {
       const key = identityKey('compat', alternative.compatible_with);

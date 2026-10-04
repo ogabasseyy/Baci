@@ -1,3 +1,8 @@
+import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
+import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
+import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
+import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
+
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
 
 const PRODUCT_LOOKUP_INPUT_SCHEMA = {
@@ -27,14 +32,11 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
   readOnlyHint: true,
 } as const;
 
-import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
-
 export const PUBLIC_MCP_TOOLS = [
   {
     name: 'search_products',
     title: 'Search Products',
-    description:
-      'Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries. Always supply intent with explicit shopper constraints and query with retrieval keywords. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability.',
+    description: MCP_SEARCH_PRODUCTS_DESCRIPTION,
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
@@ -51,7 +53,7 @@ export const PUBLIC_MCP_TOOLS = [
           enum: ['new', 'used', 'open_box', 'refurbished'],
         },
         category: {
-          description: 'Category (e.g., phones, laptops)',
+          description: MCP_SEARCH_CATEGORY_GUIDANCE,
           type: 'string',
           maxLength: 50,
         },
@@ -101,8 +103,7 @@ export const PUBLIC_MCP_TOOLS = [
   {
     name: 'get_product',
     title: 'Get Product Details',
-    description:
-      'Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+    description: `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
     inputSchema: PRODUCT_LOOKUP_INPUT_SCHEMA,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
@@ -133,8 +134,7 @@ export const PUBLIC_MCP_TOOLS = [
   {
     name: 'get_product_variants',
     title: 'Get Product Variants',
-    description:
-      'Get all available variants (colors, storage options, conditions) for a product. Use product_id when available; otherwise use the exact product_name returned by search_products.',
+    description: `Get all available variants (colors, storage options, conditions) for a product. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
     inputSchema: PRODUCT_LOOKUP_INPUT_SCHEMA,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
@@ -167,10 +167,10 @@ export const PUBLIC_MCP_TOOLS = [
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
-    name: 'get_shipping_quote',
-    title: 'Calculate Delivery Fee',
+    name: 'get_delivery_fee_info',
+    title: 'Check Delivery Fee Information',
     description:
-      'Calculate shipping/delivery cost based on location. Provides real-time quotes from multiple carriers (GIGL, Topship).',
+      'Explain that no fixed delivery fee is published and direct shoppers to checkout to confirm their destination-specific fee and timing.',
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
@@ -187,22 +187,6 @@ export const PUBLIC_MCP_TOOLS = [
           type: 'string',
           minLength: 2,
           maxLength: 100,
-        },
-        address: {
-          description: 'Full delivery address',
-          type: 'string',
-          maxLength: 200,
-        },
-        product_ids: {
-          description: 'Product IDs to calculate shipping for',
-          maxItems: 20,
-          type: 'array',
-          items: { type: 'string', minLength: 1, maxLength: 80 },
-        },
-        estimated_weight: {
-          description:
-            'Estimated total weight in kg (if products not specified)',
-          type: 'number',
         },
       },
       required: ['state'],

@@ -18,7 +18,7 @@ import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus
 import { CheckoutScreen } from './checkout/components/CheckoutScreen';
 import { isNgnChargeCurrency } from './checkout/components/payment-step-availability';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
-import { deriveCheckoutOrderSummaryPresentation } from './checkout/derive-checkout-order-summary-presentation';
+import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
@@ -80,7 +80,6 @@ export const CheckoutPage: React.FC = () => {
     form: checkoutFormState,
     flow: checkoutFlow,
     account,
-    auth: checkoutAuth,
   } = checkoutFormSession;
   const {
     values: checkoutForm,
@@ -88,26 +87,7 @@ export const CheckoutPage: React.FC = () => {
     setFields: setCheckoutFields,
     clear: clearCheckoutSession,
     inferredLocation,
-    setNewsletterOptIn,
   } = checkoutFormState;
-
-  // Destructure for convenience (these are reactive)
-  const {
-    firstName,
-    lastName,
-    customerEmail,
-    customerPhone,
-    newAddressStreet,
-    newAddressState,
-    newAddressCity,
-    deliveryCoordinates,
-    deliveryMethod,
-    airportType,
-    airportRequiresQuote,
-    selectedQuoteId: persistedSelectedQuoteId,
-    selectedProviderRateId: persistedSelectedProviderRateId,
-    newsletterOptIn,
-  } = checkoutForm;
 
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
@@ -158,8 +138,8 @@ export const CheckoutPage: React.FC = () => {
     (Number(searchParams.get('giftWrappingCost')) || 0);
 
   const delivery = useCheckoutDeliverySession({
-    airportRequiresQuote,
-    airportType,
+    airportRequiresQuote: checkoutForm.airportRequiresQuote,
+    airportType: checkoutForm.airportType,
     completedSteps,
     inferredLocation,
     isHydrated,
@@ -169,26 +149,23 @@ export const CheckoutPage: React.FC = () => {
     checkoutCart,
     checkoutCartCatalogSubtotal,
     quoteItemsFingerprint,
-    deliveryCoordinates,
-    persistedSelectedQuoteId,
-    persistedSelectedProviderRateId,
+    deliveryCoordinates: checkoutForm.deliveryCoordinates,
+    persistedSelectedQuoteId: checkoutForm.selectedQuoteId,
+    persistedSelectedProviderRateId: checkoutForm.selectedProviderRateId,
     currentStep,
     setCurrentStep,
     setCheckoutField,
     setCheckoutFields,
-    deliveryMethod,
-    newAddressStreet,
-    newAddressState,
-    newAddressCity,
-    customerPhone,
-    firstName,
-    lastName,
-    customerEmail,
+    deliveryMethod: checkoutForm.deliveryMethod,
+    newAddressStreet: checkoutForm.newAddressStreet,
+    newAddressState: checkoutForm.newAddressState,
+    newAddressCity: checkoutForm.newAddressCity,
+    customerPhone: checkoutForm.customerPhone,
+    firstName: checkoutForm.firstName,
+    lastName: checkoutForm.lastName,
+    customerEmail: checkoutForm.customerEmail,
   });
-  const { quotes: deliveryQuotes, cost: deliveryCost } = delivery;
-  const { selectedId: selectedQuoteId } = deliveryQuotes;
-
-  // Note: newAddressState, newAddressCity, newAddressStreet are now part of checkoutForm (persisted)
+  const { cost: deliveryCost } = delivery;
 
   // Live and resumed amount arithmetic feeds the payment session and summary.
   const { orderTotals, paymentSession, summaryAmounts } =
@@ -197,7 +174,7 @@ export const CheckoutPage: React.FC = () => {
       effectiveItemSubtotal,
       effectiveCheckoutCartTotal,
       deliveryCost,
-      deliveryMethod,
+      deliveryMethod: checkoutForm.deliveryMethod,
       giftWrappingCost,
       hasCheckoutCartItems,
       resumedOrder: summaryOrder,
@@ -216,11 +193,6 @@ export const CheckoutPage: React.FC = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-
-  const paymentMethod = paymentSession.method;
-  const redvaultOrderReady = paymentSession.redvault.orderReady;
-  const walletAmountUsed = paymentSession.wallet.amountUsed;
-  const remainingAmount = paymentSession.wallet.remainingAmount;
 
   const { crypto, dva, handlePlaceOrder, walletFundedTransfer } =
     useCheckoutPaymentExecution({
@@ -265,40 +237,6 @@ export const CheckoutPage: React.FC = () => {
       attempt: checkoutAttempt,
     });
 
-  const isPayForMeValid = paymentSession.payForMe.isValid;
-  const orderSummaryPresentation = deriveCheckoutOrderSummaryPresentation({
-    display: checkoutDisplay,
-    amounts: summaryAmounts,
-    formatCurrencyAuto,
-    paymentMethod,
-    selectedQuoteId,
-    wallet: {
-      currencySupported: paymentSession.wallet.currencySupported,
-      redemptionAllowed: paymentSession.wallet.redemptionAllowed,
-      loading: paymentSession.wallet.loading,
-      balance: paymentSession.wallet.balance,
-      payWithWallet: paymentSession.wallet.payWithWallet,
-      setPayWithWallet: paymentSession.wallet.setPayWithWallet,
-      amountUsed: walletAmountUsed,
-      remainingAmount,
-      checkoutPayWithWallet: paymentSession.checkoutValues.payWithWallet,
-    },
-    hasUser: Boolean(user),
-    currencySymbol,
-    redvaultSummary: paymentSession.redvault.summary,
-    newsletterOptIn,
-    setNewsletterOptIn,
-    handlePlaceOrder,
-    isProcessing,
-    isPayForMeValid,
-    merchantId: merchant?.id || '',
-    merchantCountry: merchant?.country ?? 'NG',
-    payoutCurrency: merchant?.payout_currency ?? null,
-    productIds: checkoutCart.map((item) => item.id),
-    resumeOrderId,
-    hasResumedOrder: Boolean(resumedOrder),
-  });
-
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
   const isAutoTriggerProcessing =
@@ -332,71 +270,28 @@ export const CheckoutPage: React.FC = () => {
     );
   }
 
-  // Empty cart check - only show after hydration confirms cart is genuinely empty
-  // Skip this check when resuming an order (cart is empty during order resumption)
-
-  const checkoutScreenSteps = {
-    flow: checkoutFlow,
-    onSignIn: checkoutAuth.open,
-    contact: {
-      values: checkoutFormState.contactValues,
-      onChange: setCheckoutField,
-      onComplete: checkoutFlow.completeContact,
-      account,
+  const screenModel = deriveCheckoutScreenModel({
+    sessions: {
+      form: checkoutFormSession,
+      attempt: checkoutAttempt,
+      delivery,
+      financial: { paymentSession, summaryAmounts },
+      execution: { crypto, dva, handlePlaceOrder, walletFundedTransfer },
     },
-    delivery: {
-      session: delivery,
-      address: {
-        street: newAddressStreet,
-        city: newAddressCity,
-        state: newAddressState,
-        merchantCountry,
-        isHydrated,
-      },
-    },
-    payment: {
-      session: paymentSession,
-      isProcessing,
-      isPayForMeValid,
-      isInitializingDva: dva.isInitializingDva,
-      newsletterOptIn,
-      setNewsletterOptIn,
-      handlePlaceOrder,
+    display: { checkoutDisplay, checkoutCart, isHydrated },
+    identity: {
       merchant,
       user,
-      currency: currencyCode,
-      redvaultAvailable: redvaultAvailability.available,
-      redvaultOrderReady: Boolean(redvaultOrderReady),
+      currencyCode,
+      currencySymbol,
+      merchantCountry,
+      formatCurrencyAuto,
     },
-  };
+    actions: {
+      onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
+    },
+    availability: { redvaultAvailable: redvaultAvailability.available },
+  });
 
-  return (
-    <CheckoutScreen
-      page={{
-        onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
-        merchantName: merchant?.business_name,
-        formatCurrency: formatCurrencyAuto,
-      }}
-      auth={{
-        isOpen: checkoutAuth.isOpen,
-        onOpenChange: checkoutAuth.onOpenChange,
-        onSuccess: checkoutAuth.close,
-      }}
-      overlays={{
-        crypto,
-        walletFundedTransfer,
-        dva: {
-          data: dva.dvaData,
-          isVerifying: dva.isVerifyingDva,
-          onClose: dva.closeDvaModal,
-          onConfirmTransfer: dva.handleDvaConfirmTransfer,
-        },
-      }}
-      summary={{
-        presentation: orderSummaryPresentation,
-        payment: paymentSession,
-      }}
-      steps={checkoutScreenSteps}
-    />
-  );
+  return <CheckoutScreen {...screenModel} />;
 };

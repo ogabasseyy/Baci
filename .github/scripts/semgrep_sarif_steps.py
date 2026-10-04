@@ -157,18 +157,21 @@ def audit_step_commands(ctx, drift):
             # and block-scalar bodies cannot be alias nodes, so
             # only a same-line bare alias matches.
             if re.match(r"""\s*(?:-\s+)?(?:"run"|'run'|run)\s*:"""
-                         r"""\s*(?:(?:&\S+|!!\S+)\s+)*"""
+                         r"""\s*(?:[&!]\S+\s+)*"""
                          r"""\*[A-Za-z0-9_-]+\s*(?:#.*)?$""",
                          line) \
                     and "secret-step-untrusted-command" not in drift:
                 drift.append("secret-step-untrusted-command")
             # Flow-style steps (- {run: ...}) never match the
             # block-style boundary parser, so their run bodies
-            # audit nowhere: fail closed. Same indent discipline
-            # as is_step_boundary (a dash there dedents any
-            # scalar, so it is a real step either way); with no
-            # block steps key, any indent fails closed.
-            dm = re.match(r"^(\s*)-\s*\{", line)
+            # audit nowhere: fail closed. Anchor/tag prefixes
+            # (&evil, !tag, either order) normalize first: YAML
+            # allows them between the dash and the mapping.
+            # Same indent discipline as is_step_boundary (a dash
+            # there dedents any scalar, so it is a real step
+            # either way); with no block steps key, any indent
+            # fails closed.
+            dm = re.match(r"^(\s*)-\s*(?:[&!]\S+\s+)*\{", line)
             if dm and (indent is None or len(dm.group(1)) == indent) \
                     and "secret-step-untrusted-command" not in drift:
                 drift.append("secret-step-untrusted-command")

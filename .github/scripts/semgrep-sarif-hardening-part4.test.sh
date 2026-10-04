@@ -202,3 +202,6 @@ t sevenz-extract-cwd-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}7z 
 t hg-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}hg init \"\${RUNNER_TEMP}/audit-repo\"
 HGRCPATH=\"\${GITHUB_WORKSPACE}/evil.hgrc\" hg -R \"\${RUNNER_TEMP}/audit-repo\" status"
 t julia-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}julia \"\${GITHUB_WORKSPACE}/evil.jl\""
+
+# --- round 13: lldb loader, anchor/tag flow steps ---
+t lldb-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}lldb -b -s \"\${GITHUB_WORKSPACE}/evil.lldb\" /bin/true"

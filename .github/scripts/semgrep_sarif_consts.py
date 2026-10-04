@@ -36,7 +36,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
              "g++", "c++", "clang", "clang++", "jshell",
              "ssh-keygen", "pwsh", "powershell", "swift",
-             "swiftc", "script", "rpm", "m4", "hg", "julia"}
+             "swiftc", "script", "rpm", "m4", "hg", "julia",
+             "lldb"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -57,7 +58,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # (both ship on the ubuntu runner). hg runs pre-<command>
 # hooks from HGRCPATH-selected config (PR-controlled file
 # executes on any command); julia executes program-file
-# operands (both ship on the ubuntu runner).
+# operands (both ship on the ubuntu runner). lldb -s/--source
+# executes command files (platform shell runs repo scripts;
+# ships with Swift/LLVM on the ubuntu runner).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")

@@ -44,6 +44,7 @@ const storedEnvelopeSchema = z.object({
   wallet_id: z.string().nullable(),
   reference: z.string().nullable(),
   amount_kobo: z.number().nullable(),
+  event_details: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export async function recordPiggyvestEvent(
@@ -86,7 +87,7 @@ export async function recordPiggyvestEvent(
   const existing = await db
     .from('piggyvest_webhook_inbox')
     .select(
-      'event_type, event_category, customer_id, wallet_id, reference, amount_kobo'
+      'event_type, event_category, customer_id, wallet_id, reference, amount_kobo, event_details'
     )
     .eq('event_id', parsed.eventId)
     .maybeSingle();
@@ -102,7 +103,14 @@ export async function recordPiggyvestEvent(
   if (!stored.success) {
     throw new Error('PiggyVest stored receipt is invalid');
   }
+  const transactionId = parsed.details?.transaction_id;
+  const transactionMatches =
+    parsed.eventType !== 'bank-transfer.inflow.success' ||
+    (typeof transactionId === 'string' &&
+      transactionId.length > 0 &&
+      stored.data.event_details?.transaction_id === transactionId);
   const matches =
+    transactionMatches &&
     stored.data.event_type === parsed.eventType &&
     stored.data.event_category === parsed.eventCategory &&
     stored.data.customer_id === parsed.customerId &&

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  type SavingsCardContributionSnapshot,
+  type SavingsCardContributionSnapshot as Snapshot,
   saveSavingsCardContributionSnapshot,
 } from '@/lib/savings-card-contribution-snapshot';
 import { submitSavingsCardContribution } from '@/lib/savings-card-contributions';
+import { safeRemainingKobo } from './safe-remaining-kobo';
 import {
   initializeSavingsCardContribution,
   prepareNewSavingsCardContribution,
@@ -31,8 +32,7 @@ export function useSavingsCardContribution({
   const [enabled, setEnabled] = useState(false);
   const [capabilityLoaded, setCapabilityLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [snapshot, setSnapshot] =
-    useState<SavingsCardContributionSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +49,7 @@ export function useSavingsCardContribution({
   const amountKobo = savingsCardContributionUtils.amountToKobo(amount);
   const limitKobo = Math.min(
     maximumAmountKobo,
-    Math.max(0, remainingAmount) * 100
+    safeRemainingKobo(remainingAmount)
   );
   const scopeKeyRef = useRef(scopeKey);
   const activeScopeRef = useRef<string | null>(null);
@@ -130,7 +130,7 @@ export function useSavingsCardContribution({
       snapshot: currentSnapshot,
     });
   const sendSnapshot = async (
-    currentSnapshot: SavingsCardContributionSnapshot,
+    currentSnapshot: Snapshot,
     reserved = false,
     activation = activationRef.current
   ) => {

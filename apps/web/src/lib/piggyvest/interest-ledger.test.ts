@@ -58,6 +58,7 @@ const STORED_PAYOUT_ROW = {
   withholding_tax_kobo: 5000,
   net_kobo: 95000,
   reference: 'faas-ref-synthetic-002',
+  batch_id: 'batch-synthetic-001',
   paid_at: '2026-09-01T00:05:00.000Z',
 };
 
@@ -106,6 +107,21 @@ function mockSupabase(options: {
 }
 
 describe('recordInterestPayout', () => {
+  it('rejects a reused payout ID with a changed batch under a new event ID', async () => {
+    const { client } = mockSupabase({
+      upsertResult: { data: [], error: null },
+    });
+    await expect(
+      recordInterestPayout(client, {
+        ...interestEvent,
+        eventId: 'different-event',
+        eventData: { ...interestEvent.eventData, batch_id: 'different-batch' },
+      })
+    ).rejects.toMatchObject({
+      code: 'INTEREST_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['batch_id'] },
+    });
+  });
   it('credits the reconciled net on first delivery', async () => {
     const { client, upsert } = mockSupabase({
       upsertResult: {

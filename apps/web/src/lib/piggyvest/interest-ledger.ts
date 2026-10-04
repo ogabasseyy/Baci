@@ -129,7 +129,7 @@ export async function recordInterestPayout(
   const existing = await supabase
     .from('piggyvest_interest_payouts')
     .select(
-      'customer_id, wallet_id, amount_kobo, gross_kobo, withholding_tax_kobo, net_kobo, reference, paid_at'
+      'customer_id, wallet_id, amount_kobo, gross_kobo, withholding_tax_kobo, net_kobo, reference, batch_id, paid_at'
     )
     .eq('provider_payout_id', detail.id)
     .maybeSingle();
@@ -160,6 +160,7 @@ export async function recordInterestPayout(
   if (stored.net_kobo !== net_interest_payout)
     mismatchedFields.push('net_kobo');
   if (stored.reference !== detail.reference) mismatchedFields.push('reference');
+  if (stored.batch_id !== detail.batch_id) mismatchedFields.push('batch_id');
   // Epoch compare: the stored timestamptz round-trips in a normalized
   // format that never string-equals the payload's ISO instant.
   if (
@@ -177,6 +178,7 @@ export async function recordInterestPayout(
           withholding_tax_kobo: withholding_tax,
           net_kobo: net_interest_payout,
           reference: detail.reference,
+          batch_id: detail.batch_id,
           paid_at: detail.timestamp,
           provider_payout_id: detail.id,
         })

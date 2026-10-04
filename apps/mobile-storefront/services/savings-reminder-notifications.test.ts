@@ -40,6 +40,7 @@ jest.mock('@/stores/auth-store', () => ({
 }));
 
 const {
+  cancelSavingsReminderNotification,
   activateDueSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } =
@@ -50,7 +51,107 @@ const { savingsNotificationCapability } =
 describe('savings reminder notification capability', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockGetPermissionsAsync.mockResolvedValue({ status: 'granted' });
     await AsyncStorage.clear();
+  });
+
+  it('keeps the first goal reminder when a second goal is scheduled and cancels only the requested goal', async () => {
+    mockScheduleNotificationAsync
+      .mockResolvedValueOnce('first')
+      .mockResolvedValueOnce('second');
+    for (const goalId of ['goal-1', 'goal-2']) {
+      await scheduleSavingsReminderNotification({
+        contributionAmount: 500,
+        frequency: 'weekly',
+        goalId,
+        goalTitle: 'Phone',
+      });
+    }
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalled();
+    await cancelSavingsReminderNotification('goal-2');
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('second');
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'first'
+    );
+    await cancelSavingsReminderNotification();
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('first');
+  });
+
+  it('activates both pending goals on boot without replacing the first', async () => {
+    for (const goalId of ['goal-1', 'goal-2']) {
+      await scheduleSavingsReminderNotification({
+        contributionAmount: 500,
+        frequency: 'weekly',
+        goalId,
+        goalTitle: 'Phone',
+        scheduledAt: new Date(2099, 0, 1),
+      });
+    }
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date(2100, 0, 1).getTime());
+    try {
+      await activateDueSavingsReminderNotification();
+      expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(2);
+      expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it.each([
+    'cancel-all',
+    'server-push',
+  ])('clears scheduled and pending goals for %s', async (reason) => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-2',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
+    if (reason === 'server-push') {
+      await savingsNotificationCapability.markAvailable({
+        apiOrigin: 'https://api.baci.test',
+        merchantId: '00000000-0000-4000-8000-000000000010',
+        userId: 'user-a',
+      });
+      await activateDueSavingsReminderNotification();
+    } else await cancelSavingsReminderNotification();
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(
+      (await AsyncStorage.getAllKeys()).filter((key) =>
+        key.startsWith('baci:savings-reminder-')
+      )
+    ).toEqual([]);
+  });
+
+  it('serializes overlapping activations so each due goal is scheduled once', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date(2100, 0, 1).getTime());
+    try {
+      await Promise.all([
+        activateDueSavingsReminderNotification(),
+        activateDueSavingsReminderNotification(),
+      ]);
+      expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('keeps legacy local reminders active before the inbox capability is established', async () => {
@@ -126,9 +227,30 @@ describe('savings reminder notification capability', () => {
     await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
 
     await expect(
-      AsyncStorage.getItem('baci:savings-reminder-pending-request')
+      AsyncStorage.getItem('baci:savings-reminder-goal:goal-1')
     ).resolves.toContain('goal-1');
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
     expect(mockRequestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it('retains a failed cancellation for retry without creating a duplicate', async () => {
+    const request = {
+      contributionAmount: 500,
+      frequency: 'weekly' as const,
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    };
+    await scheduleSavingsReminderNotification(request);
+    mockCancelScheduledNotificationAsync.mockRejectedValueOnce(
+      new Error('native failure')
+    );
+    await expect(
+      scheduleSavingsReminderNotification(request)
+    ).resolves.toBeNull();
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    await expect(cancelSavingsReminderNotification('goal-1')).resolves.toBe(
+      true
+    );
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(2);
   });
 });

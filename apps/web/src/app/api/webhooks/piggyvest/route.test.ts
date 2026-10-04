@@ -117,6 +117,7 @@ const MATCHING_ENVELOPE = {
   wallet_id: inflowEvent.pvb_wallet,
   reference: inflowEvent.pvb_reference,
   amount_kobo: 1750000,
+  event_details: { transaction_id: inflowEvent.eventData.transaction_id },
 };
 
 const restrictionEvent = {
@@ -313,7 +314,10 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
-  it('quarantines same-identity conflicting deliveries without crediting', async () => {
+  it.each([
+    { amount: 1 },
+    { transaction_id: 'provider-txn-synthetic-002' },
+  ])('quarantines same-identity conflicting deliveries without crediting: %j', async (changedDetail) => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     // Stored envelope keeps the original amount while the redelivery
     // claims amount 1: same identity, different content.
@@ -323,7 +327,7 @@ describe('POST event intake', () => {
     });
     const rawBody = JSON.stringify({
       ...inflowEvent,
-      eventData: { ...inflowEvent.eventData, amount: 1 },
+      eventData: { ...inflowEvent.eventData, ...changedDetail },
     });
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));

@@ -18,6 +18,7 @@ import {
   toWalletSavingsInterestEarnings,
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
+import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
 
 const WalletFundingAccountSchema = z.object({
   account_name: z.string().min(1),
@@ -68,24 +69,6 @@ function normalizeWalletTransaction(row: unknown): Transaction | null {
     amount,
     description: validation.data.description ?? '',
   };
-}
-
-function getJoinedSavingsGoalProduct({
-  goalId,
-  rows,
-}: {
-  goalId: string;
-  rows: unknown[];
-}) {
-  const sourceRow = rows.find(
-    (row) =>
-      row && typeof row === 'object' && (row as { id?: unknown }).id === goalId
-  );
-  if (!sourceRow || typeof sourceRow !== 'object') {
-    return undefined;
-  }
-
-  return (sourceRow as { products?: unknown }).products;
 }
 
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
@@ -171,21 +154,7 @@ export async function fetchWalletData(
         ? (coerceDatabaseNumber(customerValidation.data.loyalty_points) ?? 0)
         : (coerceDatabaseNumber(customerRow.loyalty_points) ?? 0);
 
-    return {
-      wallet: {
-        active_savings_goal: null,
-        balance: 0,
-        earnings_available: false,
-        earnings_balance: 0,
-        funding_account: null,
-        loyalty_points: safeLoyaltyPoints,
-        requires_funding_account_consent: true,
-        savings_balance: 0,
-        savings_goals: [],
-        total_balance: 0,
-      },
-      transactions: [],
-    };
+    return getEmptyWalletData(safeLoyaltyPoints);
   }
 
   const walletResult = await supabase
@@ -212,12 +181,7 @@ export async function fetchWalletData(
       supabase
         .from('customer_savings_goals')
         .select(
-          // Variant projection lists only columns that exist on
-          // product_variants (see generated Row type): is_active, status,
-          // deleted_at, and archived_at were never added, and PostgREST
-          // rejects the entire goals query when any selected column is
-          // unknown — failing wallet load for every customer.
-          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor))'
+          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
         )
         .eq('merchant_id', merchantId)
         .eq('customer_id', resolvedCustomerId)
@@ -249,17 +213,15 @@ export async function fetchWalletData(
     goalInterestKobo: savingsInterest.goalInterestKobo,
   });
   const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
+  const productsByGoalId = await hydrateWalletSavingsProducts(
+    projectedSavingsGoalRows
+  );
   let activeSavingsGoal: WalletActiveSavingsGoal | null = null;
 
   if (activeSavingsGoalRow) {
     activeSavingsGoal = toActiveSavingsGoal({
       goal: activeSavingsGoalRow,
-      product: activeSavingsGoalRow.product_id
-        ? getJoinedSavingsGoalProduct({
-            goalId: activeSavingsGoalRow.id,
-            rows: projectedSavingsGoalRows,
-          })
-        : undefined,
+      product: productsByGoalId.get(activeSavingsGoalRow.id),
     });
   }
 
@@ -271,12 +233,7 @@ export async function fetchWalletData(
     (row) => {
       const mapped = toActiveSavingsGoal({
         goal: row,
-        product: row.product_id
-          ? getJoinedSavingsGoalProduct({
-              goalId: row.id,
-              rows: projectedSavingsGoalRows,
-            })
-          : undefined,
+        product: productsByGoalId.get(row.id),
       });
       return mapped ? [mapped] : [];
     }

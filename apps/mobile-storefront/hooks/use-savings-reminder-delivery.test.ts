@@ -72,3 +72,127 @@ it('preserves local fallback when capability lookup fails', async () => {
   await act(async () => {});
   expect(mockCancel).not.toHaveBeenCalled();
 });
+
+it('clears persisted capability when registration is lost after a successful registration', async () => {
+  mockFetch.mockResolvedValue({ deliveryEnabled: true });
+  const { rerender } = renderHook(
+    ({ registered }) =>
+      useSavingsReminderDelivery('user', 'merchant', registered),
+    { initialProps: { registered: true } }
+  );
+  await waitFor(() => expect(mockMark).toHaveBeenCalledTimes(1));
+  rerender({ registered: false });
+  await waitFor(() =>
+    expect(mockClear).toHaveBeenCalledWith({
+      apiOrigin: 'https://staging.example.com',
+      merchantId: 'merchant',
+      userId: 'user',
+    })
+  );
+});
+
+it('clears a persisted marker on boot with failed rotation or unregistered push', async () => {
+  renderHook(() => useSavingsReminderDelivery('user', 'merchant', false));
+  await waitFor(() =>
+    expect(mockClear).toHaveBeenCalledWith({
+      apiOrigin: 'https://staging.example.com',
+      merchantId: 'merchant',
+      userId: 'user',
+    })
+  );
+  expect(mockCancel).not.toHaveBeenCalled();
+});
+
+it.each([
+  'userId',
+  'merchantId',
+] as const)('ignores the old inbox response after changing %s', async (field) => {
+  let resolve!: (value: { deliveryEnabled: boolean }) => void;
+  mockFetch
+    .mockReturnValueOnce(
+      new Promise((complete) => {
+        resolve = complete;
+      })
+    )
+    .mockResolvedValue({ deliveryEnabled: true });
+  const oldScope = { userId: 'user', merchantId: 'merchant' };
+  const nextScope = { ...oldScope, [field]: 'next' };
+  const { rerender } = renderHook(
+    ({ userId, merchantId }) =>
+      useSavingsReminderDelivery(userId, merchantId, true),
+    { initialProps: oldScope }
+  );
+  rerender(nextScope);
+  await waitFor(() => expect(mockCancel).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    resolve({ deliveryEnabled: true });
+  });
+  expect(mockMark).toHaveBeenCalledTimes(1);
+  expect(mockMark).toHaveBeenCalledWith({
+    apiOrigin: 'https://staging.example.com',
+    ...nextScope,
+  });
+  expect(mockClear).toHaveBeenCalledWith({
+    apiOrigin: 'https://staging.example.com',
+    ...oldScope,
+  });
+});
+
+it('clears a late persisted write before re-registering the same account', async () => {
+  let completeMark!: () => void;
+  let available = false;
+  mockFetch.mockResolvedValue({ deliveryEnabled: true });
+  mockMark
+    .mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        completeMark = resolve;
+      });
+      available = true;
+    })
+    .mockImplementationOnce(async () => {
+      available = true;
+    });
+  mockClear.mockImplementation(async () => {
+    available = false;
+  });
+  const { rerender, unmount } = renderHook(
+    ({ registered }) =>
+      useSavingsReminderDelivery('user', 'merchant', registered),
+    { initialProps: { registered: true } }
+  );
+  await waitFor(() => expect(mockMark).toHaveBeenCalledTimes(1));
+  rerender({ registered: false });
+  rerender({ registered: true });
+  await act(async () => {
+    completeMark();
+  });
+  await waitFor(() => expect(mockMark).toHaveBeenCalledTimes(2));
+  expect(available).toBe(true);
+  expect(mockCancel).toHaveBeenCalledTimes(1);
+  unmount();
+  await act(async () => {});
+  expect(available).toBe(false);
+  mockClear.mockResolvedValue(undefined);
+});
+
+it('never writes an unscoped capability when authentication or merchant is absent', async () => {
+  const { rerender } = renderHook(
+    ({
+      userId,
+      merchantId,
+    }: {
+      userId: string | null;
+      merchantId: string | null;
+    }) => useSavingsReminderDelivery(userId, merchantId, false),
+    {
+      initialProps: { userId: null, merchantId: 'merchant' } as {
+        userId: string | null;
+        merchantId: string | null;
+      },
+    }
+  );
+  rerender({ userId: 'user', merchantId: null });
+  await act(async () => {});
+  expect(mockClear).not.toHaveBeenCalled();
+  expect(mockMark).not.toHaveBeenCalled();
+});

@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
@@ -13,6 +12,7 @@ const input = {
   eventType: 'bank-transfer.inflow.success',
   eventCategory: 'bank-transfer',
   customerId: 'customer-001',
+  details: { transaction_id: 'transaction-001' },
 };
 const storedEnvelope = {
   event_type: input.eventType,
@@ -21,6 +21,7 @@ const storedEnvelope = {
   wallet_id: null,
   reference: null,
   amount_kobo: null,
+  event_details: input.details,
 };
 
 function mockClient(
@@ -52,6 +53,22 @@ function mockClient(
 }
 
 describe('recordPiggyvestEvent', () => {
+  it('rejects reused event IDs with a different provider transaction', async () => {
+    const { client } = mockClient([]);
+    await expect(
+      recordPiggyvestEvent(client, {
+        ...input,
+        details: { transaction_id: 'transaction-002' },
+      })
+    ).resolves.toBe('conflict');
+  });
+  it('fails closed when a stored inflow lacks transaction evidence', async () => {
+    const { client } = mockClient([], null, {
+      ...storedEnvelope,
+      event_details: null,
+    });
+    await expect(recordPiggyvestEvent(client, input)).resolves.toBe('conflict');
+  });
   it.each([
     [[{ event_id: input.eventId }], 'new'],
     [[], 'duplicate'],

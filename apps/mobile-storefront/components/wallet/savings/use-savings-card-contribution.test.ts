@@ -67,6 +67,56 @@ beforeEach(() => {
     .mockImplementation(async ({ goalId }) => readyOptions(goalId));
 });
 
+it('permits ten kobo when remaining naira is 0.30 minus 0.20', async () => {
+  jest
+    .mocked(saveSavingsCardContributionSnapshot)
+    .mockResolvedValue({ ...saved, amountKobo: 10 });
+  const { result } = renderHook(() =>
+    useSavingsCardContribution({
+      ...input,
+      amount: '0.10',
+      remainingAmount: 0.3 - 0.2,
+    })
+  );
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => result.current.selectMethod(methodId));
+  await act(async () => {
+    await result.current.beginContribution();
+  });
+  expect(result.current.limitKobo).toBe(10);
+  expect(submitSavingsCardContribution).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: expect.objectContaining({ amountKobo: 10 }),
+    })
+  );
+});
+
+it.each([
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+  -1,
+  Number.MAX_VALUE,
+])('blocks new contributions for invalid remaining amount %s', async (remainingAmount) => {
+  const { result } = renderHook(() =>
+    useSavingsCardContribution({ ...input, remainingAmount })
+  );
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => result.current.selectMethod(methodId));
+  await act(async () => {
+    await result.current.beginContribution();
+  });
+  expect(result.current.limitKobo).toBe(0);
+  expect(saveSavingsCardContributionSnapshot).not.toHaveBeenCalled();
+  expect(submitSavingsCardContribution).not.toHaveBeenCalled();
+});
+
 it('aborts and ignores capability responses from a previous goal scope', async () => {
   const oldResponse = deferred<ReturnType<typeof readyOptions>>();
   jest

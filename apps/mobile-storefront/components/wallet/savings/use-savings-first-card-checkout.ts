@@ -12,6 +12,7 @@ import { initializeSavingsFirstCardCheckout } from './initialize-savings-first-c
 import { openSavedFirstCardCheckout } from './open-saved-first-card-checkout';
 import { savingsFirstCardStatusMessage } from './refresh-savings-first-card-status';
 import { runSavingsFirstCardStatusRefresh } from './run-savings-first-card-status-refresh';
+import { safeRemainingKobo } from './safe-remaining-kobo';
 import { savingsCardContributionUtils as money } from './savings-card-contribution-utils';
 
 type Input = {
@@ -67,10 +68,10 @@ export function useSavingsFirstCardCheckout({
   isCurrentRef.current = (key, activation) =>
     activeRef.current === activation && key === scopeKeyRef.current;
   const amountKobo = money.amountToKobo(amount);
-  const remainingKobo = Number.isFinite(remainingAmount)
-    ? Math.max(0, remainingAmount) * 100
-    : 0;
-  const limitKobo = Math.min(maximumAmountKobo, remainingKobo);
+  const limitKobo = Math.min(
+    maximumAmountKobo,
+    safeRemainingKobo(remainingAmount)
+  );
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const refreshStatusRef = useRef<
@@ -107,7 +108,6 @@ export function useSavingsFirstCardCheckout({
       statusRequestRef,
     });
   };
-
   useEffect(() => {
     const activation = activeRef.current + 1;
     activeRef.current = activation;
@@ -274,7 +274,6 @@ export function useSavingsFirstCardCheckout({
       }
     }
   };
-
   return {
     allowRetry,
     amountKobo,

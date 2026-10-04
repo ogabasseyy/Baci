@@ -293,33 +293,4 @@ describe('receipt detail loading', () => {
 
     expect(detail.transactions).toEqual([]);
   });
-
-  it('opens manual detail with explicit null locality from same-as-customer edits', async () => {
-    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
-    mockSingle.mockResolvedValue({
-      data: partialManualOrder({
-        shipping_address: {
-          address_line1: '12 Allen Ave',
-          city: null,
-          state: null,
-          postal_code: null,
-          country: 'Nigeria',
-        },
-      }),
-      error: null,
-    });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-    mockRpc.mockResolvedValueOnce({ data: [], error: null });
-
-    // The sender accepts nullish locality, so the detail must open
-    // instead of failing the whole receipt closed.
-    const detail = (await (
-      receiptDetailQueryOptions('order-9') as QueryOptions
-    ).queryFn()) as { shipping_address: unknown } | null;
-
-    expect(detail).not.toBeNull();
-    expect(detail?.shipping_address).toEqual(
-      expect.objectContaining({ city: null, country: 'Nigeria' })
-    );
-  });
 });

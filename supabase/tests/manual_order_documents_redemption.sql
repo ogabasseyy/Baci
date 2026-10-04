@@ -135,6 +135,8 @@ SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('cd', 32))->>'status' = 'created'), 'recipient correction rotates the redeemed claim');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('cd', 32) AND claimed_at IS NULL AND claimed_by_user_id IS NULL AND customer_email = 'corrected@example.com' FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'rotation clears the stale redemption for the new recipient');
+SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL AND delivered_token_hash IS NULL FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'recipient correction revokes historical hashes');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('cb', 32)) IS NULL), 'revoked hash no longer previews the new recipient');
 -- A retry rotation must not orphan the mailed link from the attempt before
 -- it: the earlier send may have been accepted with an unknown outcome. The
 -- replaced hash survives one rotation; redemption and preview honor it.
@@ -173,14 +175,14 @@ SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d2', 32), 'web')->>'status' = 'expired', 'graced hash redeems expired once lapsed');
 RESET ROLE;
 UPDATE public.receipt_claims SET expires_at = now() + interval '90 days' WHERE token_hash = repeat('d3', 32);
--- Grace never bypasses the recipient check: after a recipient correction
--- the old bearer presents the graced hash but the row belongs to the new
--- recipient, so redemption fails closed instead of linking the wrong order.
+-- Revocation beats grace on recipient change: the correction revoked
+-- the historical hashes outright, so the old link resolves nothing
+-- instead of failing closed on an email check against the new row.
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000095', 'buyer@example.com', now(), null);
 SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000095', true);
 SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
 SET LOCAL ROLE authenticated;
-SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('cb', 32), 'web')->>'status' = 'email_mismatch', 'old bearer fails closed on the graced hash after recipient correction');
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('cb', 32), 'web')->>'status' = 'not_found', 'revoked hash redeems not_found after recipient correction');
 RESET ROLE;
 -- Delivered-token retention: an accepted mail's link survives rejected
 -- corrective rotations that shift the grace window past it. Record d2 as

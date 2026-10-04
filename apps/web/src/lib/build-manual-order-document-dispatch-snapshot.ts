@@ -1,4 +1,4 @@
-import { showMerchantBankDetails } from '@baci/shared';
+import { resolveMerchantBankName, showMerchantBankDetails } from '@baci/shared';
 import type { z } from 'zod';
 import type { ManualOrderDocumentPaymentAccount } from '@/lib/build-manual-order-document-pdf-input';
 import type {
@@ -24,8 +24,12 @@ export function buildDispatchPaymentSnapshot(
   // (virtual_account || merchant.bank_account_number), so without one
   // every fallback field snapshots null — a lone bank-name edit while
   // the section is hidden must not mark an accepted invoice stale.
-  // bank_code is never printed (name/number/account name only), so it is
-  // omitted entirely; the RPC keeps its positional parameter reserved.
+  // The bank NAME snapshots resolved (stored name, else the code-map
+  // fallback): a code correction under a blank/placeholder name changes
+  // the emailed card, while a code-only edit under a valid name must
+  // not abort an identical render. The raw code stays reserved-null;
+  // the RPC resolves its side with the mirrored SQL helper and compares
+  // resolved-to-resolved.
   // Snapshotting hidden fields would resend an accepted, visually
   // unchanged invoice as a corrective duplicate; the dispatch RPC
   // compares the same rendered-only sides.
@@ -42,7 +46,9 @@ export function buildDispatchPaymentSnapshot(
     merchantBankAccountNumber: merchantBankRendered
       ? merchant.bank_account_number
       : null,
-    merchantBankName: merchantBankRendered ? merchant.bank_name : null,
+    merchantBankName: merchantBankRendered
+      ? resolveMerchantBankName(merchant.bank_name, merchant.bank_code)
+      : null,
     merchantBankAccountName: merchantBankRendered
       ? merchant.bank_account_name
       : null,

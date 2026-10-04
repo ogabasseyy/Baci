@@ -1,4 +1,4 @@
-export { getBankNameFromCode } from './bank-codes';
+export { getBankNameFromCode, resolveMerchantBankName } from './bank-codes';
 export { escapeHtml, escapeJsString } from './escape-html';
 export { generateReceiptHtml } from './generate-receipt-html';
 export {
@@ -34,8 +34,8 @@ export {
 } from './receipt-money';
 export {
   compareReceiptListDesc,
-  selectReceiptDisplayDate,
   type ReceiptSortable,
+  selectReceiptDisplayDate,
 } from './receipt-sort';
 export { resolveInvoiceTypeCode } from './resolve-invoice-type-code';
 export { sanitizeSvg } from './sanitize-svg';

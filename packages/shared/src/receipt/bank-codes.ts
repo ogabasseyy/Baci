@@ -33,3 +33,20 @@ export function getBankNameFromCode(code: string | null): string | null {
   if (!code) return null;
   return BANK_NAMES[code] || null;
 }
+
+const PLACEHOLDER_BANK_NAMES = new Set(['unknown', 'unknown bank', 'n/a']);
+
+// Effective rendered bank name, shared by the HTML card, the dispatch
+// snapshot, and (mirrored in SQL) the merchant trigger + dispatch RPC:
+// a valid stored name wins; otherwise the code map fills it, else ''.
+// Snapshot and invalidation compare this resolved value — never the raw
+// columns — so a code-only edit under a valid name never aborts an
+// identical render, while a code correction under a placeholder does.
+export function resolveMerchantBankName(
+  bankName: string | null | undefined,
+  bankCode: string | null | undefined
+): string {
+  const raw = bankName?.trim();
+  if (raw && !PLACEHOLDER_BANK_NAMES.has(raw.toLowerCase())) return raw;
+  return getBankNameFromCode(bankCode ?? null) || '';
+}

@@ -128,16 +128,27 @@ BEGIN
   -- claimed_at (redemption serves live data and stays re-openable), so
   -- the customer keeps working access through the fresh link while the
   -- emailed stale link survives one rotation via previous_token_hash (a
-  -- retry must not orphan a mailed link whose send outcome was unknown)
-  -- unless staff corrected the order to a different recipient, in which
-  -- case the stale redemption is cleared so the fresh link is not
-  -- already_used (the row-current email check still fails the old bearer
-  -- closed on the graced hash).
+  -- retry must not orphan a mailed link whose send outcome was unknown).
+  -- But when staff corrected the order to a different recipient, the
+  -- historical hashes are revoked outright: the anonymous preview lookup
+  -- resolves previous/delivered hashes with no bearer check, so a
+  -- preserved hash would let the former recipient retrieve the new
+  -- recipient's name, login-email hint, and device list. (Redemption
+  -- fails closed via the row-current email check either way, but
+  -- preview must not leak at all.) Same-recipient retries keep both
+  -- fallbacks; a name-only correction is the same identity and keeps
+  -- them too. The stale redemption is cleared alongside so the fresh
+  -- link is not already_used.
   DO UPDATE SET token_hash = EXCLUDED.token_hash,
-    previous_token_hash = receipt_claims.token_hash,
+    previous_token_hash = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+      THEN NULL ELSE receipt_claims.token_hash END,
     customer_id = EXCLUDED.customer_id,
     customer_email = EXCLUDED.customer_email,
     customer_name = EXCLUDED.customer_name,
+    delivered_token_hash = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+      THEN NULL ELSE receipt_claims.delivered_token_hash END,
     claimed_at = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
         OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
       THEN NULL ELSE receipt_claims.claimed_at END,

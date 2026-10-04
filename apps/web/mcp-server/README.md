@@ -70,6 +70,9 @@ structured result. For tool execution errors (`isError: true`), SDK 1.29's serve
 skips output validation. Its client permits absent `structuredContent` on an
 error but validates any structured content that is present, including errors.
 Ordinary empty/unavailable responses still require a valid structured result.
+Empty `get_product` responses include `status` (`invalid_input`, `not_found`, or
+`unavailable`) and a safe `message`, alongside the existing `products` array.
+The product-detail helper derives its structured result type from this schema.
 
 References: [MCP tool output schemas](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
 [OpenAI MCP server guidance](https://developers.openai.com/plugins/build/mcp-server).

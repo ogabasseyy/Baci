@@ -28,6 +28,30 @@ describe('public MCP output contracts', () => {
     }
   }, 30_000);
 
+  it('distinguishes empty product causes for structured-only consumers', async () => {
+    for (const merchantAvailable of [true, false]) {
+      const server = await startMcpServerWithPostgrest({}, { merchantAvailable });
+      const cases = merchantAvailable
+        ? [
+            { args: { product_name: '  ' }, status: 'invalid_input', message: 'Please provide a valid product ID or product name.' },
+            { args: { product_id: 'missing-product' }, status: 'not_found', message: 'Product "missing-product" not found.' },
+          ]
+        : [{ args: { product_id: 'available-product' }, status: 'unavailable', message: 'Store temporarily unavailable.' }];
+      try {
+        for (const [index, { args, status, message }] of cases.entries()) {
+          const result = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
+            id: index + 100, method: 'tools/call', params: { name: 'get_product', arguments: args },
+          }));
+          expect(result.isError).not.toBe(true);
+          expect(result.structuredContent).toEqual({ products: [], status, message });
+          expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
+        }
+      } finally {
+        await server.close();
+      }
+    }
+  }, 30_000);
+
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

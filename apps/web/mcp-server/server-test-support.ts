@@ -60,7 +60,7 @@ function getResultRecord(payload: JsonRpcResponse): Record<string, unknown> {
   return payload.result as Record<string, unknown>;
 }
 
-async function startPostgrestStub() {
+async function startPostgrestStub(merchantAvailable = true) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
@@ -75,7 +75,7 @@ async function startPostgrestStub() {
       return;
     }
     if (url.pathname.endsWith('/rest/v1/merchants')) {
-      response.end(JSON.stringify({ id: 'merchant-1' }));
+      response.end(JSON.stringify(merchantAvailable ? { id: 'merchant-1' } : null));
       return;
     }
     if (serveCatalogFixture(request, response, url)) return;
@@ -101,9 +101,10 @@ async function startPostgrestStub() {
 }
 
 async function startMcpServerWithPostgrest(
-  envOverrides: NodeJS.ProcessEnv
+  envOverrides: NodeJS.ProcessEnv,
+  options: { merchantAvailable?: boolean } = {}
 ): Promise<StartedMcpServer & { close: () => Promise<void> }> {
-  const postgrest = await startPostgrestStub();
+  const postgrest = await startPostgrestStub(options.merchantAvailable);
   let server: StartedMcpServer;
   try {
     server = await startMcpServer({

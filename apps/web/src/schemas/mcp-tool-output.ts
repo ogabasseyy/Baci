@@ -99,6 +99,8 @@ export const mcpToolOutputSchemas = {
   }),
   get_product: z.object({
     products: z.array(product),
+    status: z.enum(['not_found', 'unavailable', 'invalid_input']).optional(),
+    message: z.string().optional(),
     catalog_colors: catalogColors.optional(),
     variants: z
       .array(

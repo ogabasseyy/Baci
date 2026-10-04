@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
+import type { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
@@ -29,10 +32,9 @@ interface ProductDetailSource {
   schema_markup: { aggregateRating?: { ratingValue?: number; reviewCount?: number } } | null;
 }
 
-type ProductDetailResult = {
-  content: Array<{ type: 'text'; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  _meta?: Record<string, unknown>;
+type ProductDetailResult = CallToolResult & {
+  content: TextContent[];
+  structuredContent: z.infer<typeof mcpToolOutputSchemas.get_product>;
 };
 
 export async function buildMcpProductDetail({

@@ -1663,7 +1663,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1683,7 +1683,7 @@ function createOgabasseyServer() {
               text: 'Please provide a valid product ID or product name.',
             },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'invalid_input' as const, message: 'Please provide a valid product ID or product name.' },
         };
       }
 
@@ -1720,7 +1720,7 @@ function createOgabasseyServer() {
           content: [
             { type: 'text', text: `Product "${lookupLabel}" not found.` },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'not_found' as const, message: `Product "${lookupLabel}" not found.` },
         };
       }
 

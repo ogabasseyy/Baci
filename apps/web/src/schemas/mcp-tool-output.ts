@@ -31,16 +31,14 @@ const product = z.object({
   stock_confidence: z.enum(['high', 'low', 'none', 'unconfirmed']),
   has_variants: z.boolean().nullable().optional(),
 });
-const conditionOffer = z
-  .object({
-    condition: z.string(),
-    grade: z.string().nullable().optional(),
-    price: money,
-    stock_quantity: z.number().nonnegative().nullable(),
-    availability,
-    condition_notes: z.string().nullable().optional(),
-  })
-  .passthrough();
+const conditionOffer = z.looseObject({
+  condition: z.string(),
+  grade: z.string().nullable().optional(),
+  price: money,
+  stock_quantity: z.number().nonnegative().nullable(),
+  availability,
+  condition_notes: z.string().nullable().optional(),
+});
 const lookupFlags = {
   variant_lookup_failed: z.boolean().optional(),
   offer_lookup_failed: z.boolean().optional(),
@@ -124,17 +122,15 @@ export const mcpToolOutputSchemas = {
     product_name: z.string().optional(),
     catalog_colors: catalogColors.optional(),
     variants: z.array(
-      z
-        .object({
-          attributes,
-          price_override: money
-            .nullable()
-            .optional()
-            .describe('Absent or null means the base product price applies.'),
-          stock_quantity: z.number().nonnegative().nullable(),
-          availability,
-        })
-        .passthrough()
+      z.looseObject({
+        attributes,
+        price_override: money
+          .nullable()
+          .optional()
+          .describe('Absent or null means the base product price applies.'),
+        stock_quantity: z.number().nonnegative().nullable(),
+        availability,
+      })
     ),
     condition_offers: z.array(conditionOffer),
     ...lookupFlags,

@@ -216,6 +216,16 @@ describe('MCP cart handoff', () => {
     expect(result.structuredContent).toMatchObject({ success: true, quantity: 1 });
   });
 
+  it('marks corrupt simple-product stock unavailable instead of comparing NaN', async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price: 100, manage_stock: true, stock_quantity: 'plenty', has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice: String });
+    expect(result.structuredContent).toMatchObject({ success: false });
+    expect(result.structuredContent).not.toHaveProperty('cart_url');
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+  });
+
   it.each([0, 11, 1.5, Number.NaN])('rejects out-of-range quantity %s before touching catalog stock', async (quantity) => {
     const supabase = { from: vi.fn(), rpc: vi.fn() } as unknown as SupabaseClient;
     const result = await prepareCartHandoff({

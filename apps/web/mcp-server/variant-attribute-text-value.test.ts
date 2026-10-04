@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 
 describe('getMcpVariantAttributeTextValue', () => {
-  it.each([undefined, null, '', Number.NaN, {}, { storage: 128 }, [], ['Red']])('omits empty or non-primitive value %#', (value) => {
+  it.each([undefined, null, '', Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, {}, { storage: 128 }, [], ['Red']])('omits empty or non-primitive value %#', (value) => {
     expect(getMcpVariantAttributeTextValue(value)).toBeUndefined();
   });
   it.each([

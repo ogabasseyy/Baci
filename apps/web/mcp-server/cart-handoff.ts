@@ -77,7 +77,7 @@ export async function prepareCartHandoff({
       unavailable ||= !optionAvailable;
     } else {
       const effectiveStock = Number(product.stock_quantity ?? 0);
-      unavailable ||= effectiveStock < quantity;
+      unavailable ||= !Number.isFinite(effectiveStock) || effectiveStock < quantity;
     }
   }
 

@@ -137,14 +137,18 @@ function getVariantResolutionOptions({
   return options.length > 0 ? options : undefined;
 }
 
-export function getActiveSavingsGoal(rows: unknown[]): SavingsGoalData | null {
-  const goals = rows.reduce<SavingsGoalData[]>((result, row) => {
+export function getOwnedSavingsGoals(rows: unknown[]): SavingsGoalData[] {
+  return rows.reduce<SavingsGoalData[]>((result, row) => {
     const validation = SavingsGoalDataSchema.safeParse(row);
     if (validation.success) {
       result.push(validation.data);
     }
     return result;
   }, []);
+}
+
+export function getActiveSavingsGoal(rows: unknown[]): SavingsGoalData | null {
+  const goals = getOwnedSavingsGoals(rows);
 
   return (
     goals.find((goal) => goal.status === 'active') ??

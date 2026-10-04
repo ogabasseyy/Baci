@@ -9,7 +9,7 @@ export function getSavingsPushNavigationTarget(
     return null;
 
   return {
-    params: { action: 'savings' },
+    params: { action: 'savings', savingsGoalId: parsed.data.goalId },
     screen: 'wallet' as const,
   };
 }

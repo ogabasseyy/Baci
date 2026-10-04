@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import type { PiggyvestClientConfig } from './client';
+import { recordQuarantineEvent } from './event-quarantine';
 import { InflowLedgerError, recordInflowCredit } from './inflow-ledger';
 import { InterestLedgerError, recordInterestPayout } from './interest-ledger';
 import {
@@ -32,6 +33,9 @@ import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
  * - Poison (inconsistent interest arithmetic, non-positive inflow amount,
  *   unattributed restriction) resolves failed and acks: retries cannot fix
  *   it, so it must not burn the provider's 10 attempts.
+ * - A same-identity inflow conflict quarantines the observation, resolves
+ *   failed, and acks: the inbox cannot see it (event-id dedupe), so the
+ *   quarantine row is the only durable evidence.
  * - Storage failures resolve failed and rethrow: the route 503s, the
  *   provider redelivers, and the claim re-wins the failed row.
  * - Busy leases throw for provider retry; only completed work is acknowledged.
@@ -179,6 +183,33 @@ export async function processPiggyvestEvent(
         claimToken: claimed.claimToken,
         status: 'failed',
         lastError: poison,
+      });
+      return 'processed';
+    }
+    if (
+      error instanceof InflowLedgerError &&
+      error.code === 'INFLOW_LEDGER_CONFLICT' &&
+      error.conflict
+    ) {
+      // Same-identity conflicting observation: preserve it for review and
+      // ack. Retries can never resolve a provider conflict, and the inbox
+      // cannot see it (it dedupes by event id), so the quarantine row is
+      // the only durable evidence. No receipt, no ack.
+      await recordQuarantineEvent(supabase, {
+        bodyDigest: error.conflict.bodyDigest,
+        reason: 'conflict',
+        eventId: event.eventId,
+        eventType: event.eventType,
+        detail: {
+          provider_transaction_id: error.conflict.providerTransactionId,
+          mismatched_fields: error.conflict.mismatchedFields,
+        },
+      });
+      await resolvePiggyvestEvent(supabase, {
+        eventId: event.eventId,
+        claimToken: claimed.claimToken,
+        status: 'failed',
+        lastError: 'inflow redelivery conflicts with credited row',
       });
       return 'processed';
     }

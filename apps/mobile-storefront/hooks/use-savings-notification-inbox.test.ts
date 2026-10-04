@@ -26,6 +26,9 @@ const mockClearAvailable =
     }) => Promise<void>
   >();
 const mockCancelSavingsReminderNotification = jest.fn<() => Promise<boolean>>();
+const mockGetRegisteredPushToken = jest.fn<
+  (userId: string, merchantId: string) => Promise<string | null>
+>();
 
 jest.mock('@/services/savings-notification-inbox', () => ({
   fetchSavingsNotificationInbox: mockFetchInbox,
@@ -41,6 +44,9 @@ jest.mock('@/services/savings-notification-capability', () => ({
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.baci.test' }));
 jest.mock('@/services/savings-reminder-notifications', () => ({
   cancelSavingsReminderNotification: mockCancelSavingsReminderNotification,
+}));
+jest.mock('@/lib/push-token-storage', () => ({
+  getRegisteredPushToken: mockGetRegisteredPushToken,
 }));
 
 const { useSavingsNotificationInbox } =
@@ -83,6 +89,7 @@ describe('useSavingsNotificationInbox', () => {
     mockMarkAvailable.mockResolvedValue();
     mockClearAvailable.mockResolvedValue();
     mockCancelSavingsReminderNotification.mockResolvedValue(false);
+    mockGetRegisteredPushToken.mockResolvedValue('ExponentPushToken[ok]');
   });
 
   it('loads the server inbox only after an authenticated merchant scope is available', async () => {
@@ -184,6 +191,33 @@ describe('useSavingsNotificationInbox', () => {
     );
 
     await waitFor(() => expect(result.current.notifications).toHaveLength(1));
+
+    expect(mockMarkAvailable).not.toHaveBeenCalled();
+    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(mockClearAvailable).toHaveBeenCalledWith({
+      apiOrigin: 'https://api.baci.test',
+      merchantId,
+      userId: 'user-a',
+    });
+  });
+
+  it('keeps local reminders when delivery is enabled but this device never registered', async () => {
+    mockGetRegisteredPushToken.mockResolvedValue(null);
+    const { result } = renderHook(() =>
+      useSavingsNotificationInbox({
+        enabled: true,
+        merchantId,
+        userId: 'user-a',
+      })
+    );
+
+    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
+    await waitFor(() =>
+      expect(mockGetRegisteredPushToken).toHaveBeenCalledWith(
+        'user-a',
+        merchantId
+      )
+    );
 
     expect(mockMarkAvailable).not.toHaveBeenCalled();
     expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();

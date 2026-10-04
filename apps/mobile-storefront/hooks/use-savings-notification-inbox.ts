@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
+import { getRegisteredPushToken } from '@/lib/push-token-storage';
 import type {
   SavingsNotification,
   SavingsNotificationPreferences,
@@ -105,16 +106,30 @@ export function useSavingsNotificationInbox({
           merchantId: activeMerchantId,
           userId: activeUserId,
         };
-        if (inbox.deliveryEnabled) {
-          void savingsNotificationCapability
-            .markAvailable(capabilityScope)
-            .then(() => cancelSavingsReminderNotification())
-            .catch(() => undefined);
-        } else {
-          void savingsNotificationCapability
-            .clearAvailable(capabilityScope)
-            .catch(() => undefined);
-        }
+        // deliveryEnabled is server-global; this device may still have no
+        // confirmed token (e.g. the token RPC failed). Only switch to
+        // server delivery — and cancel the local reminder — after this
+        // user/device registration is confirmed, else the customer gets
+        // neither local nor remote reminders.
+        void (async () => {
+          const registered =
+            inbox.deliveryEnabled &&
+            (await getRegisteredPushToken(
+              activeUserId,
+              activeMerchantId
+            ).catch(() => null));
+          if (!active || scopeRef.current !== scope) return;
+          if (registered) {
+            await savingsNotificationCapability
+              .markAvailable(capabilityScope)
+              .then(() => cancelSavingsReminderNotification())
+              .catch(() => undefined);
+          } else {
+            await savingsNotificationCapability
+              .clearAvailable(capabilityScope)
+              .catch(() => undefined);
+          }
+        })();
       })
       .catch((error: unknown) => {
         if (!active || scopeRef.current !== scope) return;

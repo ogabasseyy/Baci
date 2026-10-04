@@ -195,7 +195,10 @@ async function reactivateWalletPaymentAccount({
     merchantId,
     supabase,
   });
-  if (current) {
+  // Converge only on a winner: when the guarded update failed with a real
+  // storage error the row is still inactive, and returning it would let the
+  // funding endpoint direct money at a DVA that was never reactivated.
+  if (current && current.status === 'active') {
     return normalizeWalletPaymentAccount(current);
   }
   throw new CustomerWalletPaymentAccountError(

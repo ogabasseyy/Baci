@@ -78,4 +78,37 @@ describe('deriveWalletDisplayData', () => {
       }).showQuickSave
     ).toBe(true);
   });
+
+  it('opens the requested owned goal instead of the first active row', () => {
+    const result = deriveWalletDisplayData(
+      {
+        active_savings_goal: { id: 'goal-1' } as never,
+        savings_goals: [{ id: 'goal-1' } as never, { id: 'goal-2' } as never],
+      },
+      'goal-2'
+    );
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-2' });
+  });
+
+  it('falls back to the active goal for an unknown requested id', () => {
+    const result = deriveWalletDisplayData(
+      {
+        active_savings_goal: { id: 'goal-1' } as never,
+        savings_goals: [{ id: 'goal-1' } as never],
+      },
+      'goal-unknown'
+    );
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-1' });
+  });
+
+  it('keeps the active goal when no goal is requested', () => {
+    const result = deriveWalletDisplayData({
+      active_savings_goal: { id: 'goal-1' } as never,
+      savings_goals: [{ id: 'goal-1' } as never, { id: 'goal-2' } as never],
+    });
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-1' });
+  });
 });

@@ -6,6 +6,14 @@ export const PUSH_TOKEN_STORAGE_KEY = '@baci_storefront_push_token';
 export const pushOptOutKey = (userId: string) =>
   `@baci_storefront_push_opt_out_${userId}`;
 
+// Per-user/merchant receipt of a server-confirmed push registration. A
+// locally stored token is not proof: it is persisted before the server
+// save, so a failed token RPC leaves a token with no server delivery.
+// Readers treat a missing receipt as "remote delivery unconfirmed" and
+// keep local reminders scheduled.
+export const pushRegisteredKey = (userId: string, merchantId: string) =>
+  `@baci_storefront_push_registered_${userId}_${merchantId}`;
+
 // All helpers are fail-open: reads return null/false on error, writes swallow errors.
 // A storage failure must never abort a sign-out or settings flow.
 
@@ -52,6 +60,44 @@ export async function setPushOptOut(
     } else {
       await AsyncStorage.removeItem(pushOptOutKey(userId));
     }
+  } catch {
+    // Fail-open
+  }
+}
+
+export async function getRegisteredPushToken(
+  userId: string,
+  merchantId: string
+): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(pushRegisteredKey(userId, merchantId));
+  } catch {
+    return null;
+  }
+}
+
+export async function setRegisteredPushToken(
+  userId: string,
+  merchantId: string,
+  token: string
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      pushRegisteredKey(userId, merchantId),
+      token
+    );
+  } catch {
+    // Fail-open: the server save already succeeded; a missing receipt
+    // only keeps (duplicate) local reminders scheduled.
+  }
+}
+
+export async function clearRegisteredPushToken(
+  userId: string,
+  merchantId: string
+): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(pushRegisteredKey(userId, merchantId));
   } catch {
     // Fail-open
   }

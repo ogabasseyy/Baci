@@ -16,7 +16,10 @@ describe('getSavingsPushNavigationTarget', () => {
         merchantId
       )
     ).toEqual({
-      params: { action: 'savings' },
+      params: {
+        action: 'savings',
+        savingsGoalId: '00000000-0000-4000-8000-000000000002',
+      },
       screen: 'wallet',
     });
   });

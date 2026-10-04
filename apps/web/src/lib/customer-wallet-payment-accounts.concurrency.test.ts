@@ -253,6 +253,57 @@ describe('customer wallet payment account conflicts', () => {
     expect(neq).toHaveBeenCalledWith('status', 'active');
   });
 
+  it('propagates the update error when reactivation fails on an inactive row', async () => {
+    // Unlike the lost race above, the guarded update itself errors (the
+    // slot is still disabled): converging on the reread row would return
+    // a DVA that was never reactivated.
+    mockNewDedicatedAccount();
+    const accountQuery = createMaybeSingleQuery(null);
+    const orderAliasQuery = createSelectRowsQuery([]);
+    const { query: insertQuery } = createInsertErrorQuery({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint',
+    });
+    const rereadQuery = createMaybeSingleQuery(null);
+    const receiverQuery = createMaybeSingleQuery(null);
+    const stalledQuery = createMaybeSingleQuery({
+      ...existingAccountRow,
+      account_number: '1111111111',
+      status: 'disabled',
+    });
+    const { maybeSingle, query: updateQuery } = createUpdateQuery(null);
+    maybeSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'permission denied' },
+    });
+    const stalledRereadQuery = createMaybeSingleQuery({
+      ...existingAccountRow,
+      account_number: '1111111111',
+      status: 'disabled',
+    });
+    const supabase = {
+      from: vi
+        .fn()
+        .mockReturnValueOnce(accountQuery)
+        .mockReturnValueOnce(orderAliasQuery)
+        .mockReturnValueOnce(insertQuery)
+        .mockReturnValueOnce(rereadQuery)
+        .mockReturnValueOnce(receiverQuery)
+        .mockReturnValueOnce(stalledQuery)
+        .mockReturnValueOnce(updateQuery)
+        .mockReturnValueOnce(stalledRereadQuery),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer,
+        merchant,
+        supabase,
+      })
+    ).rejects.toMatchObject({ message: 'permission denied' });
+  });
+
   it('returns a typed error when Paystack DVA creation fails', async () => {
     vi.mocked(createOrGetCustomer).mockResolvedValue({
       success: true,

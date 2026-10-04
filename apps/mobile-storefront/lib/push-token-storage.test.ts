@@ -20,11 +20,15 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 const {
   PUSH_TOKEN_STORAGE_KEY,
   pushOptOutKey,
+  pushRegisteredKey,
   getStoredPushToken,
   storeLocalPushToken,
   clearStoredPushToken,
   isPushOptedOut,
   setPushOptOut,
+  getRegisteredPushToken,
+  setRegisteredPushToken,
+  clearRegisteredPushToken,
 } = require('./push-token-storage') as typeof import('./push-token-storage');
 
 describe('push-token-storage', () => {
@@ -150,6 +154,61 @@ describe('push-token-storage', () => {
     it('does not throw (fail-open) when AsyncStorage throws on remove', async () => {
       mockRemoveItem.mockRejectedValue(new Error('storage error'));
       await expect(setPushOptOut('user-1', false)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('pushRegisteredKey', () => {
+    it('namespaces the receipt by user and merchant', () => {
+      expect(pushRegisteredKey('user-1', 'merchant-1')).toBe(
+        '@baci_storefront_push_registered_user-1_merchant-1'
+      );
+      expect(pushRegisteredKey('user-1', 'merchant-2')).not.toBe(
+        pushRegisteredKey('user-1', 'merchant-1')
+      );
+      expect(pushRegisteredKey('user-2', 'merchant-1')).not.toBe(
+        pushRegisteredKey('user-1', 'merchant-1')
+      );
+    });
+  });
+
+  describe('registration receipt', () => {
+    it('round-trips the confirmed token under the namespaced key', async () => {
+      mockSetItem.mockResolvedValue(undefined);
+      await setRegisteredPushToken('user-1', 'merchant-1', 'ExponentPushToken[ok]');
+      expect(mockSetItem).toHaveBeenCalledWith(
+        pushRegisteredKey('user-1', 'merchant-1'),
+        'ExponentPushToken[ok]'
+      );
+      mockGetItem.mockResolvedValue('ExponentPushToken[ok]');
+      expect(await getRegisteredPushToken('user-1', 'merchant-1')).toBe(
+        'ExponentPushToken[ok]'
+      );
+    });
+
+    it('returns null when no receipt exists', async () => {
+      mockGetItem.mockResolvedValue(null);
+      expect(await getRegisteredPushToken('user-1', 'merchant-1')).toBeNull();
+    });
+
+    it('clears the receipt on demand', async () => {
+      mockRemoveItem.mockResolvedValue(undefined);
+      await clearRegisteredPushToken('user-1', 'merchant-1');
+      expect(mockRemoveItem).toHaveBeenCalledWith(
+        pushRegisteredKey('user-1', 'merchant-1')
+      );
+    });
+
+    it('fails open when AsyncStorage throws', async () => {
+      mockGetItem.mockRejectedValue(new Error('storage error'));
+      mockSetItem.mockRejectedValue(new Error('storage error'));
+      mockRemoveItem.mockRejectedValue(new Error('storage error'));
+      expect(await getRegisteredPushToken('user-1', 'merchant-1')).toBeNull();
+      await expect(
+        setRegisteredPushToken('user-1', 'merchant-1', 'tok')
+      ).resolves.toBeUndefined();
+      await expect(
+        clearRegisteredPushToken('user-1', 'merchant-1')
+      ).resolves.toBeUndefined();
     });
   });
 });

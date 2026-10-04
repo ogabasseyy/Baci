@@ -58,6 +58,9 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: jest.fn(),
   isPushOptedOut: jest.fn<() => Promise<boolean>>().mockResolvedValue(false),
   setPushOptOut: jest.fn(),
+  getRegisteredPushToken: jest.fn(async () => null),
+  setRegisteredPushToken: jest.fn(async () => {}),
+  clearRegisteredPushToken: jest.fn(async () => {}),
 }));
 
 jest.mock('@/stores/auth-store', () => ({

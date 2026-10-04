@@ -62,10 +62,23 @@ const MAPPING_ROW = {
   status: 'ready',
 };
 
+const STORED_CREDIT_ROW = {
+  customer_id: 'faas-customer-synthetic-001',
+  wallet_id: 'pvb-wallet-synthetic-001',
+  amount_kobo: 1750000,
+  fee_kobo: 0,
+  reference: 'faas-ref-synthetic-001',
+  session_id: '000000000001',
+};
+
 function mockSupabase(
   upsertResult: { data: unknown; error: unknown },
   mappingResult: { data: unknown; error: unknown } = {
     data: MAPPING_ROW,
+    error: null,
+  },
+  verifyResult: { data: unknown; error: unknown } = {
+    data: STORED_CREDIT_ROW,
     error: null,
   }
 ): {
@@ -78,10 +91,15 @@ function mockSupabase(
   const select = vi.fn(() => ({
     eq: vi.fn(() => ({ maybeSingle: async () => mappingResult })),
   }));
+  const verifySelect = vi.fn(() => ({
+    eq: vi.fn(() => ({ maybeSingle: async () => verifyResult })),
+  }));
   return {
     client: {
       from: vi.fn((table: string) =>
-        table === 'piggyvest_plan_wallets' ? { select } : { upsert }
+        table === 'piggyvest_plan_wallets'
+          ? { select }
+          : { upsert, select: verifySelect }
       ),
     } as unknown as SupabaseClient,
     upsert,
@@ -210,5 +228,70 @@ describe('recordInflowCredit', () => {
       expect.objectContaining({ session_id: null }),
       expect.anything()
     );
+  });
+
+  it('raises a conflict when a redelivery changes the financials', async () => {
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { data: MAPPING_ROW, error: null },
+      {
+        data: { ...STORED_CREDIT_ROW, amount_kobo: 999 },
+        error: null,
+      }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toBeInstanceOf(InflowLedgerError);
+    expect(error).toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: {
+        providerTransactionId: 'provider-txn-synthetic-001',
+        mismatchedFields: ['amount_kobo'],
+      },
+    });
+    expect(
+      (error as InflowLedgerError).conflict?.bodyDigest
+    ).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('names every mismatched field in a multi-field conflict', async () => {
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { data: MAPPING_ROW, error: null },
+      {
+        data: {
+          ...STORED_CREDIT_ROW,
+          wallet_id: 'pvb-wallet-other-001',
+          reference: 'other-ref',
+        },
+        error: null,
+      }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['wallet_id', 'reference'] },
+    });
+  });
+
+  it('fails storage-error when the duplicate verify read fails', async () => {
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { data: MAPPING_ROW, error: null },
+      { data: null, error: { message: 'db down' } }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toMatchObject({ code: 'INFLOW_LEDGER_STORAGE_ERROR' });
   });
 });

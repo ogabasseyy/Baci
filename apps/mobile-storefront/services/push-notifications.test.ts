@@ -248,7 +248,10 @@ describe('handleNotificationResponse', () => {
       '00000000-0000-4000-8000-000000000010'
     );
 
-    expect(navigate).toHaveBeenCalledWith('wallet', { action: 'savings' });
+    expect(navigate).toHaveBeenCalledWith('wallet', {
+      action: 'savings',
+      savingsGoalId: '00000000-0000-4000-8000-000000000002',
+    });
     expect(getStorefrontNotificationNavigationTarget).not.toHaveBeenCalled();
   });
 
@@ -282,7 +285,10 @@ describe('handleNotificationResponse', () => {
     );
 
     expect(invalidateSavingsWallet).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith('wallet', { action: 'savings' });
+    expect(navigate).toHaveBeenCalledWith('wallet', {
+      action: 'savings',
+      savingsGoalId: '00000000-0000-4000-8000-000000000002',
+    });
   });
 
   it('does not navigate a savings payload from another merchant', () => {

@@ -56,6 +56,9 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: jest.fn(),
   isPushOptedOut: jest.fn(),
   setPushOptOut: jest.fn(),
+  getRegisteredPushToken: jest.fn(async () => null),
+  setRegisteredPushToken: jest.fn(async () => {}),
+  clearRegisteredPushToken: jest.fn(async () => {}),
 }));
 jest.mock('@/services/push-notification-channels', () => ({
   ensureAndroidNotificationChannels: mockEnsureAndroidNotificationChannels,

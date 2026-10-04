@@ -1,8 +1,13 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  SAVINGS_DEVICE_PRODUCT_SELECT,
+  SavingsDeviceProductSchema,
+} from '@/lib/customer-savings-device';
 import { resolveCustomerSavingsNonpaymentContext } from '@/lib/customer-savings-nonpayment-context';
 import { getCustomerSavingsNonpaymentSettings } from '@/lib/customer-savings-nonpayment-settings';
+import { isStorefrontProductVariantPublic } from '@/lib/is-storefront-product-variant-public';
 import { customerSavingsVariantRecoverySchema } from '@/schemas/customer-savings-variant-recovery';
 import { mapSavingsRpcErrorStatus, toSavingsRpcError } from '../route-helpers';
 
@@ -45,6 +50,53 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: 'Customer savings is disabled' },
         { status: 403 }
       );
+    }
+    // The recovery RPC gates only the inventory anchor and the parent
+    // product status, so enforce the same storefront-visibility rule as
+    // create/swap before invoking it: a retained UUID for a hidden variant
+    // must not bind redemption to an inactive or archived device.
+    const goalResult = await context.supabase
+      .from('customer_savings_goals')
+      .select('id, product_id')
+      .eq('merchant_id', context.merchant.id)
+      .eq('customer_id', context.customer.id)
+      .eq('id', parsed.data.goalId)
+      .maybeSingle();
+    if (goalResult.error) {
+      throw goalResult.error;
+    }
+    const recoveryProductId = goalResult.data?.product_id ?? null;
+    if (recoveryProductId) {
+      const productResult = await context.supabase
+        .from('products')
+        .select(SAVINGS_DEVICE_PRODUCT_SELECT)
+        .eq('merchant_id', context.merchant.id)
+        .eq('id', recoveryProductId)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (productResult.error) {
+        throw productResult.error;
+      }
+      const productValidation = SavingsDeviceProductSchema.safeParse(
+        productResult.data
+      );
+      const recoveredVariant = productValidation.success
+        ? ((productValidation.data.variants ?? []).find(
+            (variant) => variant.id === parsed.data.variantId
+          ) ?? null)
+        : null;
+      if (
+        !recoveredVariant ||
+        !isStorefrontProductVariantPublic(recoveredVariant)
+      ) {
+        return NextResponse.json(
+          {
+            code: 'SAVINGS_DEVICE_VARIANT_NOT_FOUND',
+            error: 'Savings device variant is not available',
+          },
+          { status: 404 }
+        );
+      }
     }
     const { data, error } = await context.supabase.rpc(
       'resolve_completed_customer_savings_goal_variant',

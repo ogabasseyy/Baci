@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(),
   settings: vi.fn(),
   rpc: vi.fn(),
+  from: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -30,6 +31,48 @@ const request = (body: unknown = input) =>
     { method: 'POST', body: JSON.stringify(body) }
   );
 
+const publicVariant = {
+  id: input.variantId,
+  is_active: true,
+  status: 'active',
+  deleted_at: null,
+  archived_at: null,
+  is_inventory_anchor: false,
+};
+
+function queryFor(result: { data: unknown; error: unknown }) {
+  const query = {
+    eq: vi.fn(() => query),
+    maybeSingle: vi.fn().mockResolvedValue(result),
+    select: vi.fn(() => query),
+  };
+  return query;
+}
+
+function mockVisibilityTables({
+  goal = { data: { id: input.goalId, product_id: 'product-1' }, error: null },
+  product = {
+    data: {
+      id: 'product-1',
+      name: 'Device',
+      price: 100,
+      images: [],
+      condition: 'new',
+      variants: [publicVariant],
+    },
+    error: null,
+  },
+}: {
+  goal?: { data: unknown; error: unknown };
+  product?: { data: unknown; error: unknown };
+} = {}) {
+  mocks.from.mockImplementation((table: string) => {
+    if (table === 'customer_savings_goals') return queryFor(goal);
+    if (table === 'products') return queryFor(product);
+    throw new Error(`Unexpected table: ${table}`);
+  });
+}
+
 describe('completed savings variant recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,9 +85,10 @@ describe('completed savings variant recovery', () => {
     mocks.context.mockResolvedValue({
       customer: { id: 'trusted-customer' },
       merchant: { id: 'trusted-merchant' },
-      supabase: { rpc: mocks.rpc },
+      supabase: { rpc: mocks.rpc, from: mocks.from },
     });
     mocks.settings.mockResolvedValue({ savingsEnabled: true });
+    mockVisibilityTables();
     mocks.rpc.mockResolvedValue({
       data: [
         { success: true, goal_id: input.goalId, goal_status: 'completed' },
@@ -161,5 +205,61 @@ describe('completed savings variant recovery', () => {
   it('rejects malformed success data', async () => {
     mocks.rpc.mockResolvedValue({ data: [{ success: false }], error: null });
     expect((await POST(request())).status).toBe(500);
+  });
+
+  it('rejects a retained UUID for an archived variant without calling the RPC', async () => {
+    mockVisibilityTables({
+      product: {
+        data: {
+          id: 'product-1',
+          name: 'Device',
+          price: 100,
+          images: [],
+          condition: 'new',
+          variants: [
+            { ...publicVariant, archived_at: '2026-09-01T00:00:00Z' },
+          ],
+        },
+        error: null,
+      },
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      code: 'SAVINGS_DEVICE_VARIANT_NOT_FOUND',
+      error: 'Savings device variant is not available',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects a variant that left the product without calling the RPC', async () => {
+    mockVisibilityTables({
+      product: {
+        data: {
+          id: 'product-1',
+          name: 'Device',
+          price: 100,
+          images: [],
+          condition: 'new',
+          variants: [],
+        },
+        error: null,
+      },
+    });
+    expect((await POST(request())).status).toBe(404);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('defers to the RPC when the goal row is absent', async () => {
+    mockVisibilityTables({ goal: { data: null, error: null } });
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        message: 'savings_goal_not_legacy_variant_recoverable',
+        code: 'P0001',
+      },
+    });
+    expect((await POST(request())).status).toBe(409);
+    expect(mocks.rpc).toHaveBeenCalled();
   });
 });

@@ -15,6 +15,12 @@ const mockRecordInflow = vi.fn();
 const mockApplyCreated = vi.fn();
 const mockApplyLifted = vi.fn();
 const mockApplyOutflow = vi.fn();
+const mockRecordQuarantine = vi.fn();
+
+vi.mock('./event-quarantine', () => ({
+  recordQuarantineEvent: (...args: unknown[]) =>
+    mockRecordQuarantine(...args),
+}));
 
 vi.mock('./webhook-inbox', () => ({
   claimPiggyvestEvent: (...args: unknown[]) => mockClaim(...args),
@@ -89,6 +95,7 @@ describe('processPiggyvestEvent', () => {
     mockApplyCreated.mockResolvedValue('restricted');
     mockApplyLifted.mockResolvedValue('ready');
     mockApplyOutflow.mockResolvedValue('matched');
+    mockRecordQuarantine.mockResolvedValue('recorded');
   });
 
   it('defers unhandled events without claiming', async () => {
@@ -239,6 +246,67 @@ describe('processPiggyvestEvent', () => {
       supabase,
       expect.objectContaining({ claimToken, status: 'failed' })
     );
+  });
+
+  it('quarantines a same-identity inflow conflict before acking', async () => {
+    const conflict = new InflowLedgerError(
+      'INFLOW_LEDGER_CONFLICT',
+      'Inflow redelivery conflicts with the credited row'
+    ) as InflowLedgerError & {
+      conflict: {
+        providerTransactionId: string;
+        mismatchedFields: string[];
+        bodyDigest: string;
+      };
+    };
+    conflict.conflict = {
+      providerTransactionId: 'provider-txn-001',
+      mismatchedFields: ['amount_kobo'],
+      bodyDigest: 'a'.repeat(64),
+    };
+    mockRecordInflow.mockRejectedValue(conflict);
+    await expect(
+      processPiggyvestEvent(supabase, inflowEvent as never)
+    ).resolves.toBe('processed');
+    expect(mockRecordQuarantine).toHaveBeenCalledWith(supabase, {
+      bodyDigest: 'a'.repeat(64),
+      reason: 'conflict',
+      eventId: inflowEvent.eventId,
+      eventType: inflowEvent.eventType,
+      detail: {
+        provider_transaction_id: 'provider-txn-001',
+        mismatched_fields: ['amount_kobo'],
+      },
+    });
+    expect(mockResolve).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ claimToken, status: 'failed' })
+    );
+  });
+
+  it('does not acknowledge a conflict when quarantine persistence fails', async () => {
+    const conflict = new InflowLedgerError(
+      'INFLOW_LEDGER_CONFLICT',
+      'Inflow redelivery conflicts with the credited row'
+    ) as InflowLedgerError & {
+      conflict: {
+        providerTransactionId: string;
+        mismatchedFields: string[];
+        bodyDigest: string;
+      };
+    };
+    conflict.conflict = {
+      providerTransactionId: 'provider-txn-001',
+      mismatchedFields: ['amount_kobo'],
+      bodyDigest: 'a'.repeat(64),
+    };
+    mockRecordInflow.mockRejectedValue(conflict);
+    mockRecordQuarantine.mockRejectedValue(
+      new Error('quarantine unavailable')
+    );
+    await expect(
+      processPiggyvestEvent(supabase, inflowEvent as never)
+    ).rejects.toThrow('quarantine unavailable');
   });
 
   it('retries a credit committed before a crash through the idempotent ledger', async () => {

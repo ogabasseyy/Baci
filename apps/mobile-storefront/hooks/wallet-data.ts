@@ -10,6 +10,7 @@ import type {
 } from './wallet-query';
 import {
   getActiveSavingsGoal,
+  getOwnedSavingsGoals,
   toActiveSavingsGoal,
 } from './wallet-savings-data';
 import {
@@ -98,6 +99,7 @@ function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
       loyalty_points: safeLoyaltyPoints,
       requires_funding_account_consent: true,
       savings_balance: 0,
+      savings_goals: [],
       total_balance: 0,
     },
     transactions: [],
@@ -178,6 +180,7 @@ export async function fetchWalletData(
         loyalty_points: safeLoyaltyPoints,
         requires_funding_account_consent: true,
         savings_balance: 0,
+        savings_goals: [],
         total_balance: 0,
       },
       transactions: [],
@@ -248,6 +251,23 @@ export async function fetchWalletData(
     });
   }
 
+  // All owned redeemable goals (same merchant/customer-scoped rows): lets
+  // the wallet open the exact goal a push notification names instead of
+  // always the first active row. Rows that fail display mapping are
+  // dropped, matching the active-goal behavior.
+  const savingsGoals = getOwnedSavingsGoals(savingsGoalRows).flatMap((row) => {
+    const mapped = toActiveSavingsGoal({
+      goal: row,
+      product: row.product_id
+        ? getJoinedSavingsGoalProduct({
+            goalId: row.id,
+            rows: savingsGoalRows,
+          })
+        : undefined,
+    });
+    return mapped ? [mapped] : [];
+  });
+
   const fundingAccountValidation =
     WalletFundingAccountSchema.nullable().safeParse(fundingAccountResult.data);
   const fundingAccountData = fundingAccountValidation.success
@@ -300,6 +320,7 @@ export async function fetchWalletData(
       loyalty_points: safeLoyaltyPoints,
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
+      savings_goals: savingsGoals,
       total_balance: safeBalance + safeSavingsBalance,
     },
     transactions: transactionRows,

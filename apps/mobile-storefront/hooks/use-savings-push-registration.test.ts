@@ -14,6 +14,9 @@ const mockAcquire = jest.fn<Promise<string | null>, []>();
 const mockOptedOut = jest.fn<Promise<boolean>, [string]>();
 let mockTelemetryExcluded = false;
 const mockNativeRegistration = jest.fn();
+const mockGetRegisteredPushToken = jest.fn<Promise<string | null>, [string, string]>();
+const mockSetRegisteredPushToken = jest.fn<Promise<void>, [string, string, string]>();
+const mockClearRegisteredPushToken = jest.fn<Promise<void>, [string, string]>();
 
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: Object.assign(
@@ -34,6 +37,12 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: jest.fn(async () => {}),
   isPushOptedOut: (userId: string) => mockOptedOut(userId),
   setPushOptOut: jest.fn(async () => {}),
+  getRegisteredPushToken: (userId: string, merchantId: string) =>
+    mockGetRegisteredPushToken(userId, merchantId),
+  setRegisteredPushToken: (userId: string, merchantId: string, token: string) =>
+    mockSetRegisteredPushToken(userId, merchantId, token),
+  clearRegisteredPushToken: (userId: string, merchantId: string) =>
+    mockClearRegisteredPushToken(userId, merchantId),
 }));
 jest.mock('@/services/push-notifications', () => ({
   savePushTokenToServer: (...args: [string, string, string]) =>
@@ -69,6 +78,9 @@ beforeEach(() => {
   mockStoredToken.mockReset().mockResolvedValue('ExponentPushToken[stored]');
   mockAcquire.mockReset().mockResolvedValue('ExponentPushToken[fresh]');
   mockOptedOut.mockReset().mockResolvedValue(false);
+  mockGetRegisteredPushToken.mockReset().mockResolvedValue(null);
+  mockSetRegisteredPushToken.mockReset().mockResolvedValue(undefined);
+  mockClearRegisteredPushToken.mockReset().mockResolvedValue(undefined);
   jest
     .spyOn(AppState, 'addEventListener')
     .mockImplementation((_event, listener) => {
@@ -97,6 +109,9 @@ it('does not register a cached token when the native capability is unavailable',
 it('shares one save between automatic registration and a foreground burst', async () => {
   const saving = deferred<boolean>();
   mockSave.mockReturnValueOnce(saving.promise);
+  // Foreground re-reads the current token first; the provider returns the
+  // same token, so the burst still collapses onto the in-flight save.
+  mockAcquire.mockResolvedValue('ExponentPushToken[stored]');
   const { result } = renderHook(() => useSavingsPushRegistration());
   await waitFor(() => expect(mockSave).toHaveBeenCalledTimes(1));
 
@@ -109,6 +124,34 @@ it('shares one save between automatic registration and a foreground burst', asyn
   await act(async () => saving.resolve(true));
   await waitFor(() => expect(result.current.isRegistered).toBe(true));
   expect(mockSave).toHaveBeenCalledTimes(1);
+  expect(mockAcquire).toHaveBeenCalled();
+});
+
+it('registers a rotated token fetched on foreground instead of the cached one', async () => {
+  const { result } = renderHook(() => useSavingsPushRegistration());
+  await waitFor(() => expect(result.current.isRegistered).toBe(true));
+  expect(mockSave).toHaveBeenLastCalledWith(
+    'ExponentPushToken[stored]',
+    'user-1',
+    'merchant-1'
+  );
+
+  // The provider rotated the token while the app was terminated.
+  mockAcquire.mockResolvedValue('ExponentPushToken[rotated]');
+  await act(async () => {
+    await mockForeground('active');
+  });
+
+  await waitFor(() =>
+    expect(mockSave).toHaveBeenCalledWith(
+      'ExponentPushToken[rotated]',
+      'user-1',
+      'merchant-1'
+    )
+  );
+  await waitFor(() =>
+    expect(result.current.pushToken).toBe('ExponentPushToken[rotated]')
+  );
 });
 
 it('discards an automatic save result after logout', async () => {
@@ -191,4 +234,19 @@ it('does not bypass opt-out on automatic or foreground registration', async () =
   await waitFor(() => expect(mockOptedOut).toHaveBeenCalled());
   await act(async () => mockForeground('active'));
   expect(mockSave).not.toHaveBeenCalled();
+});
+
+it('clears the registration receipt on unregister', async () => {
+  const { result } = renderHook(() => useSavingsPushRegistration());
+  await waitFor(() => expect(result.current.isRegistered).toBe(true));
+
+  await act(async () => {
+    await result.current.unregister();
+  });
+
+  expect(mockClearRegisteredPushToken).toHaveBeenCalledWith(
+    'user-1',
+    'merchant-1'
+  );
+  expect(result.current.isRegistered).toBe(false);
 });

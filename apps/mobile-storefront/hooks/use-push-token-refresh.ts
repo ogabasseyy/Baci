@@ -64,8 +64,13 @@ export function usePushTokenRefresh({
     }
   });
   const foreground = useEffectEvent(async () => {
-    if (getState().token) await retry();
-    else await refresh();
+    // Always fetch the current token first: the provider may have rotated
+    // it while the app was terminated (the listener never observed it),
+    // and re-saving the cached value would register an undeliverable
+    // token forever. When the fetch yields nothing, retry falls back to
+    // the cached token; when it yields the same token, retry short-circuits.
+    await refresh();
+    await retry();
   });
 
   useEffect(() => {

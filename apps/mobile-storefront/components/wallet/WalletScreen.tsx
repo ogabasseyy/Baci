@@ -40,9 +40,13 @@ export function WalletScreen({
   requiredAmount,
   returnTo,
   savingsAmount,
+  savingsGoalId,
 }: WalletScreenProps = {}) {
   const { colors, scrollContentStyle } = useWalletAppearance(presentation);
   const routeAction = Array.isArray(action) ? action[0] : action;
+  const routeSavingsGoalId = Array.isArray(savingsGoalId)
+    ? savingsGoalId[0]
+    : savingsGoalId;
   const routeRequiredAmount = normalizeWalletFundAmountParam(requiredAmount);
   const walletReturnTo = sanitizeWalletReturnTo(returnTo);
   const { isLoading: authLoading, redirectTo } = useRequireAuth();
@@ -199,7 +203,7 @@ export function WalletScreen({
     showQuickSave,
     spendableBalance,
     totalBalance,
-  } = deriveWalletDisplayData(walletData);
+  } = deriveWalletDisplayData(walletData, routeSavingsGoalId);
   const {
     handleAddSavingsContribution,
     handleFundSavingsWallet,

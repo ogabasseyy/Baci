@@ -7,6 +7,7 @@ export interface WalletData {
   loyalty_points: number;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
+  savings_goals?: WalletActiveSavingsGoal[];
   total_balance?: number;
 }
 

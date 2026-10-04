@@ -229,9 +229,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       }
     );
     if (processing !== 'processed') {
+      // Deferred is durable backlog, not a failure: the inbox row exists,
+      // nothing was marked processed, and no other processor can complete
+      // these events — 503 would burn provider attempts on every retry.
       return NextResponse.json(
-        { received: false, code: 'PIGGYVEST_PROCESSING_DEFERRED' },
-        { status: 503, headers: noStore }
+        { received: true, deferred: true, duplicate: outcome === 'duplicate' },
+        { status: 200, headers: noStore }
       );
     }
     return NextResponse.json(

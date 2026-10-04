@@ -6,6 +6,7 @@ import { getNativePushRegistration } from '@/lib/hosted-staging-push-capability'
 import { createLogger } from '@/lib/logger';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import {
+  clearRegisteredPushToken,
   clearStoredPushToken,
   getStoredPushToken,
   isPushOptedOut,
@@ -215,6 +216,9 @@ export function useSavingsPushRegistration(): UsePushNotificationsReturn {
   const unregister = async () => {
     const token = tokenRef.current || (await getStoredPushToken());
     await clearStoredPushToken();
+    if (user?.id && activeMerchantId) {
+      await clearRegisteredPushToken(user.id, activeMerchantId);
+    }
     if (user?.id) await setPushOptOut(user.id, true);
     updateToken(null);
     updateIdentity(null);

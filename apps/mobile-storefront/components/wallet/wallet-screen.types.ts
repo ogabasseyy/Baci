@@ -5,6 +5,7 @@ export interface WalletScreenProps {
   requiredAmount?: string | string[];
   returnTo?: string | string[];
   savingsAmount?: string | string[];
+  savingsGoalId?: string | string[];
 }
 
 export type WalletScreenPresentation = NonNullable<

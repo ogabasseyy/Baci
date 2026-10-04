@@ -1,8 +1,26 @@
-import { describe, expect, it, jest } from '@jest/globals';
-import {
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+
+const mockGetRegistered = jest.fn<
+  (userId: string, merchantId: string) => Promise<string | null>
+>();
+const mockSetRegistered = jest.fn<
+  (userId: string, merchantId: string, token: string) => Promise<void>
+>();
+const mockClearRegistered = jest.fn<
+  (userId: string, merchantId: string) => Promise<void>
+>();
+
+jest.mock('@/lib/push-token-storage', () => ({
+  clearRegisteredPushToken: mockClearRegistered,
+  getRegisteredPushToken: mockGetRegistered,
+  setRegisteredPushToken: mockSetRegistered,
+}));
+
+const {
   retrySavingsPushRegistration,
-  type SavingsPushRegistrationIdentity,
-} from './savings-push-registration';
+} = require('./savings-push-registration') as typeof import('./savings-push-registration');
+type SavingsPushRegistrationIdentity =
+  import('./savings-push-registration').SavingsPushRegistrationIdentity;
 
 type TestState = {
   userId: string | null;
@@ -42,6 +60,13 @@ function createOptions(
 }
 
 describe('retrySavingsPushRegistration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetRegistered.mockResolvedValue(null);
+    mockSetRegistered.mockResolvedValue(undefined);
+    mockClearRegistered.mockResolvedValue(undefined);
+  });
+
   it('registers a replacement cached token for the same user and merchant', async () => {
     const options = createOptions();
     options.state.registeredKey = JSON.stringify([
@@ -157,5 +182,61 @@ describe('retrySavingsPushRegistration', () => {
     expect(options.setError).toHaveBeenCalledWith(
       'Failed to register token with server'
     );
+  });
+
+  it('persists the registration receipt when the server save succeeds', async () => {
+    const options = createOptions();
+
+    await retrySavingsPushRegistration(options);
+
+    expect(mockSetRegistered).toHaveBeenCalledWith(
+      'user-1',
+      'merchant-1',
+      'ExponentPushToken[stored]'
+    );
+  });
+
+  it('clears the receipt when the server save fails', async () => {
+    const options = createOptions({ save: async () => false });
+
+    await retrySavingsPushRegistration(options);
+
+    expect(mockSetRegistered).not.toHaveBeenCalled();
+    expect(mockClearRegistered).toHaveBeenCalledWith('user-1', 'merchant-1');
+    expect(options.setIdentity).toHaveBeenCalledWith(null);
+  });
+
+  it('drops a stale receipt before saving a rotated token', async () => {
+    mockGetRegistered.mockResolvedValue('ExponentPushToken[previous]');
+    const options = createOptions();
+
+    await retrySavingsPushRegistration(options);
+
+    expect(mockClearRegistered).toHaveBeenCalledWith('user-1', 'merchant-1');
+    expect(mockSetRegistered).toHaveBeenCalledWith(
+      'user-1',
+      'merchant-1',
+      'ExponentPushToken[stored]'
+    );
+    const clearOrder = mockClearRegistered.mock.invocationCallOrder[0] ?? 0;
+    const saveOrder =
+      jest.mocked(options.save).mock.invocationCallOrder[0] ?? 0;
+    expect(clearOrder).toBeLessThan(saveOrder);
+  });
+
+  it('leaves the receipt untouched when already registered', async () => {
+    const options = createOptions();
+    options.state.registeredKey = JSON.stringify([
+      'user-1',
+      'merchant-1',
+      'ExponentPushToken[stored]',
+    ]);
+
+    await retrySavingsPushRegistration(options);
+
+    expect(options.save).not.toHaveBeenCalled();
+    expect(mockGetRegistered).not.toHaveBeenCalled();
+    expect(mockSetRegistered).not.toHaveBeenCalled();
+    expect(mockClearRegistered).not.toHaveBeenCalled();
   });
 });

@@ -164,7 +164,7 @@ describe('GET reachability probe', () => {
 });
 
 describe('POST event intake', () => {
-  it('does not acknowledge deferred processing', async () => {
+  it('acknowledges deferred processing as durable backlog', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     mocks.createServiceClient.mockReturnValue({
       from: vi.fn(() => chainable({ data: [], error: null }).query),
@@ -174,7 +174,12 @@ describe('POST event intake', () => {
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+      deferred: true,
+      duplicate: true,
+    });
   });
   it('fails closed with 503 when no provider credentials are configured', async () => {
     vi.stubEnv('PVB_SECRET_KEY', undefined);

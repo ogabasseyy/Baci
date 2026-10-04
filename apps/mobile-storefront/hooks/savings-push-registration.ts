@@ -1,3 +1,9 @@
+import {
+  clearRegisteredPushToken,
+  getRegisteredPushToken,
+  setRegisteredPushToken,
+} from '@/lib/push-token-storage';
+
 export type SavingsPushRegistrationIdentity = {
   key: string;
   userId: string;
@@ -93,6 +99,16 @@ export async function retrySavingsPushRegistration({
     if (!(await hasPermission()) || !isCurrent()) return;
     if ((await isOptedOut(identity.userId)) || !isCurrent()) return;
 
+    // A rotated token is unconfirmed until the server accepts it: drop
+    // any receipt for the previous token before saving.
+    const confirmed = await getRegisteredPushToken(
+      identity.userId,
+      identity.merchantId
+    );
+    if (confirmed !== identity.token) {
+      await clearRegisteredPushToken(identity.userId, identity.merchantId);
+    }
+
     const saved = await save(
       identity.token,
       identity.userId,
@@ -100,6 +116,15 @@ export async function retrySavingsPushRegistration({
     );
     if (!isCurrent()) return;
 
+    if (saved) {
+      await setRegisteredPushToken(
+        identity.userId,
+        identity.merchantId,
+        identity.token
+      );
+    } else {
+      await clearRegisteredPushToken(identity.userId, identity.merchantId);
+    }
     setIdentity(saved ? identity : null);
     setError(saved ? null : 'Failed to register token with server');
   } catch {

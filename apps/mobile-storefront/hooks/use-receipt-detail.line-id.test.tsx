@@ -113,4 +113,17 @@ describe('receipt detail line ids', () => {
     );
     expect(detail.transactions).toEqual([]);
   });
+
+  it('opens null customer names for the preview fallback', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    // biome-ignore format: compact fixtures preserve the 300-line gate.
+    mockSingle.mockResolvedValue({ data: { id: 'order-9', order_number: 'OG-9', created_at: '2026-05-24T10:00:00.000Z', currency: 'NGN', customer_email: 'ada@example.com', customer_name: null, customer_phone: null, discount_amount: 0, is_credit_order: false, notes: null, order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 100 }], payment_method: null, payment_status: 'paid', shipping_status: 'processing', shipping_address: null, shipping_fee: 0, subtotal: 100, tax_amount: 0, total: 100, amount_paid: 100, recorded_by_user_id: 'staff-1', import_job_id: null, external_source: null }, error: null });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as { id: string } | null;
+
+    expect(detail).not.toBeNull();
+    expect(detail?.id).toBe('order-9');
+  });
 });

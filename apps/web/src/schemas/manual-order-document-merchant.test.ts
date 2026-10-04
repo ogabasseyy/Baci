@@ -87,6 +87,7 @@ describe('manualDocumentMerchantSchema', () => {
       'oga.bassey',
       'oga bassey',
       'a'.repeat(64),
+      null,
     ]) {
       expect(
         manualDocumentMerchantSchema.parse({ ...baseMerchant, slug }).slug

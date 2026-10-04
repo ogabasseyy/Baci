@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
         customer_phone,
         order_items (
           id,
+          line_id,
           name,
           product_id,
           condition,

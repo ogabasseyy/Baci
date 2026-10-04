@@ -13,6 +13,7 @@ import type { StorefrontCustomerTransaction } from '@/lib/storefront-customer-tr
 
 export interface StorefrontOrderListItemInput {
   id: string;
+  line_id?: number | null;
   product_id?: string | null;
   image_url?: string | null;
   name: string;

@@ -115,7 +115,7 @@ export function buildManualOrderDocumentEmailContent(
 ) {
   const { order, merchant } = input;
   return buildManualOrderDocumentEmail({
-    merchantName: merchant.business_name || merchant.slug,
+    merchantName: merchant.business_name || merchant.slug || 'Store',
     customerName: input.displayCustomerName,
     customerEmail: input.recipientEmail,
     orderNumber: order.order_number,

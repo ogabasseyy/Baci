@@ -172,8 +172,10 @@ BEGIN
   -- invalidates an in-flight
   -- send when staff edit a rendered field the snapshot already covered;
   -- only immutable ids and item-owned fields stay outside this list.
-  -- Re-evaluation is idempotent, so shipping transitions that change
-  -- nothing simply re-confirm the existing row.
+  -- Shipping status prints nowhere, so only a terminal crossing (into
+  -- or out of cancelled/canceled/returned/failed) re-evaluates:
+  -- pending-to-shipped transitions must not reset an in-flight marker
+  -- and retry an identical attachment as a corrective duplicate.
   IF NEW.payment_status IS DISTINCT FROM OLD.payment_status
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
     OR NEW.total IS DISTINCT FROM OLD.total
@@ -203,7 +205,8 @@ BEGIN
     OR NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id
     OR NEW.import_job_id IS DISTINCT FROM OLD.import_job_id
     OR NEW.external_source IS DISTINCT FROM OLD.external_source
-    OR NEW.shipping_status IS DISTINCT FROM OLD.shipping_status THEN
+    OR (lower(btrim(COALESCE(OLD.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
+      IS DISTINCT FROM (lower(btrim(COALESCE(NEW.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed')) THEN
     PERFORM private.enqueue_manual_order_document(NEW.id);
   END IF;
   RETURN NEW;

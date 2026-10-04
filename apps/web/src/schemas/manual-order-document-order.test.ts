@@ -100,6 +100,27 @@ describe('manualDocumentOrderSchema', () => {
     ).toThrow();
   });
 
+  it('rejects loose money the strict gates demote', () => {
+    // z.coerce.number() alone accepts blanks, booleans, hex, padded,
+    // and exponent strings the promotion gate demotes: the sender must
+    // fail them too, or the emailed kind and the app badge disagree.
+    for (const loose of ['', true, '0x10', ' 500', '1e3']) {
+      expect(
+        manualDocumentOrderSchema.safeParse({ ...baseOrder, total: loose })
+          .success
+      ).toBe(false);
+      expect(
+        isManualOrderDocumentContentValid(
+          { ...baseOrder, total: loose },
+          baseOrder.order_items
+        )
+      ).toBe(false);
+    }
+    expect(
+      manualDocumentOrderSchema.parse({ ...baseOrder, total: '5000.00' }).total
+    ).toBe(5000);
+  });
+
   it('accepts explicit null locality from the mobile-admin edit path', () => {
     const parsed = manualDocumentOrderSchema.parse({
       ...baseOrder,

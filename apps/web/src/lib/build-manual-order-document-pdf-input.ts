@@ -1,6 +1,7 @@
 import {
   type ReceiptMerchant,
   type ReceiptOrder,
+  resolveMerchantBankName,
   showMerchantBankDetails,
 } from '@baci/shared';
 import type { z } from 'zod';
@@ -90,7 +91,12 @@ export function buildManualOrderDocumentPdfInput({
     brand_colors: merchant.brand_colors ?? undefined,
     bank_code: showBankDetails ? merchant.bank_code : null,
     bank_account_number: showBankDetails ? merchant.bank_account_number : null,
-    bank_name: showBankDetails ? merchant.bank_name : null,
+    // The PDF generator renders bank_name only (never bank_code), so
+    // resolve blank/placeholder names here like the HTML renderer does —
+    // otherwise the attachment omits usable payment instructions.
+    bank_name: showBankDetails
+      ? resolveMerchantBankName(merchant.bank_name, merchant.bank_code)
+      : null,
     bank_account_name: showBankDetails ? merchant.bank_account_name : null,
   };
   return { receiptOrder, receiptMerchant };

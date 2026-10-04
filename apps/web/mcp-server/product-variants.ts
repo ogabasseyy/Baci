@@ -32,6 +32,7 @@ export async function loadMcpProductVariants({
 
   if (!lookupLabel) {
     return {
+      structuredContent: { variants: [], condition_offers: [], status: 'invalid_input' },
       content: [
         {
           type: 'text',
@@ -67,6 +68,7 @@ export async function loadMcpProductVariants({
       );
     }
     return {
+      structuredContent: { variants: [], condition_offers: [], status: 'not_found' },
       content: [
         { type: 'text', text: `Product "${lookupLabel}" not found. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` },
       ],
@@ -87,14 +89,13 @@ export async function loadMcpProductVariants({
         type: 'text' as const,
         text: `${message}${hasCatalogColors ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
       }],
-      ...(hasCatalogColors ? {
-        structuredContent: {
+      structuredContent: {
+          variants: [], condition_offers: [], status: 'unavailable', message,
           product_name: product.name,
           catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish variant stock or combinations.'),
           variant_lookup_failed: variantLookupFailed,
           offer_lookup_failed: offerLookupFailed,
-        },
-      } : {}),
+      },
     };
   };
 

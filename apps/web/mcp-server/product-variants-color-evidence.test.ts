@@ -85,7 +85,11 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
       expect(result.content[0].text).toContain(
         'color is unconfirmed; do not guess.',
       );
-      expect(result.structuredContent).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        status: 'unavailable', variants: [], condition_offers: [],
+        variant_lookup_failed: true, offer_lookup_failed: false,
+        catalog_colors: { labels: [], source: null },
+      });
     } finally {
       log.mockRestore();
     }
@@ -132,7 +136,11 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
       expect(result.content[0].text).toContain(
         'color is unconfirmed; do not guess.',
       );
-      expect(result.structuredContent).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        status: 'unavailable', variants: [], condition_offers: [],
+        variant_lookup_failed: false, offer_lookup_failed: true,
+        catalog_colors: { labels: [], source: null },
+      });
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'get_storefront_product_variants',
         expect.anything(),
@@ -198,7 +206,11 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
       expect(result.content[0].text).toContain(
         'color is unconfirmed; do not guess.',
       );
-      expect(result.structuredContent).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        status: 'unavailable', variants: [], condition_offers: [],
+        variant_lookup_failed: true, offer_lookup_failed: true,
+        catalog_colors: { labels: [], source: null },
+      });
     } finally {
       log.mockRestore();
     }

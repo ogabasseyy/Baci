@@ -53,7 +53,29 @@ docker compose --profile dev up -d
 ngrok http 8787
 ```
 
-### For Production
+### Public tool output contracts
+
+All eight public tools declare Zod object output schemas from
+`../src/schemas/mcp-tool-output.ts`. The installed MCP SDK converts these to
+JSON Schema in `tools/list` and validates non-error `structuredContent` before
+returning a tool result. Keep schemas aligned with the actual response branches,
+including empty results, unavailable lookups, and product-option handoffs.
+Never replace an unknown stock value with `true` or invent a delivery quote.
+
+The current SDK requires an object schema at the root, so response fields retain
+their existing shape for the widget. Optional fields describe branches where
+data is absent; nullable fields describe explicitly unknown catalog facts.
+Human-readable `content` and widget metadata remain available alongside the
+structured result. Protocol-level tool errors (`isError: true`) are exempt from
+output validation in SDK 1.29; ordinary empty/unavailable responses are not.
+
+References: [MCP tool output schemas](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
+[OpenAI MCP server guidance](https://developers.openai.com/plugins/build/mcp-server).
+Integration tests use the actual SDK and anonymous catalog fixtures to check
+published schemas and successful, empty, missing-product, untracked-stock,
+and option-selection results without opening cart links.
+
+### Production deployment
 
 Production runs Docker Compose behind a reverse proxy. The compose file binds
 MCP to `127.0.0.1:8787`, so nginx/traefik should be the public TLS entrypoint.

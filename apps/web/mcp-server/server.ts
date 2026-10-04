@@ -1,3 +1,4 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
  * Ogabassey ChatGPT MCP Server
@@ -1298,6 +1299,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'add_to_cart',
     {
+      outputSchema: mcpToolOutputSchemas.add_to_cart,
       title: 'Add to Cart',
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
@@ -1326,6 +1328,7 @@ function createOgabasseyServer() {
         if (!merchantId) {
           return {
             content: [{ type: 'text', text: '❌ Unable to access store.' }],
+            structuredContent: { success: false, message: 'Store temporarily unavailable.' },
           };
         }
 
@@ -1340,6 +1343,7 @@ function createOgabasseyServer() {
         console.error('Add to cart error:', error);
         return {
           content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+          structuredContent: { success: false, message: 'Unable to prepare cart link.' },
         };
       }
     }
@@ -1642,6 +1646,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product',
     {
+      outputSchema: mcpToolOutputSchemas.get_product,
       title: 'Get Product Details',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -1848,6 +1853,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_store_info',
     {
+      outputSchema: mcpToolOutputSchemas.get_store_info,
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
@@ -1877,6 +1883,7 @@ function createOgabasseyServer() {
       };
       return {
         content: [{ type: 'text', text: info[args.topic || 'general'] }],
+        structuredContent: { topic: args.topic || 'general', message: info[args.topic || 'general'] },
       };
     }
   );
@@ -1885,6 +1892,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product_variants',
     {
+      outputSchema: mcpToolOutputSchemas.get_product_variants,
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -1900,6 +1908,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { variants: [], condition_offers: [], status: 'unavailable', message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1911,6 +1920,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'browse_categories',
     {
+      outputSchema: mcpToolOutputSchemas.browse_categories,
       title: 'Browse Categories',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of product categories available in the store.',
@@ -1925,6 +1935,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { categories: [], message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1933,7 +1944,7 @@ function createOgabasseyServer() {
       });
 
       if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }] };
+        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [] } };
       }
 
       const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
@@ -1949,6 +1960,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_brands',
     {
+      outputSchema: mcpToolOutputSchemas.get_brands,
       title: 'Get Available Brands',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of brands available in the store.',
@@ -1969,6 +1981,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { brands: [], message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1978,7 +1991,7 @@ function createOgabasseyServer() {
       });
 
       if (brands.length === 0) {
-        return { content: [{ type: 'text', text: 'No brands found.' }] };
+        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [] } };
       }
 
       const categoryText = args.category ? ` in ${args.category}` : '';

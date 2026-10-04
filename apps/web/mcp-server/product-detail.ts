@@ -6,7 +6,7 @@ import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
-import { getMcpVariantColorValue } from './variant-color-value';
+import { getMcpVariantAttributeTextValue, getMcpVariantColorValue } from './variant-color-value';
 import { getMcpProductCatalogColors } from './product-catalog-colors';
 import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
 import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
@@ -189,7 +189,7 @@ export async function buildMcpProductDetail({
     ];
     const storageOptions = [
       ...new Set(
-        availableVariants.map((v) => v.attributes?.storage).filter(Boolean)
+        availableVariants.map((v) => getMcpVariantAttributeTextValue(v.attributes?.storage)).filter(Boolean)
       ),
     ];
     if (colors.length > 0)

@@ -4,7 +4,7 @@ import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
-import { getMcpVariantColorValue } from './variant-color-value';
+import { getMcpVariantAttributeTextValue, getMcpVariantColorValue } from './variant-color-value';
 import { getMcpProductCatalogColors } from './product-catalog-colors';
 import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
 import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
@@ -199,11 +199,11 @@ export async function loadMcpProductVariants({
     ];
     const storages = [
       ...new Set(
-        displayVariants.map((v) => v.attributes?.storage).filter(Boolean)
+        displayVariants.map((v) => getMcpVariantAttributeTextValue(v.attributes?.storage)).filter(Boolean)
       ),
     ];
     const sizes = [
-      ...new Set(displayVariants.map((v) => v.attributes?.size).filter(Boolean)),
+      ...new Set(displayVariants.map((v) => getMcpVariantAttributeTextValue(v.attributes?.size)).filter(Boolean)),
     ];
 
     if (colors.length > 0) text += `**Colors:** ${colors.join(', ')}\n`;
@@ -216,7 +216,11 @@ export async function loadMcpProductVariants({
       : '\nNo available combinations.\n';
     for (const v of displayVariants.slice(0, 10)) {
       const attrs = Object.entries(v.attributes || {})
-        .map(([k, val]) => `${k}: ${val}`)
+        .map(([k, val]) => {
+          const text = getMcpVariantAttributeTextValue(val);
+          return text === undefined ? undefined : `${k}: ${text}`;
+        })
+        .filter((entry): entry is string => typeof entry === 'string')
         .join(', ');
       const price = v.price_override != null
         ? formatPrice(v.price_override)

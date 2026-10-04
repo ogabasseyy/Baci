@@ -1,7 +1,9 @@
 import { sanitizeText } from '../src/lib/sanitize-core';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantAttributeTextValue } from './variant-color-value';
 import type { discoverMcpProducts } from './discover-products';
 
 type DiscoveryResult = Awaited<ReturnType<typeof discoverMcpProducts>>;
@@ -40,8 +42,10 @@ export function formatSearchProductsResponse({
     const variantOptions: Record<string, Set<string>> = {};
     variants.forEach((variant) => {
       Object.entries(variant.attributes || {}).forEach(([key, value]) => {
+        const text = getMcpVariantAttributeTextValue(value);
+        if (text === undefined) return;
         if (!variantOptions[key]) variantOptions[key] = new Set();
-        variantOptions[key].add(String(value));
+        variantOptions[key].add(text);
       });
     });
     const availableOptions = Object.entries(variantOptions)
@@ -126,16 +130,25 @@ export function formatSearchProductsResponse({
     ),
   ].join('\n');
 
+  const structuredContent = {
+    status: 'success' as const,
+    products: formatted,
+    coverage,
+    search_mode: searchMode,
+    semantic_unavailable: semanticUnavailable,
+    meta: { total: count, query: sanitizedQuery },
+  };
+  if (!mcpToolOutputSchemas.search_products.safeParse(structuredContent).success) {
+    const message = 'Product search is temporarily unavailable.';
+    return {
+      content: [{ type: 'text' as const, text: message }],
+      structuredContent: { products: [], status: 'error' as const, message },
+    };
+  }
+
   return {
     content: [{ type: 'text' as const, text: resultText }],
-    structuredContent: {
-      status: 'success',
-      products: formatted,
-      coverage,
-      search_mode: searchMode,
-      semantic_unavailable: semanticUnavailable,
-      meta: { total: count, query: sanitizedQuery },
-    },
+    structuredContent,
     _meta: {
       'openai/outputTemplate': STORE_WIDGET_URI,
       'openai/widgetPrefersBorder': true,

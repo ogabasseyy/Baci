@@ -8,7 +8,7 @@ import { createSupabase } from './product-variants-test-fixtures';
 describe('variant output failure contracts', () => {
   it('validates numeric JSON attributes passed through both option handlers', async () => {
     const supabase = createSupabase();
-    supabase.rpc.mockResolvedValue({ data: [{ attributes: { ram: 8, storage: '256GB' }, price_override: null, stock_quantity: 2, condition: 'new', images: [] }], error: null });
+    supabase.rpc.mockResolvedValue({ data: [{ attributes: { ram: 8, storage: { gb: 256 } }, price_override: null, stock_quantity: 2, condition: 'new', images: [] }], error: null });
     const variants = await loadMcpProductVariants({
       args: { product_id: 'phone-1' }, merchantId: 'merchant-1',
       supabase: supabase as unknown as SupabaseClient,
@@ -21,8 +21,11 @@ describe('variant output failure contracts', () => {
     });
     expect(variants.structuredContent).toMatchObject({ variants: [{ attributes: { ram: 8 } }] });
     expect(detail.structuredContent).toMatchObject({ variants: [{ attributes: { ram: 8 } }] });
+    expect(variants.structuredContent).toMatchObject({ variants: [{ attributes: { storage: { gb: 256 } } }] });
     expect(mcpToolOutputSchemas.get_product_variants.safeParse(variants.structuredContent).success).toBe(true);
     expect(mcpToolOutputSchemas.get_product.safeParse(detail.structuredContent).success).toBe(true);
+    expect(variants.content[0].text).not.toContain('[object Object]');
+    expect(detail.content[0].text).not.toContain('[object Object]');
   });
 
   it.each([

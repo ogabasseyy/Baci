@@ -104,6 +104,7 @@ export function createSupabaseMock(input?: {
       }>;
       order_items: Array<{
         id: string;
+        line_id?: number | null;
         product_id: string;
         image_url?: string | null;
         condition?: string | null;

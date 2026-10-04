@@ -85,6 +85,7 @@ describe('receipt claim links', () => {
       'oga.bassey',
       'oga_bassey',
       '-ogabassey',
+      null,
     ]) {
       expect(() =>
         buildReceiptClaimUrl({

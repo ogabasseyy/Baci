@@ -268,6 +268,7 @@ describe('GET /api/storefront/orders manual document cases', () => {
         data: [
           {
             order_id: 'manual-order',
+            amount: 100,
             created_at: '2026-09-30T12:00:00Z',
             metadata: null,
             status: 'completed',

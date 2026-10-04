@@ -132,7 +132,10 @@ export const ReceiptDetailSchema = z.object({
   transaction_date: z.string().nullable().optional(),
   invoice_issue_date: z.string().nullable().optional(),
   notes: z.string().nullable(),
-  customer_name: z.string(),
+  // Sender-permitted null (staff-recorded orders omit it): the preview
+  // falls back to email like the emailed document, so rejecting here
+  // would blank a card whose documents are valid.
+  customer_name: z.string().nullable(),
   customer_email: z.string(),
   customer_phone: z.string().nullable(),
   shipping_address: ShippingAddressSchema.nullable(),

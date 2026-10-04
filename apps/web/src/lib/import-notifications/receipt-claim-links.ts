@@ -4,7 +4,7 @@ import { getRootDomain } from '@/env';
 import { isSafeClaimSlug } from './receipt-claim-slug';
 
 export interface ReceiptClaimMerchantUrlContext {
-  slug: string;
+  slug: string | null;
   custom_domain: string | null;
 }
 
@@ -97,7 +97,7 @@ export function buildReceiptClaimUrl({
   // The manual sender pre-validates through the schema and fails closed
   // with re-arm instead; the import campaign surfaces this loudly rather
   // than emailing links no customer could open.
-  if (!isSafeClaimSlug(merchant.slug)) {
+  if (typeof merchant.slug !== 'string' || !isSafeClaimSlug(merchant.slug)) {
     throw new Error('Invalid merchant slug for receipt claim URL');
   }
   const origin = `https://${merchant.slug}.${getRootDomain() || 'usebaci.com'}`;

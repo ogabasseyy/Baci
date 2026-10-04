@@ -26,11 +26,11 @@ export const manualDocumentMerchantSchema = z.object({
   id: z.string(),
   // The slug becomes a claim-URL subdomain label only when no safe custom
   // domain wins: the sender validates it conditionally after claim prep
-  // (see send-manual-order-document.ts), so a legacy unsafe slug must not
-  // sink a merchant whose custom domain resolves. Kept as a plain string
-  // here; slug-fallback failures still skip as merchant_validation_failed
-  // and recover through the merchant re-arm.
-  slug: z.string(),
+  // (see send-manual-order-document.ts), so a legacy unsafe or null slug
+  // must not sink a merchant whose custom domain resolves. Null/unsafe
+  // slugs skip as merchant_validation_failed only on the fallback-host
+  // path, and recover through the merchant re-arm.
+  slug: nullableText,
   business_name: nullableText,
   email_sender_name: nullableText,
   logo_url: nullableText,

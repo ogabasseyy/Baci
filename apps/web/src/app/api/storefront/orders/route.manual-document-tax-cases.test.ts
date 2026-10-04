@@ -86,4 +86,71 @@ describe('GET /api/storefront/orders manual document tax cases', () => {
       manual_document_available: false,
     });
   });
+
+  it('withholds documents whose negative line_id the sender rejects', async () => {
+    // The list projection must select line_id: without it the nullish
+    // archive schema treats a database-permitted negative id as absent
+    // and advertises a document the sender and direct download refuse.
+    const supabase = createSupabaseMock({
+      orders: {
+        data: [
+          {
+            id: 'manual-line',
+            order_number: 'MANUAL-LINE-1',
+            created_at: '2026-09-20T09:00:00Z',
+            transaction_date: '2026-09-25T09:00:00Z',
+            total: 100,
+            subtotal: 100,
+            shipping_fee: 0,
+            tax_amount: 0,
+            discount_amount: 0,
+            amount_paid: 0,
+            currency: 'NGN',
+            payment_status: 'unpaid',
+            shipping_status: 'pending',
+            recorded_by_user_id: 'staff-1',
+            shipping_address: null,
+            tracking_number: null,
+            shipping_provider: null,
+            payment_method: 'bank_transfer',
+            order_items: [
+              {
+                id: 'item-1',
+                line_id: -1,
+                product_id: 'product-1',
+                name: 'Device',
+                quantity: 1,
+                price: 100,
+                has_assurance: false,
+              },
+            ],
+          },
+        ],
+        error: null,
+      },
+    });
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(supabase)
+    );
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+    const data = await response.json();
+    expect(data.orders[0]).toMatchObject({
+      current_document_kind: 'invoice',
+      manual_document_available: false,
+    });
+    // The validation above only sees line_id because the projection
+    // selects it: lock the projection, not just the transform.
+    const ordersSelect = (
+      vi.mocked(supabase.from)('orders') as unknown as {
+        select: (...args: unknown[]) => unknown;
+      }
+    ).select;
+    expect(ordersSelect).toHaveBeenCalledWith(
+      expect.stringContaining('line_id')
+    );
+  });
 });

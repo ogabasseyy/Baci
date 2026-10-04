@@ -144,9 +144,11 @@ export async function sendManualOrderDocument({
     .toLowerCase()
     .replace(/\/+$/, '')
     .replace(/\.$/, '');
+  const slugSuppliesHost =
+    typeof merchant.slug === 'string' && isSafeClaimSlug(merchant.slug);
   if (
     !(customDomainHost && isSafeClaimDomain(customDomainHost)) &&
-    !isSafeClaimSlug(merchant.slug)
+    !slugSuppliesHost
   ) {
     return { status: 'skipped', reason: 'merchant_validation_failed' };
   }

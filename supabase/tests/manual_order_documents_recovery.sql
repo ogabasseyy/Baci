@@ -47,3 +47,14 @@ SELECT pg_temp.assert_true((SELECT status = 'skipped' AND skip_reason = 'documen
 UPDATE public.orders SET payment_status = 'unpaid', amount_paid = 0 WHERE id = '10000000-0000-4000-8000-000000000090';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND skip_reason IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000090' AND event_type = 'manual_order_invoice'), 'unpaid flip re-queues the invoice');
 SELECT pg_temp.assert_true((SELECT status = 'skipped' AND skip_reason = 'document_state_changed' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000090' AND event_type = 'manual_order_receipt'), 'unpaid flip retires the pending receipt');
+-- Eligible shipping transitions keep the in-flight marker; only a
+-- terminal crossing re-evaluates and resets it.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, total, amount_paid, shipping_status)
+VALUES ('10000000-0000-4000-8000-000000000091', '10000000-0000-4000-8000-000000000084', '10000000-0000-4000-8000-000000000085', '10000000-0000-4000-8000-000000000010', 'kind85@example.com', 'paid', 100, 100, 'pending');
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000091', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt';
+UPDATE public.orders SET shipping_status = 'shipped' WHERE id = '10000000-0000-4000-8000-000000000091';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt'), 'eligible shipping transition keeps the marker');
+UPDATE public.orders SET shipping_status = 'cancelled' WHERE id = '10000000-0000-4000-8000-000000000091';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt'), 'terminal crossing resets the marker');

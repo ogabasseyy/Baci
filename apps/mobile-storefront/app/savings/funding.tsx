@@ -142,13 +142,15 @@ function SavingsPlanFundingScreen() {
               isHostedStaging={
                 process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'
               }
-              onCopy={async () =>
-                setCopied(
-                  await setClipboardString(
-                    funding.planFundingAccounts[0]?.accountNumber ?? ''
-                  )
-                )
-              }
+              onCopy={async () => {
+                const accountNumber =
+                  funding.planFundingAccounts[0]?.accountNumber ?? '';
+                if (accountNumber.trim() === '') {
+                  setCopied(false);
+                  return;
+                }
+                setCopied(await setClipboardString(accountNumber));
+              }}
               onFetchExisting={() => void funding.fetchExistingPlanFunding()}
               onFetchWithIdentity={(bvn) => void funding.fetchPlanFunding(bvn)}
               phase={funding.planFundingPhase}

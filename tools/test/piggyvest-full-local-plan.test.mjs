@@ -5,7 +5,7 @@ import { planReplay } from './piggyvest-full-local-plan.mjs';
 
 const body = Buffer.from('SELECT 1;\n');
 const hash = createHash('sha256').update(body).digest('hex');
-const inbox = '20260912090000_piggyvest_staging_webhook_inbox.sql';
+const inbox = '20260912080000_piggyvest_staging_webhook_inbox.sql';
 const policy = '20260912140000_goal_policy_tables.sql';
 const lifecycle = '20260912150000_goal_lifecycle_activation.sql';
 const cancellation = '20260912160000_cancel_plan_intents.sql';

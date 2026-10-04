@@ -10,14 +10,17 @@ const AUTH_LOGIN_RESUME_TTL_MS = 10 * 60 * 1000;
 
 // Resolved lazily (never at module scope): getStorefrontStoragePrefix() throws
 // for misconfigured hosted/local modes, and importing this module must not be
-// able to break login. A throwing prefix falls back to the legacy unprefixed
-// key, preserving pre-prefix behavior exactly in misconfigured environments.
-function resolveResumeStorageKey(): string {
+// able to break login. A throwing prefix resolves to null and every operation
+// fails closed (no read, no write, no clear): falling back to the shared
+// legacy key would collapse the hosted/local namespace isolation the prefix
+// exists to provide. Resume is best-effort, so a null key only means the
+// customer re-enters their email — login itself never breaks.
+function resolveResumeStorageKey(): string | null {
   try {
     return `${getStorefrontStoragePrefix()}${LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY}`;
   } catch (error) {
-    log.warn('Falling back to legacy login resume storage key', error);
-    return LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY;
+    log.warn('Skipping login resume storage: storage prefix unresolved', error);
+    return null;
   }
 }
 
@@ -182,6 +185,9 @@ export async function saveAuthLoginResumeState(
 
   try {
     const storageKey = resolveResumeStorageKey();
+    if (storageKey === null) {
+      return;
+    }
     if (Platform.OS === 'web') {
       writeWebStorageValue(storageKey, serializedState);
       return;
@@ -198,6 +204,9 @@ export async function getAuthLoginResumeState(
 ): Promise<AuthLoginResumeState | null> {
   try {
     const storageKey = resolveResumeStorageKey();
+    if (storageKey === null) {
+      return null;
+    }
     const rawValue =
       Platform.OS === 'web'
         ? readWebResumeValue(storageKey)
@@ -212,6 +221,9 @@ export async function getAuthLoginResumeState(
 export async function getPendingAuthLoginResumeState(): Promise<AuthLoginResumeState | null> {
   try {
     const storageKey = resolveResumeStorageKey();
+    if (storageKey === null) {
+      return null;
+    }
     const rawValue =
       Platform.OS === 'web'
         ? readWebResumeValue(storageKey)
@@ -226,6 +238,9 @@ export async function getPendingAuthLoginResumeState(): Promise<AuthLoginResumeS
 export async function clearAuthLoginResumeState(): Promise<void> {
   try {
     const storageKey = resolveResumeStorageKey();
+    if (storageKey === null) {
+      return;
+    }
     if (Platform.OS === 'web') {
       removeWebStorageValue(storageKey);
       if (storageKey !== LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {

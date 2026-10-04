@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { View } from 'react-native';
 import NotificationsScreen from '@/app/notifications';
 
@@ -16,10 +16,12 @@ const mockSavingsNotificationsScreen = jest.fn(
 const mockRedirect = jest.fn(({ href }: { href: string }) => (
   <View testID="notifications-redirect" accessibilityLabel={href} />
 ));
+const mockRouterPush = jest.fn();
 
 jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => mockRedirect({ href }),
   Stack: { Screen: () => null },
+  router: { push: (href: string) => mockRouterPush(href) },
 }));
 
 jest.mock('@/components/notifications/SavingsNotificationsScreen', () => ({
@@ -93,5 +95,13 @@ describe('NotificationsScreen', () => {
       screen.getByLabelText('/auth/login?returnTo=%2Fnotifications')
     ).toBeOnTheScreen();
     expect(mockSavingsNotificationsScreen).not.toHaveBeenCalled();
+  });
+
+  it('keeps order updates reachable from the savings inbox', () => {
+    render(<NotificationsScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'View your orders' }));
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/orders');
   });
 });

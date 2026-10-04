@@ -178,7 +178,7 @@ unknown is not zero, and charged/refund paths retain their specific gates.
 - Fresh command: `pnpm exec node --test tools/test/piggyvest-full-local-plan.test.mjs tools/test/piggyvest-web-preview/config.test.mjs` — **10 passed, 0 failed**.
 - Invoked the existing `planReplay` with only the local registry and migration
   files: **34 selected hashes verified**, from
-  `20260912090000_piggyvest_staging_webhook_inbox.sql` through
+  `20260912080000_piggyvest_staging_webhook_inbox.sql` through
   `20260912160200_cancel_plan_preserve_goal_snapshot.sql`. This was read-only
   hash validation, not SQL execution or dependency packaging.
 - Only this new Markdown report is changed. No runtime change, so no new TDD

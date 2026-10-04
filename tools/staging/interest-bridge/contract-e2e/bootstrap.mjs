@@ -37,7 +37,7 @@ export function bootstrapContractDatabase(database, loader, payout) {
     '20260912120300_piggyvest_savings_ledger_snapshot.sql',
     '20260912120400_piggyvest_savings_ledger_registry_gate.sql',
     '20260912120500_piggyvest_savings_ledger_numeric_reference_casts.sql',
-    '20260912090200_piggyvest_staging_wallet_goal_mappings.sql',
+    '20260912080200_piggyvest_staging_wallet_goal_mappings.sql',
     '20260925130000_customer_savings_engagement_storage.sql',
     '20260925130100_customer_savings_engagement_events.sql',
     '20260926170000_piggyvest_interest_bridge.sql',

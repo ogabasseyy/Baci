@@ -31,7 +31,7 @@ The private-schema lines are PostgreSQL NOTICE messages. Complete final run outp
 - Registry SHA-256 at verification: `55482a5badd23f49278eff9ff5be96667c879f403026df986b8ddc0eb930488e`.
 - Strict data parser, no evaluation/import of registry JavaScript. Rejects malformed rows, paths, duplicate timestamps, missing files, empty staging scope and hash mismatches.
 - Selects registered `_piggyvest_` and `_goal_policy_` filenames plus the exact timestamp-following `goal_lifecycle_` and `cancel_plan_` prefixes, orders by migration timestamp, verifies every selected file before starting PostgreSQL, then replays private copies of those exact bytes.
-- Current range: `20260912090000_piggyvest_staging_webhook_inbox.sql` through `20260912140300_goal_policy_canonical_commands.sql`. Six legacy savings-repair entries are intentionally excluded.
+- Current range: `20260912080000_piggyvest_staging_webhook_inbox.sql` through `20260912140300_goal_policy_canonical_commands.sql`. Six legacy savings-repair entries are intentionally excluded.
 - No hardcoded migration list or hash updates. Future registered lifecycle entries using the same naming convention are discovered automatically; rerun after parent registration. Unknown registry syntax or new permissive RLS policy fails for review.
 
 ## Safety and checks

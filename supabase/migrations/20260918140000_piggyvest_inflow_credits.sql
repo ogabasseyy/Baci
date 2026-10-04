@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS "public"."piggyvest_inflow_credits" (
   "amount_kobo" bigint NOT NULL CHECK ("amount_kobo" > 0),
   "fee_kobo" bigint NOT NULL CHECK ("fee_kobo" >= 0),
   "reference" "text" NOT NULL,
-  "session_id" "text" NOT NULL,
+  -- Nullable: genuine provider deliveries omit session_id when unset, and
+  -- recordInflowCredit persists that shape (stores-a-null-session test).
+  -- A NOT NULL column would fail every such insert and never credit it.
+  "session_id" "text",
   "credited_at" timestamp with time zone NOT NULL,
   "created_at" timestamp with time zone NOT NULL DEFAULT "now"()
 );

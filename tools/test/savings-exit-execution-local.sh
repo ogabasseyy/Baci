@@ -25,7 +25,7 @@ for migration in "$worktree"/supabase/migrations/20260912150000_goal_lifecycle_a
   "$worktree"/supabase/migrations/20260912150200_goal_lifecycle_policy_ceremony.sql \
   "$worktree"/supabase/migrations/20260912160000_cancel_plan_preparation.sql \
   "$worktree"/supabase/migrations/20260912162[0-1]00_purchase_preparation*.sql \
-  "$worktree"/supabase/migrations/20260912090200_piggyvest_staging_wallet_goal_mappings.sql \
+  "$worktree"/supabase/migrations/20260912080200_piggyvest_staging_wallet_goal_mappings.sql \
   "$worktree"/supabase/migrations/20260926171000_piggyvest_savings_exit_execution.sql \
   "$worktree"/supabase/migrations/20260926171100_piggyvest_savings_exit_authority_storage_guards.sql \
   "$worktree"/supabase/migrations/20260926171101_piggyvest_savings_exit_commands.sql \

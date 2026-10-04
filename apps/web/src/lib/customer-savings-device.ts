@@ -1,17 +1,22 @@
 import { z } from 'zod';
+import { isStorefrontProductVariantPublic } from '@/lib/is-storefront-product-variant-public';
 
 export const SAVINGS_DEVICE_PRODUCT_SELECT =
-  'id, name, price, images, condition, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor)';
+  'id, name, price, images, condition, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor, is_active, status, deleted_at, archived_at)';
 
 export const SavingsDeviceVariantSchema = z.object({
+  archived_at: z.string().nullable().optional(),
   attributes: z.record(z.string(), z.string()).nullable().optional(),
   condition: z.string().nullable().optional(),
+  deleted_at: z.string().nullable().optional(),
   id: z.string(),
   images: z.array(z.string()).nullable().optional(),
+  is_active: z.boolean().nullable().optional(),
   is_inventory_anchor: z.boolean().nullable().optional(),
   price_override: z.union([z.number(), z.string()]).nullable().optional(),
   primary_image: z.string().nullable().optional(),
   sku: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
 });
 
 export const SavingsDeviceProductSchema = z.object({
@@ -123,8 +128,12 @@ export function resolveSavingsDeviceSelection({
   product: SavingsDeviceProduct;
   variantId?: string | null;
 }): SavingsDeviceResolution {
+  // Same public-visibility rule as the storefront catalogue: an inactive,
+  // non-active, deleted, or archived variant (or an internal inventory
+  // anchor) can never back a savings goal, even when the caller retains its
+  // UUID from before it was hidden.
   const variants = (product.variants ?? []).filter(
-    (variant) => variant.is_inventory_anchor !== true
+    isStorefrontProductVariantPublic
   );
   const hasVariants = variants.length > 0;
   const requestedVariantId = variantId?.trim() || null;

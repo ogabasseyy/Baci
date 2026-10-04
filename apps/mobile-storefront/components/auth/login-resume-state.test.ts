@@ -323,38 +323,29 @@ describe('login resume state', () => {
     ]);
   });
 
-  it('uses the legacy key when storage prefix resolution throws', async () => {
+  it('fails closed without touching storage when prefix resolution throws', async () => {
     jest
       .spyOn(storefrontStoragePrefix, 'getStorefrontStoragePrefix')
       .mockImplementation(() => {
         throw new Error('Invalid hosted storage mode');
       });
 
-    await saveAuthLoginResumeState({
-      email: 'shopper@example.com',
-      returnTo: '/checkout',
-      step: 'otp',
-    });
-
-    expect(mockSetItemAsync).toHaveBeenCalledTimes(1);
-    expect(mockSetItemAsync.mock.calls[0][0]).toBe(
-      'auth-login-resume-state'
-    );
-
-    mockGetItemAsync.mockResolvedValueOnce(
-      JSON.stringify({
+    await expect(
+      saveAuthLoginResumeState({
         email: 'shopper@example.com',
         returnTo: '/checkout',
-        savedAt: 1_000_000,
         step: 'otp',
       })
-    );
+    ).resolves.toBeUndefined();
+    await expect(getPendingAuthLoginResumeState()).resolves.toBeNull();
+    await expect(getAuthLoginResumeState('/checkout')).resolves.toBeNull();
+    await expect(clearAuthLoginResumeState()).resolves.toBeUndefined();
 
-    await expect(getPendingAuthLoginResumeState()).resolves.toEqual({
-      email: 'shopper@example.com',
-      returnTo: '/checkout',
-      step: 'otp',
-    });
+    // No fallback to the shared legacy key: hosted/local namespace isolation
+    // must survive a misconfigured prefix.
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+    expect(mockGetItemAsync).not.toHaveBeenCalled();
+    expect(mockDeleteItemAsync).not.toHaveBeenCalled();
   });
 
   it('clears both the prefixed and legacy resume keys', async () => {

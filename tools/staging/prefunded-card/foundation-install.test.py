@@ -120,7 +120,7 @@ class FoundationInstallTests(unittest.TestCase):
             self.assertIn((relation, "merchant_id", "uuid"), self.module.REQUIRED_COLUMNS)
 
     def test_rehearsal_registry_matches_the_authoritative_migration(self):
-        migration = BASE.parents[2] / "supabase/migrations/20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql"
+        migration = BASE.parents[2] / "supabase/migrations/20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql"
         declaration = "CREATE TABLE piggyvest_staging.integrations ("
         expected = migration.read_text().split(declaration, 1)[1].split("\n);", 1)[0]
         actual = (BASE / "foundation-prerequisites.test.sql").read_text().split(declaration, 1)[1].split("\n);", 1)[0]

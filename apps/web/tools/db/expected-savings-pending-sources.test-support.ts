@@ -34,22 +34,22 @@ export const EXPECTED_SAVINGS_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20260912090000_piggyvest_staging_webhook_inbox.sql',
+      'supabase/migrations/20260912080000_piggyvest_staging_webhook_inbox.sql',
     sha256: 'e3528bda9bee0dd1d5bc4a908bf47d7deb8b2ebf1ee1bc054cf6dcb8a739af5b',
   },
   {
     repositoryPath:
-      'supabase/migrations/20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql',
+      'supabase/migrations/20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql',
     sha256: '13a975b3c14489bc52d28abcb66705b437411a675b421e6d08cb6d2ddbf3dd6a',
   },
   {
     repositoryPath:
-      'supabase/migrations/20260912090200_piggyvest_staging_wallet_goal_mappings.sql',
+      'supabase/migrations/20260912080200_piggyvest_staging_wallet_goal_mappings.sql',
     sha256: 'b171372fe6a356caae105b4983d6a46ac6cc57b510073e9a2c259e86d9424eb5',
   },
   {
     repositoryPath:
-      'supabase/migrations/20260912090300_piggyvest_staging_wallet_customer_consistency.sql',
+      'supabase/migrations/20260912080300_piggyvest_staging_wallet_customer_consistency.sql',
     sha256: '0bca99e300631f6a1cfedab953f1105b446c9e3903fec08767fbda2eef10d151',
   },
   {

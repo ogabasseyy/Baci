@@ -68,7 +68,7 @@ class PlanTestDatabase:
         self.query(variant_guard)
         finite_guard = (MIGRATIONS / '20260911211100_require_finite_customer_savings_money.sql').read_text()
         self.query(finite_guard)
-        self.query((MIGRATIONS / '20260912090200_piggyvest_staging_wallet_goal_mappings.sql').read_text())
+        self.query((MIGRATIONS / '20260912080200_piggyvest_staging_wallet_goal_mappings.sql').read_text())
         self.query((MIGRATIONS / '20260912120000_piggyvest_savings_ledger_tables.sql').read_text())
         self.query((MIGRATIONS / '20260912120100_piggyvest_savings_ledger_guards.sql').read_text())
         policy = (MIGRATIONS / '20261001230000_customer_savings_interest_policy.sql').read_text().split(

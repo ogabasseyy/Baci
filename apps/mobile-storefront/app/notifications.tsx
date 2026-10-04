@@ -1,4 +1,5 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { SavingsNotificationsScreen } from '@/components/notifications/SavingsNotificationsScreen';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -19,6 +20,11 @@ export default function NotificationsScreen() {
     return <Redirect href={redirectTo} />;
   }
 
+  // This route intentionally hosts the savings inbox: the previous screen
+  // rendered a hardcoded empty placeholder with no data source, and
+  // order/promo pushes deep-link straight to their content screens (see
+  // getStorefrontNotificationNavigationTarget) rather than to this route. The
+  // footer preserves order reachability from the notifications surface.
   return (
     <StorefrontScreenShell
       edges={['bottom']}
@@ -29,6 +35,21 @@ export default function NotificationsScreen() {
         merchantId={pickMerchantId(merchantId, CONFIG.MERCHANT_ID)}
         userId={userId}
       />
+      <Pressable
+        accessibilityLabel="View your orders"
+        accessibilityRole="button"
+        onPress={() => router.push('/orders')}
+        style={styles.ordersLink}
+      >
+        <Text style={[styles.ordersLinkText, { color: colors.primary }]}>
+          Looking for order updates? View your orders
+        </Text>
+      </Pressable>
     </StorefrontScreenShell>
   );
 }
+
+const styles = StyleSheet.create({
+  ordersLink: { alignItems: 'center', padding: 16 },
+  ordersLinkText: { fontSize: 14, fontWeight: '600' },
+});

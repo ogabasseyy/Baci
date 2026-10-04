@@ -37,8 +37,8 @@ CREATE ROLE inbox_test_untrusted;
 SQL
 
 if [[ "${1:-}" != "--without-migration" ]]; then
-  "${psql[@]}" -f "$worktree/supabase/migrations/20260912090000_piggyvest_staging_webhook_inbox.sql" >/dev/null
-  "${psql[@]}" -f "$worktree/supabase/migrations/20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql" >/dev/null
+  "${psql[@]}" -f "$worktree/supabase/migrations/20260912080000_piggyvest_staging_webhook_inbox.sql" >/dev/null
+  "${psql[@]}" -f "$worktree/supabase/migrations/20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql" >/dev/null
 fi
 "${psql[@]}" -f "$worktree/supabase/migrations/tests/piggyvest_staging_integration_registry.sql"
 "${psql[@]}" -f "$worktree/supabase/migrations/tests/piggyvest_staging_webhook_inbox.sql"

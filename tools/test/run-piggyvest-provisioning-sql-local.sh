@@ -45,10 +45,10 @@ ALTER TABLE public.customer_savings_goals ENABLE ROW LEVEL SECURITY;
 SQL
 
 for migration in \
-  20260912090000_piggyvest_staging_webhook_inbox.sql \
-  20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql \
-  20260912090200_piggyvest_staging_wallet_goal_mappings.sql \
-  20260912090300_piggyvest_staging_wallet_customer_consistency.sql \
+  20260912080000_piggyvest_staging_webhook_inbox.sql \
+  20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql \
+  20260912080200_piggyvest_staging_wallet_goal_mappings.sql \
+  20260912080300_piggyvest_staging_wallet_customer_consistency.sql \
   20260912100000_piggyvest_staging_provisioning_intents.sql \
   20260912100100_piggyvest_staging_prepare_provisioning_intent.sql \
   20260912100200_piggyvest_staging_claim_provisioning_intent.sql \

@@ -6,6 +6,17 @@ const mockFetchExistingPlanFunding = jest.fn();
 const mockIsHostedStagingTestPaymentsEnabled = jest.fn();
 const mockRedirect = jest.fn();
 const mockRefetch = jest.fn(async () => ({ isError: false }));
+const mockSetClipboardString = jest.fn(
+  async (_text: string): Promise<boolean> => true
+);
+const defaultPlanFundingAccounts = () => [
+  {
+    accountName: 'PiggyVest Savings',
+    accountNumber: '0001234567',
+    bankName: 'Test Bank',
+  },
+];
+let mockPlanFundingAccounts = defaultPlanFundingAccounts();
 const mockUseSavingsPlanFunding = jest.fn();
 const mockKeyboardAwareScrollViewSpy = jest.fn();
 let mockUserId: string | null = 'customer-1';
@@ -98,19 +109,15 @@ jest.mock('@/components/wallet/savings/use-savings-plan-funding', () => ({
       fetchExistingPlanFunding: mockFetchExistingPlanFunding,
       fetchPlanFunding: mockFetchPlanFunding,
       fundingError: null,
-      planFundingAccounts: [
-        {
-          accountName: 'PiggyVest Savings',
-          accountNumber: '0001234567',
-          bankName: 'Test Bank',
-        },
-      ],
+      planFundingAccounts: mockPlanFundingAccounts,
       planFundingPhase: 'ready',
       planFundingStatusCode: null,
     };
   },
 }));
-jest.mock('@/lib/clipboard', () => ({ setClipboardString: jest.fn() }));
+jest.mock('@/lib/clipboard', () => ({
+  setClipboardString: (text: string) => mockSetClipboardString(text),
+}));
 jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
   isHostedStagingTestPaymentsEnabled: () =>
     mockIsHostedStagingTestPaymentsEnabled(),
@@ -124,6 +131,7 @@ describe('SavingsPlanFundingRoute', () => {
     mockUserId = 'customer-1';
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
     mockActiveGoal = defaultActiveGoal();
+    mockPlanFundingAccounts = defaultPlanFundingAccounts();
     mockParams = {
       amount: '250000',
       goalId: '430314fd-cd8b-4579-98d4-e9f345713dd6',
@@ -260,5 +268,35 @@ describe('SavingsPlanFundingRoute', () => {
       screen.getByText(/no longer matches your active savings plan/i)
     ).toBeOnTheScreen();
     expect(screen.queryByText(/cached plan balance/i)).toBeNull();
+  });
+
+  it('copies the ready plan account number and confirms', async () => {
+    render(<SavingsPlanFundingRoute />);
+
+    await act(async () => {
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Copy plan account number' })
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockSetClipboardString).toHaveBeenCalledWith('0001234567');
+    expect(screen.getByText('Copied')).toBeOnTheScreen();
+  });
+
+  it('withholds the copy button when the ready account number is empty', () => {
+    mockPlanFundingAccounts = [
+      {
+        accountName: 'PiggyVest Savings',
+        accountNumber: '',
+        bankName: 'Test Bank',
+      },
+    ];
+    render(<SavingsPlanFundingRoute />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Copy plan account number' })
+    ).toBeNull();
+    expect(mockSetClipboardString).not.toHaveBeenCalled();
   });
 });

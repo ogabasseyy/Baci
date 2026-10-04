@@ -62,6 +62,47 @@ describe('resolveSavingsDeviceSelection', () => {
     ).toMatchObject({ ok: false, status: 404 });
   });
 
+  it.each([
+    ['inactive', { is_active: false }],
+    ['non-active status', { status: 'draft' }],
+    ['soft-deleted', { deleted_at: '2026-09-01T00:00:00.000Z' }],
+    ['archived', { archived_at: '2026-09-01T00:00:00.000Z' }],
+  ])(
+    'rejects a %s variant retained from before it was hidden',
+    (_label, visibility) => {
+      const product = SavingsDeviceProductSchema.parse({
+        id: PRODUCT_ID,
+        name: 'iPhone 15 Pro',
+        price: '700000',
+        variants: [
+          { id: VARIANT_256, price_override: '850000', ...visibility },
+        ],
+      });
+
+      expect(
+        resolveSavingsDeviceSelection({ product, variantId: VARIANT_256 })
+      ).toMatchObject({
+        code: 'SAVINGS_DEVICE_VARIANT_NOT_FOUND',
+        ok: false,
+        status: 404,
+      });
+    }
+  );
+
+  it('treats a product whose variants are all hidden as having no selectable variants', () => {
+    const product = SavingsDeviceProductSchema.parse({
+      id: PRODUCT_ID,
+      name: 'Hidden variants device',
+      price: 700000,
+      variants: [{ id: VARIANT_128, is_active: false }],
+    });
+
+    expect(resolveSavingsDeviceSelection({ product })).toMatchObject({
+      ok: true,
+      variantId: null,
+    });
+  });
+
   it('requires an explicit variant when the product has variants', () => {
     const result = resolveSavingsDeviceSelection({
       clientTargetAmount: 700000,

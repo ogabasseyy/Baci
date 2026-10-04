@@ -138,7 +138,7 @@ expiry `2026-09-29T15:59:10Z` and physical staging database identity
 
 The owner-run report confirmed a single false prerequisite:
 `foundation_missing:piggyvest_staging.integrations.merchant_id`. Migration
-`20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql` defines the
+`20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql` defines the
 provider-account registry with `id`, `expected_provider_account_id` and `enabled`;
 merchant ownership lives in separate bindings/mappings. No shipped foundation SQL
 uses a merchant column on that registry. The preflight and rehearsal fixture had

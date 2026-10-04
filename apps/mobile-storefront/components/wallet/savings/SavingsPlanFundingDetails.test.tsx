@@ -101,4 +101,61 @@ describe('SavingsPlanFundingDetails', () => {
 
     expect(screen.queryByLabelText('BVN for plan account')).toBeNull();
   });
+
+  it('withholds the account card when a ready account has an empty number', () => {
+    render(
+      <SavingsPlanFundingDetails
+        account={{
+          accountName: 'PiggyVest Savings',
+          accountNumber: '',
+          bankName: 'Test Bank',
+        }}
+        amount={250000}
+        copied={false}
+        error={null}
+        goalTitle="iPhone savings"
+        isHostedStaging
+        onCopy={async () => undefined}
+        onFetchExisting={jest.fn()}
+        onFetchWithIdentity={jest.fn()}
+        phase="ready"
+        requiresIdentity={false}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Copy plan account number' })
+    ).toBeNull();
+    expect(
+      screen.getByText(/looking for your existing dedicated account/i)
+    ).toBeOnTheScreen();
+  });
+
+  it('copies a usable ready account number', () => {
+    const onCopy = jest.fn(async () => undefined);
+    render(
+      <SavingsPlanFundingDetails
+        account={{
+          accountName: 'PiggyVest Savings',
+          accountNumber: '0001234567',
+          bankName: 'Test Bank',
+        }}
+        amount={250000}
+        copied={false}
+        error={null}
+        goalTitle="iPhone savings"
+        isHostedStaging
+        onCopy={onCopy}
+        onFetchExisting={jest.fn()}
+        onFetchWithIdentity={jest.fn()}
+        phase="ready"
+        requiresIdentity={false}
+      />
+    );
+
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Copy plan account number' })
+    );
+    expect(onCopy).toHaveBeenCalledTimes(1);
+  });
 });

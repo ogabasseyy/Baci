@@ -34,7 +34,7 @@ for migration in \
   20260912160000_cancel_plan_preparation.sql \
   20260912162000_purchase_preparation_tables.sql \
   20260912162100_purchase_preparation_commands.sql \
-  20260912090200_piggyvest_staging_wallet_goal_mappings.sql \
+  20260912080200_piggyvest_staging_wallet_goal_mappings.sql \
   20260926171000_piggyvest_savings_exit_execution.sql \
   20260926171100_piggyvest_savings_exit_authority_storage_guards.sql \
   20260926171101_piggyvest_savings_exit_commands.sql \

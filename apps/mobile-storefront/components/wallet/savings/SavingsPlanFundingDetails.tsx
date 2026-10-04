@@ -40,6 +40,11 @@ export function SavingsPlanFundingDetails({
   const isLoading = phase === 'loading';
   const needsIdentity = !isHostedStaging && requiresIdentity;
   const isPending = phase === 'pending';
+  // The funding fetch path does not schema-validate the response, so a ready
+  // account with an empty number must not render a card whose copy button
+  // confirms success while copying nothing usable.
+  const usableAccount =
+    (account?.accountNumber ?? '').trim() !== '' ? account : undefined;
 
   return (
     <View style={styles.content}>
@@ -64,9 +69,9 @@ export function SavingsPlanFundingDetails({
           ? 'This is a test environment. Do not send a real bank transfer; approved operators perform test funding. Card payments cannot fund this plan.'
           : 'Transfer from your bank app to this plan account. Card payments cannot fund this savings plan.'}
       </Text>
-      {phase === 'ready' && account ? (
+      {phase === 'ready' && usableAccount ? (
         <AccountDetails
-          account={account}
+          account={usableAccount}
           colors={colors}
           copied={copied}
           onCopy={onCopy}

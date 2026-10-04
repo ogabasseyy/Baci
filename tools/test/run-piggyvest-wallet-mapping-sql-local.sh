@@ -51,14 +51,14 @@ ALTER TABLE public.customer_savings_goals ENABLE ROW LEVEL SECURITY;
 SQL
 
 for migration in \
-  20260912090000_piggyvest_staging_webhook_inbox.sql \
-  20260912090100_restrict_piggyvest_inbox_to_staging_registry.sql
+  20260912080000_piggyvest_staging_webhook_inbox.sql \
+  20260912080100_restrict_piggyvest_inbox_to_staging_registry.sql
 do
   "${psql[@]}" -f "$worktree/supabase/migrations/$migration" >/dev/null
 done
 if [[ "${1:-}" != "--without-mapping" ]]; then
-  "${psql[@]}" -f "$worktree/supabase/migrations/20260912090200_piggyvest_staging_wallet_goal_mappings.sql" >/dev/null
-  "${psql[@]}" -f "$worktree/supabase/migrations/20260912090300_piggyvest_staging_wallet_customer_consistency.sql" >/dev/null
+  "${psql[@]}" -f "$worktree/supabase/migrations/20260912080200_piggyvest_staging_wallet_goal_mappings.sql" >/dev/null
+  "${psql[@]}" -f "$worktree/supabase/migrations/20260912080300_piggyvest_staging_wallet_customer_consistency.sql" >/dev/null
   "${psql[@]}" -f "$worktree/supabase/migrations/20260925140000_piggyvest_staging_scoped_wallet_mapping_read.sql" >/dev/null
 fi
 "${psql[@]}" -f "$worktree/supabase/migrations/tests/piggyvest_staging_wallet_goal_mappings.sql"

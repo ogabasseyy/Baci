@@ -162,25 +162,32 @@ def _audit_line(line, drift, src="", stale=frozenset(),
     if BARE_POISON_RE.search(line) \
             and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
-    # prompt_file feeds the agent's --prompt-file: the only
-    # binding is the pinned RUNNER_TEMP path (both the prompt.sh
-    # assignment and its GITHUB_OUTPUT echo carry it, the echo
-    # via the pinned variable). A constructed value (/proc/
-    # environ via printf -v) would place another process's
-    # secrets in the model prompt, so any other value drifts --
-    # as does a for/select bind of the name (no = text).
-    for m in re.finditer(
-            r"prompt_file\+?=\s*(?:\"([^\"]*)\"|'([^']*)'|"
-            r"([^\s\"']+))", line):
-        val = m.group(1) if m.group(1) is not None else (
-            m.group(2) if m.group(2) is not None else m.group(3))
-        if val not in ("${RUNNER_TEMP}/muse-prompt.md",
-                       "${prompt_file}", "$prompt_file") \
-                and "helper-promptfile-rebind" not in drift:
-            drift.append("helper-promptfile-rebind")
-    if re.search(r"\b(?:for|select)\s+prompt_file\b", line) \
-            and "helper-promptfile-rebind" not in drift:
-        drift.append("helper-promptfile-rebind")
+    # prompt_file feeds the agent's --prompt-file and
+    # review_file publishes the agent output post.sh acts on:
+    # the only binding for each is its pinned RUNNER_TEMP path
+    # (both the assignment and its GITHUB_OUTPUT echo carry
+    # it, the echo via the pinned variable). A constructed
+    # value (/proc/environ via printf -v, a workspace path)
+    # would place attacker bytes in the model prompt or the
+    # posted verdict, so any other value drifts -- as does a
+    # for/select bind of the name (no = text).
+    for var, pinned, problem in (
+            ("prompt_file", "${RUNNER_TEMP}/muse-prompt.md",
+             "helper-promptfile-rebind"),
+            ("review_file", "${RUNNER_TEMP}/muse-review-body.md",
+             "helper-reviewfile-rebind")):
+        for m in re.finditer(
+                r"%s\+?=\s*(?:\"([^\"]*)\"|'([^']*)'|"
+                r"([^\s\"']+))" % var, line):
+            val = m.group(1) if m.group(1) is not None else (
+                m.group(2) if m.group(2) is not None else
+                m.group(3))
+            if val not in (pinned, "${%s}" % var, "$%s" % var) \
+                    and problem not in drift:
+                drift.append(problem)
+        if re.search(r"\b(?:for|select)\s+%s\b" % var, line) \
+                and problem not in drift:
+            drift.append(problem)
     if SECRET_EXPAND_RE.search(nosq) \
             and "helper-secret-expand" not in drift:
         drift.append("helper-secret-expand")

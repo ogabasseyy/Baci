@@ -173,13 +173,15 @@ export function SearchComparisonTray({
         <div className="flex gap-4 overflow-x-auto py-4">
           {compareItems.map((snapshot) => {
             const product = current.get(String(snapshot.id));
-            // PDP deep link preserves the compared option: live match first,
-            // snapshot basis for off-page items (mirrors ProductIndexCard).
+            // PDP deep link preserves the compared option: the snapshot
+            // basis is authoritative (a re-filtered live match describes a
+            // different option than the one compared); live match serves
+            // only legacy snapshots without match metadata.
             const liveMatch = matches.get(String(snapshot.id));
             const matchParams = new URLSearchParams();
-            const variantId = liveMatch?.variantId ?? snapshot.matchVariantId;
-            const condition = liveMatch?.condition ?? snapshot.matchCondition;
-            const offerId = liveMatch?.offerId ?? snapshot.matchOfferId;
+            const variantId = snapshot.matchVariantId ?? liveMatch?.variantId;
+            const condition = snapshot.matchCondition ?? liveMatch?.condition;
+            const offerId = snapshot.matchOfferId ?? liveMatch?.offerId;
             if (variantId) matchParams.set('variant_id', variantId);
             if (condition) matchParams.set('condition', condition);
             if (offerId) matchParams.set('offer_id', offerId);

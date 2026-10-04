@@ -199,6 +199,53 @@ it('flags off-page matched snapshots as verify-on-product-page', () => {
   expect(detailLinks[1].getAttribute('href')).toContain('condition=open_box');
 });
 
+it('prefers the snapshot basis over a re-filtered live match', () => {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one' },
+    {
+      id: '2',
+      name: 'Two',
+      slug: 'two',
+      matchCondition: 'open_box',
+    },
+  ];
+  mocks.facts.mockReturnValue({
+    products: [
+      { id: '1', name: 'One', slug: 'one', price: 200 },
+      { id: '2', name: 'Two', slug: 'two', price: 300 },
+    ],
+    pending: false,
+    error: false,
+  });
+  // The current page re-filtered item 2 to a new-condition match, but the
+  // compared option was the open-box one stored at selection time.
+  render(
+    <SearchComparisonTray
+      products={[
+        {
+          id: '2',
+          name: 'Two',
+          slug: 'two',
+          price: 300,
+          searchMatch: {
+            productId: '2',
+            total: 1,
+            condition: 'new',
+          },
+        } as NormalizedProduct,
+      ]}
+      pathPrefix=""
+      merchantId="m1"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  const detailLinks = screen.getAllByRole('link', {
+    name: 'View details and options',
+  });
+  expect(detailLinks[1].getAttribute('href')).toContain('condition=open_box');
+  expect(detailLinks[1].getAttribute('href')).not.toContain('condition=new');
+});
+
 it('scrolls the card comparison action to the comparison details and clears from a centered action', () => {
   mocks.state.compareItems = [
     { id: '1', name: 'One', slug: 'one' },

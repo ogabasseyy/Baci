@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeParentProductIdentifiers,
-  resolveVariantProductIdentifiers,
-} from './variant-product-identifiers';
+import { productManufacturerIdentifiers } from './variant-product-identifiers';
+
+const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
+  productManufacturerIdentifiers;
 
 describe('product manufacturer identifiers', () => {
   it('trims variant strings while preserving GTIN text', () => {

@@ -51,10 +51,10 @@ import type {
   MerchantTrustProfileReturnFee,
   MerchantTrustProfileReturnMethod,
 } from './storefront-trust/merchant-trust-profile-types';
-import {
-  normalizeParentProductIdentifiers,
-  resolveVariantProductIdentifiers,
-} from './variant-product-identifiers';
+import { productManufacturerIdentifiers } from './variant-product-identifiers';
+
+const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
+  productManufacturerIdentifiers;
 
 export { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 // Re-export escapeHtml for use in other modules

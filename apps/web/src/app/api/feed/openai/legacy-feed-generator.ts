@@ -6,10 +6,7 @@ import {
   buildAgentProductUrl,
   trimTrailingSlash,
 } from '@/lib/storefront-agent-urls';
-import {
-  normalizeParentProductIdentifiers,
-  resolveVariantProductIdentifiers,
-} from '@/lib/variant-product-identifiers';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import {
   DEFAULT_RETURN_DAYS,
@@ -20,6 +17,8 @@ import type { Merchant, OpenAIFeedItem, Product } from './feed-types';
 import { resolveLegacyFeedImages } from './legacy-feed-images';
 
 const UNLIMITED_STOCK_QUANTITY = 9999;
+const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
+  productManufacturerIdentifiers;
 
 function getVariantStockCount(
   product: Pick<Product, 'manage_stock'>,

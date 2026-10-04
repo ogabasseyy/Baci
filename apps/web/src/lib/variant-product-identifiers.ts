@@ -12,7 +12,7 @@ function normalizeIdentifier(value: unknown): string | undefined {
 }
 
 /** Normalize known parent identifiers for standalone product representations. */
-export function normalizeParentProductIdentifiers(
+function normalizeParentProductIdentifiers(
   parent: ProductManufacturerIdentifiers
 ): { gtin?: string; mpn?: string } {
   return {
@@ -25,7 +25,7 @@ export function normalizeParentProductIdentifiers(
  * Resolve only usable string identifiers explicitly present on a variant.
  * Numeric values are ignored so parsing cannot erase leading-zero GTIN text.
  */
-export function resolveVariantProductIdentifiers(
+function resolveVariantProductIdentifiers(
   attributes: Readonly<Record<string, unknown>> | null | undefined
 ): { gtin?: string; mpn?: string } {
   const identifiers: { gtin?: string; mpn?: string } = {};
@@ -46,3 +46,8 @@ export function resolveVariantProductIdentifiers(
 
   return identifiers;
 }
+
+export const productManufacturerIdentifiers = {
+  normalizeParentProductIdentifiers,
+  resolveVariantProductIdentifiers,
+};

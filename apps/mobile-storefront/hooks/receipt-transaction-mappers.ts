@@ -1,3 +1,5 @@
+import { isDecimalMoney } from '@baci/shared/receipt';
+
 interface CustomerTransactionRpcRow {
   amount: number | string | null;
   created_at: string;
@@ -17,8 +19,16 @@ export function mapCustomerTransactionRpcRows(transactionRows: unknown) {
   // web transform and generator input, so the preview's
   // method → description → 'Payment' fallback agrees with the email.
   // Rows predating the projection carry a null method and map as before.
+  // PostgREST numerics arrive as decimal strings while the detail schema
+  // gates numbers: coerce strictly (blank/bool/garbage → NaN fails the
+  // detail closed; the list settled-check accepts numbers identically).
   return rows.map((transaction) => ({
-    amount: transaction.amount,
+    amount:
+      transaction.amount == null || typeof transaction.amount === 'number'
+        ? transaction.amount
+        : isDecimalMoney(transaction.amount)
+          ? Number(transaction.amount)
+          : Number.NaN,
     created_at: transaction.created_at,
     description: transaction.description,
     gateway: transaction.gateway,

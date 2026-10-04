@@ -40,7 +40,10 @@ date -u -d "@$exp" 2>/dev/null || date -u -r "$exp"
 ```
 
 Rotate when expiry is within 14 days, and confirm the Vercel
-Production value decodes to the same `exp`.
+Production value decodes to the same `exp`. This is enforced, not
+advisory: the deploy.sh preflight
+(`jobs/preflight-direct-web-workers.mjs`) refuses promotes whose
+token has 14 days or less of runway.
 
 ## Rotate
 

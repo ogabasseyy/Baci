@@ -14,8 +14,13 @@
 # that start during a stalled refresh, so presence, not a generation
 # scalar, is the durable half). This is the publish-side half of the
 # deploy.sh mutual exclusion; it catches even runs that were invisible
-# to the pre-promote query. A missing branch or file (nothing ever
-# promoted) allows; any other read failure fails closed after retries.
+# to the pre-promote query. A missing record fails closed: no genuine
+# first rollout can reach this script, because deploy-production needs
+# the cutover marker, and deploy.sh writes the pre-promote record
+# before installing that marker. A 404 here therefore means the safety
+# store is unavailable (deleted branch/file, or an authorization
+# failure masked as 404), not that no promotion occurred. Any other
+# read failure likewise fails closed after retries.
 # The store is a branch (readable under the job's contents:read)
 # because GITHUB_TOKEN cannot be granted the Variables permission an
 # Actions-variable record would need.
@@ -82,11 +87,16 @@ while [ "$overlap_attempt" -lt 3 ]; do
   fi
   case "$overlap_detail" in
     *"HTTP 404"*)
-      # First rollout: the ops branch or file does not exist yet, so
-      # no promote could have overlapped this run.
-      echo "No worker promote recorded yet; continuing."
+      # Not a first rollout (see header): the marker gate proves a
+      # promote already landed, so the record must exist. A missing
+      # branch/file means the safety store is unavailable — deleted,
+      # or an authorization failure masked as 404 — and an
+      # overlapping worker flip could publish from stale latch/SHA
+      # reads. Fail closed without retrying: a missing object is not
+      # transient.
+      echo "Refusing production publish: the worker promote record (ops/gigl-promote-record) is missing, so a mid-run worker promote cannot be ruled out. Re-run record_deploy_workflow_promote from the deploy checkout, then re-run this workflow; if the ops branch was deleted, restore it first, and if the token lost read access, restore that instead." >&2
       if [ -n "$overlap_err" ]; then rm -f "$overlap_err"; fi
-      exit 0
+      exit 1
       ;;
   esac
   if [ "$overlap_attempt" -lt 3 ]; then

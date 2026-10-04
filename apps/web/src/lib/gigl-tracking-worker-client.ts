@@ -60,7 +60,7 @@ function parseJwtPart(token: string, index: number): Record<string, unknown> {
 }
 
 // Runtime construction accepts any unexpired token so rotation can occur any
-// time before exp; the 24-hour rotation runway is enforced separately by the
+// time before exp; the 14-day rotation runway is enforced separately by the
 // VPS preflight (preflight-direct-web-workers.mjs), not here. This is an
 // expiry/role pre-check only: it never verifies the JWT signature or issuer.
 // A mis-issued token surfaces at PostgREST, and the live scope smoke (not

@@ -96,11 +96,17 @@ test('matches run ids on comma boundaries, not substrings', () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('allows publish when nothing was ever recorded', () => {
+test('fails closed when the record is missing', () => {
+  // No genuine first rollout reaches this script: deploy-production
+  // needs the cutover marker, which only exists after a deploy.sh
+  // promote — and every promote writes this record first. A 404 is a
+  // broken safety store, not an unseeded one.
   const { result } = runOverlap({ scenario: 'missing' });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /No worker promote recorded yet/);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing production publish/);
+  assert.match(result.stderr, /promote record.*is missing/);
+  assert.match(result.stderr, /record_deploy_workflow_promote/);
 });
 
 test('fails closed when the record cannot be read', () => {

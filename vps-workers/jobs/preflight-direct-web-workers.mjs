@@ -39,6 +39,14 @@ const DISABLED_GIGL_VALUES = new Set(['0', 'false', 'off']);
 // disabled, misclassify them as vacuous instead of fail-closed usable
 // credentials.
 const SUPPORTED_GIGL_TOKEN_ALGORITHMS = new Set(['ES256', 'HS256', 'RS256']);
+// Deploy-time token runway: the rotation runbook requires rotation
+// when expiry is within 14 days, and the cutover checklist requires
+// >=14 days before the Vercel schedule is removed
+// (vps-workers/docs/gigl-tracking-worker-token-rotation.md). The
+// worker client itself accepts any unexpired token so rotation can
+// land any time; this preflight is the forcing function that refuses
+// promotes inside the window.
+const GIGL_TOKEN_MIN_RUNWAY_MS = 14 * 24 * 60 * 60 * 1000;
 
 function isConfigured(env, name) {
   return typeof env[name] === 'string' && env[name].trim().length > 0;
@@ -76,7 +84,7 @@ function isRestrictedGiglWorkerToken(value, now = Date.now()) {
       SUPPORTED_GIGL_TOKEN_ALGORITHMS.has(header.alg) &&
       claims.role === 'gigl_tracking_worker' &&
       typeof claims.exp === 'number' &&
-      claims.exp * 1000 > now + 24 * 60 * 60 * 1000
+      claims.exp * 1000 > now + GIGL_TOKEN_MIN_RUNWAY_MS
     );
   } catch {
     return false;
@@ -85,7 +93,7 @@ function isRestrictedGiglWorkerToken(value, now = Date.now()) {
 
 // Same usability bar as the worker client's non-worker check
 // (well-formed, acceptably signed, unexpired) but WITHOUT the worker
-// role and WITHOUT the 24-hour rotation runway: true exactly when the
+// role and WITHOUT the 14-day rotation runway: true exactly when the
 // token is a live credential PostgREST would accept outside the worker
 // hook. The disabled preflight must reject it — otherwise a valid
 // service_role JWT passes silently and the disabled smoke would latch

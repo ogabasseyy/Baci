@@ -104,4 +104,35 @@ describe('direct worker preflight gigl token', () => {
       ]
     );
   });
+
+  it('rejects a worker token inside the 14-day rotation window', () => {
+    // 13 days out: live, but the rotation runbook requires rotation
+    // when expiry is within 14 days, and the cutover checklist needs
+    // >=14 days before the Vercel schedule is removed.
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token(
+          'gigl_tracking_worker',
+          'ES256',
+          Math.floor(Date.now() / 1000) + 13 * 24 * 60 * 60
+        ),
+      }),
+      ['GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token']
+    );
+  });
+
+  it('accepts a worker token beyond the 14-day rotation window', () => {
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token(
+          'gigl_tracking_worker',
+          'ES256',
+          Math.floor(Date.now() / 1000) + 15 * 24 * 60 * 60
+        ),
+      }),
+      []
+    );
+  });
 });

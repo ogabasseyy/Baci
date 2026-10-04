@@ -19,6 +19,7 @@ from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
 from semgrep_sarif_install import _installer_curl_ok
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
+from semgrep_sarif_zone import audit_cd
 
 
 def _jq_program(rest):
@@ -69,12 +70,18 @@ def _check_command(argv0, rest, pre, drift, src=""):
             or _LD_SO_RE.match(base)) \
             and "helper-code-loader" not in drift:
         drift.append("helper-code-loader")
-    if base == "ld" and any(tok in ("-plugin", "--plugin")
-                            for tok in rest) \
+    if ((_canon_binutils(base) or base)
+            in ("ld", "nm", "ar", "ranlib")
+            and any(tok in ("-plugin", "--plugin")
+                    or tok.startswith("--plugin=")
+                    for tok in rest)) \
             and "helper-code-loader" not in drift:
-        # ld alone only writes its -o destination (zoned
-        # below), but -plugin loads a DSO whose constructor
-        # runs before linking completes.
+        # These binutils only read/write their zoned operands,
+        # but --plugin loads a DSO whose constructor runs
+        # first (nm --plugin evil.so reads GH_TOKEN).
+        # -plugin is ld-only; the shared tuple over-approxes
+        # its siblings fail-closed (invalid there: reviewer
+        # sees drift on an already broken line).
         drift.append("helper-code-loader")
     if base in COPY_TOOLS or _canon_binutils(base):
         audit_copy_dest(base, rest, drift, src)
@@ -103,6 +110,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
         # closed, reviewer whitelists if ever needed).
         if "helper-deferred-exec" not in drift:
             drift.append("helper-deferred-exec")
+    elif base in ("cd", "pushd", "popd"):
+        audit_cd(base, rest, drift)
     elif base in ("bash", "sh", "source", ".", "dash", "ash",
                   "zsh", "ksh", "mksh", "pdksh", "lksh", "yash",
                   "fish", "tcsh", "csh"):

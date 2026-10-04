@@ -73,3 +73,41 @@ def _write_zone(target):
     if _GLOB_RE.search(t):
         return "glob"
     return None
+
+
+def audit_cd(argv0, rest, drift):
+    # cd/pushd/popd break the zoning CWD assumption (helpers
+    # start in the workspace): later relative destinations
+    # would land wherever the cd points while zoning assumes
+    # the start dir. Rejected conservatively: only provable
+    # temp dirs pass. Bare cd (HOME), -, ~, unknown expansions,
+    # and popd/pushd rotations (unresolvable stack) all drift.
+    # No legit helper changes directory (verified). Step run
+    # blocks need no mirror: cd is outside their allowlist.
+    if argv0 == "popd":
+        if "helper-sensitive-cwd" not in drift:
+            drift.append("helper-sensitive-cwd")
+        return
+    i = 0
+    while i < len(rest) \
+            and re.fullmatch(r"-[PLen]+", rest[i]):
+        i += 1
+    if i < len(rest) and rest[i] == "--":
+        i += 1
+    dest = rest[i] if i < len(rest) else ""
+    if argv0 == "pushd" and re.fullmatch(r"[+-]\d+", dest):
+        dest = ""
+    if re.match(r"^\$(?:\{RUNNER_TEMP\}|RUNNER_TEMP)"
+                r"(?:/|$)", dest):
+        return
+    if dest == "" or dest == "-" or dest.startswith("~") \
+            or any(ch in dest for ch in ("$", "`", "\\")):
+        hit = True
+    else:
+        norm = posixpath.normpath(dest)
+        hit = not (norm == "/tmp"
+                   or norm.startswith("/tmp/")
+                   or norm == "/var/tmp"
+                   or norm.startswith("/var/tmp/"))
+    if hit and "helper-sensitive-cwd" not in drift:
+        drift.append("helper-sensitive-cwd")

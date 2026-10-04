@@ -37,7 +37,7 @@ def _objcopy_dumps(rest):
 
 
 _BINUTILS_RE = re.compile(
-    r"^(?:llvm-)?(objcopy|ld|as|strip|ar|ranlib)"
+    r"^(?:llvm-)?(objcopy|ld|as|strip|ar|ranlib|nm)"
     r"(?:-\d[\d.]*)?$")
 
 
@@ -46,9 +46,11 @@ def _canon_binutils(base):
     # and versioned (objcopy-12) binutils spellings, else None.
     # Same destination semantics as the GNU originals (llvm-as
     # without -o writes stdout: the implicit zone then
-    # over-approximates, fail-closed). Cross-prefixed
-    # (x86_64-linux-gnu-) and renamed-linker (ld.lld/ld.gold)
-    # spellings stay uncovered (residual).
+    # over-approximates, fail-closed). nm is read-only (no
+    # destination audit: ([], None)) but plugin-checked at
+    # dispatch. Cross-prefixed (x86_64-linux-gnu-) and
+    # renamed-linker (ld.lld/ld.gold) spellings stay uncovered
+    # (residual).
     m = _BINUTILS_RE.match(base)
     return m.group(1) if m else None
 

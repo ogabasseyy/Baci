@@ -74,6 +74,76 @@ describe('GET /blog/feed.xml', () => {
     );
   });
 
+  it('strips XML-forbidden control characters from platform feed fields', async () => {
+    mockGetPlatformBlogFeedPosts.mockResolvedValueOnce([
+      {
+        author_name: 'Editor\u0000 Name',
+        category: 'Phones\u001a',
+        content: '<p>Content\u000b</p>',
+        excerpt: 'Price\u000c update',
+        featured_image_url: 'https://usebaci.com/image\u0008.png',
+        id: 'post-1',
+        published_at: '2026-05-16T09:00:00.000Z',
+        slug: 'launch\u001a-faster',
+        title: 'Launch\u001a Faster',
+        updated_at: null,
+      },
+    ]);
+
+    const response = await GET(
+      new NextRequest('http://localhost/blog/feed.xml')
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        author: [
+          {
+            name: 'Editor Name',
+            link: 'https://usebaci.com',
+          },
+        ],
+        category: [{ name: 'Phones' }],
+        content: '<p>Content</p>',
+        description: 'Price update',
+        // A stripped image URL identifies a different resource, so altered
+        // URLs are omitted instead of silently rewritten.
+        image: undefined,
+        id: 'https://usebaci.com/blog/launch%1A-faster',
+        link: 'https://usebaci.com/blog/launch%1A-faster',
+        title: 'Launch Faster',
+      })
+    );
+  });
+
+  it('truncates excerpts by code points without splitting surrogate pairs', async () => {
+    mockGetPlatformBlogFeedPosts.mockResolvedValueOnce([
+      {
+        author_name: 'Baci Editorial',
+        category: null,
+        content: `<p>${'a'.repeat(299)}📱${'b'.repeat(10)}</p>`,
+        excerpt: '',
+        featured_image_url: null,
+        id: 'post-1',
+        published_at: '2026-05-16T09:00:00.000Z',
+        slug: 'launch-faster',
+        title: 'Launch Faster',
+        updated_at: null,
+      },
+    ]);
+
+    const response = await GET(
+      new NextRequest('http://localhost/blog/feed.xml')
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFeedAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: `${'a'.repeat(299)}📱`,
+      })
+    );
+  });
+
   it('skips malformed dates instead of failing feed generation', async () => {
     mockGetPlatformBlogFeedPosts.mockResolvedValueOnce([
       {

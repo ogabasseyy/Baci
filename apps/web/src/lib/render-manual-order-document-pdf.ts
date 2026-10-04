@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { isNonNegativeMoney } from '@baci/shared/receipt';
 import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
 import type {
   DispatchTaxSubtotal,
@@ -102,28 +103,28 @@ export async function renderManualOrderDocumentPdf({
     description: (row.description as string | null) ?? null,
     metadata: (row.metadata as Record<string, unknown> | null) ?? null,
   }));
+  // Fail corrupt money closed before rendering: the database permits
+  // null and negative payment amounts, but no emailed document may print
+  // them. Shared with the web/mobile gates so every surface agrees.
+  for (const row of settledHistory) {
+    if (!isNonNegativeMoney(row.amount)) {
+      throw new ManualDocumentValidationError('payment_history_invalid');
+    }
+  }
   const renderTransactions = settledHistory.map((row) => ({
-    amount: Number(row.amount ?? 0),
+    amount: Number(row.amount),
     created_at: String(row.created_at ?? ''),
     description: (row.description as string | null) ?? null,
     metadata: (row.metadata as { payment_method?: string } | null) ?? null,
   }));
-  // Fail corrupt money closed before rendering: the database permits
-  // negative VAT and payment amounts, but no emailed document may print
-  // them. Receipts render no tax breakdown, so tax rows gate invoices
-  // only; settled payments render on every kind.
+  // Receipts render no tax breakdown, so tax rows gate invoices only.
   if (!isPaid) {
     for (const row of taxSubtotals) {
       const valid = [row.vat_rate, row.taxable_amount, row.tax_amount].every(
-        (value) => Number.isFinite(value) && value >= 0
+        isNonNegativeMoney
       );
       if (!valid)
         throw new ManualDocumentValidationError('tax_breakdown_invalid');
-    }
-  }
-  for (const txn of renderTransactions) {
-    if (!Number.isFinite(txn.amount) || txn.amount < 0) {
-      throw new ManualDocumentValidationError('payment_history_invalid');
     }
   }
   const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({

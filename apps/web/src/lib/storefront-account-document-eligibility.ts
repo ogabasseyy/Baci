@@ -1,5 +1,6 @@
 import {
   isManualOrderRecord,
+  isNonNegativeMoney,
   isSettledManualBalance,
 } from '@baci/shared/receipt';
 import type {
@@ -72,17 +73,13 @@ interface DocumentEligibilityInput {
 
 // Sender's settled-payment filter, mirrored exactly: the dispatch query
 // matches transaction_type 'payment' with status completed/success, and
-// the renderer coerces each amount with Number(amount ?? 0).
+// every amount shares the sender's strict money predicate (nullish and
+// blank fail closed, never coerce to zero).
 function isSenderSettledPayment(row: ManualDocumentGatePaymentRow) {
   return (
     row.transaction_type === 'payment' &&
     (row.status === 'completed' || row.status === 'success')
   );
-}
-
-function isSenderPrintableAmount(value: unknown) {
-  const amount = Number((value as number | string | null) ?? 0);
-  return Number.isFinite(amount) && amount >= 0;
 }
 
 export function isManualOrderDocumentAvailable(
@@ -105,7 +102,7 @@ export function isManualOrderDocumentAvailable(
   // without child data pass nothing and keep the order/item verdict.
   const paymentsValid = (input.payments ?? [])
     .filter(isSenderSettledPayment)
-    .every((row) => isSenderPrintableAmount(row.amount));
+    .every((row) => isNonNegativeMoney(row.amount));
   const invoiceKind =
     normalizePaymentStatus(input.paymentStatus) !== 'paid' &&
     !isSettledManualBalance({
@@ -116,7 +113,7 @@ export function isManualOrderDocumentAvailable(
     !invoiceKind ||
     (input.taxSubtotals ?? []).every((row) =>
       [row.vat_rate, row.taxable_amount, row.tax_amount].every(
-        isSenderPrintableAmount
+        isNonNegativeMoney
       )
     );
   return (

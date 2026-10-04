@@ -85,6 +85,40 @@ describe('render manual order document pdf child-row validation', () => {
     expect(mockedPdf).not.toHaveBeenCalled();
   });
 
+  it.each([
+    null,
+    undefined,
+    '',
+  ])('fails a %s settled amount closed instead of coercing to zero', async (amount) => {
+    const order = manualDocumentOrderSchema.parse(orderFixture);
+    const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
+
+    const error = await renderManualOrderDocumentPdf({
+      taxRows: [],
+      transactionRows: [
+        {
+          id: 'txn-1',
+          amount: amount as unknown as number,
+          created_at: '2026-09-29T09:00:00Z',
+          description: null,
+          metadata: null,
+        },
+      ],
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: true,
+      pdfDocumentKind: 'receipt',
+      invoiceTypeCode: null,
+    }).catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(ManualDocumentValidationError);
+    expect((error as ManualDocumentValidationError).reason).toBe(
+      'payment_history_invalid'
+    );
+    expect(mockedPdf).not.toHaveBeenCalled();
+  });
+
   it('renders receipts despite tax rows they never print', async () => {
     const order = manualDocumentOrderSchema.parse(orderFixture);
     const merchant = manualDocumentMerchantSchema.parse(merchantFixture);

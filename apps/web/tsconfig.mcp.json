@@ -5,6 +5,11 @@
     "plugins": [],
     "types": ["node"]
   },
-  "include": ["mcp-server/server.ts"],
+  "include": [
+    "mcp-server/server.ts",
+    "mcp-server/server-output-schema.test.ts",
+    "mcp-server/product-variants-output.test.ts",
+    "mcp-server/product-variants-color-evidence.test.ts"
+  ],
   "exclude": ["node_modules"]
 }

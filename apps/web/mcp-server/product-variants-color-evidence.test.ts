@@ -104,6 +104,8 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
         manage_stock: true,
         has_variants: false,
         has_condition_offers: true,
+        color: null,
+        color_images: null,
       },
       error: null,
     });
@@ -183,6 +185,8 @@ describe('loadMcpProductVariants color evidence and lookup failures', () => {
         manage_stock: true,
         has_variants: true,
         has_condition_offers: true,
+        color: null,
+        color_images: null,
       },
       error: null,
     });

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
 import type { z } from 'zod';
 import type { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
@@ -10,6 +10,7 @@ import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
 import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
 
 type ProductVariantsResult = CallToolResult & {
+  content: TextContent[];
   structuredContent: z.infer<typeof mcpToolOutputSchemas.get_product_variants>;
 };
 

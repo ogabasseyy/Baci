@@ -167,6 +167,7 @@ t loader-tidy-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipe
 t loader-webpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}webpack --config \"\${GITHUB_WORKSPACE}/evil.config.js\""
 t loader-webpack-dev 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}webpack-dev-server --config \"\${GITHUB_WORKSPACE}/evil.config.js\""
 t loader-cpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cpack --config \"\${GITHUB_WORKSPACE}/evil.cmake\""
+t loader-mono 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mono \"\${GITHUB_WORKSPACE}/evil.exe\""
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

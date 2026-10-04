@@ -4,7 +4,8 @@ rebinding for token-bearing helper content.
 """
 import re
 from semgrep_sarif_archive import (ARCHIVE_TOOLS,
-                                   audit_archive_dest)
+                                   audit_archive_dest,
+                                   audit_dpkg_dest)
 from semgrep_sarif_binutils import _canon_binutils
 from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest)
 from semgrep_sarif_findout import audit_find_output
@@ -63,6 +64,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
         audit_copy_dest(base, rest, drift, src)
     elif base in ARCHIVE_TOOLS:
         audit_archive_dest(rest, drift)
+    elif base == "dpkg-deb":
+        audit_dpkg_dest(rest, drift)
     elif base == "alias":
         # Alias definitions hide command dispatch (alias
         # leak='bash evil' + leak runs with no visible argv0).
@@ -161,7 +164,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
                   "tmux", "screen", "coproc", "fakeroot",
                   "xvfb-run", "prlimit", "timeout", "setarch",
                   "linux32", "linux64", "dbus-run-session",
-                  "dbus-launch"):
+                  "dbus-launch", "start-stop-daemon"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
         # coproc counts: it runs its command asynchronously with

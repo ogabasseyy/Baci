@@ -43,7 +43,7 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
              "runghc", "runhaskell", "ghc", "ghci",
              "cabal", "stack", "ant", "clang-tidy",
-             "webpack", "webpack-dev-server", "cpack"}
+             "webpack", "webpack-dev-server", "cpack", "mono"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -89,6 +89,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # (global on the ubuntu runner); webpack-dev-server shares
 # the config mechanism. cpack --config runs CMake-language
 # code (execute_process runs children; ships with CMake).
+# mono runs the managed-executable operand (ships on the
+# ubuntu runner).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")
@@ -236,11 +238,18 @@ BARE_POISON_RE = re.compile(
 # appends (PATH+=); the greedy bracket closes nesting.
 # Helpers authenticate gh via the environment (never expanding
 # the token: the sole legit mention is run.sh's -u scrub), so
-# any $GH_TOKEN/$GITHUB_TOKEN expansion stages a secret into a
-# log, file, or agent input. \b keeps GH_TOKEN_SUFFIX silent.
+# any secret expansion stages it into a log, file, or agent
+# input. The set is the union over helpers (superset for all):
+# GitHub tokens, the agent key bound on the Run Muse step,
+# and the runner-injected Bearer tokens. \b keeps _SUFFIX
+# names silent.
 SECRET_EXPAND_RE = re.compile(
     r"\$\{[#!]?GH_TOKEN\b|\$GH_TOKEN\b"
-    r"|\$\{[#!]?GITHUB_TOKEN\b|\$GITHUB_TOKEN\b")
+    r"|\$\{[#!]?GITHUB_TOKEN\b|\$GITHUB_TOKEN\b"
+    r"|\$\{[#!]?META_API_KEY\b|\$META_API_KEY\b"
+    r"|\$\{[#!]?ACTIONS_RUNTIME_TOKEN\b|\$ACTIONS_RUNTIME_TOKEN\b"
+    r"|\$\{[#!]?ACTIONS_ID_TOKEN_REQUEST_TOKEN\b"
+    r"|\$ACTIONS_ID_TOKEN_REQUEST_TOKEN\b")
 # Bare ${!name} indirects to a caller-chosen variable (value!);
 # [@]/[*] subscripts and !prefix* globs list names only.
 INDIRECT_RE = re.compile(

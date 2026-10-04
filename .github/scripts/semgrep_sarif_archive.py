@@ -2,9 +2,13 @@
 mutation (a/u/d/rn archive operand) zone like copy targets.
 Extraction without -o lands in CWD (implicit workspace
 write, like tar without -C / unzip without -d).
+dpkg-deb likewise: -x/-X/-e extract (archive [dir], dir
+defaulting under CWD); -b builds (dir [archive], default
+dir.deb in CWD). Info actions only read.
 """
 import re
 from semgrep_sarif_scan import github_cmdfile_kind
+from semgrep_sarif_words import _tool_operands
 from semgrep_sarif_zone import _write_zone
 
 ARCHIVE_TOOLS = {"7z", "7za"}
@@ -65,6 +69,10 @@ def audit_archive_dest(rest, drift):
             implicit = "workspace"
     elif cmd in _MUTATE_CMDS and arch is not None:
         targets = [arch]
+    _emit_zones(targets, implicit, drift)
+
+
+def _emit_zones(targets, implicit, drift):
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
     if implicit is not None:
@@ -82,3 +90,51 @@ def audit_archive_dest(rest, drift):
     kinds.discard(None)
     if kinds and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
+
+
+_DPKG_VALUE_LONGS = {"--compression", "--compression-level",
+                      "--showformat", "--uniform-compression"}
+
+
+def _dpkg_action(rest):
+    # First dpkg-deb action: x (extract incl. -X/-e), b
+    # (build), r (read-only info), or None. getopt bundles
+    # scanned left to right; Z/z/S swallow the rest of their
+    # token as the value.
+    for tok in rest:
+        if tok == "--":
+            return None
+        if tok in ("-x", "-X", "-e", "--extract", "--control"):
+            return "x"
+        if tok in ("-b", "--build"):
+            return "b"
+        if tok in ("-f", "-c", "-I", "-W", "--field",
+                   "--contents", "--info", "--show",
+                   "--fsys-tarfile", "--ctrl-tarfile"):
+            return "r"
+        m = re.fullmatch(r"-([a-zA-Z]+)", tok)
+        if m:
+            for ch in m.group(1):
+                if ch in "ZzS":
+                    break
+                if ch in "xXe":
+                    return "x"
+                if ch == "b":
+                    return "b"
+                if ch in "fcIW":
+                    return "r"
+    return None
+
+
+def audit_dpkg_dest(rest, drift):
+    # dpkg-deb destinations take the copy-target rule. Both
+    # -x (archive [dir]) and -b (dir [archive]) write their
+    # second operand, defaulting under CWD when omitted.
+    act = _dpkg_action(rest)
+    if act not in ("x", "b"):
+        return
+    ops = _tool_operands(rest, set("ZzS"), _DPKG_VALUE_LONGS)
+    if len(ops) > 1:
+        _emit_zones([ops[1]], None, drift)
+    else:
+        _emit_zones([], "workspace", drift)

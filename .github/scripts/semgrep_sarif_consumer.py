@@ -17,8 +17,8 @@ from semgrep_sarif_zone import has_proc_environ
 from semgrep_sarif_segments import run_segments
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_shell import (_bare_word, map_key_value,
-                                 split_commands2, tokenize,
-                                 unquote_value)
+                                 split_commands2, strip_comments,
+                                 tokenize, unquote_value)
 from semgrep_sarif_steps import (is_step_boundary, step_end,
                                  step_name, step_start)
 
@@ -157,6 +157,13 @@ def audit_script_dir(ctx, drift):
                 ("${{steps.scriptdir.outputs.dir}}") \
                 and "script-dir-rebound" not in drift:
             drift.append("script-dir-rebound")
+        if line.strip().startswith("?"):
+            # Explicit ? KEY: parse key as mapping (unescapes).
+            qkey, _ = map_key_value(
+                strip_comments(line).strip()[1:].strip() + ":")
+            if qkey == "SCRIPT_DIR" \
+                    and "script-dir-rebound" not in drift:
+                drift.append("script-dir-rebound")
 
 
 def audit_run_hygiene(ctx, drift):

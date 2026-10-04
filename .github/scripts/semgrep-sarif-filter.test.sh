@@ -50,6 +50,7 @@ t unbound-bare 1 "script-consumer-unbound-invocation" happy.sarif "$S${FS}bash \
 t rebound-env 1 "script-dir-rebound" happy.sarif "$S${FS}SCRIPT_DIR: \${{ steps.scriptdir.outputs.dir }}${FS}r${FS}\${{ steps.scriptdir.outputs.dir }}${FS}/tmp/evil"
 t rebound-export 1 "script-dir-rebound" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          export SCRIPT_DIR=/tmp/e"
 t scriptdir-nameref 1 "script-dir-rebound" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          EVIL_DIR=\"\${GITHUB_WORKSPACE}/evil\"; declare -n ref=SCRIPT_DIR; ref=\"\${EVIL_DIR}\""
+t rebound-explicit 1 "script-dir-rebound" happy.sarif "$S${FS}SCRIPT_DIR: \${{ steps.scriptdir.outputs.dir }}${FS}r${FS}SCRIPT_DIR: \${{ steps.scriptdir.outputs.dir }}${FS}? SCRIPT_DIR"
 t shell-override 1 "shell-override" happy.sarif "$S${FS}run: |${FS}a${FS}        shell: python"
 t unpinned-action 1 "reviewer-unpinned-action" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/install.sh\"${FS}a${FS}        uses: actions/setup-node@v4"
 t third-checkout 1 "reviewer-action-count" happy.sarif "$S${FS}2:uses: actions/checkout@${FS}a${FS}        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"

@@ -69,6 +69,10 @@ const STORED_CREDIT_ROW = {
   fee_kobo: 0,
   reference: 'faas-ref-synthetic-001',
   session_id: '000000000001',
+  event_data_id: 'faas-txn-synthetic-001',
+  // Same instant as the payload timestamp in the database's normalized
+  // timestamptz rendering: epoch comparison must treat it as identical.
+  credited_at: '2026-09-15 10:12:00+00',
 };
 
 function mockSupabase(
@@ -80,10 +84,25 @@ function mockSupabase(
   verifyResult: { data: unknown; error: unknown } = {
     data: STORED_CREDIT_ROW,
     error: null,
+  },
+  rpcResult: { data: unknown; error: unknown } = {
+    data: [
+      {
+        success: true,
+        outcome: 'projected',
+        contribution_id: 'd3b2a1f0-9c8e-4b7a-8f6e-5d4c3b2a1908',
+        goal_id: 'e4c3b2a1-0d9f-4c8b-9a7f-6e5d4c3b2a19',
+        projected_amount: 17500,
+        goal_current_amount: 17500,
+        goal_status: 'active',
+      },
+    ],
+    error: null,
   }
 ): {
   client: SupabaseClient;
   upsert: ReturnType<typeof vi.fn>;
+  rpc: ReturnType<typeof vi.fn>;
 } {
   const upsert = vi.fn(() => ({
     select: vi.fn(() => thenable(upsertResult)),
@@ -94,6 +113,7 @@ function mockSupabase(
   const verifySelect = vi.fn(() => ({
     eq: vi.fn(() => ({ maybeSingle: async () => verifyResult })),
   }));
+  const rpc = vi.fn(async () => rpcResult);
   return {
     client: {
       from: vi.fn((table: string) =>
@@ -101,8 +121,10 @@ function mockSupabase(
           ? { select }
           : { upsert, select: verifySelect }
       ),
+      rpc,
     } as unknown as SupabaseClient,
     upsert,
+    rpc,
   };
 }
 
@@ -252,9 +274,33 @@ describe('recordInflowCredit', () => {
         mismatchedFields: ['amount_kobo'],
       },
     });
-    expect(
-      (error as InflowLedgerError).conflict?.bodyDigest
-    ).toMatch(/^[0-9a-f]{64}$/);
+    expect((error as InflowLedgerError).conflict?.bodyDigest).toMatch(
+      /^[0-9a-f]{64}$/
+    );
+  });
+
+  it('raises a conflict when a redelivery reuses the transaction with a new event identity', async () => {
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { data: MAPPING_ROW, error: null },
+      {
+        data: {
+          ...STORED_CREDIT_ROW,
+          event_data_id: 'faas-txn-synthetic-002',
+          credited_at: '2026-09-15T11:45:00.000Z',
+        },
+        error: null,
+      }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toMatchObject({
+      code: 'INFLOW_LEDGER_CONFLICT',
+      conflict: { mismatchedFields: ['event_data_id', 'credited_at'] },
+    });
   });
 
   it('names every mismatched field in a multi-field conflict', async () => {
@@ -293,5 +339,99 @@ describe('recordInflowCredit', () => {
     );
 
     expect(error).toMatchObject({ code: 'INFLOW_LEDGER_STORAGE_ERROR' });
+  });
+
+  it('projects a fresh credit onto the goal with a namespaced key', async () => {
+    const { client, rpc } = mockSupabase({
+      data: [{ provider_transaction_id: 'provider-txn-synthetic-001' }],
+      error: null,
+    });
+
+    await expect(recordInflowCredit(client, inflowEvent)).resolves.toBe(
+      'credited'
+    );
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('allocate_plan_transfer_contribution', {
+      p_customer_id: MAPPING_ROW.customer_id,
+      p_merchant_id: MAPPING_ROW.merchant_id,
+      p_amount_kobo: 1750000,
+      p_provider_transaction_id: 'provider-txn-synthetic-001',
+      p_idempotency_key: 'plan-transfer:provider-txn-synthetic-001',
+    });
+  });
+
+  it('retries the projection on a verified duplicate redelivery', async () => {
+    const { client, rpc } = mockSupabase({ data: [], error: null });
+
+    await expect(recordInflowCredit(client, inflowEvent)).resolves.toBe(
+      'duplicate'
+    );
+
+    // The first delivery may have credited-then-thrown on ambiguity; the
+    // redelivery must retry the projection instead of skipping it.
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('allocate_plan_transfer_contribution', {
+      p_customer_id: MAPPING_ROW.customer_id,
+      p_merchant_id: MAPPING_ROW.merchant_id,
+      p_amount_kobo: 1750000,
+      p_provider_transaction_id: 'provider-txn-synthetic-001',
+      p_idempotency_key: 'plan-transfer:provider-txn-synthetic-001',
+    });
+  });
+
+  it('fails retryable-unresolved when goals are ambiguous', async () => {
+    const { client } = mockSupabase(
+      {
+        data: [{ provider_transaction_id: 'provider-txn-synthetic-001' }],
+        error: null,
+      },
+      { data: MAPPING_ROW, error: null },
+      { data: STORED_CREDIT_ROW, error: null },
+      { data: null, error: { code: 'P0001', message: 'no unique target' } }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toBeInstanceOf(InflowLedgerError);
+    expect(error).toMatchObject({ code: 'INFLOW_LEDGER_UNRESOLVED' });
+  });
+
+  it('fails storage-error when the projection read fails', async () => {
+    const { client } = mockSupabase(
+      {
+        data: [{ provider_transaction_id: 'provider-txn-synthetic-001' }],
+        error: null,
+      },
+      { data: MAPPING_ROW, error: null },
+      { data: STORED_CREDIT_ROW, error: null },
+      { data: null, error: { code: 'XX000', message: 'db down' } }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toMatchObject({ code: 'INFLOW_LEDGER_STORAGE_ERROR' });
+  });
+
+  it('skips projection when a redelivery conflicts', async () => {
+    const { client, rpc } = mockSupabase(
+      { data: [], error: null },
+      { data: MAPPING_ROW, error: null },
+      {
+        data: { ...STORED_CREDIT_ROW, amount_kobo: 999 },
+        error: null,
+      }
+    );
+
+    const error = await recordInflowCredit(client, inflowEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toMatchObject({ code: 'INFLOW_LEDGER_CONFLICT' });
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

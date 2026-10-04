@@ -158,53 +158,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return resolved.response;
     }
 
-    const featureSettings = await getCustomerSavingsFeatureSettings({
-      customerId: resolved.customer.id,
-      merchantId: resolved.merchant.id,
-      supabase: resolved.supabase,
-    });
-    if (!featureSettings.savingsEnabled) {
-      return NextResponse.json(
-        {
-          code: 'CUSTOMER_SAVINGS_DISABLED',
-          error: 'Customer savings is not enabled for this merchant',
-        },
-        { status: 403 }
-      );
-    }
-
-    if (
-      parsed.data.sourceMode === 'auto_debit' &&
-      !featureSettings.autoDebitEnabled
-    ) {
-      return NextResponse.json(
-        {
-          code: 'CUSTOMER_SAVINGS_AUTO_DEBIT_DISABLED',
-          error: 'Customer savings auto-debit is not enabled',
-        },
-        { status: 403 }
-      );
-    }
-
-    // Idempotent replay before catalogue validation: if creation committed
-    // but the response was lost, the retained key recovers the goal even
-    // when the product/variant was archived since. The fingerprint must
-    // match exactly — an edited plan falls through to the normal path so
-    // the RPC raises mismatched_goal_idempotency_payload instead of
-    // returning a stale goal.
+    // Idempotent replay before catalogue validation and feature gates: if
+    // creation committed but the response was lost, the retained key
+    // recovers the goal even when the product/variant was archived since
+    // or the merchant disabled savings/auto-debit after creation. The
+    // fingerprint must match exactly — an edited plan falls through to the
+    // normal path so the RPC raises mismatched_goal_idempotency_payload
+    // instead of returning a stale goal.
     const requestFingerprint = parsed.data.goalIdempotencyKey
       ? buildGoalRequestFingerprint({
           breakFeePercent: parsed.data.breakFeePercent,
           contributionAmount: parsed.data.contributionAmount,
           contributionFrequency: parsed.data.contributionFrequency,
+          earlyEndFeeAccepted: parsed.data.earlyEndFeeAccepted,
           initialContributionAmount: parsed.data.initialContributionAmount,
           maturityDate: parsed.data.maturityDate,
+          metadata: parsed.data.metadata,
           preferredDebitTime: parsed.data.preferredDebitTime,
           productId: parsed.data.productId,
           savedPaymentMethodId: parsed.data.savedPaymentMethodId,
           sourceMode: parsed.data.sourceMode,
           startDate: parsed.data.startDate,
           targetAmount: parsed.data.targetAmount,
+          title: parsed.data.title ?? 'Device savings goal',
           variantId: parsed.data.variantId,
         })
       : null;
@@ -240,9 +216,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ),
           contributionFrequency: replayResult.data.contribution_frequency,
           contributionId: null,
-          currentAmount: toSavingsRouteNumber(
-            replayResult.data.current_amount
-          ),
+          currentAmount: toSavingsRouteNumber(replayResult.data.current_amount),
           goalId: replayResult.data.id,
           goalStatus: replayResult.data.status,
           success: true,
@@ -251,6 +225,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ),
         });
       }
+    }
+
+    const featureSettings = await getCustomerSavingsFeatureSettings({
+      customerId: resolved.customer.id,
+      merchantId: resolved.merchant.id,
+      supabase: resolved.supabase,
+    });
+    if (!featureSettings.savingsEnabled) {
+      return NextResponse.json(
+        {
+          code: 'CUSTOMER_SAVINGS_DISABLED',
+          error: 'Customer savings is not enabled for this merchant',
+        },
+        { status: 403 }
+      );
+    }
+
+    if (
+      parsed.data.sourceMode === 'auto_debit' &&
+      !featureSettings.autoDebitEnabled
+    ) {
+      return NextResponse.json(
+        {
+          code: 'CUSTOMER_SAVINGS_AUTO_DEBIT_DISABLED',
+          error: 'Customer savings auto-debit is not enabled',
+        },
+        { status: 403 }
+      );
     }
 
     const deviceResult = await prepareCreateSavingsGoalDevice({

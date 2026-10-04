@@ -138,7 +138,10 @@ describe('SavingsNotificationsScreen', () => {
     expect(mockMarkRead).toHaveBeenCalledWith(notification.id);
     expect(mockRouterPush).toHaveBeenCalledWith({
       pathname: '/wallet',
-      params: { action: 'savings' },
+      params: {
+        action: 'savings',
+        savingsGoalId: '00000000-0000-4000-8000-000000000002',
+      },
     });
   });
 

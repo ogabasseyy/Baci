@@ -26,6 +26,16 @@ import { resolvePlanWalletMapping } from './plan-wallet-mapping';
  *   payload rule, so this table carries references and amounts only.
  * - A credited inflow records provider confirmation, not a balance
  *   movement: wallet balances remain live provider reads.
+ * - Every credit-or-verified-duplicate then projects onto a savings goal
+ *   via `allocate_plan_transfer_contribution`, keyed by
+ *   `plan-transfer:{provider_transaction_id}`. Projection lands only on
+ *   a uniquely allocatable manual goal; zero candidates is a definitive
+ *   skip (the audit row carries the funds record), while ambiguity
+ *   throws INFLOW_LEDGER_UNRESOLVED so the provider redelivers and a
+ *   later delivery can project. Projection runs on the duplicate path
+ *   too, because the credit insert and the projection are separate
+ *   statements: a first delivery may credit-then-throw on ambiguity,
+ *   and redeliveries must retry the projection, not skip it.
  */
 
 export type RecordInflowCreditOutcome = 'credited' | 'duplicate';
@@ -41,6 +51,7 @@ export class InflowLedgerError extends Error {
     | 'INFLOW_LEDGER_INVALID'
     | 'INFLOW_LEDGER_UNMAPPED'
     | 'INFLOW_LEDGER_CONFLICT'
+    | 'INFLOW_LEDGER_UNRESOLVED'
     | 'INFLOW_LEDGER_STORAGE_ERROR';
   readonly conflict?: InflowLedgerConflict;
 
@@ -114,7 +125,15 @@ export async function recordInflowCredit(
       'Inflow credit record failed'
     );
   }
-  if (inserted !== null && inserted.length > 0) return 'credited';
+  if (inserted !== null && inserted.length > 0) {
+    await projectPlanTransferOntoGoal(supabase, {
+      customerId: mapping.customer_id,
+      merchantId: mapping.merchant_id,
+      amountKobo: detail.amount,
+      providerTransactionId: detail.transaction_id,
+    });
+    return 'credited';
+  }
 
   // The inbox dedupes by event_id, so a signed redelivery under a new event
   // id with different financials reaches this key: verify the stored row
@@ -123,7 +142,7 @@ export async function recordInflowCredit(
   const existing = await supabase
     .from('piggyvest_inflow_credits')
     .select(
-      'customer_id, wallet_id, amount_kobo, fee_kobo, reference, session_id'
+      'customer_id, wallet_id, amount_kobo, fee_kobo, reference, session_id, event_data_id, credited_at'
     )
     .eq('provider_transaction_id', detail.transaction_id)
     .maybeSingle();
@@ -148,10 +167,18 @@ export async function recordInflowCredit(
   if (stored.amount_kobo !== detail.amount)
     mismatchedFields.push('amount_kobo');
   if (stored.fee_kobo !== detail.fee) mismatchedFields.push('fee_kobo');
-  if (stored.reference !== detail.reference)
-    mismatchedFields.push('reference');
+  if (stored.reference !== detail.reference) mismatchedFields.push('reference');
   if ((stored.session_id ?? null) !== (detail.session_id ?? null))
     mismatchedFields.push('session_id');
+  if (stored.event_data_id !== detail.id)
+    mismatchedFields.push('event_data_id');
+  // Epoch compare: the stored timestamptz round-trips in a normalized
+  // format that never string-equals the payload's ISO instant.
+  if (
+    new Date(stored.credited_at).getTime() !==
+    new Date(detail.timestamp).getTime()
+  )
+    mismatchedFields.push('credited_at');
   if (mismatchedFields.length > 0) {
     const bodyDigest = createHash('sha256')
       .update(
@@ -162,6 +189,8 @@ export async function recordInflowCredit(
           fee_kobo: detail.fee,
           reference: detail.reference,
           session_id: detail.session_id ?? null,
+          event_data_id: detail.id,
+          credited_at: detail.timestamp,
           provider_transaction_id: detail.transaction_id,
         })
       )
@@ -176,5 +205,47 @@ export async function recordInflowCredit(
       }
     );
   }
+  // Redeliveries retry the projection: the first delivery may have
+  // credited-then-thrown on ambiguity, and only a later delivery can
+  // project once the goal set resolves to one candidate.
+  await projectPlanTransferOntoGoal(supabase, {
+    customerId: mapping.customer_id,
+    merchantId: mapping.merchant_id,
+    amountKobo: detail.amount,
+    providerTransactionId: detail.transaction_id,
+  });
   return 'duplicate';
+}
+
+async function projectPlanTransferOntoGoal(
+  supabase: SupabaseClient,
+  input: {
+    customerId: string;
+    merchantId: string;
+    amountKobo: number;
+    providerTransactionId: string;
+  }
+): Promise<void> {
+  const { error } = await supabase.rpc('allocate_plan_transfer_contribution', {
+    p_customer_id: input.customerId,
+    p_merchant_id: input.merchantId,
+    p_amount_kobo: input.amountKobo,
+    p_provider_transaction_id: input.providerTransactionId,
+    p_idempotency_key: `plan-transfer:${input.providerTransactionId}`,
+  });
+  if (!error) return;
+  // P0001 is the RPC's ambiguity raise: two or more allocatable manual
+  // goals, so no unique attribution target. Retryable, mirroring
+  // INFLOW_LEDGER_UNMAPPED — the processor marks the event failed and
+  // throws, and the provider redelivers after the goal set resolves.
+  if (error.code === 'P0001') {
+    throw new InflowLedgerError(
+      'INFLOW_LEDGER_UNRESOLVED',
+      'Plan transfer matches more than one savings goal'
+    );
+  }
+  throw new InflowLedgerError(
+    'INFLOW_LEDGER_STORAGE_ERROR',
+    'Plan transfer goal projection failed'
+  );
 }

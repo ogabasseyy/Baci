@@ -68,16 +68,34 @@ export type GoalRequestFingerprintInput = {
   breakFeePercent?: number | null;
   contributionAmount: number;
   contributionFrequency: string;
+  earlyEndFeeAccepted?: boolean | null;
   initialContributionAmount?: number | null;
   maturityDate: string;
+  metadata?: Record<string, unknown> | null;
   preferredDebitTime?: string | null;
   productId: string;
   savedPaymentMethodId?: string | null;
   sourceMode: string;
   startDate: string;
   targetAmount: number;
+  title: string;
   variantId?: string | null;
 };
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalizeJson((value as Record<string, unknown>)[key]),
+        ])
+    );
+  }
+  return value;
+}
 
 /**
  * Canonical fingerprint of the raw requested plan (pre-catalogue
@@ -86,6 +104,11 @@ export type GoalRequestFingerprintInput = {
  * plan mismatches instead of silently returning the stale goal. Never
  * compare resolved values (e.g. catalogue-raised targets) here — drift is
  * not a user edit.
+ *
+ * Every caller-controlled persisted field is covered: title, metadata
+ * (key-order canonicalized), and fee consent alongside the money fields,
+ * so a retry that edits any of them falls through to the RPC's
+ * mismatched_goal_idempotency_payload instead of replaying stale evidence.
  */
 export function buildGoalRequestFingerprint(
   input: GoalRequestFingerprintInput
@@ -103,6 +126,9 @@ export function buildGoalRequestFingerprint(
     input.sourceMode,
     input.savedPaymentMethodId ?? null,
     input.breakFeePercent ?? 0,
+    input.title,
+    canonicalizeJson(input.metadata ?? {}),
+    input.earlyEndFeeAccepted ?? null,
   ]);
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }

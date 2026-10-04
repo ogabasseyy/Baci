@@ -81,14 +81,17 @@ describe('savings goals route helpers', () => {
       breakFeePercent: 5,
       contributionAmount: 20000,
       contributionFrequency: 'weekly',
+      earlyEndFeeAccepted: true,
       initialContributionAmount: 0,
       maturityDate: '2026-12-31',
+      metadata: { channel: 'storefront', campaign: 'launch' },
       preferredDebitTime: null,
       productId: 'product-1',
       savedPaymentMethodId: 'payment-method-1',
       sourceMode: 'manual',
       startDate: '2026-10-04',
       targetAmount: 800000,
+      title: 'Device savings goal',
       variantId: null,
     };
     const first = buildGoalRequestFingerprint(input);
@@ -111,6 +114,24 @@ describe('savings goals route helpers', () => {
     expect(
       buildGoalRequestFingerprint({ ...input, breakFeePercent: 10 })
     ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({ ...input, title: 'Renamed goal' })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({
+        ...input,
+        metadata: { channel: 'storefront', campaign: 'relaunch' },
+      })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({ ...input, earlyEndFeeAccepted: false })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({
+        ...input,
+        metadata: { campaign: 'launch', channel: 'storefront' },
+      })
+    ).toBe(first);
     expect(
       buildGoalRequestFingerprint({
         ...input,

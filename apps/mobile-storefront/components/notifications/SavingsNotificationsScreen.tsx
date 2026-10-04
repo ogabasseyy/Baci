@@ -24,7 +24,10 @@ export function SavingsNotificationsScreen({
 
   const openNotification = (notification: SavingsNotification) => {
     void inbox.markRead(notification.id).catch(() => undefined);
-    router.push({ pathname: '/wallet', params: { action: 'savings' } });
+    router.push({
+      pathname: '/wallet',
+      params: { action: 'savings', savingsGoalId: notification.goalId },
+    });
   };
 
   return (

@@ -554,7 +554,7 @@ describe('/api/storefront/customer/savings/goals', () => {
         contribution_frequency: 'daily',
         current_amount: '20000',
         goal_request_fingerprint:
-          'a194ea9a76e7314f89befa69ae163b6b0e905fd05d809060ca516e05dfb33c72',
+          'b038898be1566e0d2b0fd10db2d735512d4d6adaace349e981cd690dd42b76fa',
         id: 'goal-replayed',
         status: 'active',
       },
@@ -614,6 +614,66 @@ describe('/api/storefront/customer/savings/goals', () => {
       success: true,
       walletBalance: 180000,
     });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('replays a matching key even after the merchant disables savings', async () => {
+    const replayQuery = createProductQuery({
+      data: {
+        contribution_amount: '20000',
+        contribution_frequency: 'daily',
+        current_amount: '20000',
+        goal_request_fingerprint:
+          'b038898be1566e0d2b0fd10db2d735512d4d6adaace349e981cd690dd42b76fa',
+        id: 'goal-replayed',
+        status: 'active',
+      },
+      error: null,
+    });
+    const walletQuery = createProductQuery({
+      data: { available_balance: '180000' },
+      error: null,
+    });
+    const rpc = vi.fn();
+    const mockSupabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'customer_savings_goals') return replayQuery;
+        if (table === 'customer_wallets') return walletQuery;
+        throw new Error(`unexpected table ${table}`);
+      }),
+      rpc,
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+    mockGetCustomerSavingsFeatureSettings.mockResolvedValue({
+      autoDebitEnabled: false,
+      paystackEnabled: true,
+      savingsEnabled: false,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        goalIdempotencyKey: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        initialContributionAmount: 20000,
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 800000,
+        termsAccepted: true,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.goalId).toBe('goal-replayed');
     expect(rpc).not.toHaveBeenCalled();
   });
 

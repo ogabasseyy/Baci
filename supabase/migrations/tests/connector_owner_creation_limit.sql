@@ -39,7 +39,17 @@ SELECT set_config('request.jwt.claim.role','service_role',true);
 UPDATE public.merchants SET user_id='e8130000-0000-4000-8000-000000000002'
 WHERE id='e8130000-0000-4000-8000-000000000003';
 SELECT set_config('request.jwt.claim.role','authenticated',true);
-SET LOCAL ROLE connector_gateway;
+-- The managed replay administrator cannot SET ROLE into newly created roles.
+-- Check the role's execution grant, then exercise the SECURITY DEFINER body
+-- as its owner; the body resolves the linked user from the credential itself.
+DO $$ BEGIN
+  IF NOT has_function_privilege('connector_gateway', 'public.resolve_connector_grant_context(text,text,text,text,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'Gateway cannot execute its resolver';
+  END IF;
+  IF has_function_privilege('authenticated', 'public.resolve_connector_grant_context(text,text,text,text,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'Authenticated users can execute the gateway resolver';
+  END IF;
+END $$;
 DO $$ BEGIN
   BEGIN
     PERFORM public.resolve_connector_grant_context(repeat(md5('token-1'),2),'orders:read','orders','view',NULL);

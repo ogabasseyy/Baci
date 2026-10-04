@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import {
   CONNECTOR_GRANT_METADATA_COLUMNS,
   connectorManagementErrorToHttp,
@@ -14,6 +13,7 @@ import {
   type ConnectorConnectionView,
   connectorConnectRequestSchema,
   connectorGrantRecordSchema,
+  connectorManagementQuerySchema,
 } from '@/schemas/connector';
 import {
   authenticateConnectorRequest,
@@ -29,14 +29,10 @@ import {
  * matching credentials without extending expiry. Business data is never modified.
  */
 
-const merchantIdQuerySchema = z.strictObject({
-  merchantId: z.uuid().optional(),
-});
-
 export async function GET(request: NextRequest) {
   const authentication = await authenticateConnectorRequest(request);
   if (!authentication.ok) return authentication.response;
-  const query = merchantIdQuerySchema.safeParse(
+  const query = connectorManagementQuerySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams.entries())
   );
   if (!query.success) {

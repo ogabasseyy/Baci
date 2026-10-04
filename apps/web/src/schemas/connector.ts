@@ -100,3 +100,7 @@ export const connectorDisconnectRequestSchema = z.strictObject({
 export type ConnectorDisconnectRequest = z.infer<
   typeof connectorDisconnectRequestSchema
 >;
+
+export const connectorManagementQuerySchema = z.strictObject({
+  merchantId: z.uuid().optional(),
+});

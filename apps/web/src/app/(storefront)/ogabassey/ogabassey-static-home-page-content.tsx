@@ -19,7 +19,11 @@ interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
-  /** Set when the parent page already supplied critical styles and heading. */
+  /**
+   * Set when the parent page already supplied critical styles, heading, AND
+   * the hero preload hint. Suppresses all downstream hints, so only set this
+   * alongside an upstream committed slot that emits the live slide-0 link.
+   */
   omitCommittedHero?: boolean;
 }
 

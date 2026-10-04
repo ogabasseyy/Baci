@@ -74,6 +74,11 @@ async function resolveShellSlides(): Promise<OgabasseyHomeHeroShellResult | null
  * the request-scoped publication boundary may render it as shopping UI.
  * Errors/timeouts degrade to `null`; a cold cache miss or transient query
  * failure must never take down the page.
+ *
+ * Twin-call contract: the committed preload slot and the static page content
+ * both await this in the same render. The `'use cache'` legs dedupe to one
+ * fetch, so both owners settle on the same result — a split needs backend
+ * latency inside the millisecond gap between the two budget timers.
  */
 export async function resolveOgabasseyHomeHeroShell(): Promise<OgabasseyHomeHeroShellResult | null> {
   let budgetTimer: ReturnType<typeof setTimeout> | undefined;

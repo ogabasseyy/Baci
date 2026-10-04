@@ -19,7 +19,16 @@ export async function requireActiveSavingsGoal({
     .eq('customer_id', customerId)
     .eq('id', goalId)
     .maybeSingle();
-  if (error || !goal) {
+  // A lookup failure is not a missing goal: report 5xx so clients retry
+  // instead of treating the plan as permanently gone. Only a successful
+  // lookup with no row is a 404.
+  if (error) {
+    return NextResponse.json(
+      { code: 'SAVINGS_GOAL_LOOKUP_FAILED', error: 'Savings goal lookup failed' },
+      { status: 500 }
+    );
+  }
+  if (!goal) {
     return NextResponse.json(
       { code: 'SAVINGS_GOAL_NOT_FOUND', error: 'Savings goal not found' },
       { status: 404 }

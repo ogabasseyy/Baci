@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import z from 'zod';
 
 /**
@@ -38,9 +39,12 @@ export function digestRawBody(rawBody: Uint8Array): string {
 }
 
 export async function recordQuarantineEvent(
-  supabase: SupabaseClient,
+  supabase: PiggyvestIntakeServiceClient,
   input: RecordQuarantineEventInput
 ): Promise<RecordQuarantineEventOutcome> {
+  // Brand is enforced at the boundary (only the intake edge constructs this
+  // client); the query builder needs the plain client type for inference.
+  const db: SupabaseClient = supabase;
   const parsed = recordInputSchema.parse(input);
   if (parsed.detail) {
     const bytes = Buffer.byteLength(JSON.stringify(parsed.detail), 'utf8');
@@ -48,7 +52,7 @@ export async function recordQuarantineEvent(
       throw new Error('Quarantine detail exceeds size bound');
     }
   }
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('piggyvest_event_quarantine')
     .upsert(
       {

@@ -132,6 +132,42 @@ describe('wallet savings data helpers', () => {
     );
   });
 
+  it('offers priced variants for re-selection when the selection is unresolved', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, status: 'completed', variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          price: '700000',
+          variants: [
+            {
+              attributes: { storage: '128GB' },
+              condition: 'new',
+              id: 'variant-128',
+              price_override: '15000',
+            },
+            {
+              attributes: { storage: '256GB' },
+              condition: 'new',
+              id: 'variant-256',
+              price_override: '18000',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: true,
+        variant_resolution_options: [
+          { id: 'variant-128', label: 'New · Storage: 128GB' },
+          { id: 'variant-256', label: 'New · Storage: 256GB' },
+        ],
+      })
+    );
+  });
+
   it('does not mark a product with only an inventory anchor unresolved', () => {
     expect(
       toActiveSavingsGoal({

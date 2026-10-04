@@ -17018,6 +17018,7 @@ export type Database = {
           p_contribution_frequency: string;
           p_customer_id: string;
           p_early_end_fee_accepted_at: string;
+          p_goal_idempotency_key: string;
           p_initial_contribution_amount: number;
           p_initial_contribution_idempotency_key: string;
           p_maturity_date: string;

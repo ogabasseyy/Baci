@@ -12,6 +12,10 @@ import {
   getActiveSavingsGoal,
   toActiveSavingsGoal,
 } from './wallet-savings-data';
+import {
+  fetchWalletSavingsInterest,
+  toWalletSavingsInterestEarnings,
+} from './wallet-savings-interest';
 
 const WalletFundingAccountSchema = z.object({
   account_name: z.string().min(1),
@@ -88,6 +92,7 @@ function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
     wallet: {
       active_savings_goal: null,
       balance: 0,
+      earnings_available: false,
       earnings_balance: 0,
       funding_account: null,
       loyalty_points: safeLoyaltyPoints,
@@ -167,6 +172,7 @@ export async function fetchWalletData(
       wallet: {
         active_savings_goal: null,
         balance: 0,
+        earnings_available: false,
         earnings_balance: 0,
         funding_account: null,
         loyalty_points: safeLoyaltyPoints,
@@ -189,25 +195,29 @@ export async function fetchWalletData(
     throw walletResult.error;
   }
 
-  const [fundingAccountResult, savingsGoalsResult] = await Promise.all([
-    supabase
-      .from('customer_wallet_payment_accounts')
-      .select('account_name, account_number, bank_name, provider')
-      .eq('merchant_id', merchantId)
-      .eq('customer_id', resolvedCustomerId)
-      .eq('provider', 'paystack')
-      .eq('status', 'active')
-      .maybeSingle(),
-    supabase
-      .from('customer_savings_goals')
-      .select(
-        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, primary_image, images, attributes))'
-      )
-      .eq('merchant_id', merchantId)
-      .eq('customer_id', resolvedCustomerId)
-      .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
-      .order('created_at', { ascending: false }),
-  ]);
+  const [fundingAccountResult, savingsGoalsResult, savingsInterest] =
+    await Promise.all([
+      supabase
+        .from('customer_wallet_payment_accounts')
+        .select('account_name, account_number, bank_name, provider')
+        .eq('merchant_id', merchantId)
+        .eq('customer_id', resolvedCustomerId)
+        .eq('provider', 'paystack')
+        .eq('status', 'active')
+        .maybeSingle(),
+      supabase
+        .from('customer_savings_goals')
+        .select(
+          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes))'
+        )
+        .eq('merchant_id', merchantId)
+        .eq('customer_id', resolvedCustomerId)
+        .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
+        .order('created_at', { ascending: false }),
+      // Best-effort and never throws: on any failure it resolves to an
+      // explicit unavailable marker, so the wallet still loads.
+      fetchWalletSavingsInterest(merchantId),
+    ]);
 
   if (fundingAccountResult.error) {
     throw fundingAccountResult.error;
@@ -285,7 +295,7 @@ export async function fetchWalletData(
     wallet: {
       active_savings_goal: activeSavingsGoal,
       balance: safeBalance,
-      earnings_balance: safeBalance,
+      ...toWalletSavingsInterestEarnings(savingsInterest),
       funding_account: fundingAccountData,
       loyalty_points: safeLoyaltyPoints,
       requires_funding_account_consent: fundingAccountData === null,

@@ -6,13 +6,16 @@ import {
   recordQuarantineEvent,
 } from '@/lib/piggyvest/event-quarantine';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
+import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
+import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
 import {
   type RecordPiggyvestEventInput,
   recordPiggyvestEvent,
 } from '@/lib/piggyvest/webhook-inbox';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
-import { createServiceClient } from '@/lib/supabase/service';
+import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
+import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
@@ -78,6 +81,24 @@ function toRecordInput(
       };
     case 'create-wallet.success':
       return { ...base, walletId: event.pvb_wallet };
+    case 'restriction-created.success':
+    case 'restriction-lifted.success':
+      // Persist exactly the attribution the processor acts on: without it,
+      // a redelivery reusing the event id with a different wallet would
+      // compare null-to-null, classify as a duplicate, and flip the wrong
+      // wallet instead of quarantining as a conflict.
+      return { ...base, walletId: attributedWalletId(event) };
+    case 'bank-transfer.outflow.success':
+    case 'bank-transfer.outflow.failed':
+    case 'wallet-transfer.outflow.success': {
+      // Same rule for the ordered reference candidates the outflow matcher
+      // consumes: any change in set or order must surface as a conflict.
+      const references = outflowReferenceCandidates(event.eventData);
+      return {
+        ...base,
+        reference: references.length > 0 ? JSON.stringify(references) : null,
+      };
+    }
     default:
       return base;
   }
@@ -95,7 +116,7 @@ async function quarantineAndAck(
   detail: Record<string, unknown> | null
 ): Promise<Response> {
   try {
-    await recordQuarantineEvent(createServiceClient(), {
+    await recordQuarantineEvent(createPiggyvestIntakeServiceClient(), {
       bodyDigest: digestRawBody(rawBody),
       reason,
       eventId: correlation.eventId,
@@ -123,15 +144,29 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  let rawBody: Buffer;
-  try {
-    rawBody = Buffer.from(await request.arrayBuffer());
-  } catch {
+  // Bounded read (64 KiB / 5 s) before anything else: the edge proxy only
+  // rejects declared Content-Lengths over 2 MiB, so a lengthless stream must
+  // not be buffered unboundedly ahead of signature validation.
+  const bounded = await readBoundedWebhookBody(request);
+  if (!bounded.ok) {
+    if (bounded.reason === 'too_large') {
+      return NextResponse.json(
+        { received: false, code: 'PIGGYVEST_BODY_TOO_LARGE' },
+        { status: 413, headers: noStore }
+      );
+    }
+    if (bounded.reason === 'invalid') {
+      return NextResponse.json(
+        { received: false, code: 'PIGGYVEST_BODY_INVALID' },
+        { status: 400, headers: noStore }
+      );
+    }
     return NextResponse.json(
       { received: false, code: 'PIGGYVEST_BODY_UNAVAILABLE' },
       { status: 503, headers: noStore }
     );
   }
+  const rawBody: Buffer = bounded.body;
   const signature = request.headers.get('x-pvb-signature');
   const authentic = verifyPiggyvestPayloadSignature({
     payload: rawBody,
@@ -172,7 +207,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     // the inbox row but crashed before the ledger write, the redelivery
     // must still credit. The claim makes concurrent attempts safe.
     const outcome = await recordPiggyvestEvent(
-      createServiceClient(),
+      createPiggyvestIntakeServiceClient(),
       toRecordInput(parsed.data)
     );
     if (outcome === 'conflict') {
@@ -187,7 +222,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       );
     }
     const processing = await processPiggyvestEvent(
-      createServiceClient(),
+      createPiggyvestIntakeServiceClient(),
       parsed.data,
       {
         piggyvestConfig: getPiggyvestApiConfig(),

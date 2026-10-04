@@ -233,6 +233,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_early_end_fee_accepted_at: parsed.data.earlyEndFeeAccepted
           ? nowIso
           : null,
+        p_goal_idempotency_key: parsed.data.goalIdempotencyKey ?? null,
         p_initial_contribution_amount: parsed.data.initialContributionAmount,
         p_initial_contribution_idempotency_key:
           parsed.data.initialContributionIdempotencyKey ?? '',

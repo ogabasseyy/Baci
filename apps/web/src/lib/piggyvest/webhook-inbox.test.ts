@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   claimPiggyvestEvent,
   recordPiggyvestEvent,
@@ -41,7 +42,10 @@ function mockClient(
   };
   const rpc = vi.fn().mockResolvedValue({ data, error });
   return {
-    client: { from: () => query, rpc } as unknown as SupabaseClient,
+    client: {
+      from: () => query,
+      rpc,
+    } as unknown as PiggyvestIntakeServiceClient,
     rpc,
     query,
   };

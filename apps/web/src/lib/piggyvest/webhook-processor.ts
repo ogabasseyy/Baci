@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import type { PiggyvestClientConfig } from './client';
 import { InflowLedgerError, recordInflowCredit } from './inflow-ledger';
 import { InterestLedgerError, recordInterestPayout } from './interest-ledger';
@@ -149,7 +150,7 @@ function failureReason(eventType: HandledEvent['eventType']): string {
 }
 
 export async function processPiggyvestEvent(
-  supabase: SupabaseClient,
+  supabase: PiggyvestIntakeServiceClient,
   event: PiggyvestWebhookEvent,
   deps: { piggyvestConfig?: PiggyvestClientConfig | null } = {}
 ): Promise<ProcessPiggyvestEventOutcome> {

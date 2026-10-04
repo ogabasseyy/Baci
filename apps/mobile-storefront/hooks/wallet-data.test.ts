@@ -7,11 +7,13 @@ type QueryResult = {
 };
 
 const mockFrom = jest.fn<(table: string) => unknown>();
+const mockRpc = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockTrackEvent = jest.fn();
 
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: (table: string) => mockFrom(table),
+    rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }));
 
@@ -40,6 +42,13 @@ function setupSupabaseTables(
   };
   const tableCalls: string[] = [];
   const selectCalls: Record<string, string[]> = {};
+
+  // Interest RPC fails by default so tests pin the explicit unavailable
+  // marker; success-path tests override per case.
+  mockRpc.mockResolvedValue({
+    data: null,
+    error: { code: 'XX000', message: 'synthetic interest outage' },
+  });
 
   mockFrom.mockImplementation((table: string) => {
     tableCalls.push(table);
@@ -79,6 +88,7 @@ describe('fetchWalletData', () => {
       wallet: {
         active_savings_goal: null,
         balance: 0,
+        earnings_available: false,
         earnings_balance: 0,
         funding_account: null,
         loyalty_points: 0,
@@ -235,14 +245,16 @@ describe('fetchWalletData', () => {
         maturity_date: '2026-09-30',
         product_condition: 'Used',
         product_image: 'https://cdn.example.com/iphone.jpg',
-        product_variant_label: 'Storage: 256GB',
+        product_variant_label: 'Color: Black · Storage: 256GB',
+        selection_unresolved: false,
         source_mode: 'manual',
         status: 'active',
         target_amount: 120000,
         title: 'iPhone 15 Pro',
       },
       balance: 5000,
-      earnings_balance: 5000,
+      earnings_available: false,
+      earnings_balance: null,
       funding_account: {
         account_name: 'Ogabassey/Jane Doe',
         account_number: '1234567890',
@@ -258,6 +270,9 @@ describe('fetchWalletData', () => {
     expect(selectCalls.customer_savings_goals[0]).toContain(
       'variants:product_variants!product_variants_product_id_fkey'
     );
+    // The variant recovery guard needs pricing to offer re-selection.
+    expect(selectCalls.customer_savings_goals[0]).toContain('price');
+    expect(selectCalls.customer_savings_goals[0]).toContain('price_override');
     expect(result.transactions).toEqual([
       {
         amount: 2500,
@@ -267,6 +282,37 @@ describe('fetchWalletData', () => {
         type: 'credit',
       },
     ]);
+  });
+
+  it('exposes accrued interest earnings when the interest lookup succeeds', async () => {
+    setupSupabaseTables();
+    mockRpc.mockResolvedValue({
+      data: { credited_interest_kobo: 125000, goal_interest_kobo: [] },
+      error: null,
+    });
+    const merchantId = '10000000-0000-4000-8000-000000000001';
+
+    const result = await fetchWalletData('customer-1', merchantId, 'user-1');
+
+    expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
+      p_merchant_id: merchantId,
+      p_include_goals: true,
+    });
+    expect(result.wallet).toMatchObject({
+      earnings_available: true,
+      earnings_balance: 1250,
+    });
+  });
+
+  it('marks earnings unavailable when the interest lookup fails', async () => {
+    setupSupabaseTables();
+
+    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(result.wallet).toMatchObject({
+      earnings_available: false,
+      earnings_balance: null,
+    });
   });
 
   it('skips product metadata lookup for general savings goals without product ids', async () => {

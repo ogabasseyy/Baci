@@ -62,15 +62,38 @@ describe('webhook raw request regression', () => {
         body: '{}',
       }
     );
-    vi.spyOn(request, 'arrayBuffer').mockRejectedValue(
-      new Error('synthetic stream failure')
-    );
+    // Lock the stream so the bounded reader's getReader() fails like a
+    // genuinely broken stream.
+    request.body?.getReader();
 
     const response = await POST(request);
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       code: 'PIGGYVEST_BODY_UNAVAILABLE',
+    });
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized bodies without creating a database client', async () => {
+    const rawBody = 'x'.repeat(70 * 1024);
+    const signature = createHmac('sha512', secret)
+      .update(rawBody)
+      .digest('hex');
+    const request = new NextRequest(
+      'https://staging.example.com/api/webhooks/piggyvest',
+      {
+        method: 'POST',
+        body: rawBody,
+        headers: { 'x-pvb-signature': signature },
+      }
+    );
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({
+      code: 'PIGGYVEST_BODY_TOO_LARGE',
     });
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
   });

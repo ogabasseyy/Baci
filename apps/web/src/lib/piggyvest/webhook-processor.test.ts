@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deferredEvent,
@@ -75,7 +75,7 @@ vi.mock('./plan-wallet-restrictions', () => ({
   },
 }));
 
-const supabase = {} as SupabaseClient;
+const supabase = {} as PiggyvestIntakeServiceClient;
 
 const claimToken = '4204dc18-efb3-44d0-b9a2-1362448d4f21';
 

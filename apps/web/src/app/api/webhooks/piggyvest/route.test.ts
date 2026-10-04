@@ -119,6 +119,26 @@ const MATCHING_ENVELOPE = {
   amount_kobo: 1750000,
 };
 
+const restrictionEvent = {
+  eventId: '6b9d2f4a-3c1e-4a5b-9d8f-2e4b6a8c0d12',
+  eventType: 'restriction-created.success',
+  eventCategory: 'restriction',
+  customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
+  eventData: {},
+  pvb_wallet: 'pvb-wallet-synthetic-001',
+};
+
+const outflowEvent = {
+  eventId: '7cae305b-4d2f-4b6c-0e9a-3f5c7b9d1e23',
+  eventType: 'bank-transfer.outflow.success',
+  eventCategory: 'bank-transfer',
+  customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
+  eventData: {
+    reference: 'outflow-ref-001',
+    third_party_reference: 'outflow-third-party-001',
+  },
+};
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
@@ -359,5 +379,115 @@ describe('POST event intake', () => {
       error: 'Event intake unavailable',
       code: 'PIGGYVEST_INBOX_ERROR',
     });
+  });
+
+  it('records the wallet attribution a restriction flip acts on', async () => {
+    vi.stubEnv('PVB_SECRET_KEY', SECRET);
+    const { query, upsert } = chainable({
+      data: [{ event_id: restrictionEvent.eventId }],
+      error: null,
+    });
+    mocks.createServiceClient.mockReturnValue({
+      from: vi.fn(() => query),
+    });
+    const rawBody = JSON.stringify(restrictionEvent);
+
+    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
+
+    expect(response.status).toBe(200);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_id: restrictionEvent.eventId,
+        event_type: 'restriction-created.success',
+        wallet_id: 'pvb-wallet-synthetic-001',
+      }),
+      { onConflict: 'event_id', ignoreDuplicates: true }
+    );
+  });
+
+  it('quarantines a restriction redelivery that reuses the event id with a different wallet', async () => {
+    vi.stubEnv('PVB_SECRET_KEY', SECRET);
+    const { query } = chainable(
+      { data: [], error: null },
+      {
+        event_type: 'restriction-created.success',
+        event_category: 'restriction',
+        customer_id: restrictionEvent.customer_id,
+        wallet_id: 'pvb-wallet-synthetic-001',
+        reference: null,
+        amount_kobo: null,
+      }
+    );
+    mocks.createServiceClient.mockReturnValue({
+      from: vi.fn(() => query),
+    });
+    const rawBody = JSON.stringify({
+      ...restrictionEvent,
+      pvb_wallet: 'pvb-wallet-altered-002',
+    });
+
+    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+      quarantined: true,
+    });
+    expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
+  });
+
+  it('records outflow reference candidates for conflict comparison', async () => {
+    vi.stubEnv('PVB_SECRET_KEY', SECRET);
+    const { query, upsert } = chainable({
+      data: [{ event_id: outflowEvent.eventId }],
+      error: null,
+    });
+    mocks.createServiceClient.mockReturnValue({
+      from: vi.fn(() => query),
+    });
+    const rawBody = JSON.stringify(outflowEvent);
+
+    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
+
+    expect(response.status).toBe(200);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_id: outflowEvent.eventId,
+        event_type: 'bank-transfer.outflow.success',
+        reference: JSON.stringify(['outflow-ref-001', 'outflow-third-party-001']),
+      }),
+      { onConflict: 'event_id', ignoreDuplicates: true }
+    );
+  });
+
+  it('quarantines an outflow redelivery with altered references', async () => {
+    vi.stubEnv('PVB_SECRET_KEY', SECRET);
+    const { query } = chainable(
+      { data: [], error: null },
+      {
+        event_type: 'bank-transfer.outflow.success',
+        event_category: 'bank-transfer',
+        customer_id: outflowEvent.customer_id,
+        wallet_id: null,
+        reference: JSON.stringify(['outflow-ref-001', 'outflow-third-party-001']),
+        amount_kobo: null,
+      }
+    );
+    mocks.createServiceClient.mockReturnValue({
+      from: vi.fn(() => query),
+    });
+    const rawBody = JSON.stringify({
+      ...outflowEvent,
+      eventData: { ...outflowEvent.eventData, reference: 'outflow-ref-altered' },
+    });
+
+    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+      quarantined: true,
+    });
+    expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 });

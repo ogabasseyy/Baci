@@ -278,6 +278,7 @@ const serverSchema = z
     // Internal
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
+    PIGGYVEST_SECRET_KEY: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -713,6 +714,7 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         NODE_ENV: process.env.NODE_ENV,
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
+        PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,
@@ -1478,6 +1480,28 @@ export const getMyCoverWebhookSecret = (): string => {
       'MYCOVER_WEBHOOK_SECRET or MYCOVER_SECRET_KEY is not defined'
     );
   return webhookSecret;
+};
+
+export const getPiggyvestWebhookSecret = (): string | undefined => {
+  if (typeof window !== 'undefined')
+    throw new Error('PIGGYVEST_SECRET_KEY cannot be accessed on the client');
+  return (
+    env?.PIGGYVEST_SECRET_KEY?.trim() ||
+    process.env.PVB_SECRET_KEY?.trim() ||
+    undefined
+  );
+};
+
+export const getPiggyvestApiConfig = (): {
+  baseUrl?: string;
+  token: string;
+} | null => {
+  const token = getPiggyvestWebhookSecret();
+  if (!token) return null;
+  // Per the staging contract register, the secret key doubles as the Bearer
+  // token; only the base URL is separately overridable (sandbox/staging).
+  const baseUrl = process.env.PIGGYVEST_API_BASE_URL?.trim();
+  return baseUrl ? { baseUrl, token } : { token };
 };
 
 export const getMyCoverSecretKey = (): string | undefined => {

@@ -1,7 +1,8 @@
 export interface WalletData {
   active_savings_goal?: WalletActiveSavingsGoal | null;
   balance: number;
-  earnings_balance?: number;
+  earnings_available?: boolean;
+  earnings_balance?: number | null;
   funding_account?: WalletFundingAccount | null;
   loyalty_points: number;
   requires_funding_account_consent?: boolean;

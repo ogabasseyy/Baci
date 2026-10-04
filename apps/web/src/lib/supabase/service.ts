@@ -14,6 +14,9 @@ const walletFundingRecoveryClientBrand: unique symbol = Symbol(
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
 );
+const piggyvestIntakeClientBrand: unique symbol = Symbol(
+  'baci.piggyvest-intake.service-role-client'
+);
 const serviceRoleBrandValue: true = true;
 
 export type ServiceRoleClient = SupabaseClient<Database> & {
@@ -56,6 +59,19 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
+ * A service-role client reserved for the PiggyVest webhook intake edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the intake call graph
+ * (inbox record, quarantine record, event processing) cannot be driven by a
+ * generic service client from any other edge. Only the HMAC-authenticated
+ * `/api/webhooks/piggyvest` route may construct it, via
+ * `createPiggyvestIntakeServiceClient`.
+ */
+export type PiggyvestIntakeServiceClient = SupabaseClient<Database> & {
+  readonly [piggyvestIntakeClientBrand]: true;
+};
+
+/**
  * Creates a Supabase client with service role key for admin operations.
  * This client bypasses RLS policies and should only be used in:
  * - Webhook handlers (no user context)
@@ -76,6 +92,9 @@ export function createServiceClient(
 export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
+export function createServiceClient(
+  sentinel: 'piggyvest-intake'
+): PiggyvestIntakeServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -83,6 +102,7 @@ export function createServiceClient(
     | 'ads-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
+    | 'piggyvest-intake'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -134,6 +154,11 @@ export function createServiceClient(
   if (sentinel === 'shipping-quote-booking-economics') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [shippingQuoteBookingEconomicsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'piggyvest-intake') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

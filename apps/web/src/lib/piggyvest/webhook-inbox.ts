@@ -1,5 +1,6 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import z from 'zod';
 
 /**
@@ -46,9 +47,12 @@ const storedEnvelopeSchema = z.object({
 });
 
 export async function recordPiggyvestEvent(
-  supabase: SupabaseClient,
+  supabase: PiggyvestIntakeServiceClient,
   input: RecordPiggyvestEventInput
 ): Promise<RecordPiggyvestEventOutcome> {
+  // Brand is enforced at the boundary (only the intake edge constructs this
+  // client); the query builder needs the plain client type for inference.
+  const db: SupabaseClient = supabase;
   const parsed = recordInputSchema.parse(input);
   if (parsed.details) {
     const bytes = Buffer.byteLength(JSON.stringify(parsed.details), 'utf8');
@@ -56,7 +60,7 @@ export async function recordPiggyvestEvent(
       throw new Error('PiggyVest event details exceed size bound');
     }
   }
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('piggyvest_webhook_inbox')
     .upsert(
       {
@@ -79,7 +83,7 @@ export async function recordPiggyvestEvent(
   }
   if (data !== null && data.length > 0) return 'new';
 
-  const existing = await supabase
+  const existing = await db
     .from('piggyvest_webhook_inbox')
     .select(
       'event_type, event_category, customer_id, wallet_id, reference, amount_kobo'

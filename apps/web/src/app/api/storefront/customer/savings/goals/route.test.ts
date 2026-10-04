@@ -220,6 +220,60 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
   });
 
+  it('passes the client goal idempotency key to the creation RPC', async () => {
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: vi.fn().mockResolvedValue({
+        data: [
+          {
+            contribution_id: 'contrib-1',
+            current_amount: '20000',
+            goal_id: 'goal-1',
+            goal_status: 'active',
+            success: true,
+            wallet_balance: '180000',
+          },
+        ],
+        error: null,
+      }),
+    };
+
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        goalIdempotencyKey: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        initialContributionAmount: 20000,
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 800000,
+        termsAccepted: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'create_customer_savings_goal',
+      expect.objectContaining({
+        p_goal_idempotency_key: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+      })
+    );
+  });
+
   it('returns 500 when savings goal creation RPC fails unexpectedly', async () => {
     const productQuery = createProductQuery({
       data: simpleProductData(),

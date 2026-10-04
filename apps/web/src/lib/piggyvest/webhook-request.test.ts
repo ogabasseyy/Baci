@@ -1,6 +1,9 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { acceptPiggyvestStagingRequest } from './webhook-request';
+import {
+  acceptPiggyvestStagingRequest,
+  readBoundedWebhookBody,
+} from './webhook-request';
 
 const configuration = {
   environment: 'staging',
@@ -171,5 +174,46 @@ describe('acceptPiggyvestStagingRequest', () => {
     );
     expect(await acceptPiggyvestStagingRequest(input)).toBe('invalid_payload');
     expect(input.inbox.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('readBoundedWebhookBody', () => {
+  it('rejects a declared length over the shared limit without reading', async () => {
+    const getReader = vi.fn(() => {
+      throw new Error('must not read');
+    });
+    const result = await readBoundedWebhookBody({
+      headers: new Headers({ 'content-length': String(64 * 1024 + 1) }),
+      body: { getReader } as never,
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'too_large' });
+    expect(getReader).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed declared length', async () => {
+    const result = await readBoundedWebhookBody({
+      headers: new Headers({ 'content-length': 'many' }),
+      body: new ReadableStream<Uint8Array<ArrayBuffer>>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'invalid' });
+  });
+
+  it('reads an empty body as zero bytes', async () => {
+    const result = await readBoundedWebhookBody({
+      headers: new Headers(),
+      body: null,
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toEqual({ ok: true, body: Buffer.alloc(0) });
   });
 });

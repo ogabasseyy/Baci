@@ -1,5 +1,6 @@
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
 import { generateSlug } from '@/lib/blog-utils';
+import { sanitizeHtml } from '@/lib/sanitize';
 import {
   BLOG_INTENTS,
   type BlogIntent,
@@ -35,15 +36,19 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   const title = readText(value.title);
-  const content = readText(value.content_html);
-  if (!title || !content) {
+  const rawContent = readText(value.content_html);
+  if (!title || !rawContent) {
     throw new Error('A title and article content are required');
   }
-  if (content.length > MAX_REVIEW_HANDOFF_CONTENT_LENGTH) {
+  if (rawContent.length > MAX_REVIEW_HANDOFF_CONTENT_LENGTH) {
     throw new Error('Article content exceeds the import limit');
   }
-  if (/\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u.test(content)) {
+  if (/\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u.test(rawContent)) {
     throw new Error('The article has unresolved inline image placeholders');
+  }
+  const content = sanitizeHtml(rawContent);
+  if (!content.trim()) {
+    throw new Error('Article content is empty after sanitization');
   }
 
   const featuredImage = isRecord(value.featured_image)
@@ -75,6 +80,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   const metadata = {
+    slug: readText(value.slug) || generateSlug(title),
     featured_image_alt: readText(featuredImage.alt),
     focus_keyword: readText(value.focus_keyword),
     seo_title: readText(value.seo_title),
@@ -85,6 +91,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   };
   const validatedMetadata = blogPostSchema
     .pick({
+      slug: true,
       featured_image_alt: true,
       focus_keyword: true,
       seo_title: true,
@@ -109,7 +116,6 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     featured_image_variants: imageVariants,
     featured_image_width: readDimension(featuredImage.width),
     intent: (intent || 'unknown') as BlogIntent,
-    slug: readText(value.slug) || generateSlug(title),
     status: 'draft',
     tags: tags
       .map((tag) => tag.trim())

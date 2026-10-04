@@ -5,10 +5,8 @@ import type {
   PlatformAdminBlogPostSummary,
 } from '@/app/admin/blog/blog-types';
 import { fetchWithCsrf } from '@/lib/api-client';
-import {
-  shouldIncludeFeaturedImageFields,
-  toApiPayload,
-} from './blog-api-payload';
+import { toApiPayload } from './blog-api-payload';
+import { shouldIncludeFeaturedImageFields } from './should-include-featured-image-fields';
 
 type PlatformBlogListResponse = {
   hasMore?: boolean;

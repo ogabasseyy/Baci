@@ -1,3 +1,4 @@
+import { areBlogImageVariantsEqual } from './are-blog-image-variants-equal';
 import type {
   PlatformAdminBlogFormState,
   PlatformAdminBlogPostDetail,
@@ -69,62 +70,6 @@ function normalizeTrimmedString(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function areVariantMapsEqual(
-  left: Record<string, unknown> | null | undefined,
-  right: Record<string, unknown> | null | undefined
-): boolean {
-  const leftEntries = Object.entries(left ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b)
-  );
-  const rightEntries = Object.entries(right ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b)
-  );
-
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  for (let index = 0; index < leftEntries.length; index += 1) {
-    const [leftKey, leftValue] = leftEntries[index];
-    const [rightKey, rightValue] = rightEntries[index];
-    if (leftKey !== rightKey || leftValue !== rightValue) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-export function shouldIncludeFeaturedImageFields(
-  input: PlatformAdminBlogFormState,
-  existingPost?: PlatformAdminBlogPostDetail | null
-): boolean {
-  if (!existingPost) {
-    return true;
-  }
-
-  if (
-    normalizeTrimmedString(input.featured_image_url) !==
-    normalizeTrimmedString(existingPost.featured_image_url)
-  ) {
-    return true;
-  }
-
-  if (
-    (input.featured_image_width ?? null) !==
-      (existingPost.featured_image_width ?? null) ||
-    (input.featured_image_height ?? null) !==
-      (existingPost.featured_image_height ?? null)
-  ) {
-    return true;
-  }
-
-  return !areVariantMapsEqual(
-    input.featured_image_variants,
-    existingPost.featured_image_variants
-  );
-}
-
 function shouldResetFeaturedMetadataForChangedUrl(
   input: PlatformAdminBlogFormState,
   existingPost?: PlatformAdminBlogPostDetail | null
@@ -149,7 +94,7 @@ function shouldResetFeaturedMetadataForChangedUrl(
     return false;
   }
 
-  return areVariantMapsEqual(
+  return areBlogImageVariantsEqual(
     input.featured_image_variants,
     existingPost.featured_image_variants
   );

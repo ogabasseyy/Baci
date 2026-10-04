@@ -28,6 +28,43 @@ const validHandoff = {
 };
 
 describe('parseReviewHandoff', () => {
+  it.each([
+    'Uppercase',
+    'with_underscore',
+    'with spaces',
+    'path/segment',
+    'x'.repeat(201),
+  ])('rejects a slug that the save API rejects: %s', (slug) => {
+    expect(() => parseReviewHandoff({ ...validHandoff, slug })).toThrow('Slug');
+  });
+
+  it('preserves a valid supplied slug', () => {
+    expect(
+      parseReviewHandoff({ ...validHandoff, slug: 'galaxy-a-2026' }).slug
+    ).toBe('galaxy-a-2026');
+  });
+
+  it('sanitizes imported HTML before returning it to the editor', () => {
+    const { content } = parseReviewHandoff({
+      ...validHandoff,
+      content_html:
+        '<h2>Guide</h2><p onclick="bad()">Useful <strong>advice</strong></p><script>bad()</script><img src="https://cdn.example.com/phone.webp" onerror="bad()"><a href="javascript:bad()">Link</a>',
+    });
+    expect(content).toContain('<h2>Guide</h2>');
+    expect(content).toContain('<strong>advice</strong>');
+    expect(content).toContain('https://cdn.example.com/phone.webp');
+    expect(content).not.toMatch(/script|onclick|onerror|javascript:|bad\(\)/);
+  });
+
+  it('rejects content that becomes empty after sanitization', () => {
+    expect(() =>
+      parseReviewHandoff({
+        ...validHandoff,
+        content_html: '<script>bad()</script>',
+      })
+    ).toThrow('content');
+  });
+
   it.each(['4', '12', '0'])('rejects unresolved image slot %s', (slot) => {
     expect(() =>
       parseReviewHandoff({

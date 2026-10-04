@@ -15,21 +15,23 @@ export function BlogReviewHandoffImporter({
 }: BlogReviewHandoffImporterProps) {
   const [message, setMessage] = useState('');
   const onImportRef = useRef(onImport);
+  const importGenerationRef = useRef(0);
   useLayoutEffect(() => {
     onImportRef.current = onImport;
   }, [onImport]);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
+    const generation = ++importGenerationRef.current;
     if (file.size > MAX_FILE_SIZE) {
       setMessage('The review file is larger than 2 MB.');
       return;
     }
 
     try {
-      const draft = parseReviewHandoff(
-        JSON.parse(await file.text()) as unknown
-      );
+      const text = await file.text();
+      if (generation !== importGenerationRef.current) return;
+      const draft = parseReviewHandoff(JSON.parse(text) as unknown);
       if (onImportRef.current(draft) === false) {
         setMessage('Import cancelled. Your article is unchanged.');
         return;
@@ -38,6 +40,7 @@ export function BlogReviewHandoffImporter({
         'Draft loaded for review. It has not been saved or published.'
       );
     } catch (error) {
+      if (generation !== importGenerationRef.current) return;
       setMessage(
         error instanceof Error
           ? error.message

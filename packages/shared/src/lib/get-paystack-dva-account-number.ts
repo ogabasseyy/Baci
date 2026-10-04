@@ -1,7 +1,7 @@
 const PAYSTACK_DVA_ACCOUNT_NUMBER = /^\d{6,20}$/;
 const COMPLETED_TRANSACTION_STATUSES = new Set(['completed', 'success']);
 
-interface PaystackDvaTransactionLike {
+export interface PaystackDvaTransactionLike {
   created_at?: string | null;
   gateway?: string | null;
   metadata?: unknown;

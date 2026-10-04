@@ -1,26 +1,8 @@
-import {
-  appendReceiptFulfillmentDescription,
-  formatOrderItemDisplayName,
-  isDeviceReceiptItemName,
-  normalizeReceiptFulfillmentDetails,
-  type ReceiptMerchant,
-  type ReceiptOrder,
-  resolveReceiptItemFulfillmentAttachment,
-} from '@baci/shared';
-import {
-  buildAssuranceInvoiceLineItem,
-  buildAssuranceReceiptItem,
-  nextInvoiceLineId,
-  reconcileAssuranceTaxSubtotal,
-  sumAssuranceFees,
-} from '@/lib/insurance-assurance-line';
-import type {
-  InvoiceData,
-  InvoiceLineItem,
-  TaxSubtotal,
-} from '@/lib/invoice-generator';
-import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
+import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
+import { buildAssuranceReceiptItem } from '@/lib/insurance-assurance-line';
+import type { InvoiceData } from '@/lib/invoice-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
+import { selectReceiptCompletionDate } from '@/lib/resolve-manual-document-receipt-date';
 import type {
   StorefrontAccountDocumentCustomerRow,
   StorefrontAccountDocumentItemRow,
@@ -30,6 +12,12 @@ import type {
   StorefrontAccountDocumentTaxSubtotalRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
+import { manualDocumentAvailabilityFlags } from '@/lib/storefront-account-document-eligibility';
+import { buildInvoiceContent } from '@/lib/storefront-account-document-invoice-lines';
+import {
+  buildOrderProjection,
+  isProviderConfirmedTransaction,
+} from '@/lib/storefront-account-document-order-projection';
 import {
   buildReceiptMerchant,
   buildReceiptOrder,
@@ -41,8 +29,8 @@ import {
   buildCustomerAddress,
   buildOrderItems,
   normalizeShippingAddress,
+  resolveMoneyValue,
 } from '@/lib/storefront-account-document-values';
-import type { StorefrontOrder } from '@/types/storefront-order';
 
 interface BuildStorefrontAccountDocumentBundleInput {
   merchant: StorefrontAccountDocumentMerchantRow;
@@ -56,48 +44,6 @@ interface BuildStorefrontAccountDocumentBundleInput {
   shippingStatus: string;
   currentDocumentKind: 'invoice' | 'receipt';
   canCancel?: boolean;
-}
-
-function resolveMoneyValue(
-  value: number | string | null | undefined,
-  fallback: number
-) {
-  return value == null ? fallback : asNumber(value);
-}
-
-function roundCurrency(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function alignSingleZeroTaxSubtotalWithDocumentTotal(
-  subtotals: TaxSubtotal[],
-  taxExclusiveAmount: number
-) {
-  const subtotal = subtotals.length === 1 ? subtotals[0] : null;
-
-  if (subtotal?.tax_amount !== 0) {
-    return;
-  }
-
-  subtotal.taxable_amount = taxExclusiveAmount;
-}
-
-// Statuses representing provider-confirmed value movement. Only these
-// belong in customer payment surfaces (history card, receipt listing):
-// pending/processing attempts never moved money, failed/cancelled ones
-// never will. A refunded row is still a genuine historical receipt — the
-// order-level status already shows the reversal.
-const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = ['completed', 'refunded'];
-
-export function isProviderConfirmedTransaction(row: {
-  status?: string | null;
-}): boolean {
-  return (
-    typeof row.status === 'string' &&
-    PROVIDER_CONFIRMED_TRANSACTION_STATUSES.includes(
-      row.status.trim().toLowerCase()
-    )
-  );
 }
 
 export function buildStorefrontAccountDocumentBundle({
@@ -144,53 +90,57 @@ export function buildStorefrontAccountDocumentBundle({
   const customerPhone =
     asString(order.customer_phone) || customer.phone || null;
   const receiptEligible = currentDocumentKind === 'receipt';
+  // Manual availability for the invoice download gate: the sender refuses
+  // invalid/cancelled manual rows, so the direct URL must not serve what
+  // the sender and archive treat as unservable.
+  const { isManualOrderRow, manualDocumentAvailable } =
+    manualDocumentAvailabilityFlags({
+      paymentStatus: order.payment_status,
+      shippingStatus: order.shipping_status,
+      externalSource: order.external_source,
+      importJobId: order.import_job_id,
+      recordedByUserId: order.recorded_by_user_id,
+      total: order.total,
+      amountPaid: order.amount_paid,
+      money: order,
+      items: itemRows,
+      payments: transactions,
+      taxSubtotals: taxRows,
+    });
   // Same proforma rule as the order invoice route: the stored 380 default
   // must not win over 325 for unpaid invoice-method orders. Shared by the
   // generated invoiceData and the customer-facing order projection so the
   // account views label the same document the route downloads.
   const invoiceTypeCode = resolveInvoiceTypeCode({
     paymentMethod: order.payment_method,
-    isPaid: paymentStatus === 'paid',
+    // A receipt-eligible order is settled in substance (paid flag or covered
+    // manual balance), so its billing record resolves the commercial code.
+    isPaid: paymentStatus === 'paid' || receiptEligible,
     wasPaid: paymentStatus === 'refunded',
     paymentStatus,
     amountPaid,
     storedTypeCode: order.invoice_type_code,
   });
   const registeredAddress = asRecord(merchant.registered_address);
-  const sellerIsVatRegistered =
-    merchant.vat_registration_status === 'registered';
-  const invoiceVatRate = merchant.vat_rate ?? 7.5;
-  const lineExtensionTotal = orderItems.reduce(
-    (totalAmount, item) =>
-      totalAmount +
-      (typeof item.line_extension_amount === 'number' &&
-      Number.isFinite(item.line_extension_amount)
-        ? item.line_extension_amount
-        : item.quantity * item.price),
-    0
-  );
-  const singleTaxSubtotal = taxRows.length === 1 ? taxRows[0] : null;
-  const fallbackLineVatCategoryCode =
-    singleTaxSubtotal?.vat_category_code ||
-    (taxRows.length === 0 && taxAmount > 0 && sellerIsVatRegistered
-      ? 'S'
-      : taxRows.length === 0 && !sellerIsVatRegistered
-        ? 'O'
-        : null);
-  const fallbackLineVatRate =
-    singleTaxSubtotal != null
-      ? asNumber(singleTaxSubtotal.vat_rate)
-      : taxRows.length === 0 && taxAmount > 0 && sellerIsVatRegistered
-        ? invoiceVatRate
-        : taxRows.length === 0 && !sellerIsVatRegistered
-          ? 0
-          : null;
-  const shouldAllocateFallbackVat =
-    fallbackLineVatCategoryCode != null &&
-    fallbackLineVatRate != null &&
-    taxAmount > 0 &&
-    lineExtensionTotal > 0;
-  let allocatedVatAmount = 0;
+  const {
+    invoiceItems,
+    taxSubtotals,
+    documentTaxExclusive,
+    documentTaxInclusive,
+    assuranceTotal,
+  } = buildInvoiceContent({
+    order,
+    merchant,
+    orderItems,
+    itemRows,
+    taxRows,
+    taxAmount,
+    subtotal,
+    shippingFee,
+    discountAmount,
+    preTaxTotal,
+    taxInclusiveAmount,
+  });
 
   const receiptMerchant: ReceiptMerchant = buildReceiptMerchant(
     merchant,
@@ -216,220 +166,37 @@ export function buildStorefrontAccountDocumentBundle({
     customerPhone,
   });
 
-  const hasDeviceItem = orderItems.some((item) =>
-    isDeviceReceiptItemName(item.product_name || item.name || '')
-  );
-  const orderFulfillment = normalizeReceiptFulfillmentDetails(
-    order.fulfillment_details
-  );
-  const invoiceItems: InvoiceLineItem[] = orderItems.map((item, index) => {
-    const lineExtensionAmount =
-      typeof item.line_extension_amount === 'number' &&
-      Number.isFinite(item.line_extension_amount)
-        ? item.line_extension_amount
-        : item.quantity * item.price;
-    const explicitVatCategoryCode = item.vat_category_code?.trim();
-    const explicitVatRate =
-      typeof item.vat_rate === 'number' && Number.isFinite(item.vat_rate)
-        ? item.vat_rate
-        : null;
-    const explicitVatAmount =
-      typeof item.vat_amount === 'number' && Number.isFinite(item.vat_amount)
-        ? item.vat_amount
-        : null;
-    const shouldUseExplicitVatAmount =
-      explicitVatAmount != null &&
-      !(explicitVatAmount === 0 && shouldAllocateFallbackVat);
-    const lineVatCategoryCode =
-      explicitVatCategoryCode || fallbackLineVatCategoryCode;
-    const lineVatRate = explicitVatRate ?? fallbackLineVatRate;
-    const vatAmount = shouldUseExplicitVatAmount
-      ? explicitVatAmount
-      : shouldAllocateFallbackVat
-        ? index === orderItems.length - 1
-          ? roundCurrency(taxAmount - allocatedVatAmount)
-          : roundCurrency(
-              (lineExtensionAmount / lineExtensionTotal) * taxAmount
-            )
-        : lineVatCategoryCode && lineVatRate != null
-          ? 0
-          : null;
-
-    if (
-      !shouldUseExplicitVatAmount &&
-      shouldAllocateFallbackVat &&
-      vatAmount != null
-    ) {
-      allocatedVatAmount += vatAmount;
-    }
-    if (shouldUseExplicitVatAmount) {
-      allocatedVatAmount += explicitVatAmount;
-    }
-
-    const itemName = formatOrderItemDisplayName({
-      baseName: item.product_name || item.name || 'Item',
-      condition: item.condition,
-      variantName: item.variant_name,
-    });
-    const itemFulfillment = normalizeReceiptFulfillmentDetails(
-      item.fulfillment_details
-    );
-    const fulfillmentAttachment = resolveReceiptItemFulfillmentAttachment({
-      hasDeviceItem,
-      index,
-      item,
-      itemFulfillment,
-      orderFulfillment,
-    });
-
-    return {
-      line_id: index + 1,
-      product_id: item.product_id || undefined,
-      name: itemName,
-      description: appendReceiptFulfillmentDescription({
-        description: undefined,
-        fulfillment: fulfillmentAttachment.fulfillment,
-        hasDeviceItem: fulfillmentAttachment.hasDeviceItem,
-        index: fulfillmentAttachment.index,
-        itemName,
-      }),
-      quantity: item.quantity,
-      unit_code: item.unit_code || 'EA',
-      price: item.price,
-      line_extension_amount: lineExtensionAmount,
-      sellers_item_id: item.sellers_item_id || undefined,
-      ...(lineVatCategoryCode && lineVatRate != null
-        ? {
-            vat_category_code: lineVatCategoryCode,
-            vat_rate: lineVatRate,
-            vat_amount: vatAmount ?? 0,
-          }
-        : {}),
-    };
-  });
-
-  const taxSubtotals: TaxSubtotal[] = taxRows.map((subtotalRow) => ({
-    vat_category_code: subtotalRow.vat_category_code,
-    vat_rate: asNumber(subtotalRow.vat_rate),
-    taxable_amount: asNumber(subtotalRow.taxable_amount),
-    tax_amount: asNumber(subtotalRow.tax_amount),
-    exemption_reason: subtotalRow.exemption_reason || undefined,
-  }));
-
-  const derivedLineTaxSubtotals =
-    deriveTaxSubtotalsFromInvoiceItems(invoiceItems);
-  if (
-    taxSubtotals.length === 0 &&
-    derivedLineTaxSubtotals.length > 0 &&
-    (taxAmount === 0 ||
-      derivedLineTaxSubtotals.some((subtotal) => subtotal.tax_amount > 0))
-  ) {
-    taxSubtotals.push(...derivedLineTaxSubtotals);
-  }
-  if (taxSubtotals.length === 0 && taxAmount > 0 && sellerIsVatRegistered) {
-    taxSubtotals.push({
-      vat_category_code: 'S',
-      vat_rate: invoiceVatRate,
-      taxable_amount: subtotal,
-      tax_amount: taxAmount,
-    });
-  }
-  if (taxSubtotals.length === 0 && !sellerIsVatRegistered) {
-    taxSubtotals.push({
-      vat_category_code: 'O',
-      vat_rate: 0,
-      taxable_amount: subtotal,
-      tax_amount: 0,
-      exemption_reason: 'Seller is not VAT registered',
-    });
-  }
-  if (taxRows.length === 0) {
-    alignSingleZeroTaxSubtotalWithDocumentTotal(taxSubtotals, preTaxTotal);
-  }
-
-  // Ogabassey Assurance is rolled into order.subtotal but VAT-free and was never
-  // itemized — surface it as a single zero-rated line so the document reconciles.
-  const assuranceTotal = sumAssuranceFees(itemRows);
-
-  // Document tax-exclusive (BT-109) / tax-inclusive (BT-112) totals. For
-  // assurance orders, derive BT-109 from `subtotal` (which includes the VAT-free
-  // premium on BOTH order-creation paths) + shipping - discount, rather than the
-  // stored tax totals: storefront RPC orders persist tax_exclusive_amount as a
-  // product-only line sum that excludes the premium, so reusing it would leave
-  // the itemized assurance line + tax subtotal exceeding BT-109 by the premium.
-  const documentTaxExclusive =
-    assuranceTotal > 0
-      ? Number((subtotal + shippingFee - discountAmount).toFixed(2))
-      : resolveMoneyValue(order.tax_exclusive_amount, preTaxTotal);
-  const documentTaxInclusive =
-    assuranceTotal > 0
-      ? Number((documentTaxExclusive + taxAmount).toFixed(2))
-      : taxInclusiveAmount;
-
   if (assuranceTotal > 0) {
-    invoiceItems.push(
-      buildAssuranceInvoiceLineItem(
-        nextInvoiceLineId(invoiceItems),
-        assuranceTotal
-      )
-    );
     receiptOrder.items.push(buildAssuranceReceiptItem(assuranceTotal));
-    // VAT orders: add only the premium to an O subtotal (shipping/discount stay
-    // in their taxable category). Non-VAT orders: reconcile the O bucket up to
-    // BT-109 so Σ TaxableAmount === BT-109 (Peppol BR-CO-13).
-    reconcileAssuranceTaxSubtotal(
-      taxSubtotals,
-      documentTaxExclusive,
-      assuranceTotal
-    );
   }
 
-  const orderDetail: StorefrontOrder = {
-    id: order.id,
-    order_number: order.order_number,
-    created_at: order.created_at,
-    updated_at: order.updated_at || undefined,
-    shipping_status: shippingStatus,
-    payment_status: paymentStatus,
-    tracking_number: order.tracking_number || undefined,
-    subtotal,
-    total,
-    shipping_fee: shippingFee,
-    shipping_cost: shippingFee,
-    shipping_provider: order.shipping_provider || undefined,
-    shipping_rate_id: order.shipping_rate_id || undefined,
-    shipping_rate_name: order.shipping_rate_name || undefined,
-    shipping_pickup_details: order.shipping_pickup_details ?? null,
-    shipping_address: shippingAddress,
-    payment_method: order.payment_method || undefined,
-    payment_provider: order.payment_method || undefined,
-    paymentMethod: order.payment_method || undefined,
-    items: orderItems,
+  const orderDetail = buildOrderProjection({
+    order,
+    merchant,
+    orderItems,
+    shippingStatus,
+    paymentStatus,
+    shippingAddress,
     currency,
-    amount_paid: amountPaid,
-    tax_amount: taxAmount,
-    discount_amount: discountAmount,
+    total,
+    subtotal,
+    shippingFee,
+    taxAmount,
+    discountAmount,
+    amountPaid,
     balance,
-    current_document_kind: currentDocumentKind,
-    invoice_type_code: invoiceTypeCode,
-    receipt_eligible: receiptEligible,
-    can_cancel: canCancel,
-    customer_name: customerName,
-    customer_email: customerEmail,
-    customer_phone: customerPhone,
-    merchant_support_email: merchant.support_email || null,
-    merchant_support_phone: merchant.support_phone || null,
-    rider_phone_number: merchant.rider_phone_number || null,
-    notes: order.notes || null,
-    transactions: confirmedTransactions.map((transaction) => ({
-      id: transaction.id || undefined,
-      amount: asNumber(transaction.amount),
-      created_at: transaction.created_at,
-      description: transaction.description,
-      metadata: transaction.metadata,
-    })),
-    virtual_account: receiptOrder.virtual_account || null,
-  };
+    customerName,
+    customerEmail,
+    customerPhone,
+    invoiceTypeCode,
+    receiptEligible,
+    isManualOrderRow,
+    manualDocumentAvailable,
+    canCancel,
+    currentDocumentKind,
+    confirmedTransactions,
+    virtualAccount: receiptOrder.virtual_account,
+  });
 
   const invoiceData: InvoiceData = {
     invoice_number: order.order_number,
@@ -515,5 +282,8 @@ export function buildStorefrontAccountDocumentBundle({
     invoiceData,
     receiptOrder,
     receiptMerchant,
+    // Canonical paid-receipt date shared with the emailed PDF: the newest
+    // settled payment, so downloads agree with the attachment header.
+    receiptCompletionDate: selectReceiptCompletionDate(transactions),
   };
 }

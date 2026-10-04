@@ -9,7 +9,11 @@ import type {
   StorefrontAccountDocumentPaymentAccountRow,
   StorefrontAccountDocumentTransactionRow,
 } from '@/lib/storefront-account-document-bundle.types';
-import { asNumber, asRecord } from '@/lib/storefront-account-document-values';
+import {
+  asNumber,
+  asRecord,
+  mergeTransactionPaymentMethod,
+} from '@/lib/storefront-account-document-values';
 import type { StorefrontOrder } from '@/types/storefront-order';
 
 interface BuildReceiptOrderInput {
@@ -112,9 +116,10 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
       : null,
     items: input.orderItems.map((item, index) => ({
       id: item.id,
-      line_id: index + 1,
+      line_id: item.line_id ?? index + 1,
       product_id: item.product_id || null,
       product_name: item.product_name || item.name,
+      description: item.item_description || null,
       condition: item.condition || null,
       variant_id: item.variant_id || null,
       variant_name: item.variant_name,
@@ -135,7 +140,7 @@ export function buildReceiptOrder(input: BuildReceiptOrderInput): ReceiptOrder {
       amount: asNumber(transaction.amount),
       created_at: transaction.created_at,
       description: transaction.description,
-      metadata: transaction.metadata,
+      metadata: mergeTransactionPaymentMethod(transaction),
     })),
   };
 }

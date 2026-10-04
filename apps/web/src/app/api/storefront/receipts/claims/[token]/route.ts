@@ -144,6 +144,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // Verified-email is enforced before either RPC: the pre-deploy v2
+  // implementation validates only the JWT email, so gating on the missing
+  // function alone would let unverified accounts redeem during the rollout
+  // window. The hardened RPC re-checks as defense in depth.
+  if (!auth.user.email_confirmed_at) {
+    return NextResponse.json(
+      {
+        error: 'Verify your email address before claiming this receipt',
+        code: 'EMAIL_UNVERIFIED',
+      },
+      { status: 403 }
+    );
+  }
+
   try {
     const { data, error } = await redeemReceiptClaim({
       source: hasBearerAuthorization(request) ? 'app' : 'web',
@@ -171,6 +185,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const result = parsedResult.data;
 
+    if (result.status === 'email_unverified') {
+      return NextResponse.json(
+        {
+          error: 'Verify your email address before claiming this receipt',
+          code: 'EMAIL_UNVERIFIED',
+        },
+        { status: 403 }
+      );
+    }
+
     if (result.status === 'not_found') {
       return NextResponse.json(
         { error: 'Receipt claim link not found' },
@@ -186,10 +210,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (result.status === 'email_mismatch') {
+      // Manual-order claims redeem invoices and proformas as well as
+      // receipts, and the redeem result carries no document kind: keep the
+      // copy kind-neutral instead of naming the wrong document.
       return NextResponse.json(
         {
           error:
-            'Sign in with the email address that received this receipt link',
+            'Sign in with the email address that received this document link',
         },
         { status: 403 }
       );
@@ -199,6 +226,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: 'Receipt claim link has already been used' },
         { status: 409 }
+      );
+    }
+
+    if (result.status === 'customer_link_failed') {
+      return NextResponse.json(
+        { error: 'This receipt link cannot be linked to your account' },
+        { status: 403 }
       );
     }
 

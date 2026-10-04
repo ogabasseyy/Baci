@@ -266,4 +266,27 @@ describe('buildStorefrontAccountDocumentBundle fulfillment fallbacks', () => {
       'UNMATCHED-SERIAL'
     );
   });
+
+  it('matches fulfillment entries by stored line id, not position', () => {
+    // biome-ignore format: compact fixture preserves the 300-line gate.
+    const item = (id: string, line_id: number, name: string) => ({ id, line_id, product_id: `product-${id}`, variant_id: null, variant_name: null, name, quantity: 1, price: 50000 });
+    const result = buildStorefrontAccountDocumentBundle(
+      createBundleInputWithOrder(
+        {
+          fulfillment_details: {
+            items: [{ orderItemId: '5', imei: 'LINE-5-IMEI' }],
+          },
+        },
+        [item('item-5', 5, 'Widget A'), item('item-2', 2, 'Widget B')]
+      )
+    );
+
+    expect(result.receiptOrder.items.map((row) => row.line_id)).toEqual([5, 2]);
+    expect(result.invoiceData.items[0]?.description).toContain(
+      'IMEI: LINE-5-IMEI'
+    );
+    expect(result.invoiceData.items[1]?.description ?? '').not.toContain(
+      'LINE-5-IMEI'
+    );
+  });
 });

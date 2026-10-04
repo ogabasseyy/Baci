@@ -31,7 +31,10 @@ export function formatReceiptCurrency(amount: number, currency: string) {
   return getReceiptCurrencyFormatter(currency).format(amount);
 }
 
-export function formatReceiptDate(value: string) {
+export function formatReceiptDate(value: string | null | undefined) {
+  // Nullish timestamps (nullable transactions.created_at) render a dash:
+  // new Date(null) is the epoch, not an invalid date.
+  if (value == null) return '-';
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {

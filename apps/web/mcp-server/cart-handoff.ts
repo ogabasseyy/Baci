@@ -28,6 +28,12 @@ export async function prepareCartHandoff({
   quantity: number;
   formatPrice: (price: number) => string;
 }): Promise<CartHandoffResult> {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+    };
+  }
   const { data: product, error: productError } = await supabase
     .from('products')
     .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers')

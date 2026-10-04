@@ -75,7 +75,7 @@ describe('variant output failure contracts', () => {
       supabase: supabase as unknown as SupabaseClient,
       sanitizeString: (value) => value, formatPrice: String,
     });
-    expect(result.structuredContent).toMatchObject({ variants: [], condition_offers: [], variant_lookup_failed: false, offer_lookup_failed: false });
+    expect(result.structuredContent).toMatchObject({ variants: [], condition_offers: [], status: 'empty', variant_lookup_failed: false, offer_lookup_failed: false });
   });
   it('distinguishes an option lookup failure from no listed options, even without colors', async () => {
     const supabase = createSupabase();

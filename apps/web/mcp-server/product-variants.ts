@@ -178,6 +178,7 @@ export async function loadMcpProductVariants({
         catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
         variants: [],
         condition_offers: [],
+        status: 'empty',
         variant_lookup_failed: false,
         offer_lookup_failed: false,
       },

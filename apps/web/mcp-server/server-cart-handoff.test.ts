@@ -216,4 +216,14 @@ describe('MCP cart handoff', () => {
     expect(result.structuredContent).toMatchObject({ success: true, quantity: 1 });
   });
 
+  it.each([0, 11, 1.5, Number.NaN])('rejects out-of-range quantity %s before touching catalog stock', async (quantity) => {
+    const supabase = { from: vi.fn(), rpc: vi.fn() } as unknown as SupabaseClient;
+    const result = await prepareCartHandoff({
+      supabase, merchantId: 'merchant-1', productId: 'any-product', quantity, formatPrice: String,
+    });
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
 });

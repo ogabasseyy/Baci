@@ -66,9 +66,10 @@ export function formatSearchProductsResponse({
     // params, so the link opens the option that satisfied the intent instead
     // of the default. Offers resolve by condition; variants and paired
     // offers additionally pin the variant.
-    const matchedOption = 'selectedOption' in selection
-      ? selection.selectedOption as { kind?: unknown; option_id?: unknown; variantId?: unknown; condition?: unknown } | undefined
-      : undefined;
+    const rawOption = 'selectedOption' in selection ? selection.selectedOption : undefined;
+    const matchedOptionShape = mcpToolOutputSchemas.search_products.shape.products.element.shape.matched_option;
+    const validatedOption = matchedOptionShape.safeParse(rawOption).success ? rawOption : undefined;
+    const matchedOption = validatedOption as { kind?: unknown; option_id?: unknown; variantId?: unknown; condition?: unknown } | undefined;
     const optionParams = new URLSearchParams();
     if (matchedOption?.kind === 'variant' && typeof matchedOption.option_id === 'string' && matchedOption.option_id !== '') {
       optionParams.set('variantId', matchedOption.option_id);
@@ -99,7 +100,7 @@ export function formatSearchProductsResponse({
       stock_level: stockSummary.level,
       stock_confidence: stockSummary.confidence,
       price_status: isDiscounted ? 'discounted' : 'regular',
-      matched_option: 'selectedOption' in selection ? selection.selectedOption : undefined,
+      matched_option: validatedOption,
       available_variants: availableOptions || 'Standard',
       last_updated: p.updated_at,
       url,

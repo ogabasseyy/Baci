@@ -117,7 +117,9 @@ export const mcpToolOutputSchemas = {
     ...lookupFlags,
   }),
   get_product_variants: z.object({
-    status: z.enum(['not_found', 'unavailable', 'invalid_input']).optional(),
+    status: z
+      .enum(['not_found', 'unavailable', 'invalid_input', 'empty'])
+      .optional(),
     message: z.string().optional(),
     product_name: z.string().optional(),
     catalog_colors: catalogColors.optional(),

@@ -21,6 +21,9 @@ export type PlatformAdminBlogPostDetail = PlatformAdminBlogPostSummary & {
   featured_image_width: number | null;
   seo_description: string | null;
   seo_title: string | null;
+  intent?: string | null;
+  intent_source?: string | null;
+  focus_keyword?: string | null;
   tags?: string[] | null;
 };
 
@@ -40,6 +43,9 @@ export type PlatformAdminBlogFormState = {
   status: PlatformAdminBlogStatus;
   tags: string;
   title: string;
+  intent?: string | null;
+  intent_source?: string | null;
+  focus_keyword?: string;
 };
 
 export const DEFAULT_PLATFORM_BLOG_FORM_STATE: PlatformAdminBlogFormState = {

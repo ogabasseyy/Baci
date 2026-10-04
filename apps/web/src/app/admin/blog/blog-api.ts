@@ -64,6 +64,11 @@ function toApiPayload(
     content: input.content,
     excerpt: toOptionalString(input.excerpt),
     featured_image_alt: toOptionalString(input.featured_image_alt),
+    ...(input.focus_keyword
+      ? { focus_keyword: toOptionalString(input.focus_keyword) }
+      : {}),
+    ...(input.intent ? { intent: input.intent } : {}),
+    ...(input.intent_source ? { intent_source: input.intent_source } : {}),
     seo_description: toOptionalString(input.seo_description),
     seo_title: toOptionalString(input.seo_title),
     slug: input.slug || undefined,

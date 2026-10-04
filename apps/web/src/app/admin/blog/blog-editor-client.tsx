@@ -10,6 +10,7 @@ import {
   updatePlatformBlogPost,
 } from '@/app/admin/blog/blog-api';
 import { BlogEditorFields } from '@/app/admin/blog/blog-editor-fields';
+import { BlogReviewHandoffImporter } from '@/app/admin/blog/blog-review-handoff-importer';
 import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
   type PlatformAdminBlogFormState,
@@ -138,6 +139,9 @@ function toFormState(
     featured_image_url: post.featured_image_url || '',
     featured_image_variants: post.featured_image_variants ?? {},
     featured_image_width: post.featured_image_width ?? null,
+    focus_keyword: post.focus_keyword ?? '',
+    intent: post.intent ?? null,
+    intent_source: post.intent_source ?? null,
     seo_description: post.seo_description || '',
     seo_title: post.seo_title || '',
     slug: post.slug,
@@ -230,6 +234,8 @@ export function BlogEditorClient({
         </Button>
         <h1 className="text-page-title">{pageTitle}</h1>
       </div>
+
+      {!isEditMode && <BlogReviewHandoffImporter onImport={setForm} />}
 
       <BlogEditorFields
         form={form}

@@ -234,7 +234,11 @@ describe('blog-api', () => {
       )
     );
 
-    await createPlatformBlogPost(sampleForm);
+    await createPlatformBlogPost({
+      ...sampleForm,
+      intent: 'comparison',
+      intent_source: 'draft_task_type',
+    });
 
     expect(mockFetchWithCsrf).toHaveBeenCalledWith(
       '/api/admin/blog/posts',
@@ -253,6 +257,8 @@ describe('blog-api', () => {
     expect(body.seo_title).toBeUndefined();
     expect(body.slug).toBeUndefined();
     expect(body.featured_image_height).toBe(675);
+    expect(body.intent).toBe('comparison');
+    expect(body.intent_source).toBe('draft_task_type');
     expect(body.featured_image_width).toBe(1200);
     expect(body.featured_image_variants).toEqual(
       sampleForm.featured_image_variants

@@ -46,6 +46,18 @@ export const blogPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional().nullable(),
+  intent: z
+    .enum([
+      'news',
+      'comparison',
+      'repair-guide',
+      'buying-guide',
+      'platform',
+      'unknown',
+    ])
+    .optional()
+    .nullable(),
+  intent_source: z.string().max(100).optional().nullable(),
   category: z.string().max(100).optional().nullable(),
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
@@ -97,6 +109,17 @@ export const createPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional(),
+  intent: z
+    .enum([
+      'news',
+      'comparison',
+      'repair-guide',
+      'buying-guide',
+      'platform',
+      'unknown',
+    ])
+    .optional(),
+  intent_source: z.string().max(100).optional(),
   category: z.string().max(100).optional(),
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),

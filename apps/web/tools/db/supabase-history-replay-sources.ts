@@ -2,6 +2,7 @@
 
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
+import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
@@ -260,6 +261,7 @@ const PENDING_SOURCES = [
   GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES,
   SEARCH_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
+  BLOG_PENDING_REPLAY_SOURCE_ROWS,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })

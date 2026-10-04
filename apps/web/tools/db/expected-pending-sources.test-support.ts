@@ -39,6 +39,11 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   {
     repositoryPath:
+      'supabase/migrations/20261004150000_add_blog_post_intent_metadata.sql',
+    sha256: '0757b5d4e9aca6ea814ebc198564c59a19dc1e76dfed001d35d0344b32268fa6',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',
     sha256: 'e8398b0b10a5e9d199707bcceb5835f865bfce85dd4732e9bc46fc4e13d16d29',
   },

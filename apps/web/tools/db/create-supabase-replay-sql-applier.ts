@@ -33,31 +33,20 @@ export function createSupabaseReplaySqlApplier(
       ) {
         throw new Error('Connector retention replay source hash mismatch');
       }
-      // The historical migration must remain identical to the production ledger.
-      // Install the real extension, but do not launch background jobs in a replay.
-      await run(
-        psqlBin,
-        [...args, '-c', "ALTER SYSTEM SET cron.launch_active_jobs = 'off'"],
-        { env }
-      );
-      await run(
-        psqlBin,
-        [...args, '-c', 'SELECT pg_reload_conf(); SELECT pg_sleep(0.1);'],
-        { env }
-      );
-      await run(
-        psqlBin,
-        [
-          ...args,
-          '-c',
-          `DO $$ BEGIN
-        IF current_setting('cron.launch_active_jobs') <> 'off' THEN
-          RAISE EXCEPTION 'Replay cron execution must be disabled';
-        END IF;
-      END $$; CREATE EXTENSION IF NOT EXISTS pg_cron;`,
-        ],
-        { env }
-      );
+      // Provision the managed extension using the normal local database owner.
+      await run(psqlBin, [...args, '-f', '-'], {
+        env,
+        input: 'CREATE EXTENSION IF NOT EXISTS pg_cron;',
+      });
+      // Create and deactivate the replay schedule in one transaction: the cron
+      // worker never observes a committed runnable job. The ledger SQL is intact.
+      return run(psqlBin, [...args, '-f', '-'], {
+        env,
+        input: `BEGIN;
+${bytes.toString('utf8')}
+SELECT cron.alter_job(jobid, active := false) FROM cron.job WHERE jobname = 'baci-connector-retention';
+COMMIT;`,
+      });
     }
     return run(psqlBin, [...args, '-f', sqlPath], { env });
   };

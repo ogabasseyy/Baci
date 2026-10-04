@@ -38,17 +38,18 @@ describe('createSupabaseReplaySqlApplier', () => {
       .mockResolvedValue({ stdout: '', stderr: '' });
     const file = await retentionFile();
     await createSupabaseReplaySqlApplier(run, 'psql', url)(file);
-    const calls = run.mock.calls.map(([, args]) => args.join(' '));
-    expect(calls).toHaveLength(4);
-    expect(calls[0]).toContain(
-      "ALTER SYSTEM SET cron.launch_active_jobs = 'off'"
+    const calls = run.mock.calls.map(
+      ([, args, options]) => options?.input ?? args.join(' ')
     );
-    expect(calls[1]).toContain('pg_reload_conf()');
-    expect(calls[2]).toContain(
-      "current_setting('cron.launch_active_jobs') <> 'off'"
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain('CREATE EXTENSION IF NOT EXISTS pg_cron');
+    expect(calls[1]).toMatch(/^BEGIN;/);
+    expect(calls[1]).toContain(await readFile(file, 'utf8'));
+    expect(calls[1]).toContain('cron.alter_job(jobid, active := false)');
+    expect(calls[1]).toMatch(/COMMIT;$/);
+    expect(calls[1].indexOf('cron.schedule(')).toBeLessThan(
+      calls[1].indexOf('cron.alter_job(')
     );
-    expect(calls[2]).toContain('CREATE EXTENSION IF NOT EXISTS pg_cron');
-    expect(calls[3]).toContain(`-f ${file}`);
     for (const [, args, options] of run.mock.calls) {
       expect(args.join(' ')).not.toContain('test-only');
       expect(options?.env?.PGHOST).toBe('127.0.0.1');
@@ -80,7 +81,7 @@ describe('createSupabaseReplaySqlApplier', () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it('fails closed if cron isolation fails', async () => {
+  it('does not apply retention if extension provisioning fails', async () => {
     const run = vi
       .fn<ReplayCommand>()
       .mockRejectedValue(new Error('isolation failed'));

@@ -122,8 +122,9 @@ is skipped when unavailable under the owner's explicit instruction.
 ## PR review follow-up
 
 PR #3629 found missing pg_cron provisioning in the isolated replay, now handled
-by a loopback-only runner prerequisite with cron execution disabled and source
-hash verification. The original six applied migration files remain unchanged.
+by a loopback-only runner prerequisite with source hash verification. It installs
+the real extension, then applies the unchanged retention SQL and deactivates its
+replay-only schedule in one transaction so no runnable job becomes visible. The original six applied migration files remain unchanged.
 
 Current fixes enforce owner-only grant creation and tool-time authority in a
 new append-only migration; cap active grants at the 50 connections exposed by

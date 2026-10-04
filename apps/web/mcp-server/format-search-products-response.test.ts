@@ -255,13 +255,13 @@ describe('formatSearchProductsResponse', () => {
     const response = formatSearchProductsResponse({
       selectedProducts: [{
         ...selectedProducts[0],
-        availableVariants: [{ attributes: { color: 'Black', storage: { gb: 256 }, ram: 8 } }],
+        availableVariants: [{ attributes: { color: 'Black', storage: { gb: 256 }, ram: 8, cores: 0, waterproof: false } }],
       }] as unknown as typeof selectedProducts,
       sanitizedQuery: 'laptop', coverage: 'complete', searchMode: 'structured',
       semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
     });
     expect(response.content[0].text).not.toContain('[object Object]');
-    expect(response.structuredContent.products[0].available_variants).toBe('color: Black | ram: 8');
+    expect(response.structuredContent.products[0].available_variants).toBe('color: Black | ram: 8 | cores: 0 | waterproof: false');
   });
 
 });

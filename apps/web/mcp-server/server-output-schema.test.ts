@@ -76,6 +76,21 @@ describe('public MCP output contracts', () => {
     }
   }, 60_000);
 
+  it('accepts variants success payloads with extra row fields in the real SDK client', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    const client = new Client({ name: 'variants-success-test', version: '1.0.0' });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
+      const result = await client.callTool({ name: 'get_product_variants', arguments: { product_id: 'variant-available-product' } });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({ variants: [{ attributes: { storage: '256GB' } }] });
+      expect(JSON.stringify(result.structuredContent)).toContain('variant-available-product');
+      expect(mcpToolOutputSchemas.get_product_variants.safeParse(result.structuredContent).success).toBe(true);
+    } finally {
+      try { await client.close(); } finally { await server.close(); }
+    }
+  }, 30_000);
+
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

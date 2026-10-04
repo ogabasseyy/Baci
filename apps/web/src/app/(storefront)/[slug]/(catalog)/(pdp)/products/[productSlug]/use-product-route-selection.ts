@@ -17,6 +17,7 @@ import { getValidConditionOptions } from './product-selection-utils';
 export function useProductRouteSelection(product: Product) {
   const searchParams = useSearchParams();
   const conditionParam = searchParams.get('condition');
+  const offerIdParam = searchParams.get('offer_id');
   const usesVariantRouteSelection = Boolean(
     product.has_variants && product.variants && product.variants.length > 0
   );
@@ -28,7 +29,11 @@ export function useProductRouteSelection(product: Product) {
     {}) as Record<string, string>;
   const routeConditionSource =
     routeSelectionInput.condition ??
-    (!usesVariantRouteSelection ? conditionParam : undefined);
+    (!usesVariantRouteSelection
+      ? (conditionParam ??
+        product.offers?.find((offer) => String(offer.id) === offerIdParam)
+          ?.condition)
+      : undefined);
   const routeCondition =
     normalizeCanonicalProductCondition(routeConditionSource);
   const routeVariantId = routeSelectionInput.variantId ?? undefined;
@@ -41,8 +46,8 @@ export function useProductRouteSelection(product: Product) {
   const availableConditionOptions = usesVariantConditions
     ? getValidConditionOptions(getVariantConditionOptions(product))
     : [];
-  // Search/compare entry points forward the advertised matched offer id.
-  const offerIdParam = searchParams.get('offer_id');
+  // ID-only comparison links derive condition from this product's live offer.
+  // Explicit condition constraints remain authoritative when supplied.
   return {
     availableConditionOptions,
     defaultVariantSelection,

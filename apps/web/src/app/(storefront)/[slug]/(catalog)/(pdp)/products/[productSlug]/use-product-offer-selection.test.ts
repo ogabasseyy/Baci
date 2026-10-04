@@ -60,6 +60,30 @@ describe('useProductOfferSelection', () => {
   beforeEach(() => {
     mockUseSearchParams.mockReturnValue(new URLSearchParams());
   });
+  it('resolves ID-only comparison links from the live offer condition, including refreshes', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=o1'));
+    const { result, rerender } = renderHook(
+      ({ product }) => useProductOfferSelection(product),
+      {
+        initialProps: { product: baseProduct },
+      }
+    );
+    expect(result.current.selectedCondition).toBe('used');
+    expect(result.current.selectedOffer?.id).toBe('o1');
+    expect(result.current.currentPrice).toBe(80);
+    rerender({
+      product: {
+        ...baseProduct,
+        offers: baseProduct.offers?.map((offer) => ({
+          ...offer,
+          condition: 'open_box',
+        })),
+      },
+    });
+    expect(result.current.selectedCondition).toBe('open_box');
+    expect(result.current.selectedOffer?.id).toBe('o1');
+    expect(result.current.currentPrice).toBe(80);
+  });
 
   it('honors a forwarded offer id that matches the selected condition', () => {
     mockUseSearchParams.mockReturnValue(
@@ -74,6 +98,15 @@ describe('useProductOfferSelection', () => {
   it('ignores a forwarded offer id that names no offer', () => {
     mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=nope'));
     const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    expect(result.current.selectedOffer).toBeNull();
+    expect(result.current.currentPrice).toBe(100);
+  });
+  it('preserves an explicit condition constraint that conflicts with the offer', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=new&offer_id=o1')
+    );
+    const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    expect(result.current.selectedCondition).toBe('new');
     expect(result.current.selectedOffer).toBeNull();
     expect(result.current.currentPrice).toBe(100);
   });

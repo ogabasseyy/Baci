@@ -192,3 +192,19 @@ UPDATE public.orders SET shipping_address = shipping_address || '{"name": "Ade",
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'admin-only shipping edit keeps the marker');
 UPDATE public.orders SET shipping_address = shipping_address || '{"city": "Abuja"}' WHERE id = '10000000-0000-4000-8000-000000000077';
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'rendered shipping edit resets the marker');
+-- A bank-code correction under a placeholder name resets the invoice
+-- marker (the emailed card changes); a code-only edit under a valid
+-- name keeps it. The fallback card needs an account number to render,
+-- so the probe sets one first.
+UPDATE public.merchants SET bank_account_number = '1234567890', bank_name = 'unknown', bank_code = '058' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET bank_code = '011' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'code correction under a placeholder resets the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET bank_name = 'GTBank' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'placeholder-to-valid name change resets the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET bank_code = '058' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'code-only edit under a valid name keeps the invoice marker');
+UPDATE public.merchants SET bank_account_number = NULL, bank_name = NULL, bank_code = NULL WHERE id = '10000000-0000-4000-8000-000000000001';

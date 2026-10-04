@@ -48,11 +48,24 @@ describe('dispatch snapshot builders', () => {
       ngnInvoice,
       'proforma_invoice'
     );
-    // bank_code never prints (name/number/account name only): the snapshot
-    // reserves the field as null even when the merchant row carries a code.
+    // The raw code stays reserved-null, but the NAME snapshots resolved:
+    // the valid stored name wins over the code map here.
     expect(snapshot.merchantBankCode).toBeNull();
+    expect(snapshot.merchantBankName).toBe('GTBank');
     expect(snapshot.merchantBankAccountNumber).toBe('1234567890');
     expect(snapshot.virtualAccountNumber).toBeNull();
+  });
+
+  it('resolves the bank name from the code under placeholder names', () => {
+    const snapshot = buildDispatchPaymentSnapshot(
+      Object.assign({}, merchant, { bank_name: 'unknown' }),
+      null,
+      ngnInvoice,
+      'invoice'
+    );
+    // A code correction here changes the emailed card, so the resolved
+    // name — not the placeholder — is what the RPC compares.
+    expect(snapshot.merchantBankName).toBe('Guaranty Trust Bank');
   });
 
   it('excludes hidden bank data from the snapshot', () => {

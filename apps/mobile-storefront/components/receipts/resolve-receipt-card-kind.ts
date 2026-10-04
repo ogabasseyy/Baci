@@ -6,7 +6,10 @@ import type { ReceiptListItem } from '@/types/receipt';
 // through the promotion gate, but a cached entry can outlive a terminal
 // shipping flip — re-verify manual receipts through the same gate so a
 // cancelled row never badges Receipt/View Receipt. Non-manual rows keep
-// the list kind (the paid shortcut owns them, not this gate).
+// the list kind (the paid shortcut owns them, not this gate). The check
+// is intentionally demote-only: a stale cached invoice stays an invoice
+// until the list refetches — promoting it here would badge money
+// received on data the promotion inputs have not re-validated.
 export function resolveReceiptCardKind(
   item: ReceiptListItem
 ): ReceiptListItem['document_kind'] {

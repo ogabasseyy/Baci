@@ -34,6 +34,53 @@ $function$;
 REVOKE ALL ON FUNCTION private.resolved_merchant_address_line(jsonb, text)
   FROM PUBLIC, anon, authenticated;
 
+-- Effective rendered bank name, mirroring resolveMerchantBankName: a
+-- valid stored name wins (trimmed, placeholder spellings rejected);
+-- otherwise the code map fills it, else ''. The trigger and the
+-- dispatch RPC compare this resolved value — never the raw columns.
+CREATE OR REPLACE FUNCTION private.resolved_merchant_bank_name(
+  p_bank_name text, p_bank_code text
+)
+RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
+  SELECT CASE
+    WHEN lower(btrim(COALESCE(p_bank_name, ''), E' \t\n\r\f\v'))
+      IN ('', 'unknown', 'unknown bank', 'n/a')
+    THEN COALESCE(CASE p_bank_code
+      WHEN '044' THEN 'Access Bank'
+      WHEN '023' THEN 'Citibank Nigeria'
+      WHEN '063' THEN 'Diamond Bank'
+      WHEN '050' THEN 'Ecobank Nigeria'
+      WHEN '070' THEN 'Fidelity Bank'
+      WHEN '011' THEN 'First Bank of Nigeria'
+      WHEN '214' THEN 'First City Monument Bank'
+      WHEN '058' THEN 'Guaranty Trust Bank'
+      WHEN '030' THEN 'Heritage Bank'
+      WHEN '301' THEN 'Jaiz Bank'
+      WHEN '082' THEN 'Keystone Bank'
+      WHEN '526' THEN 'Parallex Bank'
+      WHEN '076' THEN 'Polaris Bank'
+      WHEN '101' THEN 'Providus Bank'
+      WHEN '221' THEN 'Stanbic IBTC Bank'
+      WHEN '068' THEN 'Standard Chartered Bank'
+      WHEN '232' THEN 'Sterling Bank'
+      WHEN '100' THEN 'Suntrust Bank'
+      WHEN '032' THEN 'Union Bank of Nigeria'
+      WHEN '033' THEN 'United Bank for Africa'
+      WHEN '215' THEN 'Unity Bank'
+      WHEN '035' THEN 'Wema Bank'
+      WHEN '057' THEN 'Zenith Bank'
+      WHEN '999992' THEN 'Opay'
+      WHEN '50515' THEN 'Moniepoint'
+      WHEN '999991' THEN 'PalmPay'
+      WHEN '090110' THEN 'VFD Microfinance Bank'
+      WHEN '090267' THEN 'Kuda Bank'
+    END, '')
+    ELSE btrim(p_bank_name, E' \t\n\r\f\v')
+  END;
+$function$;
+REVOKE ALL ON FUNCTION private.resolved_merchant_bank_name(text, text)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -49,10 +96,16 @@ BEGIN
     OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.email IS DISTINCT FROM NEW.email
     OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
+  -- The bank NAME compares resolved (stored name, else the code-map
+  -- fallback): a code correction under a blank/placeholder name changes
+  -- the emailed card, while a code-only edit under a valid name changes
+  -- no pixel and must not go corrective.
   v_bank_changed :=
     OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
-    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
-    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name;
+    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name
+    OR private.resolved_merchant_bank_name(OLD.bank_name, OLD.bank_code)
+      IS DISTINCT FROM
+      private.resolved_merchant_bank_name(NEW.bank_name, NEW.bank_code);
   v_shared_changed :=
     OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
@@ -76,10 +129,11 @@ BEGIN
     IS DISTINCT FROM
     private.resolved_merchant_address_line(NEW.registered_address, NEW.business_address);
   -- Rendered snapshot inputs: validation-repair fields plus every field
-  -- the renderers print. cac_rc_number, vat_registration_status, and
-  -- bank_code print nowhere, so edits confined to them re-arm nothing.
-  -- The bank half mirrors the invalidation below: the fallback card
-  -- requires an account number to render at all.
+  -- the renderers print. cac_rc_number and vat_registration_status print
+  -- nowhere, so edits confined to them re-arm nothing. (bank_code feeds
+  -- the resolved bank name via the code-map fallback, so it rides along
+  -- in v_bank_changed.) The bank half mirrors the invalidation below:
+  -- the fallback card requires an account number to render at all.
   v_snapshot_changed :=
     v_validation_changed
     OR v_shared_changed
@@ -119,8 +173,8 @@ BEGIN
   -- addresses), and a correction racing the snapshot read would
   -- otherwise let the worker record a terminal skip from its stale
   -- values. Edits confined to unrendered fields (cac_rc_number,
-  -- vat_registration_status, bank_code) keep the lease: repeated
-  -- unrelated saves must not starve delivery. Marked rows stay for
+  -- vat_registration_status) keep the lease: repeated unrelated saves
+  -- must not starve delivery. Marked rows stay for
   -- the invalidation half below; sent and possibly-dispatched rows
   -- stay terminal.
   IF v_snapshot_changed THEN
@@ -147,13 +201,13 @@ BEGIN
   -- Bank fields reset invoice markers only, and only for NGN orders
   -- without a selected virtual account: receipts render no payment
   -- instructions, foreign-currency invoices strip all bank details, and
-  -- a selected VA replaces the merchant-bank card. bank_code never
-  -- prints (name/number/account name only) and the fallback card
-  -- requires an account number to render at all, so code-only edits and
-  -- numberless-merchant edits reset nothing either. The dispatch RPC
-  -- compares the same rendered-only subset. Each kind resets
-  -- independently so multi-field edits invalidate the union, never a
-  -- subset.
+  -- a selected VA replaces the merchant-bank card. The name compares
+  -- resolved (stored name, else the code-map fallback), so a code
+  -- correction under a placeholder name resets while a code-only edit
+  -- under a valid name does not; numberless-merchant edits reset
+  -- nothing either. The dispatch RPC compares the same rendered-only
+  -- subset. Each kind resets independently so multi-field edits
+  -- invalidate the union, never a subset.
   IF v_shared_changed OR v_business_address_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()

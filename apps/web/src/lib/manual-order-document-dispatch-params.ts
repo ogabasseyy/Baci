@@ -46,7 +46,8 @@ export interface DispatchOutboxRow {
 }
 
 export interface DispatchPaymentSnapshot {
-  // Reserved null: bank_code is never printed, so the snapshot omits it
+  // Reserved null: the raw code rides inside the RESOLVED bank name
+  // (stored name, else the code-map fallback), so the snapshot omits it
   // and the RPC ignores the positional parameter (kept for signature
   // stability across the SQL call sites).
   merchantBankCode: string | null;

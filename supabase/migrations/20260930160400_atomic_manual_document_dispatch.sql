@@ -1,25 +1,17 @@
--- Atomically validate the rendered snapshot and mark dispatch start for a
--- manual-order document. A check-then-mark in application code leaves a
--- millisecond race between the re-read and the marker; this function locks
--- items/transactions, parents, tax, then takes the per-order and
--- per-merchant advisory gates. Items and transactions go first because
--- their row triggers enter holding those locks, while tax goes after the
--- parent to match the historical tax-rebuild trigger's parent-to-child
--- order. A payment, contact correction, or item edit landing mid-dispatch
--- aborts instead of sending a stale document. The snapshot covers every
--- order-row input the renderer reads (identity, money, notes, address,
--- dates, item contents) plus the manual-order origin fields, and the sent
--- kind lands in row metadata so claim previews survive later payments.
--- Payment instructions compare for invoice and proforma kinds only
--- (receipts render none); the issuer identity compares for every kind
--- since receipts print the issuer header too. VAT subtotals, payment
--- history (settled filter), and the claim-link domain compare as count
--- plus canonical rows. The worker retries after an abort and converges.
--- Safe predeploy: only the new worker calls it.
--- Advisory gates exist regardless of outbox status; rows precede them
--- on every path and multi-key holders sort ascending, so no cycle forms.
--- The marker write re-validates the lease. DROP before CREATE: the
--- branding params changed the signature, which OR REPLACE cannot do.
+-- Atomically validate the rendered snapshot and mark dispatch start for
+-- a manual-order document: a check-then-mark in app code races the
+-- marker. Lock order is items/transactions, parents, tax, then the
+-- per-order/per-merchant advisory gates — child-first matches the row
+-- triggers, tax-after-parent matches the tax-rebuild trigger, and
+-- sorted multi-key advisory holders keep every path acyclic. A payment,
+-- contact correction, or item edit landing mid-dispatch aborts instead
+-- of sending stale; the worker retries and converges. The snapshot
+-- covers every rendered order/merchant input (issuer header compares
+-- for every kind; payment instructions and tax compare for invoices
+-- only; VAT/history/domain compare as count plus canonical rows), and
+-- the sent kind lands in metadata so claim previews survive payments.
+-- Safe predeploy: only the new worker calls it. DROP before CREATE:
+-- the branding params changed the signature, which OR REPLACE cannot do.
 DROP FUNCTION IF EXISTS public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text);
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
@@ -51,7 +43,7 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_document_kind text,
   p_item_count integer,
   p_items jsonb,
-  -- Reserved slot: bank_code never prints; the stale check ignores it.
+  -- Reserved slot: the raw code rides inside the resolved bank name.
   p_merchant_bank_code text,
   p_merchant_bank_account_number text,
   p_merchant_bank_name text,
@@ -99,9 +91,8 @@ DECLARE
   v_merchant_id uuid;
   v_item_count bigint;
   v_items jsonb;
-  v_merchant_bank_account_number text;
-  v_merchant_bank_name text;
-  v_merchant_bank_account_name text;
+  v_merchant_bank_code text; v_merchant_bank_account_number text;
+  v_merchant_bank_name text; v_merchant_bank_account_name text;
   v_va_account_number text; v_va_bank_name text; v_va_account_name text;
   v_compare_invoice_only boolean;
   v_tax_count bigint; v_tax_subtotals jsonb;
@@ -125,8 +116,7 @@ BEGIN
   -- Receipts render no payment instructions and no subtotal breakdown:
   -- bank, virtual-account, and tax compares run for invoices only.
   v_compare_invoice_only := p_document_kind <> 'receipt';
-  -- Lock order (child rows, parent, advisory): tax follows the parent to
-  -- match the historical rebuild trigger. The outbox seed is re-validated below.
+  -- Lock order (child, parent, advisory); the outbox seed is re-validated below.
   SELECT n.order_id, n.merchant_id INTO v_order_id, v_merchant_id
   FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id;
   IF NOT FOUND THEN
@@ -143,13 +133,13 @@ BEGIN
   SELECT m.business_name, m.legal_entity_name, m.business_address,
     m.registered_address, m.tax_identification_number,
     m.support_email, m.support_phone,
-    m.phone, m.bank_account_number, m.bank_name,
+    m.phone, m.bank_code, m.bank_account_number, m.bank_name,
     m.bank_account_name, m.slug, m.email_sender_name, m.logo_url, m.brand_colors
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
     v_merchant_tax_identification_number,
     v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
-    v_merchant_bank_account_number,
+    v_merchant_bank_code, v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug,
     v_merchant_email_sender_name, v_merchant_logo_url, v_merchant_brand_colors
   FROM public.merchants AS m WHERE m.id = v_order.merchant_id FOR SHARE;
@@ -157,14 +147,11 @@ BEGIN
   -- soft-delete until commit (its trigger then resets the marker).
   PERFORM 1 FROM public.customers AS c
   WHERE c.id = v_order.customer_id FOR SHARE OF c;
-  -- Tax locks AFTER the parent: the historical tax-rebuild trigger runs
-  -- parent-to-child, so tax-first here deadlocks against a concurrent
-  -- item insert. Items/transactions stay child-first to match the row
-  -- triggers that enter holding those locks.
+  -- Tax locks AFTER the parent (the tax-rebuild trigger runs
+  -- parent-to-child); items/transactions stay child-first per above.
   PERFORM 1 FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order_id FOR SHARE OF ts;
-  -- Advisory gates after all row locks: the writers this serializes
-  -- against take the same keys after their row locks.
+  -- Advisory gates last: writers take the same keys after row locks.
   PERFORM private.lock_manual_document_gate_keys(
     private.manual_document_gate_key('order', v_order_id),
     private.manual_document_gate_key('merchant', v_merchant_id));
@@ -176,8 +163,7 @@ BEGIN
     RETURN jsonb_build_object('status', 'lease_lost');
   END IF;
   -- Post-gate re-reads, lock-free: the gate serialized against every
-  -- invalidation trigger, so these see all committed writes. Locking here
-  -- would reverse the rows-before-advisory order and deadlock.
+  -- invalidation trigger; locking here would reverse the order and deadlock.
   SELECT d.domain INTO v_claim_domain
   FROM public.domains AS d
   WHERE d.merchant_id = v_merchant_id AND d.is_primary = true
@@ -190,8 +176,7 @@ BEGIN
   FROM private.manual_document_payment_account_snapshot(v_order.id) AS s;
   SELECT count(*) INTO v_item_count FROM public.order_items AS oi
   WHERE oi.order_id = v_order.id;
-  -- Snapshot field selection must stay in lockstep with the sender in
-  -- apps/web/src/lib/manual-order-document-dispatch-items.ts.
+  -- Item snapshot stays in lockstep with manual-order-document-dispatch-items.ts.
   SELECT private.manual_document_item_snapshot(v_order.id) INTO v_items;
   SELECT count(*) INTO v_tax_count FROM public.order_tax_subtotals AS ts
   WHERE ts.order_id = v_order.id;
@@ -236,24 +221,20 @@ BEGIN
     OR v_items IS DISTINCT FROM p_items
     OR v_merchant_business_name IS DISTINCT FROM p_merchant_business_name
     OR v_merchant_legal_entity_name IS DISTINCT FROM p_merchant_legal_entity_name
-    -- Addresses resolve per kind like getMerchantAddressLine: receipts
-    -- print business_address; invoices print the registered line when it
-    -- renders nonempty, else business_address. Compare the resolved line
-    -- so a shadowed-column edit never aborts an identical render.
+    -- Addresses resolve per kind like getMerchantAddressLine (receipts:
+    -- business_address; invoices: registered line when nonempty).
     OR (NOT v_compare_invoice_only
       AND v_merchant_business_address IS DISTINCT FROM p_merchant_business_address)
     OR (v_compare_invoice_only
       AND private.resolved_merchant_address_line(v_merchant_registered_address, v_merchant_business_address)
         IS DISTINCT FROM
         private.resolved_merchant_address_line(p_merchant_registered_address, p_merchant_business_address))
-    -- cac/vat fields print nowhere, so the trigger and this check both
-    -- ignore them like the reserved bank slot.
+    -- cac/vat fields print nowhere; the trigger and this check skip them.
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone
     OR v_merchant_phone IS DISTINCT FROM p_merchant_phone
-    -- Without an active custom domain the claim URL falls back to the
-    -- slug subdomain, so a slug change must abort like a domain change.
+    -- No custom domain: the claim URL falls back to the slug subdomain.
     OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
@@ -272,16 +253,15 @@ BEGIN
         OR (v_va_account_number IS NULL AND p_va_account_number IS NULL)
           AND (v_merchant_bank_account_number IS NOT NULL OR p_merchant_bank_account_number IS NOT NULL)
           AND (v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
-            OR v_merchant_bank_name IS DISTINCT FROM p_merchant_bank_name
+            OR private.resolved_merchant_bank_name(v_merchant_bank_name, v_merchant_bank_code)
+              IS DISTINCT FROM p_merchant_bank_name
             OR v_merchant_bank_account_name IS DISTINCT FROM p_merchant_bank_account_name)))
     OR (v_compare_invoice_only AND (
       v_tax_count IS DISTINCT FROM p_tax_count::bigint
       OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
-    -- Customer liveness and scope under the row lock: a missing, deleted,
-    -- or reassigned customer aborts; a racing delete blocks, then resets.
-
+    -- Customer liveness under the row lock; a racing delete then resets.
     OR NOT EXISTS (SELECT 1 FROM public.customers AS c
       WHERE c.id = v_order.customer_id AND c.deleted_at IS NULL
         AND c.merchant_id = v_order.merchant_id)
@@ -296,8 +276,7 @@ BEGIN
   RETURN jsonb_build_object('status', 'marked');
 END;
 $$;
--- Grants live in this creation migration: the applier commits each file
--- separately, so a split grant would expose PUBLIC execute between commits.
+-- Grants stay in this creation migration: a split grant would expose PUBLIC execute between commits.
 REVOKE ALL ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text)

@@ -114,7 +114,7 @@ def audit_invocations(ctx, drift):
             argv0, rest = peel_prefix(words)
             if argv0 not in INTERP_ALLOW:
                 continue
-            if not script_operand(rest) \
+            if not script_operand(rest, argv0) \
                     and "script-consumer-unbound-invocation" \
                     not in drift:
                 drift.append("script-consumer-unbound-invocation")

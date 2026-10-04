@@ -4,7 +4,7 @@ trusted-scripts checkout (ref, credentials, action, repo).
 """
 import re
 from semgrep_sarif_pins import AUDITED_PATH, PINNED_CHECKOUT_USES
-from semgrep_sarif_refs import (_envmap, _norm_ref_value,
+from semgrep_sarif_refs import (_envmap, _flow_pr_ref, _norm_ref_value,
                                 _ref_value, ref_is_pr_controlled,
                                 ref_is_unresolved)
 from semgrep_sarif_shell import (map_key_value, strip_comments,
@@ -120,7 +120,8 @@ def find_pr_refs(ctx, drift):
     envmap = _envmap(ctx)
     ctx.pr_refs = [i for i, line in enumerate(ctx.workflow_lines)
                    if ref_is_pr_controlled(line, envmap)
-                   or ref_is_unresolved(line, envmap)]
+                   or ref_is_unresolved(line, envmap)
+                   or _flow_pr_ref(line)]
     if any(ref_is_unresolved(line, envmap)
            for line in ctx.workflow_lines) \
             and "pr-ref-unresolved" not in drift:
@@ -236,14 +237,13 @@ def audit_pr_checkout(ctx, drift):
 
 
 def audit_flow_with(ctx, drift):
-    # Step inputs must use block mappings: a flow mapping
-    # (with: {ref: ..., path: ...}) hides checkout inputs from
-    # the line-based shape/count rules, and a duplicate flow
-    # with: overrides the audited block inputs. (Multi-line
-    # flows need no rule: their inner lines parse normally.)
+    # Step inputs must use bare block mappings: any with:
+    # value (flow, anchor, alias, tag, scalar) hides inputs
+    # from the line-based shape/count rules.
     for line in ctx.workflow_lines:
         key, val = map_key_value(line.strip())
-        if key == "with" and (val or "").lstrip().startswith("{") \
+        val = re.sub(r"\s+#.*$", "", val or "")
+        if key == "with" and val.strip() \
                 and "checkout-flow-with" not in drift:
             drift.append("checkout-flow-with")
             break

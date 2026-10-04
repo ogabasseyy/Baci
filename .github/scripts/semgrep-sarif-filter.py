@@ -52,7 +52,11 @@ def main():
     ctx.pr_refs = find_pr_refs(ctx, drift)
     # The change signal gates even the no-checkout exit: a trusted-
     # tree edit that also removes the checkout still needs eyes.
+    # So does the with: shape: a flow/alias value hides the PR
+    # ref that pr_refs looks for, which must fail the run
+    # instead of taking the removed-checkout early return.
     audit_trusted_changed(drift)
+    audit_flow_with(ctx, drift)
     if not ctx.pr_refs:
         # No PR-controlled checkout left to exempt (e.g. removed in
         # favor of API-fetched diffs): nothing to filter, and failing
@@ -68,7 +72,6 @@ def main():
         return 0
     audit_pr_checkout(ctx, drift)
     audit_trusted_checkout(ctx, drift)
-    audit_flow_with(ctx, drift)
     audit_resolver(ctx, drift)
     audit_path_literals(ctx, drift)
     audit_checkout_order(ctx, drift)

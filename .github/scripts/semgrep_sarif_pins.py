@@ -108,15 +108,17 @@ def _is_home_write(target):
         or target.startswith("/home/runner/")
 
 
-def script_operand(rest):
+def script_operand(rest, base=""):
     # Validate an interpreter's script operand. Returns True
     # when bound (or provably non-executing), False on drift.
-    # --version/--help/-n exit or never execute: safe with any
-    # operand. -c/--command drifts (arbitrary code, review it).
-    # -s/stdin/no-operand drifts (uninspectable script).
+    # Options parse left to right (verified on bash 3.2/5.x):
+    # a query flag (--version/--help/-n) exits before later
+    # tokens, but -c executes before a later --help, and a
+    # flag after the script operand is just $1 -- so query
+    # flags count only in the leading option prefix. source/.
+    # take no options at all (their first operand is the
+    # file), so query spellings never excuse them.
     query = {"--version", "--help", "-n", "--noexec"}
-    if any(t in query for t in rest):
-        return True
     redir = re.compile(r"^\d*(>>|>|<<|<<<|<|>&|<&)")
     i = 0
     while i < len(rest):
@@ -127,6 +129,8 @@ def script_operand(rest):
         elif tok == "--":
             i += 1
             break
+        elif tok in query and base not in ("source", "."):
+            return True
         elif tok == "-" or tok in ("-c", "--command",
                                    "--init-file", "--rcfile"):
             return False

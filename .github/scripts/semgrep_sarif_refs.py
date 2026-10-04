@@ -89,15 +89,28 @@ def ref_is_pr_controlled(line, envmap):
         _resolve_env_ref(_ref_value(line), envmap) or "")
 
 
+def _flow_pr_ref(line):
+    # A with: line carrying a PR expression inside a flow
+    # mapping (or any other non-block value): the checkout
+    # exists but no ref: line exposes it, so the exemption
+    # path must run (and the flow rule then drifts).
+    key, _ = map_key_value(line.strip())
+    return key == "with" \
+        and "github.event.pull_request" in line
+
+
 def ref_is_unresolved(line, envmap):
     # An expression-valued ref that is neither PR-controlled
     # (literal or aliased) nor the exact default-branch shape:
     # a runtime value (steps outputs, vars, functions) whose
-    # target the audit cannot verify fails closed.
+    # target the audit cannot verify fails closed. Anchor,
+    # alias, and tag spellings hide the value the same way.
     key, _ = map_key_value(line.strip())
     if key != "ref":
         return False
     value = _ref_value(line) or ""
+    if value.lstrip()[:1] in ("&", "*", "!"):
+        return not ref_is_pr_controlled(line, envmap)
     if "${{" not in value:
         return False
     if ref_is_pr_controlled(line, envmap):

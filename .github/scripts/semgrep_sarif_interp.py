@@ -14,7 +14,7 @@ from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
 from semgrep_sarif_poison import audit_env_dump, audit_ps_env
 from semgrep_sarif_programs import jq_program_has_env
 from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
-                                  NET_DENY, _GCC_RE)
+                                  NET_DENY, _GCC_RE, _LD_SO_RE)
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
 
@@ -62,8 +62,16 @@ def _check_command(argv0, rest, pre, drift, src=""):
             and not (src == "install.sh" and base == "curl") \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
-    if (base in LOAD_DENY or _GCC_RE.match(base)) \
+    if (base in LOAD_DENY or _GCC_RE.match(base)
+            or _LD_SO_RE.match(base)) \
             and "helper-code-loader" not in drift:
+        drift.append("helper-code-loader")
+    if base == "ld" and any(tok in ("-plugin", "--plugin")
+                            for tok in rest) \
+            and "helper-code-loader" not in drift:
+        # ld alone only writes its -o destination (zoned
+        # below), but -plugin loads a DSO whose constructor
+        # runs before linking completes.
         drift.append("helper-code-loader")
     if base in COPY_TOOLS:
         audit_copy_dest(base, rest, drift, src)
@@ -97,7 +105,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
                   "fish", "tcsh", "csh"):
         # Alternate shells bind like bash (busybox stays in
         # NET_DENY: its multi-call form obscures argv0).
-        bound = script_operand(rest)
+        bound = script_operand(rest, base)
         if not bound and base in ("source", ".") and rest \
                 and re.match(RUNNER_PIN, rest[0]):
             # Sourcing inter-phase env files (%q-quoted by

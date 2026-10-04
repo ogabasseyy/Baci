@@ -65,6 +65,39 @@ def _parse_muse_argv(rest):
     return seen, problem
 
 
+def _muse_flag_values(rest):
+    # Every --workspace/--prompt-file value (separate and
+    # =-attached forms): positional consumption mirrors the
+    # argv parser, so a flag-shaped value still counts as a
+    # value. Missing values (redirect or end next) yield
+    # nothing for that occurrence.
+    vals, i, n = [], 0, len(rest)
+    redir = re.compile(r"^\d*(>>|>|<<|<<<|<|>&|<&)")
+    while i < n:
+        tok = rest[i]
+        m = redir.match(tok)
+        if m:
+            i += 1 if len(tok) > m.end() else 2
+            continue
+        if tok.startswith("--"):
+            name, eq, attached = tok.partition("=")
+            if eq and name in ("--workspace", "--prompt-file"):
+                vals.append((name, attached))
+                i += 1
+            elif not eq and name in ("--workspace",
+                                     "--prompt-file"):
+                if i + 1 < n and not redir.match(rest[i + 1]):
+                    vals.append((name, rest[i + 1]))
+                i += 2
+            elif not eq and name in MUSE_VALUE_FLAGS:
+                i += 2
+            else:
+                i += 1
+            continue
+        i += 1
+    return vals
+
+
 def _parse_env_scrub(piece):
     # Exact -u/--unset values. Unknown env shapes (bundles,
     # -C/-S/--argv0, combined shorts) stop the parse: the scrub
@@ -211,4 +244,24 @@ def audit_agent_runner(drift):
             if "GITHUB_TOKEN" not in scrub \
                     or "GH_TOKEN" not in scrub:
                 drift.append("agent-token-isolation")
+            # Pinned path operands: --workspace roots the
+            # agent's file tools (a /proc/self rebind reads
+            # environ despite the symlink sweep) and
+            # --prompt-file feeds the agent its instructions
+            # (a rebound prompt exfils context to Meta). Both
+            # are required: CWD is not audited, so a removed
+            # --workspace has no verified default.
+            vals = _muse_flag_values(
+                [_dequote(w) for w in rest])
+            works = [v for k, v in vals if k == "--workspace"]
+            prompts = [v for k, v in vals
+                       if k == "--prompt-file"]
+            if any(v != "${GITHUB_WORKSPACE}" for v in works) \
+                    or not works:
+                if "agent-workspace-rebind" not in drift:
+                    drift.append("agent-workspace-rebind")
+            if any(v != "${PROMPT_FILE}" for v in prompts) \
+                    or not prompts:
+                if "agent-promptfile-rebind" not in drift:
+                    drift.append("agent-promptfile-rebind")
         _check_model_args(logical, drift)

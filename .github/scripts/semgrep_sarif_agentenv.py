@@ -64,7 +64,9 @@ def audit_agent_env(ctx, drift):
         r"|secrets\s*\[(?!\s*['\"])"
         r"|github\s*\.\s*token\b"
         r"|github\s*\[\s*['\"]token['\"]\s*\]"
-        r"|github\s*\[(?!\s*['\"])",
+        r"|github\s*\[(?!\s*['\"])"
+        r"|toJSON\s*\(\s*github\s*\)"
+        r"|toJSON\s*\(\s*secrets\s*\)",
         re.IGNORECASE)
     agent_step = [i for i, line in enumerate(ctx.workflow_lines)
                   if step_name(line) == "Run Muse review"]
@@ -111,4 +113,21 @@ def audit_agent_env(ctx, drift):
     for line in scan:
         if token_expr.search(line):
             drift.append("agent-token-expression")
+            break
+    for line in scan:
+        # run.sh executes ${HOME}/.local/bin/muse: a HOME
+        # binding in agent-inherited env would run a
+        # PR-planted binary with META_API_KEY (the sweep
+        # removes symlinks, not regular files). Key-
+        # positional, plus flow pairs on {-lines (a run:
+        # echo mentioning HOME: stays silent).
+        key, _ = map_key_value(line.strip())
+        if key == "HOME":
+            if "agent-env-home" not in drift:
+                drift.append("agent-env-home")
+            break
+        if "{" in line and re.search(
+                r"""["']?HOME["']?\s*:""", line):
+            if "agent-env-home" not in drift:
+                drift.append("agent-env-home")
             break

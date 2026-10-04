@@ -21,12 +21,16 @@ from semgrep_sarif_scan import github_cmdfile_kind
 from semgrep_sarif_zone import _write_zone
 from semgrep_sarif_sed import audit_sed_programs
 from semgrep_sarif_tar import audit_tar_exec
-from semgrep_sarif_binutils import audit_binutils_targets
-from semgrep_sarif_words import _flag_value, _operands
+from semgrep_sarif_binutils import (_dash_o_output,
+                                     audit_binutils_targets)
+from semgrep_sarif_words import (_flag_value, _operands,
+                                 _tool_operands)
 
 COPY_TOOLS = {"cp", "mv", "ln", "install", "tee", "dd", "tar",
               "unzip", "zip", "patch", "ed", "ex", "sed",
-              "objcopy", "ld", "as", "strip", "ar", "ranlib"}
+              "objcopy", "ld", "as", "strip", "ar", "ranlib",
+              "sort", "iconv", "shuf", "uniq", "split",
+              "csplit"}
 
 
 def _sed_files(rest):
@@ -198,6 +202,57 @@ def audit_copy_dest(base, rest, drift, src=""):
         targets += bin_targets
         if bin_implicit is not None:
             implicit = bin_implicit
+    elif base in ("sort", "iconv", "shuf"):
+        # -o/--output destination (separate, =, or glued);
+        # sort -T/--temporary-directory holds sort chunks.
+        # sort --compress-program executes its operand.
+        out = _dash_o_output(rest)
+        if out is not None:
+            targets.append(out)
+        if base == "sort":
+            tmp = _flag_value(
+                rest, ("-T", "--temporary-directory"))
+            if tmp is not None:
+                targets.append(tmp)
+            if any(tok == "--compress-program"
+                   or tok.startswith("--compress-program=")
+                   for tok in rest) \
+                    and "helper-untrusted-exec" not in drift:
+                drift.append("helper-untrusted-exec")
+    elif base == "uniq":
+        # uniq [input [output]]: the positional output file
+        # (-f/-s/-w take values, so naive operands misread).
+        ops = _tool_operands(
+            rest, "fsw", ("--skip-fields", "--skip-chars",
+                          "--check-chars"))
+        if len(ops) >= 2:
+            targets.append(ops[-1])
+    elif base == "split":
+        # split [input] [prefix]: --filter executes per
+        # chunk; outputs land under prefix (default ./x).
+        if any(tok == "--filter"
+               or tok.startswith("--filter=")
+               for tok in rest) \
+                and "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
+        ops = _tool_operands(
+            rest, "abClnt", ("--bytes", "--line-bytes",
+                            "--lines", "--number",
+                            "--separator", "--filter",
+                            "--suffix-length",
+                            "--additional-suffix"))
+        if len(ops) >= 2:
+            targets.append(ops[-1])
+        else:
+            implicit = "workspace"
+    elif base == "csplit":
+        # csplit takes its prefix via -f/--prefix (positional
+        # operands after the file are patterns).
+        pref = _flag_value(rest, ("-f", "--prefix"))
+        if pref is not None:
+            targets.append(pref)
+        else:
+            implicit = "workspace"
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
     if implicit is not None:

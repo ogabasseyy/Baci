@@ -183,6 +183,38 @@ def _operands(rest):
     return ops
 
 
+def _tool_operands(rest, shorts, longs):
+    # Positional operands with per-tool flag values skipped:
+    # separate (-s 2), =-attached (--skip-chars=2), and
+    # short-glued (-s2) forms. -- ends flag parsing; a lone
+    # - is an operand (stdin marker).
+    ops, i, n = [], 0, len(rest)
+    while i < n:
+        tok = rest[i]
+        if tok == "--":
+            return ops + rest[i + 1:]
+        if tok.startswith("--"):
+            name = tok.split("=", 1)[0]
+            if "=" in tok or name not in longs:
+                i += 1
+            else:
+                i += 2
+            continue
+        if tok.startswith("-") and len(tok) > 1:
+            j = 1
+            while j < len(tok):
+                if tok[j] in shorts:
+                    if j + 1 == len(tok):
+                        i += 1
+                    break
+                j += 1
+            i += 1
+            continue
+        ops.append(tok)
+        i += 1
+    return ops
+
+
 def _flag_value(rest, names):
     i = 0
     while i < len(rest):

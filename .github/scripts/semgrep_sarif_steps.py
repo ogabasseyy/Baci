@@ -8,9 +8,10 @@ from semgrep_sarif_redirect import (has_socket_redirect,
 from semgrep_sarif_scan import is_trusted_write_target
 from semgrep_sarif_segments import run_segments
 from semgrep_sarif_consts import (ENV_POISON, RUNTIME_TOKEN_VARS,
-                                  SECRET_BINDINGS, SHELL_KEYWORDS,
-                                  STRICT_ALLOW)
+                                  SHELL_KEYWORDS, STRICT_ALLOW)
 from semgrep_sarif_peel import peel_prefix
+from semgrep_sarif_poison import _is_env_dump
+from semgrep_sarif_secretbind import collect_secret_bindings
 from semgrep_sarif_shell import (_bare_word, map_key_value,
                                  split_commands2, strip_comments,
                                  tokenize, unquote_value)
@@ -109,29 +110,25 @@ def audit_step_commands(ctx, drift):
                         "--exec-path", "-p", "--paginate",
                         "--git-dir", "--work-tree"}
     GIT_READ_SUBCOMMANDS = {"cat-file", "help", "version"}
-    # (e) Secret bindings are allowlisted over the whole file
-    # (job-level env precedes the first step boundary, so a
-    # per-span scan would miss it): any other NAME bound to an
-    # exact ${{ secrets.KEY }} value drifts, since a fresh LEAK
-    # binding plus an allowed echo would print the key in
-    # fragments redaction cannot match. Comparisons (HAS_KEY)
-    # are not bindings: they evaluate to booleans.
-    bound = {}
-    for line in ctx.workflow_lines:
-        key, val = map_key_value(line.strip())
-        if not key \
-                or re.fullmatch(r"[A-Za-z_]\w*", key) is None:
-            continue
-        text = re.sub(r"\s+#.*$", "",
-                      unquote_value(val or "")).strip()
-        m = re.fullmatch(r"\$\{\{\s*secrets\.([A-Za-z_]\w*)"
-                         r"\s*\}\}", text)
-        if not m:
-            continue
-        bound.setdefault(key, m.group(1))
-        if (key, m.group(1)) not in SECRET_BINDINGS \
-                and "secret-step-unexpected-binding" not in drift:
-            drift.append("secret-step-unexpected-binding")
+    # (e) Secret bindings are allowlisted by the secretbind
+    # scan (block scalars resolved, flow pairs covered). The
+    # agent step, any other run.sh consumer, and the
+    # pre-step region (job-level env, inherited by every
+    # step) take the tighter agent allowlist.
+    indent0 = _steps_item_indent(ctx.workflow_lines)
+    bounds0 = [i for i, line in enumerate(ctx.workflow_lines)
+               if is_step_boundary(line, indent0)] \
+        + [len(ctx.workflow_lines)]
+    agent_idx = set(range(bounds0[0])) if bounds0 else set()
+    for k in range(len(bounds0) - 1):
+        span = ctx.workflow_lines[bounds0[k]:bounds0[k + 1]]
+        code = "\n".join(strip_comments(seg)
+                         for seg in run_segments(span))
+        if step_name(span[0]) == "Run Muse review" \
+                or "run.sh" in code:
+            agent_idx.update(range(bounds0[k], bounds0[k + 1]))
+    bound = collect_secret_bindings(ctx.workflow_lines,
+                                    agent_idx, drift)
     # Poison names tolerate shell escapes (export P\ATH= unescapes
     # its operand -- verified); the = stays literal (a\=1 is dead).
     poison_alt = "(?:" + "|".join(
@@ -141,10 +138,7 @@ def audit_step_commands(ctx, drift):
     builtin_prefix = (r"(?:(?:export|local|readonly|declare|"
                       r"typeset)\s+(?:-\S+\s+)*)?"
                       r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*")
-    indent = _steps_item_indent(ctx.workflow_lines)
-    bounds = [i for i, line in enumerate(ctx.workflow_lines)
-              if is_step_boundary(line, indent)] \
-        + [len(ctx.workflow_lines)]
+    indent, bounds = indent0, bounds0
     for k in range(len(bounds) - 1):
         span = ctx.workflow_lines[bounds[k]:bounds[k + 1]]
         name = step_name(span[0])
@@ -234,16 +228,13 @@ def audit_step_commands(ctx, drift):
                         and "secret-step-untrusted-command" \
                         not in drift:
                     drift.append("secret-step-untrusted-command")
-                # (f) Bare env builtins dump every variable --
-                # bound secrets and the runner's injected tokens
-                # included -- to the log, as does -p. Flagged
-                # spellings (set -euo) pass; set -o/+o only
-                # lists option states, never variables.
+                # (f) Env builtins that disclose values (shared
+                # _is_env_dump predicate: bare calls, -p, and
+                # flags with no names) dump bound secrets and
+                # runner tokens to the log.
                 if argv0 in ("set", "export", "declare",
                              "typeset", "readonly", "local") \
-                        and (not rest or "-p" in rest) \
-                        and not (argv0 == "set" and rest
-                                and rest[0] in ("-o", "+o")) \
+                        and _is_env_dump(argv0, rest) \
                         and "secret-step-env-dump" not in drift:
                     drift.append("secret-step-env-dump")
                 if argv0 == "git":

@@ -140,6 +140,48 @@ def _subscript_spans(lhs):
     return spans
 
 
+_NUM_OP = re.compile(r"-(?:eq|ne|lt|le|gt|ge)(?![A-Za-z0-9_])")
+
+
+def _bracket_regions(text):
+    # [[ ... ]] spans with quote pairing and backslash
+    # escapes honored (a quoted or escaped ]] never closes
+    # the test).
+    regions, i, n = [], 0, len(text)
+    while i < n:
+        if not text.startswith("[[", i):
+            i += 1
+            continue
+        j, quote, buf = i + 2, None, []
+        while j < n:
+            ch = text[j]
+            if quote:
+                buf.append(ch)
+                if ch == "\\" and j + 1 < n:
+                    buf.append(text[j + 1])
+                    j += 2
+                    continue
+                if ch == quote:
+                    quote = None
+                j += 1
+            elif ch in ("'", '"'):
+                quote = ch
+                buf.append(ch)
+                j += 1
+            elif ch == "\\" and j + 1 < n:
+                buf.append(ch)
+                buf.append(text[j + 1])
+                j += 2
+            elif text.startswith("]]", j):
+                break
+            else:
+                buf.append(ch)
+                j += 1
+        regions.append("".join(buf))
+        i = j + 2 if j < n else n
+    return regions
+
+
 def subscript_cmdsubst(text):
     # $(...) / `...` hiding in single-quoted name[..]
     # operands, which extract_subshells treats as literal.
@@ -151,8 +193,27 @@ def subscript_cmdsubst(text):
     # version-dependent (audited fail-closed). export never
     # takes subscripts (verified). Unquoted and double-quoted
     # forms are already covered by the main extraction.
-    # Returns inner commands.
+    # [[ ]] numeric operands evaluate as arithmetic even
+    # single-quoted (verified on 3.2), so quoted operands of
+    # -eq/-ne/-lt/-le/-gt/-ge extract too. Returns inner
+    # commands.
     inners = []
+    for region in _bracket_regions(text):
+        for m in _NUM_OP.finditer(region):
+            cands = []
+            bm = re.search(r"'([^']*)'\s*$",
+                           region[:m.start()])
+            if bm:
+                cands.append(bm.group(1))
+            am = re.match(r"\s*'([^']*)'",
+                          region[m.end():])
+            if am:
+                cands.append(am.group(1))
+            for cand in cands:
+                for span in _subscript_spans(
+                        _operand_lhs(cand)):
+                    _, sub = extract_subshells(span)
+                    inners.extend(sub)
     for m in re.finditer(r"\[\[\s+(?:!\s+)?-v\s+", text):
         j = m.end()
         while j < len(text) and text[j] in (" ", "\t"):

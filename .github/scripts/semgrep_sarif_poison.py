@@ -170,23 +170,33 @@ def audit_ps_env(rest, drift):
             i += 1
 
 
-def audit_env_dump(argv0, rest, drift):
-    # Environment disclosure: printenv always prints, bare
-    # export/declare/typeset/readonly/local/set dump state,
-    # and -p prints values. Assignments, flags (set -p is
-    # privileged-mode, not a dump), and -f code listings pass.
-    if "helper-env-dump" in drift:
-        return
+def _is_env_dump(argv0, rest):
+    # True when the builtin call discloses variable values:
+    # printenv always prints; bare calls dump state; -p prints
+    # values; and flags with no names (declare -x) display
+    # every variable (verified: declare -x and bare local in
+    # a function both print). Assignments and named operands
+    # pass, set -p is privileged-mode (not a dump), and -f
+    # with no names lists functions (code, not values).
     if argv0 == "printenv" or not rest:
-        drift.append("helper-env-dump")
-        return
+        return True
     if argv0 == "set":
-        return
+        return False
     for tok in rest:
         if tok in ("-p", "-P"):
-            break
+            return True
         if re.fullmatch(r"-[a-zA-Z]+", tok) and "p" in tok:
-            break
-    else:
+            return True
+    if any(re.fullmatch(r"[+-][a-zA-Z]+", tok)
+           and "f" in tok[1:] for tok in rest):
+        return False
+    return not any(not re.fullmatch(r"[+-][a-zA-Z]+", tok)
+                   and tok != "--" for tok in rest)
+
+
+def audit_env_dump(argv0, rest, drift):
+    # Environment disclosure via _is_env_dump (see above).
+    if "helper-env-dump" in drift:
         return
-    drift.append("helper-env-dump")
+    if _is_env_dump(argv0, rest):
+        drift.append("helper-env-dump")

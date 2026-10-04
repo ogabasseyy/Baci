@@ -35,7 +35,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "yarn", "yum", "zypper", "composer", "conan", "pmake",
              "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
              "g++", "c++", "clang", "clang++", "jshell",
-             "ssh-keygen", "pwsh", "powershell"}
+             "ssh-keygen", "pwsh", "powershell", "swift",
+             "swiftc"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -47,7 +48,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # jshell executes load-file operands; ssh-keygen -D loads a
 # PKCS#11 provider .so (its constructor runs before provider
 # validation); pwsh/powershell -File runs script operands and
-# ship on the ubuntu runner image.
+# ship on the ubuntu runner image; swift executes program
+# operands (ships on ubuntu-latest); swiftc loads compiler
+# plugins (-load-plugin-executable) that execute at build.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")
@@ -55,6 +58,12 @@ _GCC_RE = re.compile(
 # (x86_64-linux-gnu-gcc) driver spellings share the -B
 # mechanism; only dash-joined prefixes match (mycc/acc are
 # not drivers).
+_LD_SO_RE = re.compile(
+    r"^ld(-linux.*|-musl.*)?\.so(\.\d+)?$")
+# Glibc/musl dynamic linkers run directly (ld-linux-*.so.2,
+# ld-musl-*.so.1, ld.so): --preload/--audit load attacker
+# DSOs whose constructors run before main. No audited
+# helper invokes the linker (verified).
 
 
 SHELL_KEYWORDS = {"if", "then", "else", "elif", "fi", "for",
@@ -80,6 +89,15 @@ SECRET_BINDINGS = {("GH_TOKEN", "GITHUB_TOKEN"),
                    ("SEMGREP_APP_TOKEN", "SEMGREP_APP_TOKEN")}
 
 
+# Tighter allowlist for the agent step and job-level env
+# (which the agent step inherits): the pinned third-party
+# process receives only its own credential. run.sh scrubs
+# just GITHUB_TOKEN/GH_TOKEN, so any other secret bound
+# here (SEMGREP_APP_TOKEN, an aliased GitHub token) would
+# survive into the agent; by design even those two stay out.
+AGENT_SECRET_BINDINGS = {("META_API_KEY", "META_API_KEY")}
+
+
 # Short-lived bearer tokens the runner injects into every
 # step: echo/printf of one leaks it to the Actions log even
 # in a step that binds no secret of its own.
@@ -89,9 +107,11 @@ RUNTIME_TOKEN_VARS = {"ACTIONS_RUNTIME_TOKEN",
 
 # Vars whose assignment redirects execution or the environment
 # of later commands in the same step (PATH hijack, preloaded
-# libraries, startup files, parser behavior).
+# libraries, startup files, parser behavior). GCONV_PATH
+# resolves iconv conversion modules: a workspace module
+# constructor runs with the helper token.
 ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
-              "LD_AUDIT",
+              "LD_AUDIT", "GCONV_PATH",
               "BASH_ENV", "ENV", "ZDOTDIR", "PYTHONPATH",
               "PYTHONHOME", "RUBYLIB", "RUBYOPT", "PERL5LIB",
               "PERL5OPT", "NODE_PATH", "NODE_OPTIONS",

@@ -1,4 +1,4 @@
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, lstat, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -56,8 +56,16 @@ export async function runPilotGeneration({
       'inventory contains no jobs; refusing to report an empty generation as success'
     );
   }
-  await mkdir(join(outputRoot, 'generations'), { recursive: true });
-  await mkdir(join(outputRoot, 'reports'), { recursive: true });
+  await mkdir(outputRoot, { recursive: true });
+  outputRoot = await realpath(outputRoot);
+  for (const child of ['generations', 'reports']) {
+    const path = join(outputRoot, child);
+    await mkdir(path, { recursive: true });
+    const info = await lstat(path);
+    if (info.isSymbolicLink() || !info.isDirectory() || await realpath(path) !== path) {
+      throw new PilotGenerateError('unsafe-output-directory', `${child} must be a confined directory, not a symlink`);
+    }
+  }
   const results = [];
   for (const job of jobs) {
     results.push(await runJob({ inputRoot, job, minFreeBytes: floor, outputRoot }));

@@ -161,6 +161,34 @@ describe('buildLabIndex', () => {
     expect(tiers).toHaveLength(6);
   });
 
+  it('rejects an oversized otherwise valid manifest before activating its tiers', async () => {
+    await writeFile(
+      join(lab.generationDir, 'manifest.json'),
+      `${JSON.stringify(lab.manifest)}${' '.repeat(256 * 1024)}`
+    );
+    const { index, statuses } = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'Reviewed',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(statuses[0]?.status).not.toBe('accepted');
+    expect(Object.keys(index.entries)).toHaveLength(0);
+  });
+
   it('surfaces guarded dispositions explicitly', async () => {
     const guardedTiers = lab.tiers.map((tier) => ({
       ...tier,

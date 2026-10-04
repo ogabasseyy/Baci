@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,20 @@ async function writeInventory(inputRoot, records) {
   const path = join(inputRoot, 'inventory.json');
   await writeFile(path, JSON.stringify(records, null, 2));
   return path;
+}
+
+for (const child of ['generations', 'reports']) {
+  test(`rejects a symlinked ${child} directory before starting jobs`, async () => {
+    const { base, inputRoot, outputRoot } = await setup();
+    const outside = join(base, 'outside');
+    await mkdir(outside);
+    await mkdir(outputRoot);
+    await symlink(outside, join(outputRoot, child));
+    const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+    const inventoryPath = await writeInventory(inputRoot, records);
+    await assert.rejects(runPilotGeneration({ inputRoot, inventoryPath, outputRoot }), /symlink|confined/);
+    assert.deepEqual(await readdir(outside), []);
+  });
 }
 
 test('generates, commits, and reports two jobs end to end', async () => {
@@ -233,4 +247,3 @@ test('empty inventories are rejected instead of reporting green', async () => {
     }
   );
 });
-

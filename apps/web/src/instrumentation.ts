@@ -51,6 +51,12 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    if (process.env.BACI_IMAGE_PILOT_LAB === '1') {
+      const { initializeLabRuntime } = await import(
+        '@/app/pilot-lab/lab-route'
+      );
+      await initializeLabRuntime();
+    }
     // The Places Legacy routes must put the API key in the URL. Their fetch
     // calls opt out of @vercel/otel spans, so disable Next's separate fetch
     // spans too; those spans include the full URL and do not honor that option.

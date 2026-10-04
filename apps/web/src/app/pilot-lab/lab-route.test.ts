@@ -47,7 +47,9 @@ vi.mock(
 
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import {
-  getLabConfig,
+  loadLabConfigAtStartup as getLabConfig,
+  getLabConfig as getRequestLabConfig,
+  initializeLabRuntime,
   parseRawAcceptances,
   parseRawInventoryRecords,
 } from './lab-route';
@@ -153,7 +155,27 @@ describe('parseRawAcceptances', () => {
 
 describe('getLabConfig', () => {
   afterEach(() => {
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.runtime')
+    );
     vi.unstubAllEnvs();
+  });
+
+  it('serves frozen memory without reading operator or staged files after startup', async () => {
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    expect(() => getRequestLabConfig()).toThrow(/startup validation/);
+    await stageRouteFiles(lab);
+    await initializeLabRuntime();
+    const first = await getRequestLabConfig();
+    await rm(lab.inputRoot, { recursive: true });
+    await rm(lab.outputRoot, { recursive: true });
+    await rm(lab.publicDir, { recursive: true });
+    expect(getRequestLabConfig()).toBe(first);
   });
 
   it('refuses to load with the lab flag off, before any disk I/O', async () => {

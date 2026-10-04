@@ -7,6 +7,10 @@ import {
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
+import {
+  getFrozenLabRuntime,
+  publishLabRuntime,
+} from '@/lib/merchant-image-variant-pilot/lab-runtime';
 import { isSafeRelativePath } from './lab-safe-path';
 import { verifyStagedBytes } from './lab-staged-verify';
 
@@ -189,7 +193,17 @@ async function readBoundedOperatorJson(path: string): Promise<string> {
   }
 }
 
-export async function getLabConfig(): Promise<PilotLabConfig> {
+export function getLabConfig(): PilotLabConfig {
+  if (!isPilotLabEnabled())
+    throw new Error('merchant image pilot: refusing to load outside lab mode');
+  return getFrozenLabRuntime();
+}
+
+export async function initializeLabRuntime(): Promise<void> {
+  publishLabRuntime(await loadLabConfigAtStartup());
+}
+
+export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
   // Fail fast before any disk I/O: every caller gates on the flag today,
   // but a future caller of this shared loader must not read operator
   // roots with lab mode off.

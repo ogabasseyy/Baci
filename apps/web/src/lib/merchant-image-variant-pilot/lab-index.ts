@@ -1,5 +1,4 @@
 import 'server-only';
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   PilotAcceptance,
@@ -12,6 +11,7 @@ import {
   parsePilotAcceptance,
   parsePilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
+import { readBoundedLabJson } from './lab-bounded-json';
 import { indexKey } from './lab-index-lookup';
 import { verifyOutputHashes } from './lab-index-verify';
 
@@ -166,14 +166,14 @@ export async function buildLabIndex(input: {
     }
     let manifestText: string;
     try {
-      manifestText = await readFile(
+      manifestText = await readBoundedLabJson(
         join(
           input.outputRoot,
           'generations',
           record.generationId,
           'manifest.json'
         ),
-        'utf8'
+        256 * 1024
       );
     } catch {
       statuses.push({

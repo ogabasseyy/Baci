@@ -52,14 +52,16 @@ describe('merchant-image-pilot-readiness profiles', () => {
     );
   });
 
-  it('accepts an explicit profile subset and rejects unknowns', () => {
-    expect(parseProfiles('mobile-390-dpr2,desktop-1365-dpr1')).toEqual([
-      'mobile-390-dpr2',
-      'desktop-1365-dpr1',
-    ]);
-    expect(parseProfiles('mobile-390-dpr2,mobile-390-dpr2')).toEqual([
-      'mobile-390-dpr2',
-    ]);
+  it('rejects incomplete coverage and accepts the complete explicit matrix', () => {
+    expect(() => parseProfiles('mobile-390-dpr2,desktop-1365-dpr1')).toThrow(
+      /complete readiness matrix/
+    );
+    expect(() => parseProfiles('mobile-390-dpr2,mobile-390-dpr2')).toThrow(
+      /complete readiness matrix/
+    );
+    expect(parseProfiles(DEFAULT_READINESS_PROFILES.join(','))).toEqual(
+      DEFAULT_READINESS_PROFILES
+    );
     expect(() => parseProfiles('mobile-390-dpr2,watch')).toThrow(
       /bad --profiles/
     );

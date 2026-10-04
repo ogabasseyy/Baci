@@ -198,5 +198,11 @@ export function parseProfiles(value) {
       `bad --profiles: ${value} (choose from ${DEFAULT_READINESS_PROFILES.join(', ')})`
     );
   }
-  return [...new Set(names)];
+  const selected = [...new Set(names)];
+  if (DEFAULT_READINESS_PROFILES.some((name) => !selected.includes(name))) {
+    throw new Error(
+      'bad --profiles: the complete readiness matrix is required'
+    );
+  }
+  return selected;
 }

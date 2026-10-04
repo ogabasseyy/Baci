@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prefundedCardCheckoutFixture } from '@/lib/piggyvest/prefunded-card-checkout.test-fixture';
 import { prefundedCardCheckoutPublicSchemas } from '@/schemas/prefunded-card-checkout-public-runtime';
+import * as routeExports from './route';
 import { GET, PATCH, POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -82,6 +83,10 @@ beforeEach(() => {
 });
 
 describe('first-card savings checkout HTTP boundary', () => {
+  it('uses default route configuration compatible with Cache Components', () => {
+    expect(routeExports).not.toHaveProperty('dynamic');
+    expect(routeExports).not.toHaveProperty('runtime');
+  });
   it('reports checkout disabled while the financial processing chain is not activated', async () => {
     mocks.runtime.mockReturnValue({
       publicOrigin: origin,

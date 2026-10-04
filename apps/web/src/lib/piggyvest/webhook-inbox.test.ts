@@ -53,6 +53,25 @@ function mockClient(
 }
 
 describe('recordPiggyvestEvent', () => {
+  it.each([
+    ['payout-001', 'duplicate'],
+    ['payout-002', 'conflict'],
+    [undefined, 'conflict'],
+  ])('binds reused interest event IDs to stored payout identity %s', async (storedPayoutId, outcome) => {
+    const payout = {
+      ...input,
+      eventType: 'interest-payout.success',
+      eventCategory: 'interest_payout',
+      details: { payout_id: 'payout-001' },
+    };
+    const { client } = mockClient([], null, {
+      ...storedEnvelope,
+      event_type: payout.eventType,
+      event_category: payout.eventCategory,
+      event_details: { payout_id: storedPayoutId },
+    });
+    await expect(recordPiggyvestEvent(client, payout)).resolves.toBe(outcome);
+  });
   it('rejects reused event IDs with a different provider transaction', async () => {
     const { client } = mockClient([]);
     await expect(

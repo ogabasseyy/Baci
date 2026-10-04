@@ -7,9 +7,6 @@ import { readPrefundedCardCheckoutPublicRuntime } from '@/lib/piggyvest/prefunde
 import { prefundedCardCheckoutSchemas } from '@/schemas/prefunded-card-checkout';
 import { prefundedCardCheckoutPublicSchemas } from '@/schemas/prefunded-card-checkout-public-runtime';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 function denied(status: number) {
   return Response.json(
     {

@@ -8,9 +8,6 @@ import { resolvePrefundedCardPublicContext } from '@/lib/piggyvest/prefunded-car
 import { readPrefundedCardPublicRuntime } from '@/lib/piggyvest/prefunded-card-public-runtime';
 import { prefundedCardCustomerSchemas } from '@/schemas/prefunded-card-customer';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 function denied(status: number) {
   return Response.json(
     {

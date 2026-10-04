@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFundingScreenFixture } from '@/lib/piggyvest/customer-funding-screen.test-fixture';
+import * as routeExports from './route';
 import { GET, POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -78,6 +79,10 @@ beforeEach(() => {
 });
 
 describe('public staging saved-card contributions', () => {
+  it('uses default route configuration compatible with Cache Components', () => {
+    expect(routeExports).not.toHaveProperty('dynamic');
+    expect(routeExports).not.toHaveProperty('runtime');
+  });
   it('authenticates before reading configuration, checking CSRF or reserving', async () => {
     mocks.auth.mockResolvedValue({
       user: null,

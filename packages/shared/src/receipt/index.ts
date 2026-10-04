@@ -2,13 +2,18 @@ export { getBankNameFromCode, resolveMerchantBankName } from './bank-codes';
 export { escapeHtml, escapeJsString } from './escape-html';
 export { generateReceiptHtml } from './generate-receipt-html';
 export {
+  canonicalizeTransactionPaymentMethod,
   isDecimalMoney,
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
   MANUAL_ORDER_CURRENCY_CODE_PATTERN,
+  MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
+  MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS,
+  type ManualOrderInvoiceOnlyItemFinancialField,
   type ManualOrderItemFinancialField,
+  type ManualOrderReceiptItemFinancialField,
 } from './manual-order-document-gates';
 export {
   appendReceiptFulfillmentDescription,

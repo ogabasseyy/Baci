@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import {
   hasValidSettledPayments,
+  isPromotableManualDocument,
   isPromotedManualReceipt,
   type ManualReceiptPromotionInput,
 } from './receipt-promotion-gates';
@@ -76,8 +77,6 @@ describe('isPromotedManualReceipt', () => {
   it.each([
     ['negative extension', { line_extension_amount: -50 }],
     ['negative assurance fee', { assurance_fee: -10 }],
-    ['negative vat rate', { vat_rate: -7.5 }],
-    ['negative vat amount', { vat_amount: -1 }],
     ['negative line id', { line_id: -2 }],
     ['non-numeric vat amount', { vat_amount: 'abc' }],
     ['hex vat amount', { vat_amount: '0x10' }],
@@ -92,6 +91,17 @@ describe('isPromotedManualReceipt', () => {
         })
       )
     ).toBe(false);
+  });
+
+  it.each([
+    ['negative vat rate', { vat_rate: -7.5 }],
+    ['negative vat amount', { vat_amount: -1 }],
+  ])('promotes receipts with unrendered %s while invoices stay strict', (_label, financial) => {
+    const input = coveredRow({
+      items: [{ name: 'Phone', quantity: 1, price: 500, ...financial }],
+    });
+    expect(isPromotedManualReceipt(input)).toBe(true);
+    expect(isPromotableManualDocument(input, true)).toBe(false);
   });
 
   it.each([

@@ -7,15 +7,20 @@
 -- Safe predeploy: only a new function plus a trigger that ships DISABLED;
 -- no live contract changes.
 
--- Resolved merchant address line, mirroring getMerchantAddressLine: the
--- registered parts joined exactly like the renderer (falsy parts dropped,
--- ', ' separator), falling back to the business address when empty.
--- Invoices print this; receipts always print the business address.
+-- Resolved merchant address line, mirroring getMerchantAddressLine (falsy
+-- parts dropped, ', ' separator, business fallback). Invoices print this.
 CREATE OR REPLACE FUNCTION private.resolved_merchant_address_line(
   p_registered_address jsonb, p_business_address text
 )
 RETURNS text LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path = '' AS $function$
   SELECT CASE
+    -- Non-string members fail the schema .catch(null): compare as the business fallback.
+    WHEN coalesce(jsonb_typeof(p_registered_address->'street'), 'null') NOT IN ('string', 'null')
+      OR coalesce(jsonb_typeof(p_registered_address->'city'), 'null') NOT IN ('string', 'null')
+      OR coalesce(jsonb_typeof(p_registered_address->'state'), 'null') NOT IN ('string', 'null')
+      OR coalesce(jsonb_typeof(p_registered_address->'postal_code'), 'null') NOT IN ('string', 'null')
+      OR coalesce(jsonb_typeof(p_registered_address->'country'), 'null') NOT IN ('string', 'null')
+      THEN p_business_address
     WHEN coalesce(concat_ws(', ',
       NULLIF(p_registered_address->>'street', ''),
       NULLIF(p_registered_address->>'city', ''),

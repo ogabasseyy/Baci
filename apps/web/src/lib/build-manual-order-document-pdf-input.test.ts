@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
 import { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
-import { buildManualOrderDocumentPdfInput } from './build-manual-order-document-pdf-input';
+import {
+  buildManualOrderDocumentPdfInput,
+  normalizeReceiptShippingAddress,
+} from './build-manual-order-document-pdf-input';
 
 const orderRow = {
   id: 'order-1',
@@ -99,6 +102,17 @@ describe('buildManualOrderDocumentPdfInput', () => {
     expect(receiptOrder.shipping_address?.city).toBeUndefined();
     expect(receiptOrder.shipping_address?.state).toBeUndefined();
     expect(receiptOrder.shipping_address?.postal_code).toBeUndefined();
+  });
+
+  it('collapses legacy aliases onto the canonical keys', () => {
+    expect(
+      normalizeReceiptShippingAddress({
+        address: '14 Allen',
+        postalCode: '101233',
+      })
+    ).toMatchObject({ address_line1: '14 Allen', postal_code: '101233' });
+    expect(normalizeReceiptShippingAddress(null)).toBeNull();
+    expect(normalizeReceiptShippingAddress('nope')).toBeNull();
   });
 
   it('maps items, balance, and the preferred virtual account', () => {

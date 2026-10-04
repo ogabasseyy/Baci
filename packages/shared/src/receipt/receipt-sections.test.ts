@@ -166,6 +166,27 @@ describe('renderPaymentHistoryHtml', () => {
     expect(html).toContain('<td>-</td>');
     expect(html).not.toContain('1970');
   });
+
+  it('falls back to the description for structured methods', () => {
+    // Objects/arrays canonicalize to absent like the SQL snapshot: the
+    // row renders the description, never '[object Object]'.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: '2024-02-06T23:30:00.000Z',
+            description: 'DVA transfer',
+            metadata: { payment_method: { name: 'cash' } },
+          },
+        ],
+      } as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('DVA transfer');
+    expect(html).not.toContain('[object Object]');
+  });
 });
 
 describe('renderInvoiceTermsHtml', () => {

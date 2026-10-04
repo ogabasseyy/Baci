@@ -16,6 +16,7 @@ import {
   DETAIL_ITEM_MONEY_FIELDS,
   receiptMoneyOverrides,
 } from './receipt-detail-money';
+import { isReceiptInvoiceTaxValid } from './receipt-invoice-tax-gate';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
 import {
   isPromotableManualDocument,
@@ -122,16 +123,10 @@ async function fetchReceiptDetail(
   if (orderError) throw orderError;
   if (!order) throw new Error('Order not found');
 
-  // Fail-closed dating follows the same promotion gate the preview
-  // renders through: a row that previews as an invoice (cancelled,
-  // unknown-status, content-invalid) tolerates transaction failures like
-  // any unpaid row, while a promoted row fails the whole load rather
-  // than render a misdated receipt. The generic paid shortcut applies to
-  // non-manual rows only, matching the preview and list classification —
-  // a paid-manual row that fails the gate opens as an invoice, so its
-  // detail load must tolerate lookup failures too. The status trim is
-  // typeof-guarded: the row is unvalidated here, so a numeric marker must
-  // fail closed, never throw.
+  // Fail-closed dating follows the preview's promotion gate: invoice rows
+  // tolerate lookup failures while promoted rows fail the whole load.
+  // The paid shortcut is non-manual only; the status trim is
+  // typeof-guarded since the row is unvalidated here.
   const manualOrder = isManualOrderRecord({
     recordedByUserId: order.recorded_by_user_id,
     importJobId: order.import_job_id,
@@ -172,9 +167,18 @@ async function fetchReceiptDetail(
   });
   const requiresPaymentHistory =
     manualOrder &&
-    isPromotableManualDocument(promotionInput) &&
+    isPromotableManualDocument(promotionInput, true) &&
     !paidLabel &&
     !settledBalance;
+  // Deliverable manual invoices gate on the sender-validated tax
+  // breakdown before the preview opens; invalid rows stay unexposed.
+  if (
+    manualOrder &&
+    !isPaidOrder &&
+    isPromotableManualDocument(promotionInput, true) &&
+    !(await isReceiptInvoiceTaxValid(orderId))
+  )
+    return null;
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {

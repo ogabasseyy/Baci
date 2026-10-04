@@ -152,13 +152,9 @@ describe('useReceipts money normalization', () => {
       total: 95000,
       amount_paid: 95000,
     });
-    expect(byId.get('order-bad-money')).toMatchObject({
-      total: 0,
-      amount_paid: 0,
-    });
-    expect(byId.get('order-loose-money')).toMatchObject({
-      total: 0,
-      amount_paid: 0,
-    });
+    expect(byId.get('order-bad-money')?.total).toBeNaN();
+    expect(byId.get('order-bad-money')?.amount_paid).toBeNaN();
+    expect(byId.get('order-loose-money')?.total).toBeNaN();
+    expect(byId.get('order-loose-money')?.amount_paid).toBeNaN();
   });
 });

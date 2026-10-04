@@ -1,8 +1,12 @@
-import { MANUAL_ORDER_ITEM_FINANCIAL_FIELDS } from '@baci/shared/receipt';
+import {
+  MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS,
+  MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS,
+} from '@baci/shared/receipt';
 import { describe, expect, it } from 'vitest';
 import {
   isManualOrderDocumentContentValid,
   manualDocumentOrderSchema,
+  manualDocumentOrderSchemaFor,
 } from './manual-order-document-order';
 
 const baseOrder = {
@@ -163,7 +167,7 @@ describe('manualDocumentOrderSchema', () => {
     };
     const item = { name: 'Phone', quantity: 1, price: 4500 };
     expect(isManualOrderDocumentContentValid(money, [item])).toBe(true);
-    for (const field of MANUAL_ORDER_ITEM_FINANCIAL_FIELDS) {
+    for (const field of MANUAL_ORDER_RECEIPT_ITEM_FINANCIAL_FIELDS) {
       // The sender rejects the negative value, so the archive must not
       // advertise the document either.
       expect(
@@ -179,6 +183,49 @@ describe('manualDocumentOrderSchema', () => {
       expect(
         isManualOrderDocumentContentValid(money, [{ ...item, [field]: null }])
       ).toBe(true);
+    }
+    for (const field of MANUAL_ORDER_INVOICE_ONLY_ITEM_FINANCIAL_FIELDS) {
+      const order = {
+        ...baseOrder,
+        order_items: [{ ...baseOrder.order_items[0], [field]: -1 }],
+      };
+      // Receipts print no item VAT: sender and archive accept the
+      // negative for receipts while invoices still reject on both.
+      expect(
+        manualDocumentOrderSchemaFor('receipt').safeParse(order).success
+      ).toBe(true);
+      expect(
+        manualDocumentOrderSchemaFor('invoice').safeParse(order).success
+      ).toBe(false);
+      expect(
+        isManualOrderDocumentContentValid(
+          money,
+          [{ ...item, [field]: -1 }],
+          false
+        )
+      ).toBe(true);
+      expect(
+        isManualOrderDocumentContentValid(
+          money,
+          [{ ...item, [field]: -1 }],
+          true
+        )
+      ).toBe(false);
+      // Non-decimal VAT still fails closed for both kinds.
+      const garbage = {
+        ...baseOrder,
+        order_items: [{ ...baseOrder.order_items[0], [field]: 'abc' }],
+      };
+      expect(
+        manualDocumentOrderSchemaFor('receipt').safeParse(garbage).success
+      ).toBe(false);
+      expect(
+        isManualOrderDocumentContentValid(
+          money,
+          [{ ...item, [field]: 'abc' }],
+          false
+        )
+      ).toBe(false);
     }
   });
 

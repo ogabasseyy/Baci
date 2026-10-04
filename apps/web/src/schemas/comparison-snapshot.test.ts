@@ -17,6 +17,21 @@ it('keeps safe fallback fields and drops unvalidated fields', () => {
     })
   ).toEqual({ ...snapshot, slug: 'phone' });
 });
+it('preserves the matched-option basis for off-page tray items', () => {
+  expect(
+    comparisonSnapshotSchema.parse({
+      ...snapshot,
+      matchVariantId: 'variant-blue-128',
+      matchOfferId: 'offer-open-box',
+      matchCondition: 'open_box',
+    })
+  ).toEqual({
+    ...snapshot,
+    matchVariantId: 'variant-blue-128',
+    matchOfferId: 'offer-open-box',
+    matchCondition: 'open_box',
+  });
+});
 it.each([
   { id: 'p1' },
   { ...snapshot, name: undefined },

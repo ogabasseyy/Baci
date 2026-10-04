@@ -19,4 +19,7 @@ export const comparisonSnapshotSchema = z.object({
       slug: z.string().optional(),
     })
     .optional(),
+  matchVariantId: z.string().optional(),
+  matchOfferId: z.string().optional(),
+  matchCondition: z.string().optional(),
 });

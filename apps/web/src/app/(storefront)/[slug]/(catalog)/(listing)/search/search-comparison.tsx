@@ -51,6 +51,9 @@ export function SearchCompareButton({
             category: product.category,
             categorySlug: product.category_slug,
             condition: product.condition as Product['condition'],
+            matchVariantId: product.searchMatch?.variantId,
+            matchOfferId: product.searchMatch?.offerId,
+            matchCondition: product.searchMatch?.condition,
           });
           if (replaced)
             setNotice(`Replaced ${replaced.name} in your comparison.`);
@@ -184,7 +187,10 @@ export function SearchComparisonTray({
                     : 'Open product for current price'}
                 </p>
                 <p>
-                  {matches.get(String(snapshot.id))
+                  {matches.get(String(snapshot.id)) ||
+                  snapshot.matchVariantId ||
+                  snapshot.matchOfferId ||
+                  snapshot.matchCondition
                     ? 'Matched option — verify on product page'
                     : (product?.condition ?? 'Condition not refreshed')}
                 </p>

@@ -65,6 +65,12 @@ export interface ProductSpecSection {
 export interface Product {
   id: number | string;
   merchantId?: string; // For scoped searches (comparison)
+  // Matched-option basis for the advertised card price/condition. The tray
+  // shows fresh parent facts, so it uses these only to qualify off-page
+  // matched items as verify-on-product-page (mirrors native searchMatch).
+  matchVariantId?: string;
+  matchOfferId?: string;
+  matchCondition?: string;
   slug?: string;
   name: string;
   price: string;

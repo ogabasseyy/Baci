@@ -7,7 +7,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160050_manual_order_document_claims.sql',
-    sha256: '541b578291c589b6a0651406febcc730c0b118a10a26806cb36b0e824365aec8',
+    sha256: 'e743c08350dc405d4ce50b43bf57ed7c46e97f260bcfd2b336f19f461611d462',
   },
   {
     repositoryPath:
@@ -17,17 +17,17 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160065_manual_order_document_merchant_rearm.sql',
-    sha256: '7804cffd4c663498eb0bab12216405c9b437eb3273daefbf980d16bb1b97b18e',
+    sha256: '814d3953b6a0a4875bcd5bd0a238938cbea71841bcb80634e72dd57620d9a797',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160070_manual_order_document_item_triggers.sql',
-    sha256: '8fc47a7080db7a37bd5566303c843a8f43b5714a273197097d4be77fb437bfb3',
+    sha256: '66b2a6118c0e38b9570da65cff2e542b1a0ebb1b610a60bd0f65fe11d9d74fa3',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160075_manual_order_document_domain_invalidation.sql',
-    sha256: 'c37da88262d8cd28093c6643cfedf21e0d95b80ad691a18bd9110cbbf6fd909a',
+    sha256: '9b80b16e3c29f67432ba3798c25cfc3b750d6f9f750f388e582b5906e344fa1c',
   },
   {
     repositoryPath:
@@ -37,27 +37,27 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160085_customer_order_tax_subtotals_rpc.sql',
-    sha256: 'be6c9f8a3a2d1c6ff41c97c6eec23e953dee98fae830e36ff8edc15c9de28137',
+    sha256: '232ea5ca4a164a1d276d058289650e5e7558cf6ba4d9ba7bce3e4bcc4dda16d6',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160086_manual_order_document_snapshot_rpc.sql',
-    sha256: '3a09d80a574be3043f1d2093abf170eb81b900ce3413ba5e8c7cdffe9dcb4d86',
+    sha256: '91c355da5b73bfe3105be6b62d15d97ae69514677be3338fa99c87c6b3dec016',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160100_verified_receipt_claim_redemption.sql',
-    sha256: 'b11ff4188ea0e61247b5684621f94bc283b856de54dbb1429e4f91f552568a40',
+    sha256: 'f2b4f437001f70bed5796e59409ec89bf118cf962a4c841959e8e02dc565e533',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160200_preview_receipt_claim_document_kind.sql',
-    sha256: '92ebac23dd4733c22156cd8db238979a4cf73df757a07d408ce6e5ca48c2fc60',
+    sha256: '8c390793c80ae754cae6c52ea0acbc9ee1897676603f702088c5fee5213d8363',
   },
   {
     repositoryPath:
       'supabase/migrations/20260930160300_enable_manual_order_document_triggers.sql',
-    sha256: '35363f5fb224dc68406d51bc45e3e13881563ddf4532900f7b7fec63359c2701',
+    sha256: '398d063e75a01037938fb9ac0a7404703d2d5b39120818fe5f4ece6ff961fbd7',
   },
   {
     repositoryPath:

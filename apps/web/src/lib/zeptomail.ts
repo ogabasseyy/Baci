@@ -1,8 +1,7 @@
-import { getZeptoMailFromDomain } from '@/env';
+import { getZeptoMailFromDomain, getZeptoMailToken } from '@/env';
 import { getActiveMerchantSendingDomain } from '@/lib/merchant-sending-domain';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
-  getRequiredToken,
   isRetryableError,
   parseError,
   RETRY_CONFIG,
@@ -12,6 +11,18 @@ import {
 import { zeptoMailRequest } from '@/lib/zeptomail-transport';
 
 const DEFAULT_FROM_DOMAIN = getZeptoMailFromDomain();
+
+/**
+ * Resolve the ZeptoMail API token. Lives here (not in the retry unit) so
+ * the transport split never reaches the credential authority directly.
+ */
+function getRequiredToken(): string {
+  const token = getZeptoMailToken();
+  if (!token) {
+    throw new Error('ZEPTOMAIL_TOKEN environment variable is not configured');
+  }
+  return token;
+}
 
 // Email type to sender address mapping
 export type EmailType =
@@ -415,6 +426,7 @@ export async function sendEmail({
     beforeTransportDispatch,
     resetTransportDispatch,
     resolvePlatformSender: () => getSenderAddress(emailType, fromName),
+    resolveToken: getRequiredToken,
     onAccepted: async ({ senderAddress, attemptCount, messageId }) => {
       await updateEmailAttempts(auditIds, {
         status: 'accepted',

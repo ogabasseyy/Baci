@@ -3,10 +3,11 @@
  *
  * Extracted from `@/lib/zeptomail` (Boy Scout: that module is far past the
  * split rule): one sender-scoped retry loop plus the custom→platform
- * fallback orchestration, parameterized over sender resolution and audit
- * recording so this unit stays transport-only.
+ * fallback orchestration, parameterized over sender resolution, token
+ * resolution, and audit recording so this unit stays transport-only and
+ * never reaches the credential authority directly (event-pipeline
+ * boundary: only zeptomail.ts holds the env edge).
  */
-import { getZeptoMailToken } from '@/env';
 import { resetTransportDispatchForFallback } from '@/lib/zeptomail-dispatch-reset';
 import {
   ZEPTOMAIL_DELIVERY_OUTCOME_UNKNOWN_CODE,
@@ -50,19 +51,6 @@ export function parseError(error: unknown): SendFailure {
   }
 
   return { message: String(error) };
-}
-
-/**
- * Resolve the ZeptoMail API token. Called inside each send attempt's
- * try block so a missing token records a failed audit attempt (matching
- * the legacy SDK client's behavior) instead of throwing at the caller.
- */
-export function getRequiredToken(): string {
-  const token = getZeptoMailToken();
-  if (!token) {
-    throw new Error('ZEPTOMAIL_TOKEN environment variable is not configured');
-  }
-  return token;
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -112,6 +100,7 @@ export interface ZeptoMailTransportRun {
   beforeTransportDispatch?: () => Promise<void>;
   resetTransportDispatch?: () => Promise<void>;
   resolvePlatformSender: () => { address: string; name: string };
+  resolveToken: () => string;
   onAccepted: (info: {
     senderAddress: string;
     attemptCount: number;
@@ -143,6 +132,7 @@ export async function runZeptoMailTransport(
     beforeTransportDispatch,
     resetTransportDispatch,
     resolvePlatformSender,
+    resolveToken,
     onAccepted,
   } = run;
   let transportDispatchMarked = false;
@@ -161,7 +151,10 @@ export async function runZeptoMailTransport(
     for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       attemptsMade = attempt + 1;
       try {
-        const token = getRequiredToken();
+        // Resolved inside the attempt's try block so a missing token
+        // records a failed audit attempt (matching the legacy SDK
+        // client's behavior) instead of throwing at the caller.
+        const token = resolveToken();
         if (!transportDispatchMarked) {
           await beforeTransportDispatch?.();
           transportDispatchMarked = true;

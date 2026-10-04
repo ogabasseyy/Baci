@@ -48,7 +48,9 @@ describe('dispatch snapshot builders', () => {
       ngnInvoice,
       'proforma_invoice'
     );
-    expect(snapshot.merchantBankCode).toBe('058');
+    // bank_code never prints (name/number/account name only): the snapshot
+    // reserves the field as null even when the merchant row carries a code.
+    expect(snapshot.merchantBankCode).toBeNull();
     expect(snapshot.merchantBankAccountNumber).toBe('1234567890');
     expect(snapshot.virtualAccountNumber).toBeNull();
   });

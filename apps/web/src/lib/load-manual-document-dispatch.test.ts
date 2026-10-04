@@ -33,10 +33,10 @@ describe('loadManualDocumentDispatch', () => {
   it('loads a ready dispatch through the claim-bound snapshot RPC', async () => {
     const { rpc, client: supabase } = clientReturning(snapshotWith());
     const result = await loadManualDocumentDispatch({ supabase, row });
-    expect(rpc).toHaveBeenCalledWith(
-      'get_manual_order_document_snapshot',
-      { p_outbox_id: 'outbox-1', p_claim_owner: 'worker-1' }
-    );
+    expect(rpc).toHaveBeenCalledWith('get_manual_order_document_snapshot', {
+      p_outbox_id: 'outbox-1',
+      p_claim_owner: 'worker-1',
+    });
     expect(result).toMatchObject({
       status: 'ready',
       paymentStatus: 'paid',

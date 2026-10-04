@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import type { Dispatch, SetStateAction } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { createSavingsGoal } from '@/lib/customer-savings';
 import {
@@ -15,6 +16,7 @@ import type {
 } from './start-savings.types';
 import {
   getErrorMessage,
+  isGoalIdempotencyMismatchError,
   isInsufficientWalletError,
 } from './start-savings-controller.utils';
 export type FundingAccount = {
@@ -25,19 +27,23 @@ export type UseStartSavingsSubmitInput = {
   activeMerchantId?: string;
   activeMerchantSlug?: string;
   contributionValue: number;
+  createdGoalId?: string | null;
+  deferInitialContribution?: boolean;
   effectiveInitialContribution: number;
   frequency: SavingsFrequency;
   fundingAccount: FundingAccount;
+  goalIdempotencyKey: string | null;
+  setGoalIdempotencyKey: (value: string | null) => void;
+  setCreatedGoalId?: (goalId: string | null) => void;
   initialContributionIdempotencyKey: string | null;
   maturityDate: string;
-  normalizedVariantId?: string;
   preferredDebitTime: string;
   refetch: () => Promise<unknown>;
   requiredTopUpAmount: number;
   selectedPaymentMethodId: string | null;
   selectedProduct: SavingsProductChoice | null;
   setFormError: (value: string | null) => void;
-  setInitialContributionIdempotencyKey: (value: string | null) => void;
+  setInitialContributionIdempotencyKey: Dispatch<SetStateAction<string | null>>;
   setShowFundingModal: (value: boolean) => void;
   setShowPreviewModal: (value: boolean) => void;
   setShowSuccessModal: (value: boolean) => void;
@@ -45,6 +51,7 @@ export type UseStartSavingsSubmitInput = {
   sourceMode: SavingsSourceMode;
   startDate: string;
   targetValue: number;
+  variantId?: string | null;
 };
 
 type ValidatedSavingsInput = {
@@ -59,11 +66,12 @@ type ValidatedSavingsInput = {
  */
 export async function runSavingsGoalSubmission(
   input: UseStartSavingsSubmitInput,
-  validation: ValidatedSavingsInput
+  validation: ValidatedSavingsInput,
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   try {
     const requestInitialContribution =
-      input.sourceMode === 'auto_debit'
+      input.sourceMode === 'auto_debit' || input.deferInitialContribution
         ? 0
         : input.effectiveInitialContribution;
     // Auto-debit savings starts with requestInitialContribution = 0, so no
@@ -77,7 +85,10 @@ export async function runSavingsGoalSubmission(
     if (requestIdempotencyKey && !input.initialContributionIdempotencyKey) {
       input.setInitialContributionIdempotencyKey(requestIdempotencyKey);
     }
+    const requestGoalKey = input.goalIdempotencyKey ?? Crypto.randomUUID();
+    if (!input.goalIdempotencyKey) input.setGoalIdempotencyKey(requestGoalKey);
     const result = await createSavingsGoal({
+      goalIdempotencyKey: requestGoalKey,
       autoDebitAuthorized: input.sourceMode === 'auto_debit' ? true : undefined,
       contributionAmount: input.contributionValue,
       contributionFrequency: input.frequency,
@@ -97,11 +108,17 @@ export async function runSavingsGoalSubmission(
       targetAmount: input.targetValue,
       termsAccepted: true,
       title: validation.selectedProduct.name,
-      variantId: input.normalizedVariantId ?? null,
+      variantId: validation.selectedProduct.variantId,
     });
-    if (!result.success) {
+    if (result.success !== true) {
       throw new Error('Unable to create savings plan.');
     }
+    if (requestIdempotencyKey) {
+      input.setInitialContributionIdempotencyKey((currentKey) =>
+        currentKey === requestIdempotencyKey ? null : currentKey
+      );
+    }
+    if (!isCurrent()) return;
     if (input.sourceMode === 'manual') {
       try {
         if (input.targetValue > requestInitialContribution) {
@@ -122,23 +139,43 @@ export async function runSavingsGoalSubmission(
         // Reminder scheduling is best effort and must not block goal creation.
       }
     }
+    if (!isCurrent()) return;
+    if (input.deferInitialContribution) {
+      input.setCreatedGoalId?.(result.goalId);
+      input.setShowFundingModal(false);
+      input.setShowPreviewModal(false);
+      input.setFormError(null);
+      input.setShowTransferModal(true);
+      try {
+        await input.refetch();
+      } catch {
+        if (isCurrent())
+          input.setFormError('Plan created but unable to refresh wallet data.');
+      }
+      return;
+    }
     input.setShowFundingModal(false);
     input.setShowPreviewModal(false);
     input.setShowTransferModal(false);
     input.setFormError(null);
-    input.setInitialContributionIdempotencyKey(null);
     input.setShowSuccessModal(true);
     try {
       await input.refetch();
     } catch {
-      input.setFormError('Plan created but unable to refresh wallet data.');
+      if (isCurrent())
+        input.setFormError('Plan created but unable to refresh wallet data.');
     }
   } catch (error) {
+    if (!isCurrent()) return;
     if (isInsufficientWalletError(error) && input.fundingAccount) {
       input.setShowTransferModal(true);
       return;
     }
-    const message = getErrorMessage(error, 'Unable to create savings plan.');
+    const mismatch = isGoalIdempotencyMismatchError(error);
+    if (mismatch) input.setGoalIdempotencyKey(null);
+    const message = mismatch
+      ? 'Your plan details changed. Please submit again to create your plan.'
+      : getErrorMessage(error, 'Unable to create savings plan.');
     input.setFormError(message);
     showAppAlert({
       title: 'Unable to create plan',

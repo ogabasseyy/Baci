@@ -50,6 +50,29 @@ function rawPostRequest(body: string) {
   );
 }
 
+function createProductQuery(result: {
+  data: Record<string, unknown> | null;
+  error: null | Record<string, unknown>;
+}) {
+  const query = {
+    eq: vi.fn(() => query),
+    maybeSingle: vi.fn().mockResolvedValue(result),
+    select: vi.fn(() => query),
+  };
+  return query;
+}
+
+function simpleProductData() {
+  return {
+    condition: 'used',
+    id: '00000000-0000-4000-8000-000000000101',
+    images: ['https://cdn.example.com/iphone.jpg'],
+    name: 'iPhone 13 Pro Max',
+    price: '800000',
+    variants: [],
+  };
+}
+
 describe('/api/storefront/customer/savings/goals', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -126,7 +149,12 @@ describe('/api/storefront/customer/savings/goals', () => {
   });
 
   it('creates a savings goal on POST', async () => {
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
     const mockSupabase = {
+      from: vi.fn(() => productQuery),
       rpc: vi.fn().mockResolvedValue({
         data: [
           {
@@ -171,9 +199,18 @@ describe('/api/storefront/customer/savings/goals', () => {
       expect.objectContaining({
         p_customer_id: 'customer-1',
         p_merchant_id: 'merchant-1',
+        p_product_snapshot: expect.objectContaining({
+          name: 'iPhone 13 Pro Max',
+          selectionStatus: 'exact',
+          variantId: null,
+        }),
+        p_target_amount: 800000,
+        p_variant_id: null,
       })
     );
     expect(body).toEqual({
+      contributionAmount: 20000,
+      contributionFrequency: 'daily',
       contributionId: 'contrib-1',
       currentAmount: 20000,
       goalId: 'goal-1',
@@ -184,7 +221,12 @@ describe('/api/storefront/customer/savings/goals', () => {
   });
 
   it('returns 500 when savings goal creation RPC fails unexpectedly', async () => {
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
     const mockSupabase = {
+      from: vi.fn(() => productQuery),
       rpc: vi.fn().mockResolvedValue({
         data: null,
         error: {
@@ -224,7 +266,12 @@ describe('/api/storefront/customer/savings/goals', () => {
   });
 
   it('maps RPC conflicts to 409 when initial contribution exceeds wallet balance', async () => {
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
     const mockSupabase = {
+      from: vi.fn(() => productQuery),
       rpc: vi.fn().mockResolvedValue({
         data: null,
         error: {
@@ -259,5 +306,143 @@ describe('/api/storefront/customer/savings/goals', () => {
 
     expect(response.status).toBe(409);
     expect(body.error).toBe('insufficient_wallet_balance');
+  });
+
+  it('rejects creating a multi-variant savings goal without an exact variant', async () => {
+    const productQuery = createProductQuery({
+      data: {
+        ...simpleProductData(),
+        variants: [
+          {
+            attributes: { storage: '256GB' },
+            id: '00000000-0000-4000-8000-000000000102',
+            price_override: '850000',
+          },
+        ],
+      },
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: vi.fn(),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 850000,
+        termsAccepted: true,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_REQUIRED');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('persists the selected variant snapshot and rejects a stale lower price', async () => {
+    const productQuery = createProductQuery({
+      data: {
+        ...simpleProductData(),
+        variants: [
+          {
+            attributes: { storage: '256GB' },
+            condition: 'used',
+            id: '00000000-0000-4000-8000-000000000102',
+            price_override: '850000',
+            primary_image: 'https://cdn.example.com/iphone-256.jpg',
+          },
+        ],
+      },
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: vi.fn(),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const staleResponse = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 800000,
+        termsAccepted: true,
+        variantId: '00000000-0000-4000-8000-000000000102',
+      })
+    );
+
+    expect(staleResponse.status).toBe(409);
+    expect((await staleResponse.json()).code).toBe(
+      'SAVINGS_DEVICE_PRICE_STALE'
+    );
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+
+    mockSupabase.rpc.mockResolvedValue({
+      data: [
+        {
+          contribution_id: 'contrib-1',
+          current_amount: '20000',
+          goal_id: 'goal-1',
+          goal_status: 'active',
+          success: true,
+          wallet_balance: '180000',
+        },
+      ],
+      error: null,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 850000,
+        termsAccepted: true,
+        variantId: '00000000-0000-4000-8000-000000000102',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'create_customer_savings_goal',
+      expect.objectContaining({
+        p_product_snapshot: expect.objectContaining({
+          selectionStatus: 'exact',
+          variantId: '00000000-0000-4000-8000-000000000102',
+          variantLabel: 'Storage: 256GB',
+        }),
+        p_target_amount: 850000,
+        p_variant_id: '00000000-0000-4000-8000-000000000102',
+      })
+    );
   });
 });

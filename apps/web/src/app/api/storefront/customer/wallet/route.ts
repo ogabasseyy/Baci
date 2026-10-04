@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import {
   fetchCustomerWallet,
+  getCustomerSavingsEarnings,
   getFundingAccount,
   getSavingsBalance,
   getUsdtBalance,
@@ -116,12 +117,18 @@ export async function GET(request: Request) {
       }
     }
 
+    const savingsEarnings = await getCustomerSavingsEarnings({
+      merchantId: merchant.id,
+      supabase,
+    });
+
     if (!customer) {
       // Customer doesn't exist yet - return zero balance. No customer row
       // means account creation would fail ("Customer not found"), so never
       // advertise the funding consent CTA for this response.
       return NextResponse.json(
         emptyWalletResponse({
+          ...savingsEarnings,
           requiresFundingAccountConsent: false,
           walletDvaEnabled,
         })
@@ -180,6 +187,7 @@ export async function GET(request: Request) {
     if (walletFetch.kind === 'no-wallet') {
       return NextResponse.json(
         emptyWalletResponse({
+          ...savingsEarnings,
           fundingAccount,
           loyaltyPoints,
           savingsBalance,
@@ -195,7 +203,7 @@ export async function GET(request: Request) {
         NGN: walletFetch.availableBalance,
         USDT: usdtBalance,
       },
-      earningsBalance: walletFetch.availableBalance,
+      ...savingsEarnings,
       fundingAccount,
       loyaltyPoints,
       requiresFundingAccountConsent: !fundingAccount,

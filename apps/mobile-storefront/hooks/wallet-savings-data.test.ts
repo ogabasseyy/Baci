@@ -76,7 +76,8 @@ describe('wallet savings data helpers', () => {
       maturity_date: '2026-09-30',
       product_condition: 'New',
       product_image: 'https://cdn.example.com/variant.jpg',
-      product_variant_label: 'Storage: 256GB',
+      product_variant_label: 'Color: Black · Storage: 256GB',
+      selection_unresolved: false,
       source_mode: 'manual',
       status: 'active',
       target_amount: 120000,
@@ -125,7 +126,31 @@ describe('wallet savings data helpers', () => {
       expect.objectContaining({
         product_condition: 'Used',
         product_image: 'https://cdn.example.com/product.jpg',
-        product_variant_label: null,
+        product_variant_label: 'Exact variant unavailable',
+        selection_unresolved: true,
+      })
+    );
+  });
+
+  it('does not mark a product with only an inventory anchor unresolved', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [
+            {
+              id: 'inventory-anchor',
+              is_inventory_anchor: true,
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: false,
       })
     );
   });
@@ -266,6 +291,37 @@ describe('wallet savings data helpers', () => {
         product_condition: 'New',
         product_image: 'https://cdn.example.com/snapshot.jpg',
         product_variant_label: 'Storage: 512GB',
+      })
+    );
+  });
+
+  it('uses the live selected variant label when a legacy snapshot omits color', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: {
+          ...activeGoal,
+          product_snapshot: {
+            condition: 'New',
+            variant_label: 'Storage: 256GB',
+          },
+        },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [
+            {
+              attributes: { color: 'Black', storage: '256GB' },
+              condition: 'new',
+              id: 'variant-1',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        product_condition: 'New',
+        product_variant_label: 'Color: Black · Storage: 256GB',
       })
     );
   });

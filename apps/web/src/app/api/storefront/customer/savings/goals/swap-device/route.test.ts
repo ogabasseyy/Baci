@@ -265,4 +265,46 @@ describe('/api/storefront/customer/savings/goals/swap-device', () => {
     expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_NOT_FOUND');
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
+
+  it('requires an exact variant when swapping onto a product that has variants', async () => {
+    const productQuery = createProductQuery({
+      data: {
+        condition: 'used',
+        id: '00000000-0000-4000-8000-000000000101',
+        images: [],
+        name: 'iPhone 15 Pro',
+        price: '700000',
+        variants: [
+          {
+            attributes: { storage: '256GB' },
+            id: '00000000-0000-4000-8000-000000000102',
+            price_override: '650000',
+          },
+        ],
+      },
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: vi.fn(),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        goalId: '00000000-0000-4000-8000-000000000201',
+        merchantSlug: 'ogabassey',
+        productId: '00000000-0000-4000-8000-000000000101',
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_REQUIRED');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
 });

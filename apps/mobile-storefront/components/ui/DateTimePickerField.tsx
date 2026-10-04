@@ -13,8 +13,12 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { RADIUS, SPACING, withAlpha } from '@/constants/Colors';
+import {
+  type DateTimeDisplayMode,
+  formatDateTimeDisplay,
+} from './format-date-time-display';
 
-type DateTimePickerFieldMode = 'date' | 'time';
+type DateTimePickerFieldMode = DateTimeDisplayMode;
 
 // The savings flow design defaults preferred debit time to 06:20 AM.
 const DEFAULT_TIME_HOUR = 6;
@@ -22,6 +26,7 @@ const DEFAULT_TIME_MINUTE = 20;
 
 type DateTimePickerFieldProps = {
   accessibilityLabel: string;
+  displayFormattedValue?: boolean;
   fieldStyle?: StyleProp<ViewStyle>;
   fallbackDisplay: string;
   label: string;
@@ -93,6 +98,7 @@ function formatPickerValue(date: Date, mode: DateTimePickerFieldMode) {
 
 export function DateTimePickerField({
   accessibilityLabel,
+  displayFormattedValue = false,
   fallbackDisplay,
   fieldStyle,
   label,
@@ -141,6 +147,10 @@ export function DateTimePickerField({
     setIsPickerVisible(true);
   };
 
+  const displayValue = displayFormattedValue
+    ? formatDateTimeDisplay(value, mode)
+    : value || fallbackDisplay;
+
   const handleDone = () => {
     const valueToCommit = draftPickerValue ?? pickerValue;
     const formattedValue = formatPickerValue(valueToCommit, mode);
@@ -158,12 +168,12 @@ export function DateTimePickerField({
         onPress={handleOpenPicker}
         style={fieldStyle}
       >
-        <Text style={textStyle}>{value || fallbackDisplay}</Text>
+        <Text style={textStyle}>{displayValue}</Text>
       </Pressable>
       {isPickerVisible && Platform.OS === 'ios' ? (
         <Modal
           accessibilityViewIsModal
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setIsPickerVisible(false)}
           transparent
           visible
@@ -179,8 +189,18 @@ export function DateTimePickerField({
             >
               <DateTimePicker
                 accessibilityLabel={accessibilityLabel}
-                display="spinner"
+                display={mode === 'date' ? 'inline' : 'spinner'}
                 mode={mode}
+                is24Hour={
+                  displayFormattedValue && mode === 'time' ? false : undefined
+                }
+                locale={
+                  displayFormattedValue
+                    ? mode === 'time'
+                      ? 'en-US'
+                      : 'en-GB'
+                    : undefined
+                }
                 themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
                 value={pickerValue}
                 onChange={handlePickerChange}
@@ -210,6 +230,16 @@ export function DateTimePickerField({
             accessibilityLabel={accessibilityLabel}
             display="default"
             mode={mode}
+            is24Hour={
+              displayFormattedValue && mode === 'time' ? false : undefined
+            }
+            locale={
+              displayFormattedValue
+                ? mode === 'time'
+                  ? 'en-US'
+                  : 'en-GB'
+                : undefined
+            }
             themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
             value={pickerValue}
             onChange={handlePickerChange}
@@ -233,7 +263,6 @@ const styles = StyleSheet.create({
   iosPickerOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    opacity: 0.98,
   },
   iosPickerSheet: {
     borderTopLeftRadius: RADIUS['2xl'],

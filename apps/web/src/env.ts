@@ -2,6 +2,7 @@
 import z from 'zod';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
+import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
@@ -578,8 +579,25 @@ const validateSanitizedModel = (
  * Throws an error in non-production environments if validation fails.
  * In production, it logs errors but might allow the app to crash downstream if critical keys are missing.
  */
-const getEnv = () => {
+const getEnv = (): Partial<z.infer<typeof serverSchema>> &
+  Pick<
+    z.infer<typeof serverSchema>,
+    | 'AI_CHAT_PROVIDER'
+    | 'AI_STOREFRONT_TRIGGER_TIMEOUT_MS'
+    | 'JUMIA_ENVIRONMENT'
+  > &
+  z.infer<typeof clientSchema> => {
   const isServer = typeof window === 'undefined';
+  const staging = isServer ? readHostedSavingsEnvironment(process.env) : null;
+  if (staging) {
+    return {
+      ...clientSchema.parse(staging),
+      NODE_ENV: staging.NODE_ENV,
+      AI_CHAT_PROVIDER: 'auto',
+      AI_STOREFRONT_TRIGGER_TIMEOUT_MS: 5000,
+      JUMIA_ENVIRONMENT: 'staging',
+    };
+  }
 
   // Explicitly map client variables to ensure they are available on the client
   // Next.js requires the full process.env.NEXT_PUBLIC_* string for bundling

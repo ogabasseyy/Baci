@@ -16,24 +16,32 @@ describe('normalizeRequiredFundingAccountValue', () => {
 });
 
 describe('deriveWalletDisplayData', () => {
-  it('prefers earnings balance and derives total when absent', () => {
+  it('keeps settled interest separate from spendable and savings balances', () => {
     const result = deriveWalletDisplayData({
-      earnings_balance: 1500,
+      balance: 5000,
+      earnings_available: true,
+      earnings_balance: 125.5,
       savings_balance: 500,
-    });
+    } as never);
 
-    expect(result.earningsBalance).toBe(1500);
+    expect(result.earningsBalance).toBe(125.5);
+    expect(result.earningsAvailable).toBe(true);
     expect(result.savingsBalance).toBe(500);
-    expect(result.totalBalance).toBe(2000);
+    expect(result.spendableBalance).toBe(5000);
+    expect(result.totalBalance).toBe(5500);
   });
 
-  it('falls back to balance when earnings_balance is missing', () => {
+  it('marks earnings unavailable instead of falling back to wallet deposits', () => {
     const result = deriveWalletDisplayData({
       balance: 800,
+      earnings_available: false,
+      earnings_balance: null,
       total_balance: 800,
-    });
+    } as never);
 
-    expect(result.earningsBalance).toBe(800);
+    expect(result.earningsBalance).toBeNull();
+    expect(result.earningsAvailable).toBe(false);
+    expect(result.spendableBalance).toBe(800);
     expect(result.totalBalance).toBe(800);
   });
 

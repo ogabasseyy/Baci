@@ -28,8 +28,15 @@ export function walletAccountErrorStatus(code: string) {
 export function walletAccountErrorResponse(
   error: CustomerWalletPaymentAccountError
 ) {
+  // Storage failures carry raw Postgres text (e.g. unique-constraint detail
+  // after a retried create) — never show that to shoppers; the raw message
+  // stays in server logs via the route's console.error.
+  const message =
+    error.code === 'WALLET_DVA_STORAGE_ERROR'
+      ? 'We could not save your transfer account. Please try again.'
+      : error.message;
   return NextResponse.json(
-    { error: error.message, code: error.code },
+    { error: message, code: error.code },
     { status: walletAccountErrorStatus(error.code) }
   );
 }

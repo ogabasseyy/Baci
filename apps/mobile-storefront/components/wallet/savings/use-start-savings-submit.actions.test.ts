@@ -56,8 +56,9 @@ function createInput(overrides = {}) {
     frequency: 'daily' as const,
     fundingAccount: { account_number: '0123456789' },
     initialContributionIdempotencyKey: null,
+    goalIdempotencyKey: null,
+    setGoalIdempotencyKey: jest.fn(),
     maturityDate: '2026-06-30',
-    normalizedVariantId: undefined,
     preferredDebitTime: '06:20',
     refetch: jest.fn(async () => undefined),
     requiredTopUpAmount: 50000,
@@ -68,6 +69,8 @@ function createInput(overrides = {}) {
       name: 'iPhone 13 Pro Max',
       price: 800000,
       slug: 'iphone-13-pro-max',
+      requiresVariantSelection: false,
+      variantId: null,
     },
     setFormError: jest.fn(),
     setInitialContributionIdempotencyKey: jest.fn(),
@@ -78,6 +81,7 @@ function createInput(overrides = {}) {
     sourceMode: 'manual' as const,
     startDate: '2026-05-22',
     targetValue: 800000,
+    variantId: undefined,
     ...overrides,
   };
 }
@@ -164,7 +168,7 @@ describe('useStartSavingsSubmit actions', () => {
     });
 
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to authorize card',
+      'Unable to add card',
       'Paystack unavailable'
     );
   });

@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { Product } from '@/types/product';
+import type { Product, ProductVariant } from '@/types/product';
 import {
   formatProductConditionDisplay,
   formatVariantAxisLabel,
@@ -44,8 +44,11 @@ export function toProductChoice(product: Product): SavingsProductChoice {
     id: product.id,
     image: product.image,
     name: product.name,
-    price: product.price,
+    price: product.searchPreview ? 0 : product.price,
+    requiresVariantSelection:
+      !!product.searchPreview || hasSelectableVariants(product),
     slug: product.slug,
+    variantId: null,
     variantLabel:
       storageValues.length > 0
         ? `Storage: ${formatCompactValues(storageValues)}`
@@ -67,18 +70,20 @@ export function applyStartSavingsProductSelection({
   setFormError?: (error: string | null) => void;
   setSearchValue: (value: string) => void;
   setSelectedProduct: (choice: SavingsProductChoice | null) => void;
-  setTargetAmount: Dispatch<SetStateAction<string>>;
+  setTargetAmount?: Dispatch<SetStateAction<string>>;
   variantId?: string | null;
 }) {
   const choice = toSelectedProductChoice({ product, variantId });
-  const nextAutoTargetAmount = String(Math.round(choice.price));
+  const nextAutoTargetAmount = choice.requiresVariantSelection
+    ? ''
+    : String(Math.round(choice.price));
   const previousAutoTargetAmount = previousSelectedProduct
     ? String(Math.round(previousSelectedProduct.price))
     : '';
   setFormError?.(null);
   setSelectedProduct(choice);
   setSearchValue(product.name);
-  setTargetAmount((currentTargetAmount) => {
+  setTargetAmount?.((currentTargetAmount) => {
     const normalizedCurrentTargetAmount = currentTargetAmount.trim();
     if (
       !normalizedCurrentTargetAmount ||
@@ -98,10 +103,28 @@ export function toSelectedProductChoice({
   variantId?: string | null;
 }): SavingsProductChoice {
   const selectedVariant = variantId
-    ? product.variants?.find((variant) => variant.id === variantId)
+    ? product.variants?.find(
+        (variant) =>
+          variant.id === variantId && isSavingsVariantSelectable(variant)
+      )
     : null;
 
   if (!selectedVariant) {
+    if (variantId || hasSelectableVariants(product)) {
+      return {
+        conditionLabel:
+          formatProductConditionDisplay(product.condition) ?? null,
+        id: product.id,
+        image: product.image,
+        name: product.name,
+        price: product.price,
+        requiresVariantSelection: true,
+        slug: product.slug,
+        variantId: null,
+        variantLabel: null,
+      };
+    }
+
     return toProductChoice(product);
   }
 
@@ -114,12 +137,47 @@ export function toSelectedProductChoice({
       null,
     id: product.id,
     image:
-      selectedVariant.image ?? selectedVariant.images?.[0] ?? product.image,
+      [
+        selectedVariant.image,
+        ...(selectedVariant.images ?? []),
+        product.image,
+        ...(product.images ?? []),
+      ]
+        .find((image) => typeof image === 'string' && image.trim().length > 0)
+        ?.trim() ?? '',
     name: product.name,
     price: selectedVariant.price,
+    requiresVariantSelection: false,
     slug: product.slug,
+    variantId: selectedVariant.id,
     variantLabel,
   };
+}
+
+export function hasSelectableVariants(product: Product) {
+  return (product.variants?.length ?? 0) > 0;
+}
+
+export function isSavingsVariantSelectable(variant: ProductVariant) {
+  return Number.isFinite(variant.price) && variant.price > 0;
+}
+
+export function getSavingsVariantOptions(product: Product) {
+  return (product.variants ?? []).map((variant) => {
+    const choice = toSelectedProductChoice({
+      product,
+      variantId: variant.id,
+    });
+    return {
+      conditionLabel: choice.conditionLabel ?? null,
+      id: variant.id,
+      label: [choice.conditionLabel, choice.variantLabel ?? variant.name]
+        .filter((value): value is string => Boolean(value))
+        .join(' · '),
+      price: choice.price,
+      unavailable: !isSavingsVariantSelectable(variant),
+    };
+  });
 }
 
 function formatCompactValues(values: string[]) {
@@ -156,7 +214,8 @@ function getVariantLabel(attributes: Record<string, string> | undefined) {
   }
 
   const parts = Object.entries(attributes)
-    .filter(([axis, value]) => axis !== 'color' && axis !== 'colour' && value)
+    .filter(([key]) => key.trim().toLowerCase() !== 'hex')
+    .filter(([, value]) => value)
     .map(([axis, value]) => {
       const label = formatVariantAxisLabel(axis) ?? axis;
       return `${label}: ${value}`;
@@ -167,6 +226,13 @@ function getVariantLabel(attributes: Record<string, string> | undefined) {
 
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+const GOAL_IDEMPOTENCY_MISMATCH_PATTERN =
+  /\bmismatched_goal_idempotency_payload\b/;
+
+export function isGoalIdempotencyMismatchError(error: unknown) {
+  return GOAL_IDEMPOTENCY_MISMATCH_PATTERN.test(getErrorMessage(error, ''));
 }
 
 // Prefer backend error codes; the message fallback is intentionally narrow for
@@ -206,6 +272,14 @@ export function validateStartSavingsForm({
 }) {
   if (!selectedProduct) {
     return 'Select the product you want to save for.';
+  }
+  if (
+    selectedProduct.requiresVariantSelection !== false ||
+    (selectedProduct.variantId !== null &&
+      (typeof selectedProduct.variantId !== 'string' ||
+        !selectedProduct.variantId.trim()))
+  ) {
+    return 'Select the exact device variant you want to save for.';
   }
   if (targetValue <= 0) {
     return 'Enter a valid target amount.';

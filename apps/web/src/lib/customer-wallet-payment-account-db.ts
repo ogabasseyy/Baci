@@ -114,6 +114,97 @@ export async function resolveCustomerWalletPaymentAccount({
     : null;
 }
 
+/**
+ * Status-agnostic lookup for the customer's own slot. The unique index covers
+ * inactive rows too, so a retry after a disabled/pending_review row must find
+ * it here — the active-only lookups above deliberately cannot.
+ */
+async function findCustomerWalletPaymentAccountAnyStatus({
+  customerId,
+  merchantId,
+  supabase,
+}: {
+  customerId: string;
+  merchantId: string;
+  supabase: SupabaseClient;
+}): Promise<CustomerWalletPaymentAccountRow | null> {
+  const { data, error } = await supabase
+    .from('customer_wallet_payment_accounts')
+    .select(WALLET_PAYMENT_ACCOUNT_SELECT)
+    .eq('merchant_id', merchantId)
+    .eq('customer_id', customerId)
+    .eq('provider', 'paystack')
+    .maybeSingle();
+
+  if (error) {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      error.message
+    );
+  }
+
+  return (data as CustomerWalletPaymentAccountRow | null) ?? null;
+}
+
+async function reactivateWalletPaymentAccount({
+  account,
+  consentedAt,
+  customerId,
+  merchantId,
+  rowId,
+  supabase,
+}: {
+  account: WalletDedicatedAccount;
+  consentedAt: Date;
+  customerId: string;
+  merchantId: string;
+  rowId: string;
+  supabase: SupabaseClient;
+}): Promise<CustomerWalletPaymentAccount> {
+  // The neq guard makes concurrent reactivations mutually exclusive: only
+  // the first writer flips the inactive row. A loser converges on the
+  // winner's active row instead of overwriting it with a different
+  // provider account (which would split-brain the slot).
+  const { data, error } = await supabase
+    .from('customer_wallet_payment_accounts')
+    .update({
+      account_name: account.accountName,
+      account_number: account.accountNumber,
+      bank_name: account.bankName,
+      bank_slug: account.bankSlug,
+      consented_at: consentedAt.toISOString(),
+      provider_account_id: account.providerAccountId,
+      provider_customer_code: account.providerCustomerCode,
+      provider_subaccount_code: account.providerSubaccountCode,
+      status: 'active',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', rowId)
+    .neq('status', 'active')
+    .select(WALLET_PAYMENT_ACCOUNT_SELECT)
+    .maybeSingle();
+
+  if (!error && data) {
+    return normalizeWalletPaymentAccount(
+      data as CustomerWalletPaymentAccountRow
+    );
+  }
+
+  const current = await findCustomerWalletPaymentAccountAnyStatus({
+    customerId,
+    merchantId,
+    supabase,
+  });
+  if (current) {
+    return normalizeWalletPaymentAccount(current);
+  }
+  throw new CustomerWalletPaymentAccountError(
+    'WALLET_DVA_STORAGE_ERROR',
+    (error as { message?: string } | null)?.message ??
+      'Failed to reactivate wallet payment account'
+  );
+}
+
 export async function findCustomerWalletPaymentAccountByReceiver({
   receiverAccountNumber,
   supabase,
@@ -214,6 +305,35 @@ export async function persistWalletPaymentAccount({
         'WALLET_DVA_RECEIVER_CONFLICT',
         'This Paystack wallet DVA is already assigned to another customer'
       );
+    }
+
+    // The unique slot covers inactive rows: a retry after a
+    // disabled/pending_review row lands here. Self-heal by reactivating the
+    // customer's own slot with the live provider account instead of
+    // surfacing the raw constraint error.
+    const stalledAccount = await findCustomerWalletPaymentAccountAnyStatus({
+      customerId,
+      merchantId,
+      supabase,
+    });
+    if (stalledAccount) {
+      if (
+        stalledAccount.provider_subaccount_code !==
+        account.providerSubaccountCode
+      ) {
+        throw new CustomerWalletPaymentAccountError(
+          'WALLET_DVA_SUBACCOUNT_CONFLICT',
+          'Existing wallet DVA belongs to a different Paystack subaccount'
+        );
+      }
+      return reactivateWalletPaymentAccount({
+        account,
+        consentedAt,
+        customerId,
+        merchantId,
+        rowId: stalledAccount.id,
+        supabase,
+      });
     }
   }
 

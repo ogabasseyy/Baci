@@ -28,10 +28,12 @@ const SavingsProductVariantSchema = z.object({
   attributes: z.record(z.string(), z.string()).nullable().optional(),
   condition: z.string().nullable().optional(),
   id: z.string(),
+  is_inventory_anchor: z.boolean().nullable().optional(),
   image: z.string().nullable().optional(),
   images: z.array(z.string()).nullable().optional(),
   name: z.string().nullable().optional(),
   primary_image: z.string().nullable().optional(),
+  price_override: z.union([z.number(), z.string()]).nullable().optional(),
   sku: z.string().nullable().optional(),
 });
 
@@ -40,6 +42,7 @@ const SavingsProductDataSchema = z.object({
   id: z.string(),
   images: z.array(z.string()).nullable().optional(),
   name: z.string(),
+  price: z.union([z.number(), z.string()]).nullable().optional(),
   variants: z.array(SavingsProductVariantSchema).nullable().optional(),
 });
 
@@ -78,7 +81,7 @@ function getVariantLabel(
   >[number]
 ) {
   const attributeParts = Object.entries(variant.attributes ?? {})
-    .filter(([axis, value]) => axis !== 'color' && axis !== 'colour' && value)
+    .filter(([, value]) => value)
     .map(([axis, value]) => {
       const axisLabel = formatVariantAxisLabel(axis) ?? axis;
       return `${axisLabel}: ${value}`;
@@ -87,6 +90,51 @@ function getVariantLabel(
   return attributeParts.length > 0
     ? attributeParts.join(' · ')
     : variant.name?.trim() || variant.sku?.trim() || null;
+}
+
+function getVariantResolutionOptions({
+  maximumPrice,
+  product,
+  variants,
+}: {
+  maximumPrice: number;
+  product: z.infer<typeof SavingsProductDataSchema>;
+  variants: NonNullable<z.infer<typeof SavingsProductDataSchema>['variants']>;
+}) {
+  const productPrice = coerceDatabaseNumber(product.price);
+  if (!Number.isFinite(maximumPrice) || maximumPrice <= 0) {
+    return undefined;
+  }
+
+  const options = variants.reduce<{ id: string; label: string }[]>(
+    (result, variant) => {
+      const price =
+        coerceDatabaseNumber(variant.price_override) ?? productPrice;
+      if (
+        price === null ||
+        !Number.isFinite(price) ||
+        price <= 0 ||
+        price > maximumPrice
+      ) {
+        return result;
+      }
+
+      const condition = formatProductConditionDisplay(variant.condition);
+      const variantLabel = getVariantLabel(variant);
+      const label = [condition, variantLabel]
+        .filter((value): value is string => Boolean(value))
+        .join(' · ');
+      if (!label) {
+        return result;
+      }
+
+      result.push({ id: variant.id, label });
+      return result;
+    },
+    []
+  );
+
+  return options.length > 0 ? options : undefined;
 }
 
 export function getActiveSavingsGoal(rows: unknown[]): SavingsGoalData | null {
@@ -127,9 +175,12 @@ export function toActiveSavingsGoal({
   const snapshot = goal.product_snapshot ?? {};
   const productValidation = SavingsProductDataSchema.safeParse(product);
   const productData = productValidation.success ? productValidation.data : null;
+  const customerVariants = productData?.variants?.filter(
+    (variant) => variant.is_inventory_anchor !== true
+  );
   const selectedVariant =
-    goal.variant_id && productData?.variants
-      ? productData.variants.find((variant) => variant.id === goal.variant_id)
+    goal.variant_id && customerVariants
+      ? customerVariants.find((variant) => variant.id === goal.variant_id)
       : null;
   const selectedVariantSingleImage =
     selectedVariant?.primary_image?.trim() ||
@@ -153,18 +204,32 @@ export function toActiveSavingsGoal({
     'product_image',
   ]);
   const productCondition =
-    getSnapshotText(snapshot, ['condition', 'productCondition']) ??
     formatProductConditionDisplay(
       selectedVariant?.condition ?? productData?.condition
     ) ??
+    getSnapshotText(snapshot, ['condition', 'productCondition']) ??
     null;
-  const productVariantLabel =
-    getSnapshotText(snapshot, [
-      'variantLabel',
-      'variant_label',
-      'storage',
-      'storageLabel',
-    ]) ?? (selectedVariant ? getVariantLabel(selectedVariant) : null);
+  const productHasVariants = (customerVariants?.length ?? 0) > 0;
+  const selectionUnresolved =
+    productHasVariants &&
+    (!goal.variant_id || (Boolean(goal.variant_id) && !selectedVariant));
+  const productVariantLabel = selectionUnresolved
+    ? 'Exact variant unavailable'
+    : ((selectedVariant ? getVariantLabel(selectedVariant) : null) ??
+      getSnapshotText(snapshot, [
+        'variantLabel',
+        'variant_label',
+        'storage',
+        'storageLabel',
+      ]));
+  const variantResolutionOptions =
+    productData && selectionUnresolved && goal.status === 'completed'
+      ? getVariantResolutionOptions({
+          maximumPrice: Math.min(currentAmount, targetAmount),
+          product: productData,
+          variants: customerVariants ?? [],
+        })
+      : undefined;
 
   return {
     contribution_amount: contributionAmount,
@@ -177,9 +242,13 @@ export function toActiveSavingsGoal({
       snapshotImage ??
       (productImages ? getPrimaryProductImage(productImages) : null),
     product_variant_label: productVariantLabel,
+    selection_unresolved: selectionUnresolved,
     source_mode: goal.source_mode,
     status: goal.status,
     target_amount: targetAmount,
     title: goal.title,
+    ...(variantResolutionOptions
+      ? { variant_resolution_options: variantResolutionOptions }
+      : {}),
   };
 }

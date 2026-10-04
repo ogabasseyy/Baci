@@ -183,4 +183,138 @@ describe('StartSavingsTransferModal', () => {
       })
     ).toBeNull();
   });
+
+  describe('plan funding mode', () => {
+    function createPlanController(
+      overrides: Partial<StartSavingsController> = {}
+    ): StartSavingsController {
+      return createController({
+        confirmPlanTransfer: jest.fn(async () => undefined),
+        createdGoalId: 'goal-1',
+        fetchPlanFunding: jest.fn(async () => undefined),
+        fundingAccount: null,
+        planFundingAccounts: [],
+        planFundingError: null,
+        planFundingPhase: 'idle',
+        planFundingStatusCode: null,
+        submitBankTransferContribution: jest.fn(async () => undefined),
+        ...overrides,
+      });
+    }
+
+    it('prompts for BVN and fetches the plan account', async () => {
+      const controller = createPlanController();
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+
+      expect(screen.getByText('Fund your plan to continue')).toBeOnTheScreen();
+      expect(
+        screen.queryByText('Fund wallet to continue')
+      ).not.toBeOnTheScreen();
+      fireEvent.changeText(
+        screen.getByLabelText('BVN for plan account'),
+        '00000000000'
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Show plan account' })
+      );
+
+      await waitFor(() =>
+        expect(controller.fetchPlanFunding).toHaveBeenCalledWith(
+          '00000000000',
+          { enableInterestAccrual: false }
+        )
+      );
+    });
+
+    it('passes the interest opt-in when fetching the plan account', async () => {
+      const controller = createPlanController();
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+
+      fireEvent.changeText(
+        screen.getByLabelText('BVN for plan account'),
+        '00000000000'
+      );
+      fireEvent.press(
+        screen.getByRole('checkbox', { name: 'Earn interest on this plan' })
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Show plan account' })
+      );
+
+      await waitFor(() =>
+        expect(controller.fetchPlanFunding).toHaveBeenCalledWith(
+          '00000000000',
+          { enableInterestAccrual: true }
+        )
+      );
+    });
+
+    it('shows the plan account and confirms the transfer', async () => {
+      const controller = createPlanController({
+        planFundingAccounts: [
+          {
+            accountNumber: '0001234567',
+            accountName: 'Synthetic account',
+            bankName: 'Synthetic bank',
+          },
+        ],
+        planFundingPhase: 'ready',
+      });
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+
+      expect(screen.getByText('0001234567')).toBeOnTheScreen();
+      expect(screen.getByText('Synthetic bank')).toBeOnTheScreen();
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Confirm plan transfer' })
+      );
+
+      await waitFor(() =>
+        expect(controller.confirmPlanTransfer).toHaveBeenCalledTimes(1)
+      );
+    });
+
+    it('falls back to the wallet contribution when the plan account is unavailable', async () => {
+      const controller = createPlanController({
+        fundingAccount: {
+          account_name: 'Synthetic Wallet Account',
+          account_number: '0123456789',
+          bank_name: 'Titan Paystack',
+          provider: 'paystack',
+        },
+        planFundingPhase: 'unavailable',
+      });
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+
+      expect(screen.getByText('0123456789')).toBeOnTheScreen();
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Record wallet contribution' })
+      );
+
+      await waitFor(() =>
+        expect(controller.submitBankTransferContribution).toHaveBeenCalledTimes(
+          1
+        )
+      );
+    });
+  });
 });

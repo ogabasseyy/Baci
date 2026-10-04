@@ -125,6 +125,45 @@ describe('wallet-screen.handlers', () => {
     );
   });
 
+  it('does not attempt wallet payment in the hosted staging preview', async () => {
+    const previous = {
+      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      hosted: process.env.EXPO_PUBLIC_HOSTED_STOREFRONT,
+      payments: process.env.EXPO_PUBLIC_STAGING_TEST_PAYMENTS,
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    };
+    try {
+      process.env.EXPO_PUBLIC_API_URL = 'https://staging.ogabassey.com';
+      process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = '1';
+      process.env.EXPO_PUBLIC_SUPABASE_URL =
+        'https://staging-auth.ogabassey.com';
+      delete process.env.EXPO_PUBLIC_STAGING_TEST_PAYMENTS;
+      await fundWallet({
+        fundAmount: '500',
+        resetFundPanel: jest.fn(),
+        setIsFundPending: jest.fn(),
+      });
+
+      expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Wallet top-up unavailable',
+        expect.stringContaining('hosted staging preview')
+      );
+    } finally {
+      if (previous.apiUrl === undefined) delete process.env.EXPO_PUBLIC_API_URL;
+      else process.env.EXPO_PUBLIC_API_URL = previous.apiUrl;
+      if (previous.hosted === undefined)
+        delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
+      else process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = previous.hosted;
+      if (previous.payments === undefined)
+        delete process.env.EXPO_PUBLIC_STAGING_TEST_PAYMENTS;
+      else process.env.EXPO_PUBLIC_STAGING_TEST_PAYMENTS = previous.payments;
+      if (previous.supabaseUrl === undefined)
+        delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+      else process.env.EXPO_PUBLIC_SUPABASE_URL = previous.supabaseUrl;
+    }
+  });
+
   it('starts a wallet top-up and routes to the payment gateway', async () => {
     const resetFundPanel = jest.fn();
     const setIsFundPending = jest.fn();
@@ -171,6 +210,33 @@ describe('wallet-screen.handlers', () => {
       }),
     });
     expect(setIsFundPending).toHaveBeenLastCalledWith(false);
+  });
+
+  it('returns a savings-origin top-up to the plan without submitting a savings transfer', async () => {
+    mockInitializeWalletTopUp.mockResolvedValue({
+      authorization_url: 'https://pay.example/authorize',
+      gateway: 'paystack',
+      reference: 'ref-savings',
+      success: true,
+    });
+
+    await fundWallet({
+      fundAmount: '400',
+      resetFundPanel: jest.fn(),
+      setIsFundPending: jest.fn(),
+      walletReturnTo: '/wallet?action=savings',
+    });
+
+    expect(mockInitializeWalletTopUp).toHaveBeenCalledWith(
+      expect.objectContaining({ returnTo: '/wallet?action=savings' })
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({
+        amount: '400',
+        returnTo: '/wallet?action=savings',
+      }),
+    });
   });
 
   it('rejects invalid loyalty redemption input before calling the mutation', async () => {

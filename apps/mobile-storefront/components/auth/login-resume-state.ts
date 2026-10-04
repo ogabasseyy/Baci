@@ -1,10 +1,11 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { createLogger } from '@/lib/logger';
+import { getStorefrontStoragePrefix } from '@/lib/storefront-storage-prefix';
 import { EmailSchema } from '@/lib/validation';
 
 const log = createLogger('LoginResume');
-const AUTH_LOGIN_RESUME_STORAGE_KEY = 'auth-login-resume-state';
+const AUTH_LOGIN_RESUME_STORAGE_KEY = `${getStorefrontStoragePrefix()}auth-login-resume-state`;
 const AUTH_LOGIN_RESUME_TTL_MS = 10 * 60 * 1000;
 
 export interface AuthLoginResumeState {

@@ -77,11 +77,15 @@ export function mapSavingsRpcErrorStatus(message: string, code?: string) {
     return 403;
   }
 
-  if (normalized.includes('not_found')) {
+  if (
+    normalized.includes('not_found') ||
+    normalized === 'variant_not_available_for_savings'
+  ) {
     return 404;
   }
 
   if (
+    normalized === 'saved_payment_method_not_available_for_savings' ||
     normalized.includes('insufficient_wallet_balance') ||
     normalized.includes('not_allocatable') ||
     normalized.includes('not_paused') ||

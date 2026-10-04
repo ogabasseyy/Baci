@@ -102,9 +102,6 @@ export function WalletRedeemPanel({
           Tier Rankings:
         </Text>
         <View style={styles.tierRow}>
-          <Text style={[styles.tierBadge, { backgroundColor: '#7C2D12' }]}>
-            BRONZE
-          </Text>
           <Text style={[styles.tierBadge, { backgroundColor: '#4B5563' }]}>
             SILVER
           </Text>

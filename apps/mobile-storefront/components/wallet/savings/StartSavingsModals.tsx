@@ -5,6 +5,7 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { BRAND } from '@/constants/Colors';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { createLogger } from '@/lib/logger';
+import { StartSavingsPreviewModal } from './StartSavingsPreviewModal';
 import { StartSavingsTransferModal } from './StartSavingsTransferModal';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
@@ -12,7 +13,6 @@ import type { StartSavingsController } from './start-savings-controller.types';
 import {
   FundingOptionCard,
   SavedPaymentMethodCard,
-  SummaryRow,
 } from './start-savings-modal-parts';
 
 const log = createLogger('StartSavingsModals');
@@ -43,94 +43,22 @@ export function StartSavingsModals({
 }: StartSavingsModalsProps) {
   return (
     <>
-      <PreviewModal colors={colors} controller={controller} />
-      <FundingModal colors={colors} controller={controller} />
+      <StartSavingsPreviewModal
+        colors={colors}
+        controller={controller}
+        fundingContent={
+          <FundingContent colors={colors} controller={controller} />
+        }
+      />
       <StartSavingsTransferModal colors={colors} controller={controller} />
       <SuccessModal colors={colors} controller={controller} />
     </>
   );
 }
 
-function PreviewModal({ colors, controller }: StartSavingsModalsProps) {
+function FundingContent({ colors, controller }: StartSavingsModalsProps) {
   return (
-    <ModalSheet
-      visible={controller.showPreviewModal}
-      animationType="slide"
-      backdropStyle={styles.modalBackdrop}
-      cardStyle={[styles.modalCard, { backgroundColor: colors.background }]}
-    >
-      <Text style={[styles.modalTitle, { color: colors.text }]}>
-        Preview your savings plan
-      </Text>
-      <SummaryRow
-        label="Product"
-        value={controller.selectedProduct?.name ?? '-'}
-        colors={colors}
-      />
-      <SummaryRow
-        label="Total payable"
-        value={formatNgnCurrency(controller.targetValue)}
-        colors={colors}
-      />
-      <SummaryRow
-        label="Contribution"
-        value={`${formatNgnCurrency(controller.contributionValue)} / ${controller.frequency}`}
-        colors={colors}
-      />
-      <SummaryRow
-        label="Source"
-        value={
-          controller.sourceMode === 'auto_debit' ? 'Auto debit' : 'Manual debit'
-        }
-        colors={colors}
-      />
-      <SummaryRow
-        label="Initial contribution"
-        value={formatNgnCurrency(
-          controller.sourceMode === 'auto_debit'
-            ? 0
-            : controller.effectiveInitialContribution
-        )}
-        colors={colors}
-      />
-      <SummaryRow
-        label="Maturity date"
-        value={controller.maturityDate}
-        colors={colors}
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Choose savings funding option"
-        style={styles.primaryButton}
-        onPress={() => {
-          controller.setShowPreviewModal(false);
-          controller.setShowFundingModal(true);
-        }}
-      >
-        <Text style={styles.primaryButtonText}>Choose funding option</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close preview"
-        style={styles.modalCloseButton}
-        onPress={() => controller.setShowPreviewModal(false)}
-      >
-        <Text style={[styles.modalCloseText, { color: colors.textSecondary }]}>
-          Close
-        </Text>
-      </Pressable>
-    </ModalSheet>
-  );
-}
-
-function FundingModal({ colors, controller }: StartSavingsModalsProps) {
-  return (
-    <ModalSheet
-      visible={controller.showFundingModal}
-      animationType="slide"
-      backdropStyle={styles.modalBackdrop}
-      cardStyle={[styles.modalCard, { backgroundColor: colors.background }]}
-    >
+    <>
       <Text style={[styles.modalTitle, { color: colors.text }]}>
         Payment Methods
       </Text>
@@ -139,6 +67,14 @@ function FundingModal({ colors, controller }: StartSavingsModalsProps) {
       ) : (
         <ManualFundingContent colors={colors} controller={controller} />
       )}
+      {controller.formError ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.errorText, { color: colors.error }]}
+        >
+          {controller.formError}
+        </Text>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Continue funding option"
@@ -170,6 +106,19 @@ function FundingModal({ colors, controller }: StartSavingsModalsProps) {
       </Pressable>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Back to savings review"
+        style={styles.modalCloseButton}
+        onPress={() => {
+          controller.setShowFundingModal(false);
+          controller.setShowPreviewModal(true);
+        }}
+      >
+        <Text style={[styles.modalCloseText, { color: colors.textSecondary }]}>
+          Back to plan
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
         accessibilityLabel="Close funding options"
         style={styles.modalCloseButton}
         onPress={() => controller.setShowFundingModal(false)}
@@ -178,7 +127,7 @@ function FundingModal({ colors, controller }: StartSavingsModalsProps) {
           Close
         </Text>
       </Pressable>
-    </ModalSheet>
+    </>
   );
 }
 
@@ -219,7 +168,7 @@ function AutoDebitFundingContent({
       ) : null}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Authorize savings card"
+        accessibilityLabel="Add savings card"
         style={[
           styles.outlineButton,
           { borderColor: colors.border },
@@ -229,9 +178,9 @@ function AutoDebitFundingContent({
           controller.handleAuthorizeSavingsCard().catch((error) => {
             handleSavingsModalActionError({
               error,
-              message: 'Please try card authorization again.',
+              message: 'Please try adding your card again.',
               operation: 'Savings card authorization',
-              title: 'Unable to authorize card',
+              title: 'Unable to add card',
             });
           });
         }}
@@ -239,8 +188,8 @@ function AutoDebitFundingContent({
       >
         <Text style={[styles.outlineButtonText, { color: colors.text }]}>
           {controller.isAuthorizingCard
-            ? 'Opening authorization...'
-            : 'Authorize card'}
+            ? 'Opening secure checkout…'
+            : 'Add card'}
         </Text>
       </Pressable>
     </View>

@@ -18,12 +18,14 @@ export default function WalletRoute({
   // `intent` is the per-navigation nonce that distinguishes a genuinely new
   // bank-transfer attempt from a remount of the same one: a remount replays the
   // URL (same nonce), a new tap of the nudge mints a fresh one.
-  const { action, intent, requiredAmount, returnTo } = useLocalSearchParams<{
-    action?: string;
-    intent?: string;
-    requiredAmount?: string;
-    returnTo?: string;
-  }>();
+  const { action, intent, requiredAmount, returnTo, savingsAmount } =
+    useLocalSearchParams<{
+      action?: string;
+      intent?: string;
+      requiredAmount?: string;
+      returnTo?: string;
+      savingsAmount?: string;
+    }>();
 
   return (
     <WalletScreen
@@ -32,6 +34,7 @@ export default function WalletRoute({
       presentation={presentation}
       requiredAmount={requiredAmount}
       returnTo={returnTo}
+      savingsAmount={savingsAmount}
     />
   );
 }

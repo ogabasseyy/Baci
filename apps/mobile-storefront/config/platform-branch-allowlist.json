@@ -242,6 +242,10 @@
       "justification": "Reviewed web guard for native push notification registration."
     },
     {
+      "path": "hooks/use-savings-push-registration.ts",
+      "justification": "Only Android prepares OS notification channels during scoped token registration and foreground retries; token capability and authorization checks remain shared."
+    },
+    {
       "path": "lib/get-quiz-device-fingerprint.ts",
       "justification": "Reviewed native installation ID lookup split for Android ID, iOS vendor ID, and unsupported platform fallback."
     },
@@ -276,6 +280,14 @@
     {
       "path": "lib/tracking-transparency.ts",
       "justification": "Reviewed iOS-only ATT dynamic import guard so web and Android do not evaluate the native tracking module."
+    },
+    {
+      "path": "lib/hosted-staging-push-capability.ts",
+      "justification": "Contract: only the actual installed iOS or Android application identity may match the owner-pinned staging capability before isolated push-token acquisition; web and unknown platforms are denied."
+    },
+    {
+      "path": "lib/hosted-storefront-runtime.ts",
+      "justification": "Contract: validate the owner-pinned staging capability against the actual installed iOS or Android identity; malformed, web, and unknown-platform native push configurations are denied."
     },
     {
       "path": "lib/auth/open-oauth-session.ts",

@@ -1,19 +1,17 @@
+import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
-import { initializeSavingsAuthorization } from '@/lib/customer-savings';
+import { addSavingsContribution } from '@/lib/customer-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
+import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
 import { formatDateInput } from './start-savings.helpers';
 import type { SavingsProductChoice } from './start-savings.types';
-import { getErrorMessage } from './start-savings-controller.utils';
-
-// Standard authorization amount used for card verification.
-const CARD_AUTHORIZATION_AMOUNT = 100;
 
 type SavingsInputValidation =
   | {
@@ -28,6 +26,18 @@ function validateSavingsInput(
 ): SavingsInputValidation {
   if (!input.selectedProduct) {
     return { error: 'Select a product to save for.', ok: false };
+  }
+
+  if (
+    input.selectedProduct.requiresVariantSelection !== false ||
+    (input.selectedProduct.variantId !== null &&
+      (typeof input.selectedProduct.variantId !== 'string' ||
+        !input.selectedProduct.variantId.trim()))
+  ) {
+    return {
+      error: 'Select the exact device variant you want to save for.',
+      ok: false,
+    };
   }
 
   if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {
@@ -46,52 +56,44 @@ function validateSavingsInput(
   };
 }
 
-/**
- * Starts the Paystack card authorization flow. Lives at module scope (outside
- * the hook render) so its try/catch does not block React Compiler memoization
- * of the hook.
- */
-async function runSavingsCardAuthorization(
-  input: UseStartSavingsSubmitInput
-): Promise<void> {
-  try {
-    const result = await initializeSavingsAuthorization({
-      amount: CARD_AUTHORIZATION_AMOUNT,
-      merchantId: input.activeMerchantId,
-      merchantSlug: input.activeMerchantSlug,
-    });
-    input.setShowFundingModal(false);
-    router.push({
-      pathname: '/payment-gateway',
-      params: {
-        authorizationUrl: result.authorization_url,
-        gateway: result.gateway,
-        merchantId: input.activeMerchantId,
-        merchantSlug: input.activeMerchantSlug,
-        paymentKind: 'savings_auth',
-        reference: result.reference,
-        returnTo: '/wallet/savings/start',
-      },
-    });
-  } catch (error) {
-    showAppAlert({
-      title: 'Unable to authorize card',
-      message: getErrorMessage(
-        error,
-        'Unable to start Paystack card authorization.'
-      ),
-      variant: 'error',
-    });
-  }
-}
-
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAuthorizingCard, setIsAuthorizingCard] = useState(false);
   const authorizationInFlightRef = useRef(false);
   const submitInFlightRef = useRef(false);
+  const contextRef = useRef({ active: true, key: '' });
+  const mountedRef = useRef(true);
+  const contextKey = JSON.stringify([
+    input.activeMerchantId,
+    input.activeMerchantSlug,
+    input.selectedProduct,
+    input.sourceMode,
+    input.selectedPaymentMethodId,
+    input.targetValue,
+    input.contributionValue,
+    input.effectiveInitialContribution,
+    input.frequency,
+    input.startDate,
+    input.maturityDate,
+    input.preferredDebitTime,
+  ]);
+  useEffect(() => {
+    const context = { active: true, key: contextKey };
+    contextRef.current = context;
+    return () => {
+      context.active = false;
+    };
+  }, [contextKey]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const submitSavingsGoal = async () => {
+  const submitSavingsGoal = async (options?: {
+    deferInitialContribution?: boolean;
+  }) => {
     if (submitInFlightRef.current) {
       return;
     }
@@ -104,10 +106,76 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
     submitInFlightRef.current = true;
     setIsSubmitting(true);
-    await runSavingsGoalSubmission(input, validation).finally(() => {
+    const context = contextRef.current;
+    await runSavingsGoalSubmission(
+      {
+        ...input,
+        deferInitialContribution:
+          options?.deferInitialContribution ?? input.deferInitialContribution,
+      },
+      validation,
+      () => context.active
+    ).finally(() => {
       submitInFlightRef.current = false;
-      setIsSubmitting(false);
+      if (mountedRef.current) setIsSubmitting(false);
     });
+  };
+
+  const submitBankTransferContribution = async () => {
+    const goalId = input.createdGoalId;
+    if (!goalId || submitInFlightRef.current) {
+      return;
+    }
+    const amount = input.effectiveInitialContribution;
+    if (amount <= 0) {
+      input.setShowTransferModal(false);
+      input.setFormError(null);
+      input.setCreatedGoalId?.(null);
+      input.setShowSuccessModal(true);
+      return;
+    }
+    submitInFlightRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const idempotencyKey =
+        input.initialContributionIdempotencyKey ?? Crypto.randomUUID();
+      if (!input.initialContributionIdempotencyKey) {
+        input.setInitialContributionIdempotencyKey(idempotencyKey);
+      }
+      await addSavingsContribution({
+        amount,
+        goalId,
+        idempotencyKey,
+        merchantId: input.activeMerchantId,
+        merchantSlug: input.activeMerchantSlug,
+      });
+      if (!mountedRef.current) return;
+      input.setInitialContributionIdempotencyKey(null);
+      input.setCreatedGoalId?.(null);
+      input.setShowTransferModal(false);
+      input.setFormError(null);
+      input.setShowSuccessModal(true);
+      try {
+        await input.refetch();
+      } catch {
+        input.setFormError('Plan funded but unable to refresh wallet data.');
+      }
+    } catch (error) {
+      if (!mountedRef.current) return;
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Unable to record the contribution.';
+      input.setFormError(message);
+      showAppAlert({
+        title: 'Contribution not recorded',
+        message,
+        variant: 'error',
+      });
+    } finally {
+      submitInFlightRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
+    }
   };
 
   const handleAuthorizeSavingsCard = async () => {
@@ -117,10 +185,13 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
 
     authorizationInFlightRef.current = true;
     setIsAuthorizingCard(true);
-    await runSavingsCardAuthorization(input).finally(() => {
-      authorizationInFlightRef.current = false;
-      setIsAuthorizingCard(false);
-    });
+    const context = contextRef.current;
+    await runSavingsCardAuthorization(input, () => context.active).finally(
+      () => {
+        authorizationInFlightRef.current = false;
+        if (mountedRef.current) setIsAuthorizingCard(false);
+      }
+    );
   };
 
   const handleCopyFundingAccount = async () => {
@@ -149,6 +220,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     handleCopyFundingAccount,
     isAuthorizingCard,
     isSubmitting,
+    submitBankTransferContribution,
     openWalletFundingScreen: () => {
       // Fund enough for the first contribution, but never send Paystack below the provider minimum.
       const maxNeeded = Math.max(

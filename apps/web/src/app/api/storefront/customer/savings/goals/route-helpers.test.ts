@@ -56,8 +56,21 @@ describe('savings goals route helpers', () => {
     expect(mapSavingsRpcErrorStatus('invalid product id', '22023')).toBe(400);
     expect(mapSavingsRpcErrorStatus('not_authorized', '42501')).toBe(403);
     expect(mapSavingsRpcErrorStatus('goal_not_found')).toBe(404);
+    expect(mapSavingsRpcErrorStatus('variant_not_available_for_savings')).toBe(
+      404
+    );
     expect(mapSavingsRpcErrorStatus('insufficient_wallet_balance')).toBe(409);
     expect(mapSavingsRpcErrorStatus('database unavailable')).toBe(500);
+  });
+
+  it('returns a conflict when an owned saved payment method is unavailable', () => {
+    expect(
+      mapSavingsRpcErrorStatus('saved_payment_method_not_available_for_savings')
+    ).toBe(409);
+  });
+
+  it('does not classify unknown unavailable failures as missing resources', () => {
+    expect(mapSavingsRpcErrorStatus('provider_not_available')).toBe(500);
   });
 
   it('extracts RPC error shape', () => {

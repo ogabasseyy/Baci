@@ -34,8 +34,8 @@ const PositiveAmountSchema = z.number().finite().int().positive();
 const NonNegativeAmountSchema = z.number().finite().int().min(0);
 
 export const SavingsGoalSummarySchema = z.object({
-  contributionAmount: PositiveAmountSchema,
-  contributionFrequency: SavingsFrequencySchema,
+  contributionAmount: PositiveAmountSchema.optional(),
+  contributionFrequency: SavingsFrequencySchema.optional(),
   currentAmount: NonNegativeAmountSchema,
   goalId: z.string(),
   goalStatus: SavingsGoalStatusSchema,
@@ -89,6 +89,12 @@ export const SavingsDeviceSwapResponseSchema = z.object({
   targetAmount: PositiveAmountSchema,
 });
 
+export const SavingsVariantResolutionResponseSchema = z.object({
+  goalId: z.string(),
+  goalStatus: z.literal('completed'),
+  success: z.literal(true),
+});
+
 export const SavingsAuthorizationResponseSchema = z.object({
   authorization_url: z.url(),
   checkout_url: z.url(),
@@ -129,3 +135,22 @@ export const CustomerPaymentMethodsResponseSchema = z.object({
 
 export type CustomerPaymentMethod = z.infer<typeof CustomerPaymentMethodSchema>;
 export type SavingsGoal = z.infer<typeof SavingsGoalSchema>;
+
+export const SavingsPlanFundingAccountSchema = z.object({
+  accountName: z.string().min(1),
+  accountNumber: z.string().min(1),
+  bankName: z.string().min(1),
+});
+
+export const SavingsPlanFundingResponseSchema = z.object({
+  accounts: z.array(SavingsPlanFundingAccountSchema).max(32).optional(),
+  code: z.string().min(1).max(64).optional(),
+  status: z.enum(['ready', 'pending', 'unavailable']),
+});
+
+export type SavingsPlanFundingAccount = z.infer<
+  typeof SavingsPlanFundingAccountSchema
+>;
+export type SavingsPlanFundingResponse = z.infer<
+  typeof SavingsPlanFundingResponseSchema
+>;

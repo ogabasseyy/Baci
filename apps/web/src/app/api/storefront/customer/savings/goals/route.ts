@@ -11,6 +11,10 @@ import {
   customerSavingsGoalsQuerySchema,
 } from '@/schemas/customer-savings';
 import {
+  prepareCreateSavingsGoalDevice,
+  type SavingsProductQueryClient,
+} from './prepare-create-savings-goal-device';
+import {
   formatSavingsGoal,
   mapSavingsRpcErrorStatus,
   resolveCreateGoalRpcRow,
@@ -183,6 +187,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const productQueryClient: SavingsProductQueryClient = {
+      from: (table) => ({
+        select: (columns) => {
+          const query = resolved.supabase.from(table).select(columns);
+          const chain = {
+            eq: (column: string, value: string) => {
+              query.eq(column, value);
+              return chain;
+            },
+            maybeSingle: async () => {
+              const { data, error } = await query.maybeSingle();
+              return { data, error };
+            },
+          };
+          return chain;
+        },
+      }),
+    };
+    const deviceResult = await prepareCreateSavingsGoalDevice({
+      merchantId: resolved.merchant.id,
+      productId: parsed.data.productId,
+      supabase: productQueryClient,
+      targetAmount: parsed.data.targetAmount,
+      variantId: parsed.data.variantId,
+    });
+    if ('response' in deviceResult) {
+      return deviceResult.response;
+    }
+
     const nowIso = new Date().toISOString();
     const { data, error } = await resolved.supabase.rpc(
       'create_customer_savings_goal',
@@ -209,14 +242,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_non_withdrawable_accepted_at: nowIso,
         p_preferred_debit_time: parsed.data.preferredDebitTime ?? null,
         p_product_id: parsed.data.productId,
-        p_product_snapshot: {},
+        p_product_snapshot: deviceResult.device.snapshot,
         p_saved_payment_method_id: parsed.data.savedPaymentMethodId ?? null,
         p_source_mode: parsed.data.sourceMode,
         p_start_date: parsed.data.startDate,
-        p_target_amount: parsed.data.targetAmount,
+        p_target_amount: deviceResult.device.targetAmount,
         p_terms_accepted_at: nowIso,
         p_title: parsed.data.title ?? 'Device savings goal',
-        p_variant_id: parsed.data.variantId ?? null,
+        p_variant_id: deviceResult.device.variantId,
       }
     );
 
@@ -250,6 +283,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json({
+      contributionAmount: parsed.data.contributionAmount,
+      contributionFrequency: parsed.data.contributionFrequency,
       contributionId: row.contribution_id,
       currentAmount: toSavingsRouteNumber(row.current_amount),
       goalId: row.goal_id,

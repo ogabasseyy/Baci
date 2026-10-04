@@ -10,7 +10,24 @@ import {
   SavingsGoalActionResponseSchema,
   SavingsGoalSchema,
   SavingsGoalSummarySchema,
+  SavingsVariantResolutionResponseSchema,
 } from '@/schemas/customer-savings';
+
+it('parses completed variant resolution responses', () => {
+  const input = { goalId: 'goal-1', goalStatus: 'completed', success: true };
+
+  const result = SavingsVariantResolutionResponseSchema.parse(input);
+
+  expect(result).toEqual(input);
+});
+
+it('rejects variant resolution responses for active goals', () => {
+  const input = { goalId: 'goal-1', goalStatus: 'active', success: true };
+
+  const result = SavingsVariantResolutionResponseSchema.safeParse(input);
+
+  expect(result.success).toBe(false);
+});
 
 const validGoal = {
   breakFeePercent: 0,
@@ -193,6 +210,18 @@ describe('customer savings schemas', () => {
       CustomerPaymentMethodsResponseSchema.parse({ methods: [paymentMethod] })
         .methods
     ).toHaveLength(1);
+  });
+
+  it('still rejects invalid money fields in the older staging creation response', () => {
+    expect(() =>
+      SavingsGoalSummarySchema.parse({
+        currentAmount: '0',
+        goalId: 'goal-staging',
+        goalStatus: 'active',
+        success: true,
+        walletBalance: 0,
+      })
+    ).toThrow();
   });
 
   it('rejects invalid savings device swap responses', () => {

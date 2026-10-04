@@ -11,6 +11,7 @@ interface WalletFundingAccountLike {
 interface WalletDataLike {
   active_savings_goal?: WalletActiveSavingsGoal | null;
   balance?: number | null;
+  earnings_available?: boolean | null;
   earnings_balance?: number | null;
   funding_account?: WalletFundingAccountLike | null;
   savings_balance?: number | null;
@@ -29,11 +30,16 @@ export function normalizeRequiredFundingAccountValue(
 }
 
 export function deriveWalletDisplayData(walletData: WalletDataLike) {
-  const earningsBalance =
-    walletData.earnings_balance ?? walletData.balance ?? 0;
+  const spendableBalance = walletData.balance ?? 0;
+  const earningsAvailable =
+    walletData.earnings_available === true &&
+    typeof walletData.earnings_balance === 'number';
+  const earningsBalance = earningsAvailable
+    ? (walletData.earnings_balance ?? null)
+    : null;
   const savingsBalance = walletData.savings_balance ?? 0;
   const totalBalance =
-    walletData.total_balance ?? earningsBalance + savingsBalance;
+    walletData.total_balance ?? spendableBalance + savingsBalance;
   const rawFundingAccount = walletData.funding_account;
   const accountName = normalizeRequiredFundingAccountValue(
     rawFundingAccount?.account_name
@@ -54,10 +60,12 @@ export function deriveWalletDisplayData(walletData: WalletDataLike) {
 
   return {
     earningsBalance,
+    earningsAvailable,
     activeSavingsGoal: walletData.active_savings_goal ?? null,
     fundingAccount,
     savingsBalance,
     showQuickSave: Boolean(walletData.active_savings_goal),
+    spendableBalance,
     totalBalance,
   };
 }

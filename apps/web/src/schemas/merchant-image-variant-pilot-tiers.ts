@@ -27,6 +27,31 @@ export interface TierContractSource {
   sha256: string;
 }
 
+// Hand mirror of BUDGETS in infra/cdn-transformer/pilot/constants.mjs
+// (no native imports here, mirroring the schema module): per-rung
+// per-format byte ceilings in decimal bytes. The shared
+// contract-fixtures corpus breaks loudly on drift.
+export const RECIPE_BYTE_CEILINGS: Record<
+  string,
+  Record<number, Record<string, number>>
+> = {
+  hero: {
+    384: { avif: 20_000, webp: 35_000 },
+    768: { avif: 60_000, webp: 90_000 },
+    1280: { avif: 150_000, webp: 200_000 },
+  },
+  logo: {
+    96: { avif: 5_000, webp: 5_000 },
+    192: { avif: 12_000, webp: 12_000 },
+    384: { avif: 25_000, webp: 25_000 },
+  },
+  product: {
+    384: { avif: 25_000, webp: 40_000 },
+    768: { avif: 75_000, webp: 100_000 },
+    1280: { avif: 150_000, webp: 200_000 },
+  },
+};
+
 // Per-disposition invariants hold only where a disposition is recorded;
 // legacy tiers without one are exempt (frozen r1 keeps its meaning).
 // 'generated' is capped at source bytes; 'generated-over-source' must
@@ -35,10 +60,28 @@ export function tierContractIssues(
   tier: TierContractTier,
   source: TierContractSource,
   recipeId: string,
-  currentRecipeId: string
+  currentRecipeId: string,
+  role: string
 ): string[] {
   const issues: string[] = [];
   const key = `${tier.requestedWidth}:${tier.format}`;
+  // Recipe byte ceilings bind every encoded tier — including frozen r1
+  // legacy (the encoder enforces budgets on every encode) and
+  // over-source (the exception records bytes above the SOURCE, still
+  // within the rung budget). Only pass-through reuses source bytes
+  // outside the ladder budgets. Without this, a misassembled tier could
+  // pass every gate while violating the pilot's central budget.
+  if (tier.delivery !== 'original-passthrough') {
+    const ceiling =
+      RECIPE_BYTE_CEILINGS[role]?.[tier.requestedWidth]?.[tier.format];
+    if (ceiling === undefined) {
+      issues.push(`tier "${key}" has no recipe ceiling for role "${role}"`);
+    } else if (tier.bytes > ceiling) {
+      issues.push(
+        `tier "${key}" exceeds the recipe byte ceiling (${tier.bytes} > ${ceiling})`
+      );
+    }
+  }
   if (tier.delivery === undefined) {
     // Delivery-less tiers are frozen r1 legacy. A current-recipe
     // manifest that omits delivery would skip every never-larger

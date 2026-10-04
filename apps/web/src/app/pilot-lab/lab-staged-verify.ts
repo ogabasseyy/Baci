@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
+import { basename } from 'node:path';
 
 // Per-request verification budget: the staged set is frozen at stage
 // time and lab-small (tiers + originals per accepted binding), so an
@@ -71,22 +72,30 @@ export async function verifyStagedBytes(
     await Promise.all(
       paths.map(async (entry, index) => {
         if (sizes[index] === null) {
-          return `${entry.path} (missing)`;
+          return { detail: 'missing', path: entry.path };
         }
         const bytes = await readFile(entry.path).catch(() => null);
         if (bytes === null) {
-          return `${entry.path} (missing)`;
+          return { detail: 'missing', path: entry.path };
         }
         if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
-          return `${entry.path} (hash drift)`;
+          return { detail: 'hash drift', path: entry.path };
         }
         return null;
       })
     )
-  ).filter((entry): entry is string => entry !== null);
+  ).filter(
+    (entry): entry is { detail: string; path: string } => entry !== null
+  );
   if (bad.length > 0) {
+    // Full paths go to the server log only: the thrown message can surface
+    // in route error output on shared hosts with the lab flag on.
+    console.error(
+      `merchant image pilot: unverified staged assets:\n${bad.map((entry) => `${entry.path} (${entry.detail})`).join('\n')}`
+    );
+    const first = bad[0] as { detail: string; path: string };
     throw new Error(
-      `merchant image pilot: ${bad.length} staged lab asset(s) unverified (e.g. ${bad[0]}); re-run pnpm pilot:stage and restart the origin`
+      `merchant image pilot: ${bad.length} staged lab asset(s) unverified (e.g. ${basename(first.path)} ${first.detail}); re-run pnpm pilot:stage and restart the origin`
     );
   }
   if (fingerprint !== null) {

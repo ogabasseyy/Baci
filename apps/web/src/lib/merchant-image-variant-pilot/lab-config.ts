@@ -9,6 +9,7 @@ import {
   type PilotBindingStatus,
   type PilotLabIndex,
 } from './lab-index';
+import { assertSnapshotMatchesSource } from './lab-source-verify';
 import { parsePilotInventory } from './pilot-inventory';
 
 export const PILOT_LAB_FLAG = 'BACI_IMAGE_PILOT_LAB';
@@ -228,6 +229,16 @@ export async function loadLabConfig(
       input.inputRoot,
       record.sourcePath,
       status.binding.sourceSha256
+    );
+    if (!status.source) {
+      throw new Error(
+        'merchant image pilot: accepted binding is missing manifest source facts'
+      );
+    }
+    await assertSnapshotMatchesSource(
+      snapshot,
+      status.source,
+      `${status.binding.merchantId}/${status.binding.slotId}`
     );
     const originalDest = join(originalsStage, fileName);
     if (shouldStage && !(await destMatches(originalDest, snapshot))) {

@@ -36,6 +36,18 @@ describe('verifyStagedBytes', () => {
         { path: join(dir, 'gone.avif'), sha256: '0'.repeat(64) },
       ])
     ).rejects.toThrow(/pilot:stage and restart/);
+    // Absolute server paths stay in the server log: the thrown message
+    // carries the basename only.
+    const failure = await verifyStagedBytes([
+      { path: join(dir, 'gone.avif'), sha256: '0'.repeat(64) },
+    ]).then(
+      () => {
+        throw new Error('expected verifyStagedBytes to reject');
+      },
+      (error: Error) => error.message
+    );
+    expect(failure).toContain('gone.avif');
+    expect(failure).not.toContain(dir);
   });
 
   it('re-verifies after size/mtime change but skips the re-hash when unchanged', async () => {

@@ -3,7 +3,10 @@
 // pilot/manifest.mjs). Every rule is cross-checked by the shared
 // contract-fixtures corpus consumed by all three suites, so drift breaks
 // loudly. Returns the issue list (empty = valid).
-import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import {
+  BUDGETS,
+  RECIPE_ID,
+} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { ladderCoverageIssues } from './merchant-image-pilot-preflight-manifest-ladder.mjs';
 import {
   DELIVERIES,
@@ -190,6 +193,27 @@ export function assertManifestContract(manifest, { recipeId, role }) {
         continue;
       }
       const key = `${tier.requestedWidth}:${tier.format}`;
+      // Recipe byte ceilings bind every encoded tier — including frozen r1
+      // legacy and over-source (the exception records bytes above the
+      // SOURCE, still within the rung budget). Only pass-through reuses
+      // source bytes outside the ladder budgets. Malformed tiers already
+      // flagged above are skipped instead of double-reported.
+      if (
+        tier.delivery !== 'original-passthrough' &&
+        typeof tier.bytes === 'number' &&
+        typeof tier.requestedWidth === 'number' &&
+        typeof tier.format === 'string' &&
+        typeof role === 'string'
+      ) {
+        const ceiling = BUDGETS[role]?.[tier.requestedWidth]?.[tier.format];
+        if (ceiling === undefined) {
+          issues.push(`tier "${key}" has no recipe ceiling for role "${role}"`);
+        } else if (tier.bytes > ceiling) {
+          issues.push(
+            `tier "${key}" exceeds the recipe byte ceiling (${tier.bytes} > ${ceiling})`
+          );
+        }
+      }
       if (tier.delivery === undefined) {
         // Delivery-less tiers are frozen r1 legacy. A current-recipe
         // manifest that omits delivery would skip every never-larger

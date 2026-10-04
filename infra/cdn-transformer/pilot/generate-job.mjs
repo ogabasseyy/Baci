@@ -217,7 +217,10 @@ export async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
       outputRoot,
       stagingDir,
     });
-    assertJobDeadline(deadlineMs, 'commit');
+    // No post-commit deadline throw: the deadline is enforced BEFORE the
+    // visibility rename (inside commitGeneration). Past that point only a
+    // rename and a directory fsync remain — a throw cannot interrupt them,
+    // it would only report failed-but-published. elapsedMs stays visible.
     sampleRss();
     await releaseClaim(outputRoot, job, claim.runToken);
     if (!committed.reused) {

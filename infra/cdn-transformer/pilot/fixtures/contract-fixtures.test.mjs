@@ -87,6 +87,7 @@ test('corpus pins the invalid-manifest key set (no silent case loss)', async () 
     'generatedWithoutQuality',
     'hashPathMismatch',
     'missingTier',
+    'overRecipeCeiling',
     'overSourceWithoutCause',
     'passthroughByteMismatch',
     'passthroughWithQuality',

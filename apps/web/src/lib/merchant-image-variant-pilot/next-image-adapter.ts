@@ -72,8 +72,11 @@ export function projectControlNextImage(input: {
   originalUrl: string;
   slot: PilotImageSlot;
 }): ProjectedPilotImage {
-  // No-op control: same per-format source structure as the pilot arm, but
-  // every candidate serves the mounted original bytes (no format upgrade).
+  // No-op control: NO typed sources — the mount renders a bare <img> over
+  // the mounted original bytes (no format upgrade). Typing the original
+  // URL as AVIF/WebP would lie: an AVIF-capable browser selects the
+  // AVIF-typed source and receives undecodable PNG/JPEG bytes, breaking
+  // control rendering in exactly the browsers being compared.
   return {
     alt: input.slot.alt,
     fallbackSrc: input.originalUrl,
@@ -81,10 +84,7 @@ export function projectControlNextImage(input: {
     height: input.slot.height,
     loading: input.slot.loading,
     sizes: input.slot.sizes,
-    sources: [
-      { format: 'avif', srcSet: input.originalUrl },
-      { format: 'webp', srcSet: input.originalUrl },
-    ],
+    sources: [],
     width: input.slot.width,
   };
 }

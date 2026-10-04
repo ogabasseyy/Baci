@@ -204,12 +204,20 @@ export async function acquireSnapshot(options) {
       `acquire: origin labeled bytes "${contentType}" but they decode as "${geometry?.format ?? 'unknown'}"`
     );
   }
+  // Acquisition dims are display-oriented: an EXIF orientation of 5-8
+  // transposes the stored axes, so the record files the dimensions a
+  // browser renders, not the raw probe axes. Probes that already report
+  // oriented dims win; otherwise the orientation flag swaps raw axes.
+  const orientation = geometry.orientation ?? 1;
+  const swapAxes = orientation >= 5 && orientation <= 8;
   const record = {
     assetId,
     capturedAt: new Date().toISOString(),
     contentType,
-    height: geometry.height,
+    height:
+      geometry.orientedHeight ?? (swapAxes ? geometry.width : geometry.height),
     merchantId,
+    orientation: geometry.orientation ?? null,
     role,
     schemaVersion: 1,
     sha256,
@@ -217,7 +225,8 @@ export async function acquireSnapshot(options) {
     slot,
     sourcePath: fileName,
     url,
-    width: geometry.width,
+    width:
+      geometry.orientedWidth ?? (swapAxes ? geometry.height : geometry.width),
   };
   const job = parsePilotJob({
     assetId,

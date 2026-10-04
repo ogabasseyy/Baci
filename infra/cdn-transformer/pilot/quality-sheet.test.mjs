@@ -60,8 +60,8 @@ test('builds a side-by-side sheet from verified files', async () => {
 
 test('renders the original at the same capped width as the derivatives', async () => {
   // Full-size tiers (2000px source): the logo ladder tops at 384w, and a
-  // 40px slot caps the comparison at 80px — the 384-tier row must not
-  // compare a 384px original against 80px derivatives.
+  // 40px slot caps the comparison at 120px (DPR-3 review) — the 384-tier
+  // row must not compare a 384px original against 120px derivatives.
   const full = await setupPilot({ fixture: 'wide-2000x500.png', height: 500, width: 2000 });
   const capped = await buildQualitySheet({
     inputRoot: full.inputRoot,
@@ -70,7 +70,11 @@ test('renders the original at the same capped width as the derivatives', async (
     slots: { 'header-logo': { cssWidth: 40 } },
   });
   assert.doesNotMatch(capped, /<img src="data:image\/png[^>]*style="width:384px"/);
-  assert.match(capped, /<img src="data:image\/png[^>]*style="width:80px"/);
+  assert.match(capped, /<img src="data:image\/png[^>]*style="width:120px"/);
+  // The caption states which ceiling bound each row: full DPR-3 review
+  // where encoded pixels reach it, the encoded width otherwise.
+  assert.match(capped, /compared at 120px \(3× CSS\)/);
+  assert.match(capped, /compared at 96px \(encoded-pixel ceiling\)/);
   // A wide slot leaves full rungs uncapped: the 96-tier row compares at
   // the rung's own width on both sides.
   const wide = await buildQualitySheet({
@@ -90,6 +94,9 @@ test('renders the original at the same capped width as the derivatives', async (
     slots: { 'header-logo': { cssWidth: 500 } },
   });
   assert.match(narrowSheet, /<img src="data:image\/png[^>]*style="width:48px"/);
+  assert.match(narrowSheet, /compared at 48px \(encoded-pixel ceiling\)/);
+  // Derivatives display at actual pixels capped to the DPR-3 ceiling.
+  assert.match(capped, /max-width:120px/);
 });
 
 test('ignores unrelated corrupt generations when locating assets', async () => {

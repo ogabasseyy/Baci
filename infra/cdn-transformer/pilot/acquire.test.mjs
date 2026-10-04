@@ -65,6 +65,70 @@ test('acquires a public image into a hashed snapshot record', async () => {
   );
 });
 
+test('records EXIF-oriented acquisition dims from the probe', async () => {
+  const inputRoot = await makeInputRoot();
+  const orientedProbe = async () => ({
+    format: 'png',
+    height: 5,
+    orientedHeight: 3,
+    orientedWidth: 5,
+    orientation: 6,
+    width: 3,
+  });
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      const record = await acquireSnapshot({
+        allowPrivateHosts: true,
+        assetId: 'photo-1',
+        inputRoot,
+        merchantId: MERCHANT,
+        probe: orientedProbe,
+        role: 'product',
+        slot: 'pdp-hero',
+        url,
+      });
+      assert.equal(record.width, 5);
+      assert.equal(record.height, 3);
+      assert.equal(record.orientation, 6);
+    }
+  );
+});
+
+test('swaps raw probe axes when the probe omits oriented dims', async () => {
+  const inputRoot = await makeInputRoot();
+  const rawProbe = async () => ({
+    format: 'png',
+    height: 5,
+    orientation: 8,
+    width: 3,
+  });
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      const record = await acquireSnapshot({
+        allowPrivateHosts: true,
+        assetId: 'photo-2',
+        inputRoot,
+        merchantId: MERCHANT,
+        probe: rawProbe,
+        role: 'product',
+        slot: 'pdp-hero',
+        url,
+      });
+      assert.equal(record.width, 5);
+      assert.equal(record.height, 3);
+      assert.equal(record.orientation, 8);
+    }
+  );
+});
+
 test('refuses loopback fetches by default without touching the network', async () => {
   const inputRoot = await makeInputRoot();
   let fetches = 0;

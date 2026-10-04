@@ -8,6 +8,7 @@ import {
   open,
   readFile,
   rename as fsRename,
+  rm,
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -22,6 +23,14 @@ async function defaultFsync(path) {
   } finally {
     await handle.close();
   }
+}
+
+// fsync failure classification: only "operation not supported" signals
+// downgrade the durability label. Anything else (ENOSPC, EIO, ...) means
+// the bytes may never have reached stable storage and must abort rather
+// than publish a potentially non-durable or corrupted result.
+function isUnsupportedSyncError(error) {
+  return error?.code === 'ENOSYS' || error?.code === 'EINVAL';
 }
 
 function generationDir(outputRoot, generationId) {
@@ -167,7 +176,13 @@ export async function commitGeneration({
       await fsyncFile(join(commitDir, name));
     }
     await fsyncDir(commitDir);
-  } catch {
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      throw new PilotManifestError(
+        'sync-failed',
+        `pre-commit fsync failed (${error?.code ?? 'unknown'}); refusing to publish`
+      );
+    }
     // Atomic visibility still holds via rename; power-loss durability is
     // honestly reported instead of claimed on this filesystem.
     durability = 'sync-unsupported';
@@ -181,7 +196,17 @@ export async function commitGeneration({
   await rename(commitDir, dir);
   try {
     await fsyncDir(join(outputRoot, 'generations'));
-  } catch {
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      // The rename is visible but may not be durable: unpublish so the
+      // failure leaves no reusable output, then report failed. A
+      // concurrent reuse reader fails loudly (fail-closed) and retries.
+      await rm(dir, { force: true, recursive: true }).catch(() => undefined);
+      throw new PilotManifestError(
+        'sync-failed',
+        `post-commit directory fsync failed (${error?.code ?? 'unknown'}); unpublished`
+      );
+    }
     durability = 'sync-unsupported';
   }
   return { durability, path: dir, reused: false };

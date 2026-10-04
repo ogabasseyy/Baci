@@ -84,5 +84,8 @@ describe('projectControlNextImage', () => {
     expect(control.fallbackSrc).toBe('https://cdn.example.com/media/logo.png');
     expect(control.sizes).toBe(pilot?.sizes);
     expect(control.alt).toBe(pilot?.alt);
+    // Format-honest: no AVIF/WebP-typed sources over original bytes — the
+    // mount renders a bare <img>, so nothing can mis-select by type.
+    expect(control.sources).toEqual([]);
   });
 });

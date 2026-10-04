@@ -79,7 +79,7 @@ async function findGenerationFor(outputRoot, record) {
 function tierCells(tier, files, cssWidth) {
   const file = files.get(tier.path);
   const dataUri = `data:${tier.contentType};base64,${file.toString('base64')}`;
-  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="max-width:${cssWidth * 2}px"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="max-width:${cssWidth * 3}px"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
 }
 
 export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, slots }) {
@@ -115,18 +115,23 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
       seenTiers.get(tier.requestedWidth).push(tier);
     }
     // The visual comparison must be size-matched: each derivative renders
-    // at its encoded width capped to twice the slot CSS width (the DPR
-    // matrix ceiling), so the original renders at exactly that width —
-    // never at a raw requested width the derivatives cannot reach
-    // (capped rungs and narrow sources encode below their request).
+    // at its encoded width capped to three times the slot CSS width (the
+    // DPR-3 review ceiling — phones negotiate DPR 3), so the original
+    // renders at exactly that width — never at a raw requested width the
+    // derivatives cannot reach (capped rungs and narrow sources encode
+    // below their request). The caption states which ceiling bound the
+    // comparison: full DPR-3 review, or the encoded-pixel width.
     const rows = [...seenTiers.entries()]
       .map(([requestedWidth, tiers]) => {
+        const dprCeiling = geometry.cssWidth * 3;
         const compareWidth = Math.min(
-          geometry.cssWidth * 2,
+          dprCeiling,
           ...tiers.map((tier) => tier.width)
         );
+        const ceilingNote =
+          compareWidth < dprCeiling ? 'encoded-pixel ceiling' : '3× CSS';
         return `<tr><td>${requestedWidth}px tier</td>
-<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${record.width}x${record.height}</figcaption></figure></td>
+<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${record.width}x${record.height} · compared at ${compareWidth}px (${ceilingNote})</figcaption></figure></td>
 ${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).join('\n')}</tr>`;
       })
       .join('\n');

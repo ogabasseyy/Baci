@@ -114,6 +114,9 @@ const fixtures = {
     generatedWithoutQuality: mutateGuardedTier(0, { quality: null }),
     r2MissingDelivery: stripGuardedTierDelivery(0),
     overSourceWithoutCause: mutateGuardedTier(3, { bytes: 4000 }),
+    // 100 KB on the logo/384/webp rung (ceiling 25 KB): the disposition
+    // still holds, so only the byte ceiling rejects it — in all mirrors.
+    overRecipeCeiling: mutateGuardedTier(5, { bytes: 100_000 }),
     passthroughByteMismatch: mutateGuardedTier(2, { bytes: 4999 }),
     passthroughWithQuality: mutateGuardedTier(2, { quality: 70 }),
     passthroughWrongCodec: mutateGuardedTier(2, {

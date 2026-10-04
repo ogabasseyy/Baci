@@ -165,7 +165,8 @@ export const pilotManifestSchema = z
         tier,
         manifest.source,
         manifest.recipeId,
-        PILOT_RECIPE_ID
+        PILOT_RECIPE_ID,
+        manifest.role
       )) {
         context.addIssue({ code: 'custom', message });
       }

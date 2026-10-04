@@ -284,13 +284,15 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
     )
     .map((tier) => ({ from: tier.path, name: outputFileName(tier.sha256, tier.format) }));
 
+  const unsupported = (code) =>
+    Object.assign(new Error(`fsync ${code}`), { code });
   const degraded = await commitGeneration({
     deps: {
       fsyncDir: async () => {
-        throw new Error('ENOSYS');
+        throw unsupported('ENOSYS');
       },
       fsyncFile: async () => {
-        throw new Error('ENOSYS');
+        throw unsupported('EINVAL');
       },
     },
     files,
@@ -401,6 +403,115 @@ test('commitGeneration refuses to publish past the job deadline', async () => {
   );
   await assert.rejects(
     () => loadGeneration(staged.root, generationId),
+    /not published/
+  );
+});
+
+async function commitFixture(recipeId) {
+  const staged = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId,
+    sourceSha256: staged.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    recipeId,
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: 48,
+      orientedWidth: 48,
+      sha256: staged.expectedSha256,
+    },
+    tiers: staged.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  const files = staged.ladder.tiers
+    .filter(
+      (tier, index, all) =>
+        all.findIndex((other) => other.path === tier.path) === index
+    )
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
+  return {
+    files,
+    generationId,
+    job: { ...JOB, expectedSha256: staged.expectedSha256 },
+    manifest,
+    root: staged.root,
+    stagingDir: staged.stagingDir,
+  };
+}
+
+test('commitGeneration aborts on genuine pre-commit fsync errors', async () => {
+  const fixture = await commitFixture('pilot-r1-syncfail');
+  // ENOSPC surfacing at fsync time is a storage failure, not an
+  // unsupported filesystem: refuse to publish.
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          fsyncFile: async () => {
+            throw Object.assign(new Error('no space'), { code: 'ENOSPC' });
+          },
+        },
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) =>
+      error.code === 'sync-failed' && /refusing to publish/.test(error.message)
+  );
+  await assert.rejects(
+    () => loadGeneration(fixture.root, fixture.generationId),
+    /not published/
+  );
+});
+
+test('commitGeneration unpublishes on post-commit directory fsync errors', async () => {
+  const fixture = await commitFixture('pilot-r1-syncfaildir');
+  // Only the post-rename generations-dir fsync fails: the rename is
+  // already visible, so the commit must remove it before reporting
+  // failed — never failed-but-published.
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          fsyncDir: async (path) => {
+            if (path.endsWith('generations')) {
+              throw Object.assign(new Error('io error'), { code: 'EIO' });
+            }
+          },
+        },
+        files: fixture.files,
+        generationId: fixture.generationId,
+        job: fixture.job,
+        manifest: fixture.manifest,
+        outputRoot: fixture.root,
+        stagingDir: fixture.stagingDir,
+      }),
+    (error) => error.code === 'sync-failed' && /unpublished/.test(error.message)
+  );
+  await assert.rejects(
+    () => loadGeneration(fixture.root, fixture.generationId),
     /not published/
   );
 });

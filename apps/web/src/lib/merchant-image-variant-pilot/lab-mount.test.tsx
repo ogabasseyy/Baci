@@ -184,7 +184,14 @@ describe('PilotLabMobileMount', () => {
     expect(sources[0]).toContain(`srcSet="${projection.preload.imageSrcSet}"`);
     expect(sources[0]).toContain(`sizes="${projection.preload.imageSizes}"`);
     expect(sources[0]).toContain(`media="${projection.preload.media}"`);
-    expect(sources[0]).toContain('type="image/avif"');
+    // Format-honest picture: the pilot gates AVIF bytes by type, while the
+    // control serves the original untyped (an AVIF gate over PNG/JPEG bytes
+    // would break decoding in AVIF-capable browsers).
+    if (arm === 'pilot') {
+      expect(sources[0]).toContain('type="image/avif"');
+    } else {
+      expect(sources[0]).not.toContain('type=');
+    }
     expect(sources[1]).toContain(`srcSet="${projection.fallbackSrcSet}"`);
 
     // The preload href is one of the preloaded candidates.
@@ -262,7 +269,7 @@ describe('PilotLabPictureMount', () => {
     width: 384,
   };
 
-  it('renders pilot and control arms through the identical DOM structure', () => {
+  it('renders typed pilot sources and a bare honest control img', () => {
     const pilot = projectPilotNextImage({
       baseUrl: '/__pilot',
       slot,
@@ -282,9 +289,13 @@ describe('PilotLabPictureMount', () => {
     const controlHtml = renderToStaticMarkup(
       <PilotLabPictureMount arm="control" projection={control} />
     );
-    expect(normalizeStructure(pilotHtml)).toBe(normalizeStructure(controlHtml));
     expect(pilotHtml).toMatch(/96w.*192w.*384w/s);
-    expect(controlHtml).toContain('/__pilot/originals/product.png');
+    expect(pilotHtml).toContain('type="image/avif"');
+    // Format-honest control: no typed sources over original bytes — the
+    // img fallback carries the original, so nothing mis-selects by type.
+    expect(controlHtml.match(/<source /g)).toBe(null);
+    expect(controlHtml).toContain('src="/__pilot/originals/product.png"');
+    expect(controlHtml).not.toContain('type=');
   });
 });
 
@@ -327,6 +338,10 @@ describe('PilotLabCssHeroMount', () => {
     expect(pilotHtml).toContain('tier-384.avif');
     expect(pilotHtml).toContain('tier-384.webp');
     expect(controlHtml).toContain('/__pilot/originals/hero-bg.png');
+    // Format-honest control: one original file renders a plain url(), never
+    // a typed image-set that would gate it behind AVIF/WebP claims.
+    expect(controlHtml).not.toContain('image-set(');
+    expect(controlHtml).not.toContain('type(');
   });
 
   it('gates every layer behind its own media query', () => {

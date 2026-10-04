@@ -1,22 +1,11 @@
 import { createHash } from 'node:crypto';
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  stat,
-  utimes,
-  writeFile,
-} from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
-import {
-  isPilotLabEnabled,
-  loadLabConfig,
-  stageVerifiedTier,
-} from './lab-config';
+import { isPilotLabEnabled, loadLabConfig } from './lab-config';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -199,6 +188,65 @@ describe('loadLabConfig', () => {
     await expect(stat(join(lab.publicDir, '__pilot'))).rejects.toThrow();
   });
 
+  it('rejects an accepted manifest whose source dims the snapshot disproves', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const manifestPath = join(
+      lab.outputRoot,
+      'generations',
+      GENERATION_ID,
+      'manifest.json'
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // The 48x48 snapshot is untouched (hash still matches); only the
+    // claimed height lies — by 1px, inside the schema's aspect tolerance,
+    // so the manifest still builds an accepted index and only the
+    // snapshot decode can catch it.
+    manifest.source.orientedHeight = 49;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(loadLabConfig({ ...lab })).rejects.toThrow(
+      /48x48.*claims 48x49/
+    );
+  });
+
+  it('rejects an accepted manifest whose source format the snapshot disproves', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const manifestPath = join(
+      lab.outputRoot,
+      'generations',
+      GENERATION_ID,
+      'manifest.json'
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // 'jpeg' differs from both encoded tier formats, so the schema's
+    // over-source format check still passes — only the decode catches it.
+    manifest.source.format = 'jpeg';
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(loadLabConfig({ ...lab })).rejects.toThrow(
+      /decodes as "png" but the accepted manifest claims "jpeg"/
+    );
+  });
+
+  it('rejects an accepted manifest whose source bytes the snapshot disproves', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const manifestPath = join(
+      lab.outputRoot,
+      'generations',
+      GENERATION_ID,
+      'manifest.json'
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // A shrunken byte claim keeps every over-source inequality true, so
+    // the manifest still builds an accepted index.
+    manifest.source.bytes = 10;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(loadLabConfig({ ...lab })).rejects.toThrow(
+      /claims 48x48 \(10 B\)/
+    );
+  });
+
   it('confines snapshots to the input root and verifies frozen bytes', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();
@@ -216,73 +264,5 @@ describe('loadLabConfig', () => {
     await expect(loadLabConfig({ ...lab })).rejects.toThrow(
       /differ from the frozen hash/
     );
-  });
-});
-
-describe('stageVerifiedTier', () => {
-  it('stages exactly the bytes it validated', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
-    const sourcePath = join(dir, 'tier.avif');
-    const bytes = Buffer.from('verified-tier-bytes');
-    await writeFile(sourcePath, bytes);
-    const destPath = join(dir, 'staged.avif');
-    await stageVerifiedTier({
-      destPath,
-      expectedBytes: bytes.length,
-      expectedSha256: createHash('sha256').update(bytes).digest('hex'),
-      sourcePath,
-    });
-    expect(await readFile(destPath)).toEqual(bytes);
-  });
-
-  it('leaves verified-identical destinations untouched, heals drifted ones', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
-    const sourcePath = join(dir, 'tier.avif');
-    const bytes = Buffer.from('verified-tier-bytes');
-    await writeFile(sourcePath, bytes);
-    const input = {
-      expectedBytes: bytes.length,
-      expectedSha256: createHash('sha256').update(bytes).digest('hex'),
-      sourcePath,
-    };
-    // Identical dest: backdate it, restage, mtime must not move.
-    const identical = join(dir, 'identical.avif');
-    await writeFile(identical, bytes);
-    const old = new Date('2020-01-01T00:00:00.000Z');
-    await utimes(identical, old, old);
-    await stageVerifiedTier({ ...input, destPath: identical });
-    expect((await stat(identical)).mtimeMs).toBe(old.getTime());
-    // Drifted dest: same length, different bytes → overwritten with verified.
-    const drifted = join(dir, 'drifted.avif');
-    const wrong = Buffer.from('VERIFIED-TIER-BYTES');
-    await writeFile(drifted, wrong);
-    await stageVerifiedTier({ ...input, destPath: drifted });
-    expect(await readFile(drifted)).toEqual(bytes);
-  });
-
-  it('refuses to stage bytes that fail validation', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
-    const sourcePath = join(dir, 'tier.avif');
-    const bytes = Buffer.from('unverified-tier-bytes');
-    await writeFile(sourcePath, bytes);
-    const sha = createHash('sha256').update(bytes).digest('hex');
-    await expect(
-      stageVerifiedTier({
-        destPath: join(dir, 'bad-sha.avif'),
-        expectedBytes: bytes.length,
-        expectedSha256: '0'.repeat(64),
-        sourcePath,
-      })
-    ).rejects.toThrow(/hash mismatch/);
-    await expect(
-      stageVerifiedTier({
-        destPath: join(dir, 'bad-size.avif'),
-        expectedBytes: bytes.length + 1,
-        expectedSha256: sha,
-        sourcePath,
-      })
-    ).rejects.toThrow(/byte size/);
-    await expect(stat(join(dir, 'bad-sha.avif'))).rejects.toThrow();
-    await expect(stat(join(dir, 'bad-size.avif'))).rejects.toThrow();
   });
 });

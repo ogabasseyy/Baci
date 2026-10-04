@@ -120,13 +120,17 @@ export function PilotLabCardPreload({
 }
 
 // Rendered-picture owner: same structure as the mounted mobile hero picture
-// (AVIF source, fallback source, transparent-pixel img).
+// (AVIF source, fallback source, transparent-pixel img). `type` defaults
+// to the AVIF gate; pass null for format-agnostic bytes (the control arm
+// serves the original in every candidate, so a type gate would lie).
 export function PilotLabMobilePicture({
   arm,
   projection,
+  type,
 }: {
   arm: PilotLabArm;
   projection: ProjectedOgabasseyMobile;
+  type?: string | null;
 }): React.JSX.Element {
   return (
     <picture data-pilot-lab-picture={arm}>
@@ -134,7 +138,7 @@ export function PilotLabMobilePicture({
         media={projection.media}
         sizes={projection.sizes}
         srcSet={projection.avifSrcSet}
-        type="image/avif"
+        type={type === undefined ? 'image/avif' : (type ?? undefined)}
       />
       <source
         media={projection.media}
@@ -159,8 +163,10 @@ export function PilotLabMobilePicture({
 
 // One mount for both arms: all three hint owners consume the same rendered
 // projection, so preload matching dedupes them into one fetch. `type`
-// passes through to both hint owners (the gallery control arm serves
-// format-agnostic bytes, so it omits the AVIF gate like the store pages).
+// passes through to both hint owners AND the rendered picture (the gallery
+// control arm serves format-agnostic bytes, so it omits the AVIF gate like
+// the store pages — including the picture source, which would otherwise
+// type the original as AVIF and break decoding in AVIF-capable browsers).
 export function PilotLabMobileMount({
   arm,
   binding,
@@ -181,7 +187,7 @@ export function PilotLabMobileMount({
         projection={projection}
         type={type}
       />
-      <PilotLabMobilePicture arm={arm} projection={projection} />
+      <PilotLabMobilePicture arm={arm} projection={projection} type={type} />
     </>
   );
 }
@@ -265,10 +271,16 @@ export function PilotLabCssHeroMount({
     }
   }
   const rules = projection.breakpoints
-    .map(
-      (breakpoint, index) =>
-        `@media ${breakpoint.media}{.${scope} .plab-css-layer-${index}{background-image:url("${breakpoint.webpUrl}");background-image:image-set(url("${breakpoint.avifUrl}") type("image/avif"),url("${breakpoint.webpUrl}") type("image/webp"));background-size:${projection.cover ? 'cover' : 'auto'};}}`
-    )
+    .map((breakpoint, index) => {
+      // Format-honest control: identical URLs mean one original file, so a
+      // typed image-set would gate undecodable bytes behind AVIF/WebP
+      // claims. Emit the plain url() alone instead.
+      const image =
+        breakpoint.avifUrl === breakpoint.webpUrl
+          ? `background-image:url("${breakpoint.webpUrl}");`
+          : `background-image:url("${breakpoint.webpUrl}");background-image:image-set(url("${breakpoint.avifUrl}") type("image/avif"),url("${breakpoint.webpUrl}") type("image/webp"));`;
+      return `@media ${breakpoint.media}{.${scope} .plab-css-layer-${index}{${image}background-size:${projection.cover ? 'cover' : 'auto'};}}`;
+    })
     .join('');
   return (
     <div data-pilot-lab-css-hero="true" className={scope}>

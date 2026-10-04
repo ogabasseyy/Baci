@@ -1,5 +1,4 @@
 import 'server-only';
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
@@ -14,6 +13,7 @@ import {
   parsePilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
 import { indexKey } from './lab-index-lookup';
+import { verifyOutputHashes } from './lab-index-verify';
 
 export type PilotTierDelivery =
   | 'generated'
@@ -60,6 +60,16 @@ export interface PilotBindingStatus {
   binding: PilotInventoryBinding;
   detail?: string;
   generationId?: string;
+  // Manifest source facts for the accepted generation. The config loader
+  // verifies these against the decoded snapshot before staging, so a
+  // manifest can never claim bytes, a format, or dimensions the frozen
+  // snapshot does not demonstrate.
+  source?: {
+    bytes: number;
+    format: string;
+    orientedHeight: number;
+    orientedWidth: number;
+  };
   status: PilotBindingStatusCode;
 }
 
@@ -92,35 +102,6 @@ function deepFreezeIndex(index: PilotLabIndex): PilotLabIndex {
   }
   Object.freeze(index.entries);
   return Object.freeze(index);
-}
-
-async function verifyOutputHashes(
-  outputRoot: string,
-  generationId: string,
-  manifest: PilotManifest
-): Promise<string | null> {
-  const seen = new Set<string>();
-  for (const tier of manifest.tiers) {
-    if (seen.has(tier.path)) {
-      continue;
-    }
-    seen.add(tier.path);
-    let bytes: Buffer;
-    try {
-      bytes = await readFile(
-        join(outputRoot, 'generations', generationId, tier.path)
-      );
-    } catch {
-      return `output missing: ${tier.path}`;
-    }
-    if (bytes.length !== tier.bytes) {
-      return `byte size changed: ${tier.path}`;
-    }
-    if (createHash('sha256').update(bytes).digest('hex') !== tier.sha256) {
-      return `output hash mismatch: ${tier.path}`;
-    }
-  }
-  return null;
 }
 
 export async function buildLabIndex(input: {
@@ -293,6 +274,12 @@ export async function buildLabIndex(input: {
     statuses.push({
       binding,
       generationId: record.generationId,
+      source: {
+        bytes: parsedManifest.source.bytes,
+        format: parsedManifest.source.format,
+        orientedHeight: parsedManifest.source.orientedHeight,
+        orientedWidth: parsedManifest.source.orientedWidth,
+      },
       status: 'accepted',
     });
   }

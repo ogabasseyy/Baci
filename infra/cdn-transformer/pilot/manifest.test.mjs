@@ -130,7 +130,8 @@ test('generated-over-source is an explicit over-source exception, not a cap', ()
   const over = logoTiers();
   over[0] = {
     ...over[0],
-    bytes: 6000,
+    // Above the 1234-byte source but within the 5000-byte rung ceiling.
+    bytes: 2000,
     delivery: 'generated-over-source',
     height: 72,
   };
@@ -161,7 +162,7 @@ test('generated-over-source is an explicit over-source exception, not a cap', ()
   const sameCodec = logoTiers();
   sameCodec[0] = {
     ...sameCodec[0],
-    bytes: 6000,
+    bytes: 2000,
     delivery: 'generated-over-source',
     height: 72,
   };
@@ -174,7 +175,7 @@ test('generated-over-source is an explicit over-source exception, not a cap', ()
   const crossCodec = logoTiers();
   crossCodec[1] = {
     ...crossCodec[1],
-    bytes: 6000,
+    bytes: 2000,
     delivery: 'generated-over-source',
     height: 72,
   };

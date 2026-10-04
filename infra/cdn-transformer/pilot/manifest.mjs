@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  BUDGETS,
   PILOT_POLICY_VERSION,
   PILOT_SCHEMA_VERSION,
   RECIPE_ID,
@@ -144,6 +145,26 @@ export const PilotManifestSchema = z
     // exceed them (the exception must actually hold).
     for (const tier of manifest.tiers) {
       const key = `${tier.requestedWidth}:${tier.format}`;
+      // Recipe byte ceilings bind every encoded tier — including frozen r1
+      // legacy (the encoder enforces budgets on every encode) and
+      // over-source (the exception records bytes above the SOURCE, still
+      // within the rung budget). Only pass-through reuses source bytes
+      // outside the ladder budgets.
+      if (tier.delivery !== 'original-passthrough') {
+        const ceiling =
+          BUDGETS[manifest.role]?.[tier.requestedWidth]?.[tier.format];
+        if (ceiling === undefined) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `tier "${key}" has no recipe ceiling for role "${manifest.role}"`,
+          });
+        } else if (tier.bytes > ceiling) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `tier "${key}" exceeds the recipe byte ceiling (${tier.bytes} > ${ceiling})`,
+          });
+        }
+      }
       if (tier.delivery === undefined) {
         // Delivery-less tiers are frozen r1 legacy. A current-recipe
         // manifest that omits delivery would skip every never-larger

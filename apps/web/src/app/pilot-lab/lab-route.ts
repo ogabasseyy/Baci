@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   isPilotLabEnabled,
   loadLabConfig,
@@ -151,8 +151,11 @@ export function stageLabConfigFromText(input: {
 async function statFingerprint(path: string): Promise<string> {
   const info = await stat(path).catch(() => null);
   if (info === null) {
+    // Full operator path goes to the server log only; the thrown message
+    // can surface in route error output on shared hosts with the lab on.
+    console.error(`merchant image pilot: cannot stat ${path}`);
     throw new Error(
-      `merchant image pilot: cannot stat ${path}; re-run pnpm pilot:stage and restart the origin`
+      `merchant image pilot: cannot stat ${basename(path)}; re-run pnpm pilot:stage and restart the origin`
     );
   }
   return `${info.size}:${info.mtimeMs}`;

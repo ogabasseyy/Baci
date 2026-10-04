@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { RECIPE_BYTE_CEILINGS } from '@/schemas/merchant-image-variant-pilot-tiers';
 import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
 
 // Shared lab-roots builder for the pilot-lab route tests (gallery + store
@@ -88,10 +89,17 @@ export async function setupLabRoots(input: {
     const tiers = [];
     for (const requestedWidth of asset.ladder) {
       for (const format of ['avif', 'webp'] as const) {
+        // Synthetic tiers reuse the source payload, so truncate to the
+        // rung's recipe byte ceiling: real encoders emit rung-sized
+        // outputs, never full-source bytes at every rung. A rung without
+        // a ceiling truncates to 1 byte and still fails schema validation
+        // loudly ('no recipe ceiling') instead of passing silently.
+        const ceiling =
+          RECIPE_BYTE_CEILINGS[asset.role]?.[requestedWidth]?.[format] ?? 0;
         const bytes = Buffer.concat([
           payload,
           Buffer.from(`${asset.assetId}${requestedWidth}${format}`),
-        ]);
+        ]).subarray(0, Math.max(1, ceiling));
         const hash = sha256(bytes);
         const fileName = `${hash}.${format}`;
         await writeFile(join(generationDir, fileName), bytes);

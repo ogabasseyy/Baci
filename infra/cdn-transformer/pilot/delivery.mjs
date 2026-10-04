@@ -73,6 +73,10 @@ function assertRung(rung) {
   assertPositiveBodyBytes(rung.bytes, 'rung');
 }
 
+// Per-rung/per-format guard, NOT merchant-wide: an incompatible source
+// codec (e.g. AVIF original on a WebP rung) yields generated-over-source
+// — bytes stay larger than the source for that rung. Never present lab
+// savings as merchant-wide while over-source dispositions exist.
 export function decideTierDelivery({ rung, source }) {
   assertRung(rung);
   assertNormalizedSource(source);

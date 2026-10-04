@@ -25,10 +25,11 @@ describe('send manual order document', () => {
     const db = database();
     const result = await sendManualOrderDocument({ supabase: db.client, row });
     expect(result.status).toBe('sent');
-    expect(db.filters).toMatchObject({
-      'orders.id': 'order-1',
-      'orders.merchant_id': 'merchant-1',
-      'merchants.id': 'merchant-1',
+    // Tenant scoping rides the claim-bound snapshot RPC: the outbox id
+    // plus the worker's claim owner, never request-selected table filters.
+    expect(db.rpc).toHaveBeenCalledWith('get_manual_order_document_snapshot', {
+      p_outbox_id: 'outbox-1',
+      p_claim_owner: 'worker-1',
     });
     const message = sendEmail.mock.calls[0][0];
     expect(message.to).toBe('ada@example.com');
@@ -51,7 +52,10 @@ describe('send manual order document', () => {
     expect(pdf).toContain('RECEIPT');
     expect(pdf).toContain('28 Sept 2026');
     expect(pdf).toContain('Pixel 10 Pro XL');
-    const hash = db.rpc.mock.calls[0][1].p_token_hash;
+    const claimCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'create_manual_order_document_claim'
+    );
+    const hash = claimCall?.[1].p_token_hash;
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
     expect(message.htmlContent).not.toContain(hash);
   });
@@ -129,11 +133,11 @@ describe('send manual order document', () => {
     expect(pdf).toContain('Test Bank');
   });
 
-  it('retries invoices when the payment account lookup fails', async () => {
+  it('retries when the dispatch snapshot lookup fails', async () => {
     const db = database(
       { payment_status: 'unpaid', amount_paid: 0 },
       {
-        paymentAccountError: { message: 'timeout' },
+        snapshotError: { message: 'timeout' },
       }
     );
     await expect(
@@ -141,7 +145,23 @@ describe('send manual order document', () => {
         supabase: db.client,
         row: { ...row, event_type: 'manual_order_invoice' },
       })
-    ).rejects.toThrow('Manual document payment account unavailable');
+    ).rejects.toThrow('Manual document data unavailable');
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('fails a send whose claim was superseded before the snapshot', async () => {
+    // A re-arm stole the claim between claim and send: the snapshot RPC
+    // returns null, and the sender fails for a bounded retry (the row is
+    // pending again) instead of emailing an unowned snapshot.
+    const db = database({}, { snapshotNull: true });
+    const result = await sendManualOrderDocument({
+      supabase: db.client,
+      row,
+    });
+    expect(result).toEqual({
+      status: 'failed',
+      error: 'dispatch_claim_superseded',
+    });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -178,7 +198,11 @@ describe('send manual order document', () => {
     const db = database(override);
     await sendManualOrderDocument({ supabase: db.client, row });
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(db.rpc).not.toHaveBeenCalled();
+    // Ineligible rows still cost exactly one snapshot read; no claim, mark,
+    // or marker RPC follows a skip.
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      'get_manual_order_document_snapshot',
+    ]);
   });
 
   it('brands the claim link with the active primary domain', async () => {
@@ -268,7 +292,22 @@ describe('send manual order document', () => {
   });
 
   it('dates later-payment receipts from the completing transaction', async () => {
-    const db = database({}, { latestPaymentAt: '2026-09-29T12:00:00Z' });
+    const db = database(
+      {},
+      {
+        paymentHistory: [
+          {
+            id: 'txn-9',
+            amount: 950000,
+            created_at: '2026-09-29T12:00:00Z',
+            description: null,
+            metadata: null,
+            status: 'completed',
+            transaction_type: 'payment',
+          },
+        ],
+      }
+    );
     await sendManualOrderDocument({ supabase: db.client, row });
     const pdf = Buffer.from(
       sendEmail.mock.calls[0][0].attachments[0].content,

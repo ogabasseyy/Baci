@@ -123,3 +123,31 @@ INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('100000
 UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'payment_history_invalid', skipped_at = now(), attempt_count = 1 WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt';
 INSERT INTO public.transactions (id, order_id, transaction_type, amount, status) VALUES ('10000000-0000-4000-8000-000000000c03', '10000000-0000-4000-8000-000000000069', 'payment', 100, 'completed');
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000069' AND event_type = 'manual_order_receipt'), 'payment correction re-arms the skipped receipt');
+-- A tax correction racing validation re-arms the undispatched processing
+-- row: the in-flight worker loses its claim and the corrected invoice is
+-- retried instead of terminally skipping from the stale read.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000075', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000075', 'Device', 1, 100);
+INSERT INTO public.order_tax_subtotals (order_id, vat_category_code, vat_rate, taxable_amount, tax_amount) VALUES ('10000000-0000-4000-8000-000000000075', 'S', -7.5, 100, -7.5);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000075' AND event_type = 'manual_order_invoice';
+UPDATE public.order_tax_subtotals SET vat_rate = 7.5, tax_amount = 7.5 WHERE order_id = '10000000-0000-4000-8000-000000000075';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000075' AND event_type = 'manual_order_invoice'), 'tax correction re-arms the processing invoice');
+-- A payment correction racing validation re-arms the undispatched
+-- processing row the same way.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000076', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000076', 'Device', 1, 100);
+INSERT INTO public.transactions (id, order_id, transaction_type, amount, status) VALUES ('10000000-0000-4000-8000-000000000c04', '10000000-0000-4000-8000-000000000076', 'payment', -100, 'completed');
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000076' AND event_type = 'manual_order_receipt';
+UPDATE public.transactions SET amount = 100 WHERE id = '10000000-0000-4000-8000-000000000c04';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000076' AND event_type = 'manual_order_receipt'), 'payment correction re-arms the processing receipt');
+-- A merchant correction racing validation re-arms the undispatched
+-- processing row instead of letting the stale skip go terminal.
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000077', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000077', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET support_phone = '+2348000000099' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'merchant correction re-arms the processing row');
+UPDATE public.merchants SET support_phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';

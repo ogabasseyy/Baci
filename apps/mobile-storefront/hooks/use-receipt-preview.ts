@@ -57,7 +57,8 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   const { data: merchantInfo } = useMerchantReceiptInfo();
 
   // null disables the detail query while idle
-  const { data: receiptDetail } = useReceiptDetail(selectedOrderId);
+  const { data: receiptDetail, isFetched: detailFetched } =
+    useReceiptDetail(selectedOrderId);
 
   // The preview is open once the detail data for the selected order arrives.
   const isOpen =
@@ -65,6 +66,12 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
     !!receiptDetail &&
     !!merchantInfo &&
     receiptDetail.id === selectedOrderId;
+
+  // A validation-failed detail resolves null (fail closed): stop the
+  // spinner instead of hanging on a preview that will never open. This
+  // also releases fetch errors, which settle without data the same way.
+  const detailFailedClosed =
+    selectedOrderId !== null && detailFetched && receiptDetail == null;
 
   let html = '';
   let isPaid = false;
@@ -152,7 +159,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       is_credit_order: receiptDetail.is_credit_order,
       // Null names are sender-permitted (email fallback there): the
       // generator renders the name unconditionally, so fall back here too
-      // instead of crashing on the null the warn-only fetch lets through.
+      // instead of crashing on the schema-nullable field.
       customer_name:
         receiptDetail.customer_name ||
         receiptDetail.customer_email ||
@@ -240,7 +247,7 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   };
 
   return {
-    isLoading: selectedOrderId !== null && !isOpen,
+    isLoading: selectedOrderId !== null && !isOpen && !detailFailedClosed,
     isOpen,
     html,
     isPaid,

@@ -18089,6 +18089,25 @@ export type Database = {
           transaction_type: string | null;
         }[];
       };
+      get_manual_order_document_snapshot: {
+        Args: { p_claim_owner: string; p_outbox_id: string };
+        Returns: Json;
+      };
+      mark_manual_document_claim_sent: {
+        Args: { p_claim_id: string; p_merchant_id: string };
+        Returns: string;
+      };
+      get_customer_order_tax_subtotals: {
+        Args: { p_order_ids: string[] };
+        Returns: {
+          exemption_reason: string | null;
+          order_id: string;
+          tax_amount: number | null;
+          taxable_amount: number | null;
+          vat_category_code: string | null;
+          vat_rate: number | null;
+        }[];
+      };
       get_customer_order_payment_accounts: {
         Args: { p_order_ids: string[] };
         Returns: {

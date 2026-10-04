@@ -31,8 +31,10 @@ export interface ManualReceiptPromotionInput {
 
 // Sender's settled-payment filter, mirrored exactly like the web
 // archive gate: transaction_type 'payment' with status completed/success,
-// each amount coerced with Number(amount ?? 0). Callers without child
-// data pass nothing and keep the order/item verdict.
+// each amount present, finite, and non-negative. A null/empty amount
+// must fail like the sender order schema (null maps to NaN and rejects),
+// never coerce to a valid zero that masks corrupt payment history.
+// Callers without child data pass nothing and keep the order/item verdict.
 export function hasValidSettledPayments(payments: unknown): boolean {
   if (payments == null) return true;
   if (!Array.isArray(payments)) return false;
@@ -46,9 +48,9 @@ export function hasValidSettledPayments(payments: unknown): boolean {
       );
     })
     .every((row) => {
-      const amount = Number(
-        (row as { amount?: number | string | null }).amount ?? 0
-      );
+      const raw = (row as { amount?: unknown }).amount;
+      if (raw == null || raw === '') return false;
+      const amount = Number(raw);
       return Number.isFinite(amount) && amount >= 0;
     });
 }

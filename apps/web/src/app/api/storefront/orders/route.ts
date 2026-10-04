@@ -2,6 +2,7 @@ import { compareReceiptListDesc } from '@baci/shared/receipt';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { sanitizePublicOrder } from '@/lib/public-fulfillment-sanitizer';
+import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { resolveStorefrontOrderPaymentAccounts } from '@/lib/storefront-order-payment-accounts';
 import { storefrontAccountDocumentQuerySchema } from '@/schemas/storefront-account-document';
 import { transformStorefrontOrdersForDisplay } from './storefront-orders-transform';
@@ -116,11 +117,6 @@ export async function GET(request: NextRequest) {
               slug
             )
           )
-        ),
-        order_tax_subtotals (
-          vat_rate,
-          taxable_amount,
-          tax_amount
         )
       `)
       .eq('customer_id', customer.id)
@@ -157,9 +153,36 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // The tax table is merchant/staff-readable: the embedded relation
+    // returns [] under customer RLS, so the availability gate would
+    // validate an empty set and advertise invoices the sender rejects.
+    // Load the ownership-checked customer projection instead.
+    const { data: taxSubtotals, error: taxError } =
+      await loadStorefrontCustomerTaxSubtotals(
+        supabase,
+        (orders ?? []).map((order) => order.id)
+      );
+    if (taxError) {
+      console.error('Orders tax fetch error:', taxError);
+      return NextResponse.json(
+        { error: 'Failed to fetch order tax subtotals' },
+        { status: 500 }
+      );
+    }
+    const taxSubtotalsByOrderId = new Map<
+      string,
+      { vat_rate?: unknown; taxable_amount?: unknown; tax_amount?: unknown }[]
+    >();
+    for (const subtotal of taxSubtotals ?? []) {
+      const orderSubtotals = taxSubtotalsByOrderId.get(subtotal.order_id) ?? [];
+      orderSubtotals.push(subtotal);
+      taxSubtotalsByOrderId.set(subtotal.order_id, orderSubtotals);
+    }
+
     const transformedOrders = transformStorefrontOrdersForDisplay(orders, {
       transactionsByOrderId,
       paymentAccountsByOrderId,
+      taxSubtotalsByOrderId,
     });
 
     // Supabase cannot sort by the display-date fallback, so file backdated

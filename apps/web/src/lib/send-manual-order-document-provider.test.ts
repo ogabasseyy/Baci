@@ -163,7 +163,9 @@ describe('send manual order document provider and validation', () => {
       status: 'skipped',
       reason: 'order_validation_failed',
     });
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      'get_manual_order_document_snapshot',
+    ]);
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -177,7 +179,9 @@ describe('send manual order document provider and validation', () => {
       status: 'skipped',
       reason: 'merchant_validation_failed',
     });
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(db.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      'get_manual_order_document_snapshot',
+    ]);
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -191,17 +195,19 @@ describe('send manual order document provider and validation', () => {
     expect(sendEmail).toHaveBeenCalledTimes(1);
   });
 
-  it('throws for retry when the receipt-date lookup fails', async () => {
-    const db = database({}, { transactionsError: { message: 'db down' } });
+  it('throws for retry when the dispatch snapshot lookup fails', async () => {
+    const db = database({}, { snapshotError: { message: 'db down' } });
     await expect(
       sendManualOrderDocument({ supabase: db.client, row })
-    ).rejects.toThrow('Manual document receipt date unavailable');
+    ).rejects.toThrow('Manual document data unavailable');
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
   it('skips without throwing when the claim payload fails validation', async () => {
-    const db = database();
-    db.rpc.mockResolvedValueOnce({ data: { status: 'bogus' }, error: null });
+    const db = database(
+      {},
+      { claimResult: { data: { status: 'bogus' }, error: null } }
+    );
     const result = await sendManualOrderDocument({
       supabase: db.client,
       row,

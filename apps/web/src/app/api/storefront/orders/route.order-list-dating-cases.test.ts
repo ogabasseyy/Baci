@@ -115,4 +115,71 @@ describe('GET /api/storefront/orders completion-date filing cases', () => {
     });
     expect(payload.orders[0]).not.toHaveProperty('invoice_issue_date');
   });
+
+  it('keeps invoice dates for paid but receipt-ineligible orders', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult(
+        createSupabaseMock({
+          orders: {
+            data: [
+              {
+                id: 'order-paid-unshipped',
+                order_number: 'ORD-4001',
+                created_at: '2026-09-12T10:00:00.000Z',
+                transaction_date: '2026-09-12T10:00:00.000Z',
+                invoice_issue_date: '2026-09-12',
+                total: 150000,
+                subtotal: 150000,
+                shipping_fee: 0,
+                tax_amount: 0,
+                discount_amount: 0,
+                amount_paid: 150000,
+                currency: 'NGN',
+                payment_status: 'paid',
+                shipping_status: 'pending',
+                recorded_by_user_id: null,
+                import_job_id: null,
+                external_source: null,
+                shipping_address: null,
+                tracking_number: null,
+                shipping_provider: null,
+                payment_method: 'card',
+                order_items: [],
+              },
+            ],
+            error: null,
+          },
+          transactions: {
+            data: [
+              {
+                order_id: 'order-paid-unshipped',
+                created_at: '2026-10-05T12:00:00.000Z',
+                metadata: null,
+                status: 'completed',
+                transaction_type: 'payment',
+              },
+            ],
+            error: null,
+          },
+        })
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/storefront/orders?merchantSlug=ogabassey'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    // Paid but unshipped with no import provenance: still an invoice, so
+    // the October completion must not replace the September invoice dates
+    // the downloaded PDF shows.
+    expect(payload.orders[0]).toMatchObject({
+      current_document_kind: 'invoice',
+      transaction_date: '2026-09-12T10:00:00.000Z',
+      invoice_issue_date: '2026-09-12',
+    });
+  });
 });

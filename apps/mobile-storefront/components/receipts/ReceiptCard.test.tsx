@@ -110,6 +110,10 @@ describe('ReceiptCard', () => {
     // must not misstate payment state as an unpaid Total.
     expect(screen.getByText('Paid')).toBeTruthy();
     expect(screen.queryByText('Total')).toBeNull();
+    // The mixed signal gets an explanatory subtitle: no receipt exists.
+    expect(
+      screen.getByText('Payment recorded \u2014 invoice only, no receipt')
+    ).toBeTruthy();
   });
 
   it('renders the receipt product title', () => {

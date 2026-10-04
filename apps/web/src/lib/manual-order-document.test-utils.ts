@@ -77,17 +77,15 @@ export function database(
     claimMarkerThrows?: boolean;
     merchantOverride?: Record<string, unknown>;
     paymentAccounts?: Record<string, unknown>[];
-    paymentAccountError?: { message: string } | null;
     primaryDomain?: string | null;
-    latestPaymentAt?: string | null;
-    transactionsError?: { message: string } | null;
     dispatchStatus?: string;
     paymentHistory?: Record<string, unknown>[];
-    paymentHistoryError?: { message: string } | null;
     taxSubtotals?: Record<string, unknown>[];
-    taxSubtotalsError?: { message: string } | null;
     dispatchLeaseReset?: boolean;
     dispatchLeaseError?: boolean;
+    snapshotError?: { message: string } | null;
+    snapshotNull?: boolean;
+    claimResult?: { data: unknown; error: unknown } | null;
   } = {}
 ) {
   const filters: Record<string, unknown> = {};
@@ -99,11 +97,43 @@ export function database(
   const effectiveOrder = { ...orderFixture, ...orderOverride };
   const client = {
     rpc: vi.fn().mockImplementation((fn: string) => {
+      // Claim-bound dispatch snapshot: composed from the same fixtures
+      // the table mocks below serve, so every existing case exercises
+      // the RPC path unchanged.
+      if (fn === 'get_manual_order_document_snapshot') {
+        if (options.snapshotError)
+          return Promise.resolve({ data: null, error: options.snapshotError });
+        if (options.snapshotNull)
+          return Promise.resolve({ data: null, error: null });
+        return Promise.resolve({
+          data: {
+            order: { ...orderFixture, ...orderOverride },
+            merchant: { ...merchantFixture, ...options.merchantOverride },
+            tax_subtotals: options.taxSubtotals ?? [],
+            transactions: options.paymentHistory ?? [],
+            payment_accounts: options.paymentAccounts ?? [],
+            claim_domain: options.primaryDomain ?? null,
+          },
+          error: null,
+        });
+      }
+      if (fn === 'mark_manual_document_claim_sent') {
+        if (options.claimMarkerThrows)
+          return Promise.reject(new Error('network lost'));
+        if (options.claimMarkerError)
+          return Promise.resolve({
+            data: null,
+            error: { message: 'failed write' },
+          });
+        return Promise.resolve({ data: 'claim-1', error: null });
+      }
       if (fn === 'mark_manual_document_dispatch_started') {
         const status = options.dispatchStatus ?? 'marked';
         if (status === 'marked') dispatchMarked = true;
         return Promise.resolve({ data: { status }, error: null });
       }
+      if (options.claimResult !== undefined && options.claimResult !== null)
+        return Promise.resolve(options.claimResult);
       return Promise.resolve({
         data: {
           status: 'created',
@@ -143,71 +173,32 @@ export function database(
         limit: vi.fn(() => builder),
         // biome-ignore lint/suspicious/noThenProperty: mock mirrors thenable supabase builder.
         then: vi.fn((resolve: (value: unknown) => void) =>
-          resolve({
-            data:
-              table === 'order_payment_accounts'
-                ? (options.paymentAccounts ?? [])
-                : table === 'transactions'
-                  ? (options.paymentHistory ?? [])
-                  : table === 'order_tax_subtotals'
-                    ? (options.taxSubtotals ?? [])
-                    : [],
-            error:
-              table === 'order_payment_accounts'
-                ? (options.paymentAccountError ?? null)
-                : table === 'transactions'
-                  ? (options.paymentHistoryError ?? null)
-                  : table === 'order_tax_subtotals'
-                    ? (options.taxSubtotalsError ?? null)
-                    : null,
-          })
+          resolve({ data: [], error: null })
         ),
         maybeSingle: vi.fn(() => {
-          if (table === 'receipt_claims' && options.claimMarkerThrows)
-            return Promise.reject(new Error('network lost'));
           if (
             table === 'order_notification_outbox' &&
             dispatchMarked &&
             filters['order_notification_outbox.dispatch_started_at'] === null
           )
             return Promise.resolve({ data: null, error: null });
-          if (table === 'domains')
-            return Promise.resolve({
-              data: options.primaryDomain
-                ? { domain: options.primaryDomain }
-                : null,
-              error: null,
-            });
-          if (table === 'transactions')
-            return Promise.resolve({
-              data: options.latestPaymentAt
-                ? { created_at: options.latestPaymentAt }
-                : null,
-              error: options.transactionsError ?? null,
-            });
+          // Only the lease path touches tables now (the worker owns its
+          // queue): every document read rides the snapshot RPC above.
           return Promise.resolve({
             data:
-              table === 'orders'
-                ? { ...orderFixture, ...orderOverride }
-                : table === 'merchants'
-                  ? { ...merchantFixture, ...options.merchantOverride }
-                  : table === 'receipt_claims'
-                    ? { id: 'claim-1' }
-                    : table === 'order_notification_outbox'
-                      ? {
-                          id: 'outbox-1',
-                          dispatch_started_at: options.dispatchLeaseReset
-                            ? null
-                            : '2026-09-30T10:00:00Z',
-                        }
-                      : { id: 'outbox-1' },
+              table === 'order_notification_outbox'
+                ? {
+                    id: 'outbox-1',
+                    dispatch_started_at: options.dispatchLeaseReset
+                      ? null
+                      : '2026-09-30T10:00:00Z',
+                  }
+                : { id: 'outbox-1' },
             error:
-              table === 'receipt_claims' && options.claimMarkerError
-                ? { message: 'failed write' }
-                : table === 'order_notification_outbox' &&
-                    options.dispatchLeaseError
-                  ? { message: 'lease read failed' }
-                  : null,
+              table === 'order_notification_outbox' &&
+              options.dispatchLeaseError
+                ? { message: 'lease read failed' }
+                : null,
           });
         }),
       };

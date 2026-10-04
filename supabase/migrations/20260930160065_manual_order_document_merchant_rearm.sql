@@ -15,9 +15,11 @@ BEGIN
   -- Completing a merchant profile (slug, VAT rate) re-arms rows the worker
   -- terminally skipped as merchant_validation_failed: only order and item
   -- changes invoke the order re-enqueue, so without this the corrected
-  -- document is permanently lost. Other skip reasons keep their own re-arm
-  -- paths; sent and possibly-dispatched rows stay terminal. The worker
-  -- re-validates the merchant on the next attempt, so a still-invalid
+  -- document is permanently lost. Undispatched processing rows re-arm too:
+  -- a correction racing validation would otherwise let the worker record
+  -- a terminal skip from its stale read. Other skip reasons keep their own
+  -- re-arm paths; sent and possibly-dispatched rows stay terminal. The
+  -- worker re-validates the merchant on the next attempt, so a still-invalid
   -- profile simply skips again until staff finish the correction.
   UPDATE public.order_notification_outbox AS n
   SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
@@ -25,22 +27,24 @@ BEGIN
     skip_reason = NULL, skipped_at = NULL, updated_at = now()
   WHERE n.merchant_id = NEW.id
     AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'skipped'
-    AND n.skip_reason = 'merchant_validation_failed'
+    AND ((n.status = 'skipped' AND n.skip_reason = 'merchant_validation_failed')
+      OR n.status = 'processing')
     AND n.dispatch_started_at IS NULL;
   -- A snapshot-relevant merchant edit landing mid-dispatch resets every
   -- processing marker so the lease check aborts instead of recording a
-  -- stale document as sent. Rendered branding (logo, colors) and the
-  -- From display name invalidate alongside issuer/contact fields. Bank
-  -- fields reset invoice markers only, and only for NGN orders without a
-  -- selected virtual account: receipts render no payment instructions,
-  -- foreign-currency invoices strip all bank details, and a selected VA
-  -- replaces the merchant-bank card, so resetting those markers would
-  -- push an accepted, visually unchanged invoice into a corrective
-  -- duplicate. The dispatch RPC compares the same rendered subset.
+  -- stale document as sent. Rendered branding (logo, primary color) and
+  -- the From display name invalidate alongside issuer/contact fields.
+  -- Bank fields reset invoice markers only, and only for NGN orders
+  -- without a selected virtual account: receipts render no payment
+  -- instructions, foreign-currency invoices strip all bank details, and
+  -- a selected VA replaces the merchant-bank card, so resetting those
+  -- markers would push an accepted, visually unchanged invoice into a
+  -- corrective duplicate. bank_code never prints (name/number/account
+  -- name only) and the fallback card requires an account number to
+  -- render at all, so code-only edits and numberless-merchant edits
+  -- reset nothing either. The dispatch RPC compares the same subset.
   v_bank_changed :=
-    OLD.bank_code IS DISTINCT FROM NEW.bank_code
-    OR OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
+    OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
     OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
     OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name;
   IF OLD.slug IS DISTINCT FROM NEW.slug
@@ -57,14 +61,16 @@ BEGIN
     OR OLD.phone IS DISTINCT FROM NEW.phone
     OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
     OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
-    OR OLD.brand_colors IS DISTINCT FROM NEW.brand_colors
+    OR (OLD.brand_colors->>'primary') IS DISTINCT FROM (NEW.brand_colors->>'primary')
   THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
     WHERE n.merchant_id = NEW.id
       AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
-  ELSIF v_bank_changed THEN
+  ELSIF v_bank_changed
+    AND (OLD.bank_account_number IS NOT NULL
+      OR NEW.bank_account_number IS NOT NULL) THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
     FROM public.orders AS o

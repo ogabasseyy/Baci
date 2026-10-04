@@ -20,6 +20,8 @@ export const eventPipelineAdminImporters = [
   'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
   // Audited manual-order document sender (PR 3580): CRON-authenticated outbox
   // worker dispatches receipt/invoice email only through the audited Zeptomail
-  // sender, matching repair-notifications.ts above.
+  // sender, matching repair-notifications.ts above. Document reads ride the
+  // claim-bound snapshot RPC and the claim-sent marker RPC; direct table
+  // access is limited to the worker-owned dispatch lease below.
   'apps/web/src/lib/send-manual-order-document.ts',
 ] as const;

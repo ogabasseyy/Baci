@@ -42,7 +42,7 @@ function getReceiptDetailScope(): ReceiptDetailScope {
 async function fetchReceiptDetail(
   orderId: string,
   scope: ReceiptDetailScope
-): Promise<ReceiptDetail> {
+): Promise<ReceiptDetail | null> {
   if (!scope.userId || !scope.merchantId) {
     throw new Error('Authentication required to load receipt');
   }
@@ -218,9 +218,13 @@ async function fetchReceiptDetail(
 
   const result = ReceiptDetailSchema.safeParse(detail);
   if (!result.success) {
-    log.warn('Receipt detail validation warning:', result.error.message);
+    log.warn('Receipt detail validation failed:', result.error.message);
+    return null;
   }
 
+  // The schema gates but does not transform: parsed data would strip the
+  // provider/expiry fields the preview and generator read, so the
+  // validated object passes through untouched.
   return detail as ReceiptDetail;
 }
 

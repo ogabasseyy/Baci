@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import {
+  hasValidSettledPayments,
   isPromotedManualReceipt,
   type ManualReceiptPromotionInput,
 } from './receipt-promotion-gates';
@@ -146,5 +147,26 @@ describe('isPromotedManualReceipt', () => {
         })
       )
     ).toBe(true);
+  });
+});
+
+describe('hasValidSettledPayments', () => {
+  const settled = (amount: unknown) => [
+    { transaction_type: 'payment', status: 'completed', amount },
+  ];
+
+  it('accepts present non-negative settled amounts', () => {
+    expect(hasValidSettledPayments(settled(500))).toBe(true);
+    expect(hasValidSettledPayments(settled('500'))).toBe(true);
+    expect(hasValidSettledPayments(settled(0))).toBe(true);
+  });
+
+  it('rejects missing or empty settled amounts like the sender', () => {
+    // Null coerces to a valid zero under Number(amount ?? 0), masking
+    // corrupt history the sender order schema (null -> NaN) refuses.
+    expect(hasValidSettledPayments(settled(null))).toBe(false);
+    expect(hasValidSettledPayments(settled(undefined))).toBe(false);
+    expect(hasValidSettledPayments(settled(''))).toBe(false);
+    expect(hasValidSettledPayments(settled(-50))).toBe(false);
   });
 });

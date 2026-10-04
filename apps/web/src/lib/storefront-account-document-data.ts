@@ -22,6 +22,7 @@ import {
 } from '@/lib/storefront-account-document-eligibility';
 import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account-adapter';
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
+import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
 
 const MERCHANT_COLUMNS =
@@ -113,12 +114,11 @@ export async function getStorefrontAccountDocumentData({
       .eq('order_id', orderId),
     loadStorefrontCustomerTransactions(supabase, [orderId]),
     loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
-    supabase
-      .from('order_tax_subtotals')
-      .select(
-        'vat_category_code, vat_rate, taxable_amount, tax_amount, exemption_reason'
-      )
-      .eq('order_id', orderId),
+    // The tax table is merchant/staff-readable: a direct select returns []
+    // under customer RLS, so the download gate would validate an empty set
+    // and serve an invoice the sender rejects. Load the ownership-checked
+    // customer projection like transactions and payment accounts.
+    loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
     // Authoritative gate for the customer "Cancel Order" CTA. The customer-scoped
     // client cannot read the merchant-only transactions table, so this server RPC
     // is the source of truth. Fail-closed: any error means "not cancellable".

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { transformStorefrontOrdersForDisplay } from './storefront-orders-transform';
 
 const lookups = {
+  taxSubtotalsByOrderId: new Map(),
   transactionsByOrderId: new Map([
     [
       'order-1',
@@ -131,7 +132,11 @@ describe('transformStorefrontOrdersForDisplay', () => {
           ],
         },
       ],
-      { transactionsByOrderId: new Map(), paymentAccountsByOrderId: new Map() }
+      {
+        transactionsByOrderId: new Map(),
+        paymentAccountsByOrderId: new Map(),
+        taxSubtotalsByOrderId: new Map(),
+      }
     );
 
     expect(entry.items[0]).toMatchObject({ assurance_fee: 15000 });
@@ -140,7 +145,11 @@ describe('transformStorefrontOrdersForDisplay', () => {
   it('selects null when the order has no completion transaction', () => {
     const [entry] = transformStorefrontOrdersForDisplay(
       [{ id: 'order-2', total: 5000, amount_paid: 0 }],
-      { transactionsByOrderId: new Map(), paymentAccountsByOrderId: new Map() }
+      {
+        transactionsByOrderId: new Map(),
+        paymentAccountsByOrderId: new Map(),
+        taxSubtotalsByOrderId: new Map(),
+      }
     );
 
     expect(entry.receipt_completion_date).toBeNull();
@@ -165,18 +174,19 @@ describe('transformStorefrontOrdersForDisplay', () => {
     const emptyLookups = {
       transactionsByOrderId: new Map(),
       paymentAccountsByOrderId: new Map(),
+      taxSubtotalsByOrderId: new Map(),
     };
     const [badTax] = transformStorefrontOrdersForDisplay(
-      [
-        {
-          ...base,
-          id: 'order-tax',
-          order_tax_subtotals: [
-            { vat_rate: 7.5, taxable_amount: 100, tax_amount: -7.5 },
+      [{ ...base, id: 'order-tax' }],
+      {
+        ...emptyLookups,
+        taxSubtotalsByOrderId: new Map([
+          [
+            'order-tax',
+            [{ vat_rate: 7.5, taxable_amount: 100, tax_amount: -7.5 }],
           ],
-        },
-      ],
-      emptyLookups
+        ]),
+      }
     );
     expect(badTax.manual_document_available).toBe(false);
     const [badPayment] = transformStorefrontOrdersForDisplay(
@@ -201,6 +211,7 @@ describe('transformStorefrontOrdersForDisplay', () => {
           ],
         ]),
         paymentAccountsByOrderId: new Map(),
+        taxSubtotalsByOrderId: new Map(),
       }
     );
     expect(badPayment.manual_document_available).toBe(false);

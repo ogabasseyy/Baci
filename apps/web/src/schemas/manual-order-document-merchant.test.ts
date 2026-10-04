@@ -72,27 +72,25 @@ describe('manualDocumentMerchantSchema', () => {
     }
   });
 
-  it('requires a host-safe claim slug', () => {
-    for (const slug of ['ogabassey', 'future-merchant', 'Shop1', 'a']) {
+  it('leaves slug host-safety to the conditional sender gate', () => {
+    // The schema parses any string slug: the sender validates host-safety
+    // only when the slug must supply the claim host (no safe custom
+    // domain), so a legacy unsafe slug never sinks a merchant whose custom
+    // domain resolves. See send-manual-order-document-validation.test.ts.
+    for (const slug of [
+      'ogabassey',
+      'future-merchant',
+      'Shop1',
+      'a',
+      '',
+      ' ogabassey',
+      'oga.bassey',
+      'oga bassey',
+      'a'.repeat(64),
+    ]) {
       expect(
         manualDocumentMerchantSchema.parse({ ...baseMerchant, slug }).slug
       ).toBe(slug);
-    }
-    for (const slug of [
-      '',
-      ' ogabassey',
-      'ogabassey ',
-      'oga.bassey',
-      'oga_bassey',
-      '-ogabassey',
-      'ogabassey-',
-      'oga bassey',
-      // A 64-octet label cannot resolve: fail closed before dispatch.
-      'a'.repeat(64),
-    ]) {
-      expect(() =>
-        manualDocumentMerchantSchema.parse({ ...baseMerchant, slug })
-      ).toThrow();
     }
   });
 });

@@ -90,45 +90,31 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.reset_manual_invoice_markers_for_order(uuid)
   FROM PUBLIC, anon, authenticated;
-CREATE OR REPLACE FUNCTION private.rearm_tax_invalid_manual_documents_for_order(p_order_id uuid)
+CREATE OR REPLACE FUNCTION private.rearm_invalid_manual_documents_for_order(p_order_id uuid, p_reason text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- A tax correction re-arms rows the worker terminally skipped as
-  -- tax_breakdown_invalid: without this the corrected invoice is never
-  -- emailed. Invoice-scoped like the sender validation; the worker
-  -- re-validates on the next attempt, so a still-invalid breakdown
-  -- simply skips again until staff finish the correction.
+  -- A child correction re-arms rows terminally skipped under p_reason,
+  -- plus undispatched processing rows whose in-flight worker read the
+  -- stale data: the worker loses its claim and the corrected document
+  -- is retried instead of terminally skipping. Tax is invoice-scoped
+  -- like the sender validation; payment covers both kinds. The worker
+  -- re-validates, so still-invalid data skips again until corrected.
+  -- Callers run this BEFORE resetting markers: the undispatched test
+  -- reads the live marker, and the two updates touch disjoint rows.
   UPDATE public.order_notification_outbox AS n
   SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
     locked_by = NULL, locked_at = NULL, last_error = NULL,
     skip_reason = NULL, skipped_at = NULL, updated_at = now()
   WHERE n.order_id = p_order_id
-    AND n.event_type = 'manual_order_invoice'
-    AND n.status = 'skipped'
-    AND n.skip_reason = 'tax_breakdown_invalid'
-    AND n.dispatch_started_at IS NULL;
-END;
-$$;
-REVOKE ALL ON FUNCTION private.rearm_tax_invalid_manual_documents_for_order(uuid)
-  FROM PUBLIC, anon, authenticated;
-CREATE OR REPLACE FUNCTION private.rearm_payment_invalid_manual_documents_for_order(p_order_id uuid)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  -- A payment correction re-arms rows skipped as payment_history_invalid
-  -- the same way: every kind renders the settled-payment table, so both
-  -- events re-arm and the worker re-validates on the next attempt.
-  UPDATE public.order_notification_outbox AS n
-  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
-    locked_by = NULL, locked_at = NULL, last_error = NULL,
-    skip_reason = NULL, skipped_at = NULL, updated_at = now()
-  WHERE n.order_id = p_order_id
+    AND (p_reason <> 'tax_breakdown_invalid'
+      OR n.event_type = 'manual_order_invoice')
     AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND n.status = 'skipped'
-    AND n.skip_reason = 'payment_history_invalid'
+    AND ((n.status = 'skipped' AND n.skip_reason = p_reason)
+      OR n.status = 'processing')
     AND n.dispatch_started_at IS NULL;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.rearm_payment_invalid_manual_documents_for_order(uuid)
+REVOKE ALL ON FUNCTION private.rearm_invalid_manual_documents_for_order(uuid, text)
   FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.reset_manual_markers_after_tax_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -136,23 +122,38 @@ BEGIN
   -- Tax writes are rebuilds: any of them can change the snapshotted rows.
   -- Receipts render no subtotal breakdown (isInvoice only), so tax writes
   -- reset invoice markers alone; in-flight receipt snapshots stay valid.
+  -- Rendered-subset compare like the transaction trigger: an update that
+  -- rewrites the row unchanged (or touches only exemption_reason_code,
+  -- which the sender neither selects nor renders) resets nothing, so a
+  -- post-acceptance no-op cannot schedule an identical duplicate. Only
+  -- the manual_document_tax_snapshot fields (plus order_id) count.
+  -- Lock-free like its transaction sibling.
+  IF TG_OP = 'UPDATE'
+    AND OLD.order_id IS NOT DISTINCT FROM NEW.order_id
+    AND OLD.vat_category_code IS NOT DISTINCT FROM NEW.vat_category_code
+    AND OLD.vat_rate IS NOT DISTINCT FROM NEW.vat_rate
+    AND OLD.taxable_amount IS NOT DISTINCT FROM NEW.taxable_amount
+    AND OLD.tax_amount IS NOT DISTINCT FROM NEW.tax_amount
+    AND OLD.exemption_reason IS NOT DISTINCT FROM NEW.exemption_reason THEN
+    RETURN NEW;
+  END IF;
   IF TG_OP = 'DELETE' THEN
     PERFORM private.lock_manual_document_gate('order', OLD.order_id);
+    PERFORM private.rearm_invalid_manual_documents_for_order(OLD.order_id, 'tax_breakdown_invalid');
     PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
-    PERFORM private.rearm_tax_invalid_manual_documents_for_order(OLD.order_id);
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' AND OLD.order_id IS DISTINCT FROM NEW.order_id THEN
     PERFORM private.lock_manual_document_gate_pair('order', OLD.order_id, NEW.order_id);
+    PERFORM private.rearm_invalid_manual_documents_for_order(OLD.order_id, 'tax_breakdown_invalid');
     PERFORM private.reset_manual_invoice_markers_for_order(OLD.order_id);
-    PERFORM private.rearm_tax_invalid_manual_documents_for_order(OLD.order_id);
+    PERFORM private.rearm_invalid_manual_documents_for_order(NEW.order_id, 'tax_breakdown_invalid');
     PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
-    PERFORM private.rearm_tax_invalid_manual_documents_for_order(NEW.order_id);
     RETURN NEW;
   END IF;
   PERFORM private.lock_manual_document_gate('order', NEW.order_id);
+  PERFORM private.rearm_invalid_manual_documents_for_order(NEW.order_id, 'tax_breakdown_invalid');
   PERFORM private.reset_manual_invoice_markers_for_order(NEW.order_id);
-  PERFORM private.rearm_tax_invalid_manual_documents_for_order(NEW.order_id);
   RETURN NEW;
 END;
 $$;
@@ -199,12 +200,12 @@ BEGIN
     PERFORM private.lock_manual_document_gate('order', NEW.order_id);
   END IF;
   IF v_old_in_snapshot THEN
+    PERFORM private.rearm_invalid_manual_documents_for_order(OLD.order_id, 'payment_history_invalid');
     PERFORM private.reset_manual_document_markers_for_order(OLD.order_id);
-    PERFORM private.rearm_payment_invalid_manual_documents_for_order(OLD.order_id);
   END IF;
   IF v_new_in_snapshot THEN
+    PERFORM private.rearm_invalid_manual_documents_for_order(NEW.order_id, 'payment_history_invalid');
     PERFORM private.reset_manual_document_markers_for_order(NEW.order_id);
-    PERFORM private.rearm_payment_invalid_manual_documents_for_order(NEW.order_id);
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;
@@ -267,10 +268,13 @@ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   -- A mid-dispatch soft-delete resets every processing marker for the
   -- customer's orders: the send aborts instead of emailing a link whose
-  -- redemption immediately fails. Never re-arms (deletion suppresses);
-  -- the dispatch RPC rechecks liveness so the retry terminally skips.
+  -- redemption immediately fails. A merchant reassignment breaks the
+  -- claim the same way (redemption requires the customer and claim
+  -- merchant IDs to match), so it resets too. Never re-arms (both
+  -- suppress); the dispatch RPC rechecks scope so the retry skips.
   IF TG_OP = 'UPDATE'
-    AND OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL THEN
+    AND ((OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+      OR OLD.merchant_id IS DISTINCT FROM NEW.merchant_id) THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
     FROM public.orders AS o
@@ -285,7 +289,7 @@ $$;
 REVOKE ALL ON FUNCTION private.reset_manual_markers_after_customer_delete()
   FROM PUBLIC, anon, authenticated;
 CREATE TRIGGER reset_manual_markers_after_customer_delete
-  AFTER UPDATE OF deleted_at ON public.customers
+  AFTER UPDATE OF deleted_at, merchant_id ON public.customers
   FOR EACH ROW EXECUTE FUNCTION private.reset_manual_markers_after_customer_delete();
 -- Ship disabled with the rest of the manual-document triggers; the
 -- postdeploy enable step activates them together.

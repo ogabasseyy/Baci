@@ -88,6 +88,11 @@ export function ReceiptCard({
   // carry a paid label while opening an invoice — badge/action say
   // Invoice, but the money still reads Paid, never Total.
   const moneyPaid = displayStatus === 'paid' || item.payment_status === 'paid';
+  // Invalid manual rows (cancelled, underfunded) badge Invoice under a
+  // paid ledger label: the money line must explain that no receipt
+  // exists, or the Paid-plus-Invoice mix reads as a missing receipt.
+  const invalidPaidInvoice =
+    item.document_kind === 'invoice' && item.payment_status === 'paid';
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
@@ -173,6 +178,13 @@ export function ReceiptCard({
             <Text style={[styles.balanceLabel, { color: '#D97706' }]}>
               Balance:{' '}
               {formatPrice(item.total - item.amount_paid, item.currency)}
+            </Text>
+          )}
+          {invalidPaidInvoice && (
+            <Text
+              style={[styles.balanceLabel, { color: colors.textSecondary }]}
+            >
+              Payment recorded — invoice only, no receipt
             </Text>
           )}
         </View>

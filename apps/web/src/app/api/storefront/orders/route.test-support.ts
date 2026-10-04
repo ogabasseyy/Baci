@@ -95,6 +95,13 @@ export function createSupabaseMock(input?: {
         serial_number?: string | null;
       } | null;
       order_payment_accounts?: OrderPaymentAccountFixture[];
+      order_tax_subtotals?: Array<{
+        vat_category_code?: string | null;
+        vat_rate?: number | null;
+        taxable_amount?: number | null;
+        tax_amount?: number | null;
+        exemption_reason?: string | null;
+      }>;
       order_items: Array<{
         id: string;
         product_id: string;
@@ -157,6 +164,15 @@ export function createSupabaseMock(input?: {
         })),
         error: input?.transactions?.error ?? null,
       });
+    }
+    if (fn === 'get_customer_order_tax_subtotals') {
+      const subtotals = (input?.orders?.data ?? []).flatMap((order) =>
+        (order.order_tax_subtotals ?? []).map((subtotal) => ({
+          ...subtotal,
+          order_id: order.id,
+        }))
+      );
+      return Promise.resolve({ data: subtotals, error: null });
     }
     if (fn === 'get_customer_order_payment_accounts') {
       const accounts = (input?.orders?.data ?? []).flatMap((order) =>

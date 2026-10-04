@@ -95,13 +95,45 @@ describe('send manual order document dispatch snapshots', () => {
       ([fn]) => fn === 'mark_manual_document_dispatch_started'
     );
     expect(markCall?.[1]).toMatchObject({
-      p_merchant_bank_code: '058',
+      // bank_code never prints, so the snapshot omits it even when the
+      // fallback renders: a code-only edit must not mark the send stale.
+      p_merchant_bank_code: null,
       p_merchant_bank_account_number: '1234567890',
       p_merchant_bank_name: 'GTBank',
       p_merchant_bank_account_name: 'Shop Ltd',
       p_va_account_number: null,
       p_va_bank_name: null,
       p_va_account_name: null,
+    });
+  });
+
+  it('suppresses every fallback field without an account number', async () => {
+    // The jsPDF section requires an account number to render at all: a
+    // lone bank name with no number prints nothing, so the snapshot
+    // carries nulls and a later name edit cannot mark the send stale.
+    const db = database(
+      { payment_status: 'unpaid', amount_paid: 0 },
+      {
+        merchantOverride: {
+          bank_code: '058',
+          bank_account_number: null,
+          bank_name: 'GTBank',
+          bank_account_name: 'Shop Ltd',
+        },
+      }
+    );
+    await sendManualOrderDocument({
+      supabase: db.client,
+      row: { ...row, event_type: 'manual_order_invoice' },
+    });
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_dispatch_started'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_merchant_bank_code: null,
+      p_merchant_bank_account_number: null,
+      p_merchant_bank_name: null,
+      p_merchant_bank_account_name: null,
     });
   });
 

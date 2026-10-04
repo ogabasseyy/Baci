@@ -161,3 +161,11 @@ and the completed test shards. New access changes require fresh CI; the 55
 affected local UI/API/schema/error-mapping/manifest tests passed. CodeRabbit
 remains skipped as authorized when unavailable. Production and submission remain
 separate from these local and CI results.
+
+The latest review also led to a browser-safe owner predicate, replacement of
+terminal-conflict retry IDs, and a rejection sampler capped at 20,000 entries
+with at most 100 cleanup visits per request. Fifty-two affected tests passed.
+At capacity, new identities are not individually audited until space is
+reclaimed; requests remain rate limited. ADR-003 now explicitly states that the
+trusted gateway database credential has broader authority than individual
+merchant bearer grants; credential-compromise containment is not claimed.

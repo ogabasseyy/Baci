@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { canManageConnectorConnection } from '@/lib/connector/owner-access';
 import type {
   ConnectorConnectRequest,
   ConnectorGrantRecord,
 } from '@/schemas/connector';
 import {
   CONNECTOR_GRANT_METADATA_COLUMNS,
-  canManageConnectorConnection,
   connectionMatchesRequest,
   connectorManagementErrorToHttp,
   connectorRequestFingerprint,

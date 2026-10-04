@@ -31,6 +31,7 @@ import { handleIssueToken } from './issue-token';
 import { buildGatewayOpenApiDocument } from './openapi';
 import { createRateLimiter, resolveClientIp } from './rate-limit';
 import { handleRefresh } from './refresh';
+import { createRejectionSampler } from './rejection-sampler';
 import { handleRevoke } from './revoke';
 import { handleToolRequest } from './tool-request';
 
@@ -83,23 +84,7 @@ export function startGatewayServer(
   // Bounded rejection auditing: at most one 429 row per client per
   // window, so a flood of denied requests cannot turn into a flood of
   // audit INSERTs. First rejection still records full forensics.
-  const rejectionAudited = new Map<string, number>();
-  function shouldAuditRejection(id: string): boolean {
-    const now = Date.now();
-    const resetAt = rejectionAudited.get(id);
-    if (resetAt !== undefined && resetAt > now) {
-      return false;
-    }
-    rejectionAudited.set(id, now + config.rateLimitWindowMs);
-    if (rejectionAudited.size > 20_000) {
-      for (const [key, reset] of rejectionAudited) {
-        if (reset <= now) {
-          rejectionAudited.delete(key);
-        }
-      }
-    }
-    return true;
-  }
+  const shouldAuditRejection = createRejectionSampler(config.rateLimitWindowMs);
 
   // Durable audit: grant id, route, status, latency only. Failures are
   // reported on stderr without request detail and never break the call,

@@ -6,6 +6,7 @@ vi.mock('@/hooks/use-merchant-client', () => ({ useMerchant: merchant }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
 
+import { fetchWithCsrf } from '@/lib/api-client';
 import { useMuseConnections } from './use-muse-connections';
 
 beforeEach(() => {
@@ -46,4 +47,28 @@ it('loads owner status and keeps selected scopes unique', async () => {
   expect(
     result.current.scopes.filter((scope) => scope === 'orders:read')
   ).toHaveLength(1);
+});
+
+it.each([
+  'VERSION_CONFLICT',
+  'IDEMPOTENCY_KEY_REUSED',
+])('replaces a terminal %s retry ID', async (code) => {
+  const post = vi.mocked(fetchWithCsrf);
+  post.mockResolvedValue(
+    Response.json({ error: 'Use a new connection ID', code }, { status: 409 })
+  );
+  const { result } = renderHook(() => useMuseConnections());
+  await act(async () => {
+    await result.current.handleConnect();
+  });
+  const first = JSON.parse(
+    String(post.mock.calls.at(-1)?.[1]?.body)
+  ).connectionId;
+  await act(async () => {
+    await result.current.handleConnect();
+  });
+  const second = JSON.parse(
+    String(post.mock.calls.at(-1)?.[1]?.body)
+  ).connectionId;
+  expect(second).not.toBe(first);
 });

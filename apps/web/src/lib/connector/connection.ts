@@ -82,13 +82,6 @@ export function connectionMatchesRequest(
   );
 }
 
-/** Merchant-wide grants require owner authority; so does this UI. */
-export function canManageConnectorConnection(staffAccess: {
-  isOwner: boolean;
-}): boolean {
-  return staffAccess.isOwner === true;
-}
-
 export function connectorGrantRecordToGrant(
   row: ConnectorGrantRecord
 ): ConnectorGrant {

@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { canManageConnectorConnection } from '@/lib/connector/connection';
 import { CONNECTOR_TOOL_SCOPES } from '@/lib/connector/manifest';
+import { canManageConnectorConnection } from '@/lib/connector/owner-access';
 import type { ConnectorConnectionView } from '@/schemas/connector';
 
 interface BranchOption {
@@ -148,10 +148,18 @@ export function useMuseConnections() {
       const data = (await response.json()) as Partial<OneTimeCredentials> & {
         alreadyConnected?: boolean;
         error?: string;
+        code?: string;
         grant?: { grantId?: string };
       };
       if (!active.current) return;
       if (!response.ok) {
+        if (
+          response.status === 409 &&
+          (data.code === 'VERSION_CONFLICT' ||
+            data.code === 'IDEMPOTENCY_KEY_REUSED')
+        ) {
+          pendingConnect.current = null;
+        }
         toast({
           title: 'Connection failed',
           description: data.error ?? 'Could not connect Muse.',
@@ -204,6 +212,7 @@ export function useMuseConnections() {
       const data = (await response.json()) as {
         revoked?: boolean;
         error?: string;
+        code?: string;
       };
       if (!active.current) return;
       if (!response.ok) {

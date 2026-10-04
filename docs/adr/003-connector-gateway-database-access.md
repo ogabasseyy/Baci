@@ -86,3 +86,19 @@ output. Owner instruction: "authorise and decide for me", 2 October
 2026. Production deployment and financial operations remain separately
 gated regardless. Full scope, expiry, branch identity and transport
 conditions are recorded in the linked authorization record.
+
+## Runtime credential trust boundary
+
+C-prime treats the gateway process and its database credential as trusted backend
+infrastructure. Membership in `authenticated` permits that backend to establish
+linked-user RLS identity; PostgreSQL does not independently bind those claims to
+a connector grant. Consequently a compromised runtime database credential is
+not confined to one connector grant or the four gateway tools. `NOBYPASSRLS`
+and restricted HTTP routes do not remove that credential-compromise risk.
+
+The production approval above selected this architecture, not a database-enforced
+per-grant capability design. A narrower compromise boundary requires replacing
+general authenticated-role membership with restricted database operations and
+revalidating every data path. This release must describe the runtime as a trusted
+backend and must not claim that its database credential is connector-scoped.
+Individual merchant bearer credentials remain grant-scoped at the gateway.

@@ -3,7 +3,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import {
   CONNECTOR_GRANT_METADATA_COLUMNS,
-  canManageConnectorConnection,
   connectionMatchesRequest,
   connectorManagementErrorToHttp,
   type IssuedConnectorTokens,
@@ -11,6 +10,7 @@ import {
   toConnectorConnectionView,
 } from '@/lib/connector/connection';
 import { connectorError } from '@/lib/connector/errors';
+import { canManageConnectorConnection } from '@/lib/connector/owner-access';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import {
   type ConnectorConnectionView,

@@ -111,22 +111,36 @@ capture_previous_production_deployment() {
 # next retry refuses at the pre-check (the record now lists this run)
 # while the candidate stays current. Resolve the production alias: if
 # OUR candidate is serving, verify exactly as on the success path
-# (rolling back on overlap). Returns 0 (recovered success) only when
-# the candidate is serving AND no overlap is recorded; 1 otherwise
-# (genuinely failed, unresolvable, or overlapped-and-rolled-back).
-# Fail-closed on unknowable: assuming effectiveness without proof
-# would report success for a deploy that never promoted.
+# (rolling back on overlap). The alias lookup itself is retried: a
+# single transient lookup failure must not discard the ambiguous
+# state while the candidate serves. Returns 0 (recovered success)
+# only when the candidate is serving AND no overlap is recorded; 1
+# otherwise (genuinely failed, unresolvable, or
+# overlapped-and-rolled-back). Fail-closed on unknowable: assuming
+# effectiveness without proof would report success for a deploy that
+# never promoted.
 recover_ambiguous_promote() {
   local ambiguous_target="$1"
   local previous_capture="$2"
   local serving_capture
   local serving_uid
   local serving_url
+  local serving_attempt
 
-  if ! serving_capture="$(capture_previous_production_deployment)"; then
-    return 1
-  fi
+  serving_capture=""
+  serving_attempt=0
+  while [ "$serving_attempt" -lt 3 ]; do
+    serving_attempt=$((serving_attempt + 1))
+    if serving_capture="$(capture_previous_production_deployment)"; then
+      break
+    fi
+    serving_capture=""
+    if [ "$serving_attempt" -lt 3 ]; then
+      sleep "$BACKOFF_SECONDS"
+    fi
+  done
   if [ -z "$serving_capture" ]; then
+    echo "Cannot resolve the serving production deployment after the ambiguous promote of ${ambiguous_target}: the alias lookup failed repeatedly, so the candidate may be serving production without post-promote overlap verification. Manually confirm what is serving (Vercel dashboard or GET /v4/aliases/${OVERLAP_PRODUCTION_ALIAS:-<alias>}); if it is ${ambiguous_target}, roll it back and re-run." >&2
     return 1
   fi
   serving_uid="${serving_capture%%|*}"

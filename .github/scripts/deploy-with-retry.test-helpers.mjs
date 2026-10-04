@@ -219,8 +219,9 @@ ${behavior}
 // Fake curl answering the previous-production capture: writes
 // CURL_BODY to the -o file and prints CURL_CODE (no trailing
 // newline, like curl -w). CURL_EXIT nonzero fails without output.
-// CURL_BODY_<n> overrides the body for the nth call (1-based), for
-// tests where the alias resolves differently across captures.
+// CURL_BODY_<n> / CURL_CODE_<n> override the body / status for the
+// nth call (1-based), for tests where the alias resolves
+// differently across captures or fails transiently.
 export function writeFakeCurl(binDir, tempDir) {
   const callsPath = `${tempDir}/curl-calls`;
   writeFileSync(
@@ -237,8 +238,9 @@ for arg in "$@"; do
   prev="$arg"
 done
 per_call="CURL_BODY_$((calls + 1))"
+per_code="CURL_CODE_$((calls + 1))"
 printf '%s' "\${!per_call:-\${CURL_BODY:-}}" > "$out"
-printf '%s' "\${CURL_CODE:-200}"
+printf '%s' "\${!per_code:-\${CURL_CODE:-200}}"
 `,
     { mode: 0o755 }
   );

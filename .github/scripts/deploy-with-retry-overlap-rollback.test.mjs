@@ -167,6 +167,90 @@ test('rolls back on overlap when an ambiguous promote took effect', () => {
   }
 });
 
+test('retries the alias lookup when ambiguous recovery transiently fails', () => {
+  const fakeCommand = makeFakeCommand('success-promote-fails');
+  const { checkPath, callsPath } = writeCountingOverlapCheck(
+    fakeCommand.tempDir,
+    'if [ "$calls" -ge 1 ]; then exit 1; fi\nexit 0'
+  );
+  const curlCallsPath = writeFakeCurl(
+    fakeCommand.binDir,
+    fakeCommand.tempDir
+  );
+
+  try {
+    // Recovery's first alias lookup transiently 500s while the
+    // promote took effect and a worker flip was recorded: without
+    // an independent retry, the ambiguous state would be discarded
+    // and the retry would refuse at the pre-check while the
+    // unverified candidate serves.
+    const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
+      PROMOTE_ATTEMPTS: '2',
+      ...vercelEnv,
+      CURL_CODE: '200',
+      CURL_BODY_1: prevProdEnv.CURL_BODY,
+      CURL_CODE_2: '500',
+      CURL_BODY_3: CANDIDATE_SERVING_BODY,
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /failed ambiguously/);
+    assert.match(result.stderr, /Rolled production back to dpl_previous123/);
+    assert.equal(
+      readFileSync(fakeCommand.rollbackFile, 'utf8').trim(),
+      'dpl_previous123'
+    );
+    // Pre-staging capture + failed recovery lookup + retry.
+    assert.equal(readFileSync(curlCallsPath, 'utf8').trim(), '3');
+    // Pre-allow, recovery-verify-refuse (+rollback), retry pre-refuse.
+    assert.equal(readFileSync(callsPath, 'utf8').trim(), '3');
+  } finally {
+    rmSync(fakeCommand.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('fails loud with manual reconcile when the alias lookup persistently fails', () => {
+  const fakeCommand = makeFakeCommand('success-promote-fails');
+  const { checkPath, callsPath } = writeCountingOverlapCheck(
+    fakeCommand.tempDir,
+    'exit 0'
+  );
+  const curlCallsPath = writeFakeCurl(
+    fakeCommand.binDir,
+    fakeCommand.tempDir
+  );
+
+  try {
+    const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
+      MAX_ATTEMPTS: '1',
+      PROMOTE_ATTEMPTS: '1',
+      ...vercelEnv,
+      CURL_CODE: '200',
+      CURL_BODY_1: prevProdEnv.CURL_BODY,
+      CURL_CODE_2: '500',
+      CURL_CODE_3: '500',
+      CURL_CODE_4: '500',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Cannot resolve the serving production deployment after the ambiguous promote/
+    );
+    assert.match(result.stderr, /Manually confirm what is serving/);
+    assert.throws(() => readFileSync(fakeCommand.rollbackFile, 'utf8'));
+    assert.throws(() => readFileSync(fakeCommand.promotedFile, 'utf8'));
+    // Pre-staging capture + three recovery attempts, then give up.
+    assert.equal(readFileSync(curlCallsPath, 'utf8').trim(), '4');
+    // Pre-allow only: recovery never resolved, so no verification ran.
+    assert.equal(readFileSync(callsPath, 'utf8').trim(), '1');
+  } finally {
+    rmSync(fakeCommand.tempDir, { recursive: true, force: true });
+  }
+});
+
 test('recovers success when an ambiguous promote took effect cleanly', () => {
   const fakeCommand = makeFakeCommand('success-promote-fails');
   const { checkPath, callsPath } = writeCountingOverlapCheck(

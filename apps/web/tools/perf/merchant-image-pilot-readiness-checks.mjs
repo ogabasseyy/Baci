@@ -32,7 +32,7 @@ function servedPathname(currentSrc) {
   }
 }
 
-function stagedImageProblems(image, arm, label, mount) {
+function stagedImageProblems(image, arm, label, mount, dpr) {
   if (!image) {
     return [`${label} absent`];
   }
@@ -50,12 +50,48 @@ function stagedImageProblems(image, arm, label, mount) {
   } else if (pathname !== mount.stagedOriginal) {
     return [`control ${label} is not the approved staged original`];
   }
-  return [];
+  return resolutionProblems(image, label, dpr);
+}
+
+// Resolution sufficiency: a decoded image can still be under-resolved
+// for its rendered box and profile DPR (e.g. a 928px-capped source
+// passing a 412px/DPR-3 profile whose 100vw card needs ~1236px). The
+// browser must not upscale past the natural pixels: cover/fill need
+// both axes (AND), contain needs the constraining axis (OR) —
+// min(box/nat) <= 1/dpr is exactly natW >= needW || natH >= needH.
+function resolutionProblems(image, label, dpr) {
+  const box = image.box ?? {};
+  const naturalHeight = image.naturalHeight ?? 0;
+  if (
+    !Number.isFinite(dpr) ||
+    dpr <= 0 ||
+    !Number.isFinite(box.width) ||
+    !Number.isFinite(box.height) ||
+    naturalHeight < 1 ||
+    typeof image.objectFit !== 'string'
+  ) {
+    return [`${label} resolution unverifiable (missing collection data)`];
+  }
+  if (box.width < 1 || box.height < 1) {
+    return [`${label} has no measurable box`];
+  }
+  const needWidth = Math.round(box.width * dpr);
+  const needHeight = Math.round(box.height * dpr);
+  const sufficient =
+    image.objectFit === 'contain'
+      ? image.naturalWidth >= needWidth || naturalHeight >= needHeight
+      : image.naturalWidth >= needWidth && naturalHeight >= needHeight;
+  if (sufficient) {
+    return [];
+  }
+  return [
+    `${label} under-resolved: ${image.naturalWidth}x${naturalHeight}px serves a ${Math.round(box.width)}x${Math.round(box.height)}px box at DPR ${dpr} (needs ${needWidth}x${needHeight}px for ${image.objectFit})`,
+  ];
 }
 
 // Pure verdict on the collected selected-image state.
-export function selectedImageProblems(image, arm, mount) {
-  return stagedImageProblems(image, arm, 'selected image', mount).map(
+export function selectedImageProblems(image, arm, mount, dpr) {
+  return stagedImageProblems(image, arm, 'selected image', mount, dpr).map(
     (problem) =>
       problem
         .replace(
@@ -83,7 +119,7 @@ export function selectedImageProblems(image, arm, mount) {
 export function slotMountProblems(
   slot,
   mount,
-  { arm, expectHidden, viewportWidth }
+  { arm, dpr, expectHidden, viewportWidth }
 ) {
   const label = `slot "${mount.slotId}" image`;
   if (!slot) {
@@ -106,7 +142,7 @@ export function slotMountProblems(
   if ((rect.x ?? 0) + (rect.width ?? 0) > (viewportWidth ?? 0) + 1) {
     return [`slot "${mount.slotId}" overflows the viewport`];
   }
-  return stagedImageProblems(slot.img, arm, label, mount);
+  return stagedImageProblems(slot.img, arm, label, mount, dpr);
 }
 
 // Pure verdict on one collected surface: console/request hygiene, style
@@ -162,7 +198,14 @@ export function surfaceProblems(
     if (!primary) {
       problems.push(`selected slot "${primarySlotId}" has no expected mount`);
     } else {
-      problems.push(...selectedImageProblems(g.selectedImg, arm, primary));
+      problems.push(
+        ...selectedImageProblems(
+          g.selectedImg,
+          arm,
+          primary,
+          g.devicePixelRatio
+        )
+      );
     }
   }
   if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
@@ -181,6 +224,7 @@ export function surfaceProblems(
     problems.push(
       ...slotMountProblems(slot, mount, {
         arm,
+        dpr: g.devicePixelRatio,
         expectHidden: expectHiddenMounts,
         viewportWidth: g.viewportWidth,
       })

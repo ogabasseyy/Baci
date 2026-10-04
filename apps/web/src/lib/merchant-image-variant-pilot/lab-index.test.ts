@@ -477,6 +477,38 @@ describe('buildLabIndex', () => {
     expect(result.diagnostics).toHaveLength(0);
   });
 
+  it('treats swapped-hash duplicates as conflicting, not idempotent', async () => {
+    const hashes = lab.tiers.map((tier) => tier.sha256);
+    const base = {
+      assetId: 'logo-1',
+      generationId: GENERATION_ID,
+      merchantId: MERCHANT,
+      note: 'n',
+      recipeId: PILOT_RECIPE_ID,
+      reviewedAt: '2026-10-01T21:00:00.000Z',
+      reviewer: 'pilot-owner',
+      schemaVersion: 1,
+      sourceSha256: SOURCE,
+      verdict: 'accepted' as const,
+    };
+    // Same multiset, swapped positions: binding pins each hash to one
+    // rung positionally, so these are conflicting verdicts. An
+    // order-insensitive dedupe would silently drop the second.
+    const result = await buildLabIndex({
+      acceptances: [
+        { ...base, outputHashes: hashes },
+        { ...base, outputHashes: [...hashes].reverse() },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(result.statuses[0]?.status).toBe('acceptance-mismatch');
+    expect(result.statuses[0]?.detail).toMatch(/conflicting duplicate/);
+    expect(
+      result.diagnostics.some((entry) => /duplicate acceptances/.test(entry))
+    ).toBe(true);
+  });
+
   it('keeps malformed acceptances diagnosable instead of dropping them silently', async () => {
     const result = await buildLabIndex({
       acceptances: [{ assetId: 'logo-1', verdict: 'accepted' }],

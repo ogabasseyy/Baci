@@ -209,6 +209,7 @@ export async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
     }
     await assertPreCommitGuards({ deadlineMs, minFreeBytes, outputRoot });
     const committed = await commitGeneration({
+      deps: { assertDeadline: () => assertJobDeadline(deadlineMs, 'commit') },
       files,
       generationId,
       job,

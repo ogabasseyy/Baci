@@ -339,6 +339,72 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
   await assert.rejects(() => loadGeneration(staged2.root, generationId2), /not published/);
 });
 
+test('commitGeneration refuses to publish past the job deadline', async () => {
+  const { assertJobDeadline } = await import('./generate-job.mjs');
+  const staged = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId: 'pilot-r1-deadline',
+    sourceSha256: staged.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    recipeId: 'pilot-r1-deadline',
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: 48,
+      orientedWidth: 48,
+      sha256: staged.expectedSha256,
+    },
+    tiers: staged.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  const files = staged.ladder.tiers
+    .filter(
+      (tier, index, all) =>
+        all.findIndex((other) => other.path === tier.path) === index
+    )
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
+  // Verification and the fsync loop run first; the expired deadline must
+  // abort before the visibility rename, leaving nothing published.
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        deps: {
+          assertDeadline: () =>
+            assertJobDeadline(Date.now() - 1, 'commit'),
+        },
+        files,
+        generationId,
+        job: { ...JOB, expectedSha256: staged.expectedSha256 },
+        manifest,
+        outputRoot: staged.root,
+        stagingDir: staged.stagingDir,
+      }),
+    /budget during commit/
+  );
+  await assert.rejects(
+    () => loadGeneration(staged.root, generationId),
+    /not published/
+  );
+});
+
 test('commitGeneration rejects a misbound existing directory without reuse', async () => {
   const staged = await realLadderStaging();
   const encoderIdentity = buildEncoderIdentity();

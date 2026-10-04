@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +22,7 @@ function tierBytes(width = 48, height = 48) {
     .toBuffer();
 }
 
-function manifestFor({ bytes, sha, width = 48, height = 48 }) {
+function manifestFor({ bytes, format = 'webp', sha, width = 48, height = 48 }) {
   return {
     assetId: 'logo-a',
     createdAt: '2026-10-01T10:00:00Z',
@@ -43,11 +43,11 @@ function manifestFor({ bytes, sha, width = 48, height = 48 }) {
       {
         actualWidth: width,
         bytes,
-        contentType: 'image/webp',
+        contentType: `image/${format}`,
         delivery: 'generated',
-        format: 'webp',
+        format,
         height,
-        path: `${sha}.webp`,
+        path: `${sha}.${format}`,
         quality: 70,
         requestedWidth: width,
         sha256: sha,
@@ -289,6 +289,43 @@ describe('checkBindingTiers', () => {
     });
     expect(ok).toBe(true);
     expect(failures).toEqual([]);
+  });
+
+  it('rejects truncated bodies that still report header metadata', async () => {
+    const noise = randomBytes(256 * 256 * 3);
+    const full = await sharp(noise, {
+      raw: { channels: 3, height: 256, width: 256 },
+    })
+      .avif({ quality: 50 })
+      .toBuffer();
+    const bytes = full.subarray(0, Math.floor(full.length * 0.7));
+    // Sanity: the AVIF header still reports format and dimensions, so a
+    // metadata-only gate would pass this truncated body.
+    const meta = await sharp(bytes).metadata();
+    expect(meta.width).toBe(256);
+    expect(meta.format).toBe('heif');
+    const manifest = manifestFor({
+      bytes: bytes.length,
+      format: 'avif',
+      height: 256,
+      sha: sha256(bytes),
+      width: 256,
+    });
+    const root = await outputRootWith(manifest, {
+      [`${sha256(bytes)}.avif`]: bytes,
+    });
+    const checks = [];
+    const failures = [];
+    const ok = await checkBindingTiers({
+      acceptance: acceptanceFor([sha256(bytes)]),
+      checks,
+      failures,
+      manifest,
+      name: 'tiers-truncated',
+      options: { outputRoot: root },
+    });
+    expect(ok).toBe(false);
+    expect(failures.join('\n')).toMatch(/does not decode/);
   });
 
   it('fails closed on unbound names and byte/geometry drift', async () => {

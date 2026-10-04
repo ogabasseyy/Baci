@@ -68,6 +68,10 @@ test('encodeVariant encodes within budget and flags over-budget output', async (
   assert.equal(ok.output.width, 384);
   assert.equal(ok.output.height, 384);
 
+  // Over-budget output is removed and rejected BEFORE charging: no
+  // phantom bytes linger in the budget and no file remains on disk.
+  const overDir = await staging();
+  const overBudget = createStagingBudget();
   const over = await encodeVariant({
     budgetBytes: 100,
     deadlineMs: Date.now() + 60_000,
@@ -76,12 +80,15 @@ test('encodeVariant encodes within budget and flags over-budget output', async (
     format: 'webp',
     quality: 70,
     snapshotPath: input,
-    stagingBudget: createStagingBudget(),
-    stagingDir: dir,
+    stagingBudget: overBudget,
+    stagingDir: overDir,
     width: 384,
   });
   assert.equal(over.status, 'over-budget');
   assert.ok(over.bytes > 100);
+  assert.equal(overBudget.used, 0);
+  const { readdir } = await import('node:fs/promises');
+  assert.deepEqual(await readdir(overDir), []);
 });
 
 test('encodeVariant refuses before writing when the tier cannot fit the staging cap', async () => {

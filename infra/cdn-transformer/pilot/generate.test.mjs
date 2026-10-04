@@ -5,6 +5,7 @@ import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MIN_FREE_BYTES } from './constants.mjs';
 import { loadGeneration } from './manifest-store.mjs';
 import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
 
@@ -184,8 +185,12 @@ test('source hash mismatch fails the job without encoding', async () => {
 
 test('parseMinFreeBytes rejects fail-open floor values', () => {
   assert.equal(parseMinFreeBytes(undefined), undefined);
-  assert.equal(parseMinFreeBytes('0'), 0);
-  assert.equal(parseMinFreeBytes(1024), 1024);
+  assert.equal(parseMinFreeBytes(MIN_FREE_BYTES), MIN_FREE_BYTES);
+  assert.equal(parseMinFreeBytes(String(MIN_FREE_BYTES + 1)), MIN_FREE_BYTES + 1);
+  // Below-floor CLI overrides would disable the disk safety checks.
+  for (const value of ['0', 0, 1024, String(MIN_FREE_BYTES - 1)]) {
+    assert.throws(() => parseMinFreeBytes(value), /at least/, String(value));
+  }
   for (const value of ['abc', '', '-1', '-5', '1.5', 'NaN', 'Infinity']) {
     assert.throws(() => parseMinFreeBytes(value), /non-negative integer/, String(value));
   }

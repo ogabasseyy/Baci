@@ -118,3 +118,126 @@ export function harUserAgent(har) {
   );
   return found ? String(found.value) : null;
 }
+
+// Cache-hit evidence in a HAR: a revalidation miss (304), any
+// runner-recorded cache path (disk, prefetch, service worker), or a
+// retained disk-cache marker (HARs built with cached resources kept carry
+// entry.cache.beforeRequest). Cached resources can carry HTTP 200, so
+// status alone never proves cold. Plain zero-byte entries (204s, data
+// URLs) carry none of these signals and are not classified as cache.
+export function findCacheHits(har) {
+  return (har?.log?.entries ?? []).filter((entry) => {
+    const response = entry?.response ?? {};
+    return (
+      response.status === 304 ||
+      response.fromDiskCache === true ||
+      response.fromPrefetchCache === true ||
+      response.fromServiceWorker === true ||
+      entry?.cache?.beforeRequest !== undefined
+    );
+  });
+}
+
+// Runner-produced cache-reset provenance artifact. The gate accepts a
+// PATH to this JSON — never a bare caller string, which would let any
+// warm run certify itself cold:
+//   {"event":"profile-reset","freshProfile":true,
+//    "profileDir":"<runner profile path>","resetAt":"<ISO datetime>",
+//    "tool":"<runner name>"}
+// The reset must precede the earliest HAR navigation by at most one
+// hour: a stale (or post-run) reset proves nothing about this run.
+export function verifyCacheProvenance(text, pages, sourceLabel) {
+  if (text === null || text === undefined) {
+    return {
+      error: `cannot read cache-provenance artifact ${sourceLabel}`,
+      ok: false,
+    };
+  }
+  let artifact;
+  try {
+    artifact = JSON.parse(String(text));
+  } catch {
+    return { error: 'cache-provenance artifact is not valid JSON', ok: false };
+  }
+  if (
+    !artifact ||
+    typeof artifact !== 'object' ||
+    artifact.event !== 'profile-reset' ||
+    artifact.freshProfile !== true ||
+    typeof artifact.profileDir !== 'string' ||
+    artifact.profileDir.length === 0 ||
+    typeof artifact.tool !== 'string' ||
+    artifact.tool.length === 0 ||
+    typeof artifact.resetAt !== 'string' ||
+    !Number.isFinite(Date.parse(artifact.resetAt))
+  ) {
+    return {
+      error:
+        'cache-provenance artifact must be a runner profile-reset record {event, freshProfile, profileDir, resetAt, tool}',
+      ok: false,
+    };
+  }
+  const starts = (pages ?? [])
+    .map((page) => Date.parse(page?.startedDateTime))
+    .filter(Number.isFinite);
+  if (starts.length === 0) {
+    return {
+      error: 'cache-provenance cannot bind: HAR pages carry no startedDateTime',
+      ok: false,
+    };
+  }
+  const earliest = Math.min(...starts);
+  const resetAt = Date.parse(artifact.resetAt);
+  if (resetAt > earliest) {
+    return {
+      error: 'cache-provenance reset postdates the measured run',
+      ok: false,
+    };
+  }
+  if (earliest - resetAt > 3_600_000) {
+    return {
+      error: 'cache-provenance reset is stale (>1h before the measured run)',
+      ok: false,
+    };
+  }
+  return { ok: true, summary: `${artifact.tool}@${artifact.resetAt}` };
+}
+
+export function verifyHarIterations(pages, expectIterations) {
+  if (pages.length !== expectIterations) {
+    return {
+      error: `recorded ${pages.length} runs, expected ${expectIterations}`,
+      ok: false,
+    };
+  }
+  return { ok: true };
+}
+
+export function verifyHarConnectivity(pages, expectConnectivity) {
+  const bad = pages.filter(
+    (page) => page?._meta?.connectivity !== expectConnectivity
+  );
+  if (bad.length > 0) {
+    return {
+      error: `recorded ${pages.map((page) => page?._meta?.connectivity).join(',')}, expected ${expectConnectivity}`,
+      ok: false,
+    };
+  }
+  return { ok: true };
+}
+
+export function verifyBrowserVersion(version, expectMajor) {
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
+    return {
+      error: `attested version "${version}" is not a dotted browser build`,
+      ok: false,
+    };
+  }
+  if (!version.startsWith(`${expectMajor}.`)) {
+    return {
+      error: `attested executable ${version} does not match Chrome ${expectMajor}`,
+      ok: false,
+    };
+  }
+  return { ok: true };
+}

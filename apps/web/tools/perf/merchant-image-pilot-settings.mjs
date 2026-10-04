@@ -10,21 +10,28 @@
 //     --screenshot=afterPageCompleteCheck.png [--lighthouse=report.json ...] \
 //     --expect-iterations=1 --expect-connectivity=native \
 //     --expect-chrome-major=154 --expect-viewport=375x667 --expect-dpr=3 \
-//     [--cache-provenance=<runner-profile-token>] \
+//     [--cache-provenance=<runner-reset-artifact.json>] \
 //     [--browser-version=<dotted-executable-build>]
 // Add --lighthouse plus --expect-form-factor, --expect-throttling-method,
 // --expect-lh-viewport, --expect-lh-dpr and --expect-cpu-slowdown to also
 // verify a Lighthouse report. Exits 0 with a JSON report on stdout when
 // every setting matches. --cache-provenance is REQUIRED for the cold-cache
 // claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold; --browser-version stays optional.
+// --cache-provenance takes a PATH to a runner profile-reset artifact
+// (event/freshProfile/profileDir/resetAt/tool), bound <=1h before the run.
 import { readFile } from 'node:fs/promises';
 import {
+  findCacheHits,
   harUserAgent,
   parseArgs,
   parseDimensions,
   parsePositiveInteger,
   parsePositiveNumber,
   pngDimensions,
+  verifyBrowserVersion,
+  verifyCacheProvenance,
+  verifyHarConnectivity,
+  verifyHarIterations,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 async function checkHar(args, pass, fail, warn, recorded) {
@@ -40,22 +47,18 @@ async function checkHar(args, pass, fail, warn, recorded) {
     args['expect-iterations'],
     'expect-iterations'
   );
-  if (pages.length !== iterations) {
-    fail(
-      'har.iterations',
-      `recorded ${pages.length} runs, expected ${iterations}`
-    );
+  const iterationsCheck = verifyHarIterations(pages, iterations);
+  if (!iterationsCheck.ok) {
+    fail('har.iterations', iterationsCheck.error);
   } else {
     pass('har.iterations');
   }
-  const badConnectivity = pages.filter(
-    (page) => page?._meta?.connectivity !== args['expect-connectivity']
+  const connectivityCheck = verifyHarConnectivity(
+    pages,
+    args['expect-connectivity']
   );
-  if (badConnectivity.length > 0) {
-    fail(
-      'har.connectivity',
-      `recorded ${pages.map((p) => p?._meta?.connectivity).join(',')}, expected ${args['expect-connectivity']}`
-    );
+  if (!connectivityCheck.ok) {
+    fail('har.connectivity', connectivityCheck.error);
   } else {
     pass('har.connectivity');
   }
@@ -94,31 +97,30 @@ async function checkHar(args, pass, fail, warn, recorded) {
     const why = error instanceof Error ? error.message : String(error);
     fail('har.geometry', `cannot use ${args.screenshot} (${why})`);
   }
-  // Cold cache means NO RECORDED cache hit: a revalidation miss (304),
-  // any runner-recorded cache path (disk, prefetch, service worker), or a
-  // retained disk-cache marker (HARs built with cached resources kept carry
-  // entry.cache.beforeRequest). Cached resources can carry HTTP 200, so
-  // status alone never proves cold. Plain zero-byte entries (204s, data
-  // URLs) carry none of these signals and are not classified as cache.
   // Absence of recorded hits is necessary but NOT sufficient: converters
   // such as chrome-har drop disk-cached resources by default, so a warm run
-  // can present zero entries. The cold claim additionally requires
-  // affirmative runner provenance (--cache-provenance).
-  const cached = (har?.log?.entries ?? []).filter((entry) => {
-    const response = entry?.response ?? {};
-    return (
-      response.status === 304 ||
-      response.fromDiskCache === true ||
-      response.fromPrefetchCache === true ||
-      response.fromServiceWorker === true ||
-      entry?.cache?.beforeRequest !== undefined
-    );
-  });
-  if (cached.length > 0) {
+  // can present zero entries. The cold claim additionally requires a
+  // validated runner artifact (--cache-provenance): a bare caller string
+  // would let any warm run certify itself cold.
+  const cacheHits = findCacheHits(har);
+  const provenancePath = args['cache-provenance'];
+  let provenanceError = null;
+  if (provenancePath !== undefined) {
+    const text = await readFile(provenancePath, 'utf8').catch(() => null);
+    const provenance = verifyCacheProvenance(text, pages, provenancePath);
+    if (!provenance.ok) {
+      provenanceError = provenance.error;
+    } else {
+      recorded.cacheProvenance = provenance.summary;
+    }
+  }
+  if (cacheHits.length > 0) {
     fail(
       'har.cold-cache',
-      `${cached.length} recorded cache hits (304/disk/prefetch/service-worker/beforeRequest)`
+      `${cacheHits.length} recorded cache hits (304/disk/prefetch/service-worker/beforeRequest)`
     );
+  } else if (provenanceError) {
+    fail('har.cold-cache', provenanceError);
   } else if (args['cache-provenance'] === undefined) {
     fail(
       'har.cold-cache',
@@ -132,8 +134,9 @@ async function checkHar(args, pass, fail, warn, recorded) {
       'har.cache-provenance',
       'unknown (no runner profile/reset provenance supplied)'
     );
+  } else if (provenanceError) {
+    fail('har.cache-provenance', provenanceError);
   } else {
-    recorded.cacheProvenance = args['cache-provenance'];
     pass('har.cache-provenance');
   }
   if (args['browser-version'] === undefined) {
@@ -144,16 +147,9 @@ async function checkHar(args, pass, fail, warn, recorded) {
   } else {
     const version = args['browser-version'];
     recorded.browserExecutable = version;
-    if (!/^\d+\.\d+\.\d+\.\d+$/.test(version)) {
-      fail(
-        'har.browser-version',
-        `attested version "${version}" is not a dotted browser build`
-      );
-    } else if (!version.startsWith(`${args['expect-chrome-major']}.`)) {
-      fail(
-        'har.browser-version',
-        `attested executable ${version} does not match Chrome ${args['expect-chrome-major']}`
-      );
+    const checked = verifyBrowserVersion(version, args['expect-chrome-major']);
+    if (!checked.ok) {
+      fail('har.browser-version', checked.error);
     } else {
       pass('har.browser-version');
     }

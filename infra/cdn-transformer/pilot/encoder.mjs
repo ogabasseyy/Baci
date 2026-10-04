@@ -71,11 +71,19 @@ export async function encodeVariant({
     },
     { deadlineMs, signal }
   );
-  stagingBudget?.charge(encoded.bytes);
+  // Remove and reject BEFORE charging: the worker can produce far more
+  // than the reserved ceiling, and charging actuals first would throw
+  // past the cap (leaving the oversized file on disk) or — worse —
+  // permanently charge bytes for a file this branch then unlinks. After
+  // the reorder, charge() only ever sees in-budget actuals the reserve
+  // check already proved to fit, so it cannot throw here.
   if (encoded.bytes > budgetBytes) {
-    await unlink(output).catch(() => {});
+    await unlink(output).catch(() => {
+      // Best-effort removal; job-scope cleanup handles leftovers.
+    });
     return { bytes: encoded.bytes, quality, status: 'over-budget' };
   }
+  stagingBudget?.charge(encoded.bytes);
   const facts = await verifyVariant({
     deadlineMs,
     expectedFormat: format,

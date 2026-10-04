@@ -67,6 +67,94 @@ test('isStaleInventoryLock recovers ownerless locks past the creation grace', as
   assert.equal(await isStaleInventoryLock(join(dir, 'gone.lock')), false);
 });
 
+test('isStaleInventoryLock never steals by age from a live owner', async () => {
+  const { mkdir, writeFile: write } = await import('node:fs/promises');
+  const { isStaleInventoryLock } = await import('./inventory-store.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-lock-live-'));
+  const ancient = new Date(Date.now() - 300_000).toISOString();
+  // Ancient owner with a live pid: stalled, not dead — held.
+  const live = join(dir, 'live.lock');
+  await mkdir(live);
+  await write(
+    join(live, 'owner.json'),
+    JSON.stringify({ pid: process.pid, startedAt: ancient, token: 'live' })
+  );
+  assert.equal(await isStaleInventoryLock(live), false);
+  // Unsignalable pid (EPERM) proves nothing either: held in every
+  // environment (as root the signal succeeds; otherwise EPERM).
+  const foreign = join(dir, 'foreign.lock');
+  await mkdir(foreign);
+  await write(
+    join(foreign, 'owner.json'),
+    JSON.stringify({ pid: 1, startedAt: ancient, token: 'foreign' })
+  );
+  assert.equal(await isStaleInventoryLock(foreign), false);
+  // Dead pid: only ESRCH permits recovery.
+  const dead = join(dir, 'dead.lock');
+  await mkdir(dead);
+  await write(
+    join(dead, 'owner.json'),
+    JSON.stringify({
+      pid: 999_999_999,
+      startedAt: ancient,
+      token: 'dead',
+    })
+  );
+  assert.equal(await isStaleInventoryLock(dead), true);
+  // No integer pid: no identity to probe, not from our writer.
+  const noid = join(dir, 'noid.lock');
+  await mkdir(noid);
+  await write(
+    join(noid, 'owner.json'),
+    JSON.stringify({ startedAt: ancient, token: 'noid' })
+  );
+  assert.equal(await isStaleInventoryLock(noid), true);
+});
+
+test('appendInventoryRecord waits for a live owner instead of stealing by age', async () => {
+  const {
+    mkdir,
+    readFile: read,
+    writeFile: write,
+  } = await import('node:fs/promises');
+  const { appendInventoryRecord, releaseInventoryLock } = await import(
+    './inventory-store.mjs'
+  );
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-append-live-'));
+  const path = join(dir, 'inventory.json');
+  await writeFile(path, JSON.stringify([]));
+  // Ancient owner, live pid: the waiter must not steal it.
+  const lockDir = `${path}.lock`;
+  await mkdir(lockDir);
+  await write(
+    join(lockDir, 'owner.json'),
+    JSON.stringify({
+      pid: process.pid,
+      startedAt: new Date(Date.now() - 300_000).toISOString(),
+      token: 'live-owner',
+    })
+  );
+  const sha = createHash('sha256').update('x').digest('hex');
+  const pending = appendInventoryRecord(path, {
+    assetId: 'logo-a',
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: 'header-logo',
+    sourcePath: 'snapshots/logo-a.png',
+    url: 'https://cdn.example.com/media/logo-a.png',
+  });
+  // Give the waiter time to attempt a steal (the old age check fired on
+  // the first loop iteration): the live owner's token must be untouched.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const midflight = JSON.parse(await read(join(lockDir, 'owner.json'), 'utf8'));
+  assert.equal(midflight.token, 'live-owner');
+  // The live owner finishes; the waiter proceeds without loss.
+  await releaseInventoryLock(lockDir, 'live-owner');
+  assert.equal(await pending, 1);
+});
+
 test('appendInventoryRecord recovers a crashed ownerless lock', async () => {
   const { mkdir, utimes } = await import('node:fs/promises');
   const { appendInventoryRecord } = await import('./inventory-store.mjs');

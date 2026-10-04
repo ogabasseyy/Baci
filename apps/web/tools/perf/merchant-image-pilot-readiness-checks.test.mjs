@@ -31,17 +31,23 @@ describe('merchant-image-pilot-readiness helpers', () => {
       stagedOriginal: '/__pilot/originals/x.png',
     };
     const pilot = {
+      box: { height: 300, width: 180 },
       complete: true,
       currentSrc: 'https://lab/__pilot/abc/x.avif',
+      naturalHeight: 384,
       naturalWidth: 384,
+      objectFit: 'cover',
     };
     const control = {
+      box: { height: 300, width: 180 },
       complete: true,
       currentSrc: 'https://lab/__pilot/originals/x.png',
+      naturalHeight: 1254,
       naturalWidth: 1254,
+      objectFit: 'cover',
     };
-    expect(selectedImageProblems(pilot, 'pilot', mount)).toEqual([]);
-    expect(selectedImageProblems(control, 'control', mount)).toEqual([]);
+    expect(selectedImageProblems(pilot, 'pilot', mount, 1)).toEqual([]);
+    expect(selectedImageProblems(control, 'control', mount, 1)).toEqual([]);
     // Absent, undecoded, or sourceless elements fail in both arms.
     for (const arm of ['pilot', 'control']) {
       expect(selectedImageProblems(null, arm, mount)).toEqual([
@@ -103,9 +109,98 @@ describe('merchant-image-pilot-readiness helpers', () => {
       selectedImageProblems(
         { ...control, currentSrc: `${control.currentSrc}?w=48&q=75` },
         'control',
-        mount
+        mount,
+        1
       )
     ).toEqual([]);
+  });
+
+  it('rejects under-resolved images for the rendered box and DPR', () => {
+    const mount = {
+      binding: 'merchant/card-a',
+      generationId: 'abc',
+      merchantId: 'merchant',
+      slotId: 'product-card',
+      stagedOriginal: '/__pilot/originals/x.png',
+    };
+    const base = {
+      box: { height: 300, width: 412 },
+      complete: true,
+      currentSrc: 'https://lab/__pilot/abc/x.avif',
+      objectFit: 'cover',
+    };
+    // 412px box at DPR 3 needs 1236x900: a 928px-capped source fails even
+    // though it decoded from the approved generation.
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 900, naturalWidth: 928 },
+        'pilot',
+        mount,
+        3
+      )
+    ).toEqual([
+      'selected image under-resolved: 928x900px serves a 412x300px box at DPR 3 (needs 1236x900px for cover)',
+    ]);
+    // Short on height alone still fails cover (both axes required).
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 800, naturalWidth: 1236 },
+        'pilot',
+        mount,
+        3
+      ).length
+    ).toBe(1);
+    // Exact coverage passes.
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 900, naturalWidth: 1236 },
+        'pilot',
+        mount,
+        3
+      )
+    ).toEqual([]);
+    // Contain needs only the constraining axis: a 2000x100 strip in a
+    // 100x100 box renders sharp (downscaled), so it passes.
+    expect(
+      selectedImageProblems(
+        {
+          ...base,
+          box: { height: 100, width: 100 },
+          naturalHeight: 100,
+          naturalWidth: 2000,
+          objectFit: 'contain',
+        },
+        'pilot',
+        mount,
+        1
+      )
+    ).toEqual([]);
+    // ...but a 50x50 contain image in a 100x100 box upscales 2x and fails.
+    expect(
+      selectedImageProblems(
+        {
+          ...base,
+          box: { height: 100, width: 100 },
+          naturalHeight: 50,
+          naturalWidth: 50,
+          objectFit: 'contain',
+        },
+        'pilot',
+        mount,
+        1
+      ).length
+    ).toBe(1);
+    // Missing collection data fails loud, never silently sufficient.
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 900, naturalWidth: 1236, box: undefined },
+        'pilot',
+        mount,
+        3
+      )
+    ).toEqual([
+      'selected image resolution unverifiable (missing collection data)',
+    ]);
   });
 });
 
@@ -118,9 +213,12 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
     stagedOriginal: '/__pilot/originals/x.png',
   };
   const pilotImg = {
+    box: { height: 40, width: 40 },
     complete: true,
     currentSrc: 'https://lab/__pilot/abc/x.avif',
+    naturalHeight: 80,
     naturalWidth: 80,
+    objectFit: 'cover',
   };
   const goodSlot = {
     binding: 'merchant/logo-a',
@@ -132,7 +230,11 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
 
   it('accepts a visible decoded arm-correct mount', () => {
     expect(
-      slotMountProblems(goodSlot, mount, { arm: 'pilot', viewportWidth: 390 })
+      slotMountProblems(goodSlot, mount, {
+        arm: 'pilot',
+        dpr: 2,
+        viewportWidth: 390,
+      })
     ).toEqual([]);
     expect(
       slotMountProblems(
@@ -144,9 +246,23 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
           },
         },
         mount,
-        { arm: 'control', viewportWidth: 390 }
+        { arm: 'control', dpr: 2, viewportWidth: 390 }
       )
     ).toEqual([]);
+  });
+
+  it('rejects under-resolved slot images out of coverage', () => {
+    // 40px box at DPR 3 needs 120px: the 80px tier decoded from the
+    // approved generation but cannot cover the profile.
+    expect(
+      slotMountProblems(goodSlot, mount, {
+        arm: 'pilot',
+        dpr: 3,
+        viewportWidth: 390,
+      })
+    ).toEqual([
+      'slot "header-logo" image under-resolved: 80x80px serves a 40x40px box at DPR 3 (needs 120x120px for cover)',
+    ]);
   });
 
   it('fails absent, reported, hidden, and overflowing slots', () => {
@@ -227,6 +343,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       consoleErrors: [],
       failedRequests: [],
       geometry: {
+        devicePixelRatio: 2,
         gridDisplay: 'grid',
         heading: { height: 1, width: 1, x: 0, y: 0 },
         imgObjectFit: 'cover',

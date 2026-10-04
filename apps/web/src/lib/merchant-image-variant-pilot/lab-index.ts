@@ -69,13 +69,15 @@ function sameAcceptance(
   left: PilotAcceptance,
   right: PilotAcceptance
 ): boolean {
+  // Positional: binding pins each hash to one rung, so swapped multisets
+  // are conflicting verdicts, not idempotent duplicates.
   return (
     left.generationId === right.generationId &&
     left.verdict === right.verdict &&
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
-    [...left.outputHashes].sort().join(',') ===
-      [...right.outputHashes].sort().join(',')
+    left.outputHashes.length === right.outputHashes.length &&
+    left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
   );
 }
 

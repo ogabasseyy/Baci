@@ -14,6 +14,28 @@ function pngBuffer(width, height) {
     .toBuffer();
 }
 
+async function provenanceArg(dir, overrides = {}) {
+  const path = join(dir, `reset-${Math.random().toString(36).slice(2)}.json`);
+  await writeFile(
+    path,
+    JSON.stringify({
+      event: 'profile-reset',
+      freshProfile: true,
+      profileDir: join(dir, 'profile'),
+      resetAt: '2026-10-04T00:09:00.000Z',
+      tool: 'browsertime',
+      ...overrides,
+    })
+  );
+  return `--cache-provenance=${path}`;
+}
+
+const DATED_PAGE = {
+  _meta: { connectivity: 'native' },
+  startedDateTime: '2026-10-04T00:10:00.000Z',
+  title: 'u run 1',
+};
+
 describe('merchant-image-pilot-settings gate', () => {
   it('fails closed on mismatched effective settings', async () => {
     // End-to-end through the CLI: a natively-shaped HAR must fail a 4G
@@ -22,6 +44,7 @@ describe('merchant-image-pilot-settings gate', () => {
     const harPath = join(dir, 'browsertime.har');
     const pngPath = join(dir, 'shot.png');
     const lhPath = join(dir, 'report.json');
+    const provenance = await provenanceArg(dir);
     await writeFile(
       harPath,
       JSON.stringify({
@@ -36,7 +59,7 @@ describe('merchant-image-pilot-settings gate', () => {
               response: { status: 200 },
             },
           ],
-          pages: [{ _meta: { connectivity: 'native' }, title: 'u run 1' }],
+          pages: [{ ...DATED_PAGE }],
         },
       })
     );
@@ -97,7 +120,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-chrome-major=154',
       '--expect-viewport=375x667',
       '--expect-dpr=2',
-      '--cache-provenance=test-fresh-profile',
+      provenance,
     ]);
     expect(harOnly.error).toBe(null);
     expect(harOnly.stdout).toMatch(/lighthouse\.skipped/);
@@ -109,7 +132,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-chrome-major=154',
       '--expect-viewport=375x668',
       '--expect-dpr=2',
-      '--cache-provenance=test-fresh-profile',
+      provenance,
     ]);
     expect(rounded.error).toBe(null);
     const wrongDpr = await run([
@@ -139,7 +162,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-chrome-major=154',
       '--expect-viewport=375x667',
       '--expect-dpr=2',
-      '--cache-provenance=test-fresh-profile',
+      provenance,
       '--expect-form-factor=mobile',
       '--expect-throttling-method=simulate',
       '--expect-lh-viewport=412x823',
@@ -151,7 +174,10 @@ describe('merchant-image-pilot-settings gate', () => {
     expect(JSON.parse(matched.stdout).ok).toBe(true);
   });
   describe('merchant-image-pilot-settings cache evidence', () => {
-    async function runWithEntries(entries, extra = []) {
+    async function runWithEntries(
+      entries,
+      { extra = [], pages, provenance, provenanceRaw } = {}
+    ) {
       const dir = await mkdtemp(join(tmpdir(), 'pilot-settings-cache-'));
       const harPath = join(dir, 'browsertime.har');
       const pngPath = join(dir, 'shot.png');
@@ -179,11 +205,25 @@ describe('merchant-image-pilot-settings gate', () => {
                 response: shaped.response,
               };
             }),
-            pages: [{ _meta: { connectivity: 'native' }, title: 'u run 1' }],
+            pages: pages ?? [{ ...DATED_PAGE }],
           },
         })
       );
       await writeFile(pngPath, await pngBuffer(750, 1334));
+      // Provenance is a runner artifact file: {} writes a valid one bound
+      // to the dated pages, a string passes through literally (bogus
+      // paths), and provenanceRaw writes non-JSON bytes.
+      const provenanceArgs = [];
+      if (typeof provenance === 'string') {
+        provenanceArgs.push(`--cache-provenance=${provenance}`);
+      } else if (provenance !== undefined) {
+        provenanceArgs.push(await provenanceArg(dir, provenance));
+      }
+      if (provenanceRaw !== undefined) {
+        const rawPath = join(dir, 'reset-raw.json');
+        await writeFile(rawPath, provenanceRaw);
+        provenanceArgs.push(`--cache-provenance=${rawPath}`);
+      }
       const { execFile } = await import('node:child_process');
       const report = await new Promise((resolve) => {
         execFile(
@@ -202,6 +242,7 @@ describe('merchant-image-pilot-settings gate', () => {
             '--expect-viewport=375x667',
             '--expect-dpr=2',
             ...extra,
+            ...provenanceArgs,
           ],
           (error, stdout) => resolve({ error, report: JSON.parse(stdout) })
         );
@@ -210,14 +251,15 @@ describe('merchant-image-pilot-settings gate', () => {
     }
 
     it('fails cached HTTP 200 responses, not just 304s', async () => {
-      const provenance = ['--cache-provenance=test-fresh-profile'];
       for (const [label, response] of Object.entries({
         disk: { fromDiskCache: true, status: 200 },
         prefetch: { fromPrefetchCache: true, status: 200 },
         serviceWorker: { fromServiceWorker: true, status: 200 },
         notModified: { status: 304 },
       })) {
-        const { error, report } = await runWithEntries([response], provenance);
+        const { error, report } = await runWithEntries([response], {
+          provenance: {},
+        });
         expect(error, label).not.toBe(null);
         expect(report.failures.join('\n'), label).toMatch(/har\.cold-cache/);
         expect(report.failures.join('\n'), label).toMatch(
@@ -237,7 +279,7 @@ describe('merchant-image-pilot-settings gate', () => {
             response: { status: 200 },
           },
         ],
-        ['--cache-provenance=test-fresh-profile']
+        { provenance: {} }
       );
       expect(error).not.toBe(null);
       expect(report.failures.join('\n')).toMatch(/har\.cold-cache/);
@@ -246,7 +288,7 @@ describe('merchant-image-pilot-settings gate', () => {
     it('passes attested uncached runs without misclassifying 204s', async () => {
       const { error, report } = await runWithEntries(
         [{ status: 200 }, { status: 204 }, { status: 200 }],
-        ['--cache-provenance=test-fresh-profile']
+        { provenance: {} }
       );
       expect(error).toBe(null);
       expect(report.ok).toBe(true);
@@ -268,13 +310,10 @@ describe('merchant-image-pilot-settings gate', () => {
       expect(unknown.report.warnings.join('\n')).toMatch(
         /har\.cache-provenance: unknown/
       );
-      const attested = await runWithEntries(
-        [{ status: 200 }],
-        [
-          '--cache-provenance=browsertime-fresh-profile-default',
-          '--browser-version=154.0.0.0',
-        ]
-      );
+      const attested = await runWithEntries([{ status: 200 }], {
+        extra: ['--browser-version=154.0.0.0'],
+        provenance: {},
+      });
       expect(attested.error).toBe(null);
       expect(attested.report.warnings).toEqual([]);
       expect(
@@ -283,8 +322,36 @@ describe('merchant-image-pilot-settings gate', () => {
         )
       ).toBe(true);
       expect(attested.report.recorded.cacheProvenance).toBe(
-        'browsertime-fresh-profile-default'
+        'browsertime@2026-10-04T00:09:00.000Z'
       );
+    });
+
+    it('rejects caller strings, stale resets, and undated runs', async () => {
+      // A bare caller string is a path that cannot be read — never evidence.
+      const bogus = await runWithEntries([{ status: 200 }], {
+        provenance: 'browsertime-fresh-profile-default',
+      });
+      expect(bogus.error).not.toBe(null);
+      expect(bogus.report.failures.join('\n')).toMatch(/cannot read/);
+      // Malformed bytes fail closed.
+      const malformed = await runWithEntries([{ status: 200 }], {
+        provenanceRaw: '{not-json',
+      });
+      expect(malformed.error).not.toBe(null);
+      expect(malformed.report.failures.join('\n')).toMatch(/not valid JSON/);
+      // A reset from the previous evening cannot certify this run cold.
+      const stale = await runWithEntries([{ status: 200 }], {
+        provenance: { resetAt: '2026-10-03T22:00:00.000Z' },
+      });
+      expect(stale.error).not.toBe(null);
+      expect(stale.report.failures.join('\n')).toMatch(/stale/);
+      // Undated HAR pages cannot bind the reset to the run.
+      const undated = await runWithEntries([{ status: 200 }], {
+        pages: [{ _meta: { connectivity: 'native' }, title: 'u run 1' }],
+        provenance: {},
+      });
+      expect(undated.error).not.toBe(null);
+      expect(undated.report.failures.join('\n')).toMatch(/no startedDateTime/);
     });
 
     it('records the attested browser executable separately from the emulated UA', async () => {
@@ -292,31 +359,25 @@ describe('merchant-image-pilot-settings gate', () => {
       expect(unknown.report.warnings.join('\n')).toMatch(
         /har\.browser-version: unknown/
       );
-      const attested = await runWithEntries(
-        [{ status: 200 }],
-        [
-          '--cache-provenance=browsertime-fresh-profile-default',
-          '--browser-version=154.0.0.0',
-        ]
-      );
+      const attested = await runWithEntries([{ status: 200 }], {
+        extra: ['--browser-version=154.0.0.0'],
+        provenance: {},
+      });
       expect(attested.error).toBe(null);
       expect(attested.report.warnings).toEqual([]);
       expect(attested.report.recorded.browserExecutable).toBe('154.0.0.0');
-      const wrongMajor = await runWithEntries(
-        [{ status: 200 }],
-        ['--cache-provenance=test-fresh-profile', '--browser-version=153.0.0.0']
-      );
+      const wrongMajor = await runWithEntries([{ status: 200 }], {
+        extra: ['--browser-version=153.0.0.0'],
+        provenance: {},
+      });
       expect(wrongMajor.error).not.toBe(null);
       expect(wrongMajor.report.failures.join('\n')).toMatch(
         /har\.browser-version/
       );
-      const malformed = await runWithEntries(
-        [{ status: 200 }],
-        [
-          '--cache-provenance=test-fresh-profile',
-          '--browser-version=debian-chromium',
-        ]
-      );
+      const malformed = await runWithEntries([{ status: 200 }], {
+        extra: ['--browser-version=debian-chromium'],
+        provenance: {},
+      });
       expect(malformed.error).not.toBe(null);
     });
   });

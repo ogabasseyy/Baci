@@ -191,6 +191,9 @@ export async function checkBindingTiers({
     let meta;
     try {
       meta = await sharp(bytes).metadata();
+      // metadata() is header-only: force a full pixel decode so truncated
+      // AVIF bodies fail here instead of in a browser.
+      await sharp(bytes).stats();
     } catch {
       fail(
         checks,
@@ -200,9 +203,8 @@ export async function checkBindingTiers({
       );
       return false;
     }
-    // Oriented geometry: an EXIF-rotated pass-through tier records its
-    // oriented axes in the manifest, while sharp reports the stored axes
-    // plus an orientation tag.
+    // Oriented geometry: pass-through tiers record oriented axes, while
+    // sharp reports stored axes plus an orientation tag.
     const oriented = orientedDimensions(meta);
     if (oriented.width !== tier.width || oriented.height !== tier.height) {
       fail(

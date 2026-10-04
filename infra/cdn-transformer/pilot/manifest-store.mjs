@@ -82,6 +82,7 @@ export async function commitGeneration({
   const rename = deps.rename ?? fsRename;
   const fsyncFile = deps.fsyncFile ?? defaultFsync;
   const fsyncDir = deps.fsyncDir ?? defaultFsync;
+  const assertDeadline = deps.assertDeadline ?? (() => {});
   const parsed = parsePilotManifest(manifest);
   if (!parsed.ok) {
     throw new PilotManifestError('manifest-invalid', parsed.issues.join('; '));
@@ -172,6 +173,11 @@ export async function commitGeneration({
     durability = 'sync-unsupported';
   }
   await (deps.mkdir ?? mkdir)(join(outputRoot, 'generations'), { recursive: true });
+  // Recheck the job deadline immediately before the visibility rename:
+  // verification and the fsync loop above can consume the remaining
+  // budget, and publishing an overdue generation (then reporting the job
+  // failed) would leave reusable output the gate never approved.
+  assertDeadline();
   await rename(commitDir, dir);
   try {
     await fsyncDir(join(outputRoot, 'generations'));

@@ -30,7 +30,6 @@ export class PilotAcquireError extends Error {
 }
 
 const INVENTORY_LOCK_TIMEOUT_MS = 10_000;
-const INVENTORY_LOCK_STALE_MS = 60_000;
 // Crash window between lock mkdir and the owner write: a holder that dies
 // there leaves an ownerless directory. Fresh ownerless dirs are
 // mid-acquire holders; ones older than this grace are crashed holders and
@@ -57,15 +56,20 @@ export async function isStaleInventoryLock(lockDir) {
   } catch {
     return true;
   }
-  if (Date.now() - Date.parse(parsed.startedAt) > INVENTORY_LOCK_STALE_MS) {
+  if (!Number.isInteger(parsed.pid)) {
+    // No identity to probe; our writer always records an integer pid, so
+    // this file is not from a live holder of ours.
     return true;
   }
-  if (Number.isInteger(parsed.pid)) {
-    try {
-      process.kill(parsed.pid, 0);
-    } catch {
-      return true;
-    }
+  // Age alone never proves death: a stalled-but-live owner past any
+  // timeout must never be stolen — the stealer would append alongside
+  // the resumed original and silently lose records. Only ESRCH (no such
+  // process) permits recovery; EPERM and every other outcome fail closed
+  // as held (a wedged holder blocks appends loudly, never corruptly).
+  try {
+    process.kill(parsed.pid, 0);
+  } catch (error) {
+    return error?.code === 'ESRCH';
   }
   return false;
 }
@@ -73,24 +77,40 @@ export async function isStaleInventoryLock(lockDir) {
 async function acquireInventoryLock(lockDir) {
   const deadline = Date.now() + INVENTORY_LOCK_TIMEOUT_MS;
   for (;;) {
+    let fresh = false;
     try {
       await mkdir(lockDir);
-      // The owner token binds this lock directory to this acquisition:
-      // release removes the directory only while the token still matches,
-      // so a stolen lock's replacement survives the victim's release.
-      const token = randomUUID();
-      await writeFile(
-        join(lockDir, 'owner.json'),
-        JSON.stringify({
-          pid: process.pid,
-          startedAt: new Date().toISOString(),
-          token,
-        })
-      );
-      return token;
+      fresh = true;
     } catch (error) {
       if (error?.code !== 'EEXIST') {
         throw error;
+      }
+    }
+    if (fresh) {
+      // The owner token binds this lock directory to this acquisition:
+      // release removes the directory only while the token still matches,
+      // so a stolen lock's replacement survives the victim's release.
+      // The owner write is exclusive-create: a holder stalled past the
+      // ownerless grace may find its directory renamed away and replaced
+      // while it slept — a blind write would land in the replacement and
+      // admit two concurrent appenders. EEXIST/ENOENT here means we lost
+      // that race, so fall through and retry instead of appending.
+      const token = randomUUID();
+      try {
+        await writeFile(
+          join(lockDir, 'owner.json'),
+          JSON.stringify({
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+            token,
+          }),
+          { flag: 'wx' }
+        );
+        return token;
+      } catch (error) {
+        if (error?.code !== 'EEXIST' && error?.code !== 'ENOENT') {
+          throw error;
+        }
       }
     }
     // Steal a crashed holder's lock instead of wedging every future append.

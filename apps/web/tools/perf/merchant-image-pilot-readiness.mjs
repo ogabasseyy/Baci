@@ -51,11 +51,12 @@ async function collectSurface(page, url, surface) {
   });
   page.on('response', (response) => {
     const responseUrl = response.url();
-    if (!responseUrl.startsWith(origin)) {
-      return;
-    }
+    const foreign = !responseUrl.startsWith(origin);
     if (response.status() >= 400) {
-      failedRequests.push(`${response.status()} ${responseUrl.slice(-80)}`);
+      // Self-contained lab pages: same- and cross-origin failures fail hygiene.
+      failedRequests.push(
+        `${foreign ? 'cross-origin ' : ''}${response.status()} ${responseUrl.slice(-80)}`
+      );
     }
     const contentType = response.headers()['content-type'] ?? '';
     if (contentType.startsWith('image/')) {
@@ -65,11 +66,9 @@ async function collectSurface(page, url, surface) {
   // Network-level failures (DNS, reset, aborted) never produce a response.
   page.on('requestfailed', (request) => {
     const requestUrl = request.url();
-    if (!requestUrl.startsWith(origin)) {
-      return;
-    }
+    const foreign = !requestUrl.startsWith(origin);
     failedRequests.push(
-      `requestfailed ${requestUrl.slice(-80)} (${request.failure()?.errorText ?? 'unknown'})`
+      `${foreign ? 'cross-origin ' : ''}requestfailed ${requestUrl.slice(-80)} (${request.failure()?.errorText ?? 'unknown'})`
     );
   });
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
@@ -108,9 +107,12 @@ async function collectSurface(page, url, surface) {
           binding: section.getAttribute('data-pilot-lab-binding'),
           img: img
             ? {
+                box: rectOf(img),
                 complete: img.complete,
                 currentSrc: img.currentSrc,
+                naturalHeight: img.naturalHeight,
                 naturalWidth: img.naturalWidth,
+                objectFit: getComputedStyle(img).objectFit,
               }
             : null,
           rect: rectOf(section),
@@ -125,6 +127,7 @@ async function collectSurface(page, url, surface) {
         (entry) => entry.initiatorType === 'link' && entry.name.endsWith('.css')
       );
     return {
+      devicePixelRatio: window.devicePixelRatio,
       gridDisplay: grid ? getComputedStyle(grid).display : 'n/a-hero',
       heading: rectOf(heading),
       imgObjectFit: selectedImg
@@ -133,9 +136,12 @@ async function collectSurface(page, url, surface) {
       selected: rectOf(selected),
       selectedImg: selectedImg
         ? {
+            box: rectOf(selectedImg),
             complete: selectedImg.complete,
             currentSrc: selectedImg.currentSrc,
+            naturalHeight: selectedImg.naturalHeight,
             naturalWidth: selectedImg.naturalWidth,
+            objectFit: getComputedStyle(selectedImg).objectFit,
           }
         : null,
       slots,

@@ -3,11 +3,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  findCacheHits,
   harUserAgent,
   parseArgs,
   parsePositiveInteger,
   parsePositiveNumber,
   pngDimensions,
+  verifyBrowserVersion,
+  verifyCacheProvenance,
+  verifyHarConnectivity,
+  verifyHarIterations,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -101,5 +106,89 @@ describe('merchant-image-pilot-settings helpers', () => {
       /unknown option --origin/
     );
     expect(() => parseArgs(['--har'])).toThrow(/expected --key=value/);
+  });
+
+  it('classifies cache hits without misclassifying plain entries', () => {
+    const har = {
+      log: {
+        entries: [
+          { response: { status: 200 } },
+          { response: { status: 204 } },
+          { response: { fromDiskCache: true, status: 200 } },
+          { response: { status: 304 } },
+        ],
+      },
+    };
+    expect(findCacheHits(har)).toHaveLength(2);
+    expect(findCacheHits({ log: { entries: [] } })).toEqual([]);
+  });
+
+  it('checks iteration counts and connectivity labels', () => {
+    const pages = [{ _meta: { connectivity: 'native' } }];
+    expect(verifyHarIterations(pages, 1)).toEqual({ ok: true });
+    expect(verifyHarIterations(pages, 2).ok).toBe(false);
+    expect(verifyHarConnectivity(pages, 'native')).toEqual({ ok: true });
+    expect(verifyHarConnectivity(pages, '4G').error).toMatch(
+      /recorded native, expected 4G/
+    );
+  });
+
+  it('checks attested browser builds against the expected major', () => {
+    expect(verifyBrowserVersion('154.0.0.0', '154')).toEqual({ ok: true });
+    expect(verifyBrowserVersion('153.0.0.0', '154').error).toMatch(
+      /does not match Chrome 154/
+    );
+    expect(verifyBrowserVersion('debian-chromium', '154').error).toMatch(
+      /not a dotted browser build/
+    );
+  });
+
+  it('binds cache provenance to a fresh runner reset before the run', () => {
+    const pages = [{ startedDateTime: '2026-10-04T00:10:00.000Z' }];
+    const valid = JSON.stringify({
+      event: 'profile-reset',
+      freshProfile: true,
+      profileDir: '/tmp/run/profile',
+      resetAt: '2026-10-04T00:09:00.000Z',
+      tool: 'browsertime',
+    });
+    expect(verifyCacheProvenance(valid, pages)).toEqual({
+      ok: true,
+      summary: 'browsertime@2026-10-04T00:09:00.000Z',
+    });
+    // Unreadable, malformed, and misshapen artifacts fail closed.
+    expect(verifyCacheProvenance(null, pages, 'missing.json').error).toMatch(
+      /cannot read/
+    );
+    expect(verifyCacheProvenance('{nope', pages).error).toMatch(
+      /not valid JSON/
+    );
+    for (const [label, patch] of [
+      ['event', { event: 'run-start' }],
+      ['fresh', { freshProfile: false }],
+      ['dir', { profileDir: '' }],
+      ['tool', { tool: '' }],
+      ['time', { resetAt: 'yesterday' }],
+    ]) {
+      const broken = JSON.stringify({ ...JSON.parse(valid), ...patch });
+      expect(verifyCacheProvenance(broken, pages).ok, label).toBe(false);
+    }
+    // A bare caller string is not a runner artifact.
+    expect(verifyCacheProvenance('"just-a-token"', pages).ok).toBe(false);
+    // Stale and post-run resets prove nothing about this run.
+    const stale = JSON.stringify({
+      ...JSON.parse(valid),
+      resetAt: '2026-10-03T22:00:00.000Z',
+    });
+    expect(verifyCacheProvenance(stale, pages).error).toMatch(/stale/);
+    const postdated = JSON.stringify({
+      ...JSON.parse(valid),
+      resetAt: '2026-10-04T00:11:00.000Z',
+    });
+    expect(verifyCacheProvenance(postdated, pages).error).toMatch(/postdates/);
+    // Undated HAR pages cannot bind the reset to the run.
+    expect(verifyCacheProvenance(valid, [{}]).error).toMatch(
+      /no startedDateTime/
+    );
   });
 });

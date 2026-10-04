@@ -103,6 +103,15 @@ export function parseMinFreeBytes(value) {
       'min-free-bytes must be a non-negative integer'
     );
   }
+  // The 2 GiB floor is mandatory, not a default: a CLI override below it
+  // would disable both the initial and pre-publication safety checks.
+  // Lower values stay confined to injected test dependencies (runJob).
+  if (parsed < MIN_FREE_BYTES) {
+    throw new PilotGenerateError(
+      'bad-args',
+      `min-free-bytes must be at least ${MIN_FREE_BYTES}`
+    );
+  }
   return parsed;
 }
 

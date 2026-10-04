@@ -112,8 +112,9 @@ BEGIN
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
     OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
     OR OLD.support_email IS DISTINCT FROM NEW.support_email
-    OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
-    OR OLD.phone IS DISTINCT FROM NEW.phone
+    -- Contact phone renders resolved (support_phone, else phone).
+    OR COALESCE(NULLIF(OLD.support_phone, ''), NULLIF(OLD.phone, ''))
+      IS DISTINCT FROM COALESCE(NULLIF(NEW.support_phone, ''), NULLIF(NEW.phone, ''))
     OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
     OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
     OR (OLD.brand_colors->>'primary') IS DISTINCT FROM (NEW.brand_colors->>'primary');

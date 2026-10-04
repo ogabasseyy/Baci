@@ -4,7 +4,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { isUint8Array } from 'node:util/types';
 import { prefundedCardClaimedRequestSchema } from '@/schemas/prefunded-card-claimed-request';
 import { prefundedCardProviderEvidenceSchemas as schemas } from '@/schemas/prefunded-card-provider-evidence';
+import { prefundedCardSignedOutflowSchemas as signedOutflowSchemas } from '@/schemas/prefunded-card-signed-outflow';
 import { normalizePrefundedCardProviderEvidence } from './prefunded-card-provider-evidence-normalize';
+import { normalizePrefundedCardSignedOutflow } from './prefunded-card-signed-outflow';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
 
 type Execute = (
@@ -111,7 +113,10 @@ export function createPrefundedCardProviderEvidence({
         eventId: envelope.eventId,
         fingerprint: createHash('sha256').update(payload).digest('hex'),
         eventType: envelope.eventType,
-        eventCategory: envelope.eventCategory,
+        eventCategory:
+          envelope.eventCategory === 'wallet_transfer'
+            ? 'wallet-transfer'
+            : envelope.eventCategory,
         eventDataId: schemas.identifier.safeParse(envelope.eventData.id).success
           ? envelope.eventData.id
           : null,
@@ -137,7 +142,11 @@ export function createPrefundedCardProviderEvidence({
       if (initial === 'conflict') return { outcome: 'conflict' } as const;
       let normalized: ReturnType<typeof schemas.observation.parse> | null;
       try {
-        normalized = await normalizePrefundedCardProviderEvidence({
+        const normalize = signedOutflowSchemas.signed.safeParse(envelope)
+          .success
+          ? normalizePrefundedCardSignedOutflow
+          : normalizePrefundedCardProviderEvidence;
+        normalized = await normalize({
           configuration: settings,
           envelope,
           observation,

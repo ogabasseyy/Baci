@@ -35,6 +35,8 @@ export function createPrefundedCardReplayEnrollment(options: {
         JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawPayload))
       );
       const bank = envelope.eventType === 'bank-transfer.inflow.success';
+      const native =
+        !bank && envelope.eventCategory === 'wallet_transfer';
       const inner = envelope.eventData;
       if (
         envelope.eventId !== request.eventId ||
@@ -53,7 +55,19 @@ export function createPrefundedCardReplayEnrollment(options: {
           ? !['bank-transfer', 'inflow_transaction'].includes(
               envelope.eventCategory
             )
-          : envelope.eventCategory !== 'wallet-transfer')
+          : !['wallet-transfer', 'wallet_transfer'].includes(
+              envelope.eventCategory
+            )) ||
+        // Native FAAS outflows must carry exact paired references: a
+        // reference that disagrees with its internal twin (or a
+        // third-party reference that disagrees with its initiator twin)
+        // is structurally contradictory, and a sparse native envelope
+        // invents no identities.
+        (native &&
+          (inner.reference === undefined ||
+            inner.reference !== inner.internal_reference ||
+            inner.third_party_reference === undefined ||
+            inner.third_party_reference !== inner.initiator_reference))
       )
         return 'deferred';
       const references = [

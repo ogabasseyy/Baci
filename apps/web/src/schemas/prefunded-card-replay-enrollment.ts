@@ -55,6 +55,7 @@ export const prefundedCardReplayEnrollmentSchemas = {
       'bank-transfer',
       'inflow_transaction',
       'wallet-transfer',
+      'wallet_transfer',
     ]),
     customer_id: identifier,
     pvb_wallet: identifier,

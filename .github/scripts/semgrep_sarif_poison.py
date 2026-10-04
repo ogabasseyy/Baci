@@ -6,7 +6,8 @@ needs no rule: every dangerous value flows through an
 assignment this module (or the bare-assign scan) already drifts.
 """
 import re
-from semgrep_sarif_consts import ENV_POISON
+from semgrep_sarif_consts import (ENV_POISON,
+                                  is_bash_func_key)
 
 
 def _base(word):
@@ -113,9 +114,10 @@ def _check_poison_assign(pre, argv0, rest, drift):
     # builtin, so no resolution happens under it) and local
     # IFS (function-scoped, restored on return).
     for word in pre:
-        m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)",
-                         word)
-        if not m or m.group(1) not in ENV_POISON:
+        m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*"
+                         r"|BASH_FUNC_\S+%%)=(.*)", word)
+        if not m or (m.group(1) not in ENV_POISON
+                     and not is_bash_func_key(m.group(1))):
             continue
         if m.group(1) == "IFS" and argv0 == "read":
             continue
@@ -128,11 +130,12 @@ def _check_poison_assign(pre, argv0, rest, drift):
                 and "=" not in rest[i]:
             i += 1
         for word in rest[i:]:
-            m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)",
-                             word)
+            m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*"
+                             r"|BASH_FUNC_\S+%%)=(.*)", word)
             if not m:
                 continue
-            if m.group(1) not in ENV_POISON:
+            if m.group(1) not in ENV_POISON \
+                    and not is_bash_func_key(m.group(1)):
                 continue
             if argv0 == "local" and m.group(1) == "IFS":
                 continue

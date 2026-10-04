@@ -205,3 +205,14 @@ t julia-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}
 
 # --- round 13: lldb loader, anchor/tag flow steps ---
 t lldb-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}lldb -b -s \"\${GITHUB_WORKSPACE}/evil.lldb\" /bin/true"
+
+# --- round 14: dotnet loader, BASH_FUNC env poison (Codex P1s) ---
+t dotnet-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dotnet run --project \"\${GITHUB_WORKSPACE}/evil.csproj\""
+t bashfunc-step-env 1 "reviewer-env-poison" happy.sarif "$S${FS}          META_API_KEY:${FS}b${FS}          BASH_FUNC_curl%%: () { evil; }"
+t bashfunc-flow-env 1 "reviewer-env-poison" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}        env: {BASH_FUNC_curl%%: x}"
+t bashfunc-helper-export 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}export BASH_FUNC_curl%%='() { evil; }'"
+t bashfunc-helper-prefix 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}BASH_FUNC_curl%%='() { :; }' /bin/true"
+t bashfunc-env-cmd 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}env BASH_FUNC_curl%%=evil /bin/true"
+t bashfunc-cmdfile 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo \"BASH_FUNC_curl%%=() { evil; }\" >> \"\$GITHUB_ENV\""
+t bashfunc-step-run 1 "secret-step-path-hijack" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          export BASH_FUNC_curl%%='() { evil; }'"
+t bashfunc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo BASH_FUNC_curl"

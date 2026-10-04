@@ -4,8 +4,8 @@ interpreter operands, SCRIPT_DIR bindings, and run-block hygiene
 """
 import os
 import re
-from semgrep_sarif_consts import (DEFERRED_RE, ENV_POISON,
-                                  INTERP_ALLOW, XTRACE_RE)
+from semgrep_sarif_consts import (DEFERRED_RE, INTERP_ALLOW,
+                                  XTRACE_RE)
 from semgrep_sarif_helpertree import (_audit_shell_file,
                                       invoked_shell_refs)
 from semgrep_sarif_perl import audit_perl_file
@@ -166,41 +166,9 @@ def audit_run_hygiene(ctx, drift):
             checkout_uses += 1
     if checkout_uses != 2 and "reviewer-action-count" not in drift:
         drift.append("reviewer-action-count")
-    # Shell-startup, loader, and interpreter-preload vars are
-    # inherited by every run: step: a poison var in any YAML env:
-    # mapping (job or step level) re-sources the audited blocks from
-    # outside their pinned spans. Only contiguous env: blocks (and
-    # flow mappings) are scanned, so run:-block text cannot FP.
-    # The shared poison list (single source of truth) with quoted
-    # keys normalized in both the opener and the block entries.
-    idx = 0
-    while idx < len(ctx.workflow_lines):
-        line = ctx.workflow_lines[idx]
-        stripped = line.strip()
-        key, val = map_key_value(stripped)
-        if key == "env" and val.startswith("{"):
-            if any(re.search(r"""["']?\b%s\b["']?\s*:""" % var,
-                             stripped)
-                   for var in ENV_POISON) \
-                    and "reviewer-env-poison" not in drift:
-                drift.append("reviewer-env-poison")
-            idx += 1
-        elif key == "env" and not val:
-            base = len(line) - len(line.lstrip(" "))
-            idx += 1
-            while idx < len(ctx.workflow_lines):
-                sub = ctx.workflow_lines[idx]
-                if sub.strip() == "" or sub.strip().startswith("#"):
-                    idx += 1
-                    continue
-                if len(sub) - len(sub.lstrip(" ")) <= base:
-                    break
-                if map_key_value(sub.strip())[0] in ENV_POISON \
-                        and "reviewer-env-poison" not in drift:
-                    drift.append("reviewer-env-poison")
-                idx += 1
-        else:
-            idx += 1
+    # (Reviewer env:-block poison scan lives in
+    # semgrep_sarif_bashfunc, called from the filter entrypoint
+    # next to this function: consumer.py is at the module cap.)
     # Global run-body forbids: env/path propagation, process
     # substitution, and command substitution execute or persist
     # beyond the per-command rules (every step inherits runner

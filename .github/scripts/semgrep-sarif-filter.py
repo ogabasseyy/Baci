@@ -18,6 +18,7 @@ from semgrep_sarif_audit import (audit_flow_with,
                                  audit_pr_checkout,
                                  audit_trusted_checkout, find_pr_refs,
                                  load_workflow)
+from semgrep_sarif_bashfunc import audit_reviewer_env_block
 from semgrep_sarif_consumer import (audit_helpers,
                                     audit_invocations,
                                     audit_path_literals,
@@ -81,6 +82,7 @@ def main():
     audit_invocations(ctx, drift)
     audit_script_dir(ctx, drift)
     audit_run_hygiene(ctx, drift)
+    audit_reviewer_env_block(ctx.workflow_lines, drift)
     audit_step_commands(ctx, drift)
     audit_agent_env(ctx, drift)
     audit_agent_runner(drift)

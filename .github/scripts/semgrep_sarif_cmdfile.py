@@ -17,9 +17,12 @@ from semgrep_sarif_shell import (_bare_word, split_commands2,
 
 def _env_value_hit(text):
     # NAME=value for a poison NAME anywhere in the written
-    # words (\b keeps MY_PATH silent).
-    return any(re.search(r"\b" + v + r"\s*=", text)
-               for v in ENV_POISON)
+    # words (\b keeps MY_PATH silent); BASH_FUNC_<name>%%
+    # likewise (the runner exports it, bash imports it).
+    return (any(re.search(r"\b" + v + r"\s*=", text)
+                for v in ENV_POISON)
+            or re.search(r"\bBASH_FUNC_\S+%%\s*=",
+                         text) is not None)
 
 
 def _has_cmdsub(text):

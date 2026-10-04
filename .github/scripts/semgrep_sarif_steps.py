@@ -134,8 +134,11 @@ def audit_step_commands(ctx, drift):
                                     agent_idx, drift)
     # Poison names tolerate shell escapes (export P\ATH= unescapes
     # its operand -- verified); the = stays literal (a\=1 is dead).
-    poison_alt = "(?:" + "|".join(
-        "\\\\?" + "\\\\?".join(v) for v in ENV_POISON) + ")"
+    # BASH_FUNC_<name>%% joins the alternation (round 14: bash
+    # imports such step exports as functions in later steps).
+    poison_alt = ("(?:" + "|".join(
+        "\\\\?" + "\\\\?".join(v) for v in ENV_POISON)
+        + "|BASH_FUNC_\\S+%%)")
     assign_prefix = (r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*"
                      r"=\S+\s+)*")
     builtin_prefix = (r"(?:(?:export|local|readonly|declare|"

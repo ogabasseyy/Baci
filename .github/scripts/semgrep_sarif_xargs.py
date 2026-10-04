@@ -8,7 +8,8 @@ child, so poison names drift like env assigns.
 """
 import re
 from semgrep_sarif_pins import _safe_exec_path, _ws_rooted
-from semgrep_sarif_consts import ENV_POISON
+from semgrep_sarif_consts import (ENV_POISON,
+                                  is_bash_func_key)
 
 
 def audit_xargs(rest, drift, src, dispatch):
@@ -32,13 +33,15 @@ def audit_xargs(rest, drift, src, dispatch):
                 if "helper-untrusted-exec" not in drift:
                     drift.append("helper-untrusted-exec")
                 return
-            if rest[i + 1] in ENV_POISON \
+            if (rest[i + 1] in ENV_POISON
+                    or is_bash_func_key(rest[i + 1])) \
                     and "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")
                 return
             i += 2
         elif tok.startswith("--process-slot-var="):
-            if tok.split("=", 1)[1] in ENV_POISON \
+            if (tok.split("=", 1)[1] in ENV_POISON
+                    or is_bash_func_key(tok.split("=", 1)[1])) \
                     and "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")
                 return

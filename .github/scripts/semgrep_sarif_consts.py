@@ -37,7 +37,7 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "g++", "c++", "clang", "clang++", "jshell",
              "ssh-keygen", "pwsh", "powershell", "swift",
              "swiftc", "script", "rpm", "m4", "hg", "julia",
-             "lldb"}
+             "lldb", "dotnet"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -60,7 +60,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # executes on any command); julia executes program-file
 # operands (both ship on the ubuntu runner). lldb -s/--source
 # executes command files (platform shell runs repo scripts;
-# ships with Swift/LLVM on the ubuntu runner).
+# ships with Swift/LLVM on the ubuntu runner). dotnet executes
+# project/dll operands (run/build/test restore and execute
+# repo code); ships via the setup-dotnet action on demand.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")
@@ -136,6 +138,23 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
 # ignores keys), so the COUNT exact-match closes the family.
 
 
+# Bash exported-function encoding (round 14, P1 4176327352):
+# bash imports any environment variable named BASH_FUNC_<name>%%
+# as a shell function at startup, so a poisoned mapping of that
+# shape inside env: (or exported by a helper) redefines commands
+# in every later step. The %% suffix form is the only encoding
+# bash honors (the legacy ()-suffix form was removed in bash 4.4
+# after Shellshock); names cannot contain whitespace (execve
+# NAME=VALUE splits on the first =, and bash rejects names with
+# spaces), so \S+%% neither over- nor under-matches.
+_BASH_FUNC_ALT = r"BASH_FUNC_\S+%%"
+
+
+def is_bash_func_key(name):
+    """True when an env mapping key is a bash function import."""
+    return re.fullmatch(_BASH_FUNC_ALT, name) is not None
+
+
 STRIP_WORDS = {"if", "while", "until", "time", "!", "then",
                "do", "else", "elif", "{", "}"}
 
@@ -157,7 +176,7 @@ XTRACE_RE = re.compile(
     r"\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace\b"
     r"|\b(?:bash|sh)\s+-[A-Za-z]*x")
 _POISON_ALT = "(?:" + "|".join(
-    v for v in ENV_POISON if v != "IFS") + ")"
+    v for v in ENV_POISON if v != "IFS") + "|" + _BASH_FUNC_ALT + ")"
 BARE_POISON_RE = re.compile(
     r"(?:^|[;&|])\s*" + _POISON_ALT + r"\s*=[^=]"
     r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"

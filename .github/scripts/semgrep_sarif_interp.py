@@ -272,8 +272,11 @@ def _check_env(rest, drift, src=""):
                 i += 2
             else:
                 i += 1
-        elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tok):
-            if tok.split("=", 1)[0] in ENV_POISON \
+        elif re.fullmatch(r"(?:[A-Za-z_][A-Za-z0-9_]*"
+                         r"|BASH_FUNC_\S+%%)=.*", tok):
+            if (tok.split("=", 1)[0] in ENV_POISON
+                    or re.fullmatch(r"BASH_FUNC_\S+%%",
+                                    tok.split("=", 1)[0])) \
                     and "helper-env-poison" not in drift:
                 drift.append("helper-env-poison")
                 return

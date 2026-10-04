@@ -19,6 +19,15 @@ BEGIN
   LIMIT 1;
 
   IF NOT FOUND THEN
+    -- Previous-token grace, mirroring redemption: a mailed link from the
+    -- attempt before a retry rotation still previews.
+    SELECT rc.* INTO v_claim
+    FROM public.receipt_claims AS rc
+    WHERE rc.previous_token_hash = p_token_hash
+    LIMIT 1;
+  END IF;
+
+  IF NOT FOUND THEN
     RETURN NULL;
   END IF;
 

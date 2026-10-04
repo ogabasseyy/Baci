@@ -135,3 +135,50 @@ SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt';
 SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('cd', 32))->>'status' = 'created'), 'recipient correction rotates the redeemed claim');
 SELECT pg_temp.assert_true((SELECT token_hash = repeat('cd', 32) AND claimed_at IS NULL AND claimed_by_user_id IS NULL AND customer_email = 'corrected@example.com' FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), 'rotation clears the stale redemption for the new recipient');
+-- A retry rotation must not orphan the mailed link from the attempt before
+-- it: the earlier send may have been accepted with an unknown outcome. The
+-- replaced hash survives one rotation; redemption and preview honor it.
+INSERT INTO public.customers (id, merchant_id, email) VALUES ('10000000-0000-4000-8000-000000000093', '10000000-0000-4000-8000-000000000001', 'grace@example.com');
+INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
+VALUES ('10000000-0000-4000-8000-000000000092', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000093', '10000000-0000-4000-8000-000000000010', 'grace@example.com', 'paid', 100);
+INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000092', 'Device', 1, 100);
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt';
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d1', 32))->>'status' = 'created'), 'grace-probe claim created');
+SELECT pg_temp.assert_true((SELECT previous_token_hash IS NULL FROM public.receipt_claims WHERE token_hash = repeat('d1', 32)), 'fresh claim carries no previous hash');
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d2', 32))->>'status' = 'created'), 'retry rotates the grace-probe claim');
+SELECT pg_temp.assert_true((SELECT token_hash = repeat('d2', 32) AND previous_token_hash = repeat('d1', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'rotation stashes the replaced hash');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d1', 32)) IS NOT NULL), 'mailed link from before the rotation still previews');
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000094', 'grace@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
+SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d1', 32), 'web')->>'status' = 'ok', 'graced previous hash redeems end to end');
+RESET ROLE;
+-- A second rotation shifts the grace window: the twice-superseded hash
+-- falls off while the newest predecessor still works.
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d3', 32))->>'status' = 'created'), 'second retry rotates the grace-probe claim again');
+SELECT pg_temp.assert_true((SELECT token_hash = repeat('d3', 32) AND previous_token_hash = repeat('d2', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'second rotation shifts the grace window');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d1', 32)) IS NULL), 'twice-superseded hash no longer previews');
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
+SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d1', 32), 'web')->>'status' = 'not_found', 'twice-superseded hash no longer redeems');
+RESET ROLE;
+-- Grace never bypasses expiry: the row expiry bounds both hashes.
+UPDATE public.receipt_claims SET expires_at = now() - interval '1 day' WHERE token_hash = repeat('d3', 32);
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32))->>'expired' = 'true'), 'graced hash previews the expired sentinel once lapsed');
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
+SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d2', 32), 'web')->>'status' = 'expired', 'graced hash redeems expired once lapsed');
+RESET ROLE;
+UPDATE public.receipt_claims SET expires_at = now() + interval '90 days' WHERE token_hash = repeat('d3', 32);
+-- Grace never bypasses the recipient check: after a recipient correction
+-- the old bearer presents the graced hash but the row belongs to the new
+-- recipient, so redemption fails closed instead of linking the wrong order.
+INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000095', 'buyer@example.com', now(), null);
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000095', true);
+SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('cb', 32), 'web')->>'status' = 'email_mismatch', 'old bearer fails closed on the graced hash after recipient correction');
+RESET ROLE;

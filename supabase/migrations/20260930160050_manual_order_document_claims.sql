@@ -9,12 +9,21 @@ ALTER TABLE public.receipt_claims ALTER COLUMN import_job_id DROP NOT NULL;
 ALTER TABLE public.receipt_claims
   ADD COLUMN manual_notification_id uuid
     REFERENCES public.order_notification_outbox(id) ON DELETE CASCADE,
+  ADD COLUMN previous_token_hash text,
   ADD CONSTRAINT receipt_claims_exact_source CHECK (
     (import_job_id IS NOT NULL AND manual_notification_id IS NULL)
     OR (import_job_id IS NULL AND manual_notification_id IS NOT NULL)
   );
 CREATE UNIQUE INDEX idx_receipt_claims_manual_notification
   ON public.receipt_claims (manual_notification_id) WHERE manual_notification_id IS NOT NULL;
+-- Previous-token grace: every retry rotates to a fresh bearer, which would
+-- orphan an already-mailed link when the earlier attempt was actually
+-- accepted (unknown delivery outcome). Rotation stashes the replaced hash
+-- here so redemption/preview honor the newest mailed link plus its
+-- predecessor; the row expiry still bounds both. Unique so a
+-- previous-hash lookup can never match two rows.
+CREATE UNIQUE INDEX idx_receipt_claims_previous_token_hash
+  ON public.receipt_claims (previous_token_hash) WHERE previous_token_hash IS NOT NULL;
 COMMENT ON TABLE public.receipt_claims IS
   'Hashed claim links for imported and manual order document emails; verified purchase-email sign-in is required.';
 COMMENT ON TABLE public.receipt_claim_orders IS
@@ -102,10 +111,14 @@ BEGIN
   -- skips and the stale PDF is never corrected. Rotation preserves
   -- claimed_at (redemption serves live data and stays re-openable), so
   -- the customer keeps working access through the fresh link while the
-  -- emailed stale link dies with the rotation — unless staff corrected
-  -- the order to a different recipient, in which case the stale
-  -- redemption is cleared so the fresh link is not already_used.
+  -- emailed stale link survives one rotation via previous_token_hash (a
+  -- retry must not orphan a mailed link whose send outcome was unknown)
+  -- unless staff corrected the order to a different recipient, in which
+  -- case the stale redemption is cleared so the fresh link is not
+  -- already_used (the row-current email check still fails the old bearer
+  -- closed on the graced hash).
   DO UPDATE SET token_hash = EXCLUDED.token_hash,
+    previous_token_hash = receipt_claims.token_hash,
     customer_id = EXCLUDED.customer_id,
     customer_email = EXCLUDED.customer_email,
     customer_name = EXCLUDED.customer_name,

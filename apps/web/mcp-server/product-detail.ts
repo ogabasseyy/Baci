@@ -48,7 +48,7 @@ export async function buildMcpProductDetail({
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
-    attributes: Record<string, string>;
+    attributes: Record<string, unknown> | null;
     price_override: number | null;
     stock_quantity: number;
     condition: string;

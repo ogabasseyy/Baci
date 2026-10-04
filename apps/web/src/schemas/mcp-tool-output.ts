@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 const availability = z.enum(['unconfirmed', 'in_stock', 'out_of_stock']);
-const attributes = z.record(z.string(), z.string()).nullable();
+const attributes = z.record(z.string(), z.unknown()).nullable();
 const money = z.number().nonnegative();
 const catalogColors = z.object({
   labels: z.array(z.string()),

@@ -100,7 +100,7 @@ export async function loadMcpProductVariants({
   };
 
   let variants: Array<{
-    attributes: Record<string, string> | null;
+    attributes: Record<string, unknown> | null;
     price_override: number | null;
     stock_quantity: number;
   }> = [];
@@ -163,6 +163,8 @@ export async function loadMcpProductVariants({
         catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
         variants: [],
         condition_offers: [],
+        variant_lookup_failed: false,
+        offer_lookup_failed: false,
       },
     };
   }

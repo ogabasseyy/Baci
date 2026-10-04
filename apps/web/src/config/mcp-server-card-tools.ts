@@ -1,4 +1,6 @@
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
+import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
+import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
 import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
@@ -34,7 +36,7 @@ export const PUBLIC_MCP_TOOLS = [
   {
     name: 'search_products',
     title: 'Search Products',
-    description: `Search for products in Ogabassey store. Returns rich details including variants, stock confidence, and price trends. Always use this for general product queries. Always supply intent with explicit shopper constraints and query with retrieval keywords. Includes short merchant-provided description excerpts for context. Call get_product for full details before specific technical claims; descriptions do not establish verified compatibility, specifications, price, or availability. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+    description: MCP_SEARCH_PRODUCTS_DESCRIPTION,
     inputSchema: {
       $schema: DRAFT_07_SCHEMA,
       type: 'object',
@@ -51,7 +53,7 @@ export const PUBLIC_MCP_TOOLS = [
           enum: ['new', 'used', 'open_box', 'refurbished'],
         },
         category: {
-          description: 'Category (e.g., phones, laptops)',
+          description: MCP_SEARCH_CATEGORY_GUIDANCE,
           type: 'string',
           maxLength: 50,
         },

@@ -270,6 +270,23 @@ describe('login resume state', () => {
     );
   });
 
+  it('deletes a malformed legacy web value without migrating it', async () => {
+    setPlatformOS('web');
+    jest
+      .spyOn(storefrontStoragePrefix, 'getStorefrontStoragePrefix')
+      .mockReturnValue('baci-test.');
+    const sessionStorage = mockWebSessionStorage();
+    (sessionStorage.getItem as jest.Mock)
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce('not-json{');
+
+    await expect(getAuthLoginResumeState('/checkout')).resolves.toBeNull();
+    expect(sessionStorage.setItem).not.toHaveBeenCalled();
+    expect(sessionStorage.removeItem).toHaveBeenCalledWith(
+      'auth-login-resume-state'
+    );
+  });
+
   it('handles web sessionStorage errors without falling back to native storage', async () => {
     setPlatformOS('web');
     const sessionStorage = mockWebSessionStorage({
@@ -358,6 +375,29 @@ describe('login resume state', () => {
       'baci-test.auth-login-resume-state',
       expect.stringContaining('shopper@example.com')
     );
+    expect(mockDeleteItemAsync).toHaveBeenCalledWith(
+      'auth-login-resume-state'
+    );
+  });
+
+  it('deletes an expired legacy value without migrating it to the prefixed key', async () => {
+    jest
+      .spyOn(storefrontStoragePrefix, 'getStorefrontStoragePrefix')
+      .mockReturnValue('baci-test.');
+    mockGetItemAsync.mockResolvedValueOnce(null);
+    mockGetItemAsync.mockResolvedValueOnce(
+      JSON.stringify({
+        email: 'shopper@example.com',
+        returnTo: '/checkout',
+        savedAt: 0,
+        step: 'otp',
+      })
+    );
+
+    await expect(getAuthLoginResumeState('/checkout')).resolves.toBeNull();
+    // Stale payloads must not be copied into the tenant namespace ...
+    expect(mockSetItemAsync).not.toHaveBeenCalled();
+    // ... but the shared legacy key is still deleted so it cannot linger.
     expect(mockDeleteItemAsync).toHaveBeenCalledWith(
       'auth-login-resume-state'
     );

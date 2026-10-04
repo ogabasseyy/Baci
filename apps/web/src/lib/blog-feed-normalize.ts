@@ -43,15 +43,36 @@ export function truncateFeedText(value: string, maxLength: number): string {
 /**
  * Makes a complete feed URL XML-safe while preserving its identity.
  * Percent-encoding (not deletion) keeps structural channel links
- * resolvable, and encodeURI output is XML-valid by construction. Lone
- * surrogates cannot survive in XML output and make encodeURI throw, so
- * they are stripped via the fallback path only. No-op for well-formed URLs.
+ * resolvable, and encodeURI output is XML-valid by construction. Existing
+ * percent-encoded triplets pass through untouched so they are never
+ * double-encoded. Lone surrogates cannot survive in XML output and make
+ * encodeURI throw, so they are stripped via the fallback path only.
+ * No-op for well-formed URLs.
  */
 export function xmlSafeFeedUrl(url: string): string {
   try {
-    return encodeURI(url);
+    return url
+      .split(/(%[\dA-Fa-f]{2})/g)
+      .map((part, index) => (index % 2 === 1 ? part : encodeURI(part)))
+      .join('');
   } catch {
     return encodeURI(stripInvalidXml10Characters(url));
+  }
+}
+
+/**
+ * Percent-encodes one URL path segment (e.g. a post slug) for feed links.
+ * Unlike full URLs, a bare `%` here is data and is correctly encoded to
+ * `%25` so the emitted link still resolves to the exact record. Lone
+ * surrogates would make encodeURIComponent throw, so they fall back to a
+ * stripped encoding instead of failing the whole feed. No-op for clean
+ * slugs.
+ */
+export function xmlSafeFeedPathSegment(segment: string): string {
+  try {
+    return encodeURIComponent(segment);
+  } catch {
+    return encodeURIComponent(stripInvalidXml10Characters(segment));
   }
 }
 

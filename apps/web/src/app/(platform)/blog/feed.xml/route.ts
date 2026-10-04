@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import {
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedPathSegment,
   xmlSafeFeedUrl,
 } from '@/lib/blog-feed-normalize';
 import { stripHtml } from '@/lib/blog-utils';
@@ -66,8 +67,8 @@ export async function GET(_request: NextRequest) {
         post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
       feed.addItem({
         title: feedText(post.title),
-        id: `${xmlSafeFeedUrl(blogUrl)}/${encodeURIComponent(post.slug)}`,
-        link: `${xmlSafeFeedUrl(blogUrl)}/${encodeURIComponent(post.slug)}`,
+        id: `${xmlSafeFeedUrl(blogUrl)}/${xmlSafeFeedPathSegment(post.slug)}`,
+        link: `${xmlSafeFeedUrl(blogUrl)}/${xmlSafeFeedPathSegment(post.slug)}`,
         description: feedText(excerpt),
         content: sanitizeForFeed(post.content || ''),
         author: [
@@ -75,7 +76,7 @@ export async function GET(_request: NextRequest) {
             name: feedText(
               post.author_name || PLATFORM_BLOG_CONTEXT.businessName
             ),
-            link: feedText(PLATFORM_BLOG_CONTEXT.baseUrl),
+            link: xmlSafeFeedUrl(PLATFORM_BLOG_CONTEXT.baseUrl),
           },
         ],
         date: publishedDate,

@@ -7,6 +7,7 @@ import {
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedPathSegment,
   xmlSafeFeedUrl,
 } from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
@@ -392,7 +393,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
 
     for (const { post, publishedDate } of postsWithValidDates) {
-      const postUrl = `${safeStoreUrl}/blog/${encodeURIComponent(post.slug)}`;
+      const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
       const excerpt =
         post.excerpt || truncateFeedText(stripHtml(post.content), 300);
 

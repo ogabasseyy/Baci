@@ -3,6 +3,7 @@ import {
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedPathSegment,
   xmlSafeFeedUrl,
 } from './blog-feed-normalize';
 
@@ -78,5 +79,33 @@ describe('xmlSafeFeedUrl', () => {
     expect(
       xmlSafeFeedUrl(`https://usebaci.com/${String.fromCharCode(0xd800)}blog`)
     ).toBe('https://usebaci.com/blog');
+  });
+
+  it('leaves existing percent-encoded triplets untouched', () => {
+    expect(xmlSafeFeedUrl('https://usebaci.com/a%20b%1Ac')).toBe(
+      'https://usebaci.com/a%20b%1Ac'
+    );
+  });
+
+  it('encodes bare percent signs and spaces', () => {
+    expect(xmlSafeFeedUrl('https://usebaci.com/100% off')).toBe(
+      'https://usebaci.com/100%25%20off'
+    );
+  });
+});
+
+describe('xmlSafeFeedPathSegment', () => {
+  it('leaves clean slugs untouched', () => {
+    expect(xmlSafeFeedPathSegment('launch-faster')).toBe('launch-faster');
+  });
+
+  it('encodes bare percent signs as data so links still resolve', () => {
+    expect(xmlSafeFeedPathSegment('100%-off')).toBe('100%25-off');
+  });
+
+  it('drops lone surrogates rather than throwing', () => {
+    expect(xmlSafeFeedPathSegment(`a${String.fromCharCode(0xd800)}b`)).toBe(
+      'ab'
+    );
   });
 });

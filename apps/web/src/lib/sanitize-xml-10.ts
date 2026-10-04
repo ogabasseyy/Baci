@@ -14,7 +14,7 @@ function isXml10CharCodePoint(codePoint: number): boolean {
 // points are removed; valid ones like &#241; pass through untouched.
 const FORBIDDEN_XML10_ENTITY_PATTERN = /&#([xX][\dA-Fa-f]+|\d+);?/g;
 
-function stripForbiddenXml10Entities(value: string): string {
+function stripForbiddenXml10EntitiesOnce(value: string): string {
   return value.replace(
     FORBIDDEN_XML10_ENTITY_PATTERN,
     (match: string, digits: string) => {
@@ -27,6 +27,19 @@ function stripForbiddenXml10Entities(value: string): string {
         : '';
     }
   );
+}
+
+function stripForbiddenXml10Entities(value: string): string {
+  // Rescan to a fixpoint: one removal can join neighbors into a new
+  // reference (e.g. `&` + removed `&#x0;` + `#x1A;`). Removal-only, so each
+  // pass strictly shortens the string or the loop exits.
+  let previous = value;
+  let current = stripForbiddenXml10EntitiesOnce(previous);
+  while (current !== previous) {
+    previous = current;
+    current = stripForbiddenXml10EntitiesOnce(previous);
+  }
+  return current;
 }
 
 /**
@@ -58,7 +71,9 @@ export function stripInvalidXml10Characters(
  * decode to XML-forbidden code points. Needed only before sanitize-html,
  * which decodes entities and would otherwise let `java&#xFFFE;script:`
  * slip past scheme validation and join into `javascript:` under the outer
- * strip. Never use on plain feed text — it would delete literal content.
+ * strip. Raw characters go first so a control splitting a reference
+ * (`&#xFF<U+001A>FE;`) joins before the entity scan sees it. Never use on
+ * plain feed text — it would delete literal content.
  */
 export function stripInvalidXml10CharactersAndEntities(
   value: string | null | undefined
@@ -66,5 +81,5 @@ export function stripInvalidXml10CharactersAndEntities(
   if (typeof value !== 'string') {
     return '';
   }
-  return stripInvalidXml10Characters(stripForbiddenXml10Entities(value));
+  return stripForbiddenXml10Entities(stripInvalidXml10Characters(value));
 }

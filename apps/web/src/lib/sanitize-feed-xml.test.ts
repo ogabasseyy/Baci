@@ -79,6 +79,17 @@ describe('RSS XML character safety', () => {
     expect(html).not.toContain('javascript:');
   });
 
+  it('defuses a control character splitting an entity-encoded scheme smuggle', () => {
+    const html = sanitizeForFeed(
+      '<a href="java&#xFF\u001aFE;script:alert(1)">x</a>'
+    );
+
+    expect(html).not.toContain('javascript:');
+    expect(
+      stripInvalidXml10CharactersAndEntities('java&#xFF\u001aFE;script:')
+    ).toBe('javascript:');
+  });
+
   it('preserves literal character references in plain feed text', () => {
     expect(stripInvalidXml10Characters('Understanding &#x0; in XML')).toBe(
       'Understanding &#x0; in XML'

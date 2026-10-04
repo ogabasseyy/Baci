@@ -33,6 +33,23 @@ describe('preflight served mount coverage', () => {
     void fixture;
   });
 
+  it('reports binding-less uncovered-consumer markers without failing coverage', () => {
+    // Plan §3 CSS heroes render status-only sections (no binding): mount
+    // coverage skips them (nothing expected), but the reported rows name
+    // the gap instead of silently excluding it.
+    const html = `<main data-pilot-lab-arm="pilot"><section data-pilot-lab-slot="hero-banner" data-pilot-lab-status="uncovered-consumer"><h2>hero-banner — uncovered consumer</h2></section></main>`;
+    const result = assertServedMountCoverage(html, {
+      arm: 'pilot',
+      expectedMounts: [],
+      origin: 'http://localhost:3129',
+      surface: 'store',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.reported).toEqual([
+      { binding: null, slotId: 'hero-banner', status: 'uncovered-consumer' },
+    ]);
+  });
+
   it('binds store card coverage to the selected card, never a filler', () => {
     const origin = 'http://localhost:3129';
     const mount = {

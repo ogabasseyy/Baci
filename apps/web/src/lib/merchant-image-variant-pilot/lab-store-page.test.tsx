@@ -53,6 +53,26 @@ describe('PilotLabStorePage', () => {
     expect(html).toContain(MERCHANT);
   });
 
+  it('reports uncovered consumers explicitly instead of omitting them', () => {
+    const store = pilotLabStoreBySlug('omnimart');
+    if (!store) {
+      throw new Error('omnimart store is missing from the lab table');
+    }
+    const html = renderToStaticMarkup(
+      <PilotLabStorePage
+        arm="pilot"
+        config={emptyConfig()}
+        origin="http://localhost:3000"
+        store={store}
+      />
+    );
+    // No binding (mount gates skip it), but the status lands in the
+    // served coverage reported rows and readiness slot geometry.
+    expect(html).toContain('data-pilot-lab-slot="hero-banner"');
+    expect(html).toContain('data-pilot-lab-status="uncovered-consumer"');
+    expect(html).toContain('heroComponent.render');
+  });
+
   it('keeps unaccepted bindings on the reported path', () => {
     const store = pilotLabStoreBySlug('squishyland');
     if (!store) {

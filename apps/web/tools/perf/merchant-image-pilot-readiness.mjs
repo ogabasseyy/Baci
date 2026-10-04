@@ -1,7 +1,8 @@
 // Browser readiness gate for the merchant image pilot.
 //
 // Loads every sampled store surface in both arms in real Chrome across the
-// required profile matrix (mobile DPR 1/2/3 + desktop) and fails closed
+// required profile matrix (mobile DPR 1/2/3 + desktop + the no-AVIF WebP
+// fallback exercise) and fails closed
 // unless the surface is measurement-ready: styles delivered (computed
 // styles, never class names), responsive geometry holds, layout matches
 // across arms, the selected image decoded from a staged URL, and no failed
@@ -118,16 +119,22 @@ async function run() {
           });
           try {
             const page = await context.newPage();
+            // No-AVIF profiles strip AVIF candidates on the pilot arm so
+            // the run must prove WebP fallback selection; control keeps
+            // full Chrome (format-honest originals, Chrome baseline).
+            const expectNoAvif = device.stripAvif === true && arm === 'pilot';
             const collected = await collectSurface(
               page,
               `${args.origin}/pilot-lab/store/${store.slug}?arm=${arm}`,
-              surface
+              surface,
+              { stripAvif: expectNoAvif }
             );
             surfaces[arm] = collected;
             const problems = surfaceProblems(collected, {
               arm,
               expectHiddenMounts:
                 surface === 'hero' && profile.startsWith('desktop'),
+              expectNoAvif,
               expectedFit,
               expectedMounts: mounts,
               surface,

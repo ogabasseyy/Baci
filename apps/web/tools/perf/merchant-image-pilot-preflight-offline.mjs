@@ -210,7 +210,7 @@ export async function runOfflinePreflight(options) {
       slotId: record.slot,
       stagedOriginal: `/__pilot/originals/${stagedOriginalName(
         { assetId: record.assetId, merchantId: record.merchantId },
-        record.sourcePath
+        manifest.source.format
       )}`,
     });
   }

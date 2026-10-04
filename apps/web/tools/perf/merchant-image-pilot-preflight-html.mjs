@@ -87,7 +87,10 @@ export function extractLabSections(html) {
     if (
       !(
         'data-pilot-lab-binding' in attrs ||
-        attrs['data-pilot-lab-status'] === 'missing-binding'
+        attrs['data-pilot-lab-status'] === 'missing-binding' ||
+        // Binding-less uncovered-consumer markers: mount/agreement gates
+        // skip them (no binding), but coverage reports must name them.
+        attrs['data-pilot-lab-status'] === 'uncovered-consumer'
       )
     ) {
       continue;

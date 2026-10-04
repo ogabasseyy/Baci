@@ -6,6 +6,7 @@ import { LabStoreGridSection } from './lab-store-grid-section';
 import { LabStoreHeroSection } from './lab-store-hero-section';
 import {
   type PilotLabStore,
+  type PilotLabUncoveredSlot,
   pilotLabStoreBasePath,
 } from './lab-store-registry';
 import { resolveBinding, statusFor } from './lab-store-resolve';
@@ -35,6 +36,7 @@ export {
   PILOT_LAB_STORES,
   type PilotLabSlotId,
   type PilotLabStore,
+  type PilotLabUncoveredSlot,
   pilotLabStoreBasePath,
   pilotLabStoreBySlug,
 } from './lab-store-registry';
@@ -54,6 +56,30 @@ function MissingBinding({
       <h2>{slotId} — missing binding</h2>
       <p>
         {`store "${store.slug}" expects slot "${slotId}" but the inventory has no binding for merchant "${store.merchantId}"; refusing to render rather than mixing arms.`}
+      </p>
+    </section>
+  );
+}
+
+function UncoveredConsumer({
+  store,
+  uncovered,
+}: {
+  store: PilotLabStore;
+  uncovered: PilotLabUncoveredSlot;
+}): React.JSX.Element {
+  // Explicitly reported, never silently excluded: the section carries no
+  // binding (mount gates skip it) but its status lands in the served
+  // coverage `reported` rows and the readiness slot geometry, naming the
+  // consumer the sample does not exercise.
+  return (
+    <section
+      data-pilot-lab-slot={uncovered.slotId}
+      data-pilot-lab-status="uncovered-consumer"
+    >
+      <h2>{uncovered.slotId} — uncovered consumer</h2>
+      <p>
+        {`store "${store.slug}" consumer "${uncovered.consumer}" has no sampled binding (${uncovered.reason}); excluded from every denominator by declaration, not by omission.`}
       </p>
     </section>
   );
@@ -188,6 +214,13 @@ export function PilotLabStorePage({
           />
         );
       })}
+      {store.uncoveredSlots.map((uncovered) => (
+        <UncoveredConsumer
+          key={uncovered.slotId}
+          store={store}
+          uncovered={uncovered}
+        />
+      ))}
     </main>
   );
 }

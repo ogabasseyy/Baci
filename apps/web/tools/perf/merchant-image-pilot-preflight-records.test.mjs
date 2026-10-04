@@ -46,25 +46,21 @@ describe('sameAcceptance', () => {
 describe('stagedOriginalName', () => {
   const binding = { assetId: 'logo-a', merchantId: MERCHANT };
 
-  it('derives the staged name from the binding plus a safe extension', () => {
-    expect(stagedOriginalName(binding, 'snapshots/logo-a.PNG')).toBe(
-      `${MERCHANT}-logo-a.png`
-    );
-    expect(stagedOriginalName(binding, 'snapshots/logo-a')).toBe(
-      `${MERCHANT}-logo-a`
-    );
+  it('derives the staged name from the verified format, never the filename', () => {
+    // The inventory filename may lie about the bytes; the suffix always
+    // describes the decode-verified manifest format, exactly like the
+    // loader — otherwise staging and preflight desync on lying names.
+    expect(stagedOriginalName(binding, 'png')).toBe(`${MERCHANT}-logo-a.png`);
+    expect(stagedOriginalName(binding, 'jpeg')).toBe(`${MERCHANT}-logo-a.jpg`);
+    expect(stagedOriginalName(binding, 'webp')).toBe(`${MERCHANT}-logo-a.webp`);
+    expect(stagedOriginalName(binding, 'avif')).toBe(`${MERCHANT}-logo-a.avif`);
   });
 
-  it('drops hostile or overlong extensions instead of trusting input', () => {
-    expect(stagedOriginalName(binding, 'snapshots/logo-a.svg')).toBe(
-      `${MERCHANT}-logo-a.svg`
+  it('fails closed on formats with no servable suffix', () => {
+    expect(() => stagedOriginalName(binding, 'tiff')).toThrow(
+      /no servable suffix/
     );
-    expect(stagedOriginalName(binding, '../../etc/passwd')).toBe(
-      `${MERCHANT}-logo-a`
-    );
-    expect(stagedOriginalName(binding, 'snapshots/a.abcdef')).toBe(
-      `${MERCHANT}-logo-a`
-    );
+    expect(() => stagedOriginalName(binding, '')).toThrow(/no servable suffix/);
   });
 });
 

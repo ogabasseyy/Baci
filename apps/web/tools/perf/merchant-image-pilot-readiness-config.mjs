@@ -122,6 +122,12 @@ function desktopProfile(deviceScaleFactor) {
 export const READINESS_PROFILES = {
   'desktop-1365-dpr1': desktopProfile(1),
   'desktop-1365-dpr2': desktopProfile(2),
+  // Fallback exercise, not a second engine: the pilot arm loads with AVIF
+  // candidates stripped from the served document, so a real browser must
+  // discover, fetch, decode, and paint the WebP fallback exactly as a
+  // no-AVIF browser would. Control is unstripped: originals are
+  // format-honest and the comparison baseline is defined in Chrome.
+  'mobile-390-dpr2-noavif': { ...mobileProfile(390, 2), stripAvif: true },
   'mobile-360-dpr1': mobileProfile(360, 1),
   'mobile-360-dpr2': mobileProfile(360, 2),
   'mobile-360-dpr3': mobileProfile(360, 3),

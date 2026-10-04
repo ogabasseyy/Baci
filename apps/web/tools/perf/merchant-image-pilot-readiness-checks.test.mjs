@@ -456,6 +456,113 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
     ).toEqual(['slot "header-logo" has no visible box']);
   });
 
+  it('requires WebP selection on the no-avif profile', () => {
+    const webpImg = {
+      ...pilotImg,
+      currentSrc: 'https://lab/__pilot/abc/x.webp',
+    };
+    // Painted WebP from the approved generation: fallback verified.
+    expect(
+      slotMountProblems({ ...goodSlot, img: webpImg }, mount, {
+        arm: 'pilot',
+        dpr: 2,
+        expectNoAvif: true,
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
+    ).toEqual([]);
+    // Painted AVIF despite the strip: the fallback was never selected.
+    expect(
+      slotMountProblems(goodSlot, mount, {
+        arm: 'pilot',
+        dpr: 2,
+        expectNoAvif: true,
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
+    ).toEqual(['pilot slot "header-logo" image selected AVIF despite no-avif']);
+    // Same AVIF paint on a standard profile: no fallback expected.
+    expect(
+      slotMountProblems(goodSlot, mount, {
+        arm: 'pilot',
+        dpr: 2,
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
+    ).toEqual([]);
+  });
+
+  it('proves the no-avif fallback non-vacuously at the surface level', () => {
+    const webpImg = {
+      ...pilotImg,
+      currentSrc: 'https://lab/__pilot/abc/x.webp',
+    };
+    const card = {
+      binding: 'merchant/card-a',
+      generationId: 'abc',
+      merchantId: 'merchant',
+      slotId: 'product-card',
+      stagedOriginal: '/__pilot/originals/card.png',
+    };
+    const cardSlot = {
+      binding: 'merchant/card-a',
+      img: webpImg,
+      rect: { height: 300, width: 180, x: 8, y: 120 },
+      slotId: 'product-card',
+      status: null,
+    };
+    const base = {
+      consoleErrors: [],
+      failedRequests: [],
+      geometry: {
+        devicePixelRatio: 2,
+        gridDisplay: 'grid',
+        heading: { height: 1, width: 1, x: 0, y: 0 },
+        imgObjectFit: 'cover',
+        selected: { height: 300, width: 180, x: 8, y: 120 },
+        selectedImg: webpImg,
+        slots: [{ ...goodSlot, img: webpImg }, cardSlot],
+        stylesheetBytes: 1200,
+        stylesheetCount: 1,
+        viewportHeight: 844,
+        viewportWidth: 390,
+      },
+      imageUrls: ['https://lab/__pilot/abc/x.webp'],
+      strippedAvif: 3,
+    };
+    const options = {
+      arm: 'pilot',
+      expectNoAvif: true,
+      expectedFit: 'cover',
+      expectedMounts: [mount, card],
+      surface: 'grid',
+    };
+    expect(surfaceProblems(base, options)).toEqual([]);
+    // Stripped nothing: the page had no AVIF to fall back from.
+    expect(surfaceProblems({ ...base, strippedAvif: 0 }, options)).toEqual([
+      'no-avif run stripped no AVIF candidates',
+    ]);
+    // AVIF bytes still fetched: a strip hole, not a fallback.
+    expect(
+      surfaceProblems(
+        {
+          ...base,
+          imageUrls: [
+            'https://lab/__pilot/abc/x.webp',
+            'https://lab/__pilot/abc/x.avif',
+          ],
+        },
+        options
+      )
+    ).toEqual([
+      'no-avif run fetched AVIF bytes: https://lab/__pilot/abc/x.avif',
+    ]);
+    // No WebP fetched: nothing proves the fallback painted.
+    expect(surfaceProblems({ ...base, imageUrls: [] }, options)).toEqual([
+      'no-avif run fetched no WebP fallback',
+    ]);
+  });
+
   it('inverts mobile-only mounts on desktop profiles', () => {
     const hero = {
       binding: 'merchant/hero-s0',

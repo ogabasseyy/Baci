@@ -3,11 +3,32 @@
 // and the measured geometry the pure checks verdict. Split from the
 // driver (merchant-image-pilot-readiness.mjs) under the repo line ceiling.
 
-export async function collectSurface(page, url, surface) {
+// No-AVIF emulation: remove AVIF candidates (typed <source> elements and
+// AVIF preload links) from the served document, so a real browser must
+// select the WebP fallback exactly as a no-AVIF browser would. Returns
+// the stripped document plus the stripped count — a run that strips
+// nothing proves no fallback and must fail, not pass vacuously.
+export function stripAvifCandidates(html) {
+  let stripped = 0;
+  const body = String(html)
+    .replace(/<source\b[^>]*type="image\/avif"[^>]*>/gi, () => {
+      stripped += 1;
+      return '';
+    })
+    .replace(/<link\b[^>]*type="image\/avif"[^>]*>/gi, () => {
+      stripped += 1;
+      return '';
+    });
+  return { body, stripped };
+}
+
+export async function collectSurface(page, url, surface, options = {}) {
   const consoleErrors = [];
   const failedRequests = [];
   const imageUrls = [];
   const origin = new URL(url).origin;
+  const stripAvif = options.stripAvif === true;
+  let strippedAvif = 0;
   page.on('console', (message) => {
     if (message.type() === 'error') {
       consoleErrors.push(message.text().slice(0, 200));
@@ -16,14 +37,41 @@ export async function collectSurface(page, url, surface) {
   page.on('pageerror', (error) => {
     consoleErrors.push(String(error).slice(0, 200));
   });
+  // Parsed-origin comparison (not a string prefix): the lab is
+  // self-contained, so any foreign response — even a 2xx font, CDN, or
+  // analytics hit — contaminates timing and fails hygiene. Unparseable
+  // URLs fail closed as foreign.
+  const isForeign = (url) => {
+    try {
+      return new URL(url).origin !== origin;
+    } catch {
+      return true;
+    }
+  };
+  const isAvifUrl = (value) => {
+    try {
+      return new URL(value).pathname.endsWith('.avif');
+    } catch {
+      return String(value ?? '')
+        .split('?')[0]
+        .endsWith('.avif');
+    }
+  };
   page.on('response', (response) => {
     const responseUrl = response.url();
-    const foreign = !responseUrl.startsWith(origin);
-    if (response.status() >= 400) {
-      // Self-contained lab pages: same- and cross-origin failures fail hygiene.
+    const foreign = isForeign(responseUrl);
+    if (stripAvif && isAvifUrl(responseUrl)) {
+      // Strip hole: no AVIF candidate survived to be requested, so any
+      // AVIF response is an unlisted reference, not a fallback.
       failedRequests.push(
-        `${foreign ? 'cross-origin ' : ''}${response.status()} ${responseUrl.slice(-80)}`
+        `avif served despite no-avif ${responseUrl.slice(-80)}`
       );
+    } else if (foreign) {
+      failedRequests.push(
+        `cross-origin ${response.status()} ${responseUrl.slice(-80)}`
+      );
+    } else if (response.status() >= 400) {
+      failedRequests.push(`${response.status()} ${responseUrl.slice(-80)}`);
     }
     const contentType = response.headers()['content-type'] ?? '';
     if (contentType.startsWith('image/')) {
@@ -33,11 +81,22 @@ export async function collectSurface(page, url, surface) {
   // Network-level failures (DNS, reset, aborted) never produce a response.
   page.on('requestfailed', (request) => {
     const requestUrl = request.url();
-    const foreign = !requestUrl.startsWith(origin);
+    const foreign = isForeign(requestUrl);
     failedRequests.push(
       `${foreign ? 'cross-origin ' : ''}requestfailed ${requestUrl.slice(-80)} (${request.failure()?.errorText ?? 'unknown'})`
     );
   });
+  if (stripAvif) {
+    await page.route(
+      (routeUrl) => routeUrl.href === url,
+      async (route) => {
+        const response = await route.fetch();
+        const stripped = stripAvifCandidates(await response.text());
+        strippedAvif += stripped.stripped;
+        await route.fulfill({ body: stripped.body, response });
+      }
+    );
+  }
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   const geometry = await page.evaluate((surface) => {
     const rectOf = (element) => {
@@ -157,5 +216,5 @@ export async function collectSurface(page, url, surface) {
       viewportWidth: window.innerWidth,
     };
   }, surface);
-  return { consoleErrors, failedRequests, geometry, imageUrls };
+  return { consoleErrors, failedRequests, geometry, imageUrls, strippedAvif };
 }

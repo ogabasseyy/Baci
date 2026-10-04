@@ -426,6 +426,49 @@ describe('checkBindingStaged', () => {
     expect(failures).toEqual([]);
   });
 
+  it('locates the staged original by verified format under a lying filename', async () => {
+    // PNG bytes inventoried as photo.jpg: the loader stages a .png
+    // original, so the staged check must look for .png too — a
+    // correctly staged binding cannot fail on the filename lie.
+    const bytes = await tierBytes();
+    const sha = sha256(bytes);
+    const manifest = manifestFor({ bytes: bytes.length, sha });
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-offline-liename-'));
+    await mkdir(join(publicDir, '__pilot', GENERATION), { recursive: true });
+    await mkdir(join(publicDir, '__pilot', 'originals'), { recursive: true });
+    await writeFile(
+      join(publicDir, '__pilot', GENERATION, `${sha}.webp`),
+      bytes
+    );
+    const original = Buffer.from('original-bytes');
+    await writeFile(
+      join(
+        publicDir,
+        '__pilot',
+        'originals',
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74-logo-a.png'
+      ),
+      original
+    );
+    const checks = [];
+    const failures = [];
+    const ok = await checkBindingStaged({
+      acceptance: acceptanceFor([sha]),
+      checks,
+      failures,
+      manifest,
+      name: 'staged-liename',
+      options: { publicDir },
+      record: {
+        ...RECORD,
+        sha256: sha256(original),
+        sourcePath: 'snapshots/photo.jpg',
+      },
+    });
+    expect(ok).toBe(true);
+    expect(failures).toEqual([]);
+  });
+
   it('fails closed on missing or drifted staged bytes', async () => {
     const bytes = await tierBytes();
     const sha = sha256(bytes);

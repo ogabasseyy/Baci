@@ -33,7 +33,7 @@ function servedPathname(currentSrc) {
   }
 }
 
-function stagedImageProblems(image, arm, label, mount, dpr) {
+function stagedImageProblems(image, arm, label, mount, dpr, options = {}) {
   if (!image) {
     return [`${label} absent`];
   }
@@ -48,6 +48,11 @@ function stagedImageProblems(image, arm, label, mount, dpr) {
     if (!pathname.startsWith(`/__pilot/${mount.generationId}/`)) {
       return [`pilot ${label} is not from the approved generation`];
     }
+    // No-AVIF profile: the painted resource must be the WebP fallback —
+    // an AVIF currentSrc means the fallback was never selected.
+    if (options.expectNoAvif && pathname.endsWith('.avif')) {
+      return [`pilot ${label} selected AVIF despite no-avif`];
+    }
   } else if (pathname !== mount.stagedOriginal) {
     return [`control ${label} is not the approved staged original`];
   }
@@ -55,18 +60,24 @@ function stagedImageProblems(image, arm, label, mount, dpr) {
 }
 
 // Pure verdict on the collected selected-image state.
-export function selectedImageProblems(image, arm, mount, dpr) {
-  return stagedImageProblems(image, arm, 'selected image', mount, dpr).map(
-    (problem) =>
-      problem
-        .replace(
-          'pilot selected image is not from the approved generation',
-          'pilot selected is not from the approved generation'
-        )
-        .replace(
-          'control selected image is not the approved staged original',
-          'control selected is not the approved staged original'
-        )
+export function selectedImageProblems(image, arm, mount, dpr, options = {}) {
+  return stagedImageProblems(
+    image,
+    arm,
+    'selected image',
+    mount,
+    dpr,
+    options
+  ).map((problem) =>
+    problem
+      .replace(
+        'pilot selected image is not from the approved generation',
+        'pilot selected is not from the approved generation'
+      )
+      .replace(
+        'control selected image is not the approved staged original',
+        'control selected is not the approved staged original'
+      )
   );
 }
 
@@ -84,7 +95,7 @@ export function selectedImageProblems(image, arm, mount, dpr) {
 export function slotMountProblems(
   slot,
   mount,
-  { arm, dpr, expectHidden, viewportHeight, viewportWidth }
+  { arm, dpr, expectHidden, expectNoAvif, viewportHeight, viewportWidth }
 ) {
   const label = `slot "${mount.slotId}" image`;
   if (!slot) {
@@ -112,7 +123,9 @@ export function slotMountProblems(
   if (!withinViewport(rect, viewportWidth, viewportHeight)) {
     return [`slot "${mount.slotId}" overflows the viewport`];
   }
-  return stagedImageProblems(slot.img, arm, label, mount, dpr);
+  return stagedImageProblems(slot.img, arm, label, mount, dpr, {
+    expectNoAvif,
+  });
 }
 
 // Full viewport containment on both axes (1px rounding slack): a nonzero
@@ -140,7 +153,14 @@ function withinViewport(rect, viewportWidth, viewportHeight) {
 // driver under the repo line ceiling.
 export function surfaceProblems(
   collected,
-  { arm, expectHiddenMounts, expectedFit, expectedMounts, surface }
+  {
+    arm,
+    expectHiddenMounts,
+    expectNoAvif,
+    expectedFit,
+    expectedMounts,
+    surface,
+  }
 ) {
   const problems = [];
   if (collected.consoleErrors.length > 0) {
@@ -148,6 +168,35 @@ export function surfaceProblems(
   }
   if (collected.failedRequests.length > 0) {
     problems.push(`failed requests: ${collected.failedRequests.join(' | ')}`);
+  }
+  // No-AVIF fallback proof (pilot arm): AVIF candidates were stripped, so
+  // the run must show stripped candidates (non-vacuous), zero AVIF bytes
+  // fetched, and at least one WebP fallback fetched — plus per-image
+  // non-AVIF selection below.
+  if (expectNoAvif && arm === 'pilot') {
+    if ((collected.strippedAvif ?? 0) < 1) {
+      problems.push('no-avif run stripped no AVIF candidates');
+    }
+    const servedAvif = (collected.imageUrls ?? []).filter((url) => {
+      try {
+        return new URL(url).pathname.endsWith('.avif');
+      } catch {
+        return false;
+      }
+    });
+    if (servedAvif.length > 0) {
+      problems.push(`no-avif run fetched AVIF bytes: ${servedAvif[0]}`);
+    }
+    const servedWebp = (collected.imageUrls ?? []).filter((url) => {
+      try {
+        return new URL(url).pathname.endsWith('.webp');
+      } catch {
+        return false;
+      }
+    });
+    if (servedWebp.length === 0) {
+      problems.push('no-avif run fetched no WebP fallback');
+    }
   }
   const g = collected.geometry;
   if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {
@@ -198,7 +247,10 @@ export function surfaceProblems(
           g.selectedImg,
           arm,
           primary,
-          g.devicePixelRatio
+          g.devicePixelRatio,
+          {
+            expectNoAvif,
+          }
         )
       );
     }
@@ -221,6 +273,7 @@ export function surfaceProblems(
         arm,
         dpr: g.devicePixelRatio,
         expectHidden: expectHiddenMounts,
+        expectNoAvif,
         viewportHeight: g.viewportHeight,
         viewportWidth: g.viewportWidth,
       })

@@ -26,15 +26,30 @@ export function sameAcceptance(left, right) {
 }
 
 // Mirror of lab-config originalFileName: the staged original name is derived
-// from the binding plus the source-path extension, never from remote input.
-export function stagedOriginalName(binding, sourcePath) {
-  const segments = String(sourcePath).split('/');
-  const base = segments[segments.length - 1] ?? '';
-  const extension = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
-  const safeExtension = /^\.[a-z0-9]{1,5}$/i.test(extension)
-    ? extension.toLowerCase()
-    : '';
-  return `${binding.merchantId}-${binding.assetId}${safeExtension}`;
+// from the binding plus the decode-verified manifest format — never the
+// operator-controlled inventory filename, which may lie about the bytes.
+// Callers pass manifest.source.format only after the manifest stage has
+// proved it equals the sharp-decoded format. Unknown formats fail closed,
+// exactly like the loader: there is no correct suffix for them.
+const STAGED_ORIGINAL_EXTENSION_FOR_FORMAT = {
+  avif: '.avif',
+  gif: '.gif',
+  jpeg: '.jpg',
+  jpg: '.jpg',
+  png: '.png',
+  svg: '.svg',
+  webp: '.webp',
+};
+
+export function stagedOriginalName(binding, sourceFormat) {
+  const extension =
+    STAGED_ORIGINAL_EXTENSION_FOR_FORMAT[String(sourceFormat).toLowerCase()];
+  if (!extension) {
+    throw new Error(
+      `preflight: cannot name a staged original with format "${sourceFormat}" (no servable suffix)`
+    );
+  }
+  return `${binding.merchantId}-${binding.assetId}${extension}`;
 }
 
 // Mirror of the route's binding contract (parsePilotInventoryBinding):

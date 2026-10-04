@@ -137,6 +137,12 @@ const fixtures = {
       ...manifest,
       source: { ...manifest.source, extra: true },
     },
+    // Sharp-decodable but generator-rejected input class: no suite may
+    // accept a manifest whose source the generator would refuse to encode.
+    sourceFormatGif: {
+      ...manifest,
+      source: { ...manifest.source, format: 'gif' },
+    },
     tierBytesZero: {
       ...manifest,
       tiers: logoTiers().map((tier, index) =>

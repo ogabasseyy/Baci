@@ -80,7 +80,14 @@ async function readVerifiedSnapshot(
   sourcePath: string,
   expectedSha256: string
 ): Promise<Buffer> {
-  const realRoot = await realpath(inputRoot);
+  // Basename-free error like the snapshot catch below: the raw ENOENT
+  // carries the absolute operator path, and loader errors can surface in
+  // route error output on a shared host with the lab flag on.
+  const realRoot = await realpath(inputRoot).catch(() => {
+    throw new Error(
+      'merchant image pilot: snapshot input root is not accessible'
+    );
+  });
   const joined = join(realRoot, sourcePath);
   if (joined !== realRoot && !joined.startsWith(realRoot + sep)) {
     throw new Error(

@@ -107,7 +107,11 @@ export const pilotManifestSchema = z
     source: z
       .object({
         bytes: z.number().int().min(1),
-        format: z.string().min(1),
+        // Generator-supported inputs only (mirrors ACCEPTED_INPUT_FORMATS
+        // in infra/cdn-transformer/pilot/constants.mjs): a hash-valid
+        // manifest claiming gif/svg would pass source verification yet
+        // describe an input class the generator rejects.
+        format: z.enum(['avif', 'jpeg', 'png', 'webp']),
         orientedHeight: z.number().int().min(1).max(16384),
         orientedWidth: z.number().int().min(1).max(16384),
         sha256: z.string().regex(SHA256_PATTERN),

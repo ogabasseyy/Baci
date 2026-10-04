@@ -270,7 +270,7 @@ export async function checkBindingStaged({
   }
   const originalName = stagedOriginalName(
     { assetId: record.assetId, merchantId: record.merchantId },
-    record.sourcePath
+    manifest.source.format
   );
   let stagedOriginal;
   try {

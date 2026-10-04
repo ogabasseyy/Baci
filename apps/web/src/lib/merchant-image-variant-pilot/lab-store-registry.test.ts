@@ -28,6 +28,26 @@ describe('pilot lab store table', () => {
     ]);
   });
 
+  it('declares the CSS hero banners as uncovered consumers (plan §3 rows 2, 5)', () => {
+    // The builder CSS-background heroes bypass the shared loader and have
+    // no frozen sample: declared here so store pages report them instead
+    // of silently excluding them from every denominator.
+    const uncovered = PILOT_LAB_STORES.flatMap((store) =>
+      store.uncoveredSlots.map((slot) => [store.slug, slot.slotId] as const)
+    );
+    expect(uncovered).toEqual([
+      ['omnimart', 'hero-banner'],
+      ['squishyland', 'hero-banner'],
+    ]);
+    for (const store of PILOT_LAB_STORES) {
+      for (const slot of store.uncoveredSlots) {
+        expect(slot.consumer).toMatch(/hero-component/);
+        expect(slot.reason.length).toBeGreaterThan(0);
+        expect(store.slots).not.toContain(slot.slotId);
+      }
+    }
+  });
+
   it('resolves unknown slugs to null (route 404s)', () => {
     expect(pilotLabStoreBySlug('dell')).toBeNull();
     expect(pilotLabStoreBySlug('')).toBeNull();

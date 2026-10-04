@@ -202,6 +202,28 @@ describe('loadLabConfig', () => {
     expect((await stat(join(lab.publicDir, originalUrl))).isFile()).toBe(true);
   });
 
+  it('hides the absolute input root when it is unresolvable', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const missing = join(
+      lab.inputRoot,
+      `missing-root-${Math.random().toString(36).slice(2)}`
+    );
+    // The raw ENOENT carries the absolute operator path; the loader must
+    // fail with a path-free input error instead.
+    const error = await loadLabConfig({
+      ...lab,
+      inputRoot: missing,
+    }).then(
+      () => {
+        throw new Error('expected loadLabConfig to reject');
+      },
+      (cause: unknown) => cause as Error
+    );
+    expect(error.message).toMatch(/input root is not accessible/);
+    expect(error.message).not.toContain('missing-root');
+  });
+
   it('loads read-only by default: validates, writes nothing', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();

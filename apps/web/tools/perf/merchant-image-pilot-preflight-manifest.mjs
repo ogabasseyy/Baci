@@ -4,9 +4,13 @@
 // contract-fixtures corpus consumed by all three suites, so drift breaks
 // loudly. Returns the issue list (empty = valid).
 import {
+  ACCEPTED_INPUT_FORMATS,
   BUDGETS,
   RECIPE_ID,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+
+const GENERATOR_SOURCE_FORMATS = new Set(ACCEPTED_INPUT_FORMATS);
+
 import { ladderCoverageIssues } from './merchant-image-pilot-preflight-manifest-ladder.mjs';
 import {
   DELIVERIES,
@@ -104,8 +108,11 @@ export function assertManifestContract(manifest, { recipeId, role }) {
     if (!Number.isInteger(source.bytes) || source.bytes < 1) {
       issues.push('source bytes must be a positive integer');
     }
-    if (typeof source.format !== 'string' || source.format.length < 1) {
-      issues.push('source format is required');
+    if (
+      typeof source.format !== 'string' ||
+      !GENERATOR_SOURCE_FORMATS.has(source.format)
+    ) {
+      issues.push('source format is not generator-supported');
     }
     if (!isIntIn(source.orientedHeight, 1, 16384)) {
       issues.push('source orientedHeight out of range');

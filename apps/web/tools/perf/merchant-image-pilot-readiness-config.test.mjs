@@ -13,10 +13,12 @@ import {
 describe('merchant-image-pilot-readiness profiles', () => {
   it('covers the spec matrix by default', () => {
     // Design 2026-10-01: mobile 360/390/412 at DPR 1/2/3, desktop 1365
-    // at DPR 1/2.
+    // at DPR 1/2, plus the no-AVIF fallback exercise (design: verify the
+    // WebP fallback in a real browser without AVIF support).
     expect(DEFAULT_READINESS_PROFILES).toEqual([
       'desktop-1365-dpr1',
       'desktop-1365-dpr2',
+      'mobile-390-dpr2-noavif',
       'mobile-360-dpr1',
       'mobile-360-dpr2',
       'mobile-360-dpr3',
@@ -39,6 +41,15 @@ describe('merchant-image-pilot-readiness profiles', () => {
       height: 800,
       width: 1365,
     });
+    expect(READINESS_PROFILES['mobile-390-dpr2-noavif']).toMatchObject({
+      deviceScaleFactor: 2,
+      isMobile: true,
+      stripAvif: true,
+      viewport: { height: 844, width: 390 },
+    });
+    expect(READINESS_PROFILES['mobile-390-dpr2'].stripAvif ?? false).toBe(
+      false
+    );
   });
 
   it('accepts an explicit profile subset and rejects unknowns', () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  ACCEPTED_INPUT_FORMATS,
   BUDGETS,
   PILOT_POLICY_VERSION,
   PILOT_SCHEMA_VERSION,
@@ -92,7 +93,7 @@ export const PilotManifestSchema = z
     source: z
       .object({
         bytes: z.number().int().min(1),
-        format: z.string().min(1),
+        format: z.enum(ACCEPTED_INPUT_FORMATS),
         orientedHeight: z.number().int().min(1).max(16384),
         orientedWidth: z.number().int().min(1).max(16384),
         sha256: z.string().regex(/^[0-9a-f]{64}$/),

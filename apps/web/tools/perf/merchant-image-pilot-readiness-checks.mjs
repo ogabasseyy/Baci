@@ -1,6 +1,7 @@
 // Pure readiness verdicts: geometry equality, staged-URL identity, and the
 // selected-image decode verdict. Browser collection lives in
 // merchant-image-pilot-readiness.mjs; these stay unit-testable here.
+import { noAvifSurfaceProblems } from './merchant-image-pilot-readiness-noavif.mjs';
 import { resolutionProblems } from './merchant-image-pilot-readiness-resolution.mjs';
 
 // Rounded-box equality: identical DOM + identical CSS must lay out
@@ -169,34 +170,10 @@ export function surfaceProblems(
   if (collected.failedRequests.length > 0) {
     problems.push(`failed requests: ${collected.failedRequests.join(' | ')}`);
   }
-  // No-AVIF fallback proof (pilot arm): AVIF candidates were stripped, so
-  // the run must show stripped candidates (non-vacuous), zero AVIF bytes
-  // fetched, and at least one WebP fallback fetched — plus per-image
-  // non-AVIF selection below.
-  if (expectNoAvif && arm === 'pilot') {
-    if ((collected.strippedAvif ?? 0) < 1) {
-      problems.push('no-avif run stripped no AVIF candidates');
-    }
-    const servedAvif = (collected.imageUrls ?? []).filter((url) => {
-      try {
-        return new URL(url).pathname.endsWith('.avif');
-      } catch {
-        return false;
-      }
-    });
-    if (servedAvif.length > 0) {
-      problems.push(`no-avif run fetched AVIF bytes: ${servedAvif[0]}`);
-    }
-    const servedWebp = (collected.imageUrls ?? []).filter((url) => {
-      try {
-        return new URL(url).pathname.endsWith('.webp');
-      } catch {
-        return false;
-      }
-    });
-    if (servedWebp.length === 0) {
-      problems.push('no-avif run fetched no WebP fallback');
-    }
+  // No-AVIF fallback proof (pilot arm) plus per-image non-AVIF
+  // selection below.
+  if (expectNoAvif) {
+    problems.push(...noAvifSurfaceProblems(collected, arm));
   }
   const g = collected.geometry;
   if (g.stylesheetCount < 1 || g.stylesheetBytes < 1) {

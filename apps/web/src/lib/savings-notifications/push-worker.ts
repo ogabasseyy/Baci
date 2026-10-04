@@ -3,6 +3,7 @@ import type { ClaimedSavingsNotification } from '@/schemas/savings-notification-
 export type SavingsPushOutcome =
   | 'accepted'
   | 'rejected'
+  | 'unregistered'
   | 'unknown'
   | 'retryable';
 
@@ -42,6 +43,7 @@ type PushWorkerDependencies = {
 export type SavingsPushWorkerCounts = {
   accepted: number;
   rejected: number;
+  unregistered: number;
   unknown: number;
   retried: number;
   finishFailed: number;
@@ -66,6 +68,7 @@ export async function processSavingsNotificationPushClaims(
   const counts: SavingsPushWorkerCounts = {
     accepted: 0,
     rejected: 0,
+    unregistered: 0,
     unknown: 0,
     retried: 0,
     finishFailed: 0,

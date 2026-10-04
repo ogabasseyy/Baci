@@ -51,7 +51,7 @@ describe('deliverSavingsExpoPush', () => {
               {
                 status: 'error',
                 message: 'Rejected by Expo',
-                details: { error: 'DeviceNotRegistered' },
+                details: { error: 'MessageTooBig' },
               },
             ],
           }),
@@ -87,6 +87,41 @@ describe('deliverSavingsExpoPush', () => {
       ticketId: null,
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports ticket-level DeviceNotRegistered as unregistered for token retirement', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                status: 'error',
+                message: 'Device not registered',
+                details: { error: 'DeviceNotRegistered' },
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    await expect(
+      deliverSavingsExpoPush({
+        token: 'ExponentPushToken[hidden]',
+        title: 'Title',
+        body: 'Body',
+        data: {
+          type: 'savings',
+          goalId: 'goal-1',
+          notificationId: 'notification-1',
+          merchantId: 'merchant-1',
+        },
+        channelId: 'savings',
+      })
+    ).resolves.toEqual({ outcome: 'unregistered', ticketId: null });
   });
 
   it('keeps malformed error tickets unknown', async () => {

@@ -358,6 +358,8 @@ describe('recordInflowCredit', () => {
       p_amount_kobo: 1750000,
       p_provider_transaction_id: 'provider-txn-synthetic-001',
       p_idempotency_key: 'plan-transfer:provider-txn-synthetic-001',
+      p_provider_wallet_id: 'pvb-wallet-synthetic-001',
+      p_provider_customer_id: 'faas-customer-synthetic-001',
     });
   });
 
@@ -377,6 +379,8 @@ describe('recordInflowCredit', () => {
       p_amount_kobo: 1750000,
       p_provider_transaction_id: 'provider-txn-synthetic-001',
       p_idempotency_key: 'plan-transfer:provider-txn-synthetic-001',
+      p_provider_wallet_id: 'pvb-wallet-synthetic-001',
+      p_provider_customer_id: 'faas-customer-synthetic-001',
     });
   });
 

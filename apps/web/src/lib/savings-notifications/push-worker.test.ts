@@ -51,6 +51,7 @@ describe('processSavingsNotificationPushClaims', () => {
     expect(result).toEqual({
       accepted: 1,
       rejected: 0,
+      unregistered: 0,
       unknown: 0,
       retried: 0,
       finishFailed: 0,
@@ -82,6 +83,29 @@ describe('processSavingsNotificationPushClaims', () => {
     expect(result).toEqual({
       accepted: 0,
       rejected: 1,
+      unregistered: 0,
+      unknown: 0,
+      retried: 0,
+      finishFailed: 0,
+    });
+  });
+
+  it('counts an unregistered ticket separately so dead tokens retire', async () => {
+    const finishPush = vi.fn().mockResolvedValue(true);
+    const result = await processSavingsNotificationPushClaims([claim], {
+      finishPush,
+      send: vi
+        .fn()
+        .mockResolvedValue({ outcome: 'unregistered', ticketId: null }),
+    });
+
+    expect(finishPush).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'unregistered', ticketId: null })
+    );
+    expect(result).toEqual({
+      accepted: 0,
+      rejected: 0,
+      unregistered: 1,
       unknown: 0,
       retried: 0,
       finishFailed: 0,
@@ -101,6 +125,7 @@ describe('processSavingsNotificationPushClaims', () => {
     expect(result).toEqual({
       accepted: 0,
       rejected: 0,
+      unregistered: 0,
       unknown: 0,
       retried: 1,
       finishFailed: 0,

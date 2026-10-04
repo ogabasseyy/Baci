@@ -28,14 +28,17 @@ import { resolvePlanWalletMapping } from './plan-wallet-mapping';
  *   movement: wallet balances remain live provider reads.
  * - Every credit-or-verified-duplicate then projects onto a savings goal
  *   via `allocate_plan_transfer_contribution`, keyed by
- *   `plan-transfer:{provider_transaction_id}`. Projection lands only on
- *   a uniquely allocatable manual goal; zero candidates is a definitive
- *   skip (the audit row carries the funds record), while ambiguity
- *   throws INFLOW_LEDGER_UNRESOLVED so the provider redelivers and a
- *   later delivery can project. Projection runs on the duplicate path
- *   too, because the credit insert and the projection are separate
- *   statements: a first delivery may credit-then-throw on ambiguity,
- *   and redeliveries must retry the projection, not skip it.
+ *   `plan-transfer:{provider_transaction_id}`. The destination
+ *   (provider wallet, customer) pair is passed so the RPC binds to the
+ *   funding flow's mapped goal instead of inferring from the goal count;
+ *   unmapped wallets fall back to the single-candidate census. Zero
+ *   candidates is a definitive skip (the audit row carries the funds
+ *   record), while ambiguity throws INFLOW_LEDGER_UNRESOLVED so the
+ *   provider redelivers and a later delivery can project. Projection runs
+ *   on the duplicate path too, because the credit insert and the
+ *   projection are separate statements: a first delivery may
+ *   credit-then-throw on ambiguity, and redeliveries must retry the
+ *   projection, not skip it.
  */
 
 export type RecordInflowCreditOutcome = 'credited' | 'duplicate';
@@ -131,6 +134,8 @@ export async function recordInflowCredit(
       merchantId: mapping.merchant_id,
       amountKobo: detail.amount,
       providerTransactionId: detail.transaction_id,
+      providerWalletId: event.pvb_wallet,
+      providerCustomerId: event.customer_id,
     });
     return 'credited';
   }
@@ -213,6 +218,8 @@ export async function recordInflowCredit(
     merchantId: mapping.merchant_id,
     amountKobo: detail.amount,
     providerTransactionId: detail.transaction_id,
+    providerWalletId: event.pvb_wallet,
+    providerCustomerId: event.customer_id,
   });
   return 'duplicate';
 }
@@ -224,6 +231,8 @@ async function projectPlanTransferOntoGoal(
     merchantId: string;
     amountKobo: number;
     providerTransactionId: string;
+    providerWalletId: string;
+    providerCustomerId: string;
   }
 ): Promise<void> {
   const { error } = await supabase.rpc('allocate_plan_transfer_contribution', {
@@ -232,6 +241,12 @@ async function projectPlanTransferOntoGoal(
     p_amount_kobo: input.amountKobo,
     p_provider_transaction_id: input.providerTransactionId,
     p_idempotency_key: `plan-transfer:${input.providerTransactionId}`,
+    // Bind the projection to the destination account's mapped goal: the
+    // funding flow provisions one wallet per goal, so a customer with two
+    // allocatable goals still attributes exactly. Unmapped wallets fall
+    // back to the single-candidate census inside the RPC.
+    p_provider_wallet_id: input.providerWalletId,
+    p_provider_customer_id: input.providerCustomerId,
   });
   if (!error) return;
   // P0001 is the RPC's ambiguity raise: two or more allocatable manual

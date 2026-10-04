@@ -26,10 +26,20 @@ function readTicket(value: unknown): SavingsPushResult {
   const status = (ticket as { status?: unknown }).status;
   if (status === 'error') {
     const errorTicket = ticket as { message?: unknown; details?: unknown };
-    return typeof errorTicket.message === 'string' &&
-      isRecord(errorTicket.details)
-      ? { outcome: 'rejected', ticketId: null }
-      : { outcome: 'unknown', ticketId: null };
+    if (
+      typeof errorTicket.message !== 'string' ||
+      !isRecord(errorTicket.details)
+    ) {
+      return { outcome: 'unknown', ticketId: null };
+    }
+    // A ticket-level DeviceNotRegistered is definitive: there is no receipt
+    // id, so the receipt path can never deactivate this token. Report a
+    // distinct outcome so finish_push retires it instead of reselecting it
+    // for every future event.
+    if (errorTicket.details.error === 'DeviceNotRegistered') {
+      return { outcome: 'unregistered', ticketId: null };
+    }
+    return { outcome: 'rejected', ticketId: null };
   }
   const id = (ticket as { id?: unknown }).id;
   if (

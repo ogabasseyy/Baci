@@ -32,6 +32,7 @@ type RuntimeResult = {
   claimed: number;
   accepted: number;
   rejected: number;
+  unregistered: number;
   unknown: number;
   retried: number;
   finishFailed: number;
@@ -48,6 +49,7 @@ const emptyResult = (enabled: boolean): RuntimeResult => ({
   claimed: 0,
   accepted: 0,
   rejected: 0,
+  unregistered: 0,
   unknown: 0,
   retried: 0,
   finishFailed: 0,
@@ -155,6 +157,7 @@ export async function runSavingsNotificationPushWorker(
       const counts = {
         accepted: 0,
         rejected: 0,
+        unregistered: 0,
         unknown: 0,
         retried: 0,
         finishFailed: 0,
@@ -206,6 +209,7 @@ export async function runSavingsNotificationPushWorker(
         );
         counts.accepted += cycleCounts.accepted;
         counts.rejected += cycleCounts.rejected;
+        counts.unregistered += cycleCounts.unregistered;
         counts.unknown += cycleCounts.unknown;
         counts.retried += cycleCounts.retried;
         counts.finishFailed += cycleCounts.finishFailed;

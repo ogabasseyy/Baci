@@ -306,12 +306,29 @@ describe('fetchWalletData', () => {
     // The variant recovery guard needs pricing to offer re-selection.
     expect(selectCalls.customer_savings_goals[0]).toContain('price');
     expect(selectCalls.customer_savings_goals[0]).toContain('price_override');
-    // The visibility predicate needs the storefront-visibility columns.
+    // The visibility predicate needs the storefront-visibility columns
+    // that actually exist. is_active, status, deleted_at, and archived_at
+    // were never added to product_variants (see generated Row type), and
+    // selecting any of them makes PostgREST reject the whole goals query.
     expect(selectCalls.customer_savings_goals[0]).toContain(
       'is_inventory_anchor'
     );
-    expect(selectCalls.customer_savings_goals[0]).toContain('is_active');
-    expect(selectCalls.customer_savings_goals[0]).toContain('archived_at');
+    const variantProjection =
+      selectCalls.customer_savings_goals[0].match(
+        /variants:product_variants!product_variants_product_id_fkey\(([^)]*)\)/
+      )?.[1] ?? '';
+    expect(variantProjection.length).toBeGreaterThan(0);
+    const projectedColumns = variantProjection
+      .split(',')
+      .map((column) => column.trim());
+    for (const missing of [
+      'is_active',
+      'status',
+      'deleted_at',
+      'archived_at',
+    ]) {
+      expect(projectedColumns).not.toContain(missing);
+    }
     expect(result.transactions).toEqual([
       {
         amount: 2500,

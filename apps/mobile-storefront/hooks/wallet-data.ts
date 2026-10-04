@@ -212,7 +212,12 @@ export async function fetchWalletData(
       supabase
         .from('customer_savings_goals')
         .select(
-          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor, is_active, status, deleted_at, archived_at))'
+          // Variant projection lists only columns that exist on
+          // product_variants (see generated Row type): is_active, status,
+          // deleted_at, and archived_at were never added, and PostgREST
+          // rejects the entire goals query when any selected column is
+          // unknown — failing wallet load for every customer.
+          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor))'
         )
         .eq('merchant_id', merchantId)
         .eq('customer_id', resolvedCustomerId)

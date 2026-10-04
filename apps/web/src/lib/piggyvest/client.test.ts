@@ -102,4 +102,41 @@ describe('piggyvestRequest', () => {
     expect((error as PiggyvestApiError).message).not.toContain('nope');
     vi.unstubAllGlobals();
   });
+
+  it('keeps the timeout armed while the body streams, mapping a mid-body stall to a network error', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(
+          (_url: string, init?: RequestInit): Promise<Response> =>
+            Promise.resolve({
+              headers: new Headers(),
+              json: () =>
+                new Promise((_resolve, reject) => {
+                  init?.signal?.addEventListener('abort', () => {
+                    reject(new DOMException('Aborted', 'AbortError'));
+                  });
+                }),
+              ok: true,
+              status: 200,
+            } as Response)
+        )
+      );
+
+      const pending = piggyvestRequest(
+        { token: 'synthetic-token' },
+        dataSchema,
+        '/x'
+      );
+      const assertion = expect(pending).rejects.toMatchObject({
+        code: 'PIGGYVEST_NETWORK_ERROR',
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
 });

@@ -92,15 +92,15 @@ export async function piggyvestRequest<Data>(
       }
     );
   } catch (error) {
+    clearTimeout(timeout);
     throw new PiggyvestApiError(
       'PIGGYVEST_NETWORK_ERROR',
       error instanceof Error ? error.message : 'PiggyVest request failed'
     );
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (response.status === 401 || response.status === 403) {
+    clearTimeout(timeout);
     throw new PiggyvestApiError(
       'PIGGYVEST_AUTH_ERROR',
       'PiggyVest rejected the API credentials',
@@ -126,6 +126,8 @@ export async function piggyvestRequest<Data>(
       'PiggyVest returned a non-JSON response',
       response.status
     );
+  } finally {
+    clearTimeout(timeout);
   }
 
   const header = providerEnvelopeSchema.safeParse(envelope);

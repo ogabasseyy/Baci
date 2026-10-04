@@ -191,6 +191,69 @@ describe('wallet savings data helpers', () => {
     );
   });
 
+  it.each([
+    ['inactive', { is_active: false }],
+    ['deleted', { deleted_at: '2026-01-01T00:00:00.000Z' }],
+    ['archived', { archived_at: '2026-01-01T00:00:00.000Z' }],
+    ['non-active status', { status: 'draft' }],
+  ])(
+    'does not mark a product with only a %s variant unresolved',
+    (_label, visibility) => {
+      expect(
+        toActiveSavingsGoal({
+          goal: { ...activeGoal, variant_id: null },
+          product: {
+            id: 'product-1',
+            images: ['https://cdn.example.com/product.jpg'],
+            name: 'iPhone 15 Pro',
+            variants: [{ id: 'hidden-variant', ...visibility }],
+          },
+        })
+      ).toEqual(
+        expect.objectContaining({
+          selection_unresolved: false,
+        })
+      );
+    }
+  );
+
+  it('excludes hidden variants from re-selection options', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, status: 'completed', variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          price: '700000',
+          variants: [
+            {
+              attributes: { storage: '128GB' },
+              condition: 'new',
+              id: 'variant-128',
+              is_active: false,
+              price_override: '15000',
+            },
+            {
+              attributes: { storage: '256GB' },
+              condition: 'new',
+              id: 'variant-256',
+              is_active: true,
+              price_override: '18000',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: true,
+        variant_resolution_options: [
+          { id: 'variant-256', label: 'New · Storage: 256GB' },
+        ],
+      })
+    );
+  });
+
   it('prefers a selected variant single image when hydrating goal metadata', () => {
     expect(
       toActiveSavingsGoal({

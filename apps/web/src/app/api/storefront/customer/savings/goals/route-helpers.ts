@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export interface SavingsGoalRow {
   break_fee_percent: number | string | null;
   cancelled_at: string | null;
@@ -62,6 +64,45 @@ export function toSavingsRouteNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export type GoalRequestFingerprintInput = {
+  contributionAmount: number;
+  contributionFrequency: string;
+  initialContributionAmount?: number | null;
+  maturityDate: string;
+  preferredDebitTime?: string | null;
+  productId: string;
+  sourceMode: string;
+  startDate: string;
+  targetAmount: number;
+  variantId?: string | null;
+};
+
+/**
+ * Canonical fingerprint of the raw requested plan (pre-catalogue
+ * resolution). Persisted with the goal and compared on key reuse: an
+ * identical retry replays even if the catalogue drifted, while an edited
+ * plan mismatches instead of silently returning the stale goal. Never
+ * compare resolved values (e.g. catalogue-raised targets) here — drift is
+ * not a user edit.
+ */
+export function buildGoalRequestFingerprint(
+  input: GoalRequestFingerprintInput
+): string {
+  const canonical = JSON.stringify([
+    input.productId,
+    input.variantId ?? null,
+    input.targetAmount,
+    input.initialContributionAmount ?? 0,
+    input.contributionAmount,
+    input.contributionFrequency,
+    input.preferredDebitTime ?? null,
+    input.startDate,
+    input.maturityDate,
+    input.sourceMode,
+  ]);
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
 export function mapSavingsRpcErrorStatus(message: string, code?: string) {
   const normalized = message.toLowerCase();
   if (
@@ -86,6 +127,7 @@ export function mapSavingsRpcErrorStatus(message: string, code?: string) {
 
   if (
     normalized === 'saved_payment_method_not_available_for_savings' ||
+    normalized.includes('mismatched_goal_idempotency_payload') ||
     normalized.includes('insufficient_wallet_balance') ||
     normalized.includes('not_allocatable') ||
     normalized.includes('not_paused') ||

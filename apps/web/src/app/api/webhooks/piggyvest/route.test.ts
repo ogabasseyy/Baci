@@ -128,6 +128,33 @@ const restrictionEvent = {
   pvb_wallet: 'pvb-wallet-synthetic-001',
 };
 
+const interestEvent = {
+  eventId: '01K8TESTINTEREST001',
+  eventType: 'interest-payout.success',
+  eventCategory: 'interest-payout',
+  customer_id: 'faas-customer-synthetic-001',
+  eventData: {
+    id: 'faas-interest-synthetic-001',
+    amount: 95000,
+    destination_wallet: 'faas-wallet-synthetic-001',
+    destination_wallet_balance: 1095000,
+    destination_wallet_ledger_balance: 1095000,
+    reference: 'faas-ref-synthetic-002',
+    timestamp: '2026-09-01T00:05:00.000Z',
+    batch_id: 'batch-synthetic-001',
+    break_down: {
+      gross_interest_payout: 100000,
+      withholding_tax: 5000,
+      net_interest_payout: 95000,
+    },
+  },
+  pvb_reference: 'pvb-txn-synthetic-002',
+  pvb_wallet: 'pvb-wallet-synthetic-001',
+  pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
+  pvb_destination_wallet: null,
+  pvb_third_party_reference: null,
+};
+
 const outflowEvent = {
   eventId: '7cae305b-4d2f-4b6c-0e9a-3f5c7b9d1e23',
   eventType: 'bank-transfer.outflow.success',
@@ -405,6 +432,30 @@ describe('POST event intake', () => {
         event_id: restrictionEvent.eventId,
         event_type: 'restriction-created.success',
         wallet_id: 'pvb-wallet-synthetic-001',
+      }),
+      { onConflict: 'event_id', ignoreDuplicates: true }
+    );
+  });
+
+  it('records the destination plan wallet for interest payouts', async () => {
+    vi.stubEnv('PVB_SECRET_KEY', SECRET);
+    const { query, upsert } = chainable({
+      data: [{ event_id: interestEvent.eventId }],
+      error: null,
+    });
+    mocks.createServiceClient.mockReturnValue({
+      from: vi.fn(() => query),
+    });
+    const rawBody = JSON.stringify(interestEvent);
+
+    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
+
+    expect(response.status).toBe(200);
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_id: interestEvent.eventId,
+        event_type: 'interest-payout.success',
+        wallet_id: 'faas-wallet-synthetic-001',
       }),
       { onConflict: 'event_id', ignoreDuplicates: true }
     );

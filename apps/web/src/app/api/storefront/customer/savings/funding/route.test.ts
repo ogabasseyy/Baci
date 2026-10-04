@@ -104,7 +104,7 @@ beforeEach(() => {
     },
     merchant: { id: merchantId },
     supabase: {
-      from: vi.fn(() => goalQuery({ id: goalId, status: 'active' })),
+      from: vi.fn(() => goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })),
     },
   });
   mockEnsurePiggyvestPlanFunding.mockResolvedValue({
@@ -241,7 +241,7 @@ describe('/api/storefront/customer/savings/funding POST', () => {
       customer: { id: customerId, first_name: null, last_name: null },
       merchant: { id: merchantId },
       supabase: {
-        from: vi.fn(() => goalQuery({ id: goalId, status: 'active' })),
+        from: vi.fn(() => goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })),
       },
     });
 

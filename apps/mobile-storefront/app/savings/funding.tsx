@@ -139,9 +139,9 @@ function SavingsPlanFundingScreen() {
               copied={copied}
               error={funding.fundingError}
               goalTitle={activeGoal?.title ?? 'Savings plan'}
-              isHostedStaging={
-                process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'
-              }
+              // Same gate as the route redirect above: the bare hosted
+              // flag alone must never enable staging copy.
+              isHostedStaging={isHostedStagingTestPaymentsEnabled()}
               onCopy={async () => {
                 const accountNumber =
                   funding.planFundingAccounts[0]?.accountNumber ?? '';

@@ -284,6 +284,42 @@ describe('processPiggyvestEvent', () => {
     );
   });
 
+  it('quarantines a same-identity interest conflict before acking', async () => {
+    const conflict = new InterestLedgerError(
+      'INTEREST_LEDGER_CONFLICT',
+      'Interest redelivery conflicts with the credited row'
+    ) as InterestLedgerError & {
+      conflict: {
+        providerPayoutId: string;
+        mismatchedFields: string[];
+        bodyDigest: string;
+      };
+    };
+    conflict.conflict = {
+      providerPayoutId: 'faas-interest-001',
+      mismatchedFields: ['amount_kobo'],
+      bodyDigest: 'b'.repeat(64),
+    };
+    mockRecordPayout.mockRejectedValue(conflict);
+    await expect(
+      processPiggyvestEvent(supabase, interestEvent as never)
+    ).resolves.toBe('processed');
+    expect(mockRecordQuarantine).toHaveBeenCalledWith(supabase, {
+      bodyDigest: 'b'.repeat(64),
+      reason: 'conflict',
+      eventId: interestEvent.eventId,
+      eventType: interestEvent.eventType,
+      detail: {
+        provider_payout_id: 'faas-interest-001',
+        mismatched_fields: ['amount_kobo'],
+      },
+    });
+    expect(mockResolve).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ claimToken, status: 'failed' })
+    );
+  });
+
   it('does not acknowledge a conflict when quarantine persistence fails', async () => {
     const conflict = new InflowLedgerError(
       'INFLOW_LEDGER_CONFLICT',

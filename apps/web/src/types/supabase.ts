@@ -2442,6 +2442,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at: string | null;
           future_debits_cancelled_at: string | null;
+          goal_idempotency_key: string | null;
+          goal_request_fingerprint: string | null;
           id: string;
           initial_contribution_amount: number;
           maturity_date: string;
@@ -2475,6 +2477,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date: string;
@@ -2508,6 +2512,8 @@ export type Database = {
           customer_id?: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date?: string;
@@ -17028,6 +17034,7 @@ export type Database = {
           p_preferred_debit_time: string;
           p_product_id: string;
           p_product_snapshot: Json;
+          p_request_fingerprint: string;
           p_saved_payment_method_id: string;
           p_source_mode: string;
           p_start_date: string;

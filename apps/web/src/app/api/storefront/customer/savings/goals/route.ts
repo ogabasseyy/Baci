@@ -15,6 +15,7 @@ import {
   type SavingsProductQueryClient,
 } from './prepare-create-savings-goal-device';
 import {
+  buildGoalRequestFingerprint,
   formatSavingsGoal,
   mapSavingsRpcErrorStatus,
   resolveCreateGoalRpcRow,
@@ -187,6 +188,71 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Idempotent replay before catalogue validation: if creation committed
+    // but the response was lost, the retained key recovers the goal even
+    // when the product/variant was archived since. The fingerprint must
+    // match exactly — an edited plan falls through to the normal path so
+    // the RPC raises mismatched_goal_idempotency_payload instead of
+    // returning a stale goal.
+    const requestFingerprint = parsed.data.goalIdempotencyKey
+      ? buildGoalRequestFingerprint({
+          contributionAmount: parsed.data.contributionAmount,
+          contributionFrequency: parsed.data.contributionFrequency,
+          initialContributionAmount: parsed.data.initialContributionAmount,
+          maturityDate: parsed.data.maturityDate,
+          preferredDebitTime: parsed.data.preferredDebitTime,
+          productId: parsed.data.productId,
+          sourceMode: parsed.data.sourceMode,
+          startDate: parsed.data.startDate,
+          targetAmount: parsed.data.targetAmount,
+          variantId: parsed.data.variantId,
+        })
+      : null;
+    if (parsed.data.goalIdempotencyKey && requestFingerprint) {
+      const replayResult = await resolved.supabase
+        .from('customer_savings_goals')
+        .select(
+          'id, status, current_amount, contribution_amount, contribution_frequency, goal_request_fingerprint'
+        )
+        .eq('merchant_id', resolved.merchant.id)
+        .eq('customer_id', resolved.customer.id)
+        .eq('goal_idempotency_key', parsed.data.goalIdempotencyKey)
+        .maybeSingle();
+      if (replayResult.error) {
+        throw replayResult.error;
+      }
+      if (
+        replayResult.data &&
+        replayResult.data.goal_request_fingerprint === requestFingerprint
+      ) {
+        const walletResult = await resolved.supabase
+          .from('customer_wallets')
+          .select('available_balance')
+          .eq('merchant_id', resolved.merchant.id)
+          .eq('customer_id', resolved.customer.id)
+          .maybeSingle();
+        if (walletResult.error) {
+          throw walletResult.error;
+        }
+        return NextResponse.json({
+          contributionAmount: toSavingsRouteNumber(
+            replayResult.data.contribution_amount
+          ),
+          contributionFrequency: replayResult.data.contribution_frequency,
+          contributionId: null,
+          currentAmount: toSavingsRouteNumber(
+            replayResult.data.current_amount
+          ),
+          goalId: replayResult.data.id,
+          goalStatus: replayResult.data.status,
+          success: true,
+          walletBalance: toSavingsRouteNumber(
+            walletResult.data?.available_balance ?? 0
+          ),
+        });
+      }
+    }
+
     const productQueryClient: SavingsProductQueryClient = {
       from: (table) => ({
         select: (columns) => {
@@ -244,6 +310,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_preferred_debit_time: parsed.data.preferredDebitTime ?? null,
         p_product_id: parsed.data.productId,
         p_product_snapshot: deviceResult.device.snapshot,
+        p_request_fingerprint: requestFingerprint,
         p_saved_payment_method_id: parsed.data.savedPaymentMethodId ?? null,
         p_source_mode: parsed.data.sourceMode,
         p_start_date: parsed.data.startDate,

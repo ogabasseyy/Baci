@@ -52,6 +52,21 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
       },
     },
     {
+      // The savings push worker addresses this channel id explicitly, and
+      // Android drops pushes naming a channel that was never created. It
+      // must exist from shared setup (which runs before token issue and on
+      // startup), not only from local-reminder scheduling, which is
+      // skipped once server delivery is available.
+      id: 'savings',
+      config: {
+        name: 'Savings',
+        description: 'Savings goal reminders and payout updates',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#16A34A',
+      },
+    },
+    {
       id: 'general',
       config: {
         name: 'General',

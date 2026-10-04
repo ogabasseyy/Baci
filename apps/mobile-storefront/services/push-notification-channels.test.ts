@@ -22,7 +22,7 @@ describe('ensureAndroidNotificationChannels', () => {
     mockSetNotificationChannelAsync.mockResolvedValue(null);
   });
 
-  it('creates all four channels including payments', async () => {
+  it('creates all five channels including payments and savings', async () => {
     await ensureAndroidNotificationChannels();
 
     // The payments channel must exist before a wallet-credited push targets
@@ -31,14 +31,22 @@ describe('ensureAndroidNotificationChannels', () => {
     const channelIds = mockSetNotificationChannelAsync.mock.calls.map(
       (call) => call[0]
     );
-    expect(channelIds).toEqual(['orders', 'payments', 'promotions', 'general']);
+    // The savings worker addresses the savings channel id explicitly;
+    // Android drops pushes naming a channel that was never created.
+    expect(channelIds).toEqual([
+      'orders',
+      'payments',
+      'promotions',
+      'savings',
+      'general',
+    ]);
   });
 
   it('is idempotent across repeated calls', async () => {
     await ensureAndroidNotificationChannels();
     await ensureAndroidNotificationChannels();
 
-    expect(mockSetNotificationChannelAsync).toHaveBeenCalledTimes(8);
+    expect(mockSetNotificationChannelAsync).toHaveBeenCalledTimes(10);
   });
 
   it('continues creating later channels when one registration fails', async () => {
@@ -50,7 +58,7 @@ describe('ensureAndroidNotificationChannels', () => {
 
     expect(
       mockSetNotificationChannelAsync.mock.calls.map(([id]) => id)
-    ).toEqual(['orders', 'payments', 'promotions', 'general']);
+    ).toEqual(['orders', 'payments', 'promotions', 'savings', 'general']);
     expect(mockWarn).toHaveBeenLastCalledWith(
       'Android notification channel registration failed.',
       expect.objectContaining({ channel: 'orders' })

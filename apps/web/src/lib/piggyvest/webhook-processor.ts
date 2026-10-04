@@ -33,9 +33,10 @@ import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
  * - Poison (inconsistent interest arithmetic, non-positive inflow amount,
  *   unattributed restriction) resolves failed and acks: retries cannot fix
  *   it, so it must not burn the provider's 10 attempts.
- * - A same-identity inflow conflict quarantines the observation, resolves
- *   failed, and acks: the inbox cannot see it (event-id dedupe), so the
- *   quarantine row is the only durable evidence.
+ * - A same-identity inflow or interest conflict quarantines the
+ *   observation, resolves failed, and acks: the inbox cannot see it
+ *   (event-id dedupe), so the quarantine row is the only durable
+ *   evidence.
  * - Storage failures resolve failed and rethrow: the route 503s, the
  *   provider redelivers, and the claim re-wins the failed row.
  * - Busy leases throw for provider retry; only completed work is acknowledged.
@@ -210,6 +211,32 @@ export async function processPiggyvestEvent(
         claimToken: claimed.claimToken,
         status: 'failed',
         lastError: 'inflow redelivery conflicts with credited row',
+      });
+      return 'processed';
+    }
+    if (
+      error instanceof InterestLedgerError &&
+      error.code === 'INTEREST_LEDGER_CONFLICT' &&
+      error.conflict
+    ) {
+      // Same rule as the inflow conflict above: preserve the conflicting
+      // interest observation for review and ack. Retries can never
+      // resolve a provider conflict.
+      await recordQuarantineEvent(supabase, {
+        bodyDigest: error.conflict.bodyDigest,
+        reason: 'conflict',
+        eventId: event.eventId,
+        eventType: event.eventType,
+        detail: {
+          provider_payout_id: error.conflict.providerPayoutId,
+          mismatched_fields: error.conflict.mismatchedFields,
+        },
+      });
+      await resolvePiggyvestEvent(supabase, {
+        eventId: event.eventId,
+        claimToken: claimed.claimToken,
+        status: 'failed',
+        lastError: 'interest redelivery conflicts with credited row',
       });
       return 'processed';
     }

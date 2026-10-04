@@ -499,4 +499,186 @@ describe('/api/storefront/customer/savings/goals', () => {
       })
     );
   });
+
+  it('replays a matching key before catalogue validation', async () => {
+    const replayQuery = createProductQuery({
+      data: {
+        contribution_amount: '20000',
+        contribution_frequency: 'daily',
+        current_amount: '20000',
+        goal_request_fingerprint:
+          '7a974bbbfd7784d4f727a48dc6efa9cf9e1763823ba44325bb09168394173f62',
+        id: 'goal-replayed',
+        status: 'active',
+      },
+      error: null,
+    });
+    const walletQuery = createProductQuery({
+      data: { available_balance: '180000' },
+      error: null,
+    });
+    // The product was archived after the first creation committed: the
+    // catalogue lookup finds nothing, but the replay must still succeed.
+    const archivedProductQuery = createProductQuery({
+      data: null,
+      error: null,
+    });
+    const rpc = vi.fn();
+    const mockSupabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'customer_savings_goals') return replayQuery;
+        if (table === 'customer_wallets') return walletQuery;
+        return archivedProductQuery;
+      }),
+      rpc,
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        goalIdempotencyKey: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        initialContributionAmount: 20000,
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 800000,
+        termsAccepted: true,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      contributionAmount: 20000,
+      contributionFrequency: 'daily',
+      contributionId: null,
+      currentAmount: 20000,
+      goalId: 'goal-replayed',
+      goalStatus: 'active',
+      success: true,
+      walletBalance: 180000,
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('falls through to creation when the replayed payload changed', async () => {
+    const replayQuery = createProductQuery({
+      data: {
+        contribution_amount: '20000',
+        contribution_frequency: 'daily',
+        current_amount: '20000',
+        goal_request_fingerprint: 'other-fingerprint',
+        id: 'goal-stale',
+        status: 'active',
+      },
+      error: null,
+    });
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          contribution_id: 'contrib-1',
+          current_amount: '20000',
+          goal_id: 'goal-1',
+          goal_status: 'active',
+          success: true,
+          wallet_balance: '180000',
+        },
+      ],
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn((table: string) => {
+        if (table === 'customer_savings_goals') return replayQuery;
+        return productQuery;
+      }),
+      rpc,
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        goalIdempotencyKey: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        initialContributionAmount: 20000,
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 900000,
+        termsAccepted: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      'create_customer_savings_goal',
+      expect.objectContaining({
+        p_goal_idempotency_key: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        p_request_fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      })
+    );
+  });
+
+  it('maps a reused key with a changed payload to 409 with the message', async () => {
+    const productQuery = createProductQuery({
+      data: simpleProductData(),
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'mismatched_goal_idempotency_payload',
+        },
+      }),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await POST(
+      postRequest({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        goalIdempotencyKey: 'a5bb8c9e-4c0e-4a2f-9c1d-7e6f5a4b3c2d',
+        initialContributionAmount: 20000,
+        maturityDate: '2026-06-30',
+        merchantSlug: 'ogabassey',
+        nonWithdrawableAccepted: true,
+        productId: '00000000-0000-4000-8000-000000000101',
+        sourceMode: 'manual',
+        startDate: '2026-05-21',
+        targetAmount: 800000,
+        termsAccepted: true,
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe('mismatched_goal_idempotency_payload');
+  });
 });

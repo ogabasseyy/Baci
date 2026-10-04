@@ -205,10 +205,9 @@ function FundingAccountDetails({ colors, controller }: TransferModalProps) {
 function PlanTransferMode({ colors, controller }: TransferModalProps) {
   const [bvn, setBvn] = useState('');
   const [earnInterest, setEarnInterest] = useState(false);
-  const transferAmount = Math.max(
-    controller.requiredTopUpAmount,
-    controller.contributionValue
-  );
+  // Direct plan-account transfers bypass the wallet entirely: the amount is
+  // the persisted initial contribution, not the wallet top-up shortfall.
+  const transferAmount = controller.effectiveInitialContribution;
   const phase = controller.planFundingPhase;
 
   const handleFetchPlanAccount = async () => {

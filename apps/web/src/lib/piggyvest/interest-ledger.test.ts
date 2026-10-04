@@ -28,7 +28,9 @@ const interestEvent: InterestPayoutSuccessEvent = {
     },
   },
   pvb_reference: 'pvb-txn-synthetic-002',
-  pvb_wallet: 'pvb-wallet-synthetic-002',
+  // Observed provider shape: the envelope wallet is the source
+  // accrued-interest wallet, not the credited plan wallet.
+  pvb_wallet: 'pvb-wallet-synthetic-001',
   pvb_accrued_interest_wallet: 'pvb-wallet-synthetic-001',
   pvb_destination_wallet: null,
   pvb_third_party_reference: null,
@@ -44,15 +46,31 @@ const MAPPING_ROW = {
   customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
   merchant_id: '43e157b6-179c-432a-9392-e0827da96d82',
   piggyvest_customer_id: 'faas-customer-synthetic-001',
-  wallet_id: 'pvb-wallet-synthetic-002',
+  wallet_id: 'faas-wallet-synthetic-001',
   status: 'ready',
+};
+
+const STORED_PAYOUT_ROW = {
+  customer_id: 'faas-customer-synthetic-001',
+  wallet_id: 'faas-wallet-synthetic-001',
+  amount_kobo: 95000,
+  gross_kobo: 100000,
+  withholding_tax_kobo: 5000,
+  net_kobo: 95000,
+  reference: 'faas-ref-synthetic-002',
+  paid_at: '2026-09-01T00:05:00.000Z',
 };
 
 function mockSupabase(options: {
   upsertResult?: { data: unknown; error: unknown };
   listResult?: { data: unknown; error: unknown };
   mappingResult?: { data: unknown; error: unknown };
-}): { client: SupabaseClient; upsert: ReturnType<typeof vi.fn> } {
+  verifyResult?: { data: unknown; error: unknown };
+}): {
+  client: SupabaseClient;
+  upsert: ReturnType<typeof vi.fn>;
+  mappingEq: ReturnType<typeof vi.fn>;
+} {
   const upsert = vi.fn(() => ({
     select: vi.fn(() => thenable(options.upsertResult)),
   }));
@@ -60,17 +78,30 @@ function mockSupabase(options: {
     data: MAPPING_ROW,
     error: null,
   };
-  const select = vi.fn(() => ({
+  const verifyResult = options.verifyResult ?? {
+    data: STORED_PAYOUT_ROW,
+    error: null,
+  };
+  const mappingEq = vi.fn(() => ({
+    maybeSingle: async () => mappingResult,
+  }));
+  const mappingSelect = vi.fn(() => ({ eq: mappingEq }));
+  const verifySelect = vi.fn(() => ({
     eq: vi.fn(() => ({
       ...thenable(options.listResult),
-      maybeSingle: async () => mappingResult,
+      maybeSingle: async () => verifyResult,
     })),
   }));
   return {
     client: {
-      from: vi.fn(() => ({ upsert, select })),
+      from: vi.fn((table: string) =>
+        table === 'piggyvest_plan_wallets'
+          ? { select: mappingSelect }
+          : { upsert, select: verifySelect }
+      ),
     } as unknown as SupabaseClient,
     upsert,
+    mappingEq,
   };
 }
 
@@ -98,6 +129,27 @@ describe('recordInterestPayout', () => {
     );
   });
 
+  it('attributes the mapping and stored row to the destination plan wallet', async () => {
+    const { client, upsert, mappingEq } = mockSupabase({
+      upsertResult: {
+        data: [{ provider_payout_id: 'faas-interest-synthetic-001' }],
+        error: null,
+      },
+    });
+
+    await expect(recordInterestPayout(client, interestEvent)).resolves.toBe(
+      'credited'
+    );
+    expect(mappingEq).toHaveBeenCalledWith(
+      'wallet_id',
+      'faas-wallet-synthetic-001'
+    );
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ wallet_id: 'faas-wallet-synthetic-001' }),
+      expect.anything()
+    );
+  });
+
   it('collapses redeliveries on the provider payout identity', async () => {
     const { client } = mockSupabase({
       upsertResult: { data: [], error: null },
@@ -106,6 +158,32 @@ describe('recordInterestPayout', () => {
     await expect(recordInterestPayout(client, interestEvent)).resolves.toBe(
       'duplicate'
     );
+  });
+
+  it('quarantines a same-identity redelivery with changed financials', async () => {
+    const { client } = mockSupabase({
+      upsertResult: { data: [], error: null },
+      verifyResult: {
+        data: { ...STORED_PAYOUT_ROW, amount_kobo: 94000 },
+        error: null,
+      },
+    });
+
+    const error = await recordInterestPayout(client, interestEvent).catch(
+      (cause: unknown) => cause
+    );
+
+    expect(error).toBeInstanceOf(InterestLedgerError);
+    expect(error).toMatchObject({
+      code: 'INTEREST_LEDGER_CONFLICT',
+      conflict: expect.objectContaining({
+        providerPayoutId: 'faas-interest-synthetic-001',
+        mismatchedFields: ['amount_kobo'],
+      }),
+    });
+    expect(
+      (error as InterestLedgerError).conflict?.bodyDigest
+    ).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('fails closed when gross minus tax disagrees with net', async () => {

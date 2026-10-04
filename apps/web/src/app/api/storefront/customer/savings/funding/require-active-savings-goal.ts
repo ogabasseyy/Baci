@@ -14,7 +14,7 @@ export async function requireActiveSavingsGoal({
 }): Promise<NextResponse | null> {
   const { data: goal, error } = await supabase
     .from('customer_savings_goals')
-    .select('id, status')
+    .select('id, status, source_mode')
     .eq('merchant_id', merchantId)
     .eq('customer_id', customerId)
     .eq('id', goalId)
@@ -39,6 +39,18 @@ export async function requireActiveSavingsGoal({
       {
         code: 'SAVINGS_GOAL_NOT_ACTIVE',
         error: 'Only active savings plans can be funded',
+      },
+      { status: 409 }
+    );
+  }
+  // Transfer funding is manual-only, matching the funding screen's
+  // goal-matches rule: auto-debit plans are funded by debit, and a
+  // transfer link must not provision accounts for them.
+  if (goal.source_mode !== 'manual') {
+    return NextResponse.json(
+      {
+        code: 'SAVINGS_GOAL_NOT_MANUAL',
+        error: 'Only manual savings plans can be funded by transfer',
       },
       { status: 409 }
     );

@@ -202,6 +202,26 @@ describe('StartSavingsTransferModal', () => {
       });
     }
 
+    it('shows the persisted initial contribution, not the wallet shortfall', () => {
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={createPlanController({
+            contributionValue: 20000,
+            effectiveInitialContribution: 70000,
+            requiredTopUpAmount: 50000,
+          })}
+        />
+      );
+
+      // A ₦70,000 initial contribution with a ₦20,000 wallet balance must
+      // read ₦70,000: the transfer bypasses the wallet, so the ₦50,000
+      // shortfall and the ₦20,000 recurring amount are both wrong here.
+      expect(screen.getByText('₦70,000')).toBeOnTheScreen();
+      expect(screen.queryByText('₦50,000')).not.toBeOnTheScreen();
+      expect(screen.queryByText('₦20,000')).not.toBeOnTheScreen();
+    });
+
     it('prompts for BVN and fetches the plan account', async () => {
       const controller = createPlanController();
       render(

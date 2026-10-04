@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildGoalRequestFingerprint,
   formatSavingsGoal,
   mapSavingsRpcErrorStatus,
   resolveCreateGoalRpcRow,
@@ -67,6 +68,45 @@ describe('savings goals route helpers', () => {
     expect(
       mapSavingsRpcErrorStatus('saved_payment_method_not_available_for_savings')
     ).toBe(409);
+  });
+
+  it('returns a conflict for a reused key with a changed payload', () => {
+    expect(
+      mapSavingsRpcErrorStatus('mismatched_goal_idempotency_payload', 'P0001')
+    ).toBe(409);
+  });
+
+  it('fingerprints the raw requested plan deterministically', () => {
+    const input = {
+      contributionAmount: 20000,
+      contributionFrequency: 'weekly',
+      initialContributionAmount: 0,
+      maturityDate: '2026-12-31',
+      preferredDebitTime: null,
+      productId: 'product-1',
+      sourceMode: 'manual',
+      startDate: '2026-10-04',
+      targetAmount: 800000,
+      variantId: null,
+    };
+    const first = buildGoalRequestFingerprint(input);
+    const second = buildGoalRequestFingerprint({ ...input });
+
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(second).toBe(first);
+    expect(
+      buildGoalRequestFingerprint({ ...input, targetAmount: 900000 })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({ ...input, variantId: 'variant-2' })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({
+        ...input,
+        variantId: undefined,
+        initialContributionAmount: undefined,
+      })
+    ).toBe(first);
   });
 
   it('does not classify unknown unavailable failures as missing resources', () => {

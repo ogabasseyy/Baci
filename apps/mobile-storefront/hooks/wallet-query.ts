@@ -11,6 +11,11 @@ export interface WalletData {
   total_balance?: number;
 }
 
+export interface WalletSavingsVariantResolutionOption {
+  id: string;
+  label: string;
+}
+
 export interface WalletActiveSavingsGoal {
   contribution_amount: number;
   contribution_frequency: 'daily' | 'weekly' | 'monthly';
@@ -20,10 +25,12 @@ export interface WalletActiveSavingsGoal {
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;
+  selection_unresolved?: boolean;
   source_mode: 'manual' | 'auto_debit';
   status: 'active' | 'paused' | 'completed';
   target_amount: number;
   title: string;
+  variant_resolution_options?: WalletSavingsVariantResolutionOption[];
 }
 
 export type WalletFundingProvider = 'paystack' | (string & {});

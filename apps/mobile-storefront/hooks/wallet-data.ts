@@ -17,6 +17,7 @@ import {
   fetchWalletSavingsInterest,
   toWalletSavingsInterestEarnings,
 } from './wallet-savings-interest';
+import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 
 const WalletFundingAccountSchema = z.object({
   account_name: z.string().min(1),
@@ -211,7 +212,7 @@ export async function fetchWalletData(
       supabase
         .from('customer_savings_goals')
         .select(
-          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes))'
+          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes, is_inventory_anchor, is_active, status, deleted_at, archived_at))'
         )
         .eq('merchant_id', merchantId)
         .eq('customer_id', resolvedCustomerId)
@@ -232,11 +233,15 @@ export async function fetchWalletData(
   const savingsGoalRows = Array.isArray(savingsGoalsResult.data)
     ? savingsGoalsResult.data
     : [];
-  const safeSavingsBalance = savingsGoalRows.reduce(
-    (total, row) => total + (coerceDatabaseNumber(row.current_amount) ?? 0),
-    0
-  );
-  const activeSavingsGoalRow = getActiveSavingsGoal(savingsGoalRows);
+  // Confirmed per-goal interest credits adjust each goal's progress and
+  // the savings/total balances before any selection or reduction, so plan
+  // progress agrees with the Earnings cell.
+  const { goals: projectedSavingsGoalRows, savingsBalance: safeSavingsBalance } =
+    projectWalletSavingsInterest({
+      goals: savingsGoalRows,
+      goalInterestKobo: savingsInterest.goalInterestKobo,
+    });
+  const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
   let activeSavingsGoal: WalletActiveSavingsGoal | null = null;
 
   if (activeSavingsGoalRow) {
@@ -245,7 +250,7 @@ export async function fetchWalletData(
       product: activeSavingsGoalRow.product_id
         ? getJoinedSavingsGoalProduct({
             goalId: activeSavingsGoalRow.id,
-            rows: savingsGoalRows,
+            rows: projectedSavingsGoalRows,
           })
         : undefined,
     });
@@ -255,18 +260,20 @@ export async function fetchWalletData(
   // the wallet open the exact goal a push notification names instead of
   // always the first active row. Rows that fail display mapping are
   // dropped, matching the active-goal behavior.
-  const savingsGoals = getOwnedSavingsGoals(savingsGoalRows).flatMap((row) => {
-    const mapped = toActiveSavingsGoal({
-      goal: row,
-      product: row.product_id
-        ? getJoinedSavingsGoalProduct({
-            goalId: row.id,
-            rows: savingsGoalRows,
-          })
-        : undefined,
-    });
-    return mapped ? [mapped] : [];
-  });
+  const savingsGoals = getOwnedSavingsGoals(projectedSavingsGoalRows).flatMap(
+    (row) => {
+      const mapped = toActiveSavingsGoal({
+        goal: row,
+        product: row.product_id
+          ? getJoinedSavingsGoalProduct({
+              goalId: row.id,
+              rows: projectedSavingsGoalRows,
+            })
+          : undefined,
+      });
+      return mapped ? [mapped] : [];
+    }
+  );
 
   const fundingAccountValidation =
     WalletFundingAccountSchema.nullable().safeParse(fundingAccountResult.data);

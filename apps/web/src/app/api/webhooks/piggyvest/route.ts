@@ -75,7 +75,12 @@ function toRecordInput(
     case 'interest-payout.success':
       return {
         ...base,
-        walletId: event.pvb_wallet,
+        // The credited plan wallet is the nested destination_wallet; the
+        // envelope pvb_wallet is the source accrued-interest wallet.
+        // Persist exactly the attribution the ledger acts on so a
+        // redelivery reusing the event id with a different destination
+        // surfaces as a conflict instead of a duplicate.
+        walletId: event.eventData.destination_wallet,
         reference: event.pvb_reference,
         amountKobo: event.eventData.amount,
       };

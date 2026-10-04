@@ -306,6 +306,12 @@ describe('fetchWalletData', () => {
     // The variant recovery guard needs pricing to offer re-selection.
     expect(selectCalls.customer_savings_goals[0]).toContain('price');
     expect(selectCalls.customer_savings_goals[0]).toContain('price_override');
+    // The visibility predicate needs the storefront-visibility columns.
+    expect(selectCalls.customer_savings_goals[0]).toContain(
+      'is_inventory_anchor'
+    );
+    expect(selectCalls.customer_savings_goals[0]).toContain('is_active');
+    expect(selectCalls.customer_savings_goals[0]).toContain('archived_at');
     expect(result.transactions).toEqual([
       {
         amount: 2500,
@@ -335,6 +341,50 @@ describe('fetchWalletData', () => {
       earnings_available: true,
       earnings_balance: 1250,
     });
+  });
+
+  it('applies confirmed per-goal interest to goal progress and balances', async () => {
+    const goalId = '30000000-0000-4000-8000-000000000001';
+    setupSupabaseTables({
+      customer_savings_goals: createResult([
+        {
+          contribution_amount: '10000',
+          contribution_frequency: 'weekly',
+          current_amount: '20000',
+          id: goalId,
+          maturity_date: '2026-09-30',
+          product_id: null,
+          product_snapshot: {},
+          source_mode: 'manual',
+          status: 'active',
+          target_amount: '120000',
+          title: 'General savings',
+          variant_id: null,
+        },
+      ]),
+    });
+    mockRpc.mockResolvedValue({
+      data: {
+        credited_interest_kobo: 50000,
+        goal_interest_kobo: [
+          { goal_id: goalId, credited_interest_kobo: 50000 },
+        ],
+      },
+      error: null,
+    });
+
+    const result = await fetchWalletData(
+      'customer-1',
+      '10000000-0000-4000-8000-000000000001',
+      'user-1'
+    );
+
+    expect(result.wallet.active_savings_goal).toEqual(
+      expect.objectContaining({ current_amount: 20500 })
+    );
+    expect(result.wallet.savings_balance).toBe(20500);
+    expect(result.wallet.total_balance).toBe(25500);
+    expect(result.wallet.earnings_balance).toBe(500);
   });
 
   it('marks earnings unavailable when the interest lookup fails', async () => {

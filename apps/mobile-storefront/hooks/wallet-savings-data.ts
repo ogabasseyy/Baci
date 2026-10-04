@@ -25,10 +25,14 @@ const SavingsGoalDataSchema = z.object({
 });
 
 const SavingsProductVariantSchema = z.object({
+  archived_at: z.string().nullable().optional(),
   attributes: z.record(z.string(), z.string()).nullable().optional(),
   condition: z.string().nullable().optional(),
+  deleted_at: z.string().nullable().optional(),
   id: z.string(),
+  is_active: z.boolean().nullable().optional(),
   is_inventory_anchor: z.boolean().nullable().optional(),
+  status: z.string().nullable().optional(),
   image: z.string().nullable().optional(),
   images: z.array(z.string()).nullable().optional(),
   name: z.string().nullable().optional(),
@@ -47,6 +51,26 @@ const SavingsProductDataSchema = z.object({
 });
 
 export type SavingsGoalData = z.infer<typeof SavingsGoalDataSchema>;
+
+// Mirrors apps/web/src/lib/is-storefront-product-variant-public.ts: the
+// wallet must offer exactly the variants the resolve-variant endpoint
+// accepts, so hidden variants never appear as resolution options. Keep
+// the two predicates in sync.
+function isSavingsVariantVisible(variant: {
+  archived_at?: string | null;
+  deleted_at?: string | null;
+  is_active?: boolean | null;
+  is_inventory_anchor?: boolean | null;
+  status?: string | null;
+}): boolean {
+  return !(
+    variant.is_active === false ||
+    variant.is_inventory_anchor === true ||
+    variant.deleted_at != null ||
+    variant.archived_at != null ||
+    (variant.status != null && variant.status !== 'active')
+  );
+}
 
 function coerceDatabaseNumber(value: unknown): number | null {
   if (typeof value === 'number') {
@@ -179,9 +203,8 @@ export function toActiveSavingsGoal({
   const snapshot = goal.product_snapshot ?? {};
   const productValidation = SavingsProductDataSchema.safeParse(product);
   const productData = productValidation.success ? productValidation.data : null;
-  const customerVariants = productData?.variants?.filter(
-    (variant) => variant.is_inventory_anchor !== true
-  );
+  const customerVariants =
+    productData?.variants?.filter(isSavingsVariantVisible);
   const selectedVariant =
     goal.variant_id && customerVariants
       ? customerVariants.find((variant) => variant.id === goal.variant_id)

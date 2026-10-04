@@ -24,13 +24,33 @@ function supabaseFor(goal: unknown, error: unknown = null) {
 }
 
 describe('requireActiveSavingsGoal', () => {
-  it('accepts only an owned active goal', async () => {
+  it('accepts only an owned active manual goal', async () => {
     await expect(
       requireActiveSavingsGoal({
         ...scope,
-        supabase: supabaseFor({ id: scope.goalId, status: 'active' }) as never,
+        supabase: supabaseFor({
+          id: scope.goalId,
+          status: 'active',
+          source_mode: 'manual',
+        }) as never,
       })
     ).resolves.toBeNull();
+  });
+
+  it('refuses transfer funding for an auto-debit goal', async () => {
+    const response = await requireActiveSavingsGoal({
+      ...scope,
+      supabase: supabaseFor({
+        id: scope.goalId,
+        status: 'active',
+        source_mode: 'auto_debit',
+      }) as never,
+    });
+
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toMatchObject({
+      code: 'SAVINGS_GOAL_NOT_MANUAL',
+    });
   });
 
   it('hides a missing or foreign goal', async () => {

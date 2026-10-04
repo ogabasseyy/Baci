@@ -13,9 +13,18 @@
 -- Safe replay shape: success=true with the existing goal id, current amount,
 -- wallet balance, and status. contribution_id is NULL on replay (the initial
 -- contribution id is only known at creation time).
+--
+-- A reused key with a changed request is NOT a replay: the route persists a
+-- canonical fingerprint of the raw requested payload
+-- (product/variant/amounts/schedule/source) and both key-match branches
+-- compare it, raising mismatched_goal_idempotency_payload (handled by the
+-- mobile client with a fresh key) instead of returning a stale goal.
 
 ALTER TABLE public.customer_savings_goals
   ADD COLUMN IF NOT EXISTS goal_idempotency_key text NULL;
+
+ALTER TABLE public.customer_savings_goals
+  ADD COLUMN IF NOT EXISTS goal_request_fingerprint text NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS customer_savings_goals_goal_idempotency_key_uidx
   ON public.customer_savings_goals (merchant_id, customer_id, goal_idempotency_key)
@@ -50,7 +59,8 @@ CREATE FUNCTION public.create_customer_savings_goal(
   p_break_fee_percent numeric,
   p_metadata jsonb,
   p_initial_contribution_idempotency_key text,
-  p_goal_idempotency_key text DEFAULT NULL
+  p_goal_idempotency_key text DEFAULT NULL,
+  p_request_fingerprint text DEFAULT NULL
 ) RETURNS TABLE(
   success boolean,
   goal_id uuid,
@@ -70,6 +80,7 @@ DECLARE
   v_current_amount numeric := 0;
   v_initial_contribution_id uuid;
   v_goal_idempotency_key text := NULLIF(TRIM(COALESCE(p_goal_idempotency_key, '')), '');
+  v_request_fingerprint text;
 BEGIN
   IF p_customer_id IS NULL THEN
     RAISE EXCEPTION 'create_customer_savings_goal p_customer_id is required'
@@ -145,14 +156,19 @@ BEGIN
   -- if the catalogue changed after the first creation. Runs after auth so
   -- key existence never leaks across customers.
   IF v_goal_idempotency_key IS NOT NULL THEN
-    SELECT g.id, g.status, g.current_amount
-      INTO v_goal_id, v_goal_status, v_current_amount
+    SELECT g.id, g.status, g.current_amount, g.goal_request_fingerprint
+      INTO v_goal_id, v_goal_status, v_current_amount, v_request_fingerprint
       FROM public.customer_savings_goals g
      WHERE g.merchant_id = p_merchant_id
        AND g.customer_id = p_customer_id
        AND g.goal_idempotency_key = v_goal_idempotency_key;
 
     IF FOUND THEN
+      IF v_request_fingerprint IS DISTINCT FROM
+        NULLIF(TRIM(COALESCE(p_request_fingerprint, '')), '') THEN
+        RAISE EXCEPTION 'mismatched_goal_idempotency_payload'
+          USING ERRCODE = 'P0001';
+      END IF;
       SELECT COALESCE(w.available_balance, 0)
         INTO v_wallet_balance
         FROM public.customer_wallets w
@@ -237,7 +253,8 @@ BEGIN
     auto_debit_authorized_at,
     early_end_fee_accepted_at,
     metadata,
-    goal_idempotency_key
+    goal_idempotency_key,
+    goal_request_fingerprint
   )
   VALUES (
     p_merchant_id,
@@ -263,7 +280,11 @@ BEGIN
     p_auto_debit_authorized_at,
     p_early_end_fee_accepted_at,
     COALESCE(p_metadata, '{}'::jsonb),
-    v_goal_idempotency_key
+    v_goal_idempotency_key,
+    CASE
+      WHEN v_goal_idempotency_key IS NULL THEN NULL
+      ELSE NULLIF(TRIM(COALESCE(p_request_fingerprint, '')), '')
+    END
   )
   ON CONFLICT (merchant_id, customer_id, goal_idempotency_key)
     WHERE goal_idempotency_key IS NOT NULL
@@ -272,8 +293,8 @@ BEGIN
   -- Lost a creation race: another backend won with the same key. Return the
   -- winner instead of reporting success without a row.
   IF v_goal_id IS NULL AND v_goal_idempotency_key IS NOT NULL THEN
-    SELECT g.id, g.status, g.current_amount
-      INTO v_goal_id, v_goal_status, v_current_amount
+    SELECT g.id, g.status, g.current_amount, g.goal_request_fingerprint
+      INTO v_goal_id, v_goal_status, v_current_amount, v_request_fingerprint
       FROM public.customer_savings_goals g
      WHERE g.merchant_id = p_merchant_id
        AND g.customer_id = p_customer_id
@@ -281,6 +302,12 @@ BEGIN
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'savings_goal_idempotency_winner_missing'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_request_fingerprint IS DISTINCT FROM
+      NULLIF(TRIM(COALESCE(p_request_fingerprint, '')), '') THEN
+      RAISE EXCEPTION 'mismatched_goal_idempotency_payload'
         USING ERRCODE = 'P0001';
     END IF;
 
@@ -382,10 +409,10 @@ $$;
 REVOKE ALL ON FUNCTION public.create_customer_savings_goal(
   uuid, uuid, uuid, uuid, text, jsonb, numeric, numeric, numeric, text, time,
   date, date, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz,
-  numeric, jsonb, text, text
+  numeric, jsonb, text, text, text
 ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_customer_savings_goal(
   uuid, uuid, uuid, uuid, text, jsonb, numeric, numeric, numeric, text, time,
   date, date, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz,
-  numeric, jsonb, text, text
+  numeric, jsonb, text, text, text
 ) TO authenticated, service_role;

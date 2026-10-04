@@ -196,4 +196,24 @@ describe('MCP cart handoff', () => {
     expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
     expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
   });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('rejects corrupt simple-product price %s before formatting', async (price) => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const formatPrice = vi.fn(String);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice });
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(result.structuredContent).not.toHaveProperty('cart_url');
+    expect(formatPrice).not.toHaveBeenCalled();
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
+  });
+
+  it('preserves a zero-price simple-product handoff', async () => {
+    const query = { select: vi.fn(), eq: vi.fn(), single: vi.fn(async () => ({ data: { name: 'Phone', slug: 'phone', price: 0, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false }, error: null })) };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const result = await prepareCartHandoff({ supabase: { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient, merchantId: 'merchant-1', productId: 'phone-1', quantity: 1, formatPrice: String });
+    expect(result.structuredContent).toMatchObject({ success: true, quantity: 1 });
+  });
+
 });

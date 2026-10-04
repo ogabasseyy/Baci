@@ -98,6 +98,13 @@ export async function prepareCartHandoff({
     });
   }
 
+  if (!Number.isFinite(product.price) || product.price < 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+    };
+  }
+
   const cartUrl = `https://ogabassey.com/cart?item_id=${encodeURIComponent(productId)}&qty=${quantity}`;
   const productName = product.name;
   const price = product.price

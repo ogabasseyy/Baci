@@ -242,9 +242,12 @@ export async function buildMcpProductDetail({
       'openai/widgetPrefersBorder': true,
     },
   };
+  const trackedBaseStockInvalid = product.manage_stock === true &&
+    product.has_variants !== true && product.has_condition_offers !== true &&
+    (!Number.isFinite(product.stock_quantity) || Number(product.stock_quantity) < 0);
   const trackedStockMissing = product.manage_stock === true &&
     [...variants, ...conditionOffers].some((option) => !Number.isFinite(option.stock_quantity));
-  if (trackedStockMissing || !mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success) {
+  if (trackedBaseStockInvalid || trackedStockMissing || !mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success) {
     const message = 'Product details are temporarily unavailable.';
     return {
       content: [{ type: 'text', text: message }],

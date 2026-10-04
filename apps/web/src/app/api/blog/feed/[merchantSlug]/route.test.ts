@@ -332,6 +332,67 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     ]);
   });
 
+  it('excludes posts whose blocked title prefix is split by a control character', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'sneaky-post',
+          title: 'Te\u001ast post: sneak',
+          content: '<p>Body</p>',
+          excerpt: 'Excerpt',
+          featured_image_url: null,
+          category: null,
+          author_name: 'Ogabassey',
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: unknown[];
+    };
+    expect(payload.items).toHaveLength(0);
+  });
+
+  it('percent-encodes control characters in post slugs instead of deleting them', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'launch\u001a-faster',
+          title: 'Launch guide',
+          content: '<p>Body</p>',
+          excerpt: 'Excerpt',
+          featured_image_url: null,
+          category: null,
+          author_name: 'Ogabassey',
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: Array<{ id: string; link: string }>;
+    };
+    expect(payload.items[0]).toMatchObject({
+      id: 'https://usebaci.com/ogabassey/blog/launch%1A-faster',
+      link: 'https://usebaci.com/ogabassey/blog/launch%1A-faster',
+    });
+  });
+
   it('over-fetches additional ranges when early batches are fully filtered', async () => {
     const junkBatch = buildJunkFeedBatch();
     const publicPost = {

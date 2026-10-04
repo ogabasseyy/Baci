@@ -107,7 +107,8 @@ describe('GET /blog/feed.xml', () => {
         content: '<p>Content</p>',
         description: 'Price update',
         image: 'https://usebaci.com/image.png',
-        link: 'https://usebaci.com/blog/launch-faster',
+        id: 'https://usebaci.com/blog/launch%1A-faster',
+        link: 'https://usebaci.com/blog/launch%1A-faster',
         title: 'Launch Faster',
       })
     );

@@ -3,6 +3,7 @@ import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
+import { normalizeBlogFeedPostForFilter } from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
 import {
@@ -248,7 +249,8 @@ async function fetchPublicFeedPosts(
     }
 
     const postBatch = Array.isArray(posts) ? (posts as BlogPost[]) : [];
-    publicPosts.push(...filterPublicBlogPosts(postBatch));
+    const normalizedBatch = postBatch.map(normalizeBlogFeedPostForFilter);
+    publicPosts.push(...filterPublicBlogPosts(normalizedBatch));
     hasMoreRows = postBatch.length === RSS_QUERY_BATCH_SIZE;
     offset += RSS_QUERY_BATCH_SIZE;
   }
@@ -372,7 +374,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     });
 
     for (const { post, publishedDate } of postsWithValidDates) {
-      const postUrl = `${safeStoreUrl}/blog/${feedText(post.slug)}`;
+      const postUrl = `${safeStoreUrl}/blog/${encodeURIComponent(post.slug)}`;
       const excerpt = post.excerpt || stripHtml(post.content).substring(0, 300);
 
       const sanitizedContent = sanitizeForFeed(post.content);

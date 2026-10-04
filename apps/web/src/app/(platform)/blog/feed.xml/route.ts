@@ -61,8 +61,8 @@ export async function GET(_request: NextRequest) {
         post.excerpt || stripHtml(post.content || '').substring(0, 300);
       feed.addItem({
         title: feedText(post.title),
-        id: feedText(`${blogUrl}/${post.slug}`),
-        link: feedText(`${blogUrl}/${post.slug}`),
+        id: `${feedText(blogUrl)}/${encodeURIComponent(post.slug)}`,
+        link: `${feedText(blogUrl)}/${encodeURIComponent(post.slug)}`,
         description: feedText(excerpt),
         content: sanitizeForFeed(post.content || ''),
         author: [

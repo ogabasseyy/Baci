@@ -16,7 +16,7 @@ export function useBlogFeaturedImageUpload({
 }: {
   upload: (file: File) => Promise<UploadResult>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
-  toast: ReturnType<typeof useToast>['toast'];
+  toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);

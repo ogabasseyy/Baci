@@ -35,7 +35,7 @@ BEGIN
     SELECT 1
     FROM pg_proc
     WHERE oid = (
-      'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text)'
+      'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text,text,text)'
     )::regprocedure
       AND prosecdef = true
   ) THEN
@@ -49,7 +49,7 @@ BEGIN
       COALESCE(p.proacl, acldefault('f', p.proowner))
     ) acl
     WHERE p.oid = (
-      'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text)'
+      'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text,text,text)'
     )::regprocedure
       AND acl.grantee = 0
       AND acl.privilege_type = 'EXECUTE'
@@ -59,7 +59,7 @@ BEGIN
 
   IF has_function_privilege(
     'anon',
-    'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text)',
+    'public.allocate_plan_transfer_contribution(uuid,uuid,bigint,text,text,text,text)',
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'allocate_plan_transfer_contribution must not be executable by anon';

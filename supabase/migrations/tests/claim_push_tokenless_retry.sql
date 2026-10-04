@@ -1,11 +1,13 @@
 BEGIN;
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
-INSERT INTO public.merchants(id) VALUES ('90000000-0000-4000-8000-000000000001');
+INSERT INTO public.merchants(id,email) VALUES ('90000000-0000-4000-8000-000000000001','tokenless-probe@example.com');
 INSERT INTO public.customers(id,merchant_id,user_id) VALUES
   ('90000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000003');
-INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id) VALUES
-  ('90000000-0000-4000-8000-000000000004','90000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002');
+INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity) VALUES
+  ('90000000-0000-4000-8000-000000000007','90000000-0000-4000-8000-000000000001','Probe device',100000,'active',3);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,source_mode,target_amount) VALUES
+  ('90000000-0000-4000-8000-000000000004','90000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000007','Probe goal','manual',100000);
 INSERT INTO savings_notifications.preferences(merchant_id,customer_id,quiet_hours_start,quiet_hours_end) VALUES
   ('90000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002','00:00','00:00');
 INSERT INTO savings_notifications.events(merchant_id,customer_id,goal_id,event_key,type,title,body) VALUES

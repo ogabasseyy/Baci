@@ -39,7 +39,7 @@ interface BlogPost {
   featured_image_url: string | null;
   featured_image_variants?: Record<string, unknown> | null;
   category: string | null;
-  author_name: string;
+  author_name: string | null;
   published_at: string | null;
   updated_at: string | null;
 }
@@ -386,7 +386,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         content: sanitizedContent,
         author: [
           {
-            name: feedText(post.author_name),
+            name: feedText(post.author_name || merchant.business_name),
             link: safeStoreUrl,
           },
         ],

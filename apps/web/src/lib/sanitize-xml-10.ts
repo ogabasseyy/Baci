@@ -1,5 +1,14 @@
-/** Removes code points that XML 1.0 cannot represent. */
-export function stripInvalidXml10Characters(value: string): string {
+/**
+ * Removes code points that XML 1.0 cannot represent.
+ * Nullish input yields an empty string so nullable DB columns degrade
+ * gracefully instead of throwing inside feed builders.
+ */
+export function stripInvalidXml10Characters(
+  value: string | null | undefined
+): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
   let result = '';
   for (const character of value) {
     const codePoint = character.codePointAt(0);

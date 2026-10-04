@@ -34,7 +34,7 @@ type FeedPostRow = {
   featured_image_url: string | null;
   featured_image_variants?: Record<string, unknown> | null;
   category: string | null;
-  author_name: string;
+  author_name: string | null;
   published_at: string | null;
   updated_at: string | null;
 };
@@ -299,6 +299,37 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
       content: '<p>₦61,817,004.65📱</p>',
       author: [{ name: 'Author Name' }],
     });
+  });
+
+  it('falls back to the merchant name when a post author is null', async () => {
+    enqueueSlugFeedScenario({
+      posts: [
+        {
+          id: 'post-1',
+          slug: 'public-feed-post',
+          title: 'Phone guide',
+          content: '<p>Body</p>',
+          excerpt: 'Excerpt',
+          featured_image_url: null,
+          category: null,
+          author_name: null,
+          published_at: '2026-05-02T10:00:00.000Z',
+          updated_at: null,
+        },
+      ],
+    });
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      items: Array<{ author: Array<{ name: string }> }>;
+    };
+    expect(payload.items[0]?.author).toEqual([
+      { name: 'Ogabassey', link: 'https://usebaci.com/ogabassey' },
+    ]);
   });
 
   it('over-fetches additional ranges when early batches are fully filtered', async () => {

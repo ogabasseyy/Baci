@@ -56,6 +56,13 @@ export interface StorefrontOrderListRowInput {
   shipping_provider?: string | null;
   payment_method?: string | null;
   invoice_type_code?: string | null;
+  invoice_note?: string | null;
+  notes?: string | null;
+  payment_due_date?: string | null;
+  payment_terms?: string | null;
+  buyer_reference?: string | null;
+  firs_irn?: string | null;
+  firs_csid?: string | null;
   fulfillment_details?: unknown;
   customer_name?: string | null;
   customer_email?: string | null;
@@ -201,6 +208,13 @@ export function transformStorefrontOrdersForDisplay(
       tracking_number: order.tracking_number,
       shipping_provider: order.shipping_provider,
       payment_method: order.payment_method,
+      invoice_note: order.invoice_note,
+      notes: order.notes,
+      payment_due_date: order.payment_due_date,
+      payment_terms: order.payment_terms,
+      buyer_reference: order.buyer_reference,
+      firs_irn: order.firs_irn,
+      firs_csid: order.firs_csid,
       fulfillment_details: order.fulfillment_details,
       customer_name: order.customer_name,
       customer_email: order.customer_email,

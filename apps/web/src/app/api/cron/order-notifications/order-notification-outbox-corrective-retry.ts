@@ -42,11 +42,12 @@ export function isPostAcceptanceLeaseReset(result: {
 export async function markCorrectiveRetry(
   supabase: SupabaseClientLike,
   row: OutboxStatusRow,
-  summary: { retried: number }
+  summary: { retried: number },
+  error = 'document_changed_during_send'
 ): Promise<void> {
   await updateOutboxStatus(supabase, row, {
     attempt_count: 0,
-    last_error: 'document_changed_during_send',
+    last_error: error,
     next_attempt_at: new Date(Date.now() + retryDelayMs(0)).toISOString(),
     status: 'pending' satisfies OrderNotificationOutboxStatus,
   });

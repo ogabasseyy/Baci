@@ -24,7 +24,9 @@ const PAYMENT_STATUS_CONFIG: Record<
 };
 
 export function getPaymentConfig(status: string) {
-  return PAYMENT_STATUS_CONFIG[status] ?? PAYMENT_STATUS_CONFIG.unpaid;
+  // Legacy spellings (Paid, Partially Paid) miss the map: normalize first.
+  const key = `${status ?? ''}`.trim().toLowerCase().replace(/\s+/g, '_');
+  return PAYMENT_STATUS_CONFIG[key] ?? PAYMENT_STATUS_CONFIG.unpaid;
 }
 
 const PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
@@ -58,16 +60,14 @@ export function formatPrice(
   price: number,
   currency: string | null | undefined = 'NGN'
 ) {
-  // Non-finite values render a neutral placeholder, never a confident
-  // zero: a corrupt total must not mask as valid money on the card.
+  // Non-finite renders a neutral placeholder, never a confident zero.
   if (!Number.isFinite(price)) return '-';
   const code = currency ?? 'NGN';
   try {
     return getPriceFormatter(code).format(price);
   } catch (error) {
     if (code === 'NGN') throw error;
-    // Well-formed but unassigned on Hermes: prefix the code like Node's
-    // ICU and the PDF instead of mislabeling as NGN.
+    // Unassigned on Hermes: prefix the code like Node's ICU and the PDF.
     return `${code} ${price.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
   }
 }

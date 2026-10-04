@@ -202,11 +202,11 @@ BEGIN
     -- Shipping renders nowhere: only terminal transitions abort (trigger parity).
     OR (lower(btrim(COALESCE(v_order.shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
       IS DISTINCT FROM (lower(btrim(COALESCE(p_shipping_status, ''))) IN ('cancelled', 'canceled', 'returned', 'failed'))
-    OR v_order.invoice_type_code IS DISTINCT FROM p_invoice_type_code
-    OR v_order.invoice_note IS DISTINCT FROM p_invoice_note
-    OR v_order.notes IS DISTINCT FROM p_notes
+    OR (v_compare_invoice_only AND (v_order.invoice_type_code IS DISTINCT FROM p_invoice_type_code
+      OR v_order.invoice_note IS DISTINCT FROM p_invoice_note
+      OR v_order.notes IS DISTINCT FROM p_notes
+      OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date))
     OR v_order.transaction_date IS DISTINCT FROM p_transaction_date
-    OR v_order.invoice_issue_date IS DISTINCT FROM p_invoice_issue_date
     OR v_order.payment_due_date IS DISTINCT FROM p_payment_due_date
     OR v_order.payment_terms IS DISTINCT FROM p_payment_terms
     OR v_order.buyer_reference IS DISTINCT FROM p_buyer_reference
@@ -229,7 +229,7 @@ BEGIN
         private.resolved_merchant_address_line(p_merchant_registered_address, p_merchant_business_address))
     -- cac prints nowhere; VAT inputs compare below for rowless taxed invoices.
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
-    OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
+    OR NULLIF(v_merchant_support_email, '') IS DISTINCT FROM NULLIF(p_merchant_support_email, '')
     -- The contact phone renders resolved (support_phone, else phone):
     -- compare resolved-to-resolved so a shadowed-column edit never
     -- aborts an identical render.

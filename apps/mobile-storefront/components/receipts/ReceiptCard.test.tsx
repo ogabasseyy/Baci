@@ -2,9 +2,13 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { ReceiptListItem } from '@/types/receipt';
-import { formatPrice, ReceiptCard } from './ReceiptCard';
+import { formatPrice, getPaymentConfig, ReceiptCard } from './ReceiptCard';
 
 jest.mock('@react-native-vector-icons/ionicons', () => () => null);
+
+function renderCard(item: ReceiptListItem) {
+  render(<ReceiptCard item={item} colors={Colors.light} onPress={jest.fn()} />);
+}
 
 jest.mock('expo-image', () => {
   const { View } = jest.requireActual(
@@ -88,17 +92,11 @@ describe('ReceiptCard', () => {
 
   it('honors an explicit invoice kind under a paid label', () => {
     // Invalid rows keep paid label but open invoice: badge invoice.
-    render(
-      <ReceiptCard
-        item={{
-          ...receiptItem,
-          payment_status: 'paid',
-          document_kind: 'invoice',
-        }}
-        colors={Colors.light}
-        onPress={jest.fn()}
-      />
-    );
+    renderCard({
+      ...receiptItem,
+      payment_status: 'paid',
+      document_kind: 'invoice',
+    });
 
     expect(screen.getByText('Invoice')).toBeTruthy();
     expect(screen.getByText('View Invoice')).toBeTruthy();
@@ -117,17 +115,11 @@ describe('ReceiptCard', () => {
 
   it('honors an explicit invoice kind under a legacy-cased paid label', () => {
     // Legacy Paid/PAID normalize: badge Invoice, money Paid + explainer.
-    render(
-      <ReceiptCard
-        item={{
-          ...receiptItem,
-          payment_status: 'PAID',
-          document_kind: 'invoice',
-        }}
-        colors={Colors.light}
-        onPress={jest.fn()}
-      />
-    );
+    renderCard({
+      ...receiptItem,
+      payment_status: 'PAID',
+      document_kind: 'invoice',
+    });
 
     expect(screen.getByText('Invoice')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
@@ -139,17 +131,11 @@ describe('ReceiptCard', () => {
 
   it('renders a non-string status as unpaid instead of crashing', () => {
     // List returns schema-invalid rows: unguarded trim blanks the archive.
-    render(
-      <ReceiptCard
-        item={{
-          ...receiptItem,
-          payment_status: 7 as unknown as string,
-          document_kind: 'invoice',
-        }}
-        colors={Colors.light}
-        onPress={jest.fn()}
-      />
-    );
+    renderCard({
+      ...receiptItem,
+      payment_status: 7 as unknown as string,
+      document_kind: 'invoice',
+    });
 
     expect(screen.getByText('Invoice')).toBeTruthy();
     expect(screen.getByText('Total')).toBeTruthy();
@@ -203,15 +189,23 @@ describe('ReceiptCard', () => {
   });
 
   it('renders the receipt product title', () => {
-    render(
-      <ReceiptCard
-        item={receiptItem}
-        colors={Colors.light}
-        onPress={jest.fn()}
-      />
-    );
+    renderCard(receiptItem);
 
     expect(screen.getByText('Test Phone')).toBeTruthy();
+  });
+
+  it('badges a legacy-spaced status under an absent kind', () => {
+    // Partially Paid normalizes before the config lookup: Partial, not Invoice.
+    renderCard({ ...receiptItem, payment_status: 'Partially Paid' });
+
+    expect(screen.getByText('Partial')).toBeTruthy();
+    expect(screen.queryByText('Invoice')).toBeNull();
+  });
+
+  it('normalizes legacy spellings before the badge lookup', () => {
+    expect(getPaymentConfig('Partially Paid').label).toBe('Partial');
+    expect(getPaymentConfig('Paid').label).toBe('Receipt');
+    expect(getPaymentConfig('bogus').label).toBe('Invoice');
   });
 
   it('renders the selected transaction date when it differs from creation', () => {

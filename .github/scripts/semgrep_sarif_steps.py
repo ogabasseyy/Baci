@@ -200,7 +200,7 @@ def audit_step_commands(ctx, drift):
                 drift.append("secret-step-exfil")
             if strict and re.search(
                     assign_prefix + builtin_prefix
-                    + poison_alt + r"\s*=", code) \
+                    + poison_alt + r"(\[.*\])?\+?\s*=", code) \
                     and "secret-step-path-hijack" not in drift:
                 drift.append("secret-step-path-hijack")
             if re.search(

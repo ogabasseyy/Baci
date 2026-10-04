@@ -8,48 +8,22 @@ from semgrep_sarif_archive import (ARCHIVE_TOOLS,
 from semgrep_sarif_binutils import _canon_binutils
 from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
                                 audit_find_output)
-from semgrep_sarif_embeds import _check_awk, _check_perl
+from semgrep_sarif_embeds import _check_perl
+from semgrep_sarif_awk import _check_awk
 from semgrep_sarif_gh import audit_gh
 from semgrep_sarif_git import audit_git
-from semgrep_sarif_pins import (RUNNER_PIN, SCRIPT_PIN,
+from semgrep_sarif_pins import (RUNNER_PIN,
                                 _safe_exec_path, _ws_rooted,
                                 script_operand)
 from semgrep_sarif_poison import audit_env_dump, audit_ps_env
-from semgrep_sarif_programs import jq_program_has_env
+from semgrep_sarif_jq import _check_jq
 from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
-                                  NET_DENY, _GCC_RE, _LD_SO_RE)
+                                  NET_DENY, _GCC_RE, _LD_SO_RE,
+                                  _TCL_RE)
 from semgrep_sarif_install import _installer_curl_ok
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
 from semgrep_sarif_zone import audit_cd
-
-
-def _jq_program(rest):
-    # Inline jq program (first non-flag token), or None in -f file
-    # mode / flag-only argv. Value flags consume theirs (--arg=x
-    # still takes its value next); -L is rejected by the caller.
-    vals2 = {"--arg", "--argjson", "--slurpfile", "--rawfile"}
-    vals2_eq = tuple(v + "=" for v in vals2)
-    i = 0
-    while i < len(rest):
-        tok = rest[i]
-        if tok in ("-f", "--from-file") \
-                or tok.startswith("--from-file=") \
-                or tok.startswith("-f") and len(tok) > 2:
-            return None
-        if tok == "--":
-            return rest[i + 1] if i + 1 < len(rest) else None
-        if tok in vals2:
-            i += 3
-        elif tok.startswith(vals2_eq):
-            i += 2
-        elif tok.startswith("-") and len(tok) > 1:
-            i += 1
-        else:
-            return tok
-    return None
-
-
 
 
 def _check_command(argv0, rest, pre, drift, src=""):
@@ -69,7 +43,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
     if (base in LOAD_DENY or _GCC_RE.match(base)
-            or _LD_SO_RE.match(base)) \
+            or _LD_SO_RE.match(base) or _TCL_RE.match(base)) \
             and "helper-code-loader" not in drift:
         drift.append("helper-code-loader")
     if ((_canon_binutils(base) or base)
@@ -133,32 +107,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
     elif base == "perl":
         _check_perl(rest, drift)
     elif base == "jq":
-        for i, tok in enumerate(rest):
-            target = None
-            if tok in ("-f", "--from-file") \
-                    and i + 1 < len(rest):
-                target = rest[i + 1]
-            elif tok.startswith("--from-file="):
-                target = tok[len("--from-file="):]
-            elif tok.startswith("-f") and len(tok) > 2:
-                target = tok[2:]
-            if target is not None \
-                    and not re.match(SCRIPT_PIN, target) \
-                    and "helper-untrusted-exec" not in drift:
-                drift.append("helper-untrusted-exec")
-                break
-        # -L sources unpinned module dirs (none used today); the
-        # inline program scans for env access like -f files do.
-        if any(tok in ("-L", "--library-path")
-               or tok.startswith("--library-path=")
-               or re.fullmatch(r"-[a-zA-Z]*L[a-zA-Z]*", tok)
-               for tok in rest) \
-                and "helper-jq-env" not in drift:
-            drift.append("helper-jq-env")
-        prog = _jq_program(rest)
-        if prog is not None and jq_program_has_env(prog) \
-                and "helper-jq-env" not in drift:
-            drift.append("helper-jq-env")
+        _check_jq(rest, drift)
     elif base == "gh":
         audit_gh(rest, drift)
     elif base == "awk" or re.fullmatch(
@@ -168,9 +117,12 @@ def _check_command(argv0, rest, pre, drift, src=""):
         # like awk; -v assignments are part of the program.
         _check_awk(rest, drift)
     elif base in ("python", "python3", "node", "ruby", "php",
-                  "lua", "luajit"):
+                  "lua", "luajit") \
+            or re.fullmatch(r"python\d+(\.\d+)*", base):
         # No helper uses these today; any use fails closed for
         # human review with an auditor lockstep update.
+        # Version-suffixed python (python3.12) shares the
+        # file-operand mechanism.
         if "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
     elif base == "env":
@@ -243,8 +195,9 @@ def _check_command(argv0, rest, pre, drift, src=""):
 
 def _check_env(rest, drift, src=""):
     # Token scrubbing legitimately uses env -u; anything else
-    # routes the command back through the full dispatch. -S
-    # takes its own quoting language: fail closed.
+    # routes the command back through the full dispatch. -S /
+    # --split-string take their own quoting language: fail
+    # closed.
     value_flags = {"-u", "-C", "--unset", "--chdir", "--argv0"}
     skip_one = {"-i", "-0", "--null", "-v", "--debug",
                 "--ignore-environment", "--list-signal-handling",
@@ -258,6 +211,11 @@ def _check_env(rest, drift, src=""):
             break
         if tok.startswith("-") and not tok.startswith("--") \
                 and "S" in tok[1:]:
+            if "helper-untrusted-exec" not in drift:
+                drift.append("helper-untrusted-exec")
+            return
+        if tok == "--split-string" \
+                or tok.startswith("--split-string="):
             if "helper-untrusted-exec" not in drift:
                 drift.append("helper-untrusted-exec")
             return

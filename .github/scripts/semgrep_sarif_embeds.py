@@ -42,6 +42,21 @@ def _check_perl(rest, drift):
         if tok.startswith("-") and not tok.startswith("--") \
                 and len(tok) > 1:
             cluster = tok[1:]
+            # -d anywhere in the flag-letter run starts the
+            # debugger (verified bundled -wd), which inserts
+            # PERL5DB before the first line. Value-taking
+            # flags and :args end the run, so module/pattern/
+            # extension text containing d (-MData::Dumper,
+            # -F\d+, -i.bak) stays silent; -l/-0 take octal
+            # only, so d after them is still the debugger.
+            # Uppercase -D needs a DEBUGGING perl (absent on
+            # the runner) and stays silent.
+            letters = re.split(r"[CDFIMVeimx:]",
+                               cluster, maxsplit=1)[0]
+            if "d" in letters \
+                    and "helper-untrusted-exec" not in drift:
+                drift.append("helper-untrusted-exec")
+                return
             racers = [(cluster.find(c), c)
                       for c in "IeEMm" if c in cluster]
             if not racers:
@@ -123,106 +138,3 @@ def _check_perl(rest, drift):
     if not re.match(SCRIPT_PIN, rest[i]) \
             and "helper-untrusted-exec" not in drift:
         drift.append("helper-untrusted-exec")
-
-
-def _scan_awk_program(prog, drift):
-    # Inline awk executes: system(), |& coprocesses, pipe
-    # getlines/prints, and program redirects into zoned paths.
-    # Strings blank first (regex alternation and "a|b" pass);
-    # dynamic targets fail closed upward; getline-from-file,
-    # /dev/stdout, and || pass.
-    for m in re.finditer(r">{1,2}\s*\"((?:[^\"\\]|\\.)*)\"",
-                         prog):
-        _zone_target(m.group(1), drift)
-    code = re.sub(r"\"(?:[^\"\\]|\\.)*\"", "\"\"", prog)
-    if re.search(r"(?<![\w$])system\s*\(|\|&"
-                 r"|(?<!\|)\|(?!\|)\s*getline\b"
-                 r"|(?<!\|)\|(?!\|)\s*\"", code) \
-            and "helper-untrusted-exec" not in drift:
-        drift.append("helper-untrusted-exec")
-    if re.search(r">{1,2}\s*[^\"\s=]", code) \
-            and "helper-trusted-write" not in drift:
-        drift.append("helper-trusted-write")
-
-
-def _check_awk(rest, drift):
-    # -f program files must be pinned; the positional program
-    # and --source programs take content checks (they execute);
-    # input files are data. -i inplace rewrites its file
-    # operands, so those take the write-zone rule (VAR=
-    # operands are assignments, data).
-    i, inplace, program_seen = 0, False, False
-    while i < len(rest):
-        tok = rest[i]
-        if tok == "--":
-            i += 1
-            continue
-        if tok in ("-f", "--file") and i + 1 < len(rest):
-            if not re.match(SCRIPT_PIN, rest[i + 1]) \
-                    and "helper-untrusted-exec" not in drift:
-                drift.append("helper-untrusted-exec")
-                return
-            i += 2
-        elif tok.startswith("-f") and len(tok) > 2:
-            if not re.match(SCRIPT_PIN, tok[2:]) \
-                    and "helper-untrusted-exec" not in drift:
-                drift.append("helper-untrusted-exec")
-                return
-            i += 1
-        elif tok.startswith("--file="):
-            if not re.match(SCRIPT_PIN,
-                             tok[len("--file="):]) \
-                    and "helper-untrusted-exec" not in drift:
-                drift.append("helper-untrusted-exec")
-                return
-            i += 1
-        elif tok == "--source" \
-                or tok.startswith("--source="):
-            if tok == "--source":
-                if i + 1 < len(rest):
-                    _scan_awk_program(rest[i + 1], drift)
-                i += 2
-            else:
-                _scan_awk_program(tok[len("--source="):], drift)
-                i += 1
-        elif tok == "-i":
-            # Bare -i takes an include file: only the inplace
-            # extension is known-safe (unpinned code otherwise).
-            nxt = rest[i + 1] if i + 1 < len(rest) else ""
-            if nxt.startswith("inplace"):
-                inplace = True
-                i += 2
-            elif nxt == "" or nxt == "--" \
-                    or nxt.startswith("-"):
-                i += 1
-            else:
-                if "helper-untrusted-exec" not in drift:
-                    drift.append("helper-untrusted-exec")
-                return
-        elif tok in ("--inplace",) \
-                or tok.startswith("--inplace="):
-            inplace = True
-            i += 1
-        elif tok.startswith("-i"):
-            if tok[2:].startswith("inplace"):
-                inplace = True
-                i += 1
-            else:
-                if "helper-untrusted-exec" not in drift:
-                    drift.append("helper-untrusted-exec")
-                return
-        elif tok in ("-v", "-F", "-W"):
-            i += 2
-        elif tok.startswith("-"):
-            i += 1
-        elif not program_seen:
-            program_seen = True
-            _scan_awk_program(tok, drift)
-            i += 1
-        elif inplace and not re.fullmatch(
-                r"[A-Za-z_][A-Za-z0-9_]*=.*", tok):
-            _zone_target(tok, drift)
-            i += 1
-        else:
-            i += 1
-

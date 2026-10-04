@@ -37,7 +37,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "g++", "c++", "clang", "clang++", "jshell",
              "ssh-keygen", "pwsh", "powershell", "swift",
              "swiftc", "script", "rpm", "m4", "hg", "julia",
-             "lldb", "dotnet"}
+             "lldb", "dotnet", "tclsh", "expect", "wish",
+             "autoconf", "autoheader", "autom4te", "autoreconf",
+             "autoupdate", "ifnames", "aclocal"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -63,6 +65,11 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # ships with Swift/LLVM on the ubuntu runner). dotnet executes
 # project/dll operands (run/build/test restore and execute
 # repo code); ships via the setup-dotnet action on demand.
+# tclsh evaluates its file operand as Tcl ($env() reads the
+# token); expect/wish are the same interpreter family.
+# autoconf/autoheader/autom4te/autoreconf/autoupdate run m4
+# over template operands (m4_esyscmd executes repo scripts);
+# ifnames/aclocal scan and expand workspace .m4 macros.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")
@@ -76,6 +83,10 @@ _LD_SO_RE = re.compile(
 # ld-musl-*.so.1, ld.so): --preload/--audit load attacker
 # DSOs whose constructors run before main. No audited
 # helper invokes the linker (verified).
+_TCL_RE = re.compile(r"^(?:tclsh|wish)\d+(?:\.\d+)?$")
+# Versioned Tcl shells (tclsh8.6, wish8.6, tclsh9.0) share
+# the file-operand mechanism; the bare names sit in
+# LOAD_DENY. expect ships unversioned only.
 
 
 SHELL_KEYWORDS = {"if", "then", "else", "elif", "fi", "for",
@@ -126,16 +137,21 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "LD_AUDIT", "GCONV_PATH",
               "BASH_ENV", "ENV", "ZDOTDIR", "PYTHONPATH",
               "PYTHONHOME", "RUBYLIB", "RUBYOPT", "PERL5LIB",
-              "PERL5OPT", "NODE_PATH", "NODE_OPTIONS",
+              "PERL5OPT", "PERL5DB", "NODE_PATH", "NODE_OPTIONS",
               "DYLD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
               "IFS", "GIT_SSH", "GIT_SSH_COMMAND", "GIT_PAGER",
               "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
               "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
               "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
               "GIT_CONFIG_PARAMETERS",
-              "PAGER", "GH_HOST")
+              "PAGER", "GH_HOST",
+              "SHELLOPTS", "PS4", "BASH_CMDS")
 # GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
 # ignores keys), so the COUNT exact-match closes the family.
+# PERL5DB is inserted before the first line under perl -d;
+# SHELLOPTS (xtrace) plus PS4 expand the token into the log
+# from env alone (verified imports); BASH_CMDS elements join
+# the command hash table (bash 4.0+).
 
 
 # Bash exported-function encoding (round 14, P1 4176327352):
@@ -178,9 +194,11 @@ XTRACE_RE = re.compile(
 _POISON_ALT = "(?:" + "|".join(
     v for v in ENV_POISON if v != "IFS") + "|" + _BASH_FUNC_ALT + ")"
 BARE_POISON_RE = re.compile(
-    r"(?:^|[;&|])\s*" + _POISON_ALT + r"\s*=[^=]"
-    r"|(?:^|[;&|])\s*IFS\s*=(?![^;\s]*\s+"
+    r"(?:^|[;&|])\s*" + _POISON_ALT + r"(\[.*\])?\+?\s*=[^=]"
+    r"|(?:^|[;&|])\s*IFS(\[.*\])?\+?\s*=(?![^;\s]*\s+"
     r"(?:command\s+|builtin\s+)?read\b)[^=]")
+# Subscripts bind the name (PATH[0]=, BASH_CMDS[k]=) and +=
+# appends (PATH+=); the greedy bracket closes nesting.
 # Helpers authenticate gh via the environment (never expanding
 # the token: the sole legit mention is run.sh's -u scrub), so
 # any $GH_TOKEN/$GITHUB_TOKEN expansion stages a secret into a

@@ -115,7 +115,8 @@ def _check_poison_assign(pre, argv0, rest, drift):
     # IFS (function-scoped, restored on return).
     for word in pre:
         m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*"
-                         r"|BASH_FUNC_\S+%%)=(.*)", word)
+                         r"|BASH_FUNC_\S+%%)(\[.*\])?\+?=(.*)",
+                         word)
         if not m or (m.group(1) not in ENV_POISON
                      and not is_bash_func_key(m.group(1))):
             continue
@@ -131,7 +132,8 @@ def _check_poison_assign(pre, argv0, rest, drift):
             i += 1
         for word in rest[i:]:
             m = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*"
-                             r"|BASH_FUNC_\S+%%)=(.*)", word)
+                             r"|BASH_FUNC_\S+%%)(\[.*\])?\+?="
+                             r"(.*)", word)
             if not m:
                 continue
             if m.group(1) not in ENV_POISON \

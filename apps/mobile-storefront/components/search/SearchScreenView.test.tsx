@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
-import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import {
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  StyleSheet,
+} from 'react-native';
 
 const mockResultsEvents: {
   bottomSpace?: number;
@@ -315,22 +319,19 @@ it('routes result scrolling to the toolbar and keeps filter sheets visible', () 
         },
       } as NativeSyntheticEvent<NativeScrollEvent>)
     );
+  const toolbarPointerEvents = () =>
+    StyleSheet.flatten(
+      screen.getByTestId('search-toolbar-reveal', {
+        includeHiddenElements: true,
+      }).props.style
+    )?.pointerEvents;
   scroll(120);
-  expect(
-    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
-      .props.pointerEvents
-  ).toBe('none');
+  expect(toolbarPointerEvents()).toBe('none');
   scroll(80);
-  expect(
-    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
-      .props.pointerEvents
-  ).toBe('auto');
+  expect(toolbarPointerEvents()).toBe('auto');
   fireEvent.press(screen.getByLabelText('Filters'));
   scroll(160);
-  expect(
-    screen.getByTestId('search-toolbar-reveal', { includeHiddenElements: true })
-      .props.pointerEvents
-  ).toBe('auto');
+  expect(toolbarPointerEvents()).toBe('auto');
   expect(screen.getByLabelText('Apply filters')).toBeTruthy();
 });
 

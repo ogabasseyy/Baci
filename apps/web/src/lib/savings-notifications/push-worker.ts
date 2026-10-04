@@ -1,6 +1,10 @@
 import type { ClaimedSavingsNotification } from '@/schemas/savings-notification-worker';
 
-export type SavingsPushOutcome = 'accepted' | 'rejected' | 'unknown';
+export type SavingsPushOutcome =
+  | 'accepted'
+  | 'rejected'
+  | 'unknown'
+  | 'retryable';
 
 export type SavingsPushResult = {
   outcome: SavingsPushOutcome;
@@ -39,6 +43,7 @@ export type SavingsPushWorkerCounts = {
   accepted: number;
   rejected: number;
   unknown: number;
+  retried: number;
   finishFailed: number;
 };
 
@@ -62,6 +67,7 @@ export async function processSavingsNotificationPushClaims(
     accepted: 0,
     rejected: 0,
     unknown: 0,
+    retried: 0,
     finishFailed: 0,
   };
 
@@ -104,7 +110,11 @@ export async function processSavingsNotificationPushClaims(
       if (result.status === 'rejected') {
         throw new Error('Failed to finish savings notification push claim');
       }
-      counts[result.value] += 1;
+      if (result.value === 'retryable') {
+        counts.retried += 1;
+      } else {
+        counts[result.value] += 1;
+      }
     }
   }
 

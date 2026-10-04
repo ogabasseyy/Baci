@@ -16,7 +16,11 @@ import { reconcileSavingsNotificationReceipts } from './receipt-reconciliation';
 const SAVINGS_WORKER_ROLE = 'baci_savings_notifications_worker';
 const DATABASE_STATEMENT_TIMEOUT_MS = 2_000;
 const DATABASE_QUERY_TIMEOUT_MS = 2_500;
-const RECEIPT_BATCH_LIMIT = 5;
+// Receipts are one batched Expo call plus indexed single-row writes, so the
+// per-run receipt budget matches the maximum dispatch volume (and the SQL
+// ceiling): anything smaller accumulates backlog until the 24-hour
+// receipt_unknown conversion, and dead tokens are never deactivated.
+const RECEIPT_BATCH_LIMIT = 100;
 const WORKER_DEADLINE_MS = 50_000;
 const PUSH_CYCLE_BUDGET_MS =
   DATABASE_QUERY_TIMEOUT_MS * (SAVINGS_NOTIFICATION_PUSH_CONCURRENCY + 1) +
@@ -29,6 +33,7 @@ type RuntimeResult = {
   accepted: number;
   rejected: number;
   unknown: number;
+  retried: number;
   finishFailed: number;
   receiptChecked: number;
   receiptProviderConfirmed: number;
@@ -44,6 +49,7 @@ const emptyResult = (enabled: boolean): RuntimeResult => ({
   accepted: 0,
   rejected: 0,
   unknown: 0,
+  retried: 0,
   finishFailed: 0,
   receiptChecked: 0,
   receiptProviderConfirmed: 0,
@@ -143,6 +149,7 @@ export async function runSavingsNotificationPushWorker(
         accepted: 0,
         rejected: 0,
         unknown: 0,
+        retried: 0,
         finishFailed: 0,
       };
       let claimed = 0;
@@ -193,6 +200,7 @@ export async function runSavingsNotificationPushWorker(
         counts.accepted += cycleCounts.accepted;
         counts.rejected += cycleCounts.rejected;
         counts.unknown += cycleCounts.unknown;
+        counts.retried += cycleCounts.retried;
         counts.finishFailed += cycleCounts.finishFailed;
       }
       const result = {

@@ -152,6 +152,7 @@ describe('savings notification worker database identity', () => {
       accepted: 0,
       rejected: 0,
       unknown: 0,
+      retried: 0,
       finishFailed: 0,
       receiptChecked: 0,
       receiptProviderConfirmed: 0,

@@ -104,4 +104,16 @@ INSERT INTO savings_notifications.deliveries(notification_id,push_token)
  SELECT id,'ExpoPushToken[deleted-goal]' FROM savings_notifications.events WHERE goal_id='40000000-0000-4000-8000-000000000003';
 DELETE FROM public.customer_savings_goals WHERE id='40000000-0000-4000-8000-000000000003';
 SELECT pg_temp.assert_true(NOT EXISTS (SELECT 1 FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[deleted-goal]'), 'Goal deletion clears its notification and deliveries');
+SELECT public.update_customer_savings_notification_preferences('10000000-0000-4000-8000-000000000001','{"quietHoursStart":"00:00","quietHoursEnd":"00:00"}');
+SELECT savings_notifications.emit('40000000-0000-4000-8000-000000000001','retry-probe','interest_credited','Interest','Paid');
+INSERT INTO public.push_tokens(user_id,merchant_id,token,app_type) VALUES
+ ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','ExpoPushToken[retry-probe]','storefront');
+CREATE TEMP TABLE retry_claim AS SELECT * FROM savings_notifications.claim_push(100);
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM retry_claim WHERE push_token='ExpoPushToken[retry-probe]'), 'Retry probe claimed');
+SELECT savings_notifications.finish_push(notification_id,push_token,claim_id,'retryable',NULL) FROM retry_claim WHERE push_token='ExpoPushToken[retry-probe]';
+SELECT pg_temp.assert_true((SELECT status='pending' AND attempts=1 AND claim_id IS NULL FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[retry-probe]'), 'Retryable re-queues as pending');
+UPDATE savings_notifications.deliveries SET attempts=96 WHERE push_token='ExpoPushToken[retry-probe]';
+CREATE TEMP TABLE retry_claim2 AS SELECT * FROM savings_notifications.claim_push(100);
+SELECT savings_notifications.finish_push(notification_id,push_token,claim_id,'retryable',NULL) FROM retry_claim2 WHERE push_token='ExpoPushToken[retry-probe]';
+SELECT pg_temp.assert_true((SELECT status='rejected' FROM savings_notifications.deliveries WHERE push_token='ExpoPushToken[retry-probe]'), 'Exhausted retries dead-letter as rejected');
 ROLLBACK;

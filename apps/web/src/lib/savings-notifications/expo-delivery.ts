@@ -87,12 +87,16 @@ export async function deliverSavingsExpoPush(
     });
     const payload: unknown = await response.json();
     if (response.ok) return readTicket(payload);
-    if (
-      response.status >= 400 &&
-      response.status < 600 &&
-      isExpoRequestError(payload)
-    ) {
-      return { outcome: 'rejected', ticketId: null };
+    if (isExpoRequestError(payload)) {
+      // Expo rate limits and outages are transient: 429/5xx re-queues for
+      // a later run instead of discarding the notification. Only other 4xx
+      // responses are terminally rejected.
+      if (response.status === 429 || response.status >= 500) {
+        return { outcome: 'retryable', ticketId: null };
+      }
+      if (response.status >= 400 && response.status < 600) {
+        return { outcome: 'rejected', ticketId: null };
+      }
     }
     return { outcome: 'unknown', ticketId: null };
   } catch {

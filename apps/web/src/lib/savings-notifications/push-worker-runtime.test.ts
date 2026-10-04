@@ -42,6 +42,7 @@ describe('runSavingsNotificationPushWorker', () => {
       accepted: 0,
       rejected: 0,
       unknown: 0,
+      retried: 0,
       finishFailed: 0,
     });
   });
@@ -120,7 +121,7 @@ describe('runSavingsNotificationPushWorker', () => {
     expect(client.query).toHaveBeenNthCalledWith(
       3,
       'SELECT ticket_id, notification_id, push_token FROM savings_notifications.pending_receipts($1)',
-      [5]
+      [7]
     );
     expect(client.query).toHaveBeenNthCalledWith(
       4,

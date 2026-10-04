@@ -52,6 +52,7 @@ describe('processSavingsNotificationPushClaims', () => {
       accepted: 1,
       rejected: 0,
       unknown: 0,
+      retried: 0,
       finishFailed: 0,
     });
   });
@@ -82,6 +83,26 @@ describe('processSavingsNotificationPushClaims', () => {
       accepted: 0,
       rejected: 1,
       unknown: 0,
+      retried: 0,
+      finishFailed: 0,
+    });
+  });
+
+  it('counts a retryable delivery as retried and finishes with that outcome', async () => {
+    const finishPush = vi.fn().mockResolvedValue(true);
+    const result = await processSavingsNotificationPushClaims([claim], {
+      finishPush,
+      send: vi.fn().mockResolvedValue({ outcome: 'retryable', ticketId: null }),
+    });
+
+    expect(finishPush).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: 'retryable', ticketId: null })
+    );
+    expect(result).toEqual({
+      accepted: 0,
+      rejected: 0,
+      unknown: 0,
+      retried: 1,
       finishFailed: 0,
     });
   });

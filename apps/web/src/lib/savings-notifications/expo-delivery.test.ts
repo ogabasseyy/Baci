@@ -169,7 +169,38 @@ describe('deliverSavingsExpoPush', () => {
       ticketId: null,
     });
     await expect(deliverSavingsExpoPush(input)).resolves.toEqual({
-      outcome: 'rejected',
+      outcome: 'retryable',
+      ticketId: null,
+    });
+  });
+
+  it('keeps rate-limited deliveries retryable instead of rejecting them', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            errors: [{ code: 'RATE_LIMITED', message: 'slow down' }],
+          }),
+          { status: 429 }
+        )
+      )
+    );
+    const input = {
+      token: 'ExponentPushToken[hidden]',
+      title: 'Title',
+      body: 'Body',
+      data: {
+        type: 'savings',
+        goalId: 'goal-1',
+        notificationId: 'notification-1',
+        merchantId: 'merchant-1',
+      } as const,
+      channelId: 'savings' as const,
+    };
+
+    await expect(deliverSavingsExpoPush(input)).resolves.toEqual({
+      outcome: 'retryable',
       ticketId: null,
     });
   });

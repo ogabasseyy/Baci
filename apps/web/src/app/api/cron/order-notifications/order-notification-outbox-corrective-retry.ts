@@ -15,6 +15,23 @@ export function retryDelayMs(attemptCount: number): number {
   return Math.min(RETRY_BASE_DELAY_MS * 2 ** exponent, RETRY_MAX_DELAY_MS);
 }
 
+// A rendered-field edit reset the marker post-acceptance, detected at the
+// sender's lease check rather than during the sent transition: the customer
+// holds a stale attachment and no further event requeues it, so this
+// reserves a fresh corrective attempt past the provider-failure ceiling
+// exactly like the reset error — routing it through the ordinary retry
+// budget could terminally fail the row on its final attempt and silently
+// drop the correction.
+export function isPostAcceptanceLeaseReset(result: {
+  status: string;
+  error?: unknown;
+}): boolean {
+  return (
+    result.status === 'failed' &&
+    result.error === 'document_changed_during_send'
+  );
+}
+
 // A concurrent edit landed between provider acceptance and the sent
 // marker: the customer holds a stale attachment, but the trigger that
 // caused the reset already fired, so no further event requeues the

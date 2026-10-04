@@ -184,6 +184,14 @@ BEGIN
     WHERE rc.previous_token_hash = p_token_hash
     LIMIT 1 FOR UPDATE;
   END IF;
+  IF NOT FOUND THEN
+    -- Delivered-token retention: the bearer may hold an accepted mail's
+    -- link from before a rejected corrective attempt rotated the grace
+    -- window past it. Same current-row checks as above.
+    SELECT rc.* INTO v_claim FROM public.receipt_claims AS rc
+    WHERE rc.delivered_token_hash = p_token_hash
+    LIMIT 1 FOR UPDATE;
+  END IF;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
   IF v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
   IF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN

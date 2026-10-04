@@ -182,3 +182,36 @@ SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('cb', 32), 'web')->>'status' = 'email_mismatch', 'old bearer fails closed on the graced hash after recipient correction');
 RESET ROLE;
+-- Delivered-token retention: an accepted mail's link survives rejected
+-- corrective rotations that shift the grace window past it. Record d2 as
+-- the mailed (accepted) hash, then rotate twice without delivery: d2 is
+-- in neither current nor previous, yet still redeems via delivered.
+SELECT public.mark_manual_document_claim_sent((SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), '10000000-0000-4000-8000-000000000001', repeat('d2', 32));
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d4', 32))->>'status' = 'created'), 'rejected corrective attempt rotates past the delivered hash');
+SELECT pg_temp.assert_true((SELECT public.create_manual_order_document_claim((SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt'), 'm2-worker', repeat('d5', 32))->>'status' = 'created'), 'second rejected rotation shifts the grace window again');
+SELECT pg_temp.assert_true((SELECT token_hash = repeat('d5', 32) AND previous_token_hash = repeat('d4', 32) AND delivered_token_hash = repeat('d2', 32) FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), 'rotation preserves the delivered hash while shifting grace');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32)) IS NOT NULL), 'delivered hash previews past the grace window');
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
+SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d2', 32), 'web')->>'status' = 'ok', 'delivered hash redeems past the grace window');
+RESET ROLE;
+-- A newer acceptance advances delivered: the superseded mail falls off
+-- once its replacement is known-delivered.
+SELECT public.mark_manual_document_claim_sent((SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000092' AND event_type = 'manual_order_receipt')), '10000000-0000-4000-8000-000000000001', repeat('d5', 32));
+SELECT pg_temp.assert_true((SELECT delivered_token_hash = repeat('d5', 32) FROM public.receipt_claims WHERE token_hash = repeat('d5', 32)), 'newer acceptance advances the delivered hash');
+SELECT pg_temp.assert_true((SELECT public.preview_receipt_claim(repeat('d2', 32)) IS NULL), 'superseded delivered hash no longer previews');
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000094', true);
+SELECT set_config('request.jwt.claims', '{"email":"grace@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('d2', 32), 'web')->>'status' = 'not_found', 'superseded delivered hash no longer redeems');
+RESET ROLE;
+-- Delivered retention respects the recipient check: ca survives only in
+-- delivered after the 062 correction, so the old bearer still fails
+-- closed instead of linking the new recipient's order.
+SELECT public.mark_manual_document_claim_sent((SELECT id FROM public.receipt_claims WHERE manual_notification_id = (SELECT id FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000062' AND event_type = 'manual_order_receipt')), '10000000-0000-4000-8000-000000000001', repeat('ca', 32));
+SELECT set_config('request.jwt.claim.sub', '10000000-0000-4000-8000-000000000095', true);
+SELECT set_config('request.jwt.claims', '{"email":"buyer@example.com"}', true);
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.assert_true(public.redeem_receipt_claim_v2(repeat('ca', 32), 'web')->>'status' = 'email_mismatch', 'old bearer fails closed on the delivered hash after recipient correction');
+RESET ROLE;

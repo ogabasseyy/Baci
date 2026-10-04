@@ -8,6 +8,7 @@ import { resolveOrderNotificationOutboxShipmentMetadata } from '@/lib/order-noti
 import { sendManualOrderDocument } from '@/lib/send-manual-order-document';
 import type { createServiceClient } from '@/lib/supabase/service';
 import {
+  isPostAcceptanceLeaseReset,
   markCorrectiveRetry,
   retryDelayMs,
 } from './order-notification-outbox-corrective-retry';
@@ -217,6 +218,11 @@ async function processClaimedRow(
     if (result.deliveryOutcome === 'unknown') {
       await markDeliveryOutcomeUnknown(supabase, row, result.error);
       summary.skipped += 1;
+      return;
+    }
+
+    if (isPostAcceptanceLeaseReset(result)) {
+      await markCorrectiveRetry(supabase, row, summary);
       return;
     }
 

@@ -181,6 +181,37 @@ describe('order notification outbox worker manual documents', () => {
     );
   });
 
+  it('routes a post-acceptance lease reset through the corrective path', async () => {
+    const { client, builder } = createSupabase([null]);
+    sendDocument.mockResolvedValue({
+      status: 'failed',
+      error: 'document_changed_during_send',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [
+        {
+          ...row,
+          event_type: 'manual_order_receipt',
+          attempt_count: 5,
+          max_attempts: 5,
+        },
+      ],
+      summary
+    );
+    // Detected at the lease check rather than the sent transition, on the
+    // final attempt: still a fresh corrective retry, never a terminal fail.
+    expect(summary).toMatchObject({ failed: 0, sent: 0, retried: 1 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt_count: 0,
+        last_error: 'document_changed_during_send',
+        status: 'pending',
+      })
+    );
+  });
+
   it('terminalizes an unclassifiable manual send instead of retrying blind', async () => {
     const { client, builder } = createSupabase(
       ['zero-rows', null],

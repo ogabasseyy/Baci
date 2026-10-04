@@ -239,7 +239,13 @@ export async function sendManualOrderDocument({
       return { status: 'failed', error: 'document_changed_during_send' };
     const { data: markedClaimId, error: markError } = await supabase.rpc(
       'mark_manual_document_claim_sent',
-      { p_claim_id: prepared.claim_id, p_merchant_id: row.merchant_id }
+      {
+        p_claim_id: prepared.claim_id,
+        p_merchant_id: row.merchant_id,
+        // The provider accepted this attempt's mail: record its hash as
+        // known-delivered so later rejected rotations cannot orphan it.
+        p_mailed_token_hash: claim.tokenHash,
+      }
     );
     if (markError || markedClaimId !== prepared.claim_id)
       return {

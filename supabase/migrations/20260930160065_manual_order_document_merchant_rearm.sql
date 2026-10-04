@@ -113,12 +113,14 @@ BEGIN
   -- live customer back under the order's merchant re-arms rows the
   -- worker terminally skipped as document_claim_unavailable: the claim
   -- gates on a live, order-scoped customers row, so without this a
-  -- restored or rescoped document is permanently lost. The join below
-  -- matches only orders scoped to the new merchant, so a move away
-  -- re-arms nothing. Other skip reasons keep their own re-arm paths;
-  -- sent and possibly-dispatched rows stay terminal. The worker
-  -- re-validates the claim on the next attempt, so a still-broken link
-  -- simply skips again.
+  -- restored or rescoped document is permanently lost. Undispatched
+  -- processing rows re-arm too, like the merchant and child paths: a
+  -- restore racing the claim read would otherwise let the worker record
+  -- a terminal skip from its stale decision. The join below matches
+  -- only orders scoped to the new merchant, so a move away re-arms
+  -- nothing. Other skip reasons keep their own re-arm paths; sent and
+  -- possibly-dispatched rows stay terminal. The worker re-validates the
+  -- claim on the next attempt, so a still-broken link simply skips again.
   IF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL)
     OR (NEW.deleted_at IS NULL
       AND OLD.merchant_id IS DISTINCT FROM NEW.merchant_id) THEN
@@ -131,8 +133,9 @@ BEGIN
       AND o.merchant_id = NEW.merchant_id
       AND n.order_id = o.id
       AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-      AND n.status = 'skipped'
-      AND n.skip_reason = 'document_claim_unavailable'
+      AND ((n.status = 'skipped'
+        AND n.skip_reason = 'document_claim_unavailable')
+        OR n.status = 'processing')
       AND n.dispatch_started_at IS NULL;
   END IF;
   RETURN NEW;

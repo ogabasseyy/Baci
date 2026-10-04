@@ -28,6 +28,15 @@ BEGIN
   END IF;
 
   IF NOT FOUND THEN
+    -- Delivered-token retention, mirroring redemption: an accepted
+    -- mail's link survives rejected corrective rotations.
+    SELECT rc.* INTO v_claim
+    FROM public.receipt_claims AS rc
+    WHERE rc.delivered_token_hash = p_token_hash
+    LIMIT 1;
+  END IF;
+
+  IF NOT FOUND THEN
     RETURN NULL;
   END IF;
 

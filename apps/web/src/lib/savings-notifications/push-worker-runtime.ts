@@ -139,6 +139,13 @@ export async function runSavingsNotificationPushWorker(
             );
             return recorded.rows[0]?.recorded === true;
           },
+          requeueReceipt: async (ticketId) => {
+            const requeued = await client.query<{ requeued: boolean }>(
+              'SELECT savings_notifications.requeue_delivery($1) AS requeued',
+              [ticketId]
+            );
+            return requeued.rows[0]?.requeued === true;
+          },
         },
         {
           limit: Math.min(limit, RECEIPT_BATCH_LIMIT),

@@ -121,7 +121,15 @@ export async function runSavingsGoalSubmission(
     if (!isCurrent()) return;
     if (input.sourceMode === 'manual') {
       try {
-        if (input.targetValue > requestInitialContribution) {
+        // Base the decision on the intended initial transfer, not the
+        // requested one: a deferred transfer is requested as 0 now, but
+        // the user is about to move effectiveInitialContribution — so a
+        // deferred transfer that fully funds the goal must cancel any
+        // reminder instead of scheduling a recurring one.
+        const intendedInitialContribution = input.deferInitialContribution
+          ? input.effectiveInitialContribution
+          : requestInitialContribution;
+        if (input.targetValue > intendedInitialContribution) {
           await scheduleSavingsReminderNotification({
             contributionAmount: input.contributionValue,
             frequency: input.frequency,

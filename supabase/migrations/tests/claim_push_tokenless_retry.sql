@@ -13,8 +13,16 @@ INSERT INTO savings_notifications.events(merchant_id,customer_id,goal_id,event_k
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM savings_notifications.claim_push(50)), 'Tokenless claim dispatches nothing');
 SELECT pg_temp.assert_true((SELECT push_expanded_at IS NULL FROM savings_notifications.events WHERE event_key='tokenless-probe'), 'Tokenless event stays unexpanded');
 SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM savings_notifications.deliveries), 'Tokenless claim inserts no deliveries');
+SELECT pg_temp.assert_true((SELECT push_last_attempt_at IS NOT NULL FROM savings_notifications.events WHERE event_key='tokenless-probe'), 'Expansion attempt is stamped');
+SELECT pg_temp.assert_true((SELECT count(*) = 0 FROM savings_notifications.claim_push(50)), 'Immediate retry skips the attempted event');
+INSERT INTO savings_notifications.events(merchant_id,customer_id,goal_id,event_key,type,title,body) VALUES
+  ('90000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000004','tokenless-newer','interest_credited','Interest','Body');
 INSERT INTO public.push_tokens(token,user_id,merchant_id,platform,app_type,is_active) VALUES
   ('ExponentPushToken[tokenlessprobe]','90000000-0000-4000-8000-000000000003','90000000-0000-4000-8000-000000000001','ios','storefront',true);
+SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM savings_notifications.claim_push(50)), 'Newer event advances past the retrying event');
+SELECT pg_temp.assert_true((SELECT push_expanded_at IS NULL FROM savings_notifications.events WHERE event_key='tokenless-probe'), 'Retrying event still waits its cadence');
+SELECT pg_temp.assert_true((SELECT push_expanded_at IS NOT NULL FROM savings_notifications.events WHERE event_key='tokenless-newer'), 'Newer event expands');
+UPDATE savings_notifications.events SET push_last_attempt_at = now() - interval '16 minutes' WHERE event_key='tokenless-probe';
 SELECT pg_temp.assert_true((SELECT count(*) = 1 FROM savings_notifications.claim_push(50)), 'Late token receives the pending notification');
 SELECT pg_temp.assert_true((SELECT push_expanded_at IS NOT NULL FROM savings_notifications.events WHERE event_key='tokenless-probe'), 'Delivered event expands');
 ROLLBACK;

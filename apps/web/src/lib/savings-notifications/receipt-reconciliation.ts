@@ -34,6 +34,7 @@ type ReceiptReconciliationDependencies = {
     status: SavingsReceiptStatus,
     error: string | null
   ) => Promise<boolean>;
+  requeueReceipt: (ticketId: string) => Promise<boolean>;
 };
 
 type ReceiptReconciliationOptions = {
@@ -118,10 +119,18 @@ export async function reconcileSavingsNotificationReceipts(
       receipt.status === 'error' && isRecord(receipt.details)
         ? knownReceiptError(receipt.details.error)
         : null;
-    // Expo asks that per-device rate limiting be retried slowly: leaving
-    // the ticket unrecorded keeps it pending for a later run instead of
-    // finalizing a temporary limit as a permanent failure.
+    // Expo asks that per-device rate limiting be retried with a new send:
+    // requeue the delivery to pending (attempt-capped server-side) so a
+    // later run actually re-sends instead of re-polling the same definitive
+    // receipt until it ages into receipt_unknown. On requeue failure the
+    // ticket stays accepted and re-polls — still pending, never finalized.
     if (receipt.status === 'error' && error === 'MessageRateExceeded') {
+      try {
+        const requeued = await dependencies.requeueReceipt(row.ticket_id);
+        if (!requeued) counts.recordFailed += 1;
+      } catch {
+        counts.recordFailed += 1;
+      }
       counts.pending += 1;
       continue;
     }

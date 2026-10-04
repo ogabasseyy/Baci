@@ -40,6 +40,7 @@ describe('reconcileSavingsNotificationReceipts', () => {
       {
         pendingReceipts: vi.fn().mockResolvedValue(receiptRows),
         recordReceipt,
+        requeueReceipt: vi.fn().mockResolvedValue(true),
       },
       { limit: 20, accessToken: 'server-only' }
     );
@@ -90,7 +91,11 @@ describe('reconcileSavingsNotificationReceipts', () => {
     const pendingReceipts = vi.fn().mockResolvedValue(receiptRows);
     const recordReceipt = vi.fn().mockResolvedValue(true);
 
-    const dependencies = { pendingReceipts, recordReceipt };
+    const dependencies = {
+      pendingReceipts,
+      recordReceipt,
+      requeueReceipt: vi.fn().mockResolvedValue(true),
+    };
     const partial = await reconcileSavingsNotificationReceipts(dependencies, {
       limit: 20,
     });
@@ -121,6 +126,7 @@ describe('reconcileSavingsNotificationReceipts', () => {
       {
         pendingReceipts: vi.fn().mockResolvedValue(receiptRows),
         recordReceipt,
+        requeueReceipt: vi.fn().mockResolvedValue(true),
       },
       { limit: 20 }
     );
@@ -129,7 +135,7 @@ describe('reconcileSavingsNotificationReceipts', () => {
     expect(recordReceipt).not.toHaveBeenCalled();
   });
 
-  it('leaves a rate-limited receipt pending instead of finalizing it', async () => {
+  it('requeues a rate-limited receipt for a new send instead of finalizing it', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -149,11 +155,13 @@ describe('reconcileSavingsNotificationReceipts', () => {
       )
     );
     const recordReceipt = vi.fn().mockResolvedValue(true);
+    const requeueReceipt = vi.fn().mockResolvedValue(true);
 
     const result = await reconcileSavingsNotificationReceipts(
       {
         pendingReceipts: vi.fn().mockResolvedValue(receiptRows),
         recordReceipt,
+        requeueReceipt,
       },
       { limit: 20 }
     );
@@ -164,6 +172,8 @@ describe('reconcileSavingsNotificationReceipts', () => {
       'provider_confirmed',
       null
     );
+    expect(requeueReceipt).toHaveBeenCalledTimes(1);
+    expect(requeueReceipt).toHaveBeenCalledWith('ticket-error');
     expect(result).toEqual({
       checked: 2,
       providerConfirmed: 1,
@@ -173,12 +183,54 @@ describe('reconcileSavingsNotificationReceipts', () => {
     });
   });
 
+  it('keeps polling a rate-limited receipt when its requeue fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              'ticket-error': {
+                status: 'error',
+                message: 'Slow down',
+                details: { error: 'MessageRateExceeded' },
+              },
+            },
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    const requeueReceipt = vi.fn().mockResolvedValue(false);
+
+    const result = await reconcileSavingsNotificationReceipts(
+      {
+        pendingReceipts: vi.fn().mockResolvedValue([receiptRows[1]]),
+        recordReceipt: vi.fn().mockResolvedValue(true),
+        requeueReceipt,
+      },
+      { limit: 20 }
+    );
+
+    expect(result).toEqual({
+      checked: 1,
+      providerConfirmed: 0,
+      receiptFailed: 0,
+      pending: 1,
+      recordFailed: 1,
+    });
+  });
+
   it('rejects a receipt batch larger than the bounded worker limit before querying rows', async () => {
     const pendingReceipts = vi.fn();
 
     await expect(
       reconcileSavingsNotificationReceipts(
-        { pendingReceipts, recordReceipt: vi.fn() },
+        {
+          pendingReceipts,
+          recordReceipt: vi.fn(),
+          requeueReceipt: vi.fn(),
+        },
         { limit: 101 }
       )
     ).rejects.toThrow();

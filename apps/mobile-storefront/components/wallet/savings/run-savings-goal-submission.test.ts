@@ -277,4 +277,32 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setShowTransferModal).toHaveBeenCalledWith(true);
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
   });
+
+  it('cancels reminders when the deferred transfer fully funds the goal', async () => {
+    const input = createInput({
+      deferInitialContribution: true,
+      effectiveInitialContribution: 800000,
+      targetValue: 800000,
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    expect(
+      mockCancelSavingsReminderNotification
+    ).toHaveBeenCalledWith('goal-1');
+    expect(mockScheduleSavingsReminderNotification).not.toHaveBeenCalled();
+  });
+
+  it('schedules reminders when the deferred transfer only partly funds the goal', async () => {
+    const input = createInput({
+      deferInitialContribution: true,
+      effectiveInitialContribution: 20000,
+      targetValue: 800000,
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    expect(mockScheduleSavingsReminderNotification).toHaveBeenCalledTimes(1);
+    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+  });
 });

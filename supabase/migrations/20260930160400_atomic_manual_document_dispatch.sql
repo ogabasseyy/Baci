@@ -51,9 +51,7 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_document_kind text,
   p_item_count integer,
   p_items jsonb,
-  -- Reserved: bank_code is never printed, so the snapshot sends NULL and
-  -- the stale check ignores this positional slot (kept for signature
-  -- stability across the SQL call sites).
+  -- Reserved slot: bank_code never prints; the stale check ignores it.
   p_merchant_bank_code text,
   p_merchant_bank_account_number text,
   p_merchant_bank_name text,
@@ -103,12 +101,9 @@ DECLARE
   v_merchant_bank_account_number text;
   v_merchant_bank_name text;
   v_merchant_bank_account_name text;
-  v_va_account_number text;
-  v_va_bank_name text;
-  v_va_account_name text;
+  v_va_account_number text; v_va_bank_name text; v_va_account_name text;
   v_compare_invoice_only boolean;
-  v_tax_count bigint;
-  v_tax_subtotals jsonb;
+  v_tax_count bigint; v_tax_subtotals jsonb;
   v_txn_count bigint;
   v_transactions jsonb;
   v_merchant_business_name text;
@@ -257,9 +252,7 @@ BEGIN
     OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
-    -- Only the primary brand color renders: accent/background edits leave
-    -- the attachment and email byte-identical, so comparing raw JSONB
-    -- would schedule identical duplicates.
+    -- Only brand_colors.primary renders; raw JSONB would duplicate sends.
     OR (v_merchant_brand_colors->>'primary') IS DISTINCT FROM (p_merchant_brand_colors->>'primary')
     OR v_claim_domain IS DISTINCT FROM p_claim_domain
     -- Rendered instructions only (non-NGN none, VA-only when
@@ -281,10 +274,9 @@ BEGIN
       OR v_tax_subtotals IS DISTINCT FROM p_tax_subtotals))
     OR v_txn_count IS DISTINCT FROM p_txn_count::bigint
     OR v_transactions IS DISTINCT FROM p_transactions
-    -- Customer liveness and scope under the row lock above: a missing,
-    -- deleted, or merchant-reassigned customer aborts, since redemption
-    -- requires a live customer scoped to the order's merchant. A delete
-    -- racing the mark blocks, then its trigger resets the marker.
+    -- Customer liveness and scope under the row lock: a missing, deleted,
+    -- or reassigned customer aborts; a racing delete blocks, then resets.
+
     OR NOT EXISTS (SELECT 1 FROM public.customers AS c
       WHERE c.id = v_order.customer_id AND c.deleted_at IS NULL
         AND c.merchant_id = v_order.merchant_id)

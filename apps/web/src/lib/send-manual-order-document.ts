@@ -11,12 +11,10 @@ import {
 } from '@/lib/import-notifications/receipt-claim-links';
 import { isSafeClaimSlug } from '@/lib/import-notifications/receipt-claim-slug';
 import { selectInvoicePaymentAccountForRows } from '@/lib/invoice-payment-account';
+import { loadManualDocumentDispatch } from '@/lib/load-manual-document-dispatch';
 import { buildManualOrderDocumentEmailContent } from '@/lib/manual-order-document-email';
 import { persistManualDocumentDispatch } from '@/lib/mark-manual-document-dispatch-started';
-import {
-  resolveNotificationReplyTo,
-  resolveOrderNotificationRecipient,
-} from '@/lib/order-notification-recipient';
+import { resolveNotificationReplyTo } from '@/lib/order-notification-recipient';
 import { prepareManualDocumentClaim } from '@/lib/prepare-manual-document-claim';
 import {
   ManualDocumentValidationError,
@@ -26,8 +24,6 @@ import { reportFailedManualDocumentSend } from '@/lib/report-failed-manual-docum
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { sanitizeEmailDisplayName } from '@/lib/sanitize-core';
 import { sendEmail } from '@/lib/zeptomail';
-import { manualDocumentMerchantSchema } from '@/schemas/manual-order-document-merchant';
-import { manualDocumentOrderSchema } from '@/schemas/manual-order-document-order';
 
 export type ManualOrderDocumentEventType =
   | 'manual_order_receipt'
@@ -44,21 +40,11 @@ export type ManualOrderDocumentResult =
   | { status: 'skipped'; reason: string }
   | { status: 'failed'; error: string; deliveryOutcome?: 'unknown' };
 
-type ManualDocumentSnapshot = {
-  order: unknown;
-  merchant: unknown;
-  tax_subtotals: unknown[];
-  transactions: unknown[];
-  payment_accounts: unknown[];
-  claim_domain: string | null;
-};
-
 // Only a CRON_SECRET-authenticated outbox worker calls this helper. No customer
 // request constructs a privileged client or chooses the recipient/tenant.
-// The worker's service-role client touches no table directly here: one
-// claim-bound snapshot RPC returns the exact projections the render,
-// validate, and snapshot path consumes, and every helper below selects
-// from those rows in memory.
+// The worker's service-role client touches no table directly on this path:
+// the dispatch loader fetches one claim-bound snapshot RPC and every helper
+// below selects from those rows in memory.
 export async function sendManualOrderDocument({
   supabase,
   row,
@@ -66,63 +52,15 @@ export async function sendManualOrderDocument({
   supabase: SupabaseClient;
   row: DocumentRow;
 }): Promise<ManualOrderDocumentResult> {
-  const { data: snapshotData, error: snapshotError } = await supabase.rpc(
-    'get_manual_order_document_snapshot',
-    { p_outbox_id: row.id, p_claim_owner: row.claim_owner }
-  );
-  if (snapshotError) throw new Error('Manual document data unavailable');
-  // A re-arm stole the claim between claim and send: fail for a bounded
-  // retry (the row is pending again) instead of emailing from a snapshot
-  // the worker no longer owns.
-  if (!snapshotData)
-    return { status: 'failed', error: 'dispatch_claim_superseded' };
-  const snapshot = snapshotData as unknown as ManualDocumentSnapshot;
-  if (!snapshot.order || !snapshot.merchant)
-    return { status: 'skipped', reason: 'order_or_merchant_missing' };
-  // Deterministic shape failures skip (later triggers re-arm) instead of
-  // throwing into max_attempts retries; only transient fetch/RPC failures
-  // keep throw/retry.
-  const orderParsed = manualDocumentOrderSchema.safeParse(snapshot.order);
-  if (!orderParsed.success)
-    return { status: 'skipped', reason: 'order_validation_failed' };
-  const merchantParsed = manualDocumentMerchantSchema.safeParse(
-    snapshot.merchant
-  );
-  if (!merchantParsed.success)
-    return { status: 'skipped', reason: 'merchant_validation_failed' };
-  const order = orderParsed.data;
-  const merchant = merchantParsed.data;
+  const loaded = await loadManualDocumentDispatch({ supabase, row });
+  if (loaded.status !== 'ready') return loaded;
+  const { order, merchant, snapshot, recipient, paymentStatus } = loaded;
   const rawMerchantRegisteredAddress = (
     snapshot.merchant as { registered_address?: unknown }
   ).registered_address;
   const rawMerchantBrandColors = (
     snapshot.merchant as { brand_colors?: unknown }
   ).brand_colors;
-  // No DB constraint on either status column: normalize legacy spellings
-  // exactly like the enqueue trigger so both agree on terminal/paid/eligible.
-  const paymentStatus = order.payment_status
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-  if (
-    order.merchant_id !== row.merchant_id ||
-    merchant.id !== row.merchant_id ||
-    !order.recorded_by_user_id ||
-    order.import_job_id ||
-    order.external_source?.trim() ||
-    ['cancelled', 'canceled', 'returned', 'failed'].includes(
-      order.shipping_status.trim().toLowerCase()
-    ) ||
-    !['paid', 'unpaid', 'pending', 'partially_paid'].includes(paymentStatus)
-  ) {
-    return { status: 'skipped', reason: 'ineligible_manual_order' };
-  }
-  const recipient = resolveOrderNotificationRecipient(order.customer_email);
-  if (!recipient.ok) return { status: 'skipped', reason: recipient.reason };
-  if (!order.customer_id)
-    return { status: 'skipped', reason: 'missing_customer' };
-  if (!order.order_items.length)
-    return { status: 'skipped', reason: 'missing_order_items' };
   // A fully-covered balance is substantively paid even under a non-paid
   // label: mirror the trigger so settled orders render receipts.
   const isPaid = paymentStatus === 'paid' || order.amount_paid >= order.total;

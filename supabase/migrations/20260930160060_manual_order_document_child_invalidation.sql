@@ -93,14 +93,10 @@ REVOKE ALL ON FUNCTION private.reset_manual_invoice_markers_for_order(uuid)
 CREATE OR REPLACE FUNCTION private.rearm_invalid_manual_documents_for_order(p_order_id uuid, p_reason text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- A child correction re-arms rows terminally skipped under p_reason,
-  -- plus undispatched processing rows whose in-flight worker read the
-  -- stale data: the worker loses its claim and the corrected document
-  -- is retried instead of terminally skipping. Tax is invoice-scoped
-  -- like the sender validation; payment covers both kinds. The worker
-  -- re-validates, so still-invalid data skips again until corrected.
-  -- Callers run this BEFORE resetting markers: the undispatched test
-  -- reads the live marker, and the two updates touch disjoint rows.
+  -- A child correction re-arms skipped-under-p_reason rows plus stale-read
+  -- processing rows (the worker loses its claim and retries). Tax is
+  -- invoice-scoped; payment covers both kinds. Callers run this BEFORE
+  -- resetting markers: the undispatched test reads the live marker.
   UPDATE public.order_notification_outbox AS n
   SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
     locked_by = NULL, locked_at = NULL, last_error = NULL,

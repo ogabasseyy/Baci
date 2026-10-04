@@ -30,19 +30,23 @@ BEGIN
     AND ((n.status = 'skipped' AND n.skip_reason = 'merchant_validation_failed')
       OR n.status = 'processing')
     AND n.dispatch_started_at IS NULL;
-  -- A snapshot-relevant merchant edit landing mid-dispatch resets every
-  -- processing marker so the lease check aborts instead of recording a
-  -- stale document as sent. Rendered branding (logo, primary color) and
-  -- the From display name invalidate alongside issuer/contact fields.
+  -- A snapshot-relevant merchant edit landing mid-dispatch resets the
+  -- markers of the kinds that render it, so the lease check aborts
+  -- instead of recording a stale document as sent. Rendered branding
+  -- (logo, primary color) and the From display name invalidate alongside
+  -- issuer/contact fields. cac_rc_number, vat_registration_status, and
+  -- vat_rate print nowhere (validation inputs only), so they reset
+  -- nothing: an accepted, visually unchanged attachment must not go
+  -- corrective. registered_address renders on invoices only (receipts
+  -- print business_address), so it resets invoice markers alone.
   -- Bank fields reset invoice markers only, and only for NGN orders
   -- without a selected virtual account: receipts render no payment
   -- instructions, foreign-currency invoices strip all bank details, and
-  -- a selected VA replaces the merchant-bank card, so resetting those
-  -- markers would push an accepted, visually unchanged invoice into a
-  -- corrective duplicate. bank_code never prints (name/number/account
-  -- name only) and the fallback card requires an account number to
-  -- render at all, so code-only edits and numberless-merchant edits
-  -- reset nothing either. The dispatch RPC compares the same subset.
+  -- a selected VA replaces the merchant-bank card. bank_code never
+  -- prints (name/number/account name only) and the fallback card
+  -- requires an account number to render at all, so code-only edits and
+  -- numberless-merchant edits reset nothing either. The dispatch RPC
+  -- compares the same rendered-only subset.
   v_bank_changed :=
     OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
     OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
@@ -51,11 +55,7 @@ BEGIN
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
     OR OLD.business_address IS DISTINCT FROM NEW.business_address
-    OR OLD.registered_address IS DISTINCT FROM NEW.registered_address
-    OR OLD.cac_rc_number IS DISTINCT FROM NEW.cac_rc_number
     OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
-    OR OLD.vat_registration_status IS DISTINCT FROM NEW.vat_registration_status
-    OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate
     OR OLD.support_email IS DISTINCT FROM NEW.support_email
     OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
     OR OLD.phone IS DISTINCT FROM NEW.phone
@@ -67,6 +67,12 @@ BEGIN
     SET dispatch_started_at = NULL, updated_at = now()
     WHERE n.merchant_id = NEW.id
       AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
+  ELSIF OLD.registered_address IS DISTINCT FROM NEW.registered_address THEN
+    UPDATE public.order_notification_outbox AS n
+    SET dispatch_started_at = NULL, updated_at = now()
+    WHERE n.merchant_id = NEW.id
+      AND n.event_type = 'manual_order_invoice'
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
   ELSIF v_bank_changed
     AND (OLD.bank_account_number IS NOT NULL
@@ -103,14 +109,19 @@ ALTER TABLE public.merchants DISABLE TRIGGER rearm_manual_documents_after_mercha
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_customer_restore()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  -- Restoring a soft-deleted customer (clearing deleted_at) re-arms rows
-  -- the worker terminally skipped as document_claim_unavailable: the
-  -- claim gates on a live customers row, so without this a restored
-  -- document is permanently lost. Other skip reasons keep their own
-  -- re-arm paths; sent and possibly-dispatched rows stay terminal. The
-  -- worker re-validates the claim on the next attempt, so a still-broken
-  -- link simply skips again.
-  IF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL THEN
+  -- Restoring a soft-deleted customer (clearing deleted_at) or moving a
+  -- live customer back under the order's merchant re-arms rows the
+  -- worker terminally skipped as document_claim_unavailable: the claim
+  -- gates on a live, order-scoped customers row, so without this a
+  -- restored or rescoped document is permanently lost. The join below
+  -- matches only orders scoped to the new merchant, so a move away
+  -- re-arms nothing. Other skip reasons keep their own re-arm paths;
+  -- sent and possibly-dispatched rows stay terminal. The worker
+  -- re-validates the claim on the next attempt, so a still-broken link
+  -- simply skips again.
+  IF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS NULL)
+    OR (NEW.deleted_at IS NULL
+      AND OLD.merchant_id IS DISTINCT FROM NEW.merchant_id) THEN
     UPDATE public.order_notification_outbox AS n
     SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
       locked_by = NULL, locked_at = NULL, last_error = NULL,

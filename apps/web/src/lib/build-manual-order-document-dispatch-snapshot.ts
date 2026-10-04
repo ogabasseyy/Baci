@@ -63,6 +63,11 @@ export function buildDispatchMerchantSnapshot(
   rawRegisteredAddress: unknown,
   rawBrandColors: unknown
 ): DispatchMerchantRow {
+  // The merchant rides whole for transport, but staleness compares the
+  // rendered-only subset: cac_rc_number, vat_registration_status, and
+  // vat_rate print nowhere (validation inputs), so the trigger and the
+  // dispatch RPC ignore them, and registered_address gates invoices
+  // alone (receipts print business_address instead).
   return {
     ...merchant,
     // Snapshot the RAW stored address: the schema normalizes malformed

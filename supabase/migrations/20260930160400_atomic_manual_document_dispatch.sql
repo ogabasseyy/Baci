@@ -67,6 +67,7 @@ CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_merchant_legal_entity_name text,
   p_merchant_business_address text,
   p_merchant_registered_address jsonb,
+  -- Reserved: cac/vat fields print nowhere; kept for signature stability.
   p_merchant_cac_rc_number text,
   p_merchant_tax_identification_number text,
   p_merchant_vat_registration_status text,
@@ -110,10 +111,7 @@ DECLARE
   v_merchant_legal_entity_name text;
   v_merchant_business_address text;
   v_merchant_registered_address jsonb;
-  v_merchant_cac_rc_number text;
   v_merchant_tax_identification_number text;
-  v_merchant_vat_registration_status text;
-  v_merchant_vat_rate numeric;
   v_claim_domain text;
   v_merchant_support_email text;
   v_merchant_support_phone text;
@@ -143,14 +141,13 @@ BEGIN
   WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
   FOR SHARE;
   SELECT m.business_name, m.legal_entity_name, m.business_address,
-    m.registered_address, m.cac_rc_number, m.tax_identification_number,
-    m.vat_registration_status, m.vat_rate, m.support_email, m.support_phone,
+    m.registered_address, m.tax_identification_number,
+    m.support_email, m.support_phone,
     m.phone, m.bank_account_number, m.bank_name,
     m.bank_account_name, m.slug, m.email_sender_name, m.logo_url, m.brand_colors
   INTO v_merchant_business_name, v_merchant_legal_entity_name,
     v_merchant_business_address, v_merchant_registered_address,
-    v_merchant_cac_rc_number, v_merchant_tax_identification_number,
-    v_merchant_vat_registration_status, v_merchant_vat_rate,
+    v_merchant_tax_identification_number,
     v_merchant_support_email, v_merchant_support_phone, v_merchant_phone,
     v_merchant_bank_account_number,
     v_merchant_bank_name, v_merchant_bank_account_name, v_merchant_slug,
@@ -239,11 +236,12 @@ BEGIN
     OR v_merchant_business_name IS DISTINCT FROM p_merchant_business_name
     OR v_merchant_legal_entity_name IS DISTINCT FROM p_merchant_legal_entity_name
     OR v_merchant_business_address IS DISTINCT FROM p_merchant_business_address
-    OR v_merchant_registered_address IS DISTINCT FROM p_merchant_registered_address
-    OR v_merchant_cac_rc_number IS DISTINCT FROM p_merchant_cac_rc_number
+    -- Registered address prints on invoices only (receipts use the
+    -- business address); cac/vat fields print nowhere, so the trigger
+    -- and this check both ignore them like the reserved bank slot.
+    OR (v_compare_invoice_only
+      AND v_merchant_registered_address IS DISTINCT FROM p_merchant_registered_address)
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
-    OR v_merchant_vat_registration_status IS DISTINCT FROM p_merchant_vat_registration_status
-    OR v_merchant_vat_rate IS DISTINCT FROM p_merchant_vat_rate
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone
     OR v_merchant_phone IS DISTINCT FROM p_merchant_phone

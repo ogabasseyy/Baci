@@ -125,6 +125,24 @@ BEGIN
           AND NOT CASE public.order_notification_outbox.event_type
             WHEN 'manual_order_invoice' THEN v_invoice_marked
             ELSE v_receipt_marked END));
+  -- A kind flip (paid after invoicing, or corrected back to unpaid)
+  -- orphans the opposite kind's undispatched pending row: the claim
+  -- withholds every event behind an earlier pending/processing
+  -- sibling, so the stale row would hold the fresh document until its
+  -- own retry delay expires. Retire it now with the same terminal
+  -- state the worker would record on claiming it. Dispatched rows
+  -- stay for the normal completion path; live processing rows stay
+  -- for their guarded writes.
+  UPDATE public.order_notification_outbox AS n
+  SET status = 'skipped', skip_reason = 'document_state_changed',
+    skipped_at = now(), next_attempt_at = NULL, last_error = NULL,
+    locked_by = NULL, locked_at = NULL, updated_at = now()
+  WHERE n.order_id = v_order.id
+    AND n.event_type = CASE v_event
+      WHEN 'manual_order_invoice' THEN 'manual_order_receipt'
+      ELSE 'manual_order_invoice' END
+    AND n.status = 'pending'
+    AND n.dispatch_started_at IS NULL;
 END;
 $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid)

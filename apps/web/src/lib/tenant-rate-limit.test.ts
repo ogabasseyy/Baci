@@ -42,7 +42,7 @@ describe('checkTenantRateLimit', () => {
         maxRequests: 60,
         windowMs: 60_000,
       })
-    ).resolves.toBe(true);
+    ).resolves.toBe('allowed');
     expect(mockLimiterLimit).toHaveBeenCalledWith('search_assist:m1');
     expect(mockRatelimitConstructor).toHaveBeenCalledWith(
       expect.objectContaining({ prefix: 'baci:tenant-ratelimit' })
@@ -56,7 +56,7 @@ describe('checkTenantRateLimit', () => {
         maxRequests: 60,
         windowMs: 60_000,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('denied');
   });
 
   it('fails closed when Redis is unavailable or errors', async () => {
@@ -66,7 +66,7 @@ describe('checkTenantRateLimit', () => {
         maxRequests: 60,
         windowMs: 60_000,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('unavailable');
     expect(mockLimiterLimit).not.toHaveBeenCalled();
     mockLimiterLimit.mockRejectedValueOnce(new Error('redis down'));
     await expect(
@@ -74,7 +74,7 @@ describe('checkTenantRateLimit', () => {
         maxRequests: 60,
         windowMs: 60_000,
       })
-    ).resolves.toBe(false);
+    ).resolves.toBe('unavailable');
   });
 
   it('pages once per outage instead of warning per denied request', async () => {

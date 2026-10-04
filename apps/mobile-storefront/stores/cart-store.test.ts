@@ -78,6 +78,38 @@ describe('cart-store', () => {
     expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
   });
 
+  it('applies the latest explicit assurance choice when lines merge', () => {
+    const id = { product_id: 'merge-phone', slug: 'merge-phone' } as const;
+    useCartStore.getState().addItem({
+      ...id,
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+      hasAssurance: true,
+    });
+    useCartStore.getState().addItem({
+      ...id,
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+      hasAssurance: false,
+    });
+    expect(useCartStore.getState().items[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 2,
+    });
+    useCartStore.getState().addItem({
+      ...id,
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+    expect(useCartStore.getState().items[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 3,
+    });
+  });
+
   it('keeps assurance opt-in for non-Ogabassey merchants', () => {
     mockMerchantSlug.current = 'other-store';
     try {

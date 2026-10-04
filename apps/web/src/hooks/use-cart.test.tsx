@@ -92,6 +92,29 @@ describe('useCart - Validation', () => {
     expect(result.current.cartTotal).toBe(100);
   });
 
+  it('applies the latest explicit assurance choice when lines merge', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <CartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </CartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct, 1, { hasAssurance: true }));
+    act(() =>
+      result.current.addToCart(mockProduct, 1, { hasAssurance: false })
+    );
+    expect(result.current.cart[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 2,
+    });
+    act(() => result.current.addToCart(mockProduct, 1));
+    expect(result.current.cart[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 3,
+    });
+  });
+
   const mockProduct = {
     id: 'prod-1',
     merchant_id: 'merch-1',

@@ -18,11 +18,13 @@ const tenantLimiters = new Map<string, Ratelimit>();
 let warnedRedisUnavailable = false;
 let warnedRedisError = false;
 
+export type TenantRateLimitVerdict = 'allowed' | 'denied' | 'unavailable';
+
 export async function checkTenantRateLimit(
   namespace: string,
   tenantId: string,
   config: { maxRequests: number; windowMs: number }
-): Promise<boolean> {
+): Promise<TenantRateLimitVerdict> {
   const redis = getRedis();
   if (!redis) {
     if (!warnedRedisUnavailable) {
@@ -33,7 +35,7 @@ export async function checkTenantRateLimit(
         tenantId,
       });
     }
-    return false;
+    return 'unavailable';
   }
 
   const windowSeconds = `${Math.ceil(config.windowMs / 1000)} s` as const;
@@ -50,7 +52,7 @@ export async function checkTenantRateLimit(
 
   try {
     const result = await limiter.limit(`${namespace}:${tenantId}`);
-    return result.success;
+    return result.success ? 'allowed' : 'denied';
   } catch {
     if (!warnedRedisError) {
       warnedRedisError = true;
@@ -60,6 +62,6 @@ export async function checkTenantRateLimit(
         tenantId,
       });
     }
-    return false;
+    return 'unavailable';
   }
 }

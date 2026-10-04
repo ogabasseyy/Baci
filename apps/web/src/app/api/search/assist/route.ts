@@ -59,12 +59,16 @@ export async function POST(request: Request) {
   // runs on Upstash Redis (same backend as the proxy) so it holds across
   // Vercel instances with no Supabase client at all. It fails closed: an
   // unverifiable budget must not silently unlock an expensive AI route.
-  const tenantAllowed = await checkTenantRateLimit(
+  const tenantVerdict = await checkTenantRateLimit(
     'search_assist',
     tenant.merchantId,
     { maxRequests: 60, windowMs: 60_000 }
   );
-  if (!tenantAllowed)
+  // An unverifiable budget denies closed but reports as an outage, never as
+  // user throttling: clients must not show "slow down" for our downtime.
+  if (tenantVerdict === 'unavailable')
+    return Response.json({ error: 'Assistance unavailable' }, { status: 503 });
+  if (tenantVerdict === 'denied')
     return Response.json(
       { error: 'Please try again shortly' },
       { status: 429 }

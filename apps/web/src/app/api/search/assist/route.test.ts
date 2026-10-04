@@ -36,7 +36,7 @@ beforeEach(() => {
     businessName: 'Ogabassey',
     currencyCode: 'NGN',
   });
-  mocks.limit.mockReset().mockResolvedValue(true);
+  mocks.limit.mockReset().mockResolvedValue('allowed');
   mocks.generate.mockReset().mockResolvedValue({
     text: JSON.stringify({
       query: 'iphone',
@@ -73,7 +73,7 @@ describe('assisted search', () => {
     expect(mocks.generate).not.toHaveBeenCalled();
   });
   it('bounds rate and fails invalid model output safely', async () => {
-    mocks.limit.mockResolvedValueOnce(false);
+    mocks.limit.mockResolvedValueOnce('denied');
     expect((await POST(request(input))).status).toBe(429);
     expect(mocks.limit).toHaveBeenCalledWith('search_assist', 'm1', {
       maxRequests: 60,
@@ -100,6 +100,15 @@ describe('assisted search', () => {
     expect(system).toContain('(GHS numbers)');
     expect(system).not.toContain('NGN');
     expect(system).not.toContain('electronics store');
+  });
+  it('reports a limiter outage as unavailable, never as throttling', async () => {
+    mocks.limit.mockResolvedValueOnce('unavailable');
+    const response = await POST(request(input));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: 'Assistance unavailable',
+    });
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
   it('does not reinterpret a production LAN Host', async () => {
     vi.stubEnv('NODE_ENV', 'production');

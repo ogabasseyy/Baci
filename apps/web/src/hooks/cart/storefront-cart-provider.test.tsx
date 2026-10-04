@@ -112,6 +112,29 @@ describe('StorefrontCartProvider', () => {
     expect(result.current.cartTotal).toBe(200);
   });
 
+  it('applies the latest explicit assurance choice when lines merge', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct, 1, { hasAssurance: true }));
+    act(() =>
+      result.current.addToCart(mockProduct, 1, { hasAssurance: false })
+    );
+    expect(result.current.cart[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 2,
+    });
+    act(() => result.current.addToCart(mockProduct, 1));
+    expect(result.current.cart[0]).toMatchObject({
+      hasAssurance: false,
+      quantity: 3,
+    });
+  });
+
   it('respects an explicit assurance opt-out passed to addToCart', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>

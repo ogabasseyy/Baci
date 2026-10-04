@@ -410,6 +410,9 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
+          // An explicit incoming choice wins; an absent one preserves the
+          // stored choice so silent adds never flip an opt-out.
+          hasAssurance: normalizedOptions?.hasAssurance ?? item.hasAssurance,
         };
         return newCart;
       }

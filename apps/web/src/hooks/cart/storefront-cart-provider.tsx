@@ -398,6 +398,10 @@ export function StorefrontCartProvider({
           ...existingItem,
           quantity: existingItem.quantity + quantity,
           cartItemId: existingItem.cartItemId || cartItemId,
+          // An explicit incoming choice wins; an absent one preserves the
+          // stored choice so silent adds never flip an opt-out.
+          hasAssurance:
+            normalizedOptions?.hasAssurance ?? existingItem.hasAssurance,
         };
         result = nextCart;
       } else {

@@ -70,7 +70,9 @@ export function mergeExistingCartItem(
         : newQuantity,
     negotiatedPrice: existingItem.negotiatedPrice,
     negotiationStatus: existingItem.negotiationStatus,
-    hasAssurance: existingItem.hasAssurance,
+    // An explicit incoming choice wins; an absent one preserves the stored
+    // choice so silent adds never flip an opt-out.
+    hasAssurance: incomingItem.hasAssurance ?? existingItem.hasAssurance,
     assuranceRate: existingItem.assuranceRate,
   };
 }

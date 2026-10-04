@@ -9,7 +9,7 @@ import {
 
 describe('connector manifest (R0 stability)', () => {
   it('pins the manifest version and exactly four read-only tools', () => {
-    expect(CONNECTOR_MANIFEST_VERSION).toBe('r0.3');
+    expect(CONNECTOR_MANIFEST_VERSION).toBe('r0.4');
     expect(CONNECTOR_TOOL_NAMES).toEqual([
       'orders.list',
       'orders.get',

@@ -26,7 +26,7 @@ this pilot. The harness has no MCP endpoint.
 | Connector name | Baci R0 Staging |
 | Base URL | PENDING — operator supplies an HTTPS staging URL |
 | Discovery | `GET <STAGING_BASE_URL>/openapi.json` |
-| Description version | OpenAPI `3.1.0`, manifest `r0.3` |
+| Description version | OpenAPI `3.1.0`, manifest `r0.4` |
 | Business-data access | Synthetic order reads only |
 | Credential header | `Authorization: Bearer <scoped connector token>` |
 | Body type | `Content-Type: application/json` |

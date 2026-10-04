@@ -24,12 +24,12 @@ granted for this scope until 9 Oct 2026).
 | Transport | REST with OpenAPI 3.1 description (the harness has no MCP endpoint) |
 | Base URL | **PENDING** — operator supplies an HTTPS staging URL or tunnel |
 | Discovery | `GET <STAGING_BASE_URL>/openapi.json` |
-| Description version | OpenAPI `3.1.0`, manifest `r0.3` |
+| Description version | OpenAPI `3.1.0`, manifest `r0.4` |
 | Credential header | `Authorization: Bearer <scoped connector token>` |
 | Body type | `Content-Type: application/json` |
 
 Verified 2 Oct 2026: the harness discovery document is OpenAPI `3.1.0`,
-manifest `r0.3`, `http/bearer` security, four `POST /v0/tools/*` paths with
+manifest `r0.4`, `http/bearer` security, four `POST /v0/tools/*` paths with
 `additionalProperties: false` schemas (`orders.list` all-optional with
 `limit` 1–50; `orders.get` requires `order_id`).
 

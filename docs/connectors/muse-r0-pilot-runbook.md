@@ -28,7 +28,7 @@ Callable endpoints (default base `http://127.0.0.1:3101`):
 
 | Step | Call |
 |---|---|
-| Discovery | `GET /openapi.json` — real OpenAPI 3.1 built from manifest `r0.3` |
+| Discovery | `GET /openapi.json` — real OpenAPI 3.1 built from manifest `r0.4` |
 | Issue | `POST /v0/issue-token` (owner secret) → `{ grant_id, token, refresh_token }` |
 | Read | `POST /v0/tools/orders.list`, `POST /v0/tools/orders.get` (connector token) |
 | Replace credential | `POST /v0/refresh` with `{ refresh_token }` → new pair; old pair denied |
@@ -105,7 +105,7 @@ endpoint. See the [testing guide](muse-r0-testing-guide.md).
 | # | Proof | Procedure | Pass condition |
 |---|---|---|---|
 | 1 | Initial auth | Create the custom connector in Muse against the harness `/openapi.json` (via tunnel or staging host); supply the issued token; ask Muse to list orders. | Correct Baci user + grant resolve; rows scoped to the merchant. |
-| 2 | Tool discovery | Inspect which tools Muse exposes from the provided API description. | Stable names + schemas matching manifest `r0.3`. |
+| 2 | Tool discovery | Inspect which tools Muse exposes from the provided API description. | Stable names + schemas matching manifest `r0.4`. |
 | 3 | Refresh semantics | Rotate via `/v0/refresh`, update the Muse credential, retry; then observe whether Muse ever refreshes on its own. | Manual replacement works (proven locally); record whether any platform-driven refresh exists. The harness proves credential replacement only — not platform refresh semantics. |
 | 4 | Revocation | Revoke via `/v0/revoke`, then ask Muse to list orders. | Next call denied with a safe error. |
 | 5 | Approval handoff | Attempt any action Muse gates behind approval; inspect what Baci receives. | Record whether any verifiable operation-specific receipt reaches Baci. Default: none — keep Baci-owned proof and writes disabled. |

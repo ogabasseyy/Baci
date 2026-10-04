@@ -92,6 +92,13 @@ UPDATE public.customers SET deleted_at = now() WHERE id = '10000000-0000-4000-80
 SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer delete alone leaves the skipped row alone');
 UPDATE public.customers SET deleted_at = NULL WHERE id = '10000000-0000-4000-8000-000000000055';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer restore re-arms the skipped row');
+-- A restore racing the claim read re-arms the undispatched processing row
+-- too, like the merchant and child paths: without this the worker records
+-- a terminal skip from its stale document_claim_unavailable decision.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000056';
+UPDATE public.customers SET deleted_at = now() WHERE id = '10000000-0000-4000-8000-000000000055';
+UPDATE public.customers SET deleted_at = NULL WHERE id = '10000000-0000-4000-8000-000000000055';
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL AND locked_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000056'), 'customer restore re-arms the undispatched processing row');
 -- A correction landing while a worker holds the row re-arms it: without
 -- this the worker records a terminal skip from its stale read and the
 -- correction is permanently suppressed. Dispatch-started rows stay put.

@@ -58,6 +58,15 @@ describe('send manual order document', () => {
     const hash = claimCall?.[1].p_token_hash;
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
     expect(message.htmlContent).not.toContain(hash);
+    // The sent marker records this attempt's mailed hash as
+    // known-delivered, so later rejected rotations cannot orphan it.
+    const markCall = db.rpc.mock.calls.find(
+      ([fn]) => fn === 'mark_manual_document_claim_sent'
+    );
+    expect(markCall?.[1]).toMatchObject({
+      p_claim_id: 'claim-1',
+      p_mailed_token_hash: hash,
+    });
   });
 
   it('attaches an invoice rather than a paid receipt for a partial manual order', async () => {
@@ -267,5 +276,4 @@ describe('send manual order document', () => {
     expect(usdPdf).not.toContain('1234567890');
     expect(usdPdf).not.toContain('Test Bank');
   });
-
 });

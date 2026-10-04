@@ -10,6 +10,7 @@ ALTER TABLE public.receipt_claims
   ADD COLUMN manual_notification_id uuid
     REFERENCES public.order_notification_outbox(id) ON DELETE CASCADE,
   ADD COLUMN previous_token_hash text,
+  ADD COLUMN delivered_token_hash text,
   ADD CONSTRAINT receipt_claims_exact_source CHECK (
     (import_job_id IS NOT NULL AND manual_notification_id IS NULL)
     OR (import_job_id IS NULL AND manual_notification_id IS NOT NULL)
@@ -24,6 +25,13 @@ CREATE UNIQUE INDEX idx_receipt_claims_manual_notification
 -- previous-hash lookup can never match two rows.
 CREATE UNIQUE INDEX idx_receipt_claims_previous_token_hash
   ON public.receipt_claims (previous_token_hash) WHERE previous_token_hash IS NOT NULL;
+-- Last known-delivered hash, advanced only by the sent marker (which runs
+-- solely post-acceptance): rotation shifts previous_token_hash on every
+-- pre-dispatch retry, so a rejected corrective attempt would otherwise
+-- orphan the accepted mail's token before any replacement is delivered.
+-- Rotation never touches this column; a newer acceptance overwrites it.
+CREATE UNIQUE INDEX idx_receipt_claims_delivered_token_hash
+  ON public.receipt_claims (delivered_token_hash) WHERE delivered_token_hash IS NOT NULL;
 COMMENT ON TABLE public.receipt_claims IS
   'Hashed claim links for imported and manual order document emails; verified purchase-email sign-in is required.';
 COMMENT ON TABLE public.receipt_claim_orders IS

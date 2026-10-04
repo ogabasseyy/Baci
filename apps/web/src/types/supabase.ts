@@ -18094,7 +18094,11 @@ export type Database = {
         Returns: Json;
       };
       mark_manual_document_claim_sent: {
-        Args: { p_claim_id: string; p_merchant_id: string };
+        Args: {
+          p_claim_id: string;
+          p_merchant_id: string;
+          p_mailed_token_hash: string;
+        };
         Returns: string;
       };
       get_customer_order_tax_subtotals: {

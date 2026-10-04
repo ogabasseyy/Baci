@@ -112,9 +112,14 @@ COMMENT ON FUNCTION public.get_manual_order_document_snapshot(uuid, text)
   IS 'Returns the claim-bound dispatch snapshot for the manual-order document sender.';
 
 -- Claim-sent marker as an RPC so the sender performs no direct table write.
+-- The sender passes the hash it actually mailed: this runs solely after
+-- provider acceptance, so the mailed hash is known-delivered and advances
+-- delivered_token_hash past whatever rotations later retries perform. A
+-- NULL mailed hash keeps the incumbent (never wipes a delivered bearer).
 CREATE OR REPLACE FUNCTION public.mark_manual_document_claim_sent(
   p_claim_id uuid,
-  p_merchant_id uuid
+  p_merchant_id uuid,
+  p_mailed_token_hash text
 )
 RETURNS uuid
 LANGUAGE sql
@@ -122,15 +127,16 @@ SECURITY DEFINER
 SET search_path = ''
 AS $function$
   UPDATE public.receipt_claims AS c
-  SET notification_sent_at = now()
+  SET notification_sent_at = now(),
+    delivered_token_hash = COALESCE(p_mailed_token_hash, c.delivered_token_hash)
   WHERE c.id = p_claim_id AND c.merchant_id = p_merchant_id
   RETURNING c.id;
 $function$;
 
-REVOKE ALL ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid)
+REVOKE ALL ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid, text)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid)
+GRANT EXECUTE ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid, text)
   TO service_role;
 
-COMMENT ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid)
+COMMENT ON FUNCTION public.mark_manual_document_claim_sent(uuid, uuid, text)
   IS 'Marks a manual-order receipt claim notified after provider acceptance.';

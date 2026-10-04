@@ -6,6 +6,7 @@ import {
   resolveGmcPrimaryImage,
 } from '@/lib/gmc-feed-images';
 import { isOfferClaimedImage } from '@/lib/is-offer-claimed-image';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { escapeXml } from '@/lib/xml-utils';
 import { buildFeedDescription } from './build-feed-description';
 import {
@@ -117,6 +118,10 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
       if (!image) return '';
 
       const attributes = canonicalAttributes(variant);
+      const identifiers =
+        productManufacturerIdentifiers.resolveVariantProductIdentifiers(
+          variant.attributes
+        );
       const url = new URL(productUrl);
       url.searchParams.set('variantId', variant.id);
       url.searchParams.set(
@@ -183,8 +188,8 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
           ? `<g:price>${compareAt.toFixed(2)} ${currency}</g:price>\n<g:sale_price>${price.toFixed(2)} ${currency}</g:sale_price>`
           : `<g:price>${price.toFixed(2)} ${currency}</g:price>`;
       // Missing identifiers mean unknown, not that the manufacturer assigned none.
-      const gtin = text(attributes.gtin);
-      const mpn = text(attributes.mpn);
+      const gtin = text(identifiers.gtin);
+      const mpn = text(identifiers.mpn);
       return [
         '    <item>',
         `<g:id>${escapeXml(input.familyRow ? product.id : variant.id)}</g:id>`,

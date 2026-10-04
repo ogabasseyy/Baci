@@ -1,9 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 type CartHandoffResult = {
   content: Array<{ type: 'text'; text: string }>;
   structuredContent?: Record<string, unknown>;
 };
+
+/** Downgrades corrupt handoff payloads to a schema-valid error instead of letting SDK output validation throw. */
+function guardCartHandoffResult(result: CartHandoffResult): CartHandoffResult {
+  if (mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success) return result;
+  return {
+    content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+    structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+  };
+}
 
 export async function prepareCartHandoff({
   supabase,
@@ -18,6 +28,12 @@ export async function prepareCartHandoff({
   quantity: number;
   formatPrice: (price: number) => string;
 }): Promise<CartHandoffResult> {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+    };
+  }
   const { data: product, error: productError } = await supabase
     .from('products')
     .select('name, slug, price, manage_stock, stock_quantity, stock, has_variants, has_condition_offers')
@@ -25,6 +41,13 @@ export async function prepareCartHandoff({
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
     .single();
+
+  if (product && (typeof product.name !== 'string' || !product.name.trim())) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+    };
+  }
 
   let unavailable = Boolean(productError || !product);
   if (product?.manage_stock === true) {
@@ -54,20 +77,20 @@ export async function prepareCartHandoff({
       unavailable ||= !optionAvailable;
     } else {
       const effectiveStock = Number(product.stock_quantity ?? 0);
-      unavailable ||= effectiveStock < quantity;
+      unavailable ||= !Number.isFinite(effectiveStock) || effectiveStock < quantity;
     }
   }
 
   if (unavailable || !product) {
-    return {
+    return guardCartHandoffResult({
       content: [{ type: 'text', text: 'This product is not currently available to add to cart.' }],
       structuredContent: { success: false },
-    };
+    });
   }
 
   if (product.has_variants === true || product.has_condition_offers === true) {
     const productUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug || productId)}`;
-    return {
+    return guardCartHandoffResult({
       content: [{
         type: 'text',
         text: `Choose the available options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
@@ -78,6 +101,13 @@ export async function prepareCartHandoff({
         product_id: productId,
         product_url: productUrl,
       },
+    });
+  }
+
+  if (!Number.isFinite(product.price) || product.price < 0) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
     };
   }
 
@@ -87,7 +117,7 @@ export async function prepareCartHandoff({
     ? formatPrice(product.price)
     : '';
 
-  return {
+  return guardCartHandoffResult({
     content: [
       {
         type: 'text',
@@ -101,6 +131,6 @@ export async function prepareCartHandoff({
       quantity,
       cart_url: cartUrl,
     },
-  };
+  });
 
 }

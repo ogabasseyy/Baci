@@ -53,7 +53,34 @@ docker compose --profile dev up -d
 ngrok http 8787
 ```
 
-### For Production
+### Public tool output contracts
+
+All eight public tools declare Zod object output schemas from
+`../src/schemas/mcp-tool-output.ts`. The installed MCP SDK converts these to
+JSON Schema in `tools/list` and validates non-error `structuredContent` before
+returning a tool result. Keep schemas aligned with the actual response branches,
+including empty results, unavailable lookups, and product-option handoffs.
+Never replace an unknown stock value with `true` or invent a delivery quote.
+
+The current SDK requires an object schema at the root, so response fields retain
+their existing shape for the widget. Optional fields describe branches where
+data is absent; nullable fields describe explicitly unknown catalog facts.
+Human-readable `content` and widget metadata remain available alongside the
+structured result. For tool execution errors (`isError: true`), SDK 1.29's server
+skips output validation. Its client permits absent `structuredContent` on an
+error but validates any structured content that is present, including errors.
+Ordinary empty/unavailable responses still require a valid structured result.
+Empty `get_product` responses include `status` (`invalid_input`, `not_found`, or
+`unavailable`) and a safe `message`, alongside the existing `products` array.
+The product-detail helper derives its structured result type from this schema.
+
+References: [MCP tool output schemas](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
+[OpenAI MCP server guidance](https://developers.openai.com/plugins/build/mcp-server).
+Integration tests use the actual SDK and anonymous catalog fixtures to check
+published schemas and successful, empty, missing-product, untracked-stock,
+and option-selection results without opening cart links.
+
+### Production deployment
 
 Production runs Docker Compose behind a reverse proxy. The compose file binds
 MCP to `127.0.0.1:8787`, so nginx/traefik should be the public TLS entrypoint.

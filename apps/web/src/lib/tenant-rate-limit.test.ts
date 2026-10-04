@@ -59,6 +59,18 @@ describe('checkTenantRateLimit', () => {
     ).resolves.toBe('denied');
   });
 
+  it('logs budget exhaustion for abuse alerting', async () => {
+    mockWarn.mockClear();
+    mockLimiterLimit.mockResolvedValue({ success: false });
+    await checkTenantRateLimit('search_assist', 'm1', {
+      maxRequests: 60,
+      windowMs: 60_000,
+    });
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: 'search_assist', tenantId: 'm1' })
+    );
+  });
+
   it('fails closed when Redis is unavailable or errors', async () => {
     mockGetRedis.mockReturnValueOnce(null);
     await expect(

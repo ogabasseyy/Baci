@@ -52,7 +52,17 @@ export async function checkTenantRateLimit(
 
   try {
     const result = await limiter.limit(`${namespace}:${tenantId}`);
-    return result.success ? 'allowed' : 'denied';
+    if (!result.success) {
+      // Abuse signal for budget alerting, unlike the once-per-outage Redis
+      // warns above: denial volume is the spike to page on.
+      logger.warn({
+        message: 'Tenant rate limit budget exhausted',
+        namespace,
+        tenantId,
+      });
+      return 'denied';
+    }
+    return 'allowed';
   } catch {
     if (!warnedRedisError) {
       warnedRedisError = true;

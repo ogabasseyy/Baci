@@ -58,3 +58,28 @@ UPDATE public.orders SET shipping_status = 'shipped' WHERE id = '10000000-0000-4
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt'), 'eligible shipping transition keeps the marker');
 UPDATE public.orders SET shipping_status = 'cancelled' WHERE id = '10000000-0000-4000-8000-000000000091';
 SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000091' AND event_type = 'manual_order_receipt'), 'terminal crossing resets the marker');
+-- Invoice-only edits reset invoice markers alone: VAT and terms edits
+-- on the invoice order clear its marker while the receipt order's
+-- marker survives both. Both rows are processing from the block above.
+UPDATE public.order_items SET vat_rate = 9.5 WHERE order_id = '10000000-0000-4000-8000-000000000086';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000086' AND event_type = 'manual_order_invoice'), 'VAT-only edit resets the invoice marker');
+UPDATE public.order_items SET vat_rate = 9.5 WHERE order_id = '10000000-0000-4000-8000-000000000087';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000087' AND event_type = 'manual_order_receipt'), 'VAT-only edit keeps the other receipt marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000086' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET payment_terms = 'Net 15' WHERE id = '10000000-0000-4000-8000-000000000086';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000086' AND event_type = 'manual_order_invoice'), 'terms edit resets the invoice marker');
+UPDATE public.orders SET payment_terms = 'Net 15' WHERE id = '10000000-0000-4000-8000-000000000087';
+SELECT pg_temp.assert_true((SELECT dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000087' AND event_type = 'manual_order_receipt'), 'terms edit keeps the other receipt marker');
+-- A new active primary re-arms validation-failed rows of both kinds
+-- (the host gate applies to receipts and invoices) and still resets an
+-- in-flight marker; other skips stay put.
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'merchant_validation_failed', skipped_at = now(), attempt_count = 2, dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000086' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'merchant_validation_failed', skipped_at = now(), attempt_count = 2, dispatch_started_at = NULL WHERE order_id = '10000000-0000-4000-8000-000000000087' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'order_validation_failed', skipped_at = now(), attempt_count = 2 WHERE order_id = '10000000-0000-4000-8000-000000000089';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000090' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000090' AND event_type = 'manual_order_invoice';
+INSERT INTO public.domains (merchant_id, domain, domain_type, status, is_primary) VALUES ('10000000-0000-4000-8000-000000000084', 'kindgate.example.com', 'custom', 'active', true);
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000086' AND event_type = 'manual_order_invoice'), 'new primary re-arms the failed invoice row');
+SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000087' AND event_type = 'manual_order_receipt'), 'new primary re-arms the failed receipt row');
+SELECT pg_temp.assert_true((SELECT status = 'skipped' AND skip_reason = 'order_validation_failed' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000089'), 'new primary leaves other skips alone');
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000090' AND event_type = 'manual_order_invoice'), 'new primary still resets the in-flight marker');

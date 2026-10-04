@@ -104,6 +104,15 @@ export function ReceiptCard({
         item.items.length > 1 ? ` +${item.items.length - 1} more` : ''
       }`
     : `Order #${item.order_number}`;
+  // VoiceOver must hear what sighted users see: the badge kind plus the
+  // money state and any explainer/balance, not the kind alone.
+  const accessibilityMoney = `${moneyPaid ? 'Paid' : 'Total'} ${formatPrice(item.total, item.currency)}`;
+  const accessibilityLabel =
+    `${config.label} for ${productTitle}, order ${item.order_number}, ${accessibilityMoney}` +
+    (displayStatus === 'partially_paid'
+      ? `, balance ${formatPrice(item.total - item.amount_paid, item.currency)}`
+      : '') +
+    (invalidPaidInvoice ? ', payment recorded, invoice only, no receipt' : '');
 
   return (
     <TouchableOpacity
@@ -112,7 +121,7 @@ export function ReceiptCard({
       onPressIn={() => onPrefetch?.(item.id)}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={`${config.label} for ${productTitle}, order ${item.order_number}`}
+      accessibilityLabel={accessibilityLabel}
     >
       <View style={styles.cardHeader}>
         <View style={[styles.thumb, { backgroundColor: `${BRAND.primary}12` }]}>

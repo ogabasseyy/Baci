@@ -258,5 +258,10 @@ describe('receipt claim links', () => {
       expect(isSafeClaimDomain(host)).toBe(false);
       expect(isValidCustomDomain(host)).toBe(true);
     }
+    // A 64-octet label resolves nowhere: token URLs fail closed while
+    // the proxy stays lenient with Host headers.
+    expect(isSafeClaimDomain(`${'a'.repeat(64)}.example.com`)).toBe(false);
+    expect(isValidCustomDomain(`${'a'.repeat(64)}.example.com`)).toBe(true);
+    expect(isSafeClaimDomain(`${'a'.repeat(63)}.example.com`)).toBe(true);
   });
 });

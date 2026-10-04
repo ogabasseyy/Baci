@@ -114,6 +114,11 @@ describe('ReceiptCard', () => {
     expect(
       screen.getByText('Payment recorded \u2014 invoice only, no receipt')
     ).toBeTruthy();
+    // VoiceOver hears the badge kind with the money state sighted users
+    // see, including the invoice-only explainer.
+    expect(
+      screen.getByLabelText(/Invoice for .* Paid .* invoice only, no receipt/)
+    ).toBeTruthy();
   });
 
   it('renders the receipt product title', () => {

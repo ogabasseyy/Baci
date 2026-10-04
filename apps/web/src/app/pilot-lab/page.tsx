@@ -208,6 +208,12 @@ export default async function PilotLabPage({
         origin. Slots without a verified acceptance stay on the reported
         not-optimized path.
       </p>
+      <p>
+        Byte comparisons are per-format: the never-larger guard holds per rung
+        and format, and bindings whose WebP ladder stays larger than an AVIF
+        original (generated-over-source) serve a larger fallback in browsers
+        without AVIF support.
+      </p>
       {config.statuses.map((status) => (
         <LabBinding
           key={`${status.binding.merchantId}/${status.binding.assetId}/${status.binding.slotId}`}

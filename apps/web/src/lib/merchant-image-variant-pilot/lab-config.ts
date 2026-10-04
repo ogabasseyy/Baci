@@ -45,17 +45,34 @@ interface InventoryRecord {
   url: string;
 }
 
+// Staged-original suffixes must describe the bytes: Next serves public/
+// files with a suffix-derived MIME type, and the served gate pins the
+// response type to that same suffix. The inventory filename is
+// operator-controlled and may lie, so the suffix comes from the
+// decode-verified manifest format. Formats outside the served gate's
+// known image set fail closed: there is no correct suffix for them.
+const STAGED_ORIGINAL_EXTENSION_FOR_FORMAT: Record<string, string> = {
+  avif: '.avif',
+  gif: '.gif',
+  jpeg: '.jpg',
+  jpg: '.jpg',
+  png: '.png',
+  svg: '.svg',
+  webp: '.webp',
+};
+
 function originalFileName(
   binding: PilotInventoryBinding,
-  sourcePath: string
+  sourceFormat: string
 ): string {
-  const segments = sourcePath.split('/');
-  const base = segments[segments.length - 1] ?? '';
-  const extension = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
-  const safeExtension = /^\.[a-z0-9]{1,5}$/i.test(extension)
-    ? extension.toLowerCase()
-    : '';
-  return `${binding.merchantId}-${binding.assetId}${safeExtension}`;
+  const extension =
+    STAGED_ORIGINAL_EXTENSION_FOR_FORMAT[sourceFormat.toLowerCase()];
+  if (!extension) {
+    throw new Error(
+      `merchant image pilot: cannot stage an original with format "${sourceFormat}" (no servable suffix)`
+    );
+  }
+  return `${binding.merchantId}-${binding.assetId}${extension}`;
 }
 
 async function readVerifiedSnapshot(
@@ -233,7 +250,6 @@ export async function loadLabConfig(
     if (shouldStage) {
       await mkdir(originalsStage, { recursive: true });
     }
-    const fileName = originalFileName(status.binding, record.sourcePath);
     const snapshot = await readVerifiedSnapshot(
       input.inputRoot,
       record.sourcePath,
@@ -249,6 +265,9 @@ export async function loadLabConfig(
       status.source,
       `${status.binding.merchantId}/${status.binding.slotId}`
     );
+    // Name from the verified format, not the inventory filename: the
+    // assertion above proved the snapshot decodes as status.source.format.
+    const fileName = originalFileName(status.binding, status.source.format);
     const originalDest = join(originalsStage, fileName);
     if (shouldStage && !(await destMatches(originalDest, snapshot))) {
       await writeFile(originalDest, snapshot);

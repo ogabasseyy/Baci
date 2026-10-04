@@ -161,6 +161,23 @@ async function statFingerprint(path: string): Promise<string> {
   return `${info.size}:${info.mtimeMs}`;
 }
 
+// Frozen operator JSON is small (KBs for a pilot inventory); cap the
+// request-path read so a malformed/huge file fails with an
+// input-validation error instead of an OOM-prone read. Enforced on the
+// read bytes rather than the earlier stat: the file can grow between
+// stat and read.
+const MAX_OPERATOR_JSON_BYTES = 8 * 1024 * 1024;
+
+async function readBoundedOperatorJson(path: string): Promise<string> {
+  const text = await readFile(path, 'utf8');
+  if (Buffer.byteLength(text, 'utf8') > MAX_OPERATOR_JSON_BYTES) {
+    throw new Error(
+      `merchant image pilot: ${basename(path)} exceeds the ${MAX_OPERATOR_JSON_BYTES}-byte operator JSON budget`
+    );
+  }
+  return text;
+}
+
 export async function getLabConfig(): Promise<PilotLabConfig> {
   // Fail fast before any disk I/O: every caller gates on the flag today,
   // but a future caller of this shared loader must not read operator
@@ -218,8 +235,8 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   }
   // Cache miss: read the full frozen inputs (a torn mid-write read fails
   // closed at JSON.parse, and the next request retries with a fresh key).
-  const inventoryText = await readFile(inventoryPath, 'utf8');
-  const acceptancesText = await readFile(acceptancesPath, 'utf8');
+  const inventoryText = await readBoundedOperatorJson(inventoryPath);
+  const acceptancesText = await readBoundedOperatorJson(acceptancesPath);
   const promise = loadLabConfigFromText({
     acceptancesText,
     inputRoot,

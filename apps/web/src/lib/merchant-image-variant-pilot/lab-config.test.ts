@@ -178,6 +178,30 @@ describe('loadLabConfig', () => {
     ).toBeNull();
   });
 
+  it('stages the original suffix from the verified format, not the filename', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    // PNG bytes under a lying .jpg inventory name: the staged suffix must
+    // describe the bytes (the served MIME gate pins to it), not the name.
+    const lying = join(lab.inputRoot, 'photo.jpg');
+    await writeFile(lying, await readFile(join(lab.inputRoot, 'logo-1.png')));
+    lab.inventoryRecords[0] = {
+      ...lab.inventoryRecords[0],
+      sourcePath: 'photo.jpg',
+    };
+    const config = await loadLabConfig({ ...lab }, { stage: true });
+    expect(config.statuses[0]?.status).toBe('accepted');
+    const originalUrl = config.originalUrlFor({
+      merchantId: MERCHANT,
+      slotId: 'header-logo',
+    });
+    if (originalUrl === null) {
+      throw new Error('expected a staged original URL');
+    }
+    expect(originalUrl).toBe(`/__pilot/originals/${MERCHANT}-logo-1.png`);
+    expect((await stat(join(lab.publicDir, originalUrl))).isFile()).toBe(true);
+  });
+
   it('loads read-only by default: validates, writes nothing', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();

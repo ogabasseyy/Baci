@@ -108,6 +108,35 @@ describe('collectSurface', () => {
     expect(collected.geometry.stylesheetBytes).toBe(1200);
   });
 
+  it('reads w-descriptors from picture source siblings', async () => {
+    // Pilot mounts carry srcsets on <source> children; the fallback <img>
+    // has only src. The collector must resolve the physical width from
+    // the matching source, not fall back to density-corrected naturalWidth.
+    const source = {
+      getAttribute: (name) =>
+        name === 'srcset'
+          ? '/__pilot/abc/x-384.avif 384w, /__pilot/abc/x-768.avif 768w'
+          : null,
+    };
+    stubBrowser({
+      selectedImg: fakeImg({
+        getAttribute: () => null,
+        parentElement: {
+          querySelectorAll: () => [source],
+          tagName: 'PICTURE',
+        },
+      }),
+      slotImg: fakeImg({ srcset: null }),
+    });
+    const page = fakePage();
+    const collected = await collectSurface(
+      page,
+      'https://lab/pilot-lab/store/omnimart',
+      'grid'
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBe(768);
+  });
+
   it('records console, request, and image-URL hygiene', async () => {
     stubBrowser({ selectedImg: fakeImg(), slotImg: null });
     const page = fakePage();

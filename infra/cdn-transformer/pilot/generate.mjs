@@ -117,7 +117,11 @@ export function parseMinFreeBytes(value) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   (async () => {
-    const args = parseCliArgs(process.argv.slice(2), ['inventory', 'input-root', 'output-root']);
+    const args = parseCliArgs(
+      process.argv.slice(2),
+      ['inventory', 'input-root', 'output-root'],
+      ['inventory', 'input-root', 'output-root', 'min-free-bytes']
+    );
     const summary = await runPilotGeneration({
       inputRoot: args['input-root'],
       inventoryPath: args.inventory,

@@ -30,10 +30,28 @@ function pilotScopeLeaksOriginal(scopeHtml, { arm, origin }) {
   });
 }
 
+// Control-arm service: the mount serves the staged original from any
+// rendered element — a typed source (store original-renderer heroes,
+// synthetic control fixtures) or the bare fallback <img> (gallery
+// control mounts, whose projection emits no typed sources).
+function pictureServesOriginal(picture, mount, { origin }) {
+  const sourceServes = picture.sources.some((source) =>
+    srcSetHasBase(source.srcSet, mount.stagedOriginal, origin)
+  );
+  const img = picture.img;
+  const imgServes =
+    img != null &&
+    (stripQuery(img.src, origin) === mount.stagedOriginal ||
+      srcSetHasBase(img.srcset, mount.stagedOriginal, origin));
+  return sourceServes || imgServes;
+}
+
 function checkHeroMount(section, mount, { arm, origin }) {
   const problems = [];
+  // Gallery control heroes carry no media source (bare fallback <img>),
+  // so they classify as gallery-picture, not gallery-hero.
   const pictures = sectionPictures(section.html).filter((picture) =>
-    ['hero-slide', 'gallery-hero', 'original-hero'].includes(
+    ['hero-slide', 'gallery-hero', 'gallery-picture', 'original-hero'].includes(
       pictureKind(picture)
     )
   );
@@ -78,13 +96,7 @@ function checkHeroMount(section, mount, { arm, origin }) {
     }
     return problems;
   }
-  const rendered =
-    picture.sources.find((source) => source.type === 'image/avif') ??
-    picture.sources.find((source) => source.media);
-  if (
-    !rendered ||
-    !srcSetHasBase(rendered.srcSet, mount.stagedOriginal, origin)
-  ) {
+  if (!pictureServesOriginal(picture, mount, { origin })) {
     problems.push('control hero mount does not serve the staged original');
   }
   return problems;
@@ -114,6 +126,15 @@ function checkLogoMount(section, mount, { arm, origin, surface }) {
   const marked = pictures[0].attrs['data-pilot-lab-picture'];
   if (marked != null && marked !== arm) {
     problems.push(`logo mount is marked for the ${marked} arm`);
+  }
+  if (arm === 'control' && surface !== 'store') {
+    // Gallery control: the AVIF requirement is pilot-only. The real
+    // mount is a bare fallback <img> (no typed sources); accept any
+    // rendered element serving the staged original.
+    if (!pictureServesOriginal(pictures[0], mount, { origin })) {
+      problems.push('control logo mount does not serve the staged original');
+    }
+    return problems;
   }
   const avif = pictures[0].sources.find(
     (source) => source.type === 'image/avif'
@@ -179,6 +200,15 @@ function checkCardMount(section, mount, { arm, origin, surface }) {
   const marked = pictures[0].attrs['data-pilot-lab-picture'];
   if (marked != null && marked !== arm) {
     problems.push(`card mount is marked for the ${marked} arm`);
+  }
+  if (arm === 'control' && surface !== 'store') {
+    // Gallery control: the AVIF requirement is pilot-only. The real
+    // mount is a bare fallback <img> (no typed sources); accept any
+    // rendered element serving the staged original.
+    if (!pictureServesOriginal(pictures[0], mount, { origin })) {
+      problems.push('control card mount does not serve the staged original');
+    }
+    return problems;
   }
   const avif = pictures[0].sources.find(
     (source) => source.type === 'image/avif'

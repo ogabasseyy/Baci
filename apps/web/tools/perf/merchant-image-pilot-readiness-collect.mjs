@@ -54,23 +54,33 @@ export async function collectSurface(page, url, surface) {
     };
     // Selected w-descriptor width: with a w-descriptor srcset the browser
     // density-corrects naturalWidth (resource pixels / selected density),
-    // so resolution verdicts need the physical resource width. Plain-src
+    // so resolution verdicts need the physical resource width. Pilot mounts
+    // render <picture> with the srcsets on child <source> elements (the
+    // fallback <img> carries only src), so scan those too; plain-src
     // images (and x-descriptor sets) report null and keep natural pixels.
     const resourceWidthOf = (img) => {
-      const srcset = img.getAttribute('srcset');
-      if (!srcset) {
-        return null;
+      const srcsets = [img.getAttribute('srcset')];
+      const parent = img.parentElement;
+      if (parent && parent.tagName === 'PICTURE') {
+        for (const source of parent.querySelectorAll('source[srcset]')) {
+          srcsets.push(source.getAttribute('srcset'));
+        }
       }
-      for (const candidate of srcset.split(',')) {
-        const [url, descriptor] = candidate.trim().split(/\s+/);
-        if (
-          url &&
-          descriptor?.endsWith('w') &&
-          new URL(url, document.baseURI).href === img.currentSrc
-        ) {
-          const width = Number.parseInt(descriptor, 10);
-          if (Number.isFinite(width) && width > 0) {
-            return width;
+      for (const srcset of srcsets) {
+        if (!srcset) {
+          continue;
+        }
+        for (const candidate of srcset.split(',')) {
+          const [url, descriptor] = candidate.trim().split(/\s+/);
+          if (
+            url &&
+            descriptor?.endsWith('w') &&
+            new URL(url, document.baseURI).href === img.currentSrc
+          ) {
+            const width = Number.parseInt(descriptor, 10);
+            if (Number.isFinite(width) && width > 0) {
+              return width;
+            }
           }
         }
       }

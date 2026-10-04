@@ -222,6 +222,23 @@ describe('getLabConfig', () => {
     await expect(getLabConfig()).rejects.toThrow(/pilot:stage and restart/);
   });
 
+  it('rejects operator JSON over the request-path byte budget', async () => {
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    // Oversized but otherwise valid JSON: the size gate must fire before
+    // parsing, with an input-validation error instead of an OOM-prone read.
+    const inventoryPath = join(lab.inputRoot, 'inventory.json');
+    const text = await readFile(inventoryPath, 'utf8');
+    await writeFile(
+      inventoryPath,
+      text.replace(/\]$/, `,"${'p'.repeat(8 * 1024 * 1024)}"]`)
+    );
+    await expect(getLabConfig()).rejects.toThrow(/operator JSON budget/);
+  });
+
   it('reloads on frozen-input edits and pins the mtime residual', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

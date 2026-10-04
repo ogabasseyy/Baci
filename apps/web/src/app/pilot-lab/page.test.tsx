@@ -103,6 +103,17 @@ describe('pilot-lab route', () => {
     expect(html).not.toContain(`/__pilot/${'d'.repeat(64)}/`);
   });
 
+  it('caveats the per-format guard and the over-source exception', async () => {
+    const roots = await setupLabRoots();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    const html = await renderPage('pilot');
+    expect(html).toContain('per-format');
+    expect(html).toContain('generated-over-source');
+  });
+
   it('defaults to the pilot arm', async () => {
     const roots = await setupLabRoots();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

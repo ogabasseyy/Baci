@@ -68,6 +68,45 @@ describe('preflight served mount coverage', () => {
     expect(covered.mounted).toEqual([mount.binding]);
   });
 
+  it('accepts bare-img gallery control mounts that serve the staged original', () => {
+    const origin = 'http://localhost:3129';
+    const mountFor = (role, slotId, assetId) => ({
+      assetId,
+      binding: `${MERCHANT}/${assetId}`,
+      generationId: 'c'.repeat(64),
+      merchantId: MERCHANT,
+      role,
+      slotId,
+      stagedOriginal: `/__pilot/originals/${MERCHANT}-${assetId}.png`,
+    });
+    // Gallery control renders sourceless pictures (bare fallback <img>);
+    // the AVIF requirement is pilot-only.
+    const section = (mount, imgSrc) =>
+      `<main data-pilot-lab-arm="control"><section data-pilot-lab-slot="${mount.slotId}" data-pilot-lab-binding="${mount.binding}"><picture data-pilot-lab-picture="control"><img src="${imgSrc}" alt="lab"></picture></section></main>`;
+    const check = (html, mount) =>
+      assertServedMountCoverage(html, {
+        arm: 'control',
+        expectedMounts: [mount],
+        origin,
+        surface: 'gallery',
+      });
+    for (const [role, slotId, assetId] of [
+      ['logo', 'header-logo', 'logo-1'],
+      ['product', 'product-card', 'card-a'],
+      ['hero', 'mobile-hero-slide-0', 'hero-s0'],
+    ]) {
+      const mount = mountFor(role, slotId, assetId);
+      const covered = check(section(mount, mount.stagedOriginal), mount);
+      expect(covered.failures).toEqual([]);
+      expect(covered.mounted).toEqual([mount.binding]);
+      const broken = check(section(mount, '/placeholder.svg'), mount);
+      expect(broken.failures.join('\n')).toMatch(
+        /does not serve the staged original/
+      );
+      expect(broken.mounted).toEqual([]);
+    }
+  });
+
   it('fails pilot mounts that fetch a staged original alongside the generation copy', () => {
     const origin = 'http://localhost:3129';
     const mount = {

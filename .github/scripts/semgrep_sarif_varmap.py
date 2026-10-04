@@ -80,6 +80,14 @@ def audit_unresolved_argv(argv0, stale, drift):
     # dynamic by construction.
     if "helper-unresolved-command" in drift:
         return
+    if re.search(r"(?<!\$)\{[^{}]*(\.\.|,)[^{}]*\}", argv0):
+        # Brace expansion in command position ({bash,evil.sh}
+        # becomes two words before command selection); quoted
+        # braces cannot expand but quotes are already stripped,
+        # so they fail closed harmlessly. ${...} excluded via
+        # the lookbehind (operator rule below owns those).
+        drift.append("helper-unresolved-command")
+        return
     if re.match(r"\"?\$\{[^A-Za-z_]", argv0) \
             or re.match(r"\"?\$\{[A-Za-z_]\w*"
                        r"[:#%/@^,+?=[\]-]", argv0):

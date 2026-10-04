@@ -163,6 +163,9 @@ t loader-ant 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a$
 # --- clang-tidy loader (Codex P1: --load runs DSO init) ---
 t loader-tidy 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}clang-tidy --load=\"\${GITHUB_WORKSPACE}/evil.so\" \"\${GITHUB_WORKSPACE}/x.cc\" --"
 t loader-tidy-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}clang-tidy-18 --load=\"\${GITHUB_WORKSPACE}/evil.so\" \"\${GITHUB_WORKSPACE}/x.cc\" --"
+# --- webpack loader (Codex P1: --config executes) ---
+t loader-webpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}webpack --config \"\${GITHUB_WORKSPACE}/evil.config.js\""
+t loader-webpack-dev 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}webpack-dev-server --config \"\${GITHUB_WORKSPACE}/evil.config.js\""
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

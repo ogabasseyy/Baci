@@ -29,7 +29,7 @@ at the head copy before the base auditor runs. The backstop is human:
 `.github/CODEOWNERS` auto-requests `@ogabasseyy` on any `.github/**` diff,
 so weakening the ~15-line invocation is a loud diff to the owner — but
 full enforcement (require code-owner review, required SAST/selftest
-checks) is a repo-settings step for the owner post-merge, while the
-~5k-line auditor (unreviewable per-PR) stays base-pinned. A base-owned
-`pull_request_target` gate would close even the loud vector; tracked
-post-merge.
+checks) is a repo-settings step for the owner post-merge, tracked in
+issue #3622, while the ~5k-line auditor (unreviewable per-PR) stays
+base-pinned. A base-owned `pull_request_target` gate would close even
+the loud vector; tracked post-merge.

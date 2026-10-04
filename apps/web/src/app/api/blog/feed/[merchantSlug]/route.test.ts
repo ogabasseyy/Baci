@@ -507,6 +507,33 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(payload.options.image).toBeUndefined();
   });
 
+  it('percent-encodes control characters in channel URLs instead of deleting them', async () => {
+    const unsafeMerchant = {
+      ...merchant,
+      slug: 'ogabassey\u001a',
+    };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      options: { id: string; link: string };
+    };
+    expect(payload.options.id).toBe('https://usebaci.com/ogabassey%1A/blog');
+    expect(payload.options.link).toBe('https://usebaci.com/ogabassey%1A/blog');
+  });
+
   it('over-fetches additional ranges when early batches are fully filtered', async () => {
     const junkBatch = buildJunkFeedBatch();
     const publicPost = {

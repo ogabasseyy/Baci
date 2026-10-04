@@ -3,6 +3,7 @@ import {
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedUrl,
 } from './blog-feed-normalize';
 
 describe('normalizeBlogFeedPostForFilter', () => {
@@ -57,5 +58,25 @@ describe('xmlSafeFeedImageUrl', () => {
     expect(
       xmlSafeFeedImageUrl('https://usebaci.com/image\u0008.png')
     ).toBeUndefined();
+  });
+});
+
+describe('xmlSafeFeedUrl', () => {
+  it('leaves well-formed URLs untouched', () => {
+    expect(xmlSafeFeedUrl('https://usebaci.com/ogabassey/blog')).toBe(
+      'https://usebaci.com/ogabassey/blog'
+    );
+  });
+
+  it('percent-encodes control characters instead of deleting them', () => {
+    expect(xmlSafeFeedUrl('https://usebaci.com/ogabassey\u001a/blog')).toBe(
+      'https://usebaci.com/ogabassey%1A/blog'
+    );
+  });
+
+  it('drops lone surrogates rather than throwing', () => {
+    expect(
+      xmlSafeFeedUrl(`https://usebaci.com/${String.fromCharCode(0xd800)}blog`)
+    ).toBe('https://usebaci.com/blog');
   });
 });

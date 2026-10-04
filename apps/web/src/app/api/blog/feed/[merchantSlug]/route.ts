@@ -7,6 +7,7 @@ import {
   normalizeBlogFeedPostForFilter,
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedUrl,
 } from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
@@ -361,9 +362,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         ? null
         : (postsWithValidDates[0]?.publishedDate ?? new Date());
     const feedText = stripInvalidXml10Characters;
-    const safeStoreUrl = feedText(storeUrl);
-    const safeFeedUrl = feedText(feedUrl);
-    const safeBaseUrl = feedText(baseUrl);
+    const safeStoreUrl = xmlSafeFeedUrl(storeUrl);
+    const safeFeedUrl = xmlSafeFeedUrl(feedUrl);
+    const safeBaseUrl = xmlSafeFeedUrl(baseUrl);
 
     const feed = new Feed({
       title: feedText(`${merchant.business_name} Blog`),

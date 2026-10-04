@@ -41,6 +41,21 @@ export function truncateFeedText(value: string, maxLength: number): string {
 }
 
 /**
+ * Makes a complete feed URL XML-safe while preserving its identity.
+ * Percent-encoding (not deletion) keeps structural channel links
+ * resolvable, and encodeURI output is XML-valid by construction. Lone
+ * surrogates cannot survive in XML output and make encodeURI throw, so
+ * they are stripped via the fallback path only. No-op for well-formed URLs.
+ */
+export function xmlSafeFeedUrl(url: string): string {
+  try {
+    return encodeURI(url);
+  } catch {
+    return encodeURI(stripInvalidXml10Characters(url));
+  }
+}
+
+/**
  * Returns an image/logo URL only when XML sanitization leaves it untouched.
  * A stripped URL identifies a different (likely broken) resource, so altered
  * URLs are omitted instead of silently rewritten.

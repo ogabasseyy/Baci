@@ -69,4 +69,18 @@ describe('RSS XML character safety', () => {
 
     expect(html).not.toContain('javascript:');
   });
+
+  it('does not let entity-encoded forbidden characters smuggle a scheme either', () => {
+    const html = sanitizeForFeed('<a href="java&#xFFFE;script:alert(1)">x</a>');
+
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('removes character references that decode to XML-forbidden code points', () => {
+    expect(stripInvalidXml10Characters('Fish &#x1A; Chips &#241;')).toBe(
+      'Fish  Chips &#241;'
+    );
+    expect(stripInvalidXml10Characters('a&#0;b&#65c')).toBe('ab&#65c');
+    expect(stripInvalidXml10Characters('&#x1F4F1;')).toBe('&#x1F4F1;');
+  });
 });

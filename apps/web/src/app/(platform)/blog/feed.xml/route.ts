@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import {
   truncateFeedText,
   xmlSafeFeedImageUrl,
+  xmlSafeFeedUrl,
 } from '@/lib/blog-feed-normalize';
 import { stripHtml } from '@/lib/blog-utils';
 import {
@@ -41,7 +42,7 @@ export async function GET(_request: NextRequest) {
       link: feedText(blogUrl),
       language: 'en',
       image: xmlSafeFeedImageUrl(PLATFORM_BLOG_CONTEXT.logoUrl),
-      favicon: feedText(`${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`),
+      favicon: xmlSafeFeedUrl(`${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`),
       copyright: feedText(
         `All rights reserved ${new Date().getFullYear()}, ${PLATFORM_BLOG_CONTEXT.businessName}`
       ),
@@ -52,11 +53,11 @@ export async function GET(_request: NextRequest) {
           }
         : {}),
       feedLinks: {
-        rss2: feedText(feedUrl),
+        rss2: xmlSafeFeedUrl(feedUrl),
       },
       author: {
         name: feedText(PLATFORM_BLOG_CONTEXT.businessName),
-        link: feedText(PLATFORM_BLOG_CONTEXT.baseUrl),
+        link: xmlSafeFeedUrl(PLATFORM_BLOG_CONTEXT.baseUrl),
       },
     });
 
@@ -65,8 +66,8 @@ export async function GET(_request: NextRequest) {
         post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
       feed.addItem({
         title: feedText(post.title),
-        id: `${feedText(blogUrl)}/${encodeURIComponent(post.slug)}`,
-        link: `${feedText(blogUrl)}/${encodeURIComponent(post.slug)}`,
+        id: `${xmlSafeFeedUrl(blogUrl)}/${encodeURIComponent(post.slug)}`,
+        link: `${xmlSafeFeedUrl(blogUrl)}/${encodeURIComponent(post.slug)}`,
         description: feedText(excerpt),
         content: sanitizeForFeed(post.content || ''),
         author: [

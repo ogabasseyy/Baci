@@ -8,7 +8,9 @@ describe('isProviderConfirmedTransaction', () => {
     'refunded',
     ' Success ',
   ])('confirms settled value movement (%s)', (status) => {
-    expect(isProviderConfirmedTransaction({ status })).toBe(true);
+    expect(
+      isProviderConfirmedTransaction({ status, transaction_type: 'payment' })
+    ).toBe(true);
   });
 
   it.each([
@@ -19,6 +21,22 @@ describe('isProviderConfirmedTransaction', () => {
     '',
     null,
   ])('excludes non-settled rows (%s)', (status) => {
-    expect(isProviderConfirmedTransaction({ status })).toBe(false);
+    expect(
+      isProviderConfirmedTransaction({ status, transaction_type: 'payment' })
+    ).toBe(false);
+  });
+
+  it.each([
+    'refund',
+    'fee',
+    null,
+    undefined,
+  ])('excludes non-payment types (%s) even when completed', (transaction_type) => {
+    expect(
+      isProviderConfirmedTransaction({
+        status: 'completed',
+        transaction_type,
+      })
+    ).toBe(false);
   });
 });

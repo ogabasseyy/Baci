@@ -560,6 +560,32 @@ describe('GET /api/blog/feed/[merchantSlug]', () => {
     expect(payload.options.link).toBe('https://usebaci.com/oga%2Fbassey/blog');
   });
 
+  it('falls back to the slug URL when the custom domain is corrupt', async () => {
+    const unsafeMerchant = {
+      ...merchant,
+      custom_domain: 'exa\x01mple.com',
+    };
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable(
+      'merchants',
+      createMerchantQuery({ data: unsafeMerchant, error: null })
+    );
+    enqueueTable('blog_posts', createPostQuery({ data: [], error: null }));
+
+    const response = await GET(new NextRequest('https://usebaci.com/feed'), {
+      params: Promise.resolve({ merchantSlug: 'ogabassey' }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(await response.text()) as {
+      options: { link: string };
+    };
+    expect(payload.options.link).toBe('https://usebaci.com/ogabassey/blog');
+  });
+
   it('over-fetches additional ranges when early batches are fully filtered', async () => {
     const junkBatch = buildJunkFeedBatch();
     const publicPost = {

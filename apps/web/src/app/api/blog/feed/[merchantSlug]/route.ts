@@ -345,9 +345,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // Use custom domain if available, otherwise fall back to slug-based URL
     const baseUrl = getAppUrl();
     const safeMerchantSlug = xmlSafeFeedPathSegment(merchant.slug);
-    const storeUrl = merchant.custom_domain
+    const customStoreUrl = merchant.custom_domain
       ? `https://${merchant.custom_domain}`
-      : `${baseUrl}/${safeMerchantSlug}`;
+      : null;
+    // A corrupt custom domain must not 500 the whole feed: fall back to the
+    // slug-based store URL instead of letting new URL() throw below.
+    const storeUrl =
+      customStoreUrl && URL.parse(customStoreUrl)
+        ? customStoreUrl
+        : `${baseUrl}/${safeMerchantSlug}`;
     const feedUrl = new URL(
       `/api/blog/feed/${safeMerchantSlug}`,
       storeUrl

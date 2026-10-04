@@ -89,8 +89,11 @@ export function xmlSafeFeedPathSegment(segment: string): string {
 
 /**
  * Returns an image/logo URL only when XML sanitization leaves it untouched.
- * A stripped URL identifies a different (likely broken) resource, so altered
- * URLs are omitted instead of silently rewritten.
+ * A stripped URL identifies a different (likely broken) resource, so URLs
+ * altered by XML stripping are omitted instead of silently rewritten. (URLs
+ * already go through WHATWG parsing upstream, whose tab/LF/CR normalization
+ * is identical in every browser and feed reader, so the emitted value always
+ * matches what any consumer would fetch for the stored value.)
  */
 export function xmlSafeFeedImageUrl(
   url: string | null | undefined

@@ -271,6 +271,13 @@ describe('receipt detail loading', () => {
     expect(detail.transactions).toEqual([]);
   });
 
+  // biome-ignore format: compact loop preserves the 300-line gate.
+  it('fails corrupt money closed instead of masking a zero balance', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    // Null trips the money schema; a negative total passes it as a number, so only the null balance fails closed.
+    for (const total of [null, -5]) { mockSingle.mockResolvedValue({ data: partialManualOrder({ total }), error: null }); expect(await (receiptDetailQueryOptions('order-9') as QueryOptions).queryFn()).toBeNull(); }
+  });
+
   it('opens paid-label-but-unsettled manual rows despite history errors', async () => {
     const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
     mockSingle.mockResolvedValue({

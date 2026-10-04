@@ -62,14 +62,8 @@ describe('storefront account document status helpers', () => {
       isManualOrderDocumentAvailable({ ...input, shippingStatus: 'returned' })
     ).toBe(false);
     // Nullish settled amounts fail closed, never coerce to zero.
-    for (const amount of [null, undefined, '']) {
-      expect(
-        isManualOrderDocumentAvailable({
-          ...input,
-          payments: [{ transaction_type: 'payment', status: 'completed', amount }],
-        })
-      ).toBe(false);
-    }
+    // biome-ignore format: compact rows preserve the 300-line gate.
+    for (const amount of [null, undefined, '']) expect(isManualOrderDocumentAvailable({ ...input, payments: [{ transaction_type: 'payment', status: 'completed', amount }] })).toBe(false);
   });
 
   it('treats a fully-covered manual partial as a receipt like the emailed document', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
-import type { Product } from '@/types/product';
+import { formatPrice, type Product } from '@/types/product';
 import { CompareTable } from './CompareTable';
 
 jest.mock('@react-native-vector-icons/ionicons', () => () => null);
@@ -64,5 +64,17 @@ describe('CompareTable', () => {
     render(<CompareTable {...createProps()} unavailableIds={['phone-1']} />);
     expect(screen.getByText('Price not verified')).toBeTruthy();
     expect(screen.getByText('Option not verified')).toBeTruthy();
+  });
+  it('never renders the zero-price fallback as a real amount', () => {
+    const props = createProps();
+    render(
+      <CompareTable
+        {...props}
+        products={[{ ...phone, price: 0 }]}
+        unavailableIds={['phone-1']}
+      />
+    );
+    expect(screen.getByText('Price not verified')).toBeTruthy();
+    expect(screen.queryByText(formatPrice(0))).toBeNull();
   });
 });

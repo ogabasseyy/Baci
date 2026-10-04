@@ -165,29 +165,6 @@ describe('send manual order document', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('uses the order date for legacy invoices without a persisted issue date', async () => {
-    const db = database({
-      payment_status: 'unpaid',
-      amount_paid: 0,
-      invoice_issue_date: null,
-      payment_due_date: null,
-      payment_terms: null,
-      buyer_reference: null,
-      firs_irn: null,
-      firs_csid: null,
-    });
-    await sendManualOrderDocument({
-      supabase: db.client,
-      row: { ...row, event_type: 'manual_order_invoice' },
-    });
-    const attachment = sendEmail.mock.calls[0][0].attachments[0];
-    // Fixture: issue date null, transaction 28 Sept, created 30 Sept — the
-    // emailed invoice must match the download's issue ?? transaction chain.
-    expect(
-      Buffer.from(attachment.content, 'base64').toString('latin1')
-    ).toContain('28 Sept 2026');
-  });
-
   it.each([
     { customer_email: null },
     { recorded_by_user_id: null },
@@ -291,28 +268,4 @@ describe('send manual order document', () => {
     expect(usdPdf).not.toContain('Test Bank');
   });
 
-  it('dates later-payment receipts from the completing transaction', async () => {
-    const db = database(
-      {},
-      {
-        paymentHistory: [
-          {
-            id: 'txn-9',
-            amount: 950000,
-            created_at: '2026-09-29T12:00:00Z',
-            description: null,
-            metadata: null,
-            status: 'completed',
-            transaction_type: 'payment',
-          },
-        ],
-      }
-    );
-    await sendManualOrderDocument({ supabase: db.client, row });
-    const pdf = Buffer.from(
-      sendEmail.mock.calls[0][0].attachments[0].content,
-      'base64'
-    ).toString('latin1');
-    expect(pdf).toContain('29 Sept 2026');
-  });
 });

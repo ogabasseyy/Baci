@@ -66,6 +66,17 @@ describe('mapCustomerTransactionRpcRows', () => {
     ]);
   });
 
+  it('preserves null timestamps for the detail date fallback', () => {
+    // transactions.created_at is nullable: the mapper keeps the null and
+    // dating skips it like the emailed renderer, instead of dropping the row.
+    const mapped = mapCustomerTransactionRpcRows([
+      { amount: 100, created_at: null },
+    ]);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]?.created_at).toBeNull();
+  });
+
   it('keeps DVA metadata alongside the recorded method', () => {
     expect(
       mapCustomerTransactionRpcRows([

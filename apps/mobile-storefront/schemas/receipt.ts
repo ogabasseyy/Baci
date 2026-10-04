@@ -79,7 +79,9 @@ const VirtualAccountSchema = z.object({
 
 const TransactionSchema = z.object({
   amount: z.number(),
-  created_at: z.string(),
+  // transactions.created_at is nullable: a null timestamp must not fail
+  // the whole detail closed — dating skips it like the emailed renderer.
+  created_at: z.string().nullable(),
   description: z.string().nullable(),
   metadata: z.object({ payment_method: z.string().optional() }).nullable(),
   // Provided by the RPC mapper for receipt dating (settled filter).

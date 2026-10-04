@@ -99,12 +99,16 @@ export function renderPaymentHistoryHtml(
       // Canonical document timezone like the header dates and the emailed
       // PDF: a near-midnight settlement must show the same calendar date
       // for customers outside Lagos instead of the device timezone's day.
-      const txDate = new Date(tx.created_at).toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'Africa/Lagos',
-      });
+      // A null timestamp renders a dash (new Date(null) is the epoch).
+      const txDate =
+        tx.created_at == null
+          ? '-'
+          : new Date(tx.created_at).toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+              timeZone: 'Africa/Lagos',
+            });
       const method = tx.metadata?.payment_method || tx.description || 'Payment';
       return `<tr><td>${txDate}</td><td>${escapeHtml(method)}</td><td style="text-align:right;font-weight:600;color:#059669;">${formatMoney(tx.amount)}</td></tr>`;
     })

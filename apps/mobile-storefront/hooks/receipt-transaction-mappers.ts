@@ -2,7 +2,7 @@ import { isDecimalMoney } from '@baci/shared/receipt';
 
 interface CustomerTransactionRpcRow {
   amount: number | string | null;
-  created_at: string;
+  created_at: string | null;
   description: string | null;
   dva_account_number: string | null;
   gateway: string | null;

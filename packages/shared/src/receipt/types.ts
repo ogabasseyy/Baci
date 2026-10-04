@@ -122,7 +122,7 @@ export interface ReceiptOrder {
   }>;
   transactions?: Array<{
     amount: number;
-    created_at: string;
+    created_at: string | null;
     description: string | null;
     metadata: { payment_method?: string } | null;
   }>;

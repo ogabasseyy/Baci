@@ -144,4 +144,25 @@ describe('renderPaymentHistoryHtml', () => {
     expect(html).toContain('7 Feb 2024');
     expect(html).not.toContain('6 Feb 2024');
   });
+
+  it('renders a dash for null transaction timestamps', () => {
+    // transactions.created_at is nullable: new Date(null) is the epoch,
+    // so the row must degrade instead of printing Jan 1970.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: null,
+            description: null,
+            metadata: null,
+          },
+        ],
+      } as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('<td>-</td>');
+    expect(html).not.toContain('1970');
+  });
 });

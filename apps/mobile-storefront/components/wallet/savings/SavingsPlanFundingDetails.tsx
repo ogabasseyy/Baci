@@ -12,6 +12,7 @@ type SavingsPlanFundingDetailsProps = {
   account?: SavingsPlanFundingAccount;
   amount: number;
   copied: boolean;
+  copyFailed?: boolean;
   error: string | null;
   goalTitle: string;
   isHostedStaging: boolean;
@@ -26,6 +27,7 @@ export function SavingsPlanFundingDetails({
   account,
   amount,
   copied,
+  copyFailed = false,
   error,
   goalTitle,
   isHostedStaging,
@@ -77,6 +79,7 @@ export function SavingsPlanFundingDetails({
           account={usableAccount}
           colors={colors}
           copied={copied}
+          copyFailed={copyFailed}
           onCopy={onCopy}
         />
       ) : (
@@ -101,11 +104,13 @@ function AccountDetails({
   account,
   colors,
   copied,
+  copyFailed,
   onCopy,
 }: {
   account: SavingsPlanFundingAccount;
   colors: FundingColors;
   copied: boolean;
+  copyFailed: boolean;
   onCopy: () => Promise<void>;
 }) {
   return (
@@ -141,6 +146,14 @@ function AccountDetails({
           {copied ? 'Copied' : 'Copy account number'}
         </Text>
       </Pressable>
+      {copyFailed && !copied ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.copy, { color: colors.error }]}
+        >
+          Could not copy the account number. Please try again.
+        </Text>
+      ) : null}
     </View>
   );
 }

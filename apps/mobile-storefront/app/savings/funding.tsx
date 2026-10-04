@@ -61,6 +61,7 @@ function SavingsPlanFundingScreen() {
     cachePolicy: 'strict',
   });
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [refreshNote, setRefreshNote] = useState<string | null>(null);
   const goalId = stringParam(params.goalId);
   const activeGoal = data?.wallet.active_savings_goal ?? null;
@@ -144,6 +145,7 @@ function SavingsPlanFundingScreen() {
               account={funding.planFundingAccounts[0]}
               amount={amount}
               copied={copied}
+              copyFailed={copyFailed}
               error={funding.fundingError}
               goalTitle={activeGoal?.title ?? 'Savings plan'}
               // Same gate as the route redirect above: the bare hosted
@@ -154,9 +156,12 @@ function SavingsPlanFundingScreen() {
                   funding.planFundingAccounts[0]?.accountNumber ?? '';
                 if (accountNumber.trim() === '') {
                   setCopied(false);
+                  setCopyFailed(false);
                   return;
                 }
-                setCopied(await setClipboardString(accountNumber));
+                const ok = await setClipboardString(accountNumber);
+                setCopied(ok);
+                setCopyFailed(!ok);
               }}
               onFetchExisting={() => void funding.fetchExistingPlanFunding()}
               onFetchWithIdentity={(bvn) => void funding.fetchPlanFunding(bvn)}

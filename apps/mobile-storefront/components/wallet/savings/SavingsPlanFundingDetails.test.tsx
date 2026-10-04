@@ -163,5 +163,33 @@ describe('SavingsPlanFundingDetails', () => {
       screen.getByRole('button', { name: 'Copy plan account number' })
     );
     expect(onCopy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows an error when copying the account number fails', () => {
+    render(
+      <SavingsPlanFundingDetails
+        account={{
+          accountName: 'PiggyVest Savings',
+          accountNumber: '0001234567',
+          bankName: 'Test Bank',
+        }}
+        amount={250000}
+        copied={false}
+        copyFailed
+        error={null}
+        goalTitle="iPhone savings"
+        isHostedStaging
+        onCopy={async () => undefined}
+        onFetchExisting={jest.fn()}
+        onFetchWithIdentity={jest.fn()}
+        phase="ready"
+        requiresIdentity={false}
+      />
+    );
+
+    expect(
+      screen.getByRole('alert', { name: /could not copy/i })
+    ).toBeOnTheScreen();
   });
 });

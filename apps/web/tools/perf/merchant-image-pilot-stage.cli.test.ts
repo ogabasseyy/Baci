@@ -208,6 +208,71 @@ describe('stage main', () => {
     expect(original.length).toBeGreaterThan(0);
   });
 
+  it('treats an empty public-dir env override as unset', async () => {
+    const lab = await setupStageFiles();
+    const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-pubdir-'));
+    const cwd = process.cwd();
+    const argv = process.argv;
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
+    process.argv = [
+      'node',
+      'merchant-image-pilot-stage.cli.ts',
+      '--input-root',
+      lab.inputRoot,
+      '--output-root',
+      lab.outputRoot,
+    ];
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      process.chdir(sandbox);
+      await main();
+    } finally {
+      process.chdir(cwd);
+      process.argv = argv;
+    }
+    const summary = JSON.parse(String(log.mock.calls[0]?.[0] ?? '{}'));
+    expect(summary.ok).toBe(true);
+    // Falls back to <cwd>/public — never a CWD-relative '__pilot' root the
+    // request loader would not read back.
+    const staged = await readFile(
+      join(sandbox, 'public', '__pilot', 'originals', `${MERCHANT}-logo-1.png`)
+    );
+    expect(staged.length).toBeGreaterThan(0);
+  });
+
+  it("treats --public-dir '' as unset", async () => {
+    const lab = await setupStageFiles();
+    const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-pubflag-'));
+    const cwd = process.cwd();
+    const argv = process.argv;
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    process.argv = [
+      'node',
+      'merchant-image-pilot-stage.cli.ts',
+      '--input-root',
+      lab.inputRoot,
+      '--output-root',
+      lab.outputRoot,
+      '--public-dir',
+      '',
+    ];
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      process.chdir(sandbox);
+      await main();
+    } finally {
+      process.chdir(cwd);
+      process.argv = argv;
+    }
+    const summary = JSON.parse(String(log.mock.calls[0]?.[0] ?? '{}'));
+    expect(summary.ok).toBe(true);
+    const staged = await readFile(
+      join(sandbox, 'public', '__pilot', 'originals', `${MERCHANT}-logo-1.png`)
+    );
+    expect(staged.length).toBeGreaterThan(0);
+  });
+
   it('fails closed without the lab flag or roots', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '');

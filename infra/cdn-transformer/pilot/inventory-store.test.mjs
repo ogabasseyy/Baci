@@ -67,6 +67,27 @@ test('isStaleInventoryLock recovers ownerless locks past the creation grace', as
   assert.equal(await isStaleInventoryLock(join(dir, 'gone.lock')), false);
 });
 
+test('isStaleInventoryLock grants the creation grace to unparsable owners', async () => {
+  const { mkdir, utimes, writeFile: write } = await import('node:fs/promises');
+  const { isStaleInventoryLock } = await import('./inventory-store.mjs');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-lock-torn-'));
+  // Partial owner.json in a fresh dir: exclusive-create published the path
+  // before the bytes landed — a holder mid-write, not stale.
+  const fresh = join(dir, 'fresh.lock');
+  await mkdir(fresh);
+  await write(join(fresh, 'owner.json'), '{"pid":');
+  assert.equal(await isStaleInventoryLock(fresh), false);
+  // Unparsable owner past the grace: a crashed holder — recoverable like
+  // any other stale lock. (Backdate after the write: creating the owner
+  // entry bumps the directory mtime.)
+  const aged = join(dir, 'aged.lock');
+  await mkdir(aged);
+  await write(join(aged, 'owner.json'), '{"pid":');
+  const past = new Date(Date.now() - 30_000);
+  await utimes(aged, past, past);
+  assert.equal(await isStaleInventoryLock(aged), true);
+});
+
 test('isStaleInventoryLock never steals by age from a live owner', async () => {
   const { mkdir, writeFile: write } = await import('node:fs/promises');
   const { isStaleInventoryLock } = await import('./inventory-store.mjs');

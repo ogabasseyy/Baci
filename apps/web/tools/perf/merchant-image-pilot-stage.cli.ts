@@ -72,8 +72,11 @@ export async function main(): Promise<void> {
       'merchant image pilot: set BACI_IMAGE_PILOT_INPUT_ROOT and BACI_IMAGE_PILOT_OUTPUT_ROOT to stage the lab routes'
     );
   }
+  // Empty counts as unset (same falsy fallback as the request loader): an
+  // empty public dir must fall back to <cwd>/public, never stage into a
+  // CWD-relative '__pilot' root the loader would not read back.
   const publicDir =
-    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR ?? join(process.cwd(), 'public');
+    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || join(process.cwd(), 'public');
   // The sanctioned writer: same validated loader as the routes, with
   // staging enabled. Request-time loads stay read-only and fail closed
   // when these bytes are missing or drifted.

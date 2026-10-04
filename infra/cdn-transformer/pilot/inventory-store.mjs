@@ -38,23 +38,32 @@ const INVENTORY_LOCK_OWNER_GRACE_MS = 5_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function isBeyondOwnerGrace(lockDir) {
+  const info = await stat(lockDir).catch(() => null);
+  if (!info) {
+    // Raced with a release: the next loop iteration retries the mkdir.
+    return false;
+  }
+  return Date.now() - info.mtimeMs > INVENTORY_LOCK_OWNER_GRACE_MS;
+}
+
 export async function isStaleInventoryLock(lockDir) {
   const owner = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
     () => null
   );
   if (owner === null) {
-    const info = await stat(lockDir).catch(() => null);
-    if (!info) {
-      // Raced with a release: the next loop iteration retries the mkdir.
-      return false;
-    }
-    return Date.now() - info.mtimeMs > INVENTORY_LOCK_OWNER_GRACE_MS;
+    return isBeyondOwnerGrace(lockDir);
   }
   let parsed;
   try {
     parsed = JSON.parse(owner);
   } catch {
-    return true;
+    // Torn read of an owner file still being written: exclusive-create
+    // publishes the path before the bytes land, so a second acquirer can
+    // observe a partial owner.json from a live holder. Unparsable owners
+    // get the same creation grace as missing ones — only a lock that has
+    // been unparsable past the grace is a crashed holder's.
+    return isBeyondOwnerGrace(lockDir);
   }
   if (!Number.isInteger(parsed.pid)) {
     // No identity to probe; our writer always records an integer pid, so

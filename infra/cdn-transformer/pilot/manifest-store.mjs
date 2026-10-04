@@ -162,7 +162,14 @@ export async function commitGeneration({
       );
     }
     await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
-    return { durability: 'synced', path: dir, reused: true };
+    // Reuse reports the publish-time verdict, never an assumed 'synced':
+    // a generation published where fsync is unsupported must not gain
+    // power-loss durability by being read later.
+    return {
+      durability: await readPersistedDurability(dir),
+      path: dir,
+      reused: true,
+    };
   }
   const commitDir = join(stagingDir, 'commit');
   await (deps.mkdir ?? mkdir)(commitDir, { recursive: true });
@@ -209,5 +216,34 @@ export async function commitGeneration({
     }
     durability = 'sync-unsupported';
   }
+  // Persist the publish-time verdict beside the manifest so reuse reports
+  // what publish proved. Best-effort and post-visibility: the durability
+  // value is only final after the renames above, and a lost sidecar must
+  // degrade reuse reports to 'unknown' — never fail an already-published
+  // job or print a false 'synced'.
+  await writeFile(
+    join(dir, 'durability.json'),
+    JSON.stringify({ durability })
+  ).catch(() => undefined);
   return { durability, path: dir, reused: false };
+}
+
+async function readPersistedDurability(dir) {
+  try {
+    const parsed = JSON.parse(
+      await readFile(join(dir, 'durability.json'), 'utf8')
+    );
+    if (
+      parsed?.durability === 'synced' ||
+      parsed?.durability === 'sync-unsupported'
+    ) {
+      return parsed.durability;
+    }
+  } catch {
+    // Missing or corrupt provenance (pre-sidecar generations, operator
+    // deletion, torn write) fails honest: durability is unknown, not
+    // 'synced'. This is advisory reporting only — reuse validation still
+    // runs through loadGeneration plus the identity comparison above.
+  }
+  return 'unknown';
 }

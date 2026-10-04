@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { CLAIM_LIVE_WINDOW_MS } from './constants.mjs';
 import { ownedStagingPath, removeOwnedStaging } from './disk-guards.mjs';
 import { pilotJobKey } from './job-schema.mjs';
 
@@ -57,26 +56,6 @@ function ownerExited(pid) {
   } catch (error) {
     return error?.code === 'ESRCH';
   }
-}
-
-// Recorded owner-start identity, if the claim carries a usable one.
-// Prefer the start-time approximation; fall back to claim creation (an
-// owner necessarily started before it claimed). Missing or unparseable
-// timestamps fail closed (null) — a pid that may be live is never
-// stolen on the basis of absent identity.
-function ownerStartMs(existing) {
-  for (const value of [existing.ownerStartApproxMs, existing.createdAt]) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const parsed = Date.parse(value);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-  }
-  return null;
 }
 
 export async function acquireClaim(outputRoot, job, runToken) {
@@ -168,23 +147,20 @@ export async function recoverAbandonedClaim(outputRoot, job) {
     throw error;
   });
   const existing = parseClaimFile(text);
+  // A pid that answers kill(2) is held unconditionally: age cannot
+  // distinguish a wedged-but-live owner from pid reuse, and recovering a
+  // wedged owner's staging while it can still resume would violate the
+  // single-job guarantee. Wedged or pid-reused claims need operator
+  // clearance (the claim records pid + owner start for diagnosis).
   if (!ownerExited(existing.pid)) {
-    const startMs = ownerStartMs(existing);
-    if (startMs === null || Date.now() - startMs <= CLAIM_LIVE_WINDOW_MS) {
-      throw new PilotClaimError(
-        'claim-held',
-        `owner pid ${existing.pid} may be live; refusing to steal run "${existing.runToken}"`,
-        { ownerPid: existing.pid, runToken: existing.runToken }
-      );
-    }
-    // The pid is live but its recorded owner started before any
-    // legitimate run could still be alive: the pid was reused by an
-    // unrelated process, or the owner is wedged past its job deadline.
-    // Recovery proceeds (see CLAIM_LIVE_WINDOW_MS for steal-safety).
+    throw new PilotClaimError(
+      'claim-held',
+      `owner pid ${existing.pid} may be live; refusing to steal run "${existing.runToken}"`,
+      { ownerPid: existing.pid, runToken: existing.runToken }
+    );
   }
-  // Owner provably exited, or live-but-ancient per the check above: remove
-  // ONLY that run's staging after revalidating the path beneath the output
-  // root, then drop the claim.
+  // Owner provably exited (ESRCH): remove ONLY that run's staging after
+  // revalidating the path beneath the output root, then drop the claim.
   const stagingDir = ownedStagingPath(outputRoot, existing.runToken);
   if (basename(stagingDir) !== existing.stagingDirName) {
     throw new PilotClaimError(

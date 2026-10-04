@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   checkBindingAcceptance,
   checkBindingInput,
@@ -47,6 +48,22 @@ describe('checkBindingInput', () => {
     expect(inputBytes.equals(bytes)).toBe(true);
     expect(failures).toEqual([]);
     expect(checks).toEqual([{ name: `${MERCHANT}/logo-a:input`, ok: true }]);
+  });
+
+  it('rejects snapshots over the generator input cap despite matching hashes', async () => {
+    const bytes = Buffer.alloc(MAX_INPUT_BYTES + 1, 0x61);
+    const root = await inputRootWith({ 'snapshots/logo-a.png': bytes });
+    const checks = [];
+    const failures = [];
+    const inputBytes = await checkBindingInput({
+      checks,
+      failures,
+      name: `${MERCHANT}/logo-a`,
+      options: { inputRoot: root },
+      record: recordFor({ sha256: sha256(bytes) }),
+    });
+    expect(inputBytes).toBeNull();
+    expect(failures.join('\n')).toMatch(/exceeds the .* byte input limit/);
   });
 
   it('fails closed on missing or tampered snapshots', async () => {

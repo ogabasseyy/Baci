@@ -80,7 +80,11 @@ describe('LabStoreGrid', () => {
         <LabStoreGrid
           arm={arm}
           basePath="/pilot-lab/store/omnimart"
-          fillerImageUrl="http://localhost:3000/__pilot/fillers/grid-filler-600x400.png"
+          fillerImageUrls={[
+            'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png',
+            'http://localhost:3000/__pilot/fillers/grid-filler-600x400-b.png',
+            'http://localhost:3000/__pilot/fillers/grid-filler-600x400-c.png',
+          ]}
           fillers={[]}
           mountedProduct={product}
           mountedProjection={arm === 'pilot' ? PROJECTION : null}
@@ -95,16 +99,46 @@ describe('LabStoreGrid', () => {
       <LabStoreGrid
         arm="pilot"
         basePath="/pilot-lab/store/omnimart"
-        fillerImageUrl="http://localhost:3000/__pilot/fillers/grid-filler-600x400.png"
+        fillerImageUrls={[
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-b.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-c.png',
+        ]}
         fillers={[{ imageHint: 'filler', name: 'Lab Filler Two', price: 1800 }]}
         mountedProduct={product}
         mountedProjection={PROJECTION}
       />
     );
-    expect(html).toContain('grid-filler-600x400.png');
+    expect(html).toContain('grid-filler-600x400-a.png');
     // The filler card renders the frozen asset, not the selected binding.
     const [, afterSelected] = html.split('data-pilot-lab-selected-card="true"');
     expect(afterSelected).not.toContain('__pilot/originals/selected.png');
+  });
+
+  it('gives every sibling card a distinct filler URL (no request coalescing)', () => {
+    const html = renderToStaticMarkup(
+      <LabStoreGrid
+        arm="pilot"
+        basePath="/pilot-lab/store/omnimart"
+        fillerImageUrls={[
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-b.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-c.png',
+        ]}
+        fillers={[
+          { imageHint: 'filler two', name: 'Lab Filler Two', price: 1800 },
+          { imageHint: 'filler three', name: 'Lab Filler Three', price: 3200 },
+          { imageHint: 'filler four', name: 'Lab Filler Four', price: 4100 },
+        ]}
+        mountedProduct={product}
+        mountedProjection={PROJECTION}
+      />
+    );
+    // Siblings sharing one URL would coalesce into a single browser
+    // request, understating contention on the selected priority card.
+    for (const suffix of ['-a.png', '-b.png', '-c.png']) {
+      expect(html).toContain(`grid-filler-600x400${suffix}`);
+    }
   });
 
   it('scopes commerce hrefs under the lab base path', () => {
@@ -112,7 +146,11 @@ describe('LabStoreGrid', () => {
       <LabStoreGrid
         arm="control"
         basePath="/pilot-lab/store/omnimart"
-        fillerImageUrl="http://localhost:3000/__pilot/fillers/grid-filler-600x400.png"
+        fillerImageUrls={[
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-b.png',
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-c.png',
+        ]}
         fillers={[]}
         mountedProduct={product}
         mountedProjection={null}

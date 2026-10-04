@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   ACCEPTED_INPUT_FORMATS,
   BUDGETS,
-  CLAIM_LIVE_WINDOW_MS,
   JOB_TIMEOUT_MS,
   MAX_AXIS_PIXELS,
   MAX_DECODED_PIXELS,
@@ -32,7 +31,6 @@ test('pins the design contract versions and limits', () => {
   assert.equal(MAX_AXIS_PIXELS, 16384);
   assert.equal(OP_TIMEOUT_MS, 15_000);
   assert.equal(JOB_TIMEOUT_MS, 120_000);
-  assert.equal(CLAIM_LIVE_WINDOW_MS, 150_000);
   assert.equal(MIN_FREE_BYTES, 2 * 1024 ** 3);
   assert.equal(MAX_STAGING_BYTES, 100 * 1024 ** 2);
   assert.deepEqual(QUALITY_LADDER, [70, 65, 60, 55]);

@@ -8,6 +8,7 @@ import {
   parseArgs,
   parsePositiveInteger,
   parsePositiveNumber,
+  pngCrc32,
   pngDimensions,
   verifyBrowserVersion,
   verifyCacheProvenance,
@@ -58,6 +59,44 @@ describe('merchant-image-pilot-settings helpers', () => {
     expect(() =>
       pngDimensions(Buffer.concat([full, Buffer.from([0])]))
     ).toThrow('trailing bytes after IEND');
+  });
+
+  it('rejects pixel-less and zero-dimension PNGs with valid CRCs', () => {
+    const chunk = (type, data) => {
+      const body = Buffer.concat([
+        Buffer.from(type, 'latin1'),
+        Buffer.from(data),
+      ]);
+      const head = Buffer.alloc(4);
+      head.writeUInt32BE(data.length, 0);
+      const crc = Buffer.alloc(4);
+      crc.writeUInt32BE(pngCrc32(body, 0, body.length), 0);
+      return Buffer.concat([head, body, crc]);
+    };
+    const signature = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    const ihdr = (width, height) => {
+      const data = Buffer.alloc(13);
+      data.writeUInt32BE(width, 0);
+      data.writeUInt32BE(height, 4);
+      data[8] = 8;
+      data[9] = 2;
+      return chunk('IHDR', data);
+    };
+    const iend = chunk('IEND', []);
+    // Valid IHDR + valid IEND but no IDAT: structurally sound, zero pixels.
+    expect(() =>
+      pngDimensions(Buffer.concat([signature, ihdr(48, 48), iend]))
+    ).toThrow('no image data (IDAT)');
+    // Zero width/height with a VALID IHDR CRC: the dims check must fire,
+    // not the CRC check.
+    expect(() =>
+      pngDimensions(Buffer.concat([signature, ihdr(0, 48), iend]))
+    ).toThrow('dimensions must be positive');
+    expect(() =>
+      pngDimensions(Buffer.concat([signature, ihdr(48, 0), iend]))
+    ).toThrow('dimensions must be positive');
   });
 
   it('extracts the browser UA from the first HAR entry', () => {

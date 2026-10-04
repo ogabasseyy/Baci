@@ -147,11 +147,11 @@ test('PID reuse never steals a live claimant', async () => {
   assert.ok((await stat(join(root, stagingDirName))).isDirectory());
 });
 
-test('a live pid with an ancient recorded owner start is recoverable', async () => {
+test('a live pid with an ancient recorded owner start stays held', async () => {
   const root = await outputRoot();
-  // OUR live pid, but the recorded owner started before any legitimate
-  // run could still be alive: pid reuse (or a wedged owner), so the
-  // abandoned claim must not block the job forever.
+  // OUR live pid with an ancient recorded owner start: age cannot
+  // distinguish pid reuse from a wedged-but-live owner, so recovery must
+  // refuse — the claim needs operator clearance, never a steal.
   const token = 'reused-pid-run';
   const stagingDirName = `staging-${token}`;
   const ancient = Date.now() - (150_000 + 60_000);
@@ -168,11 +168,11 @@ test('a live pid with an ancient recorded owner start is recoverable', async () 
       stagingDirName,
     })
   );
-  const recovered = await recoverAbandonedClaim(root, JOB);
-  assert.equal(recovered.runToken, token);
-  assert.equal(recovered.removedStaging, true);
-  const reacquired = await acquireClaim(root, JOB, createRunToken());
-  assert.ok(reacquired.runToken);
+  const error = await recoverAbandonedClaim(root, JOB).catch((value) => value);
+  assert.equal(error.code, 'claim-held');
+  // The maybe-live run's staging is untouched.
+  const { stat } = await import('node:fs/promises');
+  assert.ok((await stat(join(root, stagingDirName))).isDirectory());
 });
 
 test('a live pid with a recent recorded owner start stays held', async () => {

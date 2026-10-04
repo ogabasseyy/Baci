@@ -1,6 +1,7 @@
 // Pure readiness verdicts: geometry equality, staged-URL identity, and the
 // selected-image decode verdict. Browser collection lives in
 // merchant-image-pilot-readiness.mjs; these stay unit-testable here.
+import { resolutionProblems } from './merchant-image-pilot-readiness-resolution.mjs';
 
 // Rounded-box equality: identical DOM + identical CSS must lay out
 // identically. Rounding absorbs subpixel serialization, nothing more.
@@ -53,42 +54,6 @@ function stagedImageProblems(image, arm, label, mount, dpr) {
   return resolutionProblems(image, label, dpr);
 }
 
-// Resolution sufficiency: a decoded image can still be under-resolved
-// for its rendered box and profile DPR (e.g. a 928px-capped source
-// passing a 412px/DPR-3 profile whose 100vw card needs ~1236px). The
-// browser must not upscale past the natural pixels: cover/fill need
-// both axes (AND), contain needs the constraining axis (OR) —
-// min(box/nat) <= 1/dpr is exactly natW >= needW || natH >= needH.
-function resolutionProblems(image, label, dpr) {
-  const box = image.box ?? {};
-  const naturalHeight = image.naturalHeight ?? 0;
-  if (
-    !Number.isFinite(dpr) ||
-    dpr <= 0 ||
-    !Number.isFinite(box.width) ||
-    !Number.isFinite(box.height) ||
-    naturalHeight < 1 ||
-    typeof image.objectFit !== 'string'
-  ) {
-    return [`${label} resolution unverifiable (missing collection data)`];
-  }
-  if (box.width < 1 || box.height < 1) {
-    return [`${label} has no measurable box`];
-  }
-  const needWidth = Math.round(box.width * dpr);
-  const needHeight = Math.round(box.height * dpr);
-  const sufficient =
-    image.objectFit === 'contain'
-      ? image.naturalWidth >= needWidth || naturalHeight >= needHeight
-      : image.naturalWidth >= needWidth && naturalHeight >= needHeight;
-  if (sufficient) {
-    return [];
-  }
-  return [
-    `${label} under-resolved: ${image.naturalWidth}x${naturalHeight}px serves a ${Math.round(box.width)}x${Math.round(box.height)}px box at DPR ${dpr} (needs ${needWidth}x${needHeight}px for ${image.objectFit})`,
-  ];
-}
-
 // Pure verdict on the collected selected-image state.
 export function selectedImageProblems(image, arm, mount, dpr) {
   return stagedImageProblems(image, arm, 'selected image', mount, dpr).map(
@@ -119,7 +84,7 @@ export function selectedImageProblems(image, arm, mount, dpr) {
 export function slotMountProblems(
   slot,
   mount,
-  { arm, dpr, expectHidden, viewportWidth }
+  { arm, dpr, expectHidden, viewportHeight, viewportWidth }
 ) {
   const label = `slot "${mount.slotId}" image`;
   if (!slot) {
@@ -139,10 +104,33 @@ export function slotMountProblems(
   if (!visible) {
     return [`slot "${mount.slotId}" has no visible box`];
   }
-  if ((rect.x ?? 0) + (rect.width ?? 0) > (viewportWidth ?? 0) + 1) {
+  if (!Number.isFinite(viewportWidth) || !Number.isFinite(viewportHeight)) {
+    return [
+      `slot "${mount.slotId}" viewport unverifiable (missing collection data)`,
+    ];
+  }
+  if (!withinViewport(rect, viewportWidth, viewportHeight)) {
     return [`slot "${mount.slotId}" overflows the viewport`];
   }
   return stagedImageProblems(slot.img, arm, label, mount, dpr);
+}
+
+// Full viewport containment on both axes (1px rounding slack): a nonzero
+// box parked fully offscreen (negative x, below the fold) still decodes
+// its priority image, so a right-edge-only check would certify an LCP
+// surface the user never sees — and a slot hanging past any edge is a
+// layout break, not a measurable surface.
+function withinViewport(rect, viewportWidth, viewportHeight) {
+  const x = rect.x ?? 0;
+  const y = rect.y ?? 0;
+  const width = rect.width ?? 0;
+  const height = rect.height ?? 0;
+  return (
+    x >= -1 &&
+    y >= -1 &&
+    x + width <= viewportWidth + 1 &&
+    y + height <= viewportHeight + 1
+  );
 }
 
 // Pure verdict on one collected surface: console/request hygiene, style
@@ -170,7 +158,14 @@ export function surfaceProblems(
   }
   if (!g.selected) {
     problems.push('selected slot absent');
-  } else if (g.selected.x + g.selected.width > g.viewportWidth + 1) {
+  } else if (
+    !Number.isFinite(g.viewportWidth) ||
+    !Number.isFinite(g.viewportHeight)
+  ) {
+    problems.push(
+      'selected slot viewport unverifiable (missing collection data)'
+    );
+  } else if (!withinViewport(g.selected, g.viewportWidth, g.viewportHeight)) {
     problems.push('selected slot overflows the viewport');
   }
   if (surface === 'grid' && g.gridDisplay !== 'grid') {
@@ -226,6 +221,7 @@ export function surfaceProblems(
         arm,
         dpr: g.devicePixelRatio,
         expectHidden: expectHiddenMounts,
+        viewportHeight: g.viewportHeight,
         viewportWidth: g.viewportWidth,
       })
     );

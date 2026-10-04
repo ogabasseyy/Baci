@@ -86,17 +86,20 @@ export interface LabGridFiller {
 export function LabStoreGrid({
   arm,
   basePath,
-  fillerImageUrl,
+  fillerImageUrls,
   fillers,
   mountedProduct,
   mountedProjection,
 }: {
   arm: PilotLabArm;
   basePath: string;
-  // Frozen filler asset, identical in both arms. Fillers must NEVER reuse
-  // the mounted product's image: re-fetching the selected original in the
-  // candidate would swamp the byte-saving comparison with unrelated bytes.
-  fillerImageUrl: string;
+  // Frozen filler assets, identical in both arms — one DISTINCT url per
+  // sibling card. Fillers must NEVER reuse the mounted product's image:
+  // re-fetching the selected original in the candidate would swamp the
+  // byte-saving comparison with unrelated bytes. A missing entry renders
+  // the card without an image (visible failure) rather than coalescing
+  // siblings onto one request (silent measurement skew).
+  fillerImageUrls: readonly string[];
   fillers: readonly LabGridFiller[];
   mountedProduct: Product;
   // Pilot arm only; the control arm renders the original with the staged URL.
@@ -137,7 +140,7 @@ export function LabStoreGrid({
             compareAtPrice: filler.price + 500,
             id: `lab-filler-${index + 2}`,
             imageHint: filler.imageHint,
-            imageLarge: fillerImageUrl,
+            imageLarge: fillerImageUrls[index] ?? '',
             name: filler.name,
             price: filler.price,
           })}

@@ -202,6 +202,44 @@ describe('merchant-image-pilot-readiness helpers', () => {
       'selected image resolution unverifiable (missing collection data)',
     ]);
   });
+
+  it('judges w-descriptor srcsets by physical resource pixels', () => {
+    const mount = {
+      binding: 'merchant/card-a',
+      generationId: 'abc',
+      merchantId: 'merchant',
+      slotId: 'product-card',
+      stagedOriginal: '/__pilot/originals/x.png',
+    };
+    const base = {
+      box: { height: 375, width: 384 },
+      complete: true,
+      currentSrc: 'https://lab/__pilot/abc/x.avif',
+      objectFit: 'cover',
+    };
+    // 384px box at DPR 2 needs 768x750: naturalWidth 384 is the
+    // density-corrected value, but the selected 768w resource covers it.
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 375, naturalWidth: 384, resourceWidth: 768 },
+        'pilot',
+        mount,
+        2
+      )
+    ).toEqual([]);
+    // A 384w resource for the same box genuinely under-resolves, and the
+    // verdict names the resource it judged.
+    expect(
+      selectedImageProblems(
+        { ...base, naturalHeight: 375, naturalWidth: 384, resourceWidth: 384 },
+        'pilot',
+        mount,
+        2
+      )
+    ).toEqual([
+      'selected image under-resolved: 384x375px (resource 384w) serves a 384x375px box at DPR 2 (needs 768x750px for cover)',
+    ]);
+  });
 });
 
 describe('merchant-image-pilot-readiness slot mounts', () => {
@@ -233,6 +271,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(goodSlot, mount, {
         arm: 'pilot',
         dpr: 2,
+        viewportHeight: 844,
         viewportWidth: 390,
       })
     ).toEqual([]);
@@ -246,7 +285,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
           },
         },
         mount,
-        { arm: 'control', dpr: 2, viewportWidth: 390 }
+        { arm: 'control', dpr: 2, viewportHeight: 844, viewportWidth: 390 }
       )
     ).toEqual([]);
   });
@@ -258,6 +297,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(goodSlot, mount, {
         arm: 'pilot',
         dpr: 3,
+        viewportHeight: 844,
         viewportWidth: 390,
       })
     ).toEqual([
@@ -267,11 +307,16 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
 
   it('fails absent, reported, hidden, and overflowing slots', () => {
     expect(
-      slotMountProblems(null, mount, { arm: 'pilot', viewportWidth: 390 })
+      slotMountProblems(null, mount, {
+        arm: 'pilot',
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
     ).toEqual(['slot "header-logo" mount is absent']);
     expect(
       slotMountProblems({ ...goodSlot, status: 'not-optimized' }, mount, {
         arm: 'pilot',
+        viewportHeight: 844,
         viewportWidth: 390,
       })
     ).toEqual(['slot "header-logo" renders only "not-optimized"']);
@@ -281,22 +326,47 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(
         { ...goodSlot, rect: { height: 0, width: 0, x: 8, y: 8 } },
         mount,
-        { arm: 'pilot', viewportWidth: 390 }
+        { arm: 'pilot', viewportHeight: 844, viewportWidth: 390 }
       )
     ).toEqual(['slot "header-logo" has no visible box']);
     expect(
       slotMountProblems(
         { ...goodSlot, rect: { height: 40, width: 40, x: 380, y: 8 } },
         mount,
-        { arm: 'pilot', viewportWidth: 390 }
+        { arm: 'pilot', viewportHeight: 844, viewportWidth: 390 }
       )
     ).toEqual(['slot "header-logo" overflows the viewport']);
+    // Fully offscreen on any edge: nonzero boxes that still decode.
+    for (const rect of [
+      { height: 40, width: 40, x: -40, y: 8 },
+      { height: 40, width: 40, x: 8, y: -40 },
+      { height: 40, width: 40, x: 8, y: 844 },
+      { height: 40, width: 40, x: 390, y: 8 },
+    ]) {
+      expect(
+        slotMountProblems({ ...goodSlot, rect }, mount, {
+          arm: 'pilot',
+          viewportHeight: 844,
+          viewportWidth: 390,
+        })
+      ).toEqual(['slot "header-logo" overflows the viewport']);
+    }
+    // Missing viewport geometry fails loud instead of skipping the check.
+    expect(
+      slotMountProblems({ ...goodSlot }, mount, {
+        arm: 'pilot',
+        viewportWidth: 390,
+      })
+    ).toEqual([
+      'slot "header-logo" viewport unverifiable (missing collection data)',
+    ]);
   });
 
   it('requires the slot image to decode from an arm-correct staged URL', () => {
     expect(
       slotMountProblems({ ...goodSlot, img: null }, mount, {
         arm: 'pilot',
+        viewportHeight: 844,
         viewportWidth: 390,
       })
     ).toEqual(['slot "header-logo" image absent']);
@@ -304,7 +374,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(
         { ...goodSlot, img: { ...pilotImg, naturalWidth: 0 } },
         mount,
-        { arm: 'pilot', viewportWidth: 390 }
+        { arm: 'pilot', viewportHeight: 844, viewportWidth: 390 }
       )
     ).toEqual(['slot "header-logo" image did not decode']);
     expect(
@@ -317,7 +387,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
           },
         },
         mount,
-        { arm: 'pilot', viewportWidth: 390 }
+        { arm: 'pilot', viewportHeight: 844, viewportWidth: 390 }
       )
     ).toEqual([
       'pilot slot "header-logo" image is not from the approved generation',
@@ -352,6 +422,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         slots: [goodSlot, cardSlot],
         stylesheetBytes: 1200,
         stylesheetCount: 1,
+        viewportHeight: 844,
         viewportWidth: 390,
       },
       imageUrls: ['https://lab/__pilot/abc/x.avif'],
@@ -404,6 +475,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(hidden, hero, {
         arm: 'pilot',
         expectHidden: true,
+        viewportHeight: 800,
         viewportWidth: 1280,
       })
     ).toEqual([]);
@@ -412,6 +484,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(null, hero, {
         arm: 'pilot',
         expectHidden: true,
+        viewportHeight: 800,
         viewportWidth: 1280,
       })
     ).toEqual(['slot "mobile-hero-slide-0" mount is absent']);
@@ -419,6 +492,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems({ ...hidden, status: 'not-optimized' }, hero, {
         arm: 'pilot',
         expectHidden: true,
+        viewportHeight: 800,
         viewportWidth: 1280,
       })
     ).toEqual(['slot "mobile-hero-slide-0" renders only "not-optimized"']);
@@ -427,7 +501,12 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       slotMountProblems(
         { ...hidden, rect: { height: 192, width: 390, x: 0, y: 0 } },
         hero,
-        { arm: 'pilot', expectHidden: true, viewportWidth: 1280 }
+        {
+          arm: 'pilot',
+          expectHidden: true,
+          viewportHeight: 800,
+          viewportWidth: 1280,
+        }
       )
     ).toEqual(['slot "mobile-hero-slide-0" should be hidden on this profile']);
   });
@@ -457,6 +536,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         slots: [hidden],
         stylesheetBytes: 1200,
         stylesheetCount: 1,
+        viewportHeight: 800,
         viewportWidth: 1280,
       },
       imageUrls: ['https://lab/__pilot/abc/x.avif'],
@@ -500,7 +580,11 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       status: null,
     };
     expect(
-      slotMountProblems(slot, mount, { arm: 'pilot', viewportWidth: 390 })
+      slotMountProblems(slot, mount, {
+        arm: 'pilot',
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
     ).toEqual([
       'pilot slot "header-logo" image is not from the approved generation',
     ]);
@@ -513,7 +597,11 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       },
     };
     expect(
-      slotMountProblems(foreign, mount, { arm: 'control', viewportWidth: 390 })
+      slotMountProblems(foreign, mount, {
+        arm: 'control',
+        viewportHeight: 844,
+        viewportWidth: 390,
+      })
     ).toEqual([
       'control slot "header-logo" image is not the approved staged original',
     ]);
@@ -536,6 +624,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         slots: [],
         stylesheetBytes: 1200,
         stylesheetCount: 1,
+        viewportHeight: 844,
         viewportWidth: 390,
       },
       imageUrls: ['https://lab/__pilot/abc/x.avif'],

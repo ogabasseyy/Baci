@@ -228,6 +228,30 @@ describe('loadLabConfig', () => {
     );
   });
 
+  it('rejects conflicting duplicate acceptances instead of staging a subset', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const first = lab.acceptances[0];
+    if (!first) {
+      throw new Error('expected a fixture acceptance');
+    }
+    const conflict = { ...first, verdict: 'rejected' };
+    await expect(
+      loadLabConfig({ ...lab, acceptances: [...lab.acceptances, conflict] })
+    ).rejects.toThrow(/duplicate acceptances .* conflict/);
+  });
+
+  it('rejects malformed acceptance records instead of staging a subset', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    await expect(
+      loadLabConfig({
+        ...lab,
+        acceptances: [...lab.acceptances, { verdict: 'accepted' }],
+      })
+    ).rejects.toThrow(/invalid acceptances/);
+  });
+
   it('rejects an accepted manifest whose source bytes the snapshot disproves', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();

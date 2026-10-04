@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStagingBudget } from './disk-guards.mjs';
@@ -232,8 +232,26 @@ test('commitGeneration reuses validated generations and never overwrites', async
     stagingDir: second.stagingDir,
   });
   assert.equal(reused.reused, true);
+  assert.equal(reused.durability, 'synced');
   const after = await stat(join(first.root, 'generations', generationId, 'manifest.json'));
   assert.equal(after.mtimeMs, before.mtimeMs);
+
+  // A lost durability sidecar degrades the reuse report to 'unknown',
+  // never to an assumed 'synced'.
+  await unlink(
+    join(first.root, 'generations', generationId, 'durability.json')
+  );
+  const third = await realLadderStaging();
+  const unknown = await commitGeneration({
+    files: filesFor(third.ladder),
+    generationId,
+    job: boundJob,
+    manifest: manifestFor(third.ladder),
+    outputRoot: first.root,
+    stagingDir: third.stagingDir,
+  });
+  assert.equal(unknown.reused, true);
+  assert.equal(unknown.durability, 'unknown');
 
   // Tampered output invalidates the generation instead of serving bad bytes.
   const victim = manifestFor(first.ladder).tiers[0].path;
@@ -304,6 +322,27 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
   });
   assert.equal(degraded.durability, 'sync-unsupported');
   assert.equal((await loadGeneration(staged.root, generationId)).manifest.recipeId, 'pilot-r1-zzz');
+
+  // Reuse of the degraded publish reports the persisted verdict, not 'synced'.
+  const restaged = await realLadderStaging();
+  const reused = await commitGeneration({
+    files: restaged.ladder.tiers
+      .filter(
+        (tier, index, all) =>
+          all.findIndex((other) => other.path === tier.path) === index
+      )
+      .map((tier) => ({
+        from: tier.path,
+        name: outputFileName(tier.sha256, tier.format),
+      })),
+    generationId,
+    job: { ...JOB, expectedSha256: staged.expectedSha256 },
+    manifest,
+    outputRoot: staged.root,
+    stagingDir: restaged.stagingDir,
+  });
+  assert.equal(reused.reused, true);
+  assert.equal(reused.durability, 'sync-unsupported');
 
   const staged2 = await realLadderStaging();
   const generationId2 = generationIdFor({

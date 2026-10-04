@@ -70,7 +70,9 @@ export function LabStoreGridSection({
   // so only the image bytes (not the URL shape) vary between arms.
   const cardBaseUrl = `${origin}${config.baseUrl}`;
   const cardOriginal = new URL(stagedOriginal, origin).href;
-  const fillerImageUrl = pilotLabFillerImageUrl(origin);
+  const fillerImageUrls = LAB_GRID_FILLERS.map((_, index) =>
+    pilotLabFillerImageUrl(origin, index)
+  );
   const mountedProduct = labProductFixture({
     imageHint: `${binding.assetId} lab product`,
     imageLarge: cardOriginal,
@@ -104,7 +106,7 @@ export function LabStoreGridSection({
       <LabStoreGrid
         arm={arm}
         basePath={basePath}
-        fillerImageUrl={fillerImageUrl}
+        fillerImageUrls={fillerImageUrls}
         fillers={LAB_GRID_FILLERS}
         mountedProduct={mountedProduct}
         mountedProjection={projection}

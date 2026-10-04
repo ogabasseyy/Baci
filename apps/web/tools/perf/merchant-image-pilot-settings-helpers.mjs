@@ -52,7 +52,7 @@ const PNG_CRC_TABLE = (() => {
   return table;
 })();
 
-function pngCrc32(buffer, start, end) {
+export function pngCrc32(buffer, start, end) {
   let crc = 0xffffffff;
   for (let index = start; index < end; index += 1) {
     crc = PNG_CRC_TABLE[(crc ^ buffer[index]) & 0xff] ^ (crc >>> 8);
@@ -74,6 +74,7 @@ export function pngDimensions(buffer) {
   }
   let offset = 8;
   let dimensions = null;
+  let seenIdat = false;
   let first = true;
   for (;;) {
     if (offset + 8 > buffer.length) {
@@ -98,7 +99,13 @@ export function pngDimensions(buffer) {
         height: buffer.readUInt32BE(20),
         width: buffer.readUInt32BE(16),
       };
+      if (dimensions.width < 1 || dimensions.height < 1) {
+        throw new Error('PNG dimensions must be positive');
+      }
       first = false;
+    }
+    if (type === 'IDAT') {
+      seenIdat = true;
     }
     offset = dataEnd + 4;
     if (type === 'IEND') {
@@ -107,6 +114,11 @@ export function pngDimensions(buffer) {
   }
   if (offset !== buffer.length) {
     throw new Error('PNG has trailing bytes after IEND');
+  }
+  // An IHDR followed directly by IEND is structurally valid but carries
+  // no pixels: without IDAT it cannot be screenshot evidence.
+  if (!seenIdat) {
+    throw new Error('PNG has no image data (IDAT)');
   }
   return dimensions;
 }

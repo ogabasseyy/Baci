@@ -9,17 +9,28 @@ import {
   labHeroSlides,
   labHeroSlot,
   labProductFixture,
-  PILOT_LAB_FILLER_IMAGE,
+  PILOT_LAB_FILLER_IMAGES,
   pilotLabFillerImageUrl,
 } from './lab-fixtures';
 
 describe('pilotLabFillerImageUrl', () => {
-  it('resolves the frozen filler asset absolute to the origin', () => {
-    expect(PILOT_LAB_FILLER_IMAGE).toBe(
-      '/__pilot/fillers/grid-filler-600x400.png'
+  it('resolves one frozen filler asset per sibling position', () => {
+    expect(PILOT_LAB_FILLER_IMAGES).toEqual([
+      '/__pilot/fillers/grid-filler-600x400-a.png',
+      '/__pilot/fillers/grid-filler-600x400-b.png',
+      '/__pilot/fillers/grid-filler-600x400-c.png',
+    ]);
+    expect(pilotLabFillerImageUrl('http://localhost:3000', 0)).toBe(
+      'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png'
     );
-    expect(pilotLabFillerImageUrl('http://localhost:3000')).toBe(
-      'http://localhost:3000/__pilot/fillers/grid-filler-600x400.png'
+    expect(pilotLabFillerImageUrl('http://localhost:3000', 2)).toBe(
+      'http://localhost:3000/__pilot/fillers/grid-filler-600x400-c.png'
+    );
+  });
+
+  it('throws out of range instead of reusing one filler', () => {
+    expect(() => pilotLabFillerImageUrl('http://localhost:3000', 3)).toThrow(
+      /filler index 3 has no frozen asset/
     );
   });
 });

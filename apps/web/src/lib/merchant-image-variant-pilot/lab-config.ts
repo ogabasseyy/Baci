@@ -159,11 +159,20 @@ export async function loadLabConfig(
       `merchant image pilot: invalid inventory (${parsed.issues.join('; ')})`
     );
   }
-  const { index, statuses } = await buildLabIndex({
+  const { diagnostics, index, statuses } = await buildLabIndex({
     acceptances: input.acceptances,
     bindings: parsed.bindings,
     outputRoot: input.outputRoot,
   });
+  // Malformed or conflicting acceptances must fail the load, not shrink
+  // it: silently converting them into missing-acceptance statuses lets
+  // pilot:stage print ok:true for a subset the strict offline preflight
+  // would reject, and request-time config would diverge the same way.
+  if (diagnostics.length > 0) {
+    throw new Error(
+      `merchant image pilot: invalid acceptances (${diagnostics.join('; ')})`
+    );
+  }
   // Stage approved derivatives plus original snapshots under the lab base
   // URL so both comparison arms serve bytes from the same lab asset origin.
   // This runs once at lab setup (pre-start CLI with stage: true), never on

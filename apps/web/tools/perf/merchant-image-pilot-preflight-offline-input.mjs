@@ -2,8 +2,9 @@
 // The input stage returns the verified snapshot bytes (falsy = the binding
 // stops, mirroring the original loop's `continue`); downstream stages reuse
 // the verified buffer instead of re-reading the file.
-import { readFile, realpath } from 'node:fs/promises';
+import { open, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
+import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { acceptanceKey } from './merchant-image-pilot-preflight-records.mjs';
 import {
   fail,
@@ -48,9 +49,14 @@ export async function checkBindingInput({
     );
     return null;
   }
+  // Cap-bounded read: the generator rejects inputs over MAX_INPUT_BYTES,
+  // so preflight must refuse to certify an oversized snapshot even when
+  // its hashes match — and must never allocate an unbounded buffer from
+  // an operator-controlled path. One byte past the cap proves oversize.
   let inputBytes;
+  let handle;
   try {
-    inputBytes = await readFile(realPath);
+    handle = await open(realPath, 'r');
   } catch {
     fail(
       checks,
@@ -59,6 +65,44 @@ export async function checkBindingInput({
       `input snapshot missing: ${record.sourcePath}`
     );
     return null;
+  }
+  try {
+    const chunks = [];
+    let total = 0;
+    while (total <= MAX_INPUT_BYTES) {
+      const size = Math.min(65536, MAX_INPUT_BYTES + 1 - total);
+      const { bytesRead, buffer } = await handle.read(
+        Buffer.alloc(size),
+        0,
+        size,
+        total
+      );
+      if (bytesRead === 0) {
+        break;
+      }
+      chunks.push(buffer.subarray(0, bytesRead));
+      total += bytesRead;
+    }
+    if (total > MAX_INPUT_BYTES) {
+      fail(
+        checks,
+        failures,
+        `${name}:input`,
+        `input snapshot exceeds the ${MAX_INPUT_BYTES} byte input limit: ${record.sourcePath}`
+      );
+      return null;
+    }
+    inputBytes = Buffer.concat(chunks);
+  } catch {
+    fail(
+      checks,
+      failures,
+      `${name}:input`,
+      `input snapshot missing: ${record.sourcePath}`
+    );
+    return null;
+  } finally {
+    await handle.close().catch(() => undefined);
   }
   if (sha256Hex(inputBytes) !== record.sha256) {
     fail(

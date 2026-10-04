@@ -15,20 +15,34 @@ import type { OgabasseyMobileSlot } from './ogabassey-mobile-adapter';
 // (lab-server-boundary.test.ts guards this). The clone modules re-export
 // them so parity tests keep importing from the clone surface.
 
-// Frozen grid-filler image (committed, hash-pinned in
-// lab-store-grid-section.test.tsx).
-// Grid fillers render this synthetic asset — never a copy of the selected
-// binding's original — identically in both arms, so the byte comparison
-// isolates the selected slot instead of re-downloading its original in the
-// candidate. Served absolute like every card-path URL (the original card
-// renderer rejects relative URLs).
-export const PILOT_LAB_FILLER_IMAGE =
-  '/__pilot/fillers/grid-filler-600x400.png';
+// Frozen grid-filler images (committed, hash-pinned in
+// lab-store-grid-section.test.tsx), one per sibling card. Grid fillers
+// render these synthetic assets — never a copy of the selected binding's
+// original — identically in both arms, so the byte comparison isolates
+// the selected slot instead of re-downloading its original in the
+// candidate. Each card gets a DISTINCT filler URL: siblings sharing one
+// URL coalesce into a single browser request, which would understate the
+// connection contention a real storefront's distinct product images
+// impose on the selected priority card. Served absolute like every
+// card-path URL (the original card renderer rejects relative URLs).
+export const PILOT_LAB_FILLER_IMAGES: readonly string[] = [
+  '/__pilot/fillers/grid-filler-600x400-a.png',
+  '/__pilot/fillers/grid-filler-600x400-b.png',
+  '/__pilot/fillers/grid-filler-600x400-c.png',
+];
 
 // Absolute filler URL for the card path (the original card renderer rejects
-// relative URLs) — one builder so both arms resolve the same frozen asset.
-export function pilotLabFillerImageUrl(origin: string): string {
-  return new URL(PILOT_LAB_FILLER_IMAGE, origin).href;
+// relative URLs) — one builder so both arms resolve the same frozen asset
+// per sibling position. Out-of-range indexes throw: silently reusing one
+// filler would reintroduce request coalescing.
+export function pilotLabFillerImageUrl(origin: string, index: number): string {
+  const path = PILOT_LAB_FILLER_IMAGES[index];
+  if (!path) {
+    throw new Error(
+      `merchant image pilot: filler index ${index} has no frozen asset`
+    );
+  }
+  return new URL(path, origin).href;
 }
 
 export const LAB_CARD_GEOMETRY = {

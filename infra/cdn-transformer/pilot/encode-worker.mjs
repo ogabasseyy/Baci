@@ -14,6 +14,12 @@ import {
   MAX_DECODED_PIXELS,
   SHARP_LIMITS,
 } from './constants.mjs';
+import {
+  normalizeFormat,
+  orientedDimensions,
+} from './encode-worker-formats.mjs';
+
+export { normalizeFormat, orientedDimensions };
 
 export class WorkerInputError extends Error {
   constructor(code, message) {
@@ -21,16 +27,6 @@ export class WorkerInputError extends Error {
     this.code = code;
     this.name = 'WorkerInputError';
   }
-}
-
-// Sharp/libvips reports the shared HEIF container as `heif` for both input
-// and output bytes. Only AV1-coded stills are AVIF: HEVC-coded HEIC stills
-// and unknown compressions stay `heif` so the format gates reject them.
-export function normalizeFormat(meta) {
-  if (meta?.format === 'heif' && meta?.compression === 'av1') {
-    return 'avif';
-  }
-  return meta?.format;
 }
 
 export function assertDecodedFormat(meta, expectedFormat) {
@@ -42,14 +38,6 @@ export function assertDecodedFormat(meta, expectedFormat) {
     );
   }
   return decodedFormat;
-}
-
-export function orientedDimensions(meta) {
-  const orientation = meta.orientation ?? 1;
-  if (orientation >= 5 && orientation <= 8) {
-    return { height: meta.width, width: meta.height };
-  }
-  return { height: meta.height, width: meta.width };
 }
 
 export function assertAcceptedMetadata(meta) {
@@ -126,6 +114,18 @@ export async function handleMetadataOp(op, io = {}) {
     throw new WorkerInputError(
       'unreadable-input',
       `cannot decode input metadata (${errorMessage(error)})`
+    );
+  }
+  // Header-level metadata accepts truncated or corrupt pixel payloads, so
+  // the probe fully decodes (stats reads every pixel without retaining
+  // the buffer) before any caller records the input as acquired. Bounded
+  // by the sharp input limits plus the worker op timeout.
+  try {
+    await sharpBuffer(bytes).stats();
+  } catch (error) {
+    throw new WorkerInputError(
+      'unreadable-input',
+      `input does not fully decode (${errorMessage(error)})`
     );
   }
   return { metadata: assertAcceptedMetadata(meta), ok: true };

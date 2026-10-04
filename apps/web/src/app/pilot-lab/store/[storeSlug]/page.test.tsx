@@ -286,11 +286,21 @@ describe('pilot-lab store routes', () => {
     const selectedPrefix = `/__pilot/originals/${OMNIMART}-omnimart-earbuds`;
     const pilot = labImageConsumers(await renderStore('omnimart', 'pilot'));
     expect(pilot.filter((url) => url.startsWith(selectedPrefix))).toEqual([]);
-    // Fillers render the frozen filler asset instead, identical in both arms.
-    const filler = '/__pilot/fillers/grid-filler-600x400.png';
-    expect(pilot.filter((url) => url === filler).length).toBeGreaterThan(0);
+    // Fillers render the frozen filler assets instead, identical in both
+    // arms — one distinct URL per sibling card, since shared URLs would
+    // coalesce into a single browser request.
+    const fillers = [
+      '/__pilot/fillers/grid-filler-600x400-a.png',
+      '/__pilot/fillers/grid-filler-600x400-b.png',
+      '/__pilot/fillers/grid-filler-600x400-c.png',
+    ];
+    for (const filler of fillers) {
+      expect(pilot.filter((url) => url === filler).length).toBeGreaterThan(0);
+    }
     const control = labImageConsumers(await renderStore('omnimart', 'control'));
-    expect(control.filter((url) => url === filler).length).toBeGreaterThan(0);
+    for (const filler of fillers) {
+      expect(control.filter((url) => url === filler).length).toBeGreaterThan(0);
+    }
     // The control mounted card still serves the selected original.
     expect(
       control.filter((url) => url.startsWith(selectedPrefix)).length

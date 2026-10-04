@@ -3,9 +3,13 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { acquireSnapshot } from './acquire.mjs';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const fixture = (name) => join(here, 'fixtures', name);
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const PNG_BYTES = Buffer.from(
@@ -125,6 +129,39 @@ test('swaps raw probe axes when the probe omits oriented dims', async () => {
       assert.equal(record.width, 5);
       assert.equal(record.height, 3);
       assert.equal(record.orientation, 8);
+    }
+  );
+});
+
+test('refuses header-valid but truncated snapshots with the decoding probe', async () => {
+  const inputRoot = await makeInputRoot();
+  const full = await readFile(fixture('tiny-48x48.png'));
+  const truncated = full.subarray(0, 60);
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(truncated);
+    },
+    async (url) => {
+      // No stub probe: the default worker probe must fully decode.
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'truncated-1',
+            inputRoot,
+            merchantId: MERCHANT,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /does not fully decode/
+      );
+      // The rejected probe leaves no orphan snapshot behind.
+      await assert.rejects(
+        () => readFile(join(inputRoot, `${MERCHANT}-truncated-1.png`)),
+        /ENOENT/
+      );
     }
   );
 });

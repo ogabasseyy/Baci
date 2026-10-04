@@ -82,6 +82,12 @@ const row = {
   order_id: '10000000-0000-4000-8000-000000000003',
 };
 
+function finalAttempt(
+  eventType: 'manual_order_invoice' | 'manual_order_receipt'
+) {
+  return { ...row, event_type: eventType, attempt_count: 5, max_attempts: 5 };
+}
+
 describe('order notification outbox worker manual documents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,14 +165,7 @@ describe('order notification outbox worker manual documents', () => {
     const summary = createOrderNotificationCronSummary(1);
     await processClaimedOrderNotificationRows(
       client as never,
-      [
-        {
-          ...row,
-          event_type: 'manual_order_invoice',
-          attempt_count: 5,
-          max_attempts: 5,
-        },
-      ],
+      [finalAttempt('manual_order_invoice')],
       summary
     );
     // The customer holds a stale attachment and no further event
@@ -190,14 +189,7 @@ describe('order notification outbox worker manual documents', () => {
     const summary = createOrderNotificationCronSummary(1);
     await processClaimedOrderNotificationRows(
       client as never,
-      [
-        {
-          ...row,
-          event_type: 'manual_order_receipt',
-          attempt_count: 5,
-          max_attempts: 5,
-        },
-      ],
+      [finalAttempt('manual_order_receipt')],
       summary
     );
     // Detected at the lease check rather than the sent transition, on the
@@ -278,5 +270,27 @@ describe('order notification outbox worker manual documents', () => {
     );
     expect(sendDocument).toHaveBeenCalledTimes(1);
     expect(summary).toMatchObject({ retried: 1 });
+  });
+
+  it('reserves a cleanup retry past the budget on marker-clear failure', async () => {
+    const { client, builder } = createSupabase([null]);
+    sendDocument.mockResolvedValue({
+      status: 'failed',
+      error: 'dispatch_marker_clear_failed',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+    await processClaimedOrderNotificationRows(
+      client as never,
+      [finalAttempt('manual_order_invoice')],
+      summary
+    );
+    expect(summary).toMatchObject({ failed: 0, retried: 1 });
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt_count: 0,
+        last_error: 'dispatch_marker_clear_failed',
+        status: 'pending',
+      })
+    );
   });
 });

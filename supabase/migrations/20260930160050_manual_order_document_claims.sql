@@ -155,6 +155,9 @@ BEGIN
     claimed_by_user_id = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
         OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
       THEN NULL ELSE receipt_claims.claimed_by_user_id END,
+    notification_sent_at = CASE WHEN receipt_claims.customer_id IS DISTINCT FROM EXCLUDED.customer_id
+        OR lower(btrim(receipt_claims.customer_email)) IS DISTINCT FROM lower(btrim(EXCLUDED.customer_email))
+      THEN NULL ELSE receipt_claims.notification_sent_at END,
     expires_at = now() + interval '90 days', updated_at = now()
   RETURNING id INTO v_claim_id;
   IF v_claim_id IS NULL THEN RETURN jsonb_build_object('status', 'skipped'); END IF;

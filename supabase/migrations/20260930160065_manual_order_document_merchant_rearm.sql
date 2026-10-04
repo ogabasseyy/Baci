@@ -133,7 +133,7 @@ BEGIN
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
     OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
-    OR OLD.support_email IS DISTINCT FROM NEW.support_email
+    OR NULLIF(OLD.support_email, '') IS DISTINCT FROM NULLIF(NEW.support_email, '')
     -- Contact phone renders resolved (support_phone, else phone).
     OR COALESCE(NULLIF(OLD.support_phone, ''), NULLIF(OLD.phone, ''))
       IS DISTINCT FROM COALESCE(NULLIF(NEW.support_phone, ''), NULLIF(NEW.phone, ''))

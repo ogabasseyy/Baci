@@ -79,11 +79,10 @@ async function markSkipped(
 ) {
   await updateOutboxStatus(supabase, row, {
     last_error: null,
-    // A previously retried row carries a future next_attempt_at: leaving it
-    // set on a terminal row confuses janitor queries and dashboards.
+    // A previously retried row carries a future next_attempt_at: clear it
+    // so janitors and dashboards never read a terminal row as due.
     // dispatch_started_at is deliberately NOT cleared here: a skip after a
-    // lost-claim race can carry a live marker, and clearing it would destroy
-    // the at-most-once evidence the stale-dispatch terminalizer keys on.
+    // lost-claim race can carry a live marker the terminalizer keys on.
     next_attempt_at: null,
     skip_reason: reason,
     skipped_at: new Date().toISOString(),
@@ -113,6 +112,12 @@ async function markFailedOrRetry(
 ) {
   // Counts follow the durable write: a superseded attempt (lost claim)
   // must not count an outcome the row never recorded.
+  // A failed marker cleanup strands past the budget (the set marker
+  // blocks re-arm): corrective-retry like a lease reset instead.
+  if (error === 'dispatch_marker_clear_failed') {
+    await markCorrectiveRetry(supabase, row, summary, error);
+    return;
+  }
   if (row.attempt_count >= row.max_attempts) {
     await updateOutboxStatus(supabase, row, {
       last_error: error,

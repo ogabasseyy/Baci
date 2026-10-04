@@ -102,7 +102,8 @@ export async function fetchReceiptListItems(
       // The modal and print renderer infer the document from payment_status;
       // a settled manual balance reports kind receipt under a non-paid label,
       // so normalize the renderer input to match the emailed/downloaded kind.
-      // The list badge below keeps the truthful staff-facing label.
+      // The list badge follows the same normalized status: a receipt-kind
+      // row badges Paid even under its stale stored label.
       const rendererPaymentStatus =
         (order.current_document_kind as string) === 'receipt'
           ? 'paid'
@@ -184,6 +185,15 @@ export async function fetchReceiptListItems(
         balance: Number(order.balance ?? total - amountPaid),
         payment_status: rendererPaymentStatus,
         payment_method: (order.payment_method as string) ?? null,
+        // Invoice-only terms block: the modal renders what the emailed
+        // PDF renders, so forward every settled field instead of null.
+        invoice_note: (order.invoice_note as string) ?? null,
+        notes: (order.notes as string) ?? null,
+        payment_due_date: (order.payment_due_date as string) ?? null,
+        payment_terms: (order.payment_terms as string) ?? null,
+        buyer_reference: (order.buyer_reference as string) ?? null,
+        firs_irn: (order.firs_irn as string) ?? null,
+        firs_csid: (order.firs_csid as string) ?? null,
         is_credit_order: (order.is_credit_order as boolean) ?? false,
         // The order-scoped claim flow can re-link an order to the
         // recipient's existing customer row, leaving the order's snapshotted
@@ -210,9 +220,9 @@ export async function fetchReceiptListItems(
       };
 
       const statusLabel =
-        paymentStatus === 'paid'
+        rendererPaymentStatus === 'paid'
           ? 'Paid'
-          : paymentStatus === 'partially_paid'
+          : rendererPaymentStatus === 'partially_paid'
             ? 'Partially Paid'
             : 'Unpaid';
 
@@ -229,7 +239,8 @@ export async function fetchReceiptListItems(
         ),
         total: formatCurrency(total),
         status: statusLabel,
-        paymentStatus: paymentStatus as ReceiptListItem['paymentStatus'],
+        paymentStatus:
+          rendererPaymentStatus as ReceiptListItem['paymentStatus'],
         documentKind,
         balance: formatCurrency(Math.max(0, total - amountPaid)),
         firstProductName,

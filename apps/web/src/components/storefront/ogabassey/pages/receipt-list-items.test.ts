@@ -28,8 +28,7 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
     currency: 'NGN',
     payment_status: 'paid',
     payment_method: 'card',
-    // A realistic archived legacy order: the list filters through the
-    // standard archive predicate before mapping.
+    // Realistic archived legacy order: filtered by the archive predicate first.
     shipping_status: 'shipped',
     items: [
       {
@@ -192,7 +191,8 @@ describe('fetchReceiptListItems', () => {
     ]);
 
     const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
-    expect(item.status).toBe('Partially Paid');
+    expect(item.status).toBe('Paid');
+    expect(item.paymentStatus).toBe('paid');
     expect(item.documentKind).toBeNull();
     expect(item.rawOrder.payment_status).toBe('paid');
   });
@@ -291,5 +291,10 @@ describe('fetchReceiptListItems', () => {
 
     const items = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
     expect(items.map((item) => item.id)).toEqual(['order-available']);
+  });
+  it('forwards settled invoice terms into the preview model', async () => {
+    mockOrdersResponse([baseOrder({ invoice_note: 'Call first', notes: 'Fallback', payment_due_date: '2026-05-01', payment_terms: 'Net 30', buyer_reference: 'BR-9', firs_irn: 'IRN-9', firs_csid: 'CSID-9' })]);
+    const [item] = (await fetchReceiptListItems('ogabassey', customer)) ?? [];
+    expect(item.rawOrder).toMatchObject({ invoice_note: 'Call first', notes: 'Fallback', payment_due_date: '2026-05-01', payment_terms: 'Net 30', buyer_reference: 'BR-9', firs_irn: 'IRN-9', firs_csid: 'CSID-9' });
   });
 });

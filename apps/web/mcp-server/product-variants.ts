@@ -1,10 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
+import type { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
 import { getMcpProductCatalogColors } from './product-catalog-colors';
 import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
 import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
+
+type ProductVariantsResult = CallToolResult & {
+  structuredContent: z.infer<typeof mcpToolOutputSchemas.get_product_variants>;
+};
 
 /** Returns public variant and condition-offer choices for one active product. */
 export async function loadMcpProductVariants({
@@ -21,7 +28,7 @@ export async function loadMcpProductVariants({
   sanitizeString: (value: string, maxLength: number) => string;
   formatPrice: (price: number) => string;
   getSafeCatalogImageUrl?: (imageUrl: string | null | undefined) => string | undefined;
-}) {
+}): Promise<ProductVariantsResult> {
   const sanitizedProductId = args.product_id
     ? sanitizeString(args.product_id, 80)
     : '';
@@ -82,7 +89,7 @@ export async function loadMcpProductVariants({
   });
   let variantLookupFailed = false;
   let offerLookupFailed = false;
-  const unavailableOptions = (message: string) => {
+  const unavailableOptions = (message: string): ProductVariantsResult => {
     const hasCatalogColors = catalogColors.colors.length > 0;
     return {
       content: [{

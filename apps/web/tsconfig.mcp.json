@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": ["mcp-server/server.ts"],
+  "exclude": ["node_modules"]
+}

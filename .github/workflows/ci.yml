@@ -390,6 +390,8 @@ jobs:
         run: bash .github/scripts/run-migration-applier-tests.sh
       - name: Verify Migration Versions
         run: bash .github/scripts/check-migration-versions.sh
+      - name: Verify GIGL Enforcement Migration Names
+        run: bash .github/scripts/check-gigl-enforcement-migration-names.sh
       - name: Test Mobile Gem Floors
         run: bash .github/scripts/check-mobile-gem-floors.test.sh
       - name: Verify Mobile Gem Floors
@@ -414,6 +416,8 @@ jobs:
           .github/scripts/deploy-mcp-server.test.mjs
           .github/scripts/deploy-vps-readiness-checkout.test.mjs
           .github/scripts/deploy-with-retry-current-main.test.mjs
+          .github/scripts/deploy-with-retry-overlap.test.mjs
+          .github/scripts/deploy-with-retry-overlap-rollback.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
           .github/scripts/assert-preview-env-allowlist.test.mjs
@@ -426,6 +430,15 @@ jobs:
           .github/scripts/storefront-release-coherence-warming.test.mjs
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
+          .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-enforcement-migration-names.test.mjs
+          .github/scripts/check-gigl-cutover-latch-scope.test.mjs
+          .github/scripts/gigl-dotenv.test.mjs
+          .github/scripts/resolve-gigl-latch-identity.test.mjs
+          .github/scripts/verify-gigl-fallback-token.test.mjs
+          .github/scripts/smoke-gigl-worker-capability.test.mjs
+          .github/scripts/refuse-publish-on-promote-overlap.test.mjs
+          .github/scripts/probe-gigl-hook-reload.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs
@@ -436,6 +449,7 @@ jobs:
           .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
+          && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'
         run: pnpm --filter @baci/web verify:quiz-assets

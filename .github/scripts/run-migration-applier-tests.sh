@@ -57,6 +57,7 @@ node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_fixture_functions.test.mjs"
 bash "$script_dir/apply-pending-migrations.test.sh"
+bash "$script_dir/apply-pending-migrations-max-version.test.sh"
 node --test "$script_dir/repair-sales-migration-collision.test.mjs"
 node --test "$script_dir/repair-sales-migration-collision.sql.test.mjs"
 node --test "$script_dir/shipping-policy-audit-repair.test.mjs" "$script_dir/shipping-policy-audit-repair.sql.test.mjs"

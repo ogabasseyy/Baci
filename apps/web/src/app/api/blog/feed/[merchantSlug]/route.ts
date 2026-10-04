@@ -395,7 +395,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     for (const { post, publishedDate } of postsWithValidDates) {
       const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
       const excerpt =
-        post.excerpt || truncateFeedText(stripHtml(post.content), 300);
+        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
 
       const sanitizedContent = sanitizeForFeed(post.content);
       const imageUrls = getBlogStructuredDataImageUrls(post);

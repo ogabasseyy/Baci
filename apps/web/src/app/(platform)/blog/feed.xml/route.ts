@@ -39,8 +39,8 @@ export async function GET(_request: NextRequest) {
       title: feedText(`${PLATFORM_BLOG_CONTEXT.businessName} Blog`),
       description:
         'Insights, updates, and practical playbooks for modern African merchants.',
-      id: feedText(blogUrl),
-      link: feedText(blogUrl),
+      id: xmlSafeFeedUrl(blogUrl),
+      link: xmlSafeFeedUrl(blogUrl),
       language: 'en',
       image: xmlSafeFeedImageUrl(PLATFORM_BLOG_CONTEXT.logoUrl),
       favicon: xmlSafeFeedUrl(`${PLATFORM_BLOG_CONTEXT.baseUrl}/favicon.ico`),

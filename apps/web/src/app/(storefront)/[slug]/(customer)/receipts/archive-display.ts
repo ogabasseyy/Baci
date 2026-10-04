@@ -4,6 +4,9 @@ const ARCHIVE_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
+  // The emailed/downloaded PDFs date receipts in Africa/Lagos: a browser
+  // timezone here would show a different calendar date near midnight.
+  timeZone: 'Africa/Lagos',
 });
 
 const ARCHIVE_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-US', {

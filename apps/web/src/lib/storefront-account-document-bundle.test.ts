@@ -108,7 +108,10 @@ describe('buildStorefrontAccountDocumentBundle', () => {
           amount: 110000,
           created_at: '2026-03-22T10:10:00.000Z',
           description: 'Card payment',
-          metadata: { payment_method: 'card' },
+          // Staff-recorded shape: the mapper keeps only the DVA entry
+          // in metadata and surfaces the method beside it.
+          metadata: { dva_account_number: '9990001111' },
+          payment_method: 'bank_transfer',
           status: 'completed',
           transaction_type: 'payment',
         },
@@ -181,7 +184,17 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     expect(result.order.transactions?.map((entry) => entry.id)).toEqual([
       'tx-1',
     ]);
+    // The staff-recorded method merges back into metadata on both
+    // payloads, so downloads print it like the emailed PDF.
+    expect(result.order.transactions?.[0]?.metadata).toEqual({
+      dva_account_number: '9990001111',
+      payment_method: 'bank_transfer',
+    });
     expect(result.receiptOrder.transactions).toHaveLength(1);
+    expect(result.receiptOrder.transactions?.[0]?.metadata).toEqual({
+      dva_account_number: '9990001111',
+      payment_method: 'bank_transfer',
+    });
     expect(result.receiptOrder.virtual_account?.account_number).toBe(
       '1234567890'
     );

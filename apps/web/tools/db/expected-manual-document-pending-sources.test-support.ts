@@ -2,7 +2,7 @@ export const EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260930160000_manual_order_document_notifications.sql',
-    sha256: '54bd1af0650ec946da287a4de79a78f269fd3b6e652313c7f45b5990bb41f847',
+    sha256: '0afc7bac4dcbf2615a4cbe7263d344c2e0dfb4889161163e54c1c2d18d75e484',
   },
   {
     repositoryPath:

@@ -3,6 +3,7 @@ import {
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
+  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
 } from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
@@ -207,18 +208,33 @@ async function fetchReceiptDetail(
     // normalize absent to false so a valid order never fails closed.
     is_credit_order: order.is_credit_order ?? false,
     balance,
-    items: (order.order_items ?? []).map((item) =>
-      item == null
-        ? item
-        : {
-            ...item,
-            product_name: item.name,
-            // Rendered description like the emailed PDF input: without
-            // this the app link opens a document missing descriptions
-            // and SKU labels the attachment shows.
-            description: item.item_description || undefined,
-          }
-    ),
+    items: (order.order_items ?? []).map((item) => {
+      if (item == null) {
+        return item;
+      }
+      // PostgREST numeric item columns (assurance_fee, vat_amount, ...)
+      // arrive as decimal strings while the schema gates numbers: coerce
+      // like the list's toDisplayMoney or a valid order fails closed.
+      // Unparseable values stay NaN so the schema still fails corrupt
+      // money closed instead of masking it to zero.
+      const overrides: Record<string, number> = {};
+      const raw = item as unknown as Record<string, unknown>;
+      for (const field of MANUAL_ORDER_ITEM_FINANCIAL_FIELDS) {
+        const value = raw[field];
+        if (value != null && typeof value !== 'number') {
+          overrides[field] = Number(value);
+        }
+      }
+      return {
+        ...item,
+        ...overrides,
+        product_name: item.name,
+        // Rendered description like the emailed PDF input: without
+        // this the app link opens a document missing descriptions
+        // and SKU labels the attachment shows.
+        description: item.item_description || undefined,
+      };
+    }),
     virtual_account: resolveReceiptPaymentAccount(
       virtualAccounts,
       transactions,

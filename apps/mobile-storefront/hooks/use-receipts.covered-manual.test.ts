@@ -77,11 +77,11 @@ describe('receipt detail covered-manual transaction failures', () => {
     ).rejects.toBe(error);
   });
 
-  it('tolerates transaction lookup failures for uncovered manual invoices', async () => {
-    // Uncovered invoices (zero payment progress) are not dated from
-    // payments, so a failed lookup still resolves (empty history)
-    // instead of blocking the preview. Any progress would require the
-    // history table and fail closed instead.
+  it('fails closed on transaction lookup failures for uncovered manual invoices', async () => {
+    // Uncovered invoices (zero payment progress) still render their
+    // settled payments: the aggregate need not reconcile with the
+    // ledger, so a failed lookup fails closed like any progress
+    // instead of resolving an empty history.
     mockOrderSingle.mockResolvedValue({
       data: {
         id: 'order-1',
@@ -109,13 +109,12 @@ describe('receipt detail covered-manual transaction failures', () => {
       },
       error: null,
     });
-    mockTransactionsRpc.mockResolvedValue({
-      data: null,
-      error: new Error('customer transaction lookup failed'),
-    });
+    const error = new Error('customer transaction lookup failed');
+    mockTransactionsRpc.mockResolvedValue({ data: null, error });
 
-    const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
-    expect(detail?.transactions).toEqual([]);
+    await expect(
+      receiptDetailQueryOptions('order-1', scope).queryFn()
+    ).rejects.toBe(error);
   });
 
   it('fails closed when the detail row fails schema validation', async () => {

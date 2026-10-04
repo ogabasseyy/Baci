@@ -173,6 +173,21 @@ $function$;
 REVOKE ALL ON FUNCTION private.rendered_shipping_address(jsonb)
   FROM PUBLIC, anon, authenticated;
 
+-- Strict mirror of the sender's isSafeClaimDomain: same normalization
+-- (trim, lower, strip trailing slashes, one trailing dot), then a
+-- dotted hostname with alnum-ended labels <= 63 chars. Deliberately
+-- stricter in one corner (letter-led TLD, so 1.2.3.4a fails here but
+-- passes there): a strict verdict only ever falls back to the raw slug
+-- compare, never to an unsafe skip.
+CREATE OR REPLACE FUNCTION private.manual_document_domain_is_safe(p_domain text)
+RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT p_domain IS NOT NULL AND regexp_replace(
+      regexp_replace(lower(btrim(p_domain)), '/+$', ''), '\.$', ''
+    ) ~ '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$';
+$$;
+REVOKE ALL ON FUNCTION private.manual_document_domain_is_safe(text)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE

@@ -85,6 +85,9 @@ CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update(
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_bank_changed boolean;
+  v_slug_changed boolean;
+  v_slug_renders boolean;
+  v_active_domain text;
   v_shared_changed boolean;
   v_business_address_changed boolean;
   v_resolved_address_changed boolean;
@@ -97,8 +100,7 @@ BEGIN
     OLD.slug IS DISTINCT FROM NEW.slug
     OR OLD.email IS DISTINCT FROM NEW.email
     OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
-  -- The synthetic VAT inputs print through the rowless-invoice
-  -- breakdown synthesis (registration gates it, rate displays).
+  -- Synthetic VAT inputs print via rowless-invoice synthesis.
   v_synthetic_vat_changed :=
     OLD.vat_registration_status IS DISTINCT FROM NEW.vat_registration_status
     OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
@@ -112,8 +114,21 @@ BEGIN
     OR private.resolved_merchant_bank_name(OLD.bank_name, OLD.bank_code)
       IS DISTINCT FROM
       private.resolved_merchant_bank_name(NEW.bank_name, NEW.bank_code);
+  -- The slug renders only via the host/From fallbacks: a rename
+  -- under a safe domain and populated names resets nothing.
+  v_slug_changed := OLD.slug IS DISTINCT FROM NEW.slug;
+  SELECT d.domain INTO v_active_domain
+  FROM public.domains AS d
+  WHERE d.merchant_id = NEW.id AND d.is_primary = true
+    AND d.status = 'active'
+  ORDER BY d.updated_at DESC NULLS LAST, d.created_at DESC NULLS LAST, d.id
+  LIMIT 1;
+  v_slug_renders :=
+    NOT private.manual_document_domain_is_safe(v_active_domain)
+    OR COALESCE(NULLIF(OLD.email_sender_name, ''), NULLIF(OLD.business_name, '')) IS NULL
+    OR COALESCE(NULLIF(NEW.email_sender_name, ''), NULLIF(NEW.business_name, '')) IS NULL;
   v_shared_changed :=
-    OLD.slug IS DISTINCT FROM NEW.slug
+    (v_slug_changed AND v_slug_renders)
     OR OLD.business_name IS DISTINCT FROM NEW.business_name
     OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
     OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
@@ -135,12 +150,9 @@ BEGIN
     private.resolved_merchant_address_line(OLD.registered_address, OLD.business_address)
     IS DISTINCT FROM
     private.resolved_merchant_address_line(NEW.registered_address, NEW.business_address);
-  -- Rendered snapshot inputs: validation-repair fields plus every field
-  -- the renderers print, including the synthetic VAT inputs (over-broad
-  -- for receipts, but registration flips are one-shot, never starvation).
-  -- cac_rc_number prints nowhere, so edits confined to it re-arm nothing.
-  -- (bank_code rides in v_bank_changed via the code-map fallback; the
-  -- fallback card requires an account number to render at all.)
+  -- Rendered snapshot inputs: validation repairs plus every printed
+  -- field (VAT inputs over-broad for receipts, but one-shot). cac-only
+  -- edits re-arm nothing; bank_code rides in v_bank_changed.
   v_snapshot_changed :=
     v_validation_changed
     OR v_synthetic_vat_changed
@@ -150,12 +162,9 @@ BEGIN
     OR (v_bank_changed
       AND (OLD.bank_account_number IS NOT NULL
         OR NEW.bank_account_number IS NOT NULL));
-  -- Completing a merchant profile re-arms validation-skipped rows
-  -- (nothing else re-enqueues them). Gates on merchant-table validation
-  -- inputs ONLY — slug (claim host), email (required), vat_rate (the
-  -- only other failable field); unrelated saves must not burn attempts.
-  -- Other skip reasons keep their own paths; sent and possibly-
-  -- dispatched rows stay terminal; still-invalid profiles skip again.
+  -- Profile completion re-arms validation-skipped rows; gates on
+  -- validation inputs ONLY (slug, email, vat_rate). Other paths and
+  -- terminal rows stay untouched; still-invalid profiles skip again.
   IF v_validation_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
@@ -167,15 +176,9 @@ BEGIN
       AND n.dispatch_started_at IS NULL;
   END IF;
   -- Undispatched processing rows re-arm when the edit can repair
-  -- validation or alter the rendered snapshot: the worker may have
-  -- snapshotted any rendered field already (branding, contacts,
-  -- addresses), and a correction racing the snapshot read would
-  -- otherwise let the worker record a terminal skip from its stale
-  -- values. Edits confined to unrendered fields (cac_rc_number,
-  -- vat_registration_status) keep the lease: repeated unrelated saves
-  -- must not starve delivery. Marked rows stay for
-  -- the invalidation half below; sent and possibly-dispatched rows
-  -- stay terminal.
+  -- validation or alter the rendered snapshot; cac-only edits keep
+  -- the lease. Marked rows stay for invalidation; sent and
+  -- possibly-dispatched rows stay terminal.
   IF v_snapshot_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
@@ -187,13 +190,9 @@ BEGIN
       AND n.dispatch_started_at IS NULL;
   END IF;
   -- Mid-dispatch edits reset the markers of the kinds that render
-  -- them; each kind resets independently (union, never subset), and the
-  -- dispatch RPC compares the same rendered-only subset. Addresses and
-  -- bank names compare resolved like the renderer; bank fields reset
-  -- NGN VA-less invoices alone. cac_rc_number prints nowhere and resets
-  -- nothing. The VAT inputs reset rowless taxed invoices alone: stored
-  -- rows govern their own breakdown, untaxed orders synthesize nothing,
-  -- and receipts render no breakdown at all.
+  -- them (union, never subset); the dispatch RPC compares the same
+  -- rendered-only subset. cac resets nothing; VAT inputs reset rowless
+  -- taxed invoices alone; the slug resets only where it renders.
   IF v_shared_changed OR v_business_address_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()

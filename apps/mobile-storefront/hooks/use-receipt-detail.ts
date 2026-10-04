@@ -1,5 +1,4 @@
 import {
-  isDecimalMoney,
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
@@ -153,12 +152,14 @@ async function fetchReceiptDetail(
   const isPaidOrder =
     (!manualOrder && paidLabel) ||
     (manualOrder && isPromotedManualReceipt(promotionInput));
-  // A deliverable manual invoice with payment progress renders its
-  // settled payments: without history the preview shows amount_paid with
-  // an empty Payment table, while the sender fails the same lookup
-  // closed. Zero-progress invoices correctly render empty and stay
-  // tolerant, as do invalid rows (paid-label-but-unsettled included)
-  // that render as invoices without ever being emailed.
+  // A deliverable manual invoice renders its settled payments: without
+  // history the preview shows amount_paid with an empty Payment table,
+  // while the sender fails the same lookup closed. The aggregate need
+  // not reconcile with the ledger, so even zero-progress invoices
+  // require history — they still render empty on a successful empty
+  // fetch, but a failed fetch fails closed like the list loader.
+  // Invalid rows (paid-label-but-unsettled included) stay tolerant:
+  // they render as invoices without ever being emailed.
   const settledBalance = isSettledManualBalance({
     total: order.total as number | string | null | undefined,
     amountPaid: order.amount_paid as number | string | null | undefined,
@@ -167,9 +168,7 @@ async function fetchReceiptDetail(
     manualOrder &&
     isPromotableManualDocument(promotionInput) &&
     !paidLabel &&
-    !settledBalance &&
-    isDecimalMoney(order.amount_paid) &&
-    Number(order.amount_paid) > 0;
+    !settledBalance;
   const { data: virtualAccountRows, error: vaError } = await withSupabaseRetry(
     async () =>
       await supabase.rpc('get_customer_order_payment_accounts', {

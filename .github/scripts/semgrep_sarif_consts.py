@@ -15,7 +15,7 @@ import re
 NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
             "mail", "msmtp", "nc", "ncat", "netcat", "nmap",
             "openssl", "scp", "sendmail", "sftp", "socat", "ssh",
-            "telnet", "tftp", "rsync", "wget"}
+            "sshpass", "telnet", "tftp", "rsync", "wget"}
 
 # Build/package/container/provisioner drivers: each executes
 # repo-controlled files. Canonical names only (variants fail at
@@ -39,7 +39,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "swiftc", "script", "rpm", "m4", "hg", "julia",
              "lldb", "dotnet", "tclsh", "expect", "wish",
              "autoconf", "autoheader", "autom4te", "autoreconf",
-             "autoupdate", "ifnames", "aclocal"}
+             "autoupdate", "ifnames", "aclocal",
+             "kotlinc", "kotlinc-jvm", "kotlin", "kapt"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -70,6 +71,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # autoconf/autoheader/autom4te/autoreconf/autoupdate run m4
 # over template operands (m4_esyscmd executes repo scripts);
 # ifnames/aclocal scan and expand workspace .m4 macros.
+# kotlinc -script executes .kts top-level code (kotlin runs
+# classes/scripts, kapt runs annotation processors).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")
@@ -143,7 +146,7 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "GIT_EDITOR", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL",
               "GIT_CONFIG_SYSTEM", "GIT_DIR", "GIT_WORK_TREE",
               "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
-              "GIT_CONFIG_PARAMETERS",
+              "SSH_ASKPASS", "GIT_CONFIG_PARAMETERS",
               "PAGER", "GH_HOST",
               "SHELLOPTS", "PS4", "BASH_CMDS")
 # GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
@@ -151,7 +154,8 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
 # PERL5DB is inserted before the first line under perl -d;
 # SHELLOPTS (xtrace) plus PS4 expand the token into the log
 # from env alone (verified imports); BASH_CMDS elements join
-# the command hash table (bash 4.0+).
+# the command hash table (bash 4.0+); SSH_ASKPASS programs
+# run on remote auth (sshpass's env counterpart).
 
 
 # Bash exported-function encoding (round 14, P1 4176327352):

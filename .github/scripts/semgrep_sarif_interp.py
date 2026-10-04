@@ -141,6 +141,13 @@ def _check_command(argv0, rest, pre, drift, src=""):
         audit_env_dump(base, rest, drift)
     elif base == "ps":
         audit_ps_env(rest, drift)
+    elif base in ("envsubst", "eval_gettext", "eval_ngettext"):
+        # Runtime environment disclosure: single-quoted
+        # operands skip the static secret scan but expand
+        # live values into agent-bound files. No legit
+        # token-helper use; any use fails closed.
+        if "helper-secret-expand" not in drift:
+            drift.append("helper-secret-expand")
     elif base == "xargs":
         audit_xargs(rest, drift, src, _check_command)
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",

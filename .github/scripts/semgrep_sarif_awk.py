@@ -45,7 +45,7 @@ _LONG_OPTS = {"assign": "cons2", "bignum": "skip",
               "file": "file", "gen-pot": "dump", "help": "skip",
               "include": "load", "lint": "skip", "lint-old": "skip",
               "load": "load", "optimize": "skip",
-              "pretty-print": "zoneq", "profile": "zoneq",
+              "pretty-print": "dump", "profile": "dump",
               "sandbox": "skip", "source": "scan",
               "traditional": "skip", "use-lc-numeric": "skip",
               "version": "skip"}
@@ -86,10 +86,6 @@ def _awk_long_step(tok, rest, i, drift):
         return 2 if not attached and i + 1 < len(rest) else 1
     if kind == "cons2":
         return 1 if attached else 2
-    if kind == "zoneq":
-        if attached:
-            _zone_target(arg, drift)
-        return 1
     if kind == "scan":
         if attached:
             _scan_awk_program(arg, drift)
@@ -98,8 +94,10 @@ def _awk_long_step(tok, rest, i, drift):
             _scan_awk_program(rest[i + 1], drift)
         return 2
     if kind == "dump":
-        # Variable/pot dumps default into the helper CWD
-        # (workspace unless cd'd); = forms zone precisely.
+        # Variable/pot dumps and pretty-print/profile output
+        # default into the helper CWD (workspace unless cd'd),
+        # so bare forms drift like short -o/-p/-d; = forms
+        # zone precisely.
         if attached:
             _zone_target(arg, drift)
             return 1
@@ -128,14 +126,14 @@ def _check_awk(rest, drift):
             if "helper-untrusted-exec" not in drift:
                 drift.append("helper-untrusted-exec")
             return
-        if (tok.startswith("-o") or tok.startswith("-p")) \
-                and len(tok) > 2:
+        if (tok.startswith("-o") or tok.startswith("-p")
+                or tok.startswith("-d")) and len(tok) > 2:
             _zone_target(tok[2:], drift)
             i += 1
-        elif tok in ("-o", "-p"):
-            # Default awkprof.out lands in the helper CWD
-            # (workspace unless cd'd); profiling has no
-            # legit token-helper use.
+        elif tok in ("-o", "-p", "-d"):
+            # Default awkprof.out/awkvars.out lands in the
+            # helper CWD (workspace unless cd'd); profiling
+            # and dumping have no legit token-helper use.
             if "helper-untrusted-exec" not in drift:
                 drift.append("helper-untrusted-exec")
             return
@@ -169,9 +167,12 @@ def _check_awk(rest, drift):
             else:
                 _scan_awk_program(tok[len("--source="):], drift)
                 i += 1
+        elif tok == "-e":
+            if i + 1 < len(rest):
+                _scan_awk_program(rest[i + 1], drift)
+            i += 2
         elif tok.startswith("-e") and len(tok) > 2:
             _scan_awk_program(tok[2:], drift)
-            program_seen = True
             i += 1
         elif tok == "-i":
             # Bare -i takes an include file: only the inplace

@@ -36,7 +36,7 @@ const conditionOffer = z
     condition: z.string(),
     grade: z.string().nullable().optional(),
     price: money,
-    stock_quantity: z.number().nullable(),
+    stock_quantity: z.number().nonnegative().nullable(),
     availability,
     condition_notes: z.string().nullable().optional(),
   })
@@ -107,7 +107,7 @@ export const mcpToolOutputSchemas = {
         z.object({
           attributes,
           price: money.nullable().optional(),
-          stock: z.number().nullable().optional(),
+          stock: z.number().nonnegative().nullable().optional(),
           availability,
           condition: z.string().nullable().optional(),
         })
@@ -129,7 +129,7 @@ export const mcpToolOutputSchemas = {
             .nullable()
             .optional()
             .describe('Absent or null means the base product price applies.'),
-          stock_quantity: z.number().nullable(),
+          stock_quantity: z.number().nonnegative().nullable(),
           availability,
         })
         .passthrough()
@@ -143,10 +143,12 @@ export const mcpToolOutputSchemas = {
   }),
   browse_categories: z.object({
     categories: z.array(z.string()),
+    status: z.enum(['empty', 'unavailable']).optional(),
     message: z.string().optional(),
   }),
   get_brands: z.object({
     brands: z.array(z.string()),
+    status: z.enum(['empty', 'unavailable']).optional(),
     message: z.string().optional(),
   }),
   get_delivery_fee_info: z.object({

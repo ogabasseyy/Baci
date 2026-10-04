@@ -81,7 +81,7 @@ export async function loadMcpProductVariants({
       };
     }
     return {
-      structuredContent: { variants: [], condition_offers: [], status: 'not_found' },
+      structuredContent: { variants: [], condition_offers: [], status: 'not_found', message: `Product "${lookupLabel}" not found.` },
       content: [
         { type: 'text', text: `Product "${lookupLabel}" not found. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}` },
       ],

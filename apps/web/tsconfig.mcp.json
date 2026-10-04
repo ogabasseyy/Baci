@@ -9,7 +9,8 @@
     "mcp-server/server.ts",
     "mcp-server/server-output-schema.test.ts",
     "mcp-server/product-variants-output.test.ts",
-    "mcp-server/product-variants-color-evidence.test.ts"
+    "mcp-server/product-variants-color-evidence.test.ts",
+    "mcp-server/browse-catalog-facets.test.ts"
   ],
   "exclude": ["node_modules"]
 }

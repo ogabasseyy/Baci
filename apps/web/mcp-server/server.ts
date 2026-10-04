@@ -1940,7 +1940,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { categories: [], message: 'Store temporarily unavailable.' },
+          structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1948,8 +1948,13 @@ function createOgabasseyServer() {
         supabase, merchantId, facet: 'category',
       });
 
+      if (categories === null) {
+        const message = 'Category lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
+      }
+
       if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [] } };
+        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
       }
 
       const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
@@ -1986,7 +1991,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { brands: [], message: 'Store temporarily unavailable.' },
+          structuredContent: { brands: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1995,8 +2000,13 @@ function createOgabasseyServer() {
         category: args.category ? sanitizeString(args.category, 50) : undefined,
       });
 
+      if (brands === null) {
+        const message = 'Brand lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { brands: [], status: 'unavailable' as const, message } };
+      }
+
       if (brands.length === 0) {
-        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [] } };
+        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [], status: 'empty' as const } };
       }
 
       const categoryText = args.category ? ` in ${args.category}` : '';

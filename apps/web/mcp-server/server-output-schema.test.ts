@@ -52,23 +52,29 @@ describe('public MCP output contracts', () => {
     }
   }, 30_000);
 
-  it('reports catalog outages as unavailable for both product lookup tools', async () => {
+  it('reports catalog outages as unavailable for lookup and facet tools', async () => {
     const server = await startMcpServerWithPostgrest({}, { productQueryFails: true });
     const client = new Client({ name: 'catalog-outage-test', version: '1.0.0' });
+    const cases = [
+      { name: 'get_product', args: { product_id: 'available-product' }, message: 'Product lookup is temporarily unavailable.', forbidden: 'not found' },
+      { name: 'get_product_variants', args: { product_id: 'available-product' }, message: 'Product lookup is temporarily unavailable.', forbidden: 'not found' },
+      { name: 'browse_categories', args: {}, message: 'Category lookup is temporarily unavailable.', forbidden: 'No categories found' },
+      { name: 'get_brands', args: {}, message: 'Brand lookup is temporarily unavailable.', forbidden: 'No brands found' },
+    ] as const;
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
-      for (const name of ['get_product', 'get_product_variants'] as const) {
-        const result = await client.callTool({ name, arguments: { product_id: 'available-product' } });
+      for (const { name, args, message, forbidden } of cases) {
+        const result = await client.callTool({ name, arguments: { ...args } });
         expect(result.isError).not.toBe(true);
-        expect(result.structuredContent).toMatchObject({ status: 'unavailable', message: 'Product lookup is temporarily unavailable.' });
+        expect(result.structuredContent).toMatchObject({ status: 'unavailable', message });
         expect(mcpToolOutputSchemas[name].safeParse(result.structuredContent).success).toBe(true);
         expect(JSON.stringify(result)).not.toContain('Fixture database unavailable');
-        expect(JSON.stringify(result)).not.toContain('not found');
+        expect(JSON.stringify(result)).not.toContain(forbidden);
       }
     } finally {
       try { await client.close(); } finally { await server.close(); }
     }
-  }, 30_000);
+  }, 60_000);
 
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});

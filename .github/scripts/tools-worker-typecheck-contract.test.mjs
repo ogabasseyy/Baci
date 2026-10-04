@@ -47,6 +47,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'mcp-server/server-output-schema.test.ts',
     'mcp-server/product-variants-output.test.ts',
     'mcp-server/product-variants-color-evidence.test.ts',
+    'mcp-server/browse-catalog-facets.test.ts',
   ]);
   assert.ok(!mcpTsconfig.exclude.includes('mcp-server'));
   assert.deepEqual(toolsTsconfig.compilerOptions.types, [

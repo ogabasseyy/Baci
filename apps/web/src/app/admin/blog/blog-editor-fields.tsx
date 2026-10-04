@@ -20,6 +20,7 @@ import type {
 } from './blog-types';
 
 type BlogEditorFieldsProps = {
+  contentResetKey?: number;
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
   onContentChange: (value: string) => void;
@@ -36,6 +37,7 @@ type BlogEditorFieldsProps = {
 };
 
 export function BlogEditorFields({
+  contentResetKey,
   form,
   isEditMode,
   onContentChange,
@@ -200,6 +202,7 @@ export function BlogEditorFields({
 
         <Label>Content</Label>
         <BlogEditor
+          contentResetKey={contentResetKey}
           content={form.content}
           onChange={onContentChange}
           onImageUpload={onInlineImageUpload}

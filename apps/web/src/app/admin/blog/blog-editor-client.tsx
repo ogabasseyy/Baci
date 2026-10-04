@@ -160,6 +160,7 @@ export function BlogEditorClient({
   const router = useRouter();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [contentResetKey, setContentResetKey] = useState(0);
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
@@ -235,9 +236,35 @@ export function BlogEditorClient({
         <h1 className="text-page-title">{pageTitle}</h1>
       </div>
 
-      {!isEditMode && <BlogReviewHandoffImporter onImport={setForm} />}
+      {!isEditMode && (
+        <BlogReviewHandoffImporter
+          onImport={(draft) => {
+            const changed = Object.entries(form).some(
+              ([key, value]) =>
+                JSON.stringify(value) !==
+                JSON.stringify(
+                  DEFAULT_PLATFORM_BLOG_FORM_STATE[
+                    key as keyof PlatformAdminBlogFormState
+                  ]
+                )
+            );
+            if (
+              changed &&
+              !window.confirm(
+                'Replace your unsaved article with this review handoff?'
+              )
+            ) {
+              return false;
+            }
+            setForm(draft);
+            setContentResetKey((current) => current + 1);
+            return true;
+          }}
+        />
+      )}
 
       <BlogEditorFields
+        contentResetKey={contentResetKey}
         form={form}
         isEditMode={isEditMode}
         onContentChange={(content) => {

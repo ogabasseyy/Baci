@@ -60,7 +60,7 @@ describe('BlogReviewHandoffImporter', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent(
-        'A public featured-image URL is required'
+        'An HTTPS featured-image URL is required'
       )
     );
     expect(onImport).not.toHaveBeenCalled();

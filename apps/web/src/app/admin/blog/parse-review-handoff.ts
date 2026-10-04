@@ -1,4 +1,9 @@
 import { generateSlug } from '@/lib/blog-utils';
+import {
+  BLOG_INTENTS,
+  type BlogIntent,
+  blogPostSchema,
+} from '@/lib/validations/blog';
 import type { PlatformAdminBlogFormState } from './blog-types';
 
 export const MAX_REVIEW_HANDOFF_CONTENT_LENGTH = 1_000_000;
@@ -11,7 +16,7 @@ function readText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isPublicHttpsUrl(value: unknown): value is string {
+function isHttpsUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
     return new URL(value).protocol === 'https:';
@@ -36,7 +41,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (content.length > MAX_REVIEW_HANDOFF_CONTENT_LENGTH) {
     throw new Error('Article content exceeds the import limit');
   }
-  if (/\{\{\s*INLINE_IMAGE_[1-3]\s*\}\}/u.test(content)) {
+  if (/\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u.test(content)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
 
@@ -44,8 +49,8 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     ? value.featured_image
     : {};
   const featuredImageUrl = readText(featuredImage.url);
-  if (!isPublicHttpsUrl(featuredImageUrl)) {
-    throw new Error('A public featured-image URL is required');
+  if (!isHttpsUrl(featuredImageUrl)) {
+    throw new Error('An HTTPS featured-image URL is required');
   }
 
   const tags = Array.isArray(value.tags)
@@ -60,40 +65,49 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     ? Object.fromEntries(
         Object.entries(featuredImage.variants).filter(
           (entry): entry is [string, string] =>
-            imageVariantKeys.has(entry[0]) && isPublicHttpsUrl(entry[1])
+            imageVariantKeys.has(entry[0]) && isHttpsUrl(entry[1])
         )
       )
     : {};
   const intent = readText(value.intent);
-  const allowedIntents = new Set([
-    'news',
-    'comparison',
-    'repair-guide',
-    'buying-guide',
-    'platform',
-    'unknown',
-  ]);
-  if (intent && !allowedIntents.has(intent)) {
+  if (intent && !BLOG_INTENTS.some((allowed) => allowed === intent)) {
     throw new Error('The handoff contains an unsupported intent');
+  }
+
+  const metadata = {
+    focus_keyword: readText(value.focus_keyword),
+    seo_title: readText(value.seo_title),
+    seo_description: readText(value.seo_description),
+    excerpt: readText(value.excerpt),
+    category: readText(value.category),
+    intent_source: readText(value.intent_source) || 'unmapped_task_type',
+  };
+  const validatedMetadata = blogPostSchema
+    .pick({
+      focus_keyword: true,
+      seo_title: true,
+      seo_description: true,
+      excerpt: true,
+      category: true,
+      intent_source: true,
+    })
+    .safeParse(metadata);
+  if (!validatedMetadata.success) {
+    throw new Error(
+      validatedMetadata.error.issues[0]?.message || 'Invalid handoff metadata'
+    );
   }
 
   return {
     author_name: readText(value.author_name) || 'Baci Editorial',
-    category: readText(value.category),
+    ...metadata,
     content,
-    excerpt: readText(value.excerpt),
     featured_image_alt: readText(featuredImage.alt),
-    featured_image_height:
-      typeof featuredImage.height === 'number' ? featuredImage.height : null,
+    featured_image_height: readDimension(featuredImage.height),
     featured_image_url: featuredImageUrl,
     featured_image_variants: imageVariants,
-    featured_image_width:
-      typeof featuredImage.width === 'number' ? featuredImage.width : null,
-    focus_keyword: readText(value.focus_keyword),
-    intent: intent || 'unknown',
-    intent_source: readText(value.intent_source) || 'unmapped_task_type',
-    seo_description: readText(value.seo_description),
-    seo_title: readText(value.seo_title),
+    featured_image_width: readDimension(featuredImage.width),
+    intent: (intent || 'unknown') as BlogIntent,
     slug: readText(value.slug) || generateSlug(title),
     status: 'draft',
     tags: tags
@@ -102,4 +116,10 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
       .join(', '),
     title,
   };
+}
+
+function readDimension(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : null;
 }

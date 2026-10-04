@@ -8,16 +8,19 @@ const mockInlineUploadTrigger = vi.fn();
 vi.mock('@/components/blog/blog-editor', () => ({
   BlogEditor: ({
     content,
+    contentResetKey,
     onChange,
     onImageUpload,
   }: {
     content: string;
+    contentResetKey?: number;
     onChange: (value: string) => void;
     onImageUpload: (file: File) => Promise<string>;
   }) => (
     <div>
       <textarea
         aria-label="Blog editor content"
+        data-reset-key={contentResetKey}
         value={content}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -81,6 +84,13 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 }
 
 describe('BlogEditorFields', () => {
+  it('forwards the import reset key to the rich-text editor', () => {
+    renderComponent({ contentResetKey: 2 });
+    expect(screen.getByLabelText('Blog editor content')).toHaveAttribute(
+      'data-reset-key',
+      '2'
+    );
+  });
   it('renders all key editor controls and creates mode submit label', () => {
     renderComponent();
 

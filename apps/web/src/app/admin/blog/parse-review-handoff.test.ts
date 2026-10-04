@@ -26,6 +26,54 @@ const validHandoff = {
 };
 
 describe('parseReviewHandoff', () => {
+  it.each(['4', '12', '0'])('rejects unresolved image slot %s', (slot) => {
+    expect(() =>
+      parseReviewHandoff({
+        ...validHandoff,
+        content_html: `{{INLINE_IMAGE_${slot}}}`,
+      })
+    ).toThrow('unresolved');
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    '1200',
+    null,
+  ])('clears invalid image dimensions %s', (dimension) => {
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          width: dimension,
+          height: dimension,
+        },
+      })
+    ).toMatchObject({
+      featured_image_width: null,
+      featured_image_height: null,
+    });
+  });
+
+  it.each([
+    ['focus_keyword', 50],
+    ['seo_title', 70],
+    ['seo_description', 160],
+    ['excerpt', 300],
+    ['category', 100],
+    ['intent_source', 100],
+  ] as const)('validates the server limit for %s', (field, limit) => {
+    expect(() =>
+      parseReviewHandoff({ ...validHandoff, [field]: 'x'.repeat(limit) })
+    ).not.toThrow();
+    expect(() =>
+      parseReviewHandoff({ ...validHandoff, [field]: 'x'.repeat(limit + 1) })
+    ).toThrow();
+  });
   it('maps a completed handoff into an unsaved draft regardless of artifact status', () => {
     expect(parseReviewHandoff(validHandoff)).toMatchObject({
       author_name: 'Baci Editorial',
@@ -67,7 +115,7 @@ describe('parseReviewHandoff', () => {
         ...validHandoff,
         featured_image: { path: 'assets/featured.png', alt: 'Cover' },
       })
-    ).toThrow('public featured-image URL');
+    ).toThrow('HTTPS featured-image URL');
   });
 
   it('keeps only supported HTTPS image variants from the handoff', () => {

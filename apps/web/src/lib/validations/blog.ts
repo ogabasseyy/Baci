@@ -1,6 +1,16 @@
 import z from 'zod';
 import { sanitizeHtml } from '@/lib/sanitize';
 
+export const BLOG_INTENTS = [
+  'news',
+  'comparison',
+  'repair-guide',
+  'buying-guide',
+  'platform',
+  'unknown',
+] as const;
+export type BlogIntent = (typeof BLOG_INTENTS)[number];
+
 const featuredImageVariantsSchema = z
   .object({
     square_1x1: z.url().optional(),
@@ -46,17 +56,7 @@ export const blogPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional().nullable(),
-  intent: z
-    .enum([
-      'news',
-      'comparison',
-      'repair-guide',
-      'buying-guide',
-      'platform',
-      'unknown',
-    ])
-    .optional()
-    .nullable(),
+  intent: z.enum(BLOG_INTENTS).optional().nullable(),
   intent_source: z.string().max(100).optional().nullable(),
   category: z.string().max(100).optional().nullable(),
   tags: z.array(z.string()).optional(),
@@ -109,16 +109,7 @@ export const createPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional(),
-  intent: z
-    .enum([
-      'news',
-      'comparison',
-      'repair-guide',
-      'buying-guide',
-      'platform',
-      'unknown',
-    ])
-    .optional(),
+  intent: z.enum(BLOG_INTENTS).optional(),
   intent_source: z.string().max(100).optional(),
   category: z.string().max(100).optional(),
   tags: z.array(z.string()).optional(),

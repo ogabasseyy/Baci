@@ -1,3 +1,5 @@
+import type { BlogIntent } from '@/lib/validations/blog';
+
 export type PlatformAdminBlogStatus = 'draft' | 'published' | 'archived';
 
 export type PlatformAdminBlogPostSummary = {
@@ -21,7 +23,7 @@ export type PlatformAdminBlogPostDetail = PlatformAdminBlogPostSummary & {
   featured_image_width: number | null;
   seo_description: string | null;
   seo_title: string | null;
-  intent?: string | null;
+  intent?: BlogIntent | null;
   intent_source?: string | null;
   focus_keyword?: string | null;
   tags?: string[] | null;
@@ -43,9 +45,9 @@ export type PlatformAdminBlogFormState = {
   status: PlatformAdminBlogStatus;
   tags: string;
   title: string;
-  intent?: string | null;
+  intent?: BlogIntent | null;
   intent_source?: string | null;
-  focus_keyword?: string;
+  focus_keyword?: string | null;
 };
 
 export const DEFAULT_PLATFORM_BLOG_FORM_STATE: PlatformAdminBlogFormState = {

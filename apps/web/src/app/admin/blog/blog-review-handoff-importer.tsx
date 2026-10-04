@@ -1,19 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { parseReviewHandoff } from './parse-review-handoff';
 
 const MAX_FILE_SIZE = 2_000_000;
 
 type BlogReviewHandoffImporterProps = {
-  onImport: (draft: PlatformAdminBlogFormState) => void;
+  onImport: (draft: PlatformAdminBlogFormState) => boolean | undefined;
 };
 
 export function BlogReviewHandoffImporter({
   onImport,
 }: BlogReviewHandoffImporterProps) {
   const [message, setMessage] = useState('');
+  const onImportRef = useRef(onImport);
+  useLayoutEffect(() => {
+    onImportRef.current = onImport;
+  }, [onImport]);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
@@ -26,7 +30,10 @@ export function BlogReviewHandoffImporter({
       const draft = parseReviewHandoff(
         JSON.parse(await file.text()) as unknown
       );
-      onImport(draft);
+      if (onImportRef.current(draft) === false) {
+        setMessage('Import cancelled. Your article is unchanged.');
+        return;
+      }
       setMessage(
         'Draft loaded for review. It has not been saved or published.'
       );

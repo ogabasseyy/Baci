@@ -4,7 +4,8 @@ import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
-import { getMcpVariantAttributeTextValue, getMcpVariantColorValue } from './variant-color-value';
+import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
+import { getMcpVariantColorValue } from './variant-color-value';
 import { getMcpProductCatalogColors } from './product-catalog-colors';
 import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
 import { buildMcpCatalogColorsPayload } from './build-mcp-catalog-colors-payload';
@@ -88,6 +89,7 @@ export async function loadMcpProductVariants({
     };
   }
 
+  const productName = typeof product.name === 'string' && product.name.trim() ? product.name : undefined;
   const catalogColors = getMcpProductCatalogColors({
     color: product.color,
     colorImages: product.color_images,
@@ -104,7 +106,7 @@ export async function loadMcpProductVariants({
       }],
       structuredContent: {
           variants: [], condition_offers: [], status: 'unavailable', message,
-          product_name: product.name,
+          ...(productName ? { product_name: productName } : {}),
           catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish variant stock or combinations.'),
           variant_lookup_failed: variantLookupFailed,
           offer_lookup_failed: offerLookupFailed,
@@ -168,11 +170,11 @@ export async function loadMcpProductVariants({
       content: [
         {
           type: 'text',
-          text: `No variant options were returned for "${product.name}".${catalogColors.colors.length > 0 ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+          text: `No variant options were returned for "${productName ?? 'this product'}".${catalogColors.colors.length > 0 ? `\n\n${formatMcpCatalogColors(catalogColors)}.` : ''} ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
         },
       ],
       structuredContent: {
-        product_name: product.name,
+        ...(productName ? { product_name: productName } : {}),
         catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
         variants: [],
         condition_offers: [],
@@ -182,7 +184,7 @@ export async function loadMcpProductVariants({
     };
   }
 
-  let text = `**Variants for ${product.name}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
+  let text = `**Variants for ${productName ?? 'this product'}:**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n\n`;
   if (catalogColors.colors.length > 0) {
     text += `${formatMcpCatalogColors(catalogColors)}\n\n`;
   }
@@ -247,7 +249,7 @@ export async function loadMcpProductVariants({
   const result: ProductVariantsResult = {
     content: [{ type: 'text', text }],
     structuredContent: {
-      product_name: product.name,
+      ...(productName ? { product_name: productName } : {}),
       catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels do not establish selectable variant or stock combinations.'),
       variants: (variants || []).map((variant) => ({
         ...variant,

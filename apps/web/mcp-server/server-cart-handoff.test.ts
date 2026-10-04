@@ -177,12 +177,12 @@ describe('MCP cart handoff', () => {
     }
   });
 
-  it('downgrades corrupt catalog rows to a schema-valid cart error', async () => {
+  it.each([false, true])('downgrades null-name catalog rows with has_variants=%s to a safe cart error', async (hasVariants) => {
     const query = {
       select: vi.fn(),
       eq: vi.fn(),
       single: vi.fn(async () => ({
-        data: { name: null, slug: 'null-name', price: 100, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false },
+        data: { name: null, slug: 'null-name', price: 100, manage_stock: false, stock_quantity: 0, has_variants: hasVariants, has_condition_offers: false },
         error: null,
       })),
     };
@@ -192,6 +192,7 @@ describe('MCP cart handoff', () => {
     const result = await prepareCartHandoff({
       supabase, merchantId: 'merchant-1', productId: 'null-name-product', quantity: 1, formatPrice: String,
     });
+    expect(result.content[0].text).not.toContain('null');
     expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
     expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
   });

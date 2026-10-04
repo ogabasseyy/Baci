@@ -6,6 +6,19 @@ import { buildMcpProductDetail } from './product-detail';
 import { createSupabase } from './product-variants-test-fixtures';
 
 describe('variant output failure contracts', () => {
+  it.each(['outage', 'empty', 'success'])('omits a corrupt null product name from %s option results', async (mode) => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({ data: { id: 'phone-1', name: null, manage_stock: true, has_variants: true, has_condition_offers: false, color: null, color_images: null }, error: null });
+    if (mode === 'outage') supabase.rpc.mockResolvedValue({ data: null, error: { message: 'Fixture unavailable' } });
+    if (mode === 'empty') supabase.rpc.mockResolvedValue({ data: [], error: null });
+    const result = await loadMcpProductVariants({ args: { product_id: 'phone-1' }, merchantId: 'merchant-1', supabase: supabase as unknown as SupabaseClient, sanitizeString: (value) => value, formatPrice: String });
+    if (mode === 'outage') expect(result.structuredContent).toMatchObject({ status: 'unavailable', variants: [] });
+    expect(result.content[0].text).not.toContain('null');
+    if (mode === 'success') expect(result.structuredContent?.variants).toHaveLength(1);
+    expect(result.structuredContent).not.toHaveProperty('product_name');
+    expect(mcpToolOutputSchemas.get_product_variants.safeParse(result.structuredContent).success).toBe(true);
+  });
+
   it('validates numeric JSON attributes passed through both option handlers', async () => {
     const supabase = createSupabase();
     supabase.rpc.mockResolvedValue({ data: [{ attributes: { ram: 8, storage: { gb: 256 } }, price_override: null, stock_quantity: 2, condition: 'new', images: [] }], error: null });

@@ -36,6 +36,13 @@ export async function prepareCartHandoff({
     .eq('status', 'active')
     .single();
 
+  if (product && (typeof product.name !== 'string' || !product.name.trim())) {
+    return {
+      content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+      structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+    };
+  }
+
   let unavailable = Boolean(productError || !product);
   if (product?.manage_stock === true) {
     let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&

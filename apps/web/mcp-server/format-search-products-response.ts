@@ -3,7 +3,7 @@ import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
-import { getMcpVariantAttributeTextValue } from './variant-color-value';
+import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import type { discoverMcpProducts } from './discover-products';
 
 type DiscoveryResult = Awaited<ReturnType<typeof discoverMcpProducts>>;

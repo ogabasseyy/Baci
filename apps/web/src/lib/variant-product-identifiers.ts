@@ -3,7 +3,10 @@ export interface ProductManufacturerIdentifiers {
   mpn?: string | null;
 }
 
-/** Prefer populated variant manufacturer identifiers, retaining parent fallback. */
+/**
+ * Prefer nonblank variant identifier strings using GMC key normalization.
+ * Parent fallback stays verbatim to preserve existing schema/feed output.
+ */
 export function resolveVariantProductIdentifiers(
   attributes: Readonly<Record<string, unknown>> | null | undefined,
   parent: ProductManufacturerIdentifiers
@@ -15,6 +18,7 @@ export function resolveVariantProductIdentifiers(
       .toLowerCase()
       .replace(/[\s-]+/g, '_');
     if (normalizedKey === 'gtin' || normalizedKey === 'mpn') {
+      // GMC preserves finite numeric collisions, while identifier output remains string-only.
       const normalizedValue =
         typeof value === 'string'
           ? value.trim()

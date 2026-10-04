@@ -104,6 +104,8 @@ export async function handleToolRequest(
   let grantId: string | null = null;
   try {
     const result = await sql.begin(async (txn) => {
+      await txn`SET LOCAL statement_timeout = '5s'`;
+      await txn`SET LOCAL lock_timeout = '1s'`;
       const context = await resolveGrant(txn, {
         tokenHash: sha256Hex(presented),
         scope: tool.requiredScope,

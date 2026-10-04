@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Pressable, Text } from 'react-native';
+import { useWalletRouteActionSetup } from '@/components/wallet/use-wallet-route-action-setup';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { SampleInterestPreview } from './SampleInterestPreview';
+import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { WalletScreen } from './WalletScreen';
+import { fundWallet } from './wallet-screen.handlers';
 
 const mockGoal: WalletActiveSavingsGoal = {
   contribution_amount: 5000,
@@ -37,6 +40,7 @@ const mockUseWallet = jest.fn(() => ({
   refetch: jest.fn(),
 }));
 const mockUseAuthStore = jest.fn(() => mockAuthState);
+const mockSetSavingsAmount = jest.fn();
 const mockDeriveWalletDisplayData = jest.fn(() => ({
   activeSavingsGoal: mockGoal,
   earningsAvailable: false,
@@ -68,7 +72,7 @@ jest.mock('@/components/wallet/use-wallet-funding-account-controller', () => ({
   }),
 }));
 jest.mock('@/components/wallet/use-wallet-route-action-setup', () => ({
-  useWalletRouteActionSetup: () => false,
+  useWalletRouteActionSetup: jest.fn(() => false),
 }));
 jest.mock('@/hooks/use-auth-guard', () => ({
   useRequireAuth: () => mockUseRequireAuth(),
@@ -108,14 +112,14 @@ jest.mock('./use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
 jest.mock('./use-wallet-savings-actions', () => ({
-  createWalletSavingsActions: () => ({
+  createWalletSavingsActions: jest.fn(() => ({
     handleAddSavingsContribution: jest.fn(),
     handleFundSavingsWallet: jest.fn(),
     handleOpenSavings: jest.fn(),
-  }),
+  })),
 }));
 jest.mock('./use-wallet-savings-amount', () => ({
-  useWalletSavingsAmount: () => ['0', jest.fn()],
+  useWalletSavingsAmount: () => ['500', mockSetSavingsAmount],
 }));
 jest.mock('./wallet-screen.handlers', () => ({
   fundWallet: jest.fn(),
@@ -163,6 +167,32 @@ describe('WalletScreen interest preview integration', () => {
         <Text>{`${ownerId}|${goal?.title}|${goal?.current_amount}`}</Text>
       </Pressable>
     ));
+  });
+
+  it('preserves the selected goal and contribution after a production wallet top-up', () => {
+    render(<WalletScreen />);
+    const actions = jest.mocked(createWalletSavingsActions).mock.calls[0][0];
+
+    actions.startWalletTopUp();
+
+    const funding = jest.mocked(fundWallet).mock.calls[0][0];
+    expect(funding.fundAmount).toBe('500');
+    expect(funding.walletReturnTo).toBe(
+      '/wallet?action=savings&savingsGoalId=goal-active-1&savingsAmount=500'
+    );
+    funding.resetFundPanel();
+    expect(mockSetSavingsAmount).not.toHaveBeenCalled();
+  });
+
+  it('forwards the named savings goal to route-action synchronization', () => {
+    render(<WalletScreen action="savings" savingsGoalId="goal-b" />);
+
+    expect(useWalletRouteActionSetup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routeAction: 'savings',
+        routeSavingsGoalId: 'goal-b',
+      })
+    );
   });
 
   it('mounts the explicit preview with the active goal and customer owner', () => {

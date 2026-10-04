@@ -18,6 +18,7 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
+import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
@@ -123,6 +124,7 @@ export function WalletScreen({
     },
     customerId: customer?.id,
     routeAction,
+    routeSavingsGoalId,
     routeIntentId: Array.isArray(intent) ? intent[0] : intent,
     routeRequiredAmount,
     setFundAmount,
@@ -151,17 +153,6 @@ export function WalletScreen({
       setIsFundPending,
       user,
       walletReturnTo: fundReturnTo,
-    });
-  const startSavingsWalletTopUp = () =>
-    fundWallet({
-      activeMerchantId,
-      activeMerchantSlug,
-      customer,
-      fundAmount: savingsContributionAmount,
-      resetFundPanel: () => setSavingsContributionAmount(''),
-      setIsFundPending,
-      user,
-      walletReturnTo,
     });
   const handleRedeemPoints = () =>
     redeemWalletPoints({
@@ -216,7 +207,19 @@ export function WalletScreen({
     refetchWallet: refetch,
     savingsContributionAmount,
     spendableBalance,
-    startWalletTopUp: startSavingsWalletTopUp,
+    startWalletTopUp: () => {
+      if (activeSavingsGoal) {
+        void startSavingsWalletTopUp({
+          activeMerchantId,
+          activeMerchantSlug,
+          customer,
+          fundAmount: savingsContributionAmount,
+          goalId: activeSavingsGoal.id,
+          setIsFundPending,
+          user,
+        });
+      }
+    },
     setIsAddingSavingsContribution,
     setShowSavingsProgressModal,
     setSavingsContributionAmount,

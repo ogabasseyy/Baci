@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import { ScrollView } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { Category, Product } from '@/types/product';
 import SearchScreenBody from './SearchScreenBody';
@@ -101,5 +102,28 @@ describe('SearchScreenBody', () => {
   it('renders the results list once products load', () => {
     renderBody();
     expect(screen.getByTestId('mock-results-list')).toBeTruthy();
+  });
+  it('scrolls idle suggestions with dock clearance', () => {
+    const view = renderBody({
+      hasSearchQuery: false,
+      bottomSpace: 100,
+      insetsBottom: 34,
+      isKeyboardVisible: false,
+      keyboardHeight: 0,
+    });
+    const scroller = view.UNSAFE_getByType(ScrollView);
+    expect(scroller.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(scroller.props.contentContainerStyle).toEqual({
+      paddingBottom: 134,
+    });
+    view.unmount();
+    const keyboard = renderBody({
+      hasSearchQuery: false,
+      isKeyboardVisible: true,
+      keyboardHeight: 300,
+    });
+    expect(
+      keyboard.UNSAFE_getByType(ScrollView).props.contentContainerStyle
+    ).toEqual({ paddingBottom: 400 });
   });
 });

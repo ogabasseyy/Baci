@@ -9,6 +9,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
@@ -90,8 +91,19 @@ export default function SearchScreenBody({
   totalCount,
 }: SearchScreenBodyProps) {
   if (!hasSearchQuery) {
+    // Idle suggestions scroll with the same dock clearance as the results
+    // list: a full history or enlarged text would otherwise render behind
+    // the bottom-docked search field with no way to reach it.
     return (
-      <View style={styles.suggestionsContainer}>
+      <ScrollView
+        style={styles.suggestionsContainer}
+        contentContainerStyle={{
+          paddingBottom: isKeyboardVisible
+            ? keyboardHeight + 100
+            : Math.max(100 + insetsBottom, bottomSpace),
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
             Recent Searches
@@ -144,7 +156,7 @@ export default function SearchScreenBody({
             ))}
           </View>
         </View>
-      </View>
+      </ScrollView>
     );
   }
   if (invalidFilters)

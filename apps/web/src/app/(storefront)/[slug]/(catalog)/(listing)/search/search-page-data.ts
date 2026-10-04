@@ -200,7 +200,7 @@ export async function loadSearchPageData({
           redirectHref = href(query, 1);
         } else {
           const lastPage = Math.ceil(
-            probe.count / STOREFRONT_PRODUCTS_PER_PAGE
+            (probe.totalCount ?? probe.count) / STOREFRONT_PRODUCTS_PER_PAGE
           );
           redirectHref = href(
             query,
@@ -228,7 +228,9 @@ export async function loadSearchPageData({
           } else {
             const lastPage = Math.max(
               1,
-              Math.ceil(probe.count / STOREFRONT_PRODUCTS_PER_PAGE)
+              Math.ceil(
+                (probe.totalCount ?? probe.count) / STOREFRONT_PRODUCTS_PER_PAGE
+              )
             );
             // The target always steps back from the requested page so a
             // pathological probe can never redirect to the same URL in a loop.

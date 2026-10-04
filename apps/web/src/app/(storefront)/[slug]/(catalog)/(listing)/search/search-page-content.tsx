@@ -93,11 +93,16 @@ export async function SearchPageContent({
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
   // Pagination never advertises pages the bounded offset cannot serve.
+  // The empty guard stays on the visible count (no rows, no pages) while
+  // the division uses the unadjusted total: skipped rows stay ranked.
   const totalPages =
     searchFailed || effectiveResult.count <= 0
       ? 0
       : Math.min(
-          Math.ceil(effectiveResult.count / STOREFRONT_PRODUCTS_PER_PAGE),
+          Math.ceil(
+            (effectiveResult.totalCount ?? effectiveResult.count) /
+              STOREFRONT_PRODUCTS_PER_PAGE
+          ),
           STOREFRONT_SEARCH_MAX_PAGE
         );
   const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({

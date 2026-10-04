@@ -104,6 +104,8 @@ describe('refined product hydration', () => {
     expect(result.products[0]).toMatchObject({ price: 100 });
     expect(result.productIds).toEqual(['p1']);
     expect(result.count).toBe(1);
+    // Page arithmetic uses the raw RPC total: the skipped row stays ranked.
+    expect(result.totalCount).toBe(2);
   });
   it('preserves all condition metadata when sorting an unrefined search', async () => {
     rpc.mockResolvedValue({

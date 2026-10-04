@@ -74,6 +74,11 @@ export async function loadMcpProductVariants({
           message: productError.message,
         })
       );
+      const message = 'Product lookup is temporarily unavailable.';
+      return {
+        content: [{ type: 'text', text: message }],
+        structuredContent: { variants: [], condition_offers: [], status: 'unavailable', message },
+      };
     }
     return {
       structuredContent: { variants: [], condition_offers: [], status: 'not_found' },

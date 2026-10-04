@@ -60,7 +60,7 @@ function getResultRecord(payload: JsonRpcResponse): Record<string, unknown> {
   return payload.result as Record<string, unknown>;
 }
 
-async function startPostgrestStub(merchantAvailable = true) {
+async function startPostgrestStub(merchantAvailable = true, productQueryFails = false) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
     response.setHeader('content-type', 'application/json');
@@ -76,6 +76,11 @@ async function startPostgrestStub(merchantAvailable = true) {
     }
     if (url.pathname.endsWith('/rest/v1/merchants')) {
       response.end(JSON.stringify(merchantAvailable ? { id: 'merchant-1' } : null));
+      return;
+    }
+    if (productQueryFails && url.pathname.endsWith('/rest/v1/products')) {
+      response.statusCode = 503;
+      response.end(JSON.stringify({ code: 'PGRST000', message: 'Fixture database unavailable' }));
       return;
     }
     if (serveCatalogFixture(request, response, url)) return;
@@ -102,9 +107,9 @@ async function startPostgrestStub(merchantAvailable = true) {
 
 async function startMcpServerWithPostgrest(
   envOverrides: NodeJS.ProcessEnv,
-  options: { merchantAvailable?: boolean } = {}
+  options: { merchantAvailable?: boolean; productQueryFails?: boolean } = {}
 ): Promise<StartedMcpServer & { close: () => Promise<void> }> {
-  const postgrest = await startPostgrestStub(options.merchantAvailable);
+  const postgrest = await startPostgrestStub(options.merchantAvailable, options.productQueryFails);
   let server: StartedMcpServer;
   try {
     server = await startMcpServer({

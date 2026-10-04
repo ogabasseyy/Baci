@@ -52,6 +52,24 @@ describe('public MCP output contracts', () => {
     }
   }, 30_000);
 
+  it('reports catalog outages as unavailable for both product lookup tools', async () => {
+    const server = await startMcpServerWithPostgrest({}, { productQueryFails: true });
+    const client = new Client({ name: 'catalog-outage-test', version: '1.0.0' });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
+      for (const name of ['get_product', 'get_product_variants'] as const) {
+        const result = await client.callTool({ name, arguments: { product_id: 'available-product' } });
+        expect(result.isError).not.toBe(true);
+        expect(result.structuredContent).toMatchObject({ status: 'unavailable', message: 'Product lookup is temporarily unavailable.' });
+        expect(mcpToolOutputSchemas[name].safeParse(result.structuredContent).success).toBe(true);
+        expect(JSON.stringify(result)).not.toContain('Fixture database unavailable');
+        expect(JSON.stringify(result)).not.toContain('not found');
+      }
+    } finally {
+      try { await client.close(); } finally { await server.close(); }
+    }
+  }, 30_000);
+
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

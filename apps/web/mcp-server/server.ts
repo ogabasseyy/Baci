@@ -1715,6 +1715,11 @@ function createOgabasseyServer() {
               message: productError.message,
             })
           );
+          const message = 'Product lookup is temporarily unavailable.';
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'unavailable' as const, message },
+          };
         }
         return {
           content: [

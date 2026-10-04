@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatSearchProductsResponse } from './format-search-products-response';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 
@@ -232,6 +233,47 @@ describe('formatSearchProductsResponse', () => {
       semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
     });
     expect(response.structuredContent.products[0].url).toBe(url);
+  });
+
+  it.each([
+    ['negative catalog price', { displayPrice: -5 }],
+    ['string catalog price', { displayPrice: 'free' }],
+  ])('falls back to a schema-valid error result for corrupt catalog data: %s', (_label, override) => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [{ ...selectedProducts[0], ...override }] as unknown as typeof selectedProducts,
+      sanitizedQuery: 'laptop', coverage: 'complete', searchMode: 'structured',
+      semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.structuredContent).toMatchObject({ status: 'error', products: [] });
+    expect(mcpToolOutputSchemas.search_products.safeParse(response.structuredContent).success).toBe(true);
+    expect(response.content[0].text).toContain('temporarily unavailable');
+    expect(JSON.stringify(response)).not.toContain('-5');
+  });
+
+  it('strips a malformed matched option while keeping valid products', () => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [{ ...selectedProducts[0], selectedOption: { kind: 'variant' } }] as unknown as typeof selectedProducts,
+      sanitizedQuery: 'laptop', coverage: 'complete', searchMode: 'structured',
+      semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.structuredContent.status).toBe('success');
+    expect(response.structuredContent.products).toHaveLength(1);
+    expect(response.structuredContent.products[0].matched_option).toBeUndefined();
+    expect(response.structuredContent.products[0].url).toBe('https://ogabassey.com/products/baci-laptop');
+    expect(mcpToolOutputSchemas.search_products.safeParse(response.structuredContent).success).toBe(true);
+  });
+
+  it('drops non-primitive attributes from variant summaries instead of stringifying objects', () => {
+    const response = formatSearchProductsResponse({
+      selectedProducts: [{
+        ...selectedProducts[0],
+        availableVariants: [{ attributes: { color: 'Black', storage: { gb: 256 }, ram: 8, cores: 0, waterproof: false } }],
+      }] as unknown as typeof selectedProducts,
+      sanitizedQuery: 'laptop', coverage: 'complete', searchMode: 'structured',
+      semanticUnavailable: false, requestedCondition: undefined, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(response.content[0].text).not.toContain('[object Object]');
+    expect(response.structuredContent.products[0].available_variants).toBe('color: Black | ram: 8 | cores: 0 | waterproof: false');
   });
 
 });

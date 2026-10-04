@@ -13,7 +13,7 @@ export function getMcpProductStockSummary(
   source: ProductStockSource,
   variants?: readonly VariantStockSource[],
   offers?: readonly VariantStockSource[]
-) {
+): { confidence: 'high' | 'low' | 'none' | 'unconfirmed'; inStock: boolean | null; level: string } {
   const managesStock = source.manage_stock === true;
 
   if (!managesStock) {

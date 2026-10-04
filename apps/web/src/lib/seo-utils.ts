@@ -51,7 +51,10 @@ import type {
   MerchantTrustProfileReturnFee,
   MerchantTrustProfileReturnMethod,
 } from './storefront-trust/merchant-trust-profile-types';
-import { resolveVariantProductIdentifiers } from './variant-product-identifiers';
+import {
+  normalizeParentProductIdentifiers,
+  resolveVariantProductIdentifiers,
+} from './variant-product-identifiers';
 
 export { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 // Re-export escapeHtml for use in other modules
@@ -655,7 +658,7 @@ export function generateProductSchema(
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
-  const productIdentifiers = resolveVariantProductIdentifiers(null, product);
+  const productIdentifiers = normalizeParentProductIdentifiers(product);
   const structuredDataProductUrl = parseStructuredDataUrl(options.productUrl);
   const acceptedPaymentMethod = normalizeAcceptedPaymentMethods(
     options.acceptedPaymentMethods
@@ -1012,10 +1015,7 @@ export function generateProductSchema(
 
     // Build hasVariant array — each variant becomes a @type Product
     schema.hasVariant = product.variants.map((variant) => {
-      const identifiers = resolveVariantProductIdentifiers(
-        variant.attributes,
-        product
-      );
+      const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
       const variantUrl = buildStructuredDataVariantUrl(
         structuredDataProductUrl,
@@ -1754,6 +1754,7 @@ export function generateCollectionPageSchema(
           data.url,
           getProductUrl(product)
         );
+        const identifiers = normalizeParentProductIdentifiers(product);
 
         return {
           '@type': 'ListItem',
@@ -1770,8 +1771,8 @@ export function generateCollectionPageSchema(
               '@type': 'Brand',
               name: escapeHtml(product.brand || data.merchantName),
             },
-            ...(product.gtin && { gtin: escapeHtml(product.gtin) }),
-            ...(product.mpn && { mpn: escapeHtml(product.mpn) }),
+            ...(identifiers.gtin && { gtin: escapeHtml(identifiers.gtin) }),
+            ...(identifiers.mpn && { mpn: escapeHtml(identifiers.mpn) }),
             offers: {
               '@type': 'Offer',
               price: product.price,

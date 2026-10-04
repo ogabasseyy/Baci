@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { generateProductSchema } from './seo-utils';
+import {
+  generateCollectionPageSchema,
+  generateProductSchema,
+} from './seo-utils';
 import { makeSeoProduct as makeProduct } from './seo-utils-product-schema-test-helper';
 
 describe('generateProductSchema identifiers', () => {
@@ -47,7 +50,7 @@ describe('generateProductSchema identifiers', () => {
     ]);
   });
 
-  it('retains parent manufacturer identifiers when variant attributes are absent or blank', () => {
+  it('omits parent manufacturer identifiers from variants when attributes are absent or blank', () => {
     const schema = generateProductSchema(
       makeProduct({
         gtin: '00000000000011',
@@ -75,10 +78,13 @@ describe('generateProductSchema identifiers', () => {
     );
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    expect(variants.map(({ gtin, mpn }) => ({ gtin, mpn }))).toEqual([
-      { gtin: '00000000000011', mpn: 'PARENT-MODEL' },
-      { gtin: '00000000000011', mpn: 'PARENT-MODEL' },
-    ]);
+    expect(schema.gtin).toBe('00000000000011');
+    expect(schema.mpn).toBe('PARENT-MODEL');
+    expect(variants).toHaveLength(2);
+    for (const variant of variants) {
+      expect(variant).not.toHaveProperty('gtin');
+      expect(variant).not.toHaveProperty('mpn');
+    }
   });
 
   it('trims parent identifiers and keeps valid variant strings ahead of numeric collisions', () => {
@@ -98,13 +104,23 @@ describe('generateProductSchema identifiers', () => {
             } as unknown as Record<string, string>,
             stock_quantity: 1,
           },
+          {
+            id: 'variant-numeric-only',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            attributes: { gtin: 123 } as unknown as Record<string, string>,
+            stock_quantity: 1,
+          },
         ],
       }),
       'TestStore',
       'USD',
       'NG'
     );
-    const [variant] = schema.hasVariant as Record<string, unknown>[];
+    const [variant, numericOnlyVariant] = schema.hasVariant as Record<
+      string,
+      unknown
+    >[];
 
     expect(schema).toMatchObject({
       gtin: '00012345678901',
@@ -113,5 +129,41 @@ describe('generateProductSchema identifiers', () => {
     expect(schema).not.toHaveProperty('mpn');
     expect(variant).toMatchObject({ gtin: 'VARIANT-GTIN' });
     expect(variant).not.toHaveProperty('mpn');
+    expect(numericOnlyVariant).not.toHaveProperty('gtin');
+    expect(numericOnlyVariant).not.toHaveProperty('mpn');
+  });
+
+  it('normalizes CollectionPage parent identifiers and omits blank values', () => {
+    const schema = generateCollectionPageSchema({
+      name: 'Phones',
+      url: 'https://example.com/phones',
+      merchantName: 'Example',
+      products: [
+        makeProduct({
+          slug: 'identified-phone',
+          image: 'https://example.com/phone.jpg',
+          gtin: ' PARENT-GTIN ',
+          mpn: ' PARENT-MPN ',
+        }),
+        makeProduct({
+          id: 'blank-product',
+          slug: 'blank-phone',
+          image: 'https://example.com/blank.jpg',
+          gtin: '  ',
+          mpn: '\t',
+        }),
+      ],
+    });
+    const list = schema.mainEntity as Record<string, unknown>;
+    const items = list.itemListElement as Record<string, unknown>[];
+    const identified = items[0]?.item as Record<string, unknown>;
+    const blank = items[1]?.item as Record<string, unknown>;
+
+    expect(identified).toMatchObject({
+      gtin: 'PARENT-GTIN',
+      mpn: 'PARENT-MPN',
+    });
+    expect(blank).not.toHaveProperty('gtin');
+    expect(blank).not.toHaveProperty('mpn');
   });
 });

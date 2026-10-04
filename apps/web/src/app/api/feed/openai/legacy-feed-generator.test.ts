@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Merchant } from './feed-types';
 import { generateOpenAIFeed } from './legacy-feed-generator';
-import {
-  merchant,
-  parseLine,
-  product,
-} from './legacy-feed-generator.test-fixtures';
+import { createLegacyFeedTestFixtures } from './legacy-feed-generator.test-fixtures';
+
+const { merchant, parseLine, product } = createLegacyFeedTestFixtures();
 
 describe('generateOpenAIFeed', () => {
   it('builds canonical policy URLs and normalizes trailing base URL slashes', () => {

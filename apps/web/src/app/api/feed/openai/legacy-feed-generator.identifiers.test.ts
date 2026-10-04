@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { generateOpenAIFeed } from './legacy-feed-generator';
-import {
-  merchant,
-  parseLine,
-  product,
-} from './legacy-feed-generator.test-fixtures';
+import { createLegacyFeedTestFixtures } from './legacy-feed-generator.test-fixtures';
+
+const { merchant, parseLine, product } = createLegacyFeedTestFixtures();
 
 describe('generateOpenAIFeed identifiers', () => {
   it('uses per-variant GTIN and MPN ahead of conflicting parent identifiers', () => {
@@ -49,7 +47,7 @@ describe('generateOpenAIFeed identifiers', () => {
     ]);
   });
 
-  it('falls back to parent GTIN and MPN when variant identifiers are absent or blank', () => {
+  it('omits parent GTIN and MPN when variant identifiers are absent or blank', () => {
     const lines = generateOpenAIFeed(
       [
         product({
@@ -75,12 +73,12 @@ describe('generateOpenAIFeed identifiers', () => {
       'https://ogabassey.com'
     );
 
-    expect(
-      lines.map(parseLine).map(({ gtin, mpn }) => ({ gtin, mpn }))
-    ).toEqual([
-      { gtin: '00000000000011', mpn: 'PARENT-MODEL' },
-      { gtin: '00000000000011', mpn: 'PARENT-MODEL' },
-    ]);
+    const rows = lines.map(parseLine);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).not.toHaveProperty('gtin');
+      expect(row).not.toHaveProperty('mpn');
+    }
   });
 
   it('trims parent identifiers and ignores numeric variant collisions', () => {
@@ -88,7 +86,7 @@ describe('generateOpenAIFeed identifiers', () => {
       [
         product({
           gtin: ' 00000000000011 ',
-          mpn: '   ',
+          mpn: ' PARENT-MPN ',
           variants: [
             {
               id: 'variant-numeric-collision',
@@ -100,19 +98,49 @@ describe('generateOpenAIFeed identifiers', () => {
               } as unknown as Record<string, string>,
               stock_quantity: 1,
             },
+            {
+              id: 'variant-numeric-only',
+              sku: 'SKU-BLUE',
+              attributes: { gtin: 123 } as unknown as Record<string, string>,
+              stock_quantity: 1,
+            },
+            {
+              id: 'variant-gtin-only',
+              sku: 'SKU-GTIN',
+              attributes: { gtin: 'VARIANT-GTIN-ONLY' },
+              stock_quantity: 1,
+            },
+            {
+              id: 'variant-mpn-only',
+              sku: 'SKU-MPN',
+              attributes: { mpn: 'VARIANT-MPN-ONLY' },
+              stock_quantity: 1,
+            },
           ],
         }),
         product({ gtin: '  ', mpn: '\t' }),
+        product({ gtin: ' PARENT-GTIN ', mpn: ' PARENT-MPN ' }),
       ],
       merchant,
       'https://ogabassey.com'
     );
 
-    expect(
-      lines.map(parseLine).map(({ gtin, mpn }) => ({ gtin, mpn }))
-    ).toEqual([
+    const rows = lines.map(parseLine);
+    expect(rows.map(({ gtin, mpn }) => ({ gtin, mpn }))).toEqual([
       { gtin: 'VARIANT-GTIN', mpn: undefined },
       { gtin: undefined, mpn: undefined },
+      { gtin: 'VARIANT-GTIN-ONLY', mpn: undefined },
+      { gtin: undefined, mpn: 'VARIANT-MPN-ONLY' },
+      { gtin: undefined, mpn: undefined },
+      { gtin: 'PARENT-GTIN', mpn: 'PARENT-MPN' },
     ]);
+    for (const row of rows.slice(0, 5)) {
+      if (row.gtin === undefined) {
+        expect(row).not.toHaveProperty('gtin');
+      }
+      if (row.mpn === undefined) {
+        expect(row).not.toHaveProperty('mpn');
+      }
+    }
   });
 });

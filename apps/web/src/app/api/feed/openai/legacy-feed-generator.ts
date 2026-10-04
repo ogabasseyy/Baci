@@ -6,7 +6,10 @@ import {
   buildAgentProductUrl,
   trimTrailingSlash,
 } from '@/lib/storefront-agent-urls';
-import { resolveVariantProductIdentifiers } from '@/lib/variant-product-identifiers';
+import {
+  normalizeParentProductIdentifiers,
+  resolveVariantProductIdentifiers,
+} from '@/lib/variant-product-identifiers';
 import type { ImageManifestMap } from '../google-merchant/feed-builder';
 import {
   DEFAULT_RETURN_DAYS,
@@ -79,10 +82,7 @@ function buildVariantFeedItem({
     stockCount > 0 ? 'in_stock' : 'out_of_stock';
   const color = variant.attributes?.color || variant.attributes?.Color;
   const size = variant.attributes?.size || variant.attributes?.Size;
-  const identifiers = resolveVariantProductIdentifiers(
-    variant.attributes,
-    product
-  );
+  const identifiers = resolveVariantProductIdentifiers(variant.attributes);
 
   return {
     enable_search: true,
@@ -131,7 +131,7 @@ function buildSimpleFeedItem({
     return null;
   }
 
-  const productIdentifiers = resolveVariantProductIdentifiers(null, product);
+  const productIdentifiers = normalizeParentProductIdentifiers(product);
 
   const stockCount =
     product.manage_stock === false

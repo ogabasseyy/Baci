@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import type { useSavingsNotificationInbox } from '@/hooks/use-savings-notification-inbox';
+import { getSavingsNotificationAccessibilityLabel } from './SavingsNotificationList';
 
 type Inbox = ReturnType<typeof useSavingsNotificationInbox>;
 
@@ -125,7 +126,14 @@ describe('SavingsNotificationsScreen', () => {
         userId="user-a"
       />
     );
-    fireEvent.press(screen.getByRole('button', { name: 'Interest credited' }));
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: getSavingsNotificationAccessibilityLabel(
+          notification.title,
+          notification.createdAt
+        ),
+      })
+    );
 
     expect(mockMarkRead).toHaveBeenCalledWith(notification.id);
     expect(mockRouterPush).toHaveBeenCalledWith({

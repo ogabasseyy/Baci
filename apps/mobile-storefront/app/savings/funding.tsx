@@ -21,17 +21,18 @@ function stringParam(value: string | string[] | undefined) {
   return typeof value === 'string' ? value : '';
 }
 
+// Accepts any UUID version/variant shape: goal ids live in a Postgres uuid
+// column and the server-side requireActiveSavingsGoal lookup stays
+// authoritative (unknown ids 404 there), so the client must not reject v6/v7.
 function validGoalId(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value
   );
 }
 
-function validAmount(value: string, remainingAmount: number) {
+function parseRequestedAmount(value: string): number | null {
   const amount = Number(value);
-  return Number.isSafeInteger(amount) && amount > 0 && amount <= remainingAmount
-    ? amount
-    : null;
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }
 
 export default function SavingsPlanFundingRoute() {
@@ -59,14 +60,25 @@ function SavingsPlanFundingScreen() {
   const remainingAmount = activeGoal
     ? Math.max(0, activeGoal.target_amount - activeGoal.current_amount)
     : 0;
-  const amount = validAmount(stringParam(params.amount), remainingAmount);
-  const isCurrentPlan =
+  const requestedAmount = parseRequestedAmount(stringParam(params.amount));
+  const amount =
+    requestedAmount !== null && requestedAmount <= remainingAmount
+      ? requestedAmount
+      : null;
+  const goalMatches =
     Boolean(userId) &&
     validGoalId(goalId) &&
     activeGoal?.id === goalId &&
     activeGoal.source_mode === 'manual' &&
-    activeGoal.status === 'active' &&
-    amount !== null;
+    activeGoal.status === 'active';
+  const isCurrentPlan = goalMatches && amount !== null;
+  // The goal matches but the cached remaining balance is lower than the linked
+  // amount: the link may be fine and the wallet cache stale, so prompt a
+  // refresh instead of reporting the link as dead.
+  const amountExceedsCachedRemaining =
+    goalMatches &&
+    requestedAmount !== null &&
+    requestedAmount > remainingAmount;
   const funding = useSavingsPlanFunding({
     activeMerchantId: activeMerchantId ?? undefined,
     activeMerchantSlug,
@@ -116,8 +128,9 @@ function SavingsPlanFundingScreen() {
           </Text>
           {!isCurrentPlan || !activeMerchantId ? (
             <Text style={[styles.copy, { color: colors.error }]}>
-              This funding link no longer matches your active savings plan.
-              Return to savings and choose the plan again.
+              {amountExceedsCachedRemaining && activeMerchantId
+                ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'
+                : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
             </Text>
           ) : (
             <SavingsPlanFundingDetails

@@ -21,6 +21,29 @@ type SavingsNotificationListProps = {
   requestError: string | null;
 };
 
+// Pinned locale with explicit fields (house en-NG style, see the orders and
+// receipts screens): stable across device locales, unlike a bare
+// toLocaleString(). createdAt is an ISO datetime, which the
+// format-date-time-display helper does not accept.
+export function formatSavingsNotificationTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-NG', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+export function getSavingsNotificationAccessibilityLabel(
+  title: string,
+  createdAt: string
+): string {
+  return `${title}, ${formatSavingsNotificationTimestamp(createdAt)}`;
+}
+
 function getNotificationIcon(
   type: string
 ):
@@ -118,7 +141,10 @@ export function SavingsNotificationList({
       contentContainerStyle={styles.content}
       renderItem={({ item }) => (
         <Pressable
-          accessibilityLabel={item.title}
+          accessibilityLabel={getSavingsNotificationAccessibilityLabel(
+            item.title,
+            item.createdAt
+          )}
           accessibilityRole="button"
           onPress={() => onOpen(item)}
           style={({ pressed }) => [
@@ -152,7 +178,7 @@ export function SavingsNotificationList({
               {item.body}
             </Text>
             <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
-              {new Date(item.createdAt).toLocaleString()}
+              {formatSavingsNotificationTimestamp(item.createdAt)}
             </Text>
           </View>
         </Pressable>

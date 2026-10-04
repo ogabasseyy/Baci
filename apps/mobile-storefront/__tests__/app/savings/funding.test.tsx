@@ -14,6 +14,15 @@ let mockParams: Record<string, string> = {
   amount: '250000',
   goalId: '430314fd-cd8b-4579-98d4-e9f345713dd6',
 };
+const defaultActiveGoal = () => ({
+  current_amount: 0,
+  id: '430314fd-cd8b-4579-98d4-e9f345713dd6',
+  source_mode: 'manual',
+  status: 'active',
+  target_amount: 250000,
+  title: 'iPhone savings',
+});
+let mockActiveGoal = defaultActiveGoal();
 
 jest.mock('expo-router', () => ({
   Redirect: (props: unknown) => {
@@ -50,14 +59,7 @@ jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({
     data: {
       wallet: {
-        active_savings_goal: {
-          current_amount: 0,
-          id: '430314fd-cd8b-4579-98d4-e9f345713dd6',
-          source_mode: 'manual',
-          status: 'active',
-          target_amount: 250000,
-          title: 'iPhone savings',
-        },
+        active_savings_goal: mockActiveGoal,
       },
     },
     isLoading: false,
@@ -121,6 +123,7 @@ describe('SavingsPlanFundingRoute', () => {
     jest.clearAllMocks();
     mockUserId = 'customer-1';
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
+    mockActiveGoal = defaultActiveGoal();
     mockParams = {
       amount: '250000',
       goalId: '430314fd-cd8b-4579-98d4-e9f345713dd6',
@@ -223,5 +226,39 @@ describe('SavingsPlanFundingRoute', () => {
     expect(mockFetchPlanFunding).not.toHaveBeenCalled();
     fireEvent.press(screen.getByRole('button', { name: 'Back to savings' }));
     expect(router.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts UUID v7 goal ids emitted by the backend', () => {
+    const v7GoalId = '01932f3e-7a2d-7c1e-b4d5-9f8e7d6c5b4a';
+    mockActiveGoal = { ...mockActiveGoal, id: v7GoalId };
+    mockParams = { amount: '250000', goalId: v7GoalId };
+    render(<SavingsPlanFundingRoute />);
+
+    expect(screen.getByText('₦250,000')).toBeOnTheScreen();
+    expect(
+      screen.queryByText(/no longer matches your active savings plan/i)
+    ).toBeNull();
+  });
+
+  it('prompts a refresh when the linked amount exceeds the cached remaining balance', () => {
+    mockParams = { ...mockParams, amount: '999999999' };
+    render(<SavingsPlanFundingRoute />);
+
+    expect(
+      screen.getByText(/asks for more than your cached plan balance/i)
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Refresh plan progress' })
+    ).toBeOnTheScreen();
+  });
+
+  it('treats a malformed link amount as a mismatched link rather than stale cache', () => {
+    mockParams = { ...mockParams, amount: 'not-a-number' };
+    render(<SavingsPlanFundingRoute />);
+
+    expect(
+      screen.getByText(/no longer matches your active savings plan/i)
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/cached plan balance/i)).toBeNull();
   });
 });

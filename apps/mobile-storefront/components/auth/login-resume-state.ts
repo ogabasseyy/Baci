@@ -5,8 +5,21 @@ import { getStorefrontStoragePrefix } from '@/lib/storefront-storage-prefix';
 import { EmailSchema } from '@/lib/validation';
 
 const log = createLogger('LoginResume');
-const AUTH_LOGIN_RESUME_STORAGE_KEY = `${getStorefrontStoragePrefix()}auth-login-resume-state`;
+const LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY = 'auth-login-resume-state';
 const AUTH_LOGIN_RESUME_TTL_MS = 10 * 60 * 1000;
+
+// Resolved lazily (never at module scope): getStorefrontStoragePrefix() throws
+// for misconfigured hosted/local modes, and importing this module must not be
+// able to break login. A throwing prefix falls back to the legacy unprefixed
+// key, preserving pre-prefix behavior exactly in misconfigured environments.
+function resolveResumeStorageKey(): string {
+  try {
+    return `${getStorefrontStoragePrefix()}${LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY}`;
+  } catch (error) {
+    log.warn('Falling back to legacy login resume storage key', error);
+    return LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY;
+  }
+}
 
 export interface AuthLoginResumeState {
   email: string;
@@ -18,24 +31,43 @@ interface StoredAuthLoginResumeState extends AuthLoginResumeState {
   savedAt: number;
 }
 
-function readWebStorageValue(): string | null {
+function readWebStorageValue(key: string): string | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
     return null;
   }
 
-  return window.sessionStorage.getItem(AUTH_LOGIN_RESUME_STORAGE_KEY);
+  return window.sessionStorage.getItem(key);
 }
 
-function writeWebStorageValue(value: string) {
+function writeWebStorageValue(key: string, value: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.sessionStorage.setItem(AUTH_LOGIN_RESUME_STORAGE_KEY, value);
+    window.sessionStorage.setItem(key, value);
   }
 }
 
-function removeWebStorageValue() {
+function removeWebStorageValue(key: string) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.sessionStorage.removeItem(AUTH_LOGIN_RESUME_STORAGE_KEY);
+    window.sessionStorage.removeItem(key);
   }
+}
+
+// Reads the resolved key first, then the legacy unprefixed key, so resume
+// state saved before the storage-prefix migration (10-minute TTL) survives an
+// upgrade instead of dropping a mid-OTP resume.
+function readWebResumeValue(primaryKey: string): string | null {
+  const rawValue = readWebStorageValue(primaryKey);
+  if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+    return rawValue;
+  }
+  return readWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+}
+
+async function readNativeResumeValue(primaryKey: string): Promise<string | null> {
+  const rawValue = await SecureStore.getItemAsync(primaryKey);
+  if (rawValue !== null || primaryKey === LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+    return rawValue;
+  }
+  return SecureStore.getItemAsync(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
 }
 
 function hasControlCharacters(value: string): boolean {
@@ -149,15 +181,13 @@ export async function saveAuthLoginResumeState(
   } satisfies StoredAuthLoginResumeState);
 
   try {
+    const storageKey = resolveResumeStorageKey();
     if (Platform.OS === 'web') {
-      writeWebStorageValue(serializedState);
+      writeWebStorageValue(storageKey, serializedState);
       return;
     }
 
-    await SecureStore.setItemAsync(
-      AUTH_LOGIN_RESUME_STORAGE_KEY,
-      serializedState
-    );
+    await SecureStore.setItemAsync(storageKey, serializedState);
   } catch (error) {
     log.warn('Failed to save pending login resume state', error);
   }
@@ -167,10 +197,11 @@ export async function getAuthLoginResumeState(
   expectedReturnTo: string | null
 ): Promise<AuthLoginResumeState | null> {
   try {
+    const storageKey = resolveResumeStorageKey();
     const rawValue =
       Platform.OS === 'web'
-        ? readWebStorageValue()
-        : await SecureStore.getItemAsync(AUTH_LOGIN_RESUME_STORAGE_KEY);
+        ? readWebResumeValue(storageKey)
+        : await readNativeResumeValue(storageKey);
     return parseStoredAuthLoginResumeState(rawValue, expectedReturnTo);
   } catch (error) {
     log.warn('Failed to read pending login resume state', error);
@@ -180,10 +211,11 @@ export async function getAuthLoginResumeState(
 
 export async function getPendingAuthLoginResumeState(): Promise<AuthLoginResumeState | null> {
   try {
+    const storageKey = resolveResumeStorageKey();
     const rawValue =
       Platform.OS === 'web'
-        ? readWebStorageValue()
-        : await SecureStore.getItemAsync(AUTH_LOGIN_RESUME_STORAGE_KEY);
+        ? readWebResumeValue(storageKey)
+        : await readNativeResumeValue(storageKey);
     return parseValidAuthLoginResumeState(rawValue);
   } catch (error) {
     log.warn('Failed to read pending login resume state', error);
@@ -193,12 +225,19 @@ export async function getPendingAuthLoginResumeState(): Promise<AuthLoginResumeS
 
 export async function clearAuthLoginResumeState(): Promise<void> {
   try {
+    const storageKey = resolveResumeStorageKey();
     if (Platform.OS === 'web') {
-      removeWebStorageValue();
+      removeWebStorageValue(storageKey);
+      if (storageKey !== LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+        removeWebStorageValue(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+      }
       return;
     }
 
-    await SecureStore.deleteItemAsync(AUTH_LOGIN_RESUME_STORAGE_KEY);
+    await SecureStore.deleteItemAsync(storageKey);
+    if (storageKey !== LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY) {
+      await SecureStore.deleteItemAsync(LEGACY_AUTH_LOGIN_RESUME_STORAGE_KEY);
+    }
   } catch (error) {
     log.warn('Failed to clear pending login resume state', error);
   }

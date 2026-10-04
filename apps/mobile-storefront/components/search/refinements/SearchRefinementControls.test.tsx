@@ -67,6 +67,23 @@ describe('native search refinements', () => {
       sort: 'relevance',
     });
   });
+  it('applies a drafted minimum rating through the rating section', () => {
+    const commit = jest.fn();
+    const view = render(
+      <SearchRefinementControls {...props} onCommit={commit} />
+    );
+    fireEvent.press(view.getByLabelText('Filters'));
+    fireEvent.press(view.getByLabelText('Rating options'));
+    fireEvent.press(view.getByRole('radio', { name: '4+ stars' }));
+    expect(commit).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText('Apply filters'));
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith({
+      brands: [],
+      sort: 'relevance',
+      minRating: 4,
+    });
+  });
   it('retains an explicit zero upper price', () => {
     const commit = jest.fn();
     const view = render(

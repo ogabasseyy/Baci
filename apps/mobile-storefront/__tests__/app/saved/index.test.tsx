@@ -164,6 +164,30 @@ describe('SavedItemsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/product/test-phone');
   });
 
+  it('forwards the saved match identity to the product page', () => {
+    const matchedItem = makeSavedItem({
+      slug: 'iphone-15',
+      match_variant_id: 'variant-blue-128',
+      match_offer_id: 'offer-open-box',
+      match_condition: 'open_box',
+    });
+    mockItems.mockReturnValue([matchedItem]);
+
+    render(<SavedItemsScreen />);
+
+    fireEvent.press(screen.getByText('Test Phone'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: {
+        slug: 'iphone-15',
+        variant_id: 'variant-blue-128',
+        offer_id: 'offer-open-box',
+        condition: 'open_box',
+      },
+    });
+  });
+
   it('routes saved SKU-matrix products to detail selection instead of direct cart add', () => {
     const skuMatrixItem = makeSavedItem({
       name: 'iPhone 15',

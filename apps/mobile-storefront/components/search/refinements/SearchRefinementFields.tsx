@@ -239,6 +239,26 @@ export function SearchRefinementFields({
           )}
         </View>
       )}
+      {section(
+        'rating',
+        'Rating',
+        <View>
+          {action(
+            'Any rating',
+            () => setDraft({ ...draft, minRating: undefined }),
+            !draft.minRating,
+            'radio'
+          )}
+          {[4, 3, 2, 1].map((rating) =>
+            action(
+              `${rating}+ stars`,
+              () => setDraft({ ...draft, minRating: rating }),
+              draft.minRating === rating,
+              'radio'
+            )
+          )}
+        </View>
+      )}
     </>
   );
 }

@@ -6,7 +6,10 @@ import type { Product } from '../types';
 
 interface V2ComparisonContextType {
   compareItems: Product[];
-  addToCompare: (product: Product) => void;
+  // Returns the evicted item when the tray was full, so callers announce
+  // the replacement from the hydrated source instead of possibly-stale
+  // state; null when the product was appended or already present.
+  addToCompare: (product: Product) => Product | null;
   removeFromCompare: (productId: number | string) => void;
   isInCompare: (productId: number | string) => boolean;
   clearCompare: () => void;
@@ -153,23 +156,34 @@ export const V2ComparisonProvider: React.FC<{
     }
   }, [compareItems, hasHydratedStorage, storageKey]);
 
-  const addToCompare = (product: Product) => {
+  const addToCompare = (product: Product): Product | null => {
     const hydratedComparisonItems = hydrateComparisonItems();
+    // The hydrated list is authoritative when hydration just ran; otherwise
+    // state is current (React flushes between discrete events, and this is
+    // the only writer besides remove/clear). The updater below stays the
+    // single tray writer so same-tick mutations still chain correctly.
+    const source = hydratedComparisonItems ?? compareItems;
+    const isDuplicate = source.some(
+      (p) => String(p.id) === String(product.id)
+    );
+    const replacedComparisonItem =
+      !isDuplicate && source.length >= 4 ? source[0] : null;
 
     setCompareItems((prev) => {
-      const source = hydratedComparisonItems ?? prev;
+      const current = hydratedComparisonItems ?? prev;
       // Avoid duplicates
-      if (source.some((p) => String(p.id) === String(product.id))) {
-        return source;
+      if (current.some((p) => String(p.id) === String(product.id))) {
+        return current;
       }
 
       // Limit to 4 items for UI sanity (1 main + 3 comparisons)
-      if (source.length >= 4) {
+      if (current.length >= 4) {
         // Remove first, add new
-        return [...source.slice(1), product];
+        return [...current.slice(1), product];
       }
-      return [...source, product];
+      return [...current, product];
     });
+    return replacedComparisonItem;
   };
 
   const removeFromCompare = (productId: number | string) => {

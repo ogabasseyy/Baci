@@ -143,6 +143,30 @@ describe('refined native pages', () => {
     expect(result.products.map((p) => p.id)).toEqual(['p2']);
     expect(result.total).toBe(1);
   });
+  it('continues past a skipped row instead of truncating the list', async () => {
+    const matches = Array.from({ length: 20 }, (_, index) => ({
+      product_id: `p${index}`,
+      total_count: 21,
+    }));
+    mockRpc.mockResolvedValue({ data: matches, error: null });
+    mockRead.mockResolvedValue({
+      data: Array.from({ length: 20 }, (_, index) => ({
+        id: `p${index}`,
+        price: 100 + index,
+      })).filter((row) => row.id !== 'p5'),
+      error: null,
+    });
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      20,
+      0
+    );
+    expect(result.products).toHaveLength(19);
+    expect(result.total).toBe(20);
+    expect(result.nextOffset).toBe(20);
+  });
   it('does not silently fall back when the new contract fails', async () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
     await expect(

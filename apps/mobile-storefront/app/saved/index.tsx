@@ -14,9 +14,27 @@ import Colors from '@/constants/Colors';
 import { useCartStore } from '@/stores/cart-store';
 import { type SavedItem, useSavedStore } from '@/stores/saved-store';
 
+// Forwards a saved search match's option identity to the PDP so the
+// displayed selection matches the saved price basis; plain string href
+// when no match basis was persisted (mirrors search.tsx PDP nav).
+const buildProductHref = (item: SavedItem) => {
+  if (!item.match_variant_id && !item.match_offer_id && !item.match_condition) {
+    return `/product/${item.slug}`;
+  }
+  return {
+    pathname: '/product/[slug]',
+    params: {
+      slug: item.slug,
+      ...(item.match_variant_id ? { variant_id: item.match_variant_id } : {}),
+      ...(item.match_offer_id ? { offer_id: item.match_offer_id } : {}),
+      ...(item.match_condition ? { condition: item.match_condition } : {}),
+    },
+  } as const;
+};
+
 const handleProductPress = (item: SavedItem): void => {
   if (!item.slug) return;
-  router.push(`/product/${item.slug}`);
+  router.push(buildProductHref(item));
 };
 
 export default function SavedItemsScreen() {
@@ -74,7 +92,7 @@ export default function SavedItemsScreen() {
       )
     ) {
       if (item.slug) {
-        router.push(`/product/${item.slug}`);
+        router.push(buildProductHref(item));
       }
       return;
     }

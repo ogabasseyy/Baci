@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 import {
@@ -262,6 +263,51 @@ describe('V2ComparisonProvider', () => {
       'ogabassey_v2_compare:merchant-b',
       expect.any(String)
     );
+  });
+
+  it('reports the evicted stored item when adding to a full tray before hydration', () => {
+    const stored = [baseProduct, 2, 3, 4].map((entry, index) =>
+      typeof entry === 'number'
+        ? { ...baseProduct, id: `product-${entry}`, name: `Product ${entry}` }
+        : { ...entry, name: `Product ${index + 1}` }
+    );
+    sessionStorage.setItem('ogabassey_v2_compare', JSON.stringify(stored));
+    const nextProduct: Product = {
+      ...baseProduct,
+      id: 'product-5',
+      name: 'Product 5',
+    };
+    function ReportingConsumer() {
+      const { addToCompare, compareItems } = useV2Comparison();
+      const [replacedName, setReplacedName] = useState<string | null>(null);
+      return (
+        <div>
+          <span data-testid="compare-count">{compareItems.length}</span>
+          <span data-testid="replaced-name">{replacedName ?? 'none'}</span>
+          <button
+            onClick={() =>
+              setReplacedName(addToCompare(nextProduct)?.name ?? null)
+            }
+            type="button"
+          >
+            Add to compare
+          </button>
+        </div>
+      );
+    }
+    render(
+      <V2ComparisonProvider>
+        <ReportingConsumer />
+      </V2ComparisonProvider>
+    );
+
+    // No timer advance and no activation event: state is still empty while
+    // storage already holds four selections.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
+
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('4');
+    expect(screen.getByTestId('replaced-name')).toHaveTextContent('Product 1');
   });
 
   it('reports stored selections from isInCompare before hydration fires', () => {

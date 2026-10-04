@@ -38,11 +38,7 @@ export function SearchCompareButton({
             comparison.removeFromCompare(product.id);
             return;
           }
-          if (comparison.compareItems.length >= 4)
-            setNotice(
-              `Replaced ${comparison.compareItems[0].name} in your comparison.`
-            );
-          comparison.addToCompare({
+          const replaced = comparison.addToCompare({
             id: product.id,
             merchantId: product.merchant_id,
             slug: product.slug,
@@ -56,6 +52,8 @@ export function SearchCompareButton({
             categorySlug: product.category_slug,
             condition: product.condition as Product['condition'],
           });
+          if (replaced)
+            setNotice(`Replaced ${replaced.name} in your comparison.`);
         }}
       >
         {compact

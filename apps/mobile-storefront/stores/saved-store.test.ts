@@ -41,4 +41,33 @@ describe('saved-store', () => {
       has_condition_offers: true,
     });
   });
+
+  it('preserves the search-match option identity for the saved price basis', () => {
+    useSavedStore.getState().addItem({
+      id: 'iphone-15',
+      name: 'iPhone 15',
+      slug: 'iphone-15',
+      price: 750000,
+      condition: 'Open Box',
+      image: 'https://example.com/iphone-15.jpg',
+      searchMatch: {
+        productId: 'iphone-15',
+        total: 1,
+        price: 750000,
+        variantId: 'variant-blue-128',
+        offerId: 'offer-open-box',
+        condition: 'open_box',
+      },
+    });
+
+    const [item] = useSavedStore.getState().items;
+
+    expect(item).toMatchObject({
+      product_id: 'iphone-15',
+      price: 750000,
+      match_variant_id: 'variant-blue-128',
+      match_offer_id: 'offer-open-box',
+      match_condition: 'open_box',
+    });
+  });
 });

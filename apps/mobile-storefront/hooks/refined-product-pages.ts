@@ -72,9 +72,12 @@ export async function fetchRefinedProductsPage(
   // Total minus rows that vanished mid-read: the RPC snapshot total
   // overcounts the visible page by exactly the skipped rows.
   const total = matches[0].total - (matches.length - products.length);
+  // Continuation guards on the unadjusted RPC total, never the visible
+  // count: skipped rows stay ranked, so an adjusted guard would strand
+  // valid rows past a skipped id on every refetch.
   return {
     products,
     total,
-    nextOffset: offset + limit < total ? offset + limit : null,
+    nextOffset: offset + limit < matches[0].total ? offset + limit : null,
   };
 }

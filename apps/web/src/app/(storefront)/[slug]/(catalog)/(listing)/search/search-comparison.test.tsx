@@ -71,6 +71,8 @@ it('announces the existing fourth-item replacement without touching any cart', (
     name: `Product ${id}`,
     slug: `p${id}`,
   }));
+  // The provider reports the evicted item, which the button announces.
+  mocks.add.mockReturnValue({ id: '1', name: 'Product 1', slug: 'p1' });
   render(
     <SearchCompareButton
       product={

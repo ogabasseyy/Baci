@@ -1,9 +1,10 @@
 """Tar program-execution flags: --to-command pipes every
 member through a command, --checkpoint-action=exec= runs on
-each checkpoint, -F runs an info script, and -I runs a
-compress program. Bundle-aware with value-taker consumption,
-so -cfIx (archive named Ix) never misreads as -I. Stops at
---. Residual: old-form (dashless) tar is unsupported, like
+each checkpoint, -F runs an info script, -I runs a
+compress program, and --rsh/--rmt-command select the remote
+shell. Bundle-aware with value-taker consumption, so -cfIx
+(archive named Ix) never misreads as -I. Stops at --.
+Residual: old-form (dashless) tar is unsupported, like
 the existing extract detection.
 """
 
@@ -60,6 +61,10 @@ def audit_tar_exec(rest, drift):
             hit = val == "exec" or val.startswith("exec=")
         elif tok in ("-F", "--info-script") \
                 or tok.startswith("--info-script="):
+            hit = True
+        elif tok in ("--rsh-command", "--rmt-command") \
+                or tok.startswith(("--rsh-command=",
+                                   "--rmt-command=")):
             hit = True
         elif tok in ("-I", "--use-compress-program") \
                 and i + 1 < n:

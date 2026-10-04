@@ -156,6 +156,10 @@ t loader-gfortran-cross 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipe
 t loader-runghc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}runghc \"\${GITHUB_WORKSPACE}/evil.hs\""
 t loader-runhaskell 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}runhaskell \"\${GITHUB_WORKSPACE}/evil.hs\""
 t loader-ghc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ghc \"\${GITHUB_WORKSPACE}/evil.hs\" -o /tmp/evil"
+# --- Haskell frontends + Ant (Codex P1s: cabal/stack/ant) ---
+t loader-cabal 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cabal run \"\${GITHUB_WORKSPACE}/evil.hs\""
+t loader-stack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}stack run"
+t loader-ant 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ant -f \"\${GITHUB_WORKSPACE}/evil.xml\""
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

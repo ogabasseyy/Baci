@@ -41,7 +41,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "autoconf", "autoheader", "autom4te", "autoreconf",
              "autoupdate", "ifnames", "aclocal",
              "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
-             "runghc", "runhaskell", "ghc", "ghci"}
+             "runghc", "runhaskell", "ghc", "ghci",
+             "cabal", "stack", "ant"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -77,6 +78,10 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # runghc/runhaskell interpret the file operand; ghc runs
 # Template Haskell splices at compile time (-e evaluates);
 # ghci is the same front end, interactive.
+# cabal run executes project executables/scripts; stack run
+# builds and executes project components (both ship on the
+# ubuntu runner). ant -f runs XML build files whose exec
+# task runs system commands (ships on ubuntu-latest).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")

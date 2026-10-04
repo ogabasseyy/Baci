@@ -207,32 +207,8 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
-      # The filter below repairs the nosemgrep/SARIF transport gap for
-      # exactly one audited finding after a fail-closed drift audit; any
-      # drift keeps the SARIF unfiltered and fails the job, even with no
-      # SARIF (empty scans must not skip the audit). TRUSTED_CHANGED
-      # carries the scope job's trusted-set diff signal (same-repo PRs
-      # only; forks skip this job). Auditor logic lives in
-      # .github/scripts/semgrep-sarif-filter.py (+ semgrep_sarif_*
-      # modules), pinned by semgrep-sarif-filter.test.sh (selftest).
-      # PRs execute the BASE revision of that auditor (checked out
-      # below): the job workspace holds submitter-controlled head
-      # code, so running the head copy would let a PR neuter its own
-      # audit. Push/schedule runs use the workspace copy, which
-      # already is a trusted branch. No fallback: a base without the
-      # auditor fails closed (bootstrap PRs stay red by design).
-      # Fork-PR gap (post-merge follow-up, not more pull_request
-      # YAML): forks skip this job, so they need a base-side audit.
-      # Invocation-ownership residual (accepted, post-merge
-      # follow-up): this pull_request job's YAML is PR-revision
-      # code, so a same-repo PR could delete this step, force the
-      # TRUSTED_CHANGED signal, or point filter_dir at the head
-      # copy before the base auditor runs. The backstop is human:
-      # .github/** is CODEOWNERS-gated, so weakening the ~15-line
-      # invocation needs owner approval on a loud diff, while the
-      # ~5k-line auditor (unreviewable per-PR) stays base-pinned.
-      # A base-owned pull_request_target gate would close even
-      # the loud vector; tracked post-merge.
+      # The filter invocation below is trust-sensitive; its rationale
+      # lives in .github/sarif-filter-notes.md (300-line ceiling).
       - name: Clear base-filter collision
         if: github.event_name == 'pull_request'
         run: rm -rf "${GITHUB_WORKSPACE}/base-filter"
@@ -255,7 +231,7 @@ jobs:
           filter_dir=.github/scripts
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
-            for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_agentenv.py semgrep_sarif_alias.py semgrep_sarif_archive.py semgrep_sarif_audit.py semgrep_sarif_awk.py semgrep_sarif_bashfunc.py semgrep_sarif_cmdfile.py semgrep_sarif_binutils.py semgrep_sarif_consts.py semgrep_sarif_consumer.py semgrep_sarif_container.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_gh.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_helpertree.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_jq.py semgrep_sarif_nameref.py semgrep_sarif_order.py semgrep_sarif_peel.py semgrep_sarif_perl.py semgrep_sarif_pins.py semgrep_sarif_refs.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_redirect.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_secretbind.py semgrep_sarif_sed.py semgrep_sarif_segments.py semgrep_sarif_shell.py semgrep_sarif_steps.py semgrep_sarif_subscript.py semgrep_sarif_tar.py semgrep_sarif_varcollect.py semgrep_sarif_varmap.py semgrep_sarif_words.py semgrep_sarif_xargs.py semgrep_sarif_zone.py; do
+            for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_agentenv.py semgrep_sarif_alias.py semgrep_sarif_archive.py semgrep_sarif_audit.py semgrep_sarif_awk.py semgrep_sarif_bashfunc.py semgrep_sarif_cmdfile.py semgrep_sarif_binutils.py semgrep_sarif_consts.py semgrep_sarif_consumer.py semgrep_sarif_container.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_findout.py semgrep_sarif_gh.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_helpertree.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_jq.py semgrep_sarif_nameref.py semgrep_sarif_order.py semgrep_sarif_peel.py semgrep_sarif_perl.py semgrep_sarif_pins.py semgrep_sarif_refs.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_redirect.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_secretbind.py semgrep_sarif_sed.py semgrep_sarif_segments.py semgrep_sarif_shell.py semgrep_sarif_steps.py semgrep_sarif_subscript.py semgrep_sarif_tar.py semgrep_sarif_varcollect.py semgrep_sarif_varmap.py semgrep_sarif_words.py semgrep_sarif_xargs.py semgrep_sarif_zone.py; do
               [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
             done
           fi

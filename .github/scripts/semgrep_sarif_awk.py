@@ -20,6 +20,12 @@ def _scan_awk_program(prog, drift):
                          prog):
         _zone_target(m.group(1), drift)
     code = re.sub(r"\"(?:[^\"\\]|\\.)*\"", "\"\"", prog)
+    if re.search(r"@(?:include|load)\b", code) \
+            and "helper-untrusted-exec" not in drift:
+        # gawk directives: @include reads external AWK
+        # source, @load runs a DSO constructor (strings
+        # blanked above, so only live directives match).
+        drift.append("helper-untrusted-exec")
     if re.search(r"(?<![\w$])system\s*\(|\|&"
                  r"|(?<!\|)\|(?!\|)\s*getline\b"
                  r"|(?<!\|)\|(?!\|)\s*\"", code) \

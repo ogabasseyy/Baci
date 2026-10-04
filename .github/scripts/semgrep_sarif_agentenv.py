@@ -3,7 +3,8 @@ token-scope and poison scanning of the agent env blocks.
 """
 import re
 from semgrep_sarif_segments import run_segments
-from semgrep_sarif_shell import map_key_value, strip_comments
+from semgrep_sarif_shell import (_yaml_double_unescape,
+                                map_key_value, strip_comments)
 from semgrep_sarif_steps import (_steps_item_indent,
                                  is_step_boundary, step_end,
                                  step_name)
@@ -126,8 +127,16 @@ def audit_agent_env(ctx, drift):
             if "agent-env-home" not in drift:
                 drift.append("agent-env-home")
             break
-        if "{" in line and re.search(
-                r"""["']?HOME["']?\s*:""", line):
+        if "{" in line and (
+                re.search(r"""["']?HOME["']?\s*:""", line)
+                or any(_yaml_double_unescape(m.group(1))
+                       == "HOME"
+                       for m in re.finditer(
+                           r'"((?:[^"\\]|\\.)*)"\s*:', line))):
+            # Double-quoted flow keys decode escapes
+            # ("\u0048OME" is HOME); plain and
+            # single-quoted keys keep backslashes literal,
+            # so the raw match above suffices for them.
             if "agent-env-home" not in drift:
                 drift.append("agent-env-home")
             break

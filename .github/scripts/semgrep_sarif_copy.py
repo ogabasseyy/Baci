@@ -160,10 +160,14 @@ def audit_copy_dest(base, rest, drift, src=""):
             cdir = _flag_value(rest, ("-C", "--directory"))
             if cdir is not None:
                 targets = [cdir]
+            else:
+                # No -C: members land in CWD, which is the
+                # workspace at helper runtime, replacing
+                # trusted files by default.
+                implicit = "workspace"
         else:
             # Creation bundles member bytes (possibly staged
-            # secrets) into the -f archive; extraction without
-            # -C only restores static members, so it stays silent.
+            # secrets) into the -f archive.
             arch = _flag_value(rest, ("-f", "--file"))
             if arch is not None:
                 targets = [arch]
@@ -172,6 +176,13 @@ def audit_copy_dest(base, rest, drift, src=""):
         if dest is not None:
             targets = [dest]
     elif base == "zip":
+        # -T only tests integrity, but -TT cmd runs cmd to
+        # test (separate or attached word, possibly bundled:
+        # any doubled T in a dash token executes).
+        if any(t.startswith("-") and "TT" in t and t != "--"
+               for t in rest) \
+                and "helper-untrusted-exec" not in drift:
+            drift.append("helper-untrusted-exec")
         ops = _operands(rest)
         if ops:
             targets = [ops[0]]
@@ -274,25 +285,3 @@ def audit_copy_dest(base, rest, drift, src=""):
     kinds.discard(None)
     if kinds and "helper-env-poison" not in drift:
         drift.append("helper-env-poison")
-
-
-def audit_find_output(rest, drift):
-    # find -fls/-fprint/-fprintf write listings into the named
-    # file (attacker-influenced filenames); the file operand
-    # takes the destination rule like any copy target.
-    for i, tok in enumerate(rest):
-        if tok in ("-fls", "-fprint", "-fprint0", "-fprintf") \
-                and i + 1 < len(rest):
-            zone = _write_zone(rest[i + 1])
-            if zone == "trusted" \
-                    and "helper-trusted-write" not in drift:
-                drift.append("helper-trusted-write")
-            if zone == "workspace" \
-                    and "helper-workspace-write" not in drift:
-                drift.append("helper-workspace-write")
-            if zone == "glob" \
-                    and "helper-unzoneable-write" not in drift:
-                drift.append("helper-unzoneable-write")
-            if github_cmdfile_kind(rest[i + 1]) is not None \
-                    and "helper-env-poison" not in drift:
-                drift.append("helper-env-poison")

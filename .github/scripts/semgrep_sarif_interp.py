@@ -6,8 +6,8 @@ import re
 from semgrep_sarif_archive import (ARCHIVE_TOOLS,
                                    audit_archive_dest)
 from semgrep_sarif_binutils import _canon_binutils
-from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
-                                audit_find_output)
+from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest)
+from semgrep_sarif_findout import audit_find_output
 from semgrep_sarif_embeds import _check_perl
 from semgrep_sarif_awk import _check_awk
 from semgrep_sarif_gh import audit_gh
@@ -104,7 +104,11 @@ def _check_command(argv0, rest, pre, drift, src=""):
         if not bound \
                 and "helper-untrusted-exec" not in drift:
             drift.append("helper-untrusted-exec")
-    elif base == "perl":
+    elif base == "perl" or re.fullmatch(r"perl\d[\w.+-]*",
+                                            base):
+        # Versioned/target-qualified perl (perl5.38.2,
+        # perl5.38-x86_64-linux-gnu) audits like perl; the
+        # digit right after perl keeps perldoc/perlbug out.
         _check_perl(rest, drift)
     elif base == "jq":
         _check_jq(rest, drift)
@@ -152,7 +156,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
         audit_xargs(rest, drift, src, _check_command)
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
                   "flock", "chrt", "ionice", "taskset", "sg",
-                  "tmux", "screen", "coproc"):
+                  "tmux", "screen", "coproc", "fakeroot",
+                  "xvfb-run"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
         # coproc counts: it runs its command asynchronously with

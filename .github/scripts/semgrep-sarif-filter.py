@@ -165,7 +165,19 @@ def main():
     # Atomic replace: a truncate-then-write crash (disk-full,
     # preemption) would leave an empty/truncated report and
     # lose unrelated findings, so stage aside and rename.
-    with open("semgrep.sarif.tmp", "w") as fh:
+    # O_NOFOLLOW: the workspace is submitter-controlled, so a
+    # tracked semgrep.sarif.tmp symlink would otherwise write
+    # through it; os.replace below renames atop (never
+    # through) a symlink, so the temp open is the only risk.
+    try:
+        fd = os.open("semgrep.sarif.tmp",
+                     os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                     | os.O_NOFOLLOW, 0o644)
+    except OSError as exc:
+        print(f"::error::SARIF temp write refused ({exc}); keeping "
+              f"SARIF unfiltered.")
+        return 1
+    with os.fdopen(fd, "w") as fh:
         json.dump(sarif, fh)
         fh.flush()
         os.fsync(fh.fileno())

@@ -87,6 +87,23 @@ def audit_path_literals(ctx, drift):
             break
 
 
+def _has_minus_n(rest):
+    # Leading declare/local/typeset flags (options precede
+    # operands: no permutation): any -form token carrying n
+    # makes a nameref. +n only removes the attribute; export
+    # -n is unexport (different builtin, never checked here).
+    for tok in rest:
+        if tok == "--":
+            return False
+        if tok.startswith("+"):
+            continue
+        if not tok.startswith("-") or tok == "-":
+            return False
+        if "n" in tok[1:]:
+            return True
+    return False
+
+
 def audit_invocations(ctx, drift):
     # (b) In run: blocks, every bash/sh/source operand naming a
     # script must route via ${SCRIPT_DIR} (bound in (c) to the
@@ -97,7 +114,7 @@ def audit_invocations(ctx, drift):
         # Builtin-qualified (export/local/readonly/declare/typeset,
         # with optional flags) and prefix-assigned rebindings count
         # too: `export SCRIPT_DIR=...` evades a bare-assign match.
-        # Residual: read/getopts/printf -v/nameref indirection.
+        # Residual: read/getopts/printf -v indirection.
         if re.search(r"(?:^|[;&|])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*"
                      r"(?:(?:export|local|readonly|declare|typeset)\s+"
                      r"(?:-\S+\s+)*)?"
@@ -112,6 +129,14 @@ def audit_invocations(ctx, drift):
             if not words:
                 continue
             argv0, rest = peel_prefix(words)
+            if argv0 in ("declare", "local", "typeset") \
+                    and _has_minus_n(rest) \
+                    and "script-dir-rebound" not in drift:
+                # Nameref indirection rebinds without a
+                # SCRIPT_DIR= assignment (declare -n
+                # ref=SCRIPT_DIR; ref=evil): no legit run
+                # block uses -n, so any use fails closed.
+                drift.append("script-dir-rebound")
             if argv0 not in INTERP_ALLOW:
                 continue
             if not script_operand(rest, argv0) \

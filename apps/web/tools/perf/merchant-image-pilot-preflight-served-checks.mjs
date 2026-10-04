@@ -6,6 +6,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { orientedDimensions } from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
 import {
   extractLabPreloads,
   extractLabSections,
@@ -104,9 +105,13 @@ export async function assertServedDescriptors(
         );
         continue;
       }
-      if (meta.width !== candidate.descriptor) {
+      // Oriented width: an EXIF-rotated pass-through tier renders at
+      // its oriented axes (which the descriptor claims), while sharp
+      // reports the stored axes plus an orientation tag.
+      const oriented = orientedDimensions(meta);
+      if (oriented.width !== candidate.descriptor) {
         failures.push(
-          `${name}: descriptor ${candidate.descriptor}w does not match decoded width ${meta.width}: "${candidate.url}"`
+          `${name}: descriptor ${candidate.descriptor}w does not match oriented width ${oriented.width}: "${candidate.url}"`
         );
       }
     }

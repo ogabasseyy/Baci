@@ -55,8 +55,8 @@ export function parseArgs(argv, allowed) {
   return args;
 }
 
-export function parseStoreMap(value) {
-  return String(value ?? '')
+export function parseStoreMap(value, expectedMounts = null) {
+  const stores = String(value ?? '')
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
@@ -67,6 +67,35 @@ export function parseStoreMap(value) {
       }
       return { merchantId, slug };
     });
+  // An empty map would run zero browser checks and still report ok, so
+  // it is a usage error, not an empty loop.
+  if (stores.length === 0) {
+    throw new Error(
+      'bad --store-map: expected at least one merchant=slug entry'
+    );
+  }
+  const seen = new Set();
+  for (const store of stores) {
+    if (seen.has(store.merchantId)) {
+      throw new Error(
+        `bad --store-map: merchant "${store.merchantId}" maps to more than one store`
+      );
+    }
+    seen.add(store.merchantId);
+  }
+  // Every merchant with expected mounts needs exactly one mapped store:
+  // omitted merchants would otherwise skip all browser checks silently.
+  if (expectedMounts !== null) {
+    const uncovered = [
+      ...new Set(expectedMounts.map((mount) => mount.merchantId)),
+    ].filter((merchantId) => !seen.has(merchantId));
+    if (uncovered.length > 0) {
+      throw new Error(
+        `bad --store-map: no store mapped for merchants with expected mounts: ${uncovered.join(', ')}`
+      );
+    }
+  }
+  return stores;
 }
 
 // Every profile runs both arms. Widths and DPRs follow the spec coverage

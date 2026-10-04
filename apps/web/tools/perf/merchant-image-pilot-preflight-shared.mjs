@@ -118,3 +118,16 @@ export function isIntIn(value, min, max) {
 export function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
+// Positional binding, mirroring matchAcceptance/matchPilotAcceptance:
+// outputHashes lists tier sha256 in canonical manifest tier order, so
+// each accepted hash pins one rung's format, width, and bytes. No
+// dedupe, no sort — a sorted-set comparison would let swapped tier
+// claims pass offline while the runtime matcher rejects them.
+export function positionalHashesMatch(manifestHashes, recordHashes) {
+  const record = recordHashes ?? [];
+  return (
+    manifestHashes.length === record.length &&
+    manifestHashes.every((hash, index) => hash === record[index])
+  );
+}

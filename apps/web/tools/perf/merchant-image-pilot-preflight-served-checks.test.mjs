@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
   assertControlPurity,
@@ -66,6 +67,32 @@ describe('assertServedDescriptors', () => {
       status: 'not-optimized',
     });
     const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-checks-'));
+    const failures = await assertServedDescriptors(html, {
+      arm: 'pilot',
+      origin: 'http://localhost:3000',
+      publicDir,
+    });
+    expect(failures).toEqual([]);
+  });
+
+  it('matches width descriptors against oriented bytes', async () => {
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-oriented-'));
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    // Stored 32x48 with orientation 6 renders 48 wide; the descriptor
+    // claims the oriented width. Raw-axis comparison would fail this.
+    const bytes = await sharp({
+      create: { background: '#1c1917', channels: 3, height: 48, width: 32 },
+    })
+      .withMetadata({ orientation: 6 })
+      .webp()
+      .toBuffer();
+    const staged = `/__pilot/${GEN}/${'d'.repeat(64)}.webp`;
+    await writeFile(join(publicDir, staged), bytes);
+    const html = section({
+      binding: `${MERCHANT}/logo-a`,
+      inner: `<picture><source srcSet="${staged} 48w" type="image/webp"/><img src="${staged}" alt="logo"/></picture>`,
+      slot: 'header-logo',
+    });
     const failures = await assertServedDescriptors(html, {
       arm: 'pilot',
       origin: 'http://localhost:3000',

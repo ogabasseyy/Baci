@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { CLAIM_LIVE_WINDOW_MS } from './constants.mjs';
 import { ownedStagingPath, removeOwnedStaging } from './disk-guards.mjs';
@@ -93,13 +93,37 @@ export async function acquireClaim(outputRoot, job, runToken) {
     runToken,
     stagingDirName,
   };
+  // Atomic publication: write the complete claim to a unique temp file,
+  // then hard-link it onto the claim path. link(2) is atomic and fails
+  // with EEXIST when beaten, so a kill can never leave an empty or
+  // partial claim behind (an exclusive-create followed by a separate
+  // content write could, permanently blocking the asset: claim-corrupt
+  // is unrecoverable because a torn file carries no owner identity).
+  // Orphaned temp files from a mid-publish kill are inert and safe for
+  // operators to delete.
+  const tempPath = join(
+    outputRoot,
+    'claims',
+    `claim-${runToken}-${process.pid}-${randomUUID()}.tmp`
+  );
+  await writeFile(tempPath, JSON.stringify(claim, null, 2), { flag: 'wx' });
+  let linked = false;
   try {
-    await writeFile(path, JSON.stringify(claim, null, 2), { flag: 'wx' });
-    return claim;
+    await link(tempPath, path);
+    linked = true;
   } catch (error) {
     if (error?.code !== 'EEXIST') {
       throw error;
     }
+  } finally {
+    // Always drop our temp name: on success the claim keeps the content
+    // via its own link; on a lost race this removes our scratch file.
+    await unlink(tempPath).catch(() => {
+      // Best-effort cleanup; the temp name is unique and inert.
+    });
+  }
+  if (linked) {
+    return claim;
   }
   const existing = parseClaimFile(await readFile(path, 'utf8'));
   throw new PilotClaimError(

@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,12 +113,17 @@ describe('parseRawInventoryRecords', () => {
       'a\\b.png',
       './logo.png',
       // Transformer-parity hardening: length cap, control characters,
-      // and encoded separators fail here, not downstream.
+      // and encoded separators fail here, not downstream. Every
+      // decode layer is validated, so nested encodings fail too.
       `${'a'.repeat(253)}.png`,
       'a\nb.png',
       'a%2flogo.png',
       'a%5clogo.png',
       'a%00.png',
+      'a%252flogo.png',
+      'a%25252flogo.png',
+      '%2e%2e%2fescape.png',
+      '..%2fescape.png',
     ]) {
       expect(() =>
         parseRawInventoryRecords([{ ...RECORD, sourcePath }])
@@ -178,6 +191,33 @@ describe('getLabConfig', () => {
     const [deleted] = first.stagedPaths;
     await rm(deleted?.path as string);
     await expect(getLabConfig()).rejects.toThrow(/pilot:stage and restart/);
+  });
+
+  it('reloads on frozen-input edits and pins the mtime residual', async () => {
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    await stageRouteFiles(lab);
+    const first = await getLabConfig();
+    const inventoryPath = join(lab.inputRoot, 'inventory.json');
+    // Size-changing edit invalidates the fingerprint key: full reload.
+    const text = await readFile(inventoryPath, 'utf8');
+    await writeFile(inventoryPath, `${text} `);
+    // Synthetic ms-quantized mtime: raw stat mtimes carry sub-ms
+    // fractions that utimes cannot round-trip exactly.
+    const afterEdit = await stat(inventoryPath);
+    const pinned = new Date(afterEdit.mtimeMs + 2000);
+    await utimes(inventoryPath, pinned, pinned);
+    const second = await getLabConfig();
+    expect(second).not.toBe(first);
+    // Same-size rewrite with a pinned mtime keeps serving the cached
+    // config until restart (accepted lab residual, same class as the
+    // staged-verify fingerprint skip).
+    await writeFile(inventoryPath, ` ${text}`);
+    await utimes(inventoryPath, pinned, pinned);
+    await expect(getLabConfig()).resolves.toBe(second);
   });
 
   it('dedupes concurrent loads per frozen input without cross-key mixups', async () => {

@@ -1,12 +1,13 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   isPilotLabEnabled,
   loadLabConfig,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { isSafeRelativePath } from './lab-safe-path';
 import { verifyStagedBytes } from './lab-staged-verify';
 
 // Shared loader for the lab-only pilot routes (gallery + per-store pages).
@@ -34,40 +35,6 @@ const RECORD_STRING_FIELDS = [
   'sourcePath',
   'url',
 ] as const;
-
-// Mirrors the transformer-side isConfinedRelativePath (job-schema.mjs):
-// length cap, no control characters, no encoded separators, no
-// absolute/empty/dot segments. Traversal is also blocked downstream by
-// readVerifiedSnapshot's realpath confinement; this is the fail-fast
-// input-validation layer with lab errors instead of incidental throws.
-const ENCODED_SEPARATOR_PATTERN = /%(2f|5c|00)/i;
-
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0);
-    if (code < 32 || code === 127) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isSafeRelativePath(value: string): boolean {
-  if (value.length < 1 || value.length > 256) {
-    return false;
-  }
-  if (
-    value.startsWith('/') ||
-    value.includes('\\') ||
-    hasControlCharacter(value) ||
-    ENCODED_SEPARATOR_PATTERN.test(value)
-  ) {
-    return false;
-  }
-  return !value
-    .split('/')
-    .some((segment) => segment === '' || segment === '.' || segment === '..');
-}
 
 export function parseRawInventoryRecords(value: unknown): RawInventoryRecord[] {
   if (!Array.isArray(value)) {
@@ -181,6 +148,16 @@ export function stageLabConfigFromText(input: {
   return loadLabConfigFromText(input, { stage: true });
 }
 
+async function statFingerprint(path: string): Promise<string> {
+  const info = await stat(path).catch(() => null);
+  if (info === null) {
+    throw new Error(
+      `merchant image pilot: cannot stat ${path}; re-run pnpm pilot:stage and restart the origin`
+    );
+  }
+  return `${info.size}:${info.mtimeMs}`;
+}
+
 export async function getLabConfig(): Promise<PilotLabConfig> {
   // Fail fast before any disk I/O: every caller gates on the flag today,
   // but a future caller of this shared loader must not read operator
@@ -197,33 +174,35 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   }
   const publicDir =
     process.env.BACI_IMAGE_PILOT_PUBLIC_DIR ?? join(process.cwd(), 'public');
-  // The cache key commits to the frozen input bytes, so an inventory or
-  // acceptance edit invalidates the config instead of serving stale lab
-  // state. Concurrent first requests share one in-flight load per key;
-  // a failed load clears so the next request retries.
-  const inventoryText = await readFile(
-    join(inputRoot, 'inventory.json'),
-    'utf8'
-  );
-  const acceptancesText = await readFile(
-    join(outputRoot, 'acceptances.json'),
-    'utf8'
-  );
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  const acceptancesPath = join(outputRoot, 'acceptances.json');
+  // The cache key commits to stat fingerprints, not content: re-reading
+  // and re-hashing both operator files on every request would put
+  // frozen-config I/O on the render path and contaminate arm timing
+  // comparisons. Content is fully read, parsed, and validated on every
+  // fingerprint change. Residual (accepted lab posture, same class as
+  // the staged-verify skip): a same-size same-mtime rewrite keeps
+  // serving the cached config until restart. Concurrent first requests
+  // share one in-flight load per key; a failed load clears so the next
+  // request retries.
+  const inventoryFingerprint = await statFingerprint(inventoryPath);
+  const acceptancesFingerprint = await statFingerprint(acceptancesPath);
   const key = createHash('sha256')
     .update(
       JSON.stringify({
-        acceptancesText,
+        acceptancesFingerprint,
         inputRoot,
-        inventoryText,
+        inventoryFingerprint,
         outputRoot,
         publicDir,
       })
     )
     .digest('hex');
   if (cachedConfig?.key === key) {
-    // The cache key commits to input bytes, not staged bytes: deleted,
-    // never-staged, or drifted public/__pilot files would otherwise keep
-    // serving bad URLs. Fail closed with the operator fix instead.
+    // The cache key commits to input fingerprints, not staged bytes:
+    // deleted, never-staged, or drifted public/__pilot files would
+    // otherwise keep serving bad URLs. Fail closed with the operator fix
+    // instead.
     await verifyStagedBytes(cachedConfig.config.stagedPaths);
     return cachedConfig.config;
   }
@@ -231,6 +210,10 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   if (inflight) {
     return inflight;
   }
+  // Cache miss: read the full frozen inputs (a torn mid-write read fails
+  // closed at JSON.parse, and the next request retries with a fresh key).
+  const inventoryText = await readFile(inventoryPath, 'utf8');
+  const acceptancesText = await readFile(acceptancesPath, 'utf8');
   const promise = loadLabConfigFromText({
     acceptancesText,
     inputRoot,

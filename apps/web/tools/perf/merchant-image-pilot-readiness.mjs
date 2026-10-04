@@ -170,15 +170,10 @@ async function run() {
     return { checks, failures, ok: false };
   }
   let stores;
-  try {
-    stores = parseStoreMap(args['store-map']);
-  } catch (error) {
-    fail('usage', error instanceof Error ? error.message : String(error));
-    return { checks, failures, ok: false };
-  }
   let expectedMounts;
   try {
     expectedMounts = parseMountsJson(await readFile(args.mounts, 'utf8'));
+    stores = parseStoreMap(args['store-map'], expectedMounts);
   } catch (error) {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false };

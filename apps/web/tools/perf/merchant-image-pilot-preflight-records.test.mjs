@@ -90,6 +90,11 @@ describe('isSafeRelativePath', () => {
       'a%2fb.png',
       'a%5cb.png',
       'a%00.png',
+      // Nested encodings: every decode layer is validated.
+      'a%252fb.png',
+      'a%25252fb.png',
+      '%2e%2e%2fescape.png',
+      '..%2fescape.png',
       null,
       undefined,
       42,

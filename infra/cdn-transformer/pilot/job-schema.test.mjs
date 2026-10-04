@@ -72,6 +72,12 @@ test('rejects absolute paths, traversal, and encoded separators', () => {
     'a%2Fb.png',
     'a%5cb.png',
     'a%00.png',
+    // Nested encodings: every decode layer is validated, so double,
+    // triple, encoded dots, and mixed layers must all fail.
+    'a%252fb.png',
+    'a%25252fb.png',
+    '%2e%2e%2fescape.png',
+    '..%2fescape.png',
     'a\x00b.png',
     'a\nb.png',
     '',
@@ -81,6 +87,8 @@ test('rejects absolute paths, traversal, and encoded separators', () => {
     const result = parsePilotJob(validJob({ sourcePath }));
     assert.equal(result.ok, false, JSON.stringify(sourcePath));
   }
+  // A bare percent that decodes to nothing stays valid.
+  assert.equal(parsePilotJob(validJob({ sourcePath: '100%.png' })).ok, true);
 });
 
 test('rejects unknown fields', () => {

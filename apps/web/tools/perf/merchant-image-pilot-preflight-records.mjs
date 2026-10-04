@@ -72,21 +72,47 @@ function hasControlCharacter(value) {
   return false;
 }
 
+// Every decode layer (capped): %252f (double) and deeper nestings must
+// not smuggle separators past the single-pattern check — intermediates
+// matter, not just the fixpoint. Malformed sequences stop decoding and
+// validate as-is; overlong-UTF-8 forms that no decoder accepts stay
+// blocked downstream by realpath confinement.
+function decodeLayers(value) {
+  const layers = [value];
+  let current = value;
+  for (let depth = 0; depth < 8; depth += 1) {
+    let next = current;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return layers;
+    }
+    if (next === current) {
+      return layers;
+    }
+    layers.push(next);
+    current = next;
+  }
+  return layers;
+}
+
 export function isSafeRelativePath(value) {
-  if (
-    typeof value !== 'string' ||
-    value.length < 1 ||
-    value.length > 256 ||
-    value.startsWith('/') ||
-    value.includes('\\') ||
-    hasControlCharacter(value) ||
-    ENCODED_SEPARATOR_PATTERN.test(value)
-  ) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 256) {
     return false;
   }
-  return !value
-    .split('/')
-    .some((segment) => segment === '' || segment === '.' || segment === '..');
+  return decodeLayers(value).every((layer) => {
+    if (
+      layer.startsWith('/') ||
+      layer.includes('\\') ||
+      hasControlCharacter(layer) ||
+      ENCODED_SEPARATOR_PATTERN.test(layer)
+    ) {
+      return false;
+    }
+    return !layer
+      .split('/')
+      .some((segment) => segment === '' || segment === '.' || segment === '..');
+  });
 }
 
 export function isHttpUrl(value) {

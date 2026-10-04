@@ -150,6 +150,29 @@ describe('checkBindingManifest', () => {
     expect(failures).toEqual([]);
   });
 
+  it('compares acceptance hashes positionally, not as a sorted set', async () => {
+    const { inputBytes, manifest, sourceSha } = await boundSourceFixture();
+    const root = await outputRootWith(manifest);
+    const checks = [];
+    const failures = [];
+    // Same hashes, reversed: a sorted-set comparison would pass, but the
+    // runtime matcher binds each hash to one rung positionally.
+    const parsed = await checkBindingManifest({
+      acceptance: acceptanceFor(
+        manifest.tiers.map((tier) => tier.sha256).reverse()
+      ),
+      checks,
+      effectiveRecipe: RECIPE_ID,
+      failures,
+      inputBytes,
+      name: 'reversed',
+      options: { outputRoot: root },
+      record: { ...RECORD, sha256: sourceSha },
+    });
+    expect(parsed).toBeNull();
+    expect(failures.join('\n')).toMatch(/acceptance hashes differ/);
+  });
+
   it('rejects source-fact drift against the verified input', async () => {
     const { inputBytes, manifest, sourceSha } = await boundSourceFixture();
     const record = { ...RECORD, sha256: sourceSha };
@@ -229,6 +252,39 @@ describe('checkBindingTiers', () => {
       failures,
       manifest,
       name: 'tiers-ok',
+      options: { outputRoot: root },
+    });
+    expect(ok).toBe(true);
+    expect(failures).toEqual([]);
+  });
+
+  it('accepts an EXIF-rotated pass-through tier at its oriented geometry', async () => {
+    // Stored 32x48 with orientation 6 renders 48x32; the manifest records
+    // the oriented axes. Raw-axis comparison would reject this valid tier.
+    const bytes = await sharp({
+      create: { background: '#1c1917', channels: 3, height: 48, width: 32 },
+    })
+      .withMetadata({ orientation: 6 })
+      .webp()
+      .toBuffer();
+    const manifest = manifestFor({
+      bytes: bytes.length,
+      height: 32,
+      sha: sha256(bytes),
+      width: 48,
+    });
+    manifest.tiers[0].delivery = 'original-passthrough';
+    const root = await outputRootWith(manifest, {
+      [`${sha256(bytes)}.webp`]: bytes,
+    });
+    const checks = [];
+    const failures = [];
+    const ok = await checkBindingTiers({
+      acceptance: acceptanceFor([sha256(bytes)]),
+      checks,
+      failures,
+      manifest,
+      name: 'tiers-oriented',
       options: { outputRoot: root },
     });
     expect(ok).toBe(true);

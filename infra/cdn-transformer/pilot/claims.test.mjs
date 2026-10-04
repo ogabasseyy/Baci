@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -42,6 +42,37 @@ test('acquire creates an exclusive claim bound to this process', async () => {
     await readFile(join(root, 'claims', `${claimKeyForJob(JOB)}.json`), 'utf8')
   );
   assert.equal(stored.runToken, token);
+});
+
+test('concurrent acquires publish exactly one complete claim', async () => {
+  const root = await outputRoot();
+  const tokens = Array.from({ length: 20 }, () => createRunToken());
+  const outcomes = await Promise.all(
+    tokens.map((token) =>
+      acquireClaim(root, JOB, token).catch((error) => error)
+    )
+  );
+  const winners = outcomes.filter((outcome) => !(outcome instanceof Error));
+  const losers = outcomes.filter((outcome) => outcome instanceof Error);
+  assert.equal(winners.length, 1);
+  assert.equal(losers.length, tokens.length - 1);
+  for (const loser of losers) {
+    // Every loser parsed the winner's complete claim (never a torn
+    // file): claim-held carries the owner's identity.
+    assert.equal(loser.code, 'claim-held');
+    assert.equal(loser.ownerPid, process.pid);
+    assert.equal(loser.runToken, winners[0].runToken);
+  }
+  // The published claim is complete (atomic link, never torn) and no
+  // publish temp files linger, win or lose.
+  const stored = JSON.parse(
+    await readFile(join(root, 'claims', `${claimKeyForJob(JOB)}.json`), 'utf8')
+  );
+  assert.equal(stored.runToken, winners[0].runToken);
+  assert.equal(stored.pid, process.pid);
+  assert.deepEqual(await readdir(join(root, 'claims')), [
+    `${claimKeyForJob(JOB)}.json`,
+  ]);
 });
 
 test('a live claim is reported, never stolen', async () => {

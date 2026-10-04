@@ -4,6 +4,7 @@ import {
   parseArgs,
   parseMountsJson,
   parseProfiles,
+  parseStoreMap,
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
   SETTINGS_CLI_OPTIONS,
@@ -145,5 +146,31 @@ describe('merchant-image-pilot-readiness expected mounts', () => {
         ])
       )
     ).toThrow(/generationId/);
+  });
+});
+
+describe('merchant-image-pilot-readiness store coverage', () => {
+  const mounts = [{ merchantId: 'm1' }, { merchantId: 'm2' }];
+
+  it('parses a covering map', () => {
+    expect(parseStoreMap('m1=slug-a,m2=slug-b', mounts)).toEqual([
+      { merchantId: 'm1', slug: 'slug-a' },
+      { merchantId: 'm2', slug: 'slug-b' },
+    ]);
+  });
+
+  it('rejects empty maps that would run zero browser checks', () => {
+    for (const value of ['', ' , ', ',']) {
+      expect(() => parseStoreMap(value, mounts)).toThrow(/at least one/);
+    }
+  });
+
+  it('rejects duplicate merchants and uncovered mount merchants', () => {
+    expect(() => parseStoreMap('m1=a,m1=b', mounts)).toThrow(
+      /more than one store/
+    );
+    expect(() => parseStoreMap('m1=slug-a', mounts)).toThrow(
+      /no store mapped.*m2/
+    );
   });
 });

@@ -13,6 +13,7 @@ import { stagedOriginalName } from './merchant-image-pilot-preflight-records.mjs
 import {
   fail,
   pass,
+  positionalHashesMatch,
   readJson,
   sha256Hex,
   TIER_FILE,
@@ -122,14 +123,12 @@ export async function checkBindingManifest({
     );
     return null;
   }
-  const manifestHashes = [
-    ...new Set(manifest.tiers.map((tier) => tier.sha256)),
-  ].sort();
-  const recordHashes = [...new Set(acceptance.outputHashes)].sort();
-  const hashesEqual =
-    manifestHashes.length === recordHashes.length &&
-    manifestHashes.every((hash, index) => hash === recordHashes[index]);
-  if (!hashesEqual) {
+  if (
+    !positionalHashesMatch(
+      manifest.tiers.map((tier) => tier.sha256),
+      acceptance.outputHashes
+    )
+  ) {
     fail(
       checks,
       failures,
@@ -201,12 +200,16 @@ export async function checkBindingTiers({
       );
       return false;
     }
-    if (meta.width !== tier.width || meta.height !== tier.height) {
+    // Oriented geometry: an EXIF-rotated pass-through tier records its
+    // oriented axes in the manifest, while sharp reports the stored axes
+    // plus an orientation tag.
+    const oriented = orientedDimensions(meta);
+    if (oriented.width !== tier.width || oriented.height !== tier.height) {
       fail(
         checks,
         failures,
         `${name}:tiers`,
-        `decoded dimensions ${meta.width}x${meta.height} differ from manifest ${tier.width}x${tier.height}: ${tier.path}`
+        `decoded dimensions ${oriented.width}x${oriented.height} differ from manifest ${tier.width}x${tier.height}: ${tier.path}`
       );
       return false;
     }

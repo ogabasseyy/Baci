@@ -14,9 +14,23 @@ import { fail, pass } from './merchant-image-pilot-preflight-shared.mjs';
 async function fetchPage(origin, pagePath, arm, timeoutMs) {
   const url = `${origin.replace(/\/$/, '')}${pagePath}?arm=${arm}`;
   const response = await fetch(url, {
-    redirect: 'follow',
+    // Never follow: validating the redirect target would certify a
+    // different route than the one named in the matrix (e.g. a store
+    // page redirecting to the gallery, which holds the same binding).
+    redirect: 'manual',
     signal: AbortSignal.timeout(timeoutMs),
   });
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(
+      `GET ${url} redirected (${response.status}) to "${response.headers.get('location') ?? 'unknown'}" instead of serving the matrix route directly`
+    );
+  }
+  // Belt and braces: the final URL must be the requested page URL.
+  if (response.url && response.url !== url) {
+    throw new Error(
+      `GET ${url} resolved to "${response.url}" instead of serving the matrix route directly`
+    );
+  }
   if (!response.ok) {
     throw new Error(`GET ${url} -> ${response.status}`);
   }

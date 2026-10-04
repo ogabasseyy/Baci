@@ -8,6 +8,7 @@ import {
   isPlainObject,
   isRouteDatetime,
   pass,
+  positionalHashesMatch,
   sha256Hex,
   TIER_FILE,
   UUID,
@@ -99,5 +100,15 @@ describe('small predicates', () => {
     expect(isPlainObject([])).toBe(false);
     expect(isPlainObject(null)).toBe(false);
     expect(isPlainObject('x')).toBe(false);
+  });
+
+  it('compares acceptance hashes positionally without dedupe or sort', () => {
+    expect(positionalHashesMatch(['a', 'b'], ['a', 'b'])).toBe(true);
+    // Same set, swapped positions: a sorted-set comparison would pass.
+    expect(positionalHashesMatch(['a', 'b'], ['b', 'a'])).toBe(false);
+    // Deduped capped rungs must not certify: lengths differ.
+    expect(positionalHashesMatch(['a', 'a'], ['a'])).toBe(false);
+    expect(positionalHashesMatch(['a'], ['a', 'b'])).toBe(false);
+    expect(positionalHashesMatch(['a'], undefined)).toBe(false);
   });
 });

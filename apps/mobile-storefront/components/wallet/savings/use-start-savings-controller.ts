@@ -1,12 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProductSearch } from '@/hooks/use-product-search';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
-import type { Product } from '@/types/product';
 import {
   calculateMaturityDate,
   formatDateInput,
@@ -22,22 +21,13 @@ import type {
   SavingsSearchParams,
   SavingsSourceMode,
 } from './start-savings.types';
-import {
-  readParam,
-  validateStartSavingsForm,
-} from './start-savings-controller.utils';
-import {
-  buildSavingsVariantOptionGroups,
-  completeSavingsSingleValueSelection,
-  resolveSavingsVariant,
-  type SavingsVariantSelection,
-  seedSavingsVariantSelection,
-  selectSavingsVariantOption,
-} from './start-savings-variant-options';
+import { readParam } from './start-savings-controller.utils';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
+import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
 import { useStartSavingsProductSelection } from './use-start-savings-product-selection';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
+import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
 
 const DEFAULT_PREFERRED_DEBIT_TIME = '06:20';
 
@@ -51,10 +41,6 @@ export function useStartSavingsController() {
   );
   const { data: walletData, isRefetching, refetch } = useWallet();
   const [searchValue, setSearchValue] = useState('');
-  const [selectedProductSource, setSelectedProductSource] =
-    useState<Product | null>(null);
-  const [variantSelection, setVariantSelection] =
-    useState<SavingsVariantSelection>({});
   const [contributionAmount, setContributionAmount] = useState('');
   const [frequency, setFrequency] = useState<SavingsFrequency>('daily');
   const [preferredDebitTime, setPreferredDebitTime] = useState(
@@ -121,44 +107,16 @@ export function useStartSavingsController() {
   const safeWalletBalance = walletData?.wallet.balance ?? 0;
   const fundingAccount = walletData?.wallet.funding_account ?? null;
 
-  const selectVariantOption = (axis: string, value: string) => {
-    const variants = selectedProductSource?.variants ?? [];
-    if (!selectedProductSource || variants.length === 0) {
-      return;
-    }
-    const selection = selectSavingsVariantOption(
-      variants,
-      variantSelection,
-      axis,
-      value
-    );
-    const resolvedVariant = resolveSavingsVariant(variants, selection);
-    setVariantSelection(selection);
-    selectProduct(selectedProductSource, resolvedVariant?.id ?? null);
-  };
-
   const routeVariantId = readParam(params.variantId);
-  useEffect(() => {
-    if (!selectedCatalogProduct) {
-      return;
-    }
-    const variants = selectedCatalogProduct.variants ?? [];
-    setSelectedProductSource(selectedCatalogProduct);
-    setVariantSelection(
-      completeSavingsSingleValueSelection(
-        variants,
-        seedSavingsVariantSelection(variants, routeVariantId)
-      )
-    );
-  }, [routeVariantId, selectedCatalogProduct]);
-  useEffect(() => {
-    if (!selectedProduct || searchValue === selectedProduct.name) {
-      return;
-    }
-    clearProductSelection();
-    setSelectedProductSource(null);
-    setVariantSelection({});
-  }, [clearProductSelection, searchValue, selectedProduct]);
+  const { selectVariantOption, variantOptionGroups } =
+    useStartSavingsVariantSelection({
+      clearProductSelection,
+      routeVariantId,
+      searchValue,
+      selectedCatalogProduct,
+      selectedProduct,
+      selectProduct,
+    });
   const contributionValue = parseAmount(contributionAmount);
   const targetValue =
     selectedProduct && !selectedProduct.requiresVariantSelection
@@ -233,77 +191,33 @@ export function useStartSavingsController() {
     variantId: selectedProduct?.variantId ?? null,
   });
 
-  const handleContinue = () => {
-    const error = validateStartSavingsForm({
-      acceptsNonWithdrawableTerms,
-      contributionValue,
-      initialContributionEnabled,
-      initialContributionValue,
-      paymentProvider: 'paystack',
-      selectedProduct,
-      sourceMode,
-      targetValue,
-    });
-    setFormError(error);
-    if (!error) {
-      setShowPreviewModal(true);
-    }
-  };
-
-  const confirmPlanTransfer = async () => {
-    try {
-      await refetch();
-    } catch {
-      // Best effort: the transfer lands asynchronously via reconciliation.
-    }
-    setShowTransferModal(false);
-    setFormError(null);
-    setCreatedGoalId(null);
-    setShowSuccessModal(true);
-  };
-
-  const handleFundingContinue = async () => {
-    if (sourceMode === 'auto_debit') {
-      if (process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1') {
-        setPaymentMethodsError(
-          'Auto debit is not available in this staging build.'
-        );
-        return;
-      }
-      if (!selectedPaymentMethodId) {
-        setPaymentMethodsError(
-          'Select a saved card or authorize a new Paystack card.'
-        );
-        return;
-      }
-      await submitSavingsGoal();
-      return;
-    }
-
-    if (selectedFundingOption === 'bank_transfer') {
-      await submitSavingsGoal({ deferInitialContribution: true });
-      return;
-    }
-
-    await submitSavingsGoal();
-  };
-
-  const handleSourceModeChange = (nextMode: SavingsSourceMode) => {
-    if (
-      nextMode === 'auto_debit' &&
-      process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'
-    ) {
-      setFormError('Auto debit is not available in this staging build.');
-      return;
-    }
-    setSourceMode(nextMode);
-    setFormError(null);
-    setPaymentMethodsError(null);
-    if (nextMode === 'auto_debit') {
-      setInitialContributionEnabled(false);
-      setInitialContributionAmount('');
-    }
-  };
+  const {
+    confirmPlanTransfer,
+    handleContinue,
+    handleFundingContinue,
+    handleSourceModeChange,
+  } = useStartSavingsFormFlow({
+    acceptsNonWithdrawableTerms,
+    contributionValue,
+    initialContributionEnabled,
+    initialContributionValue,
+    refetch,
+    selectedFundingOption,
+    selectedPaymentMethodId,
+    selectedProduct,
+    setCreatedGoalId,
+    setFormError,
+    setInitialContributionAmount,
+    setInitialContributionEnabled,
+    setPaymentMethodsError,
+    setShowPreviewModal,
+    setShowSuccessModal,
+    setShowTransferModal,
+    setSourceMode,
+    sourceMode,
+    submitSavingsGoal,
+    targetValue,
+  });
 
   return {
     acceptsNonWithdrawableTerms,
@@ -378,10 +292,7 @@ export function useStartSavingsController() {
     submitSavingsGoal,
     targetAmount,
     targetValue,
-    variantOptionGroups: buildSavingsVariantOptionGroups(
-      selectedProductSource?.variants ?? [],
-      variantSelection
-    ),
+    variantOptionGroups,
     variantOptions,
   };
 }

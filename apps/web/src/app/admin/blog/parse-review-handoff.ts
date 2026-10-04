@@ -80,6 +80,8 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   const metadata = {
+    title,
+    author_name: readText(value.author_name) || 'Baci Editorial',
     slug: readText(value.slug) || generateSlug(title),
     featured_image_alt: readText(featuredImage.alt),
     focus_keyword: readText(value.focus_keyword),
@@ -91,6 +93,8 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   };
   const validatedMetadata = blogPostSchema
     .pick({
+      title: true,
+      author_name: true,
       slug: true,
       featured_image_alt: true,
       focus_keyword: true,
@@ -108,7 +112,6 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   return {
-    author_name: readText(value.author_name) || 'Baci Editorial',
     ...metadata,
     content,
     featured_image_height: readDimension(featuredImage.height),
@@ -121,7 +124,6 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
       .map((tag) => tag.trim())
       .filter(Boolean)
       .join(', '),
-    title,
   };
 }
 

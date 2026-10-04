@@ -22,6 +22,7 @@ interface BlogEditorProps {
   content: string; // Used for content storage
   contentResetKey?: number;
   onChange: (content: string) => void;
+  onContentDirty?: () => void;
   placeholder?: string;
   onImageUpload?: (file: File) => Promise<string>;
   onProductsChange?: (products: Product[]) => void;
@@ -34,6 +35,7 @@ export function BlogEditor({
   contentResetKey = 0,
   merchantId,
   onChange,
+  onContentDirty,
   onImageUpload,
   onProductsChange,
   embeddedProducts = [],
@@ -71,6 +73,7 @@ export function BlogEditor({
         merchantId={merchantId}
         initialValue={initialContent}
         onChange={handleContentChange}
+        onContentDirty={onContentDirty}
         onImageUpload={onImageUpload}
         onProductsChange={onProductsChange}
         embeddedProducts={embeddedProducts}

@@ -7,7 +7,6 @@ import {
   EditorCommandItem,
   EditorCommandList,
   EditorContent,
-  type EditorInstance,
   EditorRoot,
   handleCommandNavigation,
   handleImageDrop,
@@ -16,7 +15,6 @@ import {
 } from 'novel';
 
 import { useState } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 import {
   createImageUploader,
   createMerchantImageUploader,
@@ -33,6 +31,7 @@ import { LinkSelector } from './novel-features/selectors/link-selector';
 import { NodeSelector } from './novel-features/selectors/node-selector';
 import { TextButtons } from './novel-features/selectors/text-buttons';
 import { ProductEmbedPicker } from './product-embed';
+import { useBlogContentUpdates } from './use-blog-content-updates';
 
 // Remove static extensions definition
 // const extensions = [...defaultExtensions, slashCommand];
@@ -41,6 +40,7 @@ interface NovelEditorProps {
   merchantId?: string;
   initialValue?: JSONContent | string;
   onChange: (value: string) => void;
+  onContentDirty?: () => void;
   onImageUpload?: (file: File) => Promise<string>;
   onProductsChange?: (products: Product[]) => void;
   embeddedProducts?: Product[];
@@ -60,6 +60,7 @@ export default function NovelEditor({
   merchantId,
   initialValue,
   onChange,
+  onContentDirty,
   onImageUpload,
   onProductsChange,
   embeddedProducts = [],
@@ -69,10 +70,7 @@ export default function NovelEditor({
   const [openLink, setOpenLink] = useState(false);
   const [openProducts, setOpenProducts] = useState(false);
 
-  const debouncedUpdates = useDebouncedCallback((editor: EditorInstance) => {
-    const html = editor.getHTML();
-    onChange(html);
-  }, 500);
+  const updateContent = useBlogContentUpdates(onChange, onContentDirty);
 
   const imageUploader = onImageUpload
     ? createImageUploader(onImageUpload)
@@ -134,7 +132,7 @@ export default function NovelEditor({
             } as Record<string, string>,
           }}
           onUpdate={({ editor }) => {
-            debouncedUpdates(editor);
+            updateContent(editor);
           }}
           slotBefore={
             <EditorToolbar

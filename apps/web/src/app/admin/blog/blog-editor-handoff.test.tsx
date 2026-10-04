@@ -17,15 +17,21 @@ vi.mock('next/link', () => ({
   default: (props: ComponentProps<'a'>) => <a {...props} />,
 }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
+const fetchWithCsrf = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/api-client', () => ({ fetchWithCsrf }));
 vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
   BlogEditorFields: ({
     form,
     contentResetKey,
     onFormChange,
+    onContentDirty,
+    onUploadFeatured,
   }: {
     form: PlatformAdminBlogFormState;
     contentResetKey: number;
     onFormChange: (form: PlatformAdminBlogFormState) => void;
+    onContentDirty?: () => void;
+    onUploadFeatured: () => void;
   }) => (
     <>
       <input
@@ -37,6 +43,13 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
       />
       <output aria-label="Editor reset">{contentResetKey}</output>
       <output aria-label="Article">{form.content}</output>
+      <button type="button" onClick={onContentDirty}>
+        Type pending body edit
+      </button>
+      <button type="button" onClick={onUploadFeatured}>
+        Upload cover
+      </button>
+      <output aria-label="Featured image">{form.featured_image_url}</output>
     </>
   ),
 }));
@@ -66,6 +79,55 @@ it('imports directly into an unchanged form and resets the rich-text editor', as
   expect(confirm).not.toHaveBeenCalled();
   expect(screen.getByLabelText('Editor reset')).toHaveTextContent('1');
   expect(screen.getByLabelText('Article')).toHaveTextContent('Imported body');
+});
+
+it('confirms body edits before their debounced form update arrives', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  render(<BlogEditorClient mode="create" />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Type pending body edit' })
+  );
+  importHandoff();
+  expect(
+    await screen.findByText('Import cancelled. Your article is unchanged.')
+  ).toBeInTheDocument();
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText('Editor reset')).toHaveTextContent('0');
+});
+
+it('keeps an imported image when an older featured upload finishes later', async () => {
+  const pending = Promise.withResolvers<Response>();
+  fetchWithCsrf.mockReturnValueOnce(pending.promise);
+  vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
+    this: HTMLInputElement
+  ) {
+    fireEvent.change(this, {
+      target: { files: [new File(['image'], 'cover.png')] },
+    });
+  });
+  render(<BlogEditorClient mode="create" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
+  expect(fetchWithCsrf).toHaveBeenCalled();
+  importHandoff();
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
+  await act(async () =>
+    pending.resolve(
+      new Response(
+        JSON.stringify({
+          url: 'https://cdn.example.com/stale.webp',
+          width: 1200,
+          height: 675,
+          variants: {},
+        }),
+        { status: 200 }
+      )
+    )
+  );
+  expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+    'https://cdn.example.com/cover.webp'
+  );
 });
 
 it('preserves changed content on cancellation and replaces it after confirmation', async () => {

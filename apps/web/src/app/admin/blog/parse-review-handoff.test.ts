@@ -29,6 +29,25 @@ const validHandoff = {
 
 describe('parseReviewHandoff', () => {
   it.each([
+    ['title', 200],
+    ['author_name', 100],
+  ] as const)('validates the save limit for %s', (field, limit) => {
+    expect(() =>
+      parseReviewHandoff({
+        ...validHandoff,
+        slug: 'guide',
+        [field]: 'x'.repeat(limit),
+      })
+    ).not.toThrow();
+    expect(() =>
+      parseReviewHandoff({
+        ...validHandoff,
+        slug: 'guide',
+        [field]: 'x'.repeat(limit + 1),
+      })
+    ).toThrow();
+  });
+  it.each([
     'Uppercase',
     'with_underscore',
     'with spaces',

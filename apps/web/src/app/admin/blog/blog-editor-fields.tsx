@@ -24,6 +24,7 @@ type BlogEditorFieldsProps = {
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
   onContentChange: (value: string) => void;
+  onContentDirty?: () => void;
   onFormChange: (
     updater:
       | PlatformAdminBlogFormState
@@ -41,6 +42,7 @@ export function BlogEditorFields({
   form,
   isEditMode,
   onContentChange,
+  onContentDirty,
   onFormChange,
   onInlineImageUpload,
   onSubmit,
@@ -205,6 +207,7 @@ export function BlogEditorFields({
           contentResetKey={contentResetKey}
           content={form.content}
           onChange={onContentChange}
+          onContentDirty={onContentDirty}
           onImageUpload={onInlineImageUpload}
         />
 

@@ -4,7 +4,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
   updatePlatformBlogPost,
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { generateSlug } from '@/lib/blog-utils';
+import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
 
 type BlogEditorClientProps = {
   initialPost?: PlatformAdminBlogPostDetail | null;
@@ -161,10 +162,16 @@ export function BlogEditorClient({
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
-  const [uploadingFeatured, setUploadingFeatured] = useState(false);
+  const pendingContentEditRef = useRef(false);
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
   );
+  const { uploadingFeatured, uploadFeatured, invalidateFeaturedUploads } =
+    useBlogFeaturedImageUpload({
+      upload: (file) => uploadBlogMedia(file, 'featured'),
+      setForm,
+      toast,
+    });
 
   const pageTitle = isEditMode
     ? 'Edit Platform Blog Post'
@@ -178,29 +185,7 @@ export function BlogEditorClient({
       const file = input.files?.[0];
       if (!file) return;
 
-      setUploadingFeatured(true);
-      uploadBlogMedia(file, 'featured')
-        .then((upload) => {
-          setForm((current) => ({
-            ...current,
-            featured_image_height: upload.height ?? null,
-            featured_image_url: upload.url,
-            featured_image_variants: upload.variants ?? {},
-            featured_image_width: upload.width ?? null,
-          }));
-          toast({ title: 'Featured image uploaded' });
-        })
-        .catch((error) => {
-          toast({
-            title: 'Upload failed',
-            description:
-              error instanceof Error ? error.message : 'Unknown error',
-            variant: 'destructive',
-          });
-        })
-        .finally(() => {
-          setUploadingFeatured(false);
-        });
+      void uploadFeatured(file);
     };
     input.click();
   };
@@ -249,13 +234,15 @@ export function BlogEditorClient({
                 )
             );
             if (
-              changed &&
+              (changed || pendingContentEditRef.current) &&
               !window.confirm(
                 'Replace your unsaved article with this review handoff?'
               )
             ) {
               return false;
             }
+            invalidateFeaturedUploads();
+            pendingContentEditRef.current = false;
             setForm(draft);
             setContentResetKey((current) => current + 1);
             return true;
@@ -268,7 +255,11 @@ export function BlogEditorClient({
         form={form}
         isEditMode={isEditMode}
         onContentChange={(content) => {
+          pendingContentEditRef.current = false;
           setForm((current) => ({ ...current, content }));
+        }}
+        onContentDirty={() => {
+          pendingContentEditRef.current = true;
         }}
         onFormChange={(updater) => {
           setForm((current) =>

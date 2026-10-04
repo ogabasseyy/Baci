@@ -137,6 +137,13 @@ t varmap-for 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail
 t varmap-multiassign 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}loader=old; export ziplog=x loader=new; \"\${loader}\" -C /tmp all"
 t varmap-cmdsubst-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x=\"\$(printf hi)\""
 
+# --- varmap operators (Codex P1: ${v:0} computed argv0) ---
+t varmap-substring 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cmd=bash; \"\${cmd:0}\" \"\${GITHUB_WORKSPACE}/evil.sh\""
+t varmap-default-op 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cmd=bash; \"\${cmd:-sh}\" -c true"
+t varmap-at-op 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${@}\" -c true"
+t varmap-home-path-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${HOME}/.local/bin/muse\" --version"
+t varmap-assign-op-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}note=\"\${note} [done]\""
+
 # --- CORE-qualified perl calls (Codex P1: CORE::open) ---
 t perl-core-open 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::open(my \$fh, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\");"
 t perl-core-sysopen 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::sysopen(my \$fh, \$f, O_RDWR);"

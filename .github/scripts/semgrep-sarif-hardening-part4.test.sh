@@ -36,6 +36,9 @@ t helper-ps-o-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ps -o etim
 t helper-ld-audit 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}LD_AUDIT=\"\${GITHUB_WORKSPACE}/evil.so\" /bin/true"
 t reviewer-ld-audit 1 "reviewer-env-poison" happy.sarif "$S${FS}          META_API_KEY:${FS}b${FS}          LD_AUDIT: /tmp/evil.so"
 
+# --- TAR_OPTIONS poison (Codex P1: checkpoint-action exec) ---
+t helper-tar-options 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v TAR_OPTIONS 'x'; export TAR_OPTIONS; tar -cf \"\${RUNNER_TEMP}/x.tar\" /dev/null"
+
 # --- runner-home exec (Codex P1: /home/runner/work allowlist) ---
 t helper-runner-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/home/runner/work/Baci/Baci/evil.sh"
 t helper-runner-home-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/home/runner/.local/bin/muse --version"
@@ -43,6 +46,9 @@ t helper-runner-home-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/ho
 # --- globbed writes (Codex P1: trusted-* copy destination) ---
 t helper-glob-write 1 "helper-unzoneable-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp \"\${GITHUB_WORKSPACE}/evil.sh\" /home/runner/work/Baci/Baci/trusted-*/.github/scripts/muse-review/diff.sh"
 t helper-glob-source-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp *.log /tmp/build.log"
+# --- globbed abspath exec (Codex P1: /usr/bin/ba?h) ---
+t helper-glob-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/ba?h \"\${GITHUB_WORKSPACE}/evil.sh\""
+t helper-glob-abspath-class 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/ba[rs]h \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- static eval (Codex P1: eval 'bash ./evil.sh') ---
 t helper-eval-static 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}eval 'bash ./evil.sh'"

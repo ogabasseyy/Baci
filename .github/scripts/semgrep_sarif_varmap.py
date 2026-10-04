@@ -79,6 +79,21 @@ def audit_unresolved_argv(argv0, stale, drift):
     # dynamic by construction.
     if "helper-unresolved-command" in drift:
         return
+    if re.match(r"\"?\$\{[^A-Za-z_]", argv0) \
+            or re.match(r"\"?\$\{[A-Za-z_]\w*"
+                       r"[:#%/@^,+?=[\]-]", argv0):
+        # Parameter operators in command position (${v:0},
+        # ${v:-d}, ${v[0]}): _resolve keeps the literal text
+        # while bash computes the value, so the auditor would
+        # bless a different command than the one executed --
+        # stale or not. Start-anchored (mid-word expansions
+        # and assignments audit through their own rules); a
+        # bare ${V} has its closing brace right after the
+        # name, so no operator fires. A non-name char right
+        # after ${ (${@}, ${#}, ${!ref}) is a special
+        # parameter or operator by construction.
+        drift.append("helper-unresolved-command")
+        return
     if argv0 == "$()" or argv0 in ("$@", "$*", "$_") \
             or re.match(r"\$[0-9]", argv0):
         drift.append("helper-unresolved-command")

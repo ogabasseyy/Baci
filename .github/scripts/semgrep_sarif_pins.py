@@ -52,7 +52,8 @@ def _contained_exec_path(path, root_re):
     m = re.match(root_re, path)
     if not m:
         return False
-    if any(ch in path[m.end():] for ch in ("$", "`", "\\")):
+    if any(ch in path[m.end():]
+           for ch in ("$", "`", "\\", "*", "?", "[", "(")):
         return False
     if not path[m.end():]:
         return True
@@ -99,7 +100,12 @@ def _safe_exec_path(path):
         if re.match(r"^/(usr|bin|sbin|etc)/", norm) \
                 or re.match(r"^/lib[^/]*/", norm) \
                 or norm == "/":
-            return not any(ch in path for ch in ("$", "`", "\\"))
+            # Glob metacharacters expand to a different path
+            # than the approved literal (quoted or not: quoted
+            # matches nothing and fails closed harmlessly).
+            return not any(ch in path
+                           for ch in ("$", "`", "\\", "*", "?",
+                                      "[", "("))
         return False
     return False
 

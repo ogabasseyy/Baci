@@ -75,11 +75,12 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # classes/scripts, kapt runs annotation processors).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
-    r"clang\+\+)(?:-\d[\d.]*)?$")
+    r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")
 # Versioned (gcc-12, g++-13, clang-17) and cross-prefixed
 # (x86_64-linux-gnu-gcc) driver spellings share the -B
 # mechanism; only dash-joined prefixes match (mycc/acc are
-# not drivers).
+# not drivers). gfortran accepts GCC options (-B plants
+# subprograms like f951).
 _LD_SO_RE = re.compile(
     r"^ld(-linux.*|-musl.*)?\.so(\.\d+)?$")
 # Glibc/musl dynamic linkers run directly (ld-linux-*.so.2,
@@ -148,14 +149,16 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
               "GIT_EXTERNAL_DIFF", "GIT_DIFF_OPTS", "GIT_ASKPASS",
               "SSH_ASKPASS", "GIT_CONFIG_PARAMETERS",
               "PAGER", "GH_HOST",
-              "SHELLOPTS", "PS4", "BASH_CMDS")
+              "SHELLOPTS", "PS4", "BASH_CMDS",
+              "TAR_OPTIONS")
 # GIT_CONFIG_COUNT gates GIT_CONFIG_KEY_n/VALUE_n (verified: count 0
 # ignores keys), so the COUNT exact-match closes the family.
 # PERL5DB is inserted before the first line under perl -d;
 # SHELLOPTS (xtrace) plus PS4 expand the token into the log
 # from env alone (verified imports); BASH_CMDS elements join
 # the command hash table (bash 4.0+); SSH_ASKPASS programs
-# run on remote auth (sshpass's env counterpart).
+# run on remote auth (sshpass's env counterpart); TAR_OPTIONS
+# prepends tar flags (checkpoint-action=exec runs commands).
 
 
 # Bash exported-function encoding (round 14, P1 4176327352):

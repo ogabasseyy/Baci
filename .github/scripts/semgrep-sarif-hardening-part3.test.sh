@@ -144,6 +144,9 @@ t loader-gcc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a$
 t loader-gcc-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gcc-13 --version"
 t loader-gcc-cross 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x86_64-linux-gnu-gcc --version"
 t loader-mycc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mycc --version"
+# --- gfortran loader (Codex P1: gfortran -B plants f951) ---
+t loader-gfortran 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gfortran -B\"\${GITHUB_WORKSPACE}/evil-bin\" \"\${GITHUB_WORKSPACE}/evil.f90\""
+t loader-gfortran-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gfortran-13 --version"
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

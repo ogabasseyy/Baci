@@ -51,6 +51,11 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // The Places Legacy routes must put the API key in the URL. Their fetch
+    // calls opt out of @vercel/otel spans, so disable Next's separate fetch
+    // spans too; those spans include the full URL and do not honor that option.
+    process.env.NEXT_OTEL_FETCH_DISABLED = '1';
+
     const { registerOTel } = await import('@vercel/otel');
 
     registerOTel({

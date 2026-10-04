@@ -1,11 +1,13 @@
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
 import {
   eventPipelineFrozenRoutes,
   frozenEventPipelineAuthoritySources,
 } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
+import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
@@ -134,10 +136,12 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ],
     credentialPaths: [
       ...eventPipelineCredentialPaths,
+      ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
@@ -155,17 +159,19 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/lib/platform-admin-auth.ts',
     ],
+    // biome-ignore format: compact reviewed authority allowlist preserves the 300-line module gate.
     serviceImporters: [
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking/route.ts',
       'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
       'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
+      'apps/web/src/lib/jumia/server-credential-client.ts',
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+      'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
@@ -205,9 +211,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
   projectionAuthorities: {
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
-    'apps/web/src/app/api/platform/events/platform-event-forwarding.ts': [
-      'platformProviderConfig',
-    ],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
       'merchantFeatureProviderConfig',
       'merchantProviderConfig',

@@ -74,6 +74,34 @@ describe('storefront search page metadata', () => {
     });
   });
 
+  it('treats a repeated query as an empty search', async () => {
+    vi.mocked(getRequestScopedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      custom_domain: 'shop.example.ng',
+      business_name: 'Ogabassey',
+      payout_currency: 'NGN',
+    } as never);
+
+    mockHeaders.mockResolvedValue(
+      new Headers([
+        ['host', 'proxy.internal'],
+        ['x-custom-domain', 'shop.example.ng'],
+        ['x-pathname', '/search'],
+      ])
+    );
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+      searchParams: Promise.resolve({ q: ['iphone', 'galaxy'] }),
+    });
+
+    expect(metadata.title).toEqual({ absolute: 'Search | Ogabassey' });
+    expect(metadata.alternates).toMatchObject({
+      canonical: 'https://shop.example.ng/search',
+    });
+  });
+
   it('treats a query that sanitizes to empty as an empty search', async () => {
     vi.mocked(getRequestScopedMerchant).mockResolvedValue({
       id: 'merchant-1',

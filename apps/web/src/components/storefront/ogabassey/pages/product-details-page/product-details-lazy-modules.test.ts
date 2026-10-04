@@ -23,16 +23,12 @@ const dynamicMock = vi.hoisted(() =>
   )
 );
 
-vi.mock('next/dynamic', () => ({
-  default: dynamicMock,
-}));
-
+vi.mock('next/dynamic', () => ({ default: dynamicMock }));
 vi.mock('./selection-required-modal', () => ({
   SelectionRequiredModal: function SelectionRequiredModal() {
     return null;
   },
 }));
-
 vi.mock('../../components/BannerCarousel', () => ({
   BannerCarousel: function BannerCarousel() {
     return null;
@@ -49,15 +45,13 @@ describe('product details lazy modules', () => {
     const { SelectionRequiredModal } = await import(
       './product-details-lazy-selection-required-modal'
     );
-
-    expect(dynamicMock).toHaveBeenCalled();
     const lazyComponent = SelectionRequiredModal as typeof SelectionRequiredModal & {
-      loader: () => Promise<{ default?: unknown } | Record<string, unknown>>;
+      loader: () => Promise<unknown>;
       options?: { ssr?: boolean };
     };
 
+    expect(dynamicMock).toHaveBeenCalled();
     expect(lazyComponent.options?.ssr).toBe(false);
-
     const resolved = await lazyComponent.loader();
     expect(typeof resolved).toBe('function');
     expect((resolved as { name?: string }).name).toBe('SelectionRequiredModal');
@@ -67,15 +61,13 @@ describe('product details lazy modules', () => {
     const { BannerCarousel } = await import(
       './product-details-lazy-banner-carousel'
     );
-
-    expect(dynamicMock).toHaveBeenCalled();
     const lazyComponent = BannerCarousel as typeof BannerCarousel & {
-      loader: () => Promise<{ default?: unknown } | Record<string, unknown>>;
+      loader: () => Promise<unknown>;
       options?: { ssr?: boolean };
     };
 
+    expect(dynamicMock).toHaveBeenCalled();
     expect(lazyComponent.options?.ssr).toBe(false);
-
     const resolved = await lazyComponent.loader();
     expect(typeof resolved).toBe('function');
     expect((resolved as { name?: string }).name).toBe('BannerCarousel');

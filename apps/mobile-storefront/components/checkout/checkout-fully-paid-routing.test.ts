@@ -1,8 +1,18 @@
 import type { OrderResponse } from '@/services/orders';
+import type { CheckoutPaymentCompletionOutcome } from '@/services/track-checkout-payment-completed-once';
 
 const mockRouterReplace = jest.fn();
 jest.mock('expo-router', () => ({
   router: { replace: (...args: unknown[]) => mockRouterReplace(...args) },
+}));
+
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown): Promise<CheckoutPaymentCompletionOutcome> =>
+    'emitted'
+);
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
 }));
 
 const mockClearAndPersistCheckoutCart = jest.fn(
@@ -34,7 +44,7 @@ describe('routeStoreCreditSuccess', () => {
     const setIsProcessing = jest.fn();
     const orderResponse = {
       amountDueToGateway: 0,
-      order: { payment_status: 'paid' },
+      order: { payment_status: 'paid', total: 25000 },
       savings: { amountUsed: 3000 },
       wallet: { amountUsed: 22000 },
     } as unknown as OrderResponse;
@@ -49,6 +59,12 @@ describe('routeStoreCreditSuccess', () => {
       trackingToken: 'tok',
     });
 
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith({
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'wallet',
+      value: 25000,
+    });
     expect(clearCart).toHaveBeenCalled();
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(mockRouterReplace).toHaveBeenCalledWith({
@@ -61,6 +77,81 @@ describe('routeStoreCreditSuccess', () => {
         trackingToken: 'tok',
       }),
     });
+  });
+
+  it('retries a released claim once before leaving checkout', async () => {
+    mockTrackCheckoutPaymentCompletedOnce
+      .mockResolvedValueOnce('released')
+      .mockResolvedValueOnce('emitted');
+    const clearCart = jest.fn();
+    const setIsProcessing = jest.fn();
+    const orderResponse = {
+      amountDueToGateway: 0,
+      order: { payment_status: 'paid', total: 25000 },
+      savings: { amountUsed: 3000 },
+      wallet: { amountUsed: 22000 },
+    } as unknown as OrderResponse;
+
+    await routeStoreCreditSuccess({
+      clearCart,
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      orderResponse,
+      paymentMethod: 'wallet',
+      setIsProcessing,
+      trackingToken: 'tok',
+    });
+
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(2);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenNthCalledWith(2, {
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      paymentMethod: 'wallet',
+      value: 25000,
+    });
+    expect(clearCart).toHaveBeenCalled();
+    expect(mockRouterReplace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: expect.objectContaining({ orderId: 'order-1' }),
+    });
+  });
+
+  it('skips cart clear and navigation when unmounted during tracking', async () => {
+    let resolveTracking: (outcome: CheckoutPaymentCompletionOutcome) => void =
+      () => {};
+    mockTrackCheckoutPaymentCompletedOnce.mockImplementationOnce(
+      () =>
+        new Promise<CheckoutPaymentCompletionOutcome>((resolve) => {
+          resolveTracking = resolve;
+        })
+    );
+    const clearCart = jest.fn();
+    const setIsProcessing = jest.fn();
+    const isMountedRef = { current: true };
+    const orderResponse = {
+      amountDueToGateway: 0,
+      order: { payment_status: 'paid', total: 25000 },
+      savings: { amountUsed: 3000 },
+      wallet: { amountUsed: 22000 },
+    } as unknown as OrderResponse;
+
+    const pending = routeStoreCreditSuccess({
+      clearCart,
+      isMountedRef,
+      orderId: 'order-1',
+      orderNumber: 'BAC-001',
+      orderResponse,
+      paymentMethod: 'wallet',
+      setIsProcessing,
+      trackingToken: 'tok',
+    });
+    isMountedRef.current = false;
+    resolveTracking('emitted');
+    await pending;
+
+    expect(clearCart).not.toHaveBeenCalled();
+    expect(setIsProcessing).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 });
 
@@ -75,10 +166,17 @@ describe('routeFullyPaidPrizeSuccess', () => {
       isOrderInFlight,
       orderId: 'order-9',
       orderNumber: 'BAC-009',
+      orderTotal: 19000,
       setIsProcessing,
       trackingToken: null,
     });
 
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith({
+      orderId: 'order-9',
+      orderNumber: 'BAC-009',
+      paymentMethod: 'quiz_voucher',
+      value: 19000,
+    });
     expect(clearCart).toHaveBeenCalled();
     expect(setIsProcessing).toHaveBeenCalledWith(false);
     expect(isOrderInFlight.current).toBe(false);
@@ -94,5 +192,72 @@ describe('routeFullyPaidPrizeSuccess', () => {
     // No trackingToken key when null.
     const params = mockRouterReplace.mock.calls[0][0].params;
     expect(params).not.toHaveProperty('trackingToken');
+  });
+
+  it('retries a released claim once before leaving checkout', async () => {
+    mockTrackCheckoutPaymentCompletedOnce
+      .mockResolvedValueOnce('released')
+      .mockResolvedValueOnce('emitted');
+    const clearCart = jest.fn();
+    const setIsProcessing = jest.fn();
+    const isOrderInFlight = { current: true };
+
+    await routeFullyPaidPrizeSuccess({
+      clearCart,
+      isOrderInFlight,
+      orderId: 'order-9',
+      orderNumber: 'BAC-009',
+      orderTotal: 19000,
+      setIsProcessing,
+      trackingToken: null,
+    });
+
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(2);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenNthCalledWith(2, {
+      orderId: 'order-9',
+      orderNumber: 'BAC-009',
+      paymentMethod: 'quiz_voucher',
+      value: 19000,
+    });
+    expect(clearCart).toHaveBeenCalled();
+    expect(isOrderInFlight.current).toBe(false);
+    expect(mockRouterReplace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: expect.objectContaining({ orderId: 'order-9' }),
+    });
+  });
+
+  it('skips cart clear and navigation when unmounted during tracking', async () => {
+    let resolveTracking: (outcome: CheckoutPaymentCompletionOutcome) => void =
+      () => {};
+    mockTrackCheckoutPaymentCompletedOnce.mockImplementationOnce(
+      () =>
+        new Promise<CheckoutPaymentCompletionOutcome>((resolve) => {
+          resolveTracking = resolve;
+        })
+    );
+    const clearCart = jest.fn();
+    const setIsProcessing = jest.fn();
+    const isMountedRef = { current: true };
+    const isOrderInFlight = { current: true };
+
+    const pending = routeFullyPaidPrizeSuccess({
+      clearCart,
+      isMountedRef,
+      isOrderInFlight,
+      orderId: 'order-9',
+      orderNumber: 'BAC-009',
+      orderTotal: 19000,
+      setIsProcessing,
+      trackingToken: null,
+    });
+    isMountedRef.current = false;
+    resolveTracking('emitted');
+    await pending;
+
+    expect(clearCart).not.toHaveBeenCalled();
+    expect(setIsProcessing).not.toHaveBeenCalled();
+    expect(isOrderInFlight.current).toBe(true);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 });

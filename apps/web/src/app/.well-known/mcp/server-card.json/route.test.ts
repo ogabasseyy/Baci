@@ -6,10 +6,9 @@ const PUBLIC_TOOL_NAMES = [
   'add_to_cart',
   'browse_categories',
   'get_brands',
+  'get_delivery_fee_info',
   'get_product',
   'get_product_variants',
-  'get_recommendations',
-  'get_shipping_quote',
   'get_store_info',
   'search_products',
 ];
@@ -75,11 +74,88 @@ describe('GET /.well-known/mcp/server-card.json', () => {
       annotations: {
         destructiveHint: false,
         openWorldHint: false,
-        readOnlyHint: false,
+        readOnlyHint: true,
       },
       inputSchema: {
         required: ['product_id'],
+        properties: {
+          quantity: expect.objectContaining({ type: 'integer' }),
+        },
       },
     });
+    expect(
+      toolsByName.get('add_to_cart').inputSchema.properties
+    ).not.toHaveProperty('session_id');
+  });
+
+  it('publishes the search_products intent contract', async () => {
+    const { GET } = await import('./route');
+    const body = await GET().json();
+    const searchProducts = body.tools.find(
+      (tool: { name: string }) => tool.name === 'search_products'
+    );
+
+    expect(searchProducts.description).toContain('intent');
+    expect(searchProducts.inputSchema.required).toEqual(
+      expect.arrayContaining(['intent'])
+    );
+    expect(searchProducts.inputSchema.properties.intent).toMatchObject({
+      type: 'object',
+      required: ['alternatives'],
+      properties: {
+        alternatives: expect.objectContaining({
+          minItems: 1,
+          maxItems: 5,
+        }),
+      },
+    });
+    const attributeBranches =
+      searchProducts.inputSchema.properties.intent.properties.alternatives.items
+        .properties.attributes.items.oneOf;
+    expect(attributeBranches).toHaveLength(2);
+    expect(attributeBranches[0]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['storage_gb', 'power_w']) },
+        operator: { enum: ['eq', 'gte', 'lte'] },
+        value: {
+          anyOf: [
+            { const: 0 },
+            { type: 'number', minimum: 0.000001, maximum: 1000000000 },
+          ],
+        },
+      },
+    });
+    expect(attributeBranches[1]).toMatchObject({
+      properties: {
+        key: { enum: expect.arrayContaining(['color']) },
+        operator: { enum: ['eq'] },
+        value: { type: 'string' },
+      },
+    });
+  });
+
+  it('publishes checkout-only delivery fee information with the runtime schema shape', async () => {
+    const { GET } = await import('./route');
+    const body = await GET().json();
+    const tool = body.tools.find(
+      (candidate: { name: string }) =>
+        candidate.name === 'get_delivery_fee_info'
+    );
+
+    expect(tool).toMatchObject({
+      title: 'Check Delivery Fee Information',
+      description: expect.stringContaining(
+        'no fixed delivery fee is published'
+      ),
+      inputSchema: {
+        required: ['state'],
+        properties: {
+          state: expect.objectContaining({ type: 'string' }),
+          city: expect.objectContaining({ type: 'string' }),
+        },
+      },
+    });
+    expect(tool.inputSchema.properties).not.toHaveProperty('address');
+    expect(tool.inputSchema.properties).not.toHaveProperty('estimated_weight');
   });
 });

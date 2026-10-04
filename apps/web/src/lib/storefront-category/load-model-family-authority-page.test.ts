@@ -94,4 +94,43 @@ describe('model family authority page loader', () => {
       })
     ).toBeNull();
   });
+
+  it('keeps the Infinix HOT hub indexable with Hot 70 and Hot 70 Pro', async () => {
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://store.test/smartphones/brands/infinix',
+      merchant: {
+        id: 'merchant-id',
+        business_name: 'Store',
+        country: 'NG',
+        slug: 'store',
+        custom_domain: null,
+      },
+      brand: { brandKey: 'infinix', displayName: 'Infinix' },
+      products: [
+        { name: 'Infinix Hot 70', slug: 'infinix-hot-70' },
+        { name: 'Infinix Hot 70 Pro', slug: 'infinix-hot-70-pro' },
+        { name: 'Infinix Note 60', slug: 'infinix-note-60' },
+      ],
+      breadcrumbItems: [],
+    });
+    const { modelFamilyAuthorityPageLoader } = await import(
+      './load-model-family-authority-page'
+    );
+    const page = await modelFamilyAuthorityPageLoader.load({
+      merchantSlug: 'store',
+      categorySlug: 'smartphones',
+      brandSlug: 'infinix',
+      familySlug: 'hot',
+    });
+
+    expect(page).toMatchObject({
+      canonicalUrl:
+        'https://store.test/smartphones/brands/infinix/families/hot',
+      heading: 'Infinix HOT Phones and Prices in Nigeria',
+    });
+    expect(page?.products.map((product) => product.slug)).toEqual([
+      'infinix-hot-70',
+      'infinix-hot-70-pro',
+    ]);
+  });
 });

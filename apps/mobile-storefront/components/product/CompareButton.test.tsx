@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import React from 'react';
 import { useComparisonStore } from '@/stores/comparison-store';
 import type { Product } from '@/types/product';
 import { CompareButton } from './CompareButton';

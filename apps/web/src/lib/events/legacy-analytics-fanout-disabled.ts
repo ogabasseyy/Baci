@@ -1,8 +1,12 @@
 import { eventPipelineAuthorityCutover } from './event-pipeline-authority-cutover';
 
-export function isLegacyAnalyticsFanoutDisabled(): boolean {
+export function isLegacyAnalyticsFanoutDisabled(
+  scope: 'merchant' | 'platform' = 'merchant'
+): boolean {
   const authorityExpiry = Date.parse(
-    eventPipelineAuthorityCutover.temporaryAuthorityExpiresAt
+    scope === 'platform'
+      ? eventPipelineAuthorityCutover.temporaryAuthorityExpiresAt
+      : eventPipelineAuthorityCutover.merchantAuthorityExpiresAt
   );
   return (
     eventPipelineAuthorityCutover.queueOnlyDeliveryActivated ||

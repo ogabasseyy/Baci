@@ -84,6 +84,11 @@ export function useQuizPrizeClaim(
       // the web path zeroes it the same way in build-order-items). Keep the
       // catalog price as compare_at so the cart shows the "was" amount.
       price: 0,
+      // Order verification uses variant.price_override ?? product.price.
+      // The normalized variant.price may be display-only when no override exists.
+      catalog_price:
+        product.variants?.find((variant) => variant.id === prizeClaim.variantId)
+          ?.price_override ?? product.price,
       compare_at_price: product.compare_at_price ?? product.price,
       quantity: 1,
       image_url: product.image || product.images?.[0],

@@ -1,10 +1,16 @@
 import { eventPipelineAdsServicePaths } from '@/lib/events/event-pipeline-ads-service-paths';
+import { eventPipelineJumiaServicePaths } from '@/lib/events/event-pipeline-jumia-service-paths';
 
 export const eventPipelineAuthorityServicePaths = [
   ...eventPipelineAdsServicePaths,
+  ...eventPipelineJumiaServicePaths,
   [
     'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
     'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+    'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
   ],
   [
     'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',

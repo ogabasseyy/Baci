@@ -11,5 +11,8 @@ describe('getForwardableSelectedQuoteId', () => {
       ),
     ).toBeUndefined();
     expect(getForwardableSelectedQuoteId('airport', 'air-1')).toBeUndefined();
+    expect(getForwardableSelectedQuoteId('airport', 'air-1', true)).toBe(
+      'air-1',
+    );
   });
 });

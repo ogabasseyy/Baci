@@ -8,13 +8,30 @@
  *   loading → loading (user taps a different receipt while loading)
  */
 
-import type { ReceiptMerchant, ReceiptOrder } from '@baci/shared';
-import { generateReceiptHtml } from '@baci/shared';
+import type {
+  ReceiptDocumentKind,
+  ReceiptMerchant,
+  ReceiptOrder,
+} from '@baci/shared';
+import {
+  generateReceiptHtml,
+  resolveInvoiceTypeCode,
+  showMerchantBankDetails,
+} from '@baci/shared';
 import { useState } from 'react';
 import type { ReceiptListItem } from '@/types/receipt';
 import { useMerchantReceiptInfo, useReceiptDetail } from './use-receipts';
 
-export function useReceiptPreview() {
+export interface ReceiptPreviewOptions {
+  /**
+   * Explicit document kind for the generated HTML. Order-success passes
+   * `proforma` for unpaid invoice orders so the opened artifact matches
+   * the "View / Download Proforma Invoice" action that opened it.
+   */
+  documentKind?: ReceiptDocumentKind;
+}
+
+export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const { data: merchantInfo } = useMerchantReceiptInfo();
 
@@ -30,7 +47,20 @@ export function useReceiptPreview() {
 
   let html = '';
   let isPaid = false;
+  // The effective kind behind the generated artifact, mirroring the
+  // generator's own resolution (paid always renders the commercial
+  // receipt, even with a stale proforma kind). Returned so the modal
+  // chrome (title/share labels) reads from the same value the artifact
+  // was built with — never a second local derivation that can disagree
+  // with it.
+  let documentKind: ReceiptDocumentKind = 'invoice';
   if (isOpen) {
+    // Same NGN-only rule as the web document builders: a
+    // foreign-currency preview must not print the untyped naira account
+    // beside a dollar-denominated balance. The renderer prefers the
+    // order-level virtual account, so the guard must cover it — not just
+    // the merchant fallback below.
+    const showBankDetails = showMerchantBankDetails(receiptDetail.currency);
     const orderData: ReceiptOrder = {
       order_number: receiptDetail.order_number,
       created_at: receiptDetail.created_at,
@@ -51,7 +81,7 @@ export function useReceiptPreview() {
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
       shipping_address: receiptDetail.shipping_address,
-      virtual_account: receiptDetail.virtual_account,
+      virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
       items: receiptDetail.items,
       transactions: receiptDetail.transactions,
     };
@@ -70,16 +100,42 @@ export function useReceiptPreview() {
       brand_colors: merchantInfo.brand_colors ?? undefined,
       vat_registration_status: merchantInfo.vat_registration_status,
       vat_rate: merchantInfo.vat_rate,
-      bank_code: merchantInfo.bank_code,
-      bank_account_number: merchantInfo.bank_account_number,
-      bank_name: merchantInfo.bank_name,
-      bank_account_name: merchantInfo.bank_account_name,
+      bank_code: showBankDetails ? merchantInfo.bank_code : null,
+      bank_account_number: showBankDetails
+        ? merchantInfo.bank_account_number
+        : null,
+      bank_name: showBankDetails ? merchantInfo.bank_name : null,
+      bank_account_name: showBankDetails
+        ? merchantInfo.bank_account_name
+        : null,
       social_media: merchantInfo.social_media,
       pages: merchantInfo.pages,
     };
 
-    html = generateReceiptHtml(orderData, merchant);
+    // Archive callers open by order id without an explicit kind: derive
+    // it from the loaded order through the shared server rule so a
+    // never-paid invoice keeps its proforma labeling instead of falling
+    // back to the generic commercial "Invoice" — while an explicit
+    // stored type code (e.g. 381) survives the derivation untouched.
+    // Matches the success-screen classification: only invoices with no
+    // prior-payment evidence (never paid, refunded, partially paid, or
+    // wallet/savings credited) are proforma.
+    const resolvedTypeCode = resolveInvoiceTypeCode({
+      paymentMethod: receiptDetail.payment_method,
+      isPaid: receiptDetail.payment_status === 'paid',
+      wasPaid: receiptDetail.payment_status === 'refunded',
+      paymentStatus: receiptDetail.payment_status,
+      amountPaid: receiptDetail.amount_paid,
+      storedTypeCode: receiptDetail.invoice_type_code,
+    });
+    const derivedDocumentKind =
+      options.documentKind ??
+      (resolvedTypeCode === '325' ? 'proforma' : undefined);
+    html = generateReceiptHtml(orderData, merchant, {
+      documentKind: derivedDocumentKind,
+    });
     isPaid = receiptDetail.payment_status === 'paid';
+    documentKind = isPaid ? 'receipt' : (derivedDocumentKind ?? 'invoice');
   }
 
   const openPreview = (item: ReceiptListItem) => {
@@ -99,6 +155,7 @@ export function useReceiptPreview() {
     isOpen,
     html,
     isPaid,
+    documentKind,
     openPreview,
     openPreviewByOrderId,
     closePreview,

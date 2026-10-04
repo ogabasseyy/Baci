@@ -5,6 +5,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { CHECKOUT_INSTALLATION_STORAGE_KEY } from '@/config/checkout-storage';
+import { applyCheckoutCreditSnapshot } from '@/lib/checkout-attempt-credit-snapshot';
+import { usesCodepointCheckoutItemSort } from '@/lib/checkout-idempotency-item-sort';
 import { resolveCheckoutGeneration } from '@/lib/resolve-checkout-generation';
 
 let installationPromise: Promise<string> | undefined;
@@ -119,12 +121,19 @@ export async function getCheckoutAttemptKey(
     persistFrozen: options?.persistFrozen,
     liveGeneration: options?.liveGeneration,
   });
+  // Gateway partitions (for example ":uba_redvault") share the base
+  // generation's sort marker and credit snapshot: both are recorded under
+  // the minted cart UUID so cleanup releases a single entry.
+  const baseGeneration = generation.split(':')[0];
   // The server intentionally excludes the selected gateway from its checkout
   // hash so switching payment methods resumes the same pending order.
-  const recoveryPayload = Object.fromEntries(
-    Object.entries(payload).filter(
-      ([key]) => key !== 'payment_method' && key !== 'payment_status'
-    )
+  const recoveryPayload = await applyCheckoutCreditSnapshot(
+    Object.fromEntries(
+      Object.entries(payload).filter(
+        ([key]) => key !== 'payment_method' && key !== 'payment_status'
+      )
+    ),
+    baseGeneration
   );
   // Only an opaque installation ID is stored here, never checkout PII. Identity
   // hashes the server checkout projection plus local retry partitions.
@@ -136,7 +145,12 @@ export async function getCheckoutAttemptKey(
         checkoutGeneration: generation,
         installationId,
         payload: buildOrderIdempotencyPayload(
-          toCheckoutIdempotencyInput(recoveryPayload)
+          toCheckoutIdempotencyInput(recoveryPayload),
+          {
+            itemSort: (await usesCodepointCheckoutItemSort(baseGeneration))
+              ? 'codepoint'
+              : 'locale',
+          }
         ),
       })
     )

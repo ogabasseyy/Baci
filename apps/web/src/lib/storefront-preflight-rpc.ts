@@ -9,35 +9,19 @@ import {
 } from './storefront-internal-preflight';
 import { createStorefrontPreflightCircuitBreaker } from './storefront-preflight-circuit-breaker';
 import { classifyRpcErrorReason } from './storefront-preflight-rpc-error';
+import {
+  snapshotStorefrontPreflightRpcArgs,
+  storefrontPreflightRpcFlightKey,
+  storefrontPreflightRpcFlights,
+} from './storefront-preflight-rpc-flight';
 
-/**
- * Direct-Supabase transport for the proxy middleware's storefront preflights.
+/** Direct-Supabase transport for the proxy middleware's storefront preflights.
+ * One anon PostgREST RPC replaces the internal self-fetch. A short verdict memo
+ * and a consecutive-failure breaker bound repeat traffic and brownouts.
  *
- * Replaces the /api/internal self-fetch (middleware → public edge →
- * cold-startable function → data cache → DB) with one anon PostgREST RPC call:
- * the Vercel function region (dub1) and the database (eu-west-1) are
- * co-located, so verdicts resolve in tens of milliseconds and the abort budget
- * becomes headroom instead of a cliff. Verdict semantics live in the
- * SECURITY DEFINER RPCs (supabase/migrations/20260706200000_*).
- *
- * Blast-radius bounds (both required because middleware cannot use 'use cache'
- * and therefore lost the data-cache absorber the route transport had):
- *  - a short-TTL verdict memo collapses the canonical + membership helpers'
- *    identical calls on the same navigation (and same-URL crawl repeats) into
- *    one round trip;
- *  - a consecutive-failure circuit breaker fails every preflight open
- *    instantly during a Supabase brownout instead of stalling each document
- *    navigation for the full budget, twice.
- *
- * ACCEPTED EXPOSURE: the verdict RPCs are anon-GRANTed SECURITY DEFINER
- * functions, so they are directly callable at PostgREST with the public anon
- * key, bypassing this transport's memo/breaker/kill-switch — the same class
- * as the shipped resolve_storefront_auth_merchant and
- * get_merchant_product_slug_resolution RPCs. They expose only public
- * storefront verdict data, are index-backed point reads, and are capped
- * DB-side by the anon role's statement_timeout (a function-level SET could
- * not re-arm the timer for the already-running statement); platform-side
- * anon rate limiting is the control surface for direct abuse.
+ * The RPCs are intentionally anon-GRANTed SECURITY DEFINER public verdict
+ * reads. They remain directly callable with the public key, so platform anon
+ * rate limiting and the DB statement timeout provide the outer safeguards.
  */
 
 export interface StorefrontPreflightRpcContext {
@@ -71,16 +55,7 @@ interface CallStorefrontPreflightRpcOptions {
   emptyResult?: 'unknown';
 }
 
-// 2s, not the route transport's old 800ms: the RPCs execute in ~20ms
-// server-side, and PostHog `detail` telemetry showed the entire residual
-// timeout class (155 events/19h post-#2980) was OUR client abort firing on
-// transport-tail events (cold TLS + event-loop contention during page-data
-// fanout) — each one a fail-open that forfeits a crawler-facing 404/308
-// verdict. The old prohibition on budget bumps guarded a user-visible stall
-// bound on two SEQUENTIAL slow function hops; here the memo collapses the
-// second call on success, the circuit breaker bounds brownouts, and the
-// extra budget is only ever spent on genuine tail events, converting lost
-// verdicts into slightly-slower correct ones.
+// A 2s budget recovers transport-tail events; memo and breaker bound its cost.
 const DEFAULT_TIMEOUT_MS = 2_000;
 // One navigation's helpers call within ~100ms; this short memo absorbs repeats.
 const breaker = createStorefrontPreflightCircuitBreaker();
@@ -133,9 +108,22 @@ export async function callStorefrontPreflightRpc(
   args: Record<string, string>,
   options: CallStorefrontPreflightRpcOptions
 ): Promise<unknown | null> {
-  const { failOpenContext } = options;
+  const failOpenContext = { ...options.failOpenContext };
+  const emptyResult = options.emptyResult;
+  const attemptOptions = { emptyResult, failOpenContext };
+  const argsSnapshot = snapshotStorefrontPreflightRpcArgs(args);
 
-  const key = storefrontPreflightRpcMemo.key(fn, args, options.emptyResult);
+  // Preview deployments must not borrow a production memo or hit its data.
+  const vercelEnv = process.env.VERCEL_ENV?.trim();
+  if (vercelEnv && vercelEnv !== 'production') {
+    storefrontInternalPreflight.warnFailOpen({
+      ...failOpenContext,
+      reason: 'no-base-url',
+    });
+    return null;
+  }
+
+  const key = storefrontPreflightRpcMemo.key(fn, argsSnapshot, emptyResult);
   const memoized = storefrontPreflightRpcMemo.read(key);
   if (
     storefrontPreflightRpcMemo.isTimeout(memoized) ||
@@ -147,18 +135,36 @@ export async function callStorefrontPreflightRpc(
     return memoized;
   }
 
-  // Preview deployments must not resolve verdicts against production data —
-  // parity with the route transport's resolveBaseUrl gate, which returns null
-  // for every non-production VERCEL_ENV.
-  const vercelEnv = process.env.VERCEL_ENV?.trim();
-  if (vercelEnv && vercelEnv !== 'production') {
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'no-base-url',
-    });
-    return null;
-  }
+  const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const flightKey = storefrontPreflightRpcFlightKey(
+    key,
+    timeoutMs,
+    vercelEnv,
+    rpcImpl
+  );
 
+  return await storefrontPreflightRpcFlights.run(flightKey, () =>
+    runStorefrontPreflightRpcAttempt(
+      fn,
+      argsSnapshot,
+      key,
+      attemptOptions,
+      rpcImpl,
+      timeoutMs
+    )
+  );
+}
+
+async function runStorefrontPreflightRpcAttempt(
+  fn: string,
+  args: Record<string, string>,
+  key: string,
+  options: CallStorefrontPreflightRpcOptions,
+  rpcImpl: StorefrontPreflightRpcImpl,
+  timeoutMs: number
+): Promise<unknown | null> {
+  const { failOpenContext } = options;
   if (breaker.isOpen()) {
     // Console-only: the transition itself was captured once below.
     storefrontInternalPreflight.warnSkip({
@@ -168,10 +174,7 @@ export async function callStorefrontPreflightRpc(
     return null;
   }
 
-  const rpcImpl = options.rpcImpl ?? defaultRpcImpl;
-  const timeout = createAbortSignalTimeout(
-    options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  );
+  const timeout = createAbortSignalTimeout(timeoutMs);
 
   let result: StorefrontPreflightRpcResult;
   try {
@@ -282,6 +285,7 @@ export function gateStorefrontPreflightStatus(
 /** Test hook: clears the verdict memo, breaker state, and client singleton. */
 export function resetStorefrontPreflightRpcForTests(): void {
   storefrontPreflightRpcMemo.clear();
+  storefrontPreflightRpcFlights.reset();
   breaker.reset();
   client = null;
 }

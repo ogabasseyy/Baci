@@ -8,9 +8,12 @@
   "regions": ["dub1"],
   "crons": [
     { "path": "/api/cron/web-vitals-health", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/gigl-tracking", "schedule": "*/5 * * * *" },
     {
       "path": "/api/cron/gigl-tracking-notifications",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/purge-jumia-self-authorization-discoveries",
       "schedule": "*/10 * * * *"
     },
     {
@@ -20,6 +23,10 @@
     {
       "path": "/api/cron/savings-notifications",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/provision-immediate-notification-completion-hmac",
+      "schedule": "*/5 * * * *"
     }
   ],
   "functions": {

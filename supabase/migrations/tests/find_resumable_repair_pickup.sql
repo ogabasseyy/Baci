@@ -28,6 +28,7 @@ INSERT INTO public.repairs (
   service_type,
   pickup_address,
   status,
+  pickup_payment_status,
   created_at
 )
 VALUES
@@ -43,6 +44,7 @@ VALUES
   'pickup',
   '12 Station Road, Osogbo',
   'pending',
+  'awaiting_payment',
   now() - interval '30 minutes'
 ),
 (
@@ -57,6 +59,7 @@ VALUES
   'pickup',
   '12 Station Road, Osogbo',
   'pending',
+  'awaiting_payment',
   now() - interval '10 minutes'
 );
 
@@ -199,6 +202,53 @@ BEGIN
     )
   ) THEN
     RAISE EXCEPTION 'mismatched merchant capability must not reclaim a ticket';
+  END IF;
+END;
+$$;
+
+-- A pending (pre-provider) binding must not hide the unpaid repair from
+-- reclaim: only a paid binding (pickup_payment_reference) excludes it. The
+-- bind RPC overwrites prior pending refs, so retries after an ambiguous
+-- bind, a terminal provider failure, or a fenced-resultless reclaim resume
+-- the same repair instead of creating a duplicate ticket.
+DO $$
+DECLARE
+  rebound_id uuid;
+  bound_row record;
+BEGIN
+  -- The preceding block leaves merchant ...099 in the receiver claims; point
+  -- them back at the fixture merchant for this block's capability checks.
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claims',
+    jsonb_build_object(
+      'role', 'repair_pickup_receiver',
+      'repair_pickup_receiver_context', 'server-quote',
+      'repair_pickup_receiver_merchant_id',
+      '84a63d82-0000-4000-8000-000000000001'
+    )::text,
+    true
+  );
+
+  SELECT bind_result.bound INTO bound_row
+  FROM public.bind_repair_pickup_pending_payment_reference(
+    '84a63d82-0000-4000-8000-000000000010',
+    '84a63d82-0000-4000-8000-000000000001',
+    'RPU-TESTPENDING00001'
+  ) AS bind_result;
+
+  IF bound_row IS NULL OR bound_row.bound IS NOT TRUE THEN
+    RAISE EXCEPTION 'fixture pending bind must succeed before the resumability check';
+  END IF;
+
+  SELECT reclaim.id INTO rebound_id
+  FROM public.find_resumable_repair_pickup(
+    '84a63d82-0000-4000-8000-000000000001',
+    'ada@example.com',
+    '84a63d82-0000-4000-8000-000000000010'
+  ) AS reclaim;
+
+  IF rebound_id IS DISTINCT FROM '84a63d82-0000-4000-8000-000000000010'::uuid THEN
+    RAISE EXCEPTION 'pending-bound unpaid pickup must stay resumable';
   END IF;
 END;
 $$;

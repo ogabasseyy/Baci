@@ -310,11 +310,11 @@ export function AddressAutocomplete({
           'pr-10 transition-all duration-200',
           className
         )}
-        autoComplete="new-password"
+        autoComplete={props.autoComplete ?? 'new-password'}
         data-lpignore="true"
       />
 
-      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+      <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2">
         {/* Only show clear button after hydration to prevent SSR mismatch */}
         {mounted && internalValue && !isLoading && (
           <button

@@ -109,7 +109,14 @@ export function generateReceiptHtml(
 
   const isPaid = order.payment_status === 'paid';
   const statusConfig = getReceiptStatusConfig(order.payment_status);
-  const docTitle = isPaid ? 'Receipt' : 'Invoice';
+  // A proforma is by definition unpaid; a paid order always renders the
+  // commercial receipt even if a stale proforma kind travels with it.
+  const isProforma = options.documentKind === 'proforma' && !isPaid;
+  const docTitle = isPaid
+    ? 'Receipt'
+    : isProforma
+      ? 'Proforma Invoice'
+      : 'Invoice';
 
   const currencyCode = order.currency || 'NGN';
   const formatMoney = createMoneyFormatter(currencyCode);
@@ -176,6 +183,7 @@ export function generateReceiptHtml(
     dateStr,
     docTitle,
     isPaid,
+    isProforma,
     itemRows: renderItemRows(order, formatMoney),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),

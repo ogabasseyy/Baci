@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QuizAdminClient } from './quiz-admin-client';
@@ -50,6 +56,52 @@ const generated = {
 
 describe('QuizAdminClient activation timing', () => {
   beforeEach(() => mockApiPost.mockReset());
+
+  it.each([
+    { manual: false, seconds: 100 },
+    { manual: true, seconds: 150 },
+  ])('uses generated play time unless the immediate window was edited ($manual)', async ({
+    manual,
+    seconds,
+  }) => {
+    mockApiPost
+      .mockResolvedValueOnce({
+        ...generated,
+        questions: Array.from({ length: 10 }, () => generated.questions[0]),
+      })
+      .mockResolvedValueOnce({
+        event: { ...generated.event, status: 'active' },
+      });
+    const user = userEvent.setup();
+    render(<QuizAdminClient initialPrizeProducts={[prize]} />);
+    await user.selectOptions(
+      screen.getByLabelText(/launch timing/i),
+      'immediate'
+    );
+    if (manual)
+      fireEvent.change(screen.getByLabelText(/total quiz duration/i), {
+        target: { value: '150' },
+      });
+    await user.click(screen.getByRole('button', { name: /generate draft/i }));
+    await user.click(
+      await screen.findByRole('checkbox', {
+        name: /reviewed every correct answer/i,
+      })
+    );
+    await user.click(screen.getByRole('button', { name: /launch quiz/i }));
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: /launch quiz/i,
+      })
+    );
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(2));
+    expect(mockApiPost).toHaveBeenLastCalledWith(
+      '/api/merchant/quiz/activate',
+      expect.objectContaining({
+        timing: { kind: 'immediate', liveWindowSeconds: seconds },
+      })
+    );
+  });
 
   it('resyncs the auto-derived end from the generated count before activation', async () => {
     // Regression: Gemma may return a different count than requested (the

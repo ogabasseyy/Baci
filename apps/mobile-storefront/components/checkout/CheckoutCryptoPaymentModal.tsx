@@ -69,7 +69,7 @@ export function CheckoutCryptoPaymentModal({
 
   const completePayment = async () => {
     await clearCart();
-    const { orderId, orderNumber, trackingToken } = cryptoPayment;
+    const { orderId, orderNumber, reference, trackingToken } = cryptoPayment;
     onClosePayment();
     router.replace({
       pathname: '/order-success',
@@ -77,6 +77,9 @@ export function CheckoutCryptoPaymentModal({
         orderId,
         orderNumber,
         paymentMethod: 'juicyway',
+        // Settlement polling consumes the durable completion claim, so it
+        // needs the provider reference to reconcile the conversion.
+        ...(reference && { reference }),
         ...(trackingToken && { trackingToken }),
       },
     });

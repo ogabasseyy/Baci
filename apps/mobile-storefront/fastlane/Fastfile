@@ -203,7 +203,14 @@ platform :ios do
       submit_for_review: true,
       automatic_release: true,
       force: true,
-      reject_if_possible: true,
+      # Pinned false, never omitted: deliver reads DELIVER_REJECT_IF_POSSIBLE
+      # when the option is omitted, which would silently re-enable its
+      # unguarded cancellation path. Cancellation is owned solely by
+      # app_store_version_slot_ready? above (opt-in via
+      # IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT) -- deliver's own
+      # reject_if_possible withdrew build 2.1.527 from App Review when
+      # 2.1.528 shipped.
+      reject_if_possible: false,
       precheck_include_in_app_purchases: false,
       # IDFA: the storefront uses the advertiser identifier for ad-attribution
       # (Facebook/TikTok/Snapchat/Google conversion + install tracking via the

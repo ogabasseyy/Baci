@@ -17,12 +17,17 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/tiktok/route.ts':
     '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
   'apps/web/src/app/api/platform/events/route.ts':
-    'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+    '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.
+  // Refreshed for malformed-JSON rejection before business data access; the
+  // inherited notification/payment authority and database operations are unchanged.
+  // Re-pinned after merging main (#3525/#3504): keeps this branch's checkout
+  // blog-purge scheduling plus main's tracking-link, redvault, and
+  // plan-tier-authoritative entitlement additions.
   'apps/web/src/app/api/orders/route.ts':
-    '94aa16c3ed4a30ca1c2bedea0d920ddbe706ed971d40f0cc4f3017c9dc496388',
+    '09b39ce08dff5a8bf34b83a7516c92534fb5122a5bfd84641db19f3d0c789ad7',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

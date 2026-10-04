@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-async function readWebFilter() {
+async function readWebFilter(filterPath = '.github/filters/ci.yml') {
   const [workflow, filters] = await Promise.all([
     readFile('.github/workflows/ci.yml', 'utf8'),
-    readFile('.github/filters/ci.yml', 'utf8'),
+    readFile(filterPath, 'utf8'),
   ]);
   const filterLines = filters.split('\n');
   const webFilterIndex = filterLines.findIndex((line) => line.trim() === 'web:');
@@ -27,14 +27,14 @@ async function readWebFilter() {
   return { webFilter, webFilterIndex, workflow };
 }
 
-test('the Quality Gate reaches the tools and worker TypeScript project', async () => {
+test('the Quality Gate generates route types and reaches the tools and worker TypeScript project', async () => {
   const pkg = JSON.parse(await readFile('apps/web/package.json', 'utf8'));
   const toolsTsconfig = JSON.parse(await readFile('apps/web/tsconfig.tools-workers.json', 'utf8'));
   const configTest = await readFile('.github/scripts/resolve-ci-test-plan-config.test.mjs', 'utf8');
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'tsc --noEmit && pnpm typecheck:tools-workers');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.deepEqual(toolsTsconfig.compilerOptions.types, [
     'node', 'vitest/globals', '@testing-library/jest-dom', 'google.maps',
@@ -64,6 +64,10 @@ test('the Quality Gate reaches the tools and worker TypeScript project', async (
     'src/lib/quiz/finalize-due-quiz-events.test.ts',
     'src/scripts/process-petrock-reconciliation.ts',
     'src/scripts/process-petrock-reconciliation.test.ts',
+    'src/scripts/process-gigl-tracking.ts',
+    'src/scripts/process-gigl-tracking.test.ts',
+    'src/scripts/verify-gigl-tracking-worker-capability.ts',
+    'src/scripts/verify-gigl-tracking-worker-capability.test.ts',
     'src/scripts/process-quiz-finalization.ts',
     'src/scripts/process-quiz-finalization.test.ts',
   ]);
@@ -71,6 +75,11 @@ test('the Quality Gate reaches the tools and worker TypeScript project', async (
   assert.ok(
     webFilter.includes("- '.github/scripts/tools-worker-typecheck-contract.test.mjs'")
   );
+  assert.ok(webFilter.includes("- 'vercel.json'"));
+  const { webFilter: deployWebFilter } = await readWebFilter(
+    '.github/filters/deploy.yml'
+  );
+  assert.ok(deployWebFilter.includes("- 'vercel.json'"));
   assert.match(workflow, /filters: \.github\/filters\/ci\.yml/);
   assert.match(configTest, /import '\.\/tools-worker-typecheck-contract\.test\.mjs';/);
   assert.match(workflow, /node --test [^\n]*resolve-ci-test-plan-config\.test\.mjs/);

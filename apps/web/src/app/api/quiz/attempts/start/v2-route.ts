@@ -9,7 +9,10 @@ import { parseQuizV2Attempt } from '@/app/api/quiz/_shared/quiz-v2-projection';
 import {
   createRouteProof,
   invalidInputResponse,
+  isQuizAgeGateError,
   parseJsonBody,
+  prizeGuardErrorResponse,
+  quizAgeGateErrorResponse,
   quizRpcClientErrorResponse,
   rejectQuizIdentityMismatch,
   requireQuizCsrf,
@@ -22,7 +25,9 @@ import {
   resolveQuizDevice,
 } from '@/lib/quiz/quiz-device-hash';
 import { buildQuizDeviceProofSubject } from '@/lib/quiz/quiz-device-proof-subject';
+import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 import { startQuizAttemptV2RouteSchema } from '@/schemas/quiz';
+import { enforceQuizStartGuards } from './v2-start-guards';
 
 const START_ACTION = 'start_quiz_attempt_v2';
 const DEVICE_ACTION = 'start_quiz_attempt_with_device_v2';
@@ -48,13 +53,32 @@ export async function postQuizStartV2(request: NextRequest) {
   );
   if (mismatch) return mismatch;
 
-  const runtimeResponse = await requireQuizV2Runtime(auth.supabase);
-  if (runtimeResponse) return runtimeResponse;
-
+  // Reject a malformed fingerprint before any database work so invalid input
+  // cannot consume guard lookups or surface event-dependent failures.
   const rawFingerprint = request.headers.get('X-Baci-Quiz-Device-Fingerprint');
   const fingerprint = readQuizDeviceFingerprint(request);
   if (rawFingerprint !== null && !fingerprint) {
     return invalidInputResponse({ deviceFingerprint: ['Invalid header'] });
+  }
+
+  const runtimeResponse = await requireQuizV2Runtime(auth.supabase);
+  if (runtimeResponse) return runtimeResponse;
+
+  try {
+    await enforceQuizStartGuards(
+      auth.supabase,
+      parsed.data.eventId,
+      auth.user.id
+    );
+  } catch (error) {
+    if (isQuizAgeGateError(error)) return quizAgeGateErrorResponse(error);
+    if (error instanceof QuizProductionNotApprovedError) {
+      return prizeGuardErrorResponse(error);
+    }
+    // Guard lookup and eligibility failures stay fail-closed behind the
+    // route's stable JSON error contract instead of escaping as a
+    // framework 500.
+    return rpcErrorResponse();
   }
 
   const shouldResolveDevice =

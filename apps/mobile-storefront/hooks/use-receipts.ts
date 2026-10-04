@@ -128,6 +128,7 @@ async function fetchReceiptDetail(
           id,
           order_number,
           payment_status,
+          shipping_status,
           payment_method,
           total,
           subtotal,
@@ -145,6 +146,7 @@ async function fetchReceiptDetail(
           customer_email,
           customer_phone,
           shipping_address,
+          invoice_type_code,
           order_items (
             id,
             name,

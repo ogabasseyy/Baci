@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto';
 import {
+  type BuildOrderIdempotencyPayloadOptions,
   buildOrderIdempotencyPayload,
   type OrderIdempotencyPayloadInput,
 } from '@baci/shared';
 
-export { buildOrderIdempotencyPayload, type OrderIdempotencyPayloadInput };
+export {
+  type BuildOrderIdempotencyPayloadOptions,
+  buildOrderIdempotencyPayload,
+  type OrderIdempotencyPayloadInput,
+};
 
 export function hashOrderIdempotencyPayload(
   payload: ReturnType<typeof buildOrderIdempotencyPayload>

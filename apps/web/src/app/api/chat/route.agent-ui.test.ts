@@ -9,6 +9,16 @@ let ollamaExecutedToolNameBeforeFailure = '';
 let ollamaExecutedToolResultBeforeFailure = '';
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
 vi.mock('@/ai/provider', () => ({ checkRateLimit: () => ({ allowed: true }) }));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: vi.fn(async () => ({
+    agenticCheckoutEnabled: true,
+    businessName: 'Demo Store',
+    currencyCode: 'NGN',
+    merchantId: 'merchant-1',
+    merchantSlug: 'demo-store',
+    priceNegotiationEnabled: true,
+  })),
+}));
 vi.mock('@/env', () => ({
   getAiChatProvider: () => 'ollama',
   getAiChatModel: () => 'gemma4:e4b',
@@ -21,7 +31,10 @@ vi.mock('@/env', () => ({
 vi.mock('./ollama-chat-tool-runtime', () => ({
   executeAgenticChatToolForOllama: vi.fn(),
 }));
-vi.mock('./run-chat-provider-chain', () => ({ runChatProviderChain: vi.fn() }));
+vi.mock('./run-chat-provider-chain', () => ({
+  GEMINI_PROVIDER_TIMEOUT_MS: 25_000,
+  runChatProviderChain: vi.fn(),
+}));
 vi.mock('@/lib/llm-chat', () => ({ createLlmChatResponse: vi.fn() }));
 vi.mock('@/lib/sanitize', () => ({ sanitizeHtml: (value: string) => value }));
 vi.mock('@/lib/ollama-agentic-chat', () => ({

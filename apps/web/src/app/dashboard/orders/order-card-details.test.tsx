@@ -93,4 +93,20 @@ describe('OrderCardDetails', () => {
       screen.queryByRole('link', { name: 'Open Order Details' })
     ).not.toBeInTheDocument();
   });
+
+  it('passes the order currency to the item formatter', () => {
+    const formatCurrency = vi.fn(
+      (amount: number, currency?: string | null) => `${currency}:${amount}`
+    );
+
+    render(
+      <OrderCardDetails
+        order={makeOrder({ source: 'jumia', currency: 'KES' })}
+        formatCurrency={formatCurrency}
+      />
+    );
+
+    expect(formatCurrency).toHaveBeenCalledWith(25000, 'KES');
+    expect(screen.getByText('KES:25000')).toBeInTheDocument();
+  });
 });

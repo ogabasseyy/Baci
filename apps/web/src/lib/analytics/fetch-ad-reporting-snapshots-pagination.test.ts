@@ -18,7 +18,7 @@ function socialConnection() {
     provider_account_label: 'Baci Meta',
     provider_customer_id: 'meta-1',
     status: 'active',
-    token_expires_at: '2026-09-01T00:00:00.000Z',
+    token_expires_at: '2099-01-01T00:00:00.000Z',
   };
 }
 

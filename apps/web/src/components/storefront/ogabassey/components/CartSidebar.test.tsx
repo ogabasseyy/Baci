@@ -154,6 +154,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
 // ── Import after mocks ──────────────────────────────────────────────────────
 
+import { analytics } from '@/lib/analytics';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { CartSidebar } from './CartSidebar';
 
@@ -183,6 +184,25 @@ describe('CartSidebar', () => {
   it('renders cart items when open', () => {
     render(<CartSidebar />);
     expect(screen.getByText('Test Shoe')).toBeInTheDocument();
+  });
+
+  it('reports full cart items to analytics without remapping', () => {
+    render(<CartSidebar />);
+
+    expect(vi.mocked(analytics.viewCart)).toHaveBeenCalledWith(
+      [
+        {
+          product: expect.objectContaining({
+            id: 'p1',
+            cartItemId: 'ci-1',
+            name: 'Test Shoe',
+          }),
+          quantity: 1,
+        },
+      ],
+      'NGN',
+      expect.objectContaining({ merchantId: 'merchant-abc' })
+    );
   });
 
   it('renders cart-specific empty copy in the sidebar', () => {

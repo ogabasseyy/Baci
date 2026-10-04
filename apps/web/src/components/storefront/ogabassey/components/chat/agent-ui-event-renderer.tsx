@@ -8,18 +8,13 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import type { Product } from '@/lib/products';
+import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import {
   storefrontAgentUiContract,
   type StorefrontAgentUiEvent,
   type StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
-
-const PRICE_FORMATTER = new Intl.NumberFormat('en-NG', {
-  currency: 'NGN',
-  maximumFractionDigits: 0,
-  style: 'currency',
-});
 
 function needsSelection(product: StorefrontAgentUiProduct): boolean {
   // The PDP owns condition-aware cart options and minimum-order selection.
@@ -185,7 +180,15 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                         </p>
                       )}
                       <p className="mt-1 text-sm font-bold text-[var(--store-primary)]">
-                        {PRICE_FORMATTER.format(product.price)}
+                        {formatMerchantCurrency(
+                          product.price,
+                          {
+                            country: merchantContext?.merchant?.country,
+                            payout_currency:
+                              merchantContext?.merchant?.payout_currency,
+                          },
+                          { maximumFractionDigits: 0 }
+                        )}
                       </p>
                     </div>
                   </div>

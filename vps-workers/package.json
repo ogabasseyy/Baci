@@ -21,6 +21,7 @@
     "reconcile-vtu-processing": "node jobs/run-web-cron.mjs /api/cron/reconcile-vtu-processing",
     "vtu-cashback-summaries": "node jobs/run-web-cron.mjs /api/cron/vtu-cashback-summaries",
     "sync-jumia-orders": "bash bin/sync-jumia-orders.sh",
+    "process-gigl-tracking": "bash bin/process-gigl-tracking.sh",
     "process-petrock-reconciliation": "bash bin/process-petrock-reconciliation.sh",
     "process-quiz-finalization": "bash bin/process-quiz-finalization.sh",
     "preflight-direct-web-workers": "node jobs/preflight-direct-web-workers.mjs",

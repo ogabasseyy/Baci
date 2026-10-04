@@ -1,20 +1,9 @@
 'use client';
 
-import {
-  AlertTriangle,
-  ArrowUpDown,
-  ExternalLink,
-  Loader2,
-  Package,
-  RefreshCw,
-  Unlink,
-  Zap,
-} from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import jumiaLogo from '@/assets/jumia-logo.png';
+import { PublishProductsDialog } from '@/components/products/jumia/publish-products-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +14,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { BagLoader } from '@/components/ui/bag-loader';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,12 +23,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { ConnectJumiaDialog } from './connect-jumia-dialog';
+import { JumiaConnectionCard } from './jumia-connection-card';
+import { useJumiaChannelActions } from './use-jumia-channel-actions';
 import {
   disconnectIntegration,
   syncOrders,
-  syncStock,
   useJumiaIntegrations,
 } from './use-jumia-integrations';
 
@@ -55,20 +45,18 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   merchant_not_found: 'Merchant account not found — please log in again',
   oauth_not_configured:
     'Jumia OAuth is not configured — please contact support or try again later',
+  no_shops_discovered:
+    'Connected but no active shops discovered — please check your Jumia Vendor Center',
 };
-
-function formatLastSync(dateString: string | null) {
-  if (!dateString) return 'Never';
-  return new Date(dateString).toLocaleString('en-NG', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-}
 
 export default function ChannelsClientPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
+  const merchantContext = useMerchantSafe();
+  const merchant = merchantContext?.merchant;
+  const canManageIntegrations =
+    merchantContext?.hasPermission?.('integrations', 'manage') ?? false;
   const {
     integrations,
     setIntegrations,
@@ -78,10 +66,16 @@ export default function ChannelsClientPage() {
   } = useJumiaIntegrations();
 
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
-  const [stockSyncingIds, setStockSyncingIds] = useState<Set<string>>(
-    new Set()
-  );
+  const {
+    syncingIds,
+    stockSyncingIds,
+    approvalCheckingIds,
+    publishIntegrationId,
+    setPublishIntegrationId,
+    handleSync,
+    handleStockSync,
+    handleCheckApprovals,
+  } = useJumiaChannelActions({ refetch, toast });
   const [disconnectId, setDisconnectId] = useState<string | null>(null);
   const handledOauthParamsRef = useRef<string | null>(null);
 
@@ -156,50 +150,6 @@ export default function ChannelsClientPage() {
     setDisconnectId(null);
   };
 
-  const handleSync = async (integrationId: string) => {
-    setSyncingIds((prev) => new Set(prev).add(integrationId));
-    const result = await syncOrders(integrationId);
-
-    if (result.ok) {
-      toast({ title: result.message });
-      void refetch();
-    } else {
-      toast({
-        title: 'Sync failed',
-        description: result.error,
-        variant: 'destructive',
-      });
-    }
-
-    setSyncingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(integrationId);
-      return next;
-    });
-  };
-
-  const handleStockSync = async (integrationId: string) => {
-    setStockSyncingIds((prev) => new Set(prev).add(integrationId));
-    const result = await syncStock(integrationId);
-
-    if (result.ok) {
-      toast({ title: result.message });
-      void refetch();
-    } else {
-      toast({
-        title: 'Stock sync failed',
-        description: result.error,
-        variant: 'destructive',
-      });
-    }
-
-    setStockSyncingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(integrationId);
-      return next;
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
@@ -240,159 +190,20 @@ export default function ChannelsClientPage() {
         </Card>
       )}
 
-      {/* Jumia Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="size-12 rounded-lg flex items-center justify-center border overflow-hidden p-1.5">
-                <Image
-                  src={jumiaLogo}
-                  alt="Jumia"
-                  width={40}
-                  height={40}
-                  className="object-contain"
-                />
-              </div>
-              <div>
-                <CardTitle>Jumia</CardTitle>
-                <CardDescription>
-                  Africa&apos;s largest e-commerce platform
-                </CardDescription>
-              </div>
-            </div>
-
-            {integrations.length === 0 ? (
-              <Button onClick={() => setShowConnectModal(true)}>Connect</Button>
-            ) : (
-              <Badge
-                variant="outline"
-                className="text-green-600 border-green-300 dark:text-green-400 dark:border-green-700"
-              >
-                Connected
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-
-        {integrations.length > 0 ? (
-          <CardContent className="space-y-4">
-            <p className="text-sm font-medium text-muted-foreground">
-              Connected Shops
-            </p>
-
-            {integrations.map((integration) => (
-              <div
-                key={integration.id}
-                className="flex flex-col gap-4 p-4 rounded-lg border bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-medium">
-                    {integration.shop_name || 'Unnamed Shop'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {integration.country_code || 'NG'} &middot; Last sync:{' '}
-                    {formatLastSync(integration.last_sync_at)}
-                  </p>
-                  {integration.sync_error && (
-                    <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                      <AlertTriangle className="size-3.5" />
-                      {integration.sync_error}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2 sm:justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSync(integration.id)}
-                    disabled={syncingIds.has(integration.id)}
-                  >
-                    {syncingIds.has(integration.id) ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                    <span className="ml-1.5">
-                      {syncingIds.has(integration.id)
-                        ? 'Syncing Orders'
-                        : 'Sync Orders'}
-                    </span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleStockSync(integration.id)}
-                    disabled={stockSyncingIds.has(integration.id)}
-                  >
-                    {stockSyncingIds.has(integration.id) ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <ArrowUpDown className="size-4" />
-                    )}
-                    <span className="ml-1.5">
-                      {stockSyncingIds.has(integration.id)
-                        ? 'Syncing Stock'
-                        : 'Sync Stock'}
-                    </span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setDisconnectId(integration.id)}
-                  >
-                    <Unlink className="size-4" />
-                    <span>Disconnect Jumia</span>
-                    <span className="sr-only">
-                      {' '}
-                      for {integration.shop_name || 'shop'}
-                    </span>
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            {/* Quick Actions */}
-            <div className="pt-4 border-t flex gap-3">
-              <Button variant="outline" className="flex-1" asChild>
-                <Link href="/dashboard/orders?source=jumia">
-                  <Package className="size-4 mr-2" />
-                  View Jumia Orders
-                </Link>
-              </Button>
-              <Button variant="outline" className="flex-1" asChild>
-                <a
-                  href="https://vendorcenter.jumia.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="size-4 mr-2" />
-                  Vendor Center
-                </a>
-              </Button>
-            </div>
-          </CardContent>
-        ) : (
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2">
-              <li className="flex items-center gap-2">
-                <Package className="size-4 text-green-500" />
-                Receive orders in your Baci dashboard
-              </li>
-              <li className="flex items-center gap-2">
-                <Zap className="size-4 text-green-500" />
-                Get push notifications for new orders
-              </li>
-              <li className="flex items-center gap-2">
-                <RefreshCw className="size-4 text-green-500" />
-                Manage inventory across platforms
-              </li>
-            </ul>
-          </CardContent>
-        )}
-      </Card>
+      <JumiaConnectionCard
+        integrations={integrations}
+        merchantId={merchant?.id}
+        canManageIntegrations={canManageIntegrations}
+        onConnect={() => setShowConnectModal(true)}
+        onAddProducts={setPublishIntegrationId}
+        onCheckApprovals={handleCheckApprovals}
+        approvalCheckingIds={approvalCheckingIds}
+        onSyncOrders={handleSync}
+        syncingIds={syncingIds}
+        onSyncStock={handleStockSync}
+        stockSyncingIds={stockSyncingIds}
+        onDisconnect={setDisconnectId}
+      />
 
       {/* Konga — Coming Soon */}
       <Card className="border-dashed opacity-60">
@@ -415,6 +226,20 @@ export default function ChannelsClientPage() {
         onOpenChange={setShowConnectModal}
         onConnected={refetch}
       />
+
+      {merchant?.id && publishIntegrationId && (
+        <PublishProductsDialog
+          merchantId={merchant.id}
+          integrationId={publishIntegrationId}
+          countryCode={
+            integrations.find(
+              (integration) => integration.id === publishIntegrationId
+            )?.country_code ?? 'NG'
+          }
+          open
+          onOpenChange={(open) => !open && setPublishIntegrationId(null)}
+        />
+      )}
 
       {/* Disconnect Confirmation */}
       <AlertDialog

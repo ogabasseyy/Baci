@@ -5,7 +5,6 @@ apps/web/src/app/api/analytics/conversion/route.test.ts
 apps/web/src/app/api/events/route.pipeline.test.ts
 apps/web/src/app/api/events/route.test.ts
 apps/web/src/app/api/payments/juicyway/webhook/route.pipeline.test.ts
-apps/web/src/app/api/platform/events/platform-event-forwarding.test.ts
 apps/web/src/app/api/platform/events/route.pipeline.test.ts
 apps/web/src/app/api/platform/events/route.test.ts
 apps/web/src/components/storefront/ogabassey/pages/imei-checker.test.tsx

@@ -1,5 +1,7 @@
 export {
+  type BuildOrderIdempotencyPayloadOptions,
   buildOrderIdempotencyPayload,
+  type OrderIdempotencyItemSort,
   type OrderIdempotencyPayloadInput,
 } from './build-order-idempotency-payload';
 export { calculateStorefrontDeliveryDailyEvidenceSha256 } from './delivery-evidence';

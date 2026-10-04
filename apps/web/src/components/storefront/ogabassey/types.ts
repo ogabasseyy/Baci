@@ -96,6 +96,7 @@ export interface Product {
   simType?: string;
   displayType?: string;
   displaySize?: string;
+  graphics?: string;
   // New fields for Interactive Grid
   images?: string[];
   spec?: string;
@@ -133,6 +134,7 @@ export function normalizeProductCondition(
 
 export interface ProductVariant {
   id: string;
+  inventory_tracking_policy?: string | null;
   name?: string;
   condition?: ProductCondition;
   price_override?: number;

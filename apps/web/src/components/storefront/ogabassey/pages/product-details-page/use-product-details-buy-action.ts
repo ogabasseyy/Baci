@@ -82,7 +82,8 @@ export function useProductDetailsBuyAction({
         (selectedVariantSelection?.condition as ConditionType | undefined) ||
           'new',
         selectedAttributesForBuy,
-        selectedVariantSelection?.color
+        selectedVariantSelection?.color,
+        { hasVariantPricing: selectedVariantSelection?.variant != null }
       ),
       1,
       {

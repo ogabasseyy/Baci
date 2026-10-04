@@ -1,5 +1,6 @@
 import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { clampNumberInput } from './quiz-admin-actions';
+import { QUIZ_AUTHORING_MAX_DURATION_SECONDS } from './quiz-authoring-timing-limits';
 
 interface QuizAuthoringTimingFieldsProps {
   timingKind: 'immediate' | 'scheduled';
@@ -46,17 +47,35 @@ export function QuizAuthoringTimingFields({
       </label>
       {timingKind === 'immediate' ? (
         <label className="grid gap-2 text-sm font-medium">
-          Universal live window (minutes)
+          Total quiz duration (seconds)
           <input
             className="h-11 rounded-md border bg-background px-3"
             min={1}
-            max={120}
+            max={QUIZ_AUTHORING_MAX_DURATION_SECONDS}
+            step={1}
             type="number"
-            value={windowMinutes}
-            onBlur={() =>
-              onWindowMinutesChange(clampNumberInput(windowMinutes, 1, 120))
+            value={Math.round(Number(windowMinutes) * 60)}
+            onBlur={() => {
+              // Blur only clamps the displayed value; reporting an
+              // unchanged duration would mark the window as manually
+              // edited and skip the automatic duration resync after
+              // generation changes the question count.
+              const clamped = String(
+                Number(
+                  clampNumberInput(
+                    String(Math.round(Number(windowMinutes) * 60)),
+                    1,
+                    QUIZ_AUTHORING_MAX_DURATION_SECONDS
+                  )
+                ) / 60
+              );
+              if (Number(clamped) !== Number(windowMinutes)) {
+                onWindowMinutesChange(clamped);
+              }
+            }}
+            onChange={(event) =>
+              onWindowMinutesChange(String(Number(event.target.value) / 60))
             }
-            onChange={(event) => onWindowMinutesChange(event.target.value)}
           />
         </label>
       ) : (

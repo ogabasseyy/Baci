@@ -56,19 +56,26 @@ case "$ENV_FILE" in
 esac
 
 if [ -z "${BACI_REPO_DIR:-}" ] && [ -f "$ENV_FILE" ]; then
-  ENV_REPO_DIR="$(
-    awk '
-      /^BACI_REPO_DIR=/ {
-        sub(/^BACI_REPO_DIR=/, "")
-        print
-        exit
-      }
-    ' "$ENV_FILE"
-  )"
-  ENV_REPO_DIR="${ENV_REPO_DIR%\"}"
-  ENV_REPO_DIR="${ENV_REPO_DIR#\"}"
-  ENV_REPO_DIR="${ENV_REPO_DIR%\'}"
-  ENV_REPO_DIR="${ENV_REPO_DIR#\'}"
+  # Single dotenv reader, shared with the provisioner, the flip, and
+  # the verifier: every BACI_REPO_DIR spelling the preflight accepts
+  # (export prefix, spaces, colon separator, quotes, comments,
+  # duplicates) must resolve identically on every cron tick. Primary:
+  # the promoted copy beside this script; fallback: the repo source
+  # for direct execution from a checkout.
+  runner_bin_dir="$(cd "$(dirname "$0")" && pwd)"
+  dotenv_reader="$runner_bin_dir/gigl-dotenv.sh"
+  if [ ! -f "$dotenv_reader" ]; then
+    dotenv_reader="$runner_bin_dir/../../.github/scripts/gigl-dotenv.sh"
+  fi
+  if [ ! -f "$dotenv_reader" ]; then
+    echo "[$LABEL] Missing gigl-dotenv.sh beside the worker bin and the repo." >&2
+    exit 1
+  fi
+  # shellcheck source=../../.github/scripts/gigl-dotenv.sh
+  . "$dotenv_reader"
+  # Last assignment wins inside the shared reader, matching dotenv and
+  # every other checkout reader: duplicates resolve to the live line.
+  ENV_REPO_DIR="$(gigl_dotenv_value "$ENV_FILE" 'BACI_REPO_DIR')"
   if [ -n "$ENV_REPO_DIR" ]; then
     BACI_REPO_DIR="$ENV_REPO_DIR"
   fi
@@ -119,7 +126,7 @@ if [ ! -f "$SCRIPT_FILE" ]; then
   exit 1
 fi
 
-if [ ! -f "$ENV_FILE" ]; then
+if [ "$ENV_FILE" != "/dev/null" ] && [ ! -f "$ENV_FILE" ]; then
   echo "[$LABEL] Missing env file: $ENV_FILE" >&2
   exit 1
 fi
@@ -142,8 +149,13 @@ cd "$WEB_DIR" || {
 }
 TSX_BIN="$WEB_DIR/node_modules/.bin/tsx"
 if [ ! -x "$TSX_BIN" ]; then
-  echo "[$LABEL] Missing executable tsx in $WEB_DIR. Run pnpm install --frozen-lockfile for the Baci checkout; do not use a production-only install until the worker entrypoints are compiled." >&2
-  exit 1
+  WORKSPACE_TSX_BIN="$REPO_DIR/node_modules/.bin/tsx"
+  if [ -x "$WORKSPACE_TSX_BIN" ]; then
+    TSX_BIN="$WORKSPACE_TSX_BIN"
+  else
+    echo "[$LABEL] Missing executable tsx in both $WEB_DIR and the workspace root. Run pnpm install --frozen-lockfile for the Baci checkout; do not use a production-only install until the worker entrypoints are compiled." >&2
+    exit 1
+  fi
 fi
 if ! tsx_output=$("$TSX_BIN" --version 2>&1); then
   echo "[$LABEL] tsx check output: $tsx_output" >&2

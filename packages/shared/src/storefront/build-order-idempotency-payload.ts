@@ -1,3 +1,5 @@
+import { compareOrderIdempotencyText } from './compare-order-idempotency-text';
+
 type IdempotencyItem = {
   assurance_fee?: number;
   condition?: string;
@@ -43,6 +45,18 @@ export type OrderIdempotencyPayloadInput = {
   wallet_amount?: number;
 };
 
+export type OrderIdempotencyItemSort = 'codepoint' | 'locale';
+
+export type BuildOrderIdempotencyPayloadOptions = {
+  itemSort?: OrderIdempotencyItemSort;
+};
+
+function itemTextCompare(sort: OrderIdempotencyItemSort) {
+  return sort === 'locale'
+    ? compareOrderIdempotencyText.locale
+    : compareOrderIdempotencyText.codePoints;
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -52,7 +66,8 @@ function normalizeNumber(value: number | null | undefined) {
 }
 
 function normalizeAttributes(
-  attributes: Record<string, string> | null | undefined
+  attributes: Record<string, string> | null | undefined,
+  compareText: (left: string, right: string) => number
 ) {
   if (!attributes) {
     return {};
@@ -61,26 +76,35 @@ function normalizeAttributes(
   return Object.fromEntries(
     Object.entries(attributes)
       .map(([key, value]) => [normalizeText(key), normalizeText(value)])
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareText(left, right))
   );
 }
 
-function stableStringify(value: unknown): string {
+function stableStringify(
+  value: unknown,
+  compareText: (left: string, right: string) => number
+): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`;
+    return `[${value.map((entry) => stableStringify(entry, compareText)).join(',')}]`;
   }
 
   if (value && typeof value === 'object') {
     return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .sort(([left], [right]) => compareText(left, right))
+      .map(
+        ([key, entry]) =>
+          `${JSON.stringify(key)}:${stableStringify(entry, compareText)}`
+      )
       .join(',')}}`;
   }
 
   return JSON.stringify(value);
 }
 
-function normalizeItems(items: readonly IdempotencyItem[]) {
+function normalizeItems(
+  items: readonly IdempotencyItem[],
+  compareText: (left: string, right: string) => number
+) {
   return items
     .map((item) => ({
       assurance_fee: normalizeNumber(item.assurance_fee),
@@ -90,30 +114,32 @@ function normalizeItems(items: readonly IdempotencyItem[]) {
       product_id: normalizeText(item.product_id ?? item.productId),
       quantity: normalizeNumber(item.quantity),
       variant_attributes: normalizeAttributes(
-        item.variant_attributes ?? item.variantAttributes
+        item.variant_attributes ?? item.variantAttributes,
+        compareText
       ),
       variant_id: normalizeText(item.variant_id ?? item.variantId),
       variant_name: normalizeText(item.variant_name ?? item.variantName),
     }))
     .sort((left, right) => {
-      const productComparison = left.product_id.localeCompare(right.product_id);
+      const productComparison = compareText(left.product_id, right.product_id);
       if (productComparison !== 0) {
         return productComparison;
       }
 
-      const variantComparison = left.variant_id.localeCompare(right.variant_id);
+      const variantComparison = compareText(left.variant_id, right.variant_id);
       if (variantComparison !== 0) {
         return variantComparison;
       }
 
-      const variantNameComparison = left.variant_name.localeCompare(
+      const variantNameComparison = compareText(
+        left.variant_name,
         right.variant_name
       );
       if (variantNameComparison !== 0) {
         return variantNameComparison;
       }
 
-      const conditionComparison = left.condition.localeCompare(right.condition);
+      const conditionComparison = compareText(left.condition, right.condition);
       if (conditionComparison !== 0) {
         return conditionComparison;
       }
@@ -134,14 +160,16 @@ function normalizeItems(items: readonly IdempotencyItem[]) {
         return left.has_assurance ? 1 : -1;
       }
 
-      return stableStringify(left.variant_attributes).localeCompare(
-        stableStringify(right.variant_attributes)
+      return compareText(
+        stableStringify(left.variant_attributes, compareText),
+        stableStringify(right.variant_attributes, compareText)
       );
     });
 }
 
 export function buildOrderIdempotencyPayload(
-  input: OrderIdempotencyPayloadInput
+  input: OrderIdempotencyPayloadInput,
+  options?: BuildOrderIdempotencyPayloadOptions
 ) {
   return {
     // JSON.stringify preserves insertion order, so keep hash-significant keys
@@ -154,7 +182,10 @@ export function buildOrderIdempotencyPayload(
     discount_amount: normalizeNumber(input.discount_amount),
     discount_code: normalizeText(input.discount_code) || null,
     gift_wrapping_fee: normalizeNumber(input.gift_wrapping_fee),
-    items: normalizeItems(input.items),
+    items: normalizeItems(
+      input.items,
+      itemTextCompare(options?.itemSort ?? 'codepoint')
+    ),
     merchant_id: normalizeText(input.merchant_id),
     savings_amount: normalizeNumber(input.savings_amount),
     savings_goal_id: normalizeText(input.savings_goal_id) || null,

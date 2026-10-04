@@ -1,44 +1,44 @@
-function stripRubyComments(source) {
-  let inBlockComment = false;
-  return source
-    .split('\n')
-    .filter((line) => {
-      if (/^=begin(?:\s|$)/.test(line)) {
-        inBlockComment = true;
-        return false;
-      }
-      if (inBlockComment) {
-        if (/^=end(?:\s|$)/.test(line)) inBlockComment = false;
-        return false;
-      }
-      return true;
-    })
-    .map((line) => line.replace(/(^|\s)#.*$/, '$1'))
-    .join('\n');
+const stripRubyComments = require('./validate-fastfile-strip-ruby-comments.cjs');
+const extractIndentedBlock = require('./validate-fastfile-extract-indented-block.cjs');
+const assertCancelGuard = require('./validate-fastfile-cancel-guard.cjs');
+
+// Balanced-brace scan from an opening brace, skipping quoted strings so
+// braces inside string literals cannot unbalance the depth count.
+function scanBraceBlock(source, openIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIndex; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return source.slice(openIndex, i + 1);
+    }
+  }
+  return null;
 }
 
-function extractIndentedBlock(source, declarationPattern, closingToken) {
-  const lines = source.split('\n');
-  const startIndex = lines.findIndex((line) => declarationPattern.test(line));
-  if (startIndex === -1) return null;
-
-  const indentation = lines[startIndex].match(/^\s*/)?.[0] ?? '';
-  const closingLine = `${indentation}${closingToken}`;
-  const endOffset = lines
-    .slice(startIndex + 1)
-    .findIndex((line) => line.trimEnd() === closingLine);
-  if (endOffset === -1) return null;
-
-  return lines.slice(startIndex, startIndex + endOffset + 2).join('\n');
-}
-
-/** Index of a call site, ignoring the `def` line that shares the same name. */
-function callSiteIndex(source, methodName) {
-  const match = new RegExp(
-    `^[ \\t]*(?:return\\s+\\w+\\s+if\\s+)?${methodName.replace(/[!?]/g, '\\$&')}\\(`,
-    'm'
-  ).exec(source);
-  return match ? match.index : -1;
+// The options hash actually received by deliver: either an inline hash or
+// the assigned value of the variable passed to deliver(...).
+function extractDeliverOptions(submitLane) {
+  const call = /\bdeliver\(\s*/.exec(submitLane);
+  if (!call) return null;
+  const argStart = call.index + call[0].length;
+  if (submitLane[argStart] === '{') return scanBraceBlock(submitLane, argStart);
+  const name = /^[A-Za-z_]\w*/.exec(submitLane.slice(argStart))?.[0];
+  if (!name) return null;
+  const assign = new RegExp(`\\b${name}\\s*=\\s*\\{`).exec(submitLane);
+  if (!assign) return null;
+  return scanBraceBlock(submitLane, assign.index + assign[0].length - 1);
 }
 
 /**
@@ -92,6 +92,31 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     failures.push('Fastfile: submit lane is missing set_changelog');
   }
 
+  // deliver's own reject_if_possible is a SECOND, unguarded cancellation path:
+  // it withdraws whatever is in App Review regardless of the
+  // IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT opt-in that
+  // app_store_version_slot_ready? enforces. It silently cancelled build 2.1.527's
+  // review when 2.1.528 shipped. Omission is not a pin: deliver reads
+  // DELIVER_REJECT_IF_POSSIBLE when the option is omitted, so the lane must
+  // pass false explicitly. Cancellation must be owned solely by the guard.
+  if (/reject_if_possible\s*:\s*true/.test(submitLane)) {
+    failures.push(
+      'Fastfile: submit lane must not pass reject_if_possible: true — cancellation is owned solely by app_store_version_slot_ready? (opt-in via IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT); deliver reject_if_possible is an unguarded second path that withdraws live App Reviews'
+    );
+  } else {
+    // A false pin in some unrelated hash must not satisfy this: trace the
+    // options hash actually passed to deliver and require the pin there.
+    const deliverOptions = extractDeliverOptions(submitLane);
+    if (
+      !deliverOptions ||
+      !/reject_if_possible\s*:\s*false/.test(deliverOptions)
+    ) {
+      failures.push(
+        'Fastfile: the options hash passed to deliver must pin reject_if_possible: false explicitly — deliver reads DELIVER_REJECT_IF_POSSIBLE when the option is omitted, which would silently re-enable its unguarded cancellation path'
+      );
+    }
+  }
+
   const cancellationGate =
     /def\s+review_cancellation_allowed\?[\s\S]*?IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT/;
   if (!cancellationGate.test(activeSlot)) {
@@ -100,89 +125,65 @@ function validateFastfileSubmitVersionGuard(fastfileSource, versionSlotSource) {
     );
   }
 
-  const cancelIndex = activeSlot.indexOf('cancel_submission');
-  if (cancelIndex !== -1) {
-    // Presence of the gate is not enough — it has to sit BEFORE the
-    // cancellation, otherwise a reordering edit would silently withdraw App
-    // Review without the opt-in while this validator stayed green.
-    const gateIndex = activeSlot.search(/unless\s+review_cancellation_allowed\?/);
-    if (gateIndex === -1 || gateIndex > cancelIndex) {
+  // An editable version can briefly coexist with a live review (this is the
+  // state in which deliver's reject_if_possible withdrew build 2.1.527), so
+  // the guard must consult the in-progress review before trusting the
+  // editable shortcut — otherwise the opt-in below is skipped.
+  const slotGuard = extractIndentedBlock(
+    activeSlot,
+    /^\s*def\s+app_store_version_slot_ready\?/,
+    'end'
+  );
+  if (slotGuard) {
+    const submissionIndex = slotGuard.indexOf(
+      'get_in_progress_review_submission'
+    );
+    const editableIndex = slotGuard.indexOf('get_edit_app_store_version');
+    if (
+      submissionIndex === -1 ||
+      editableIndex === -1 ||
+      submissionIndex > editableIndex
+    ) {
       failures.push(
-        'asc_version_slot.rb: cancel_submission must be guarded by review_cancellation_allowed?'
+        'asc_version_slot.rb: app_store_version_slot_ready? must query get_in_progress_review_submission before the get_edit_app_store_version shortcut'
       );
     }
   }
 
-  if (cancelIndex !== -1) {
-    // Withdrawing the live review before knowing the replacement build exists
-    // would leave the app with nothing under review at all.
-    const validationIndex = callSiteIndex(activeSlot, 'ensure_replacement_build_exists!');
-    if (validationIndex === -1 || validationIndex > cancelIndex) {
+  // A cancellation from another run (or a crashed one we never waited out)
+  // is invisible to the in-progress query, so the guard must rule out a
+  // winding-down submission before trusting the editable shortcut.
+  if (slotGuard) {
+    const windingIndex = slotGuard.indexOf('winding_down_review_submission?');
+    const shortcutIndex = slotGuard.indexOf('get_edit_app_store_version');
+    if (
+      windingIndex === -1 ||
+      shortcutIndex === -1 ||
+      windingIndex > shortcutIndex
+    ) {
       failures.push(
-        'asc_version_slot.rb: ensure_replacement_build_exists! must run BEFORE cancel_submission withdraws the live review'
-      );
-    }
-
-    // `get_in_progress_review_submission` stops matching as soon as Apple flips
-    // the submission to CANCELING, which happens before the version is editable
-    // again — so readiness must be confirmed by polling the editable version.
-    const waitIndex = callSiteIndex(activeSlot, 'wait_for_editable_app_store_version');
-    if (waitIndex === -1 || waitIndex < cancelIndex) {
-      failures.push(
-        'asc_version_slot.rb: after cancel_submission the lane must wait via wait_for_editable_app_store_version'
-      );
-    }
-
-    const waiter = extractIndentedBlock(
-      activeSlot,
-      /^\s*def\s+wait_for_editable_app_store_version\b/,
-      'end'
-    );
-    if (!waiter || !waiter.includes('get_edit_app_store_version')) {
-      failures.push(
-        'asc_version_slot.rb: wait_for_editable_app_store_version must poll get_edit_app_store_version, not the in-progress review submission'
-      );
-    }
-
-    // A build that exists but is still processing, failed, invalid or expired
-    // cannot replace the review we are about to withdraw.
-    const buildCheck = extractIndentedBlock(
-      activeSlot,
-      /^\s*def\s+ensure_replacement_build_exists!/,
-      'end'
-    );
-    if (!buildCheck || !buildCheck.includes('processing_states:')) {
-      failures.push(
-        'asc_version_slot.rb: ensure_replacement_build_exists! must filter on processing_states so unusable builds cannot pass'
-      );
-    }
-    if (!buildCheck || !/reject\(&:expired\)/.test(buildCheck)) {
-      failures.push(
-        'asc_version_slot.rb: ensure_replacement_build_exists! must reject expired builds'
-      );
-    }
-    if (!buildCheck || !/^\s*version:/m.test(buildCheck)) {
-      failures.push(
-        'asc_version_slot.rb: ensure_replacement_build_exists! must scope the lookup to the requested app version'
-      );
-    }
-
-    // Once the review is withdrawn, skipping would report success with nothing
-    // under review at all — the timeout has to be a hard failure.
-    const guard = extractIndentedBlock(
-      activeSlot,
-      /^\s*def\s+app_store_version_slot_ready\?/,
-      'end'
-    );
-    const afterWait = guard
-      ? guard.slice(guard.indexOf('wait_for_editable_app_store_version('))
-      : '';
-    if (!guard || !afterWait.includes('UI.user_error!')) {
-      failures.push(
-        'asc_version_slot.rb: a post-cancellation timeout must fail the lane, not skip — the previous submission is already withdrawn'
+        'asc_version_slot.rb: app_store_version_slot_ready? must rule out a winding-down cancellation before the get_edit_app_store_version shortcut'
       );
     }
   }
+
+  const windingHelper = extractIndentedBlock(
+    activeSlot,
+    /^\s*def\s+winding_down_review_submission\?/,
+    'end'
+  );
+  if (
+    !windingHelper ||
+    !windingHelper.includes('get_review_submissions') ||
+    !windingHelper.includes('CANCELING')
+  ) {
+    failures.push(
+      'asc_version_slot.rb: winding_down_review_submission? must list submissions filtered on the verified CANCELING state'
+    );
+  }
+
+
+  assertCancelGuard(activeSlot, failures);
 
   return failures;
 }

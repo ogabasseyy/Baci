@@ -123,6 +123,7 @@ jest.mock('@/lib/offline-queue', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutOrderCreated: jest.fn(),
   trackError: jest.fn(),
   trackEvent: jest.fn(),
 }));

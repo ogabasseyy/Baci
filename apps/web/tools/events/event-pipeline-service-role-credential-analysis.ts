@@ -13,7 +13,7 @@ type CredentialReaderLedgers = {
 const defaultLedgers: CredentialReaderLedgers = {
   approvedTask6ReaderHashes: {
     'apps/web/src/lib/supabase/service.ts':
-      '6754dc6f3381be4653abc91e32e65c741172563db570b81c4e820190384f0e05',
+      '6aaad249f5e1635f1ea590d9736b3313f9df0367df1ea02bf6011530d0c309bb',
   },
   // These are pre-existing factory, worker, or route readers. They are not part
   // of the temporary three-edge Task 6 analytics exception. Tracked operational
@@ -21,8 +21,6 @@ const defaultLedgers: CredentialReaderLedgers = {
   preExistingReaderHashes: {
     'apps/web/mcp-server/migrate_images.ts':
       'bd69a87ccb7c68ecef2a49eaaf059465cef2b0a5de45a2dab9bc988381615bd7',
-    'apps/web/mcp-server/server.ts':
-      'b616e48f8a83fd45ae7d12337398a2755d04b4abe929276ac3df2ebfb16b76fe',
     'apps/web/scripts-tmp/bulk-fix-macbooks.ts':
       'b68336dba5c2cb670b48599657f635870aa75786d243fe65568c080ddf82372d',
     'apps/web/scripts-tmp/check-blog-images.ts':
@@ -68,7 +66,7 @@ const defaultLedgers: CredentialReaderLedgers = {
     'apps/web/src/app/api/shipping/webhooks/[provider]/route.ts':
       '2a2713042ae099e9deb7ac4be9e05631fbf72d18789689a26fa0e4896f2189d5',
     'apps/web/src/env.ts':
-      '6a00a9893d24ded63fa00969196dd9c663fcf4fa0f51535a65119f8c5eab0789',
+      '1f9b49944787721d7cd539287f7107c3da90d2f887a71c540d71715e89e7d4b1',
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       '47bea3bc3ac77a939febb07b99c4ec4edf6f16f33f310dddd23ec2a4cbe2c0ad',
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':

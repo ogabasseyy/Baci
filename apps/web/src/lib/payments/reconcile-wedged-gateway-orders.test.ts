@@ -134,6 +134,50 @@ describe('reconcileWedgedGatewayOrders', () => {
     });
   });
 
+  it('admits provider-flagged pending rows and heals them after re-verification', async () => {
+    // A guest Paystack payment the verify GET confirmed with the
+    // provider but whose webhook never landed: pending, flagged, order
+    // unpaid. The sweep must pick it up (not only pending Juicyway)
+    // and heal once its own re-verification agrees.
+    const supabase = buildSupabase({
+      data: [
+        {
+          ...wedgedCandidate,
+          metadata: { guest_provider_confirmed: true },
+          status: 'pending',
+        },
+      ],
+    });
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      healed: true,
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    const builder = vi.mocked(supabase.from).mock.results[0]?.value as {
+      or: ReturnType<typeof vi.fn>;
+    };
+    expect(builder.or).toHaveBeenCalledWith(
+      'status.eq.completed,and(status.eq.pending,gateway.eq.juicyway),and(status.eq.pending,metadata->>guest_provider_confirmed.eq.true)'
+    );
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ wonTransactionFlip: true })
+    );
+    expect(summary).toMatchObject({
+      checked: 1,
+      healed: [{ orderId: 'order-1', orderNumber: 'ORD-1' }],
+    });
+  });
+
   it('surfaces unhealable gateways loudly instead of guessing', async () => {
     const supabase = buildSupabase({
       data: [{ ...wedgedCandidate, gateway: 'klump' }],

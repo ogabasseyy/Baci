@@ -14,12 +14,14 @@ interface McpSearchProductsArgs {
 
 export function buildSearchProductsV2RpcArgs({
   args,
+  forcePostFilterBuffer = false,
   limit,
   merchantId,
   sanitizedQuery,
   offset = 0,
 }: {
   args: McpSearchProductsArgs;
+  forcePostFilterBuffer?: boolean;
   limit: number;
   merchantId: string;
   sanitizedQuery: string;
@@ -43,7 +45,7 @@ export function buildSearchProductsV2RpcArgs({
     min_rating_filter: null,
     parent_only: false,
     result_limit:
-      args.brand || args.category || hasConditionFamilyFilter
+      forcePostFilterBuffer || args.brand || args.category || hasConditionFamilyFilter
         ? POST_FILTER_RESULT_PAGE_SIZE
         : limit,
     result_offset: offset,

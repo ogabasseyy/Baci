@@ -10,11 +10,28 @@ import type {
 const mockBeginWalletTopUpCompletion = jest.fn();
 const mockBeginSavingsAuthorizationCompletion = jest.fn();
 const mockHandleVtuConfirmation = jest.fn();
+const mockTrackCheckoutPaymentCompletedOnce = jest.fn(
+  async (_input: unknown) => true
+);
+const mockTrackCheckoutPaymentCompleted = jest.fn((_input: unknown) => {});
+const mockTrackCheckoutPaymentFailed = jest.fn(
+  async (..._args: unknown[]) => {}
+);
 const mockVerifyRedvaultPayment =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('expo-router', () => ({
   router: { replace: jest.fn() },
+}));
+
+jest.mock('@/services/analytics', () => ({
+  PAYMENT_COMPLETED_CLAIM_EVENT: 'payment_completed',
+  trackCheckoutPaymentCompleted: (input: unknown) =>
+    mockTrackCheckoutPaymentCompleted(input),
+  trackCheckoutPaymentCompletedOnce: (input: unknown) =>
+    mockTrackCheckoutPaymentCompletedOnce(input),
+  trackCheckoutPaymentFailed: (...args: unknown[]) =>
+    mockTrackCheckoutPaymentFailed(...args),
 }));
 
 jest.mock('./payment-gateway-completions', () => ({
@@ -38,13 +55,33 @@ const mockLoadRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClaimCheckoutPurchaseTracking =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockMarkCheckoutPurchaseEmitted =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockIsCheckoutPurchaseClaimed =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockReleaseCheckoutPurchaseTracking =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockClearRedvaultPurchaseTrackingContext =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
-const mockTrackCheckoutRoutePurchaseCompleted = jest.fn();
+const mockTrackCheckoutRoutePurchaseCompleted =
+  jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 jest.mock('@/lib/claim-checkout-purchase-tracking', () => ({
   claimCheckoutPurchaseTracking: (...args: unknown[]) =>
     mockClaimCheckoutPurchaseTracking(...args),
+  markCheckoutPurchaseEmitted: (...args: unknown[]) =>
+    mockMarkCheckoutPurchaseEmitted(...args),
+  isCheckoutPurchaseClaimed: (...args: unknown[]) =>
+    mockIsCheckoutPurchaseClaimed(...args),
+  isCheckoutPurchaseClaimedSettled: (...args: unknown[]) =>
+    mockIsCheckoutPurchaseClaimed(...args),
+}));
+jest.mock('@/lib/claim-checkout-purchase-release', () => ({
+  releaseCheckoutPurchaseTracking: (...args: unknown[]) =>
+    mockReleaseCheckoutPurchaseTracking(...args),
+}));
+
+jest.mock('@/lib/redvault-purchase-tracking-context', () => ({
   clearRedvaultPurchaseTrackingContext: (...args: unknown[]) =>
     mockClearRedvaultPurchaseTrackingContext(...args),
   loadRedvaultPurchaseTrackingContext: (...args: unknown[]) =>
@@ -112,9 +149,142 @@ function createInput(
   };
 }
 
+function mockPaidVerification(total = 5000, currency?: string) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderTotal: total,
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'paid',
+          subtotal: 45000,
+          shipping_cost: 1500,
+          discount_amount: 0,
+          total,
+          ...(currency ? { currency } : {}),
+        },
+        customer: {
+          name: 'Ada Buyer',
+          email: 'ada@example.com',
+          phone: '+2348123456789',
+        },
+        items: [
+          {
+            id: 'line-1',
+            product_id: 'prod-1',
+            product_name: 'Jar',
+            quantity: 1,
+            unit_price: 45000,
+            total_price: 45000,
+            product_image: null,
+          },
+        ],
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockTerminalVerification(
+  status: 'failed' | 'cancelled' | 'abandoned' = 'cancelled'
+) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status,
+          finalizationOutcome: status,
+          orderId: 'order-1',
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockReconciliationVerification(
+  outcome: 'order_cancelled' | 'order_skipped' = 'order_cancelled'
+) {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: outcome,
+          orderId: 'order-1',
+        }),
+        { status: 200 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
+function mockPendingVerification() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (String(url).includes('/api/payments/verify')) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          status: 'pending',
+          error: 'still pending',
+        }),
+        { status: 400 }
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        order: {
+          id: 'order-1',
+          order_number: 'ORD-1',
+          payment_status: 'pending',
+          total: 5000,
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+}
+
 describe('createPaymentGatewayCompletionHandlers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPaidVerification();
     mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
     mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
     mockClearRedvaultPurchaseTrackingContext.mockResolvedValue(undefined);
@@ -146,6 +316,117 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({ pathname: '/order-success' })
     );
+  });
+
+  it('emits exactly one purchase for a verified REDVAULT success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // Even with a paid tracked order, the generic block must not run for
+    // a provider-verified REDVAULT payment: its payment_completed claim
+    // is independent of the REDVAULT branch's purchase claim, so a
+    // second emission would double-count the conversion.
+    mockPaidVerification();
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
+  it('emits the funnel payment_completed once for verified REDVAULT success', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    // Production route shape: Paystack rails with the uba_redvault
+    // method — never override gateway to uba_redvault here.
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+      amount: 4000,
+      orderTotal: 5000,
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    // The canonical total wins over the residual gateway amount, and the
+    // once-helper stays untouched so the ad purchase is never re-emitted.
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        orderNumber: 'ORD-1',
+        paymentMethod: 'uba_redvault',
+        reference: 'ref-1',
+        value: 5000,
+      })
+    );
+    expect(mockClaimCheckoutPurchaseTracking).toHaveBeenCalledWith(
+      'order-1',
+      'payment_completed'
+    );
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    // The success route preserves the selected method: routing the
+    // REDVAULT success as `paystack` would join the settlement poll set
+    // and risk a late ad-purchase repeat.
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/order-success',
+        params: expect.objectContaining({ paymentMethod: 'uba_redvault' }),
+      })
+    );
+  });
+
+  it('skips the funnel emission when another path recorded the conversion', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(true);
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the newer cart when the shopper leaves during the REDVAULT claim', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue(null);
+    const { input } = createInput({
+      paymentMethod: 'uba_redvault',
+    });
+    // Leave while the claim lookup is pending: the continuation must
+    // emit nothing and must not clear the cart built since.
+    mockClaimCheckoutPurchaseTracking.mockImplementationOnce(async () => {
+      input.refs.isMountedRef.current = false;
+      return true;
+    });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutPaymentCompleted).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('clears the persisted REDVAULT fence after verified success', async () => {
@@ -212,6 +493,58 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
   });
 
+  it('clears saved REDVAULT context without re-emitting when the purchase claim is taken', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // Another path already recorded the conversion: no fresh claim, so no
+    // emission — but the held claim proves the context is stale, so it is
+    // still cleared instead of lingering.
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(true);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockTrackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+    expect(mockClearRedvaultPurchaseTrackingContext).toHaveBeenCalledWith(
+      'order-1'
+    );
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+  });
+
+  it('retains saved REDVAULT context when the store is unavailable', async () => {
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    // A denied claim is not proof of emission: with the store wedged the
+    // purchase may never have gone out, so the saved email/phone/items
+    // snapshot must survive for a later retry.
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(false);
+    mockIsCheckoutPurchaseClaimed.mockResolvedValue(false);
+    const { input } = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      input
+    ).beginPaymentCompletion();
+    expect(mockTrackCheckoutRoutePurchaseCompleted).not.toHaveBeenCalled();
+    expect(mockClearRedvaultPurchaseTrackingContext).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+  });
+
   it('preserves the cart when REDVAULT verification rejects', async () => {
     mockVerifyRedvaultPayment.mockRejectedValue(new Error('offline'));
     const { input } = createInput({ paymentMethod: 'uba_redvault' });
@@ -275,6 +608,10 @@ describe('createPaymentGatewayCompletionHandlers', () => {
     expect(refs.paymentCompletionStartedRef.current).toBe(true);
     expect(input.clearPendingLoadTimeout).toHaveBeenCalledTimes(1);
     expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledTimes(1);
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', value: 5000 })
+    );
     expect(input.clearCart).toHaveBeenCalledTimes(1);
     expect(router.replace).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -288,6 +625,267 @@ describe('createPaymentGatewayCompletionHandlers', () => {
         }),
       })
     );
+  });
+
+  it('stops completion work when the screen unmounts while verifying', async () => {
+    // Arrange: verification stays pending until the test releases it.
+    let resolveVerify!: (response: Response) => void;
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/api/payments/verify')) {
+        return new Promise<Response>((resolve) => {
+          resolveVerify = resolve;
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          order: {
+            id: 'order-1',
+            order_number: 'ORD-1',
+            payment_status: 'pending',
+            total: 5000,
+          },
+        }),
+        { status: 200 }
+      );
+    }) as unknown as typeof fetch;
+    const { input, refs } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+    const completion = beginPaymentCompletion();
+
+    // Act: the shopper leaves while verification is pending, then the
+    // provider answers paid.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    refs.isMountedRef.current = false;
+    resolveVerify(
+      new Response(
+        JSON.stringify({
+          success: true,
+          status: 'success',
+          finalizationOutcome: 'completed',
+          orderId: 'order-1',
+          orderTotal: 5000,
+        }),
+        { status: 200 }
+      )
+    );
+    await completion;
+
+    // Assert: no conversion is recorded and the cart survives — a new
+    // storefront cart built since unmount must not be erased.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('forwards tracked identity, breakdown, and items on direct completion', async () => {
+    // Arrange: the server already marks the order paid (total = 45000 +
+    // 1500 shipping + 3375 VAT).
+    mockPaidVerification(49875);
+    const { input } = createInput({ amount: 5000, orderTotal: 49875 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: the durable claim is consumed with full attribution.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerEmail: 'ada@example.com',
+        customerPhone: '+2348123456789',
+        items: [expect.objectContaining({ product_id: 'prod-1', quantity: 1 })],
+        orderId: 'order-1',
+        shipping: 1500,
+        subtotal: 45000,
+        tax: 3375,
+        value: 49875,
+      })
+    );
+  });
+
+  it('forwards the verified order currency to completion tracking', async () => {
+    // Arrange: a non-NGN order confirmed through the tracked-order lookup.
+    mockPaidVerification(5000, 'KES');
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: without the stamped currency the Once helper falls back to
+    // NGN and the completion (plus any fallback purchase) misattributes.
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', currency: 'KES' })
+    );
+  });
+
+  it('reports the canonical order total instead of the gateway residual', async () => {
+    // Arrange
+    mockPaidVerification(21500);
+    const { input } = createInput({ amount: 5000, orderTotal: 21500 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert
+    expect(mockTrackCheckoutPaymentCompletedOnce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-1',
+        value: 21500,
+      })
+    );
+  });
+
+  it('skips the conversion when server verification is still pending', async () => {
+    // Arrange: a matching-reference redirect whose order is not paid yet.
+    mockPendingVerification();
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no paid conversion, but the shopper still reaches success
+    // (settlement polling may complete the order once the webhook lands).
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/order-success' })
+    );
+  });
+
+  it('keeps the error path when verification definitively cancels', async () => {
+    // Arrange: pending tracked order, but the reference cannot settle.
+    mockTerminalVerification();
+    const { input, refs } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no conversion, no cart clear, no success navigation — the
+    // error message shows and completion can be retried.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenCalledWith('error');
+    expect(input.setErrorMessage).toHaveBeenCalledWith(
+      'Payment was cancelled before completion. You can try again.'
+    );
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(refs.paymentCompletionStartedRef.current).toBe(false);
+  });
+
+  it.each([
+    'failed',
+    'cancelled',
+    'abandoned',
+  ] as const)('records payment_failed with the canonical total on a %s verdict', async (verdict) => {
+    // Arrange: the provider definitively declined the attempt, while
+    // wallet credit covered most of the 49875 order (5000 residual due).
+    mockTerminalVerification(verdict);
+    const { input } = createInput({ amount: 5000, orderTotal: 49875 });
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: the started attempt is matched with the full order
+    // revenue — never the residual due — and the cart/error path stays.
+    expect(mockTrackCheckoutPaymentFailed).toHaveBeenCalledWith(
+      verdict,
+      'order-1',
+      'paystack',
+      'ref-1',
+      undefined,
+      49875
+    );
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).toHaveBeenCalledWith('error');
+  });
+
+  it.each([
+    { outcome: 'order_cancelled' },
+    { outcome: 'order_skipped' },
+  ])('routes a captured $outcome payment to reconciliation, not confirmation', async ({
+    outcome,
+  }) => {
+    // Arrange: captured money, but the finalizer left no active order.
+    mockReconciliationVerification(
+      outcome as 'order_cancelled' | 'order_skipped'
+    );
+    const { input } = createInput();
+    const { beginPaymentCompletion } =
+      createPaymentGatewayCompletionHandlers(input);
+
+    // Act
+    await beginPaymentCompletion();
+
+    // Assert: no conversion, cart intact, and the success route carries
+    // the reconciliation outcome for its dedicated state.
+    expect(mockTrackCheckoutPaymentCompletedOnce).not.toHaveBeenCalled();
+    expect(input.clearCart).not.toHaveBeenCalled();
+    expect(input.setPaymentStatus).not.toHaveBeenCalledWith('error');
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: expect.objectContaining({
+        orderId: 'order-1',
+        reconciliation: outcome,
+      }),
+    });
+  });
+
+  it('releases the purchase claim when REDVAULT tracking rejects so a retry can emit', async () => {
+    // Arrange
+    mockVerifyRedvaultPayment.mockResolvedValue({ orderNumber: 'ORD-9' });
+    mockLoadRedvaultPurchaseTrackingContext.mockResolvedValue({
+      items: [],
+      orderNumber: 'ORD-9',
+      paymentMethod: 'uba_redvault',
+      shipping: 0,
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+    });
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    mockTrackCheckoutRoutePurchaseCompleted.mockRejectedValueOnce(
+      new Error('ad platform down')
+    );
+
+    // Act: first pass emits nothing but still succeeds the payment.
+    const first = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      first.input
+    ).beginPaymentCompletion();
+
+    // Assert: claim rolled back, context retained for retry.
+    expect(mockReleaseCheckoutPurchaseTracking).toHaveBeenCalledWith('order-1');
+    expect(mockClearRedvaultPurchaseTrackingContext).not.toHaveBeenCalled();
+    expect(first.input.setPaymentStatus).toHaveBeenLastCalledWith('success');
+    expect(first.input.clearCart).toHaveBeenCalled();
+
+    // Act: retry emits exactly once and then cleans up.
+    mockTrackCheckoutRoutePurchaseCompleted.mockClear();
+    mockClearRedvaultPurchaseTrackingContext.mockClear();
+    mockClaimCheckoutPurchaseTracking.mockResolvedValue(true);
+    const second = createInput({ paymentMethod: 'uba_redvault' });
+    await createPaymentGatewayCompletionHandlers(
+      second.input
+    ).beginPaymentCompletion();
+
+    expect(mockTrackCheckoutRoutePurchaseCompleted).toHaveBeenCalledTimes(1);
+    expect(mockClearRedvaultPurchaseTrackingContext).toHaveBeenCalledWith(
+      'order-1'
+    );
+    expect(mockReleaseCheckoutPurchaseTracking).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a second completion once one has already started', () => {

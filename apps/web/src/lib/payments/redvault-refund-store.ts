@@ -68,16 +68,14 @@ function readRefund(value: unknown): RedvaultRefund {
 }
 
 function readSingleRefundRow(data: unknown): Record<string, unknown> {
-  if (Array.isArray(data)) {
-    if (data.length !== 1) {
-      throw new Error('REDVAULT refund RPC must return exactly one refund row');
-    }
-    data = data[0];
+  const row = Array.isArray(data) ? data[0] : data;
+  if (Array.isArray(data) && data.length !== 1) {
+    throw new Error('REDVAULT refund RPC must return exactly one refund row');
   }
-  if (!data || typeof data !== 'object') {
+  if (!row || typeof row !== 'object') {
     throw new Error('REDVAULT refund RPC returned no refund row');
   }
-  return data as Record<string, unknown>;
+  return row as Record<string, unknown>;
 }
 
 function readSingleRefund(data: unknown): RedvaultRefund {

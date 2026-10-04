@@ -9,4 +9,5 @@ export { ProgressCard } from './ProgressCard';
 export { QuickActionButton } from './QuickActionButton';
 export { RevenueChart } from './RevenueChart';
 export { StatCard } from './StatCard';
+export { StoreSetupStatusCard } from './StoreSetupStatusCard';
 export { WelcomeHeader } from './WelcomeHeader';

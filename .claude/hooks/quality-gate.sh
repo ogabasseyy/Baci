@@ -9,6 +9,9 @@
 
 INPUT=$(cat)
 
+# shellcheck source=quality-gate-environment.sh
+source "$(dirname "$0")/quality-gate-environment.sh"
+
 # CRITICAL: Prevent infinite loops — if Claude is already fixing from a prior block, let it stop.
 # Use `printf '%s\n'` rather than `echo` to feed jq — some echo implementations
 # (notably macOS /bin/sh) interpret backslash escapes by default, which would

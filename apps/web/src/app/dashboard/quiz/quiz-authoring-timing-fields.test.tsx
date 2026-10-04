@@ -49,16 +49,56 @@ describe('QuizAuthoringTimingFields', () => {
   it('edits the live window and switches modes in immediate mode', () => {
     // Arrange & Act
     render(<QuizAuthoringTimingFields {...props} timingKind="immediate" />);
-    fireEvent.change(screen.getByLabelText(/universal live window/i), {
-      target: { value: '10' },
+    fireEvent.change(screen.getByLabelText(/total quiz duration/i), {
+      target: { value: '25' },
     });
     fireEvent.change(screen.getByLabelText(/launch timing/i), {
       target: { value: 'scheduled' },
     });
 
     // Assert
-    expect(props.onWindowMinutesChange).toHaveBeenCalledWith('10');
+    expect(props.onWindowMinutesChange).toHaveBeenCalledWith(String(25 / 60));
     expect(props.onTimingKindChange).toHaveBeenCalledWith('scheduled');
     expect(screen.queryByLabelText(/scheduled start/i)).toBeNull();
+  });
+
+  it('does not mark an unchanged duration as edited on blur', () => {
+    // Arrange: focus-and-tab without typing must leave the untouched
+    // window alone so generation keeps its automatic duration resync.
+    const onWindowMinutesChange = vi.fn();
+    render(
+      <QuizAuthoringTimingFields
+        {...props}
+        timingKind="immediate"
+        windowMinutes="5"
+        onWindowMinutesChange={onWindowMinutesChange}
+      />
+    );
+
+    // Act
+    fireEvent.blur(screen.getByLabelText(/total quiz duration/i));
+
+    // Assert
+    expect(onWindowMinutesChange).not.toHaveBeenCalled();
+  });
+
+  it('clamps an out-of-range duration on blur', () => {
+    // Arrange
+    const onWindowMinutesChange = vi.fn();
+    render(
+      <QuizAuthoringTimingFields
+        {...props}
+        timingKind="immediate"
+        windowMinutes="99999"
+        onWindowMinutesChange={onWindowMinutesChange}
+      />
+    );
+
+    // Act
+    fireEvent.blur(screen.getByLabelText(/total quiz duration/i));
+
+    // Assert
+    expect(onWindowMinutesChange).toHaveBeenCalledTimes(1);
+    expect(onWindowMinutesChange).toHaveBeenCalledWith(String(7200 / 60));
   });
 });

@@ -39,9 +39,9 @@ export function analyzeAnalyticsDeliveryAuthoritySources(sources: ReadonlyMap<st
     findings.push(...analyzeRouteConstruction(path, source));
   }
 
-  const platformImporters = [...sources].filter(([path, source]) => !isTestSourcePath(path) && moduleGraph.moduleReferences(path, source).some((specifier) => moduleGraph.resolveLocalModule(path, specifier, sources) === manifest.platformAuthority.helper)).map(([path]) => path);
-  for (const path of platformImporters) if (path !== manifest.platformAuthority.route) add(path, 'unauthorized platform authority helper importer');
-  if (sources.has(manifest.platformAuthority.route) && !platformImporters.includes(manifest.platformAuthority.route)) add(manifest.platformAuthority.route, 'missing platform authority helper import');
+  const platformImporters = [...sources].filter(([path, source]) => !isTestSourcePath(path) && moduleGraph.moduleReferences(path, source).some((specifier) => moduleGraph.resolveLocalModule(path, specifier, sources) === manifest.retiredPlatformAuthority.helper || /(?:^|\/)platform-event-forwarding(?:\.[^/]*)?$/.test(specifier))).map(([path]) => path);
+  for (const path of platformImporters) add(path, 'retired platform authority helper importer');
+  if (sources.has(manifest.retiredPlatformAuthority.helper)) add(manifest.retiredPlatformAuthority.helper, 'retired platform authority helper is present');
 
   const wrapperSource = sources.get(manifest.trustedWrapper) ?? '';
   if (wrapperSource && !/^import ['"]server-only['"];?/m.test(wrapperSource)) add(manifest.trustedWrapper, 'trusted wrapper must import server-only');

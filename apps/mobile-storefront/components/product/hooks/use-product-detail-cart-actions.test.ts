@@ -109,3 +109,59 @@ describe('useProductDetailCartActions add-to-cart image', () => {
     );
   });
 });
+
+describe('useProductDetailCartActions catalog basis', () => {
+  it('retains the catalog price for a non-variant condition offer', () => {
+    const { addItem, args } = buildArgs({
+      routeData: {
+        product: {
+          id: 'pixel-8',
+          slug: 'pixel-8',
+          name: 'Pixel 8',
+          brand: 'Google',
+          image: 'https://cdn.example.com/pixel-8.avif',
+          has_variants: false,
+          price: 410000,
+          offers: [{ condition: 'used', price: 320000, stock_quantity: 3 }],
+        },
+        offerConditionKey: 'used',
+      },
+      purchaseState: { effectivePrice: 320000 },
+    });
+    const { result } = renderHook(() => useProductDetailCartActions(...args));
+
+    act(() => {
+      result.current.handleAddToCart();
+    });
+
+    expect(addItem.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ price: 320000, catalog_price: 410000 })
+    );
+  });
+
+  it('omits the catalog price without a condition offer', () => {
+    const { addItem, args } = buildArgs({
+      routeData: {
+        product: {
+          id: 'pixel-8',
+          slug: 'pixel-8',
+          name: 'Pixel 8',
+          brand: 'Google',
+          image: 'https://cdn.example.com/pixel-8.avif',
+          has_variants: false,
+          price: 410000,
+        },
+        offerConditionKey: null,
+      },
+    });
+    const { result } = renderHook(() => useProductDetailCartActions(...args));
+
+    act(() => {
+      result.current.handleAddToCart();
+    });
+
+    expect(addItem.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ catalog_price: undefined })
+    );
+  });
+});

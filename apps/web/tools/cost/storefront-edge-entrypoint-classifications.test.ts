@@ -27,4 +27,17 @@ describe('STOREFRONT_EDGE_ENTRYPOINT_CLASSIFICATIONS', () => {
       })
     );
   });
+
+  it('keeps inventory-qualified graphics hubs on the origin', () => {
+    expect(
+      STOREFRONT_EDGE_ENTRYPOINT_CLASSIFICATIONS.get(
+        '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx'
+      )
+    ).toEqual(
+      expect.objectContaining({
+        decision: 'origin_dynamic',
+        reason: 'request_state_or_origin_action_required',
+      })
+    );
+  });
 });

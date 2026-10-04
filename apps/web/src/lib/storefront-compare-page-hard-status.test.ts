@@ -8,7 +8,7 @@ const { mockGetInternalApiSecret, mockResolveStorefrontComparePageStatus } =
     mockResolveStorefrontComparePageStatus: vi.fn(),
   }));
 
-vi.mock('@/env', () => ({
+vi.mock('@/lib/internal-api-secret', () => ({
   getInternalApiSecret: () => mockGetInternalApiSecret(),
 }));
 

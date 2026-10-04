@@ -4,9 +4,18 @@ This MCP (Model Context Protocol) server enables ChatGPT integration with the Og
 
 - Search products
 - Get product details
-- Check order status
+- Read public delivery and returns guidance
 - Get store information
-- Receive product recommendations
+- Find matching products by category and budget
+
+`search_products` is the single discovery tool. Broad requests such as “for
+work” ask for a product type before searching when the intent is ambiguous;
+exact names, brands, categories, conditions, and budgets use the ranked catalog
+search. The older standalone recommendation tool was removed after it returned
+unrelated catalog items for broad use cases. The optional Gemini Embedding 2
+fallback is disabled until the index is backfilled and evaluated. It never
+overrides merchant, publication, category, condition, option price, or stock
+checks.
 
 ## Quick Start
 
@@ -98,6 +107,13 @@ server {
 }
 ```
 
+Production Compose requires an explicit `MCP_TRUST_PROXY_REAL_IP` value in its
+private `.env`. Set it to `true` only after verifying that the active reverse
+proxy overwrites `X-Real-IP` with the client IP on **every** request and the
+MCP port is inaccessible except through that proxy (the documented Compose
+port binding is loopback-only). Set it to `false` for any unverified proxy.
+With trust disabled, the server uses the validated socket `remoteAddress`.
+
 ## Connecting to ChatGPT
 
 1. Go to **ChatGPT Settings → Apps & Connectors → Advanced settings**
@@ -105,30 +121,29 @@ server {
 3. Click **Create** under **Connectors**
 4. Enter your MCP URL (e.g., `https://mcp.ogabassey.com/mcp` or your ngrok URL)
 5. Name: "Ogabassey Store"
-6. Description: "Search products, check orders, and get recommendations from Ogabassey"
+6. Description: "Search Ogabassey products, compare options, and review cart handoffs"
 
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
-| `add_to_cart` | Add a selected product to the in-chat cart handoff |
+| `add_to_cart` | Prepare a storefront cart URL without saving a server-side cart |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
-| `check_order` | Look up order status by order number or phone |
-| `check_payment_status` | Check whether a bank-transfer payment has been received |
+| `check_order` | Unavailable until customer authorization is implemented |
+| `check_payment_status` | Unavailable until customer authorization is implemented |
 | `complete_agentic_checkout_session` | Complete a signed Baci agentic checkout session with buyer authorization |
 | `convert_ucp_cart_to_checkout` | Create or reuse a checkout session from a UCP cart |
 | `create_agentic_checkout_session` | Create a signed Baci agentic checkout session with authoritative totals and fulfillment options |
 | `create_ucp_cart` | Create a persistent UCP cart session |
-| `generate_payment_account` | Generate a Paystack dedicated bank account for bank-transfer payment |
+| `generate_payment_account` | Unavailable until customer authorization is implemented |
 | `get_agentic_checkout_session` | Read a signed Baci agentic checkout session state |
 | `get_brands` | Browse active store brands |
 | `get_ucp_cart` | Read a UCP cart session |
 | `get_product` | Get detailed product information |
 | `get_product_variants` | Get variants, conditions, prices, and availability for a product |
-| `get_recommendations` | AI-powered product recommendations |
-| `get_shipping_quote` | Estimate delivery options for a destination |
+| `get_delivery_fee_info` | Explain where to confirm the final delivery fee at checkout |
 | `get_store_info` | Shipping, returns, payment info |
 | `lookup_ucp_catalog_items` | Fetch exact product IDs through the UCP catalog lookup route |
 | `search_ucp_catalog` | Search Ogabassey products using the UCP catalog route |
@@ -142,21 +157,25 @@ Once connected, users can ask:
 
 - "Show me phones under 500,000 naira"
 - "What's the iPhone 15 Pro Max price?"
-- "Where's my order ORD-12345?"
 - "What's your shipping policy?"
 - "I need a laptop for gaming, budget 800k"
-- "Create a checkout session for two iPhone 15 Pro Max units"
-- "Show me my current checkout session"
-- "Update my checkout session to use my Lagos shipping address"
-- "Complete my checkout session with my confirmed payment authorization"
-- "Cancel my current checkout session"
+- "Add one Apple 20W charger to my cart and let me review it on Ogabassey"
+
+Order lookup, payment-account generation, and signed agentic checkout are
+separate, default-off integrations. Do not advertise them in the public app
+until customer authorization and production readiness are verified.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public Supabase key used under RLS for shopping tools |
+| `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
+| `MCP_TRUST_PROXY_REAL_IP` | Production Compose: yes | The server defaults to `false`. Set `true` only when the reverse proxy overwrites `X-Real-IP` on every request and the MCP port is reachable only through that proxy; otherwise set `false`. |
+| `MCP_SEMANTIC_SEARCH_ENABLED` | No | Defaults to `false`. Enable only after applying the discovery migration, generating current vectors, and checking search evaluation results. |
+| `GEMINI_API_KEY` | For semantic search and catalog backfills | Private Gemini API key for `gemini-embedding-2`; never send it to ChatGPT or a browser. |
+| `MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS` | No | Explicitly forwarded by Compose; defaults to `false`. Set `true` only when checkout credentials and APIs are ready. |
 | `BACI_AGENTIC_ACCESS_TOKEN` | Yes for checkout | Baci-owned bearer token for agentic checkout APIs; this is not an OpenAI Platform API key |
 | `BACI_AGENTIC_SIGNING_KEY` | Yes for checkout | Baci-owned HMAC signing key for agentic checkout APIs |
 | `OPENAI_AGENTIC_API_KEY` | Legacy alias | Backwards-compatible alias for `BACI_AGENTIC_ACCESS_TOKEN` |
@@ -167,6 +186,52 @@ Once connected, users can ask:
 
 Signed checkout requests identify this MCP bridge with the `agent-id` value
 `openai:baci-mcp`.
+
+### Semantic discovery pilot
+
+The append-only `20260928080000_product_discovery_embeddings.sql` migration
+creates a separate 768-dimensional Gemini Embedding 2 index. Existing
+`products.content_embedding` vectors came from another model and must not be
+mixed with Gemini Embedding 2 vectors. The retired `text-embedding-004` product
+function is not an indexing source for this pilot. Candidate ranking is exact
+after merchant filtering at the current catalog size; an approximate vector
+index should be considered only with measured tenant-level recall and latency.
+
+For Ogabassey, a user with product-edit permission can use
+`/dashboard/products/discovery` to backfill from their signed-in merchant
+session. The dashboard processes five active products per request, skips
+unchanged sources, and can be stopped and restarted without handling a JWT.
+It uses the server-side Gemini key and keeps semantic search disabled.
+
+For a private operator backfill instead, run
+`pnpm --filter @baci/web exec tsx mcp-server/backfill-discovery-embeddings.ts`
+with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+`SUPABASE_ACCESS_TOKEN` (a merchant user's short-lived JWT), `MERCHANT_ID`, and
+`GEMINI_API_KEY` supplied privately to the process. Never put them in command
+arguments or commit them.
+The script uses merchant RLS and processes at most 50 products per invocation
+unless `MAX_PRODUCTS` is set. Re-run it after product name, brand, category, or
+description changes; the search RPC excludes those stale vectors until refreshed.
+Price and stock updates retain the existing vector. Keep the runtime flag disabled if
+the initial backfill or recurring refresh cannot be operated. Do not use a
+service-role key for the backfill.
+
+Before enabling the flag, compare the app's exact-name, broad-intent,
+accessory, price, condition, sold-out, and no-result cases against the lexical
+baseline. Record relevant-result rate, false-positive rate, and response time.
+The semantic call only runs when lexical discovery returns fewer than the
+requested limit and falls back to lexical results on provider failure.
+
+## Catalog colour evidence
+
+The storefront records colours in variant attributes and in explicit product
+colour/image mappings (`color_images`). MCP must preserve these catalog labels
+so image-backed colour choices remain visible to ChatGPT. A product colour or
+colour-image label does not establish stock or a specific colour/storage/price
+combination; only an actual variant can establish that combination.
+
+Image pixels, filenames, and description text do not establish a colour choice.
+When no explicit catalog colour is returned, report it as unconfirmed.
 
 ## Testing
 

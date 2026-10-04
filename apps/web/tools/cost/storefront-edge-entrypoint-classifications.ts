@@ -39,6 +39,7 @@ const DYNAMIC_ENTRYPOINTS = [
   '(blog)/blog/[...catchAll]/route.ts',
   '(blog)/blog/news-sitemap.xml/route.ts',
   'sitemap/[id]/route.ts',
+  '(catalog)/(listing)/[category]/graphics/[graphicsSlug]/page.tsx',
   '(catalog)/(listing)/search/page.tsx',
   '(catalog)/(pdp)/product/[productSlug]/page.tsx',
   '(commerce)/cart/page.tsx',

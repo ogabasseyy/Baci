@@ -3,6 +3,11 @@ pre-commit:
   commands:
     lint:
       glob: "*.{js,ts,jsx,tsx,json}"
+      env:
+        PUPPETEER_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
+        PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
       run: bash ci_scripts/run-lefthook-pnpm.sh turbo lint
     knip:
       run: bash ci_scripts/run-lefthook-pnpm.sh knip || true
@@ -13,6 +18,11 @@ pre-push:
   parallel: true
   commands:
     typecheck:
+      env:
+        PUPPETEER_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
+        PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
       run: bash ci_scripts/run-lefthook-pnpm.sh turbo typecheck
     # Tests intentionally run in CI, where the Quality Gate has the full
     # affected-test context plus build/misc guardrails. Keeping pre-push to

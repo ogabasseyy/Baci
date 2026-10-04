@@ -105,6 +105,21 @@ it('retains IDs when dismissed during initialization and waits before reopening'
   expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
 });
 
+it('evicts the cached session on demand so the next initialize POSTs a replacement', async () => {
+  const immediate = { ...pending, crypto_address_pending: false, crypto_payment: { ...pending.crypto_payment, ...address } };
+  const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(immediate)).mockResolvedValueOnce(Response.json({ ...immediate, session_id: 'replacement' }));
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() => useCryptoPaymentInitializer());
+
+  const first = await result.current.initialize(input);
+  result.current.evictSession(input);
+  const second = await result.current.initialize(input);
+
+  expect(first.sessionId).toBe('session');
+  expect(second.sessionId).toBe('replacement');
+  expect(fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(2);
+});
+
 it('rechecks an immediately issued address and evicts its expired session', async () => {
   const immediate = { ...pending, crypto_address_pending: false, crypto_payment: { ...pending.crypto_payment, ...address } };
   const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(immediate)).mockResolvedValueOnce(Response.json({ success: true, status: 'expired', crypto_address: null })).mockResolvedValueOnce(Response.json({ ...immediate, session_id: 'replacement' }));

@@ -1,0 +1,1 @@
+export const STORE_SETUP_COMPLETE_PROGRESS = 100;

@@ -91,6 +91,12 @@ function sectionFor(text, heading) {
   return [first, ...rest].join('\n').trim();
 }
 
+function exactConfidenceValue(value) {
+  const normalized = String(value || '').trim();
+  const formatted = normalized.match(/^(\*\*|__|`)(high|medium|low)\1$/i);
+  return (formatted ? formatted[2] : normalized).toLowerCase();
+}
+
 export function validateCodexResearchResult(stdout) {
   const extracted = extractCodexResearchText(stdout);
   const text = redactCodexOutput(extracted)
@@ -112,7 +118,9 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.ROOT_CAUSE_CONFIDENCE &&
-    !/^(?:high|medium|low)$/i.test(sections.ROOT_CAUSE_CONFIDENCE.trim())
+    !['high', 'medium', 'low'].includes(
+      exactConfidenceValue(sections.ROOT_CAUSE_CONFIDENCE)
+    )
   ) {
     reasons.push('root-cause confidence must be high, medium, or low');
   }
@@ -130,7 +138,7 @@ export function validateCodexResearchResult(stdout) {
   }
   if (
     sections.SELECTED_FIX &&
-    /\b(?:no defensible fix|none|unable to|cannot safely)\b/i.test(
+    /\b(?:no\s+(?:a\s+)?defensible(?!(?:\s+\w+){0,4}\s+reason\s+(?:to\s+)?reject\b)(?:\s+\w+){0,4}\s+fix|no\s+(?:safe\s+)?(?:code\s+)?(?:change|fix|changes|fixes)\s+(?:can|could)\s+be\s+(?:safely\s+)?(?:established|identified|justified|determined|found)(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b)|(?:a\s+)?defensible\s+fix\s+(?:cannot|can't|can not)\s+(?:be\s+)?(?:established|identified|justified|determined|found)|^(?:(?:I|we)\s+)?(?:cannot|can't|can not|could not|couldn't)\s+(?:establish|identify|determine|justify|find|propose|recommend|confirm|verify|select|guarantee)\s+(?:(?:a|the)\s+)?(?:safe|defensible)(?:\s+\w+){0,4}\s+fix(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b)|(?:fix(?:es)?|change(?:s)?)(?:\s+\w+){0,4}\s+(?:is|are|was|were|has|have)\s+(?:not\s+(?:\w+\s+){0,2}(?:be(?:en)?\s+)?(?:identified|established|justified|determined|found)|unavailable(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b))|^none|^(?:(?:I(?:'m| am| was)?|we(?:'re| are| were)?)\s+)?unable to|(?:requir(?:ed|es)|need(?:ed|s))\s+before\s+(?:a\s+)?(?:safe\s+|defensible\s+)?(?:fix(?:es)?|change(?:s)?)\s+can\s+be\s+(?:selected|established|identified|justified|determined)(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b)|cannot safely\s+(?:(?:be\s+)?(?:established|identified|justified|determined|selected|proposed|recommended|confirmed|verified|guaranteed)|(?:establish|identify|determine|justify|select|propose|recommend|confirm|verify|find|guarantee)\s+(?:(?:a|the|any)\s+)?(?:safe\s+|defensible\s+)?(?:fix(?:es)?|change(?:s)?))(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b)|insufficient\s+evidence\s+(?:exists\s+)?to\s+(?:select|establish|identify|determine|justify|propose|recommend|confirm|verify|find|guarantee)\s+(?:(?:a|the|any)\s+)?(?:safe\s+|defensible\s+)?(?:fix(?:es)?|change(?:s)?)(?![^.;]*,\s*so\s+(?:\w+\s+){0,2}(?:apply|use|implement|adopt|proceed|switch|fall back)\b))\b/i.test(
       sections.SELECTED_FIX
     )
   ) {
@@ -147,6 +155,7 @@ export function validateCodexResearchResult(stdout) {
 export function runRemediationCodexPhase({
   codexBin,
   commandEnv,
+  containerIdentity,
   prompt,
   readOnly,
   repoDir,
@@ -158,6 +167,7 @@ export function runRemediationCodexPhase({
 }) {
   const command = buildRemediationCodexCommand({
     codexBin,
+    containerIdentity,
     env: commandEnv,
     prompt,
     readOnly,
@@ -185,6 +195,7 @@ export function runRemediationCodexPhases({
   candidate,
   commandEnv,
   codexBin,
+  containerIdentity,
   prompt,
   repoDir,
   runner,
@@ -199,6 +210,7 @@ export function runRemediationCodexPhases({
   const researchExecution = runRemediationCodexPhase({
     codexBin,
     commandEnv,
+    containerIdentity,
     prompt: buildCodexResearchPrompt({ candidate }),
     readOnly: true,
     repoDir,
@@ -218,6 +230,7 @@ export function runRemediationCodexPhases({
     implementationExecution: runRemediationCodexPhase({
       codexBin,
       commandEnv,
+      containerIdentity,
       prompt: implementationPrompt,
       readOnly: false,
       repoDir,

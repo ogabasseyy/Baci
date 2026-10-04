@@ -7,6 +7,7 @@ vi.hoisted(() => {
   process.env.GIGL_PASSWORD = 'test-password';
 });
 
+import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -262,5 +263,53 @@ describe('GiglProvider international shipments', () => {
       price: 104_500,
       providerRateId: 'GIGL_INTL_2_1_3_1',
     });
+  });
+
+  it('marks a provider failure when every rate lacks booking selectors', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(loginResponseWithoutCustomerType))
+      .mockResolvedValueOnce(jsonResponse(internationalCountriesResponse))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          success: true,
+          data: {
+            message: 'Success',
+            status: 200,
+            data: [
+              {
+                GrandTotal: 114_534.49,
+                LogisticCompany: 0,
+                DeliveryType: 2,
+              },
+              {
+                GrandTotal: 95_000,
+                LogisticCompany: 1,
+                DeliveryType: 2,
+              },
+            ],
+          },
+        })
+      );
+
+    const provider = buildHarness();
+    const quotes = await provider.getQuotes({
+      ...quoteRequest,
+      shipmentType: 'international',
+      receiver: {
+        ...quoteRequest.receiver,
+        address: '123 Queen Street West',
+        city: 'Toronto',
+        state: 'Ontario',
+        country: 'Canada',
+        countryCode: 'CA',
+      },
+    });
+
+    expect(quotes).toEqual([]);
+    expect(quoteProviderFailure.get(quotes)?.message).toBe(
+      'GIGL international rates lacked booking selectors'
+    );
   });
 });

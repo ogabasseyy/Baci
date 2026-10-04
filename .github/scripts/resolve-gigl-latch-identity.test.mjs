@@ -1,0 +1,270 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const directory = dirname(fileURLToPath(import.meta.url));
+const script = join(directory, 'resolve-gigl-latch-identity.sh');
+const temporaryDirectories = [];
+
+afterEach(() => {
+  for (const path of temporaryDirectories.splice(0)) {
+    rmSync(path, { force: true, recursive: true });
+  }
+});
+
+const fingerprintOf = (
+  token,
+  url = '',
+  anon = '',
+  baseUrl = '',
+  email = '',
+  password = ''
+) =>
+  createHash('sha256')
+    .update(
+      token === ''
+        ? ''
+        : `${url}\n${anon}\n${baseUrl}\n${email}\n${password}\n${token}`,
+      'utf8'
+    )
+    .digest('hex');
+
+function resolve({ envFile = null, processEnv = {} }) {
+  const remote = mkdtempSync(join(tmpdir(), 'baci-gigl-identity-'));
+  temporaryDirectories.push(remote);
+  if (envFile !== null) {
+    writeFileSync(join(remote, '.env'), envFile);
+  }
+  const env = { ...process.env };
+  delete env.GIGL_BASE_URL;
+  delete env.GIGL_EMAIL;
+  delete env.GIGL_ENABLED;
+  delete env.GIGL_PASSWORD;
+  delete env.GIGL_TRACKING_WORKER_TOKEN;
+  delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  delete env.NEXT_PUBLIC_SUPABASE_URL;
+  Object.assign(env, processEnv);
+  const result = spawnSync('bash', [script, remote], { encoding: 'utf8', env });
+  assert.equal(result.status, 0, result.stderr);
+  const [scope, fingerprint] = result.stdout.trim().split(' ');
+  return { scope, fingerprint };
+}
+
+describe('GIGL latch identity resolver', () => {
+  for (const value of ['0', 'false', 'off', 'FALSE', ' Off ', '"off"', "'0'"]) {
+    it(`reports disabled scope for ${JSON.stringify(value)}`, () => {
+      const { scope } = resolve({ envFile: `GIGL_ENABLED=${value}\n` });
+      assert.equal(scope, 'disabled');
+    });
+  }
+
+  // '"off#x"': dotenv keeps hashes inside quotes, so this is the
+  // enabled value `off#x` — a naive `#`-cut would misread it as off.
+  for (const value of ['1', 'true', 'on', '', 'nope', 'o ff', '"off#x"']) {
+    it(`reports enabled scope for ${JSON.stringify(value)}`, () => {
+      const { scope } = resolve({ envFile: `GIGL_ENABLED=${value}\n` });
+      assert.equal(scope, 'enabled');
+    });
+  }
+
+  it('reports enabled scope when the env file is missing or lacks the key', () => {
+    assert.equal(resolve({}).scope, 'enabled');
+    assert.equal(resolve({ envFile: 'OTHER=1\n' }).scope, 'enabled');
+  });
+
+  it('prefers a set process variable over the file, even when empty', () => {
+    assert.equal(
+      resolve({
+        envFile: 'GIGL_ENABLED=off\n',
+        processEnv: { GIGL_ENABLED: '1' },
+      }).scope,
+      'enabled'
+    );
+    // dotenv keeps an explicitly-set empty var instead of the file value.
+    assert.equal(
+      resolve({ envFile: 'GIGL_ENABLED=off\n', processEnv: { GIGL_ENABLED: '' } })
+        .scope,
+      'enabled'
+    );
+  });
+
+  it('ignores process overrides in file-authoritative mode', () => {
+    // Production smoke/identity must fingerprint the installed dotenv,
+    // never a runner export (which would certify one token while cron
+    // runs another).
+    const { fingerprint, scope } = resolve({
+      envFile: 'GIGL_ENABLED=off\nGIGL_TRACKING_WORKER_TOKEN=file-token\n',
+      processEnv: {
+        GIGL_ENABLED: '1',
+        GIGL_ENV_FILE_AUTHORITATIVE: '1',
+        GIGL_TRACKING_WORKER_TOKEN: 'runner-token',
+      },
+    });
+
+    assert.equal(scope, 'disabled');
+    assert.equal(fingerprint, fingerprintOf('file-token'));
+  });
+
+  it('fingerprints the effective worker token', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('binds the Supabase URL and anon key into the fingerprint', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    });
+    assert.equal(
+      fingerprint,
+      fingerprintOf(
+        'aaa.bbb.ccc',
+        'https://project.supabase.co',
+        'anon-key'
+      )
+    );
+  });
+
+  it('ignores endpoint values when the token is absent (vacuous)', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co\nNEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key\n',
+    });
+    assert.equal(fingerprint, fingerprintOf(''));
+  });
+
+  it('changes the fingerprint when the endpoint moves but the token does not', () => {
+    const before = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://old.supabase.co\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    }).fingerprint;
+    const after = resolve({
+      envFile:
+        'NEXT_PUBLIC_SUPABASE_URL=https://new.supabase.co\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    }).fingerprint;
+
+    assert.notEqual(before, after);
+  });
+
+  it('binds the provider credential triple into the fingerprint', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
+    });
+    assert.equal(
+      fingerprint,
+      fingerprintOf(
+        'aaa.bbb.ccc',
+        '',
+        '',
+        'https://api.gigl.example',
+        'ops@example.com',
+        's3cret'
+      )
+    );
+  });
+
+  it('invalidates the latch when any provider credential rotates', () => {
+    // The smoke probes the provider login: without the triple, a
+    // rotation would keep the old latch and drop the Vercel schedule
+    // on unprobed values.
+    const base =
+      'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\nGIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n';
+    const before = resolve({ envFile: base }).fingerprint;
+
+    for (const rotated of [
+      base.replace('s3cret', 'n3w-secret'),
+      base.replace('ops@example.com', 'rotation@example.com'),
+      base.replace('https://api.gigl.example', 'https://gigl.example'),
+    ]) {
+      assert.notEqual(
+        resolve({ envFile: rotated }).fingerprint,
+        before
+      );
+    }
+  });
+
+  it('ignores provider values when the token is absent (vacuous)', () => {
+    const { fingerprint } = resolve({
+      envFile:
+        'GIGL_BASE_URL=https://api.gigl.example\nGIGL_EMAIL=ops@example.com\nGIGL_PASSWORD=s3cret\n',
+    });
+    assert.equal(fingerprint, fingerprintOf(''));
+  });
+
+  it('fingerprints the empty string when the token is absent', () => {
+    const { fingerprint } = resolve({ envFile: 'GIGL_ENABLED=off\n' });
+    assert.equal(fingerprint, fingerprintOf(''));
+  });
+
+  it('strips one quote layer from file token values', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN="aaa.bbb.ccc"\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('prefers a set process token over the file token', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=file-token\n',
+      processEnv: { GIGL_TRACKING_WORKER_TOKEN: 'proc-token' },
+    });
+    assert.equal(fingerprint, fingerprintOf('proc-token'));
+  });
+
+  // dotenv subset parity with the capability smoke (dotenv 17.4.2):
+  // export prefix, surrounding whitespace, trailing comments, and
+  // last-assignment-wins must resolve exactly as dotenv parses them,
+  // or the latch identity disagrees with the smoke it recorded.
+  for (const line of [
+    'export GIGL_ENABLED=off',
+    '  GIGL_ENABLED=off',
+    'GIGL_ENABLED=off # comment',
+    'GIGL_ENABLED = off',
+    'export  GIGL_ENABLED="off" # rotated',
+  ]) {
+    it(`reports disabled scope for dotenv form ${JSON.stringify(line)}`, () => {
+      const { scope } = resolve({ envFile: `${line}\n` });
+      assert.equal(scope, 'disabled');
+    });
+  }
+
+  it('lets the last assignment win, like dotenv', () => {
+    assert.equal(
+      resolve({ envFile: 'GIGL_ENABLED=on\nGIGL_ENABLED=off\n' }).scope,
+      'disabled'
+    );
+    assert.equal(
+      resolve({ envFile: 'GIGL_ENABLED=off\nGIGL_ENABLED=on\n' }).scope,
+      'enabled'
+    );
+  });
+
+  it('ignores lookalike keys and comment lines', () => {
+    assert.equal(
+      resolve({ envFile: '# GIGL_ENABLED=off\nGIGL_ENABLED_FOO=off\n' }).scope,
+      'enabled'
+    );
+  });
+
+  it('strips trailing comments from file token values, like dotenv', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc # rotated\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('keeps hashes inside quoted token values, like dotenv', () => {
+    const { fingerprint } = resolve({
+      envFile: 'GIGL_TRACKING_WORKER_TOKEN="aaa#bbb"\n',
+    });
+    assert.equal(fingerprint, fingerprintOf('aaa#bbb'));
+  });
+});

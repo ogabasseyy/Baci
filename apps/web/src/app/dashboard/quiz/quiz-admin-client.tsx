@@ -15,11 +15,14 @@ import { QuizAdminResult } from './quiz-admin-result';
 import { QuizAuthoringForm } from './quiz-authoring-form';
 import { resyncQuizAuthoringScheduledEnd } from './quiz-authoring-scheduled-end';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
+import { suggestedQuizDuration } from './quiz-duration';
 
 export function QuizAdminClient({
+  initialNextCursor = null,
   initialPrizeProducts,
   initialPrizeProductsError = null,
 }: {
+  initialNextCursor?: string | null;
   initialPrizeProducts: QuizPrizeProduct[];
   initialPrizeProductsError?: string | null;
 }) {
@@ -57,6 +60,17 @@ export function QuizAdminClient({
         // edited end is never rewritten.
         const actualCount = draft.questions.length;
         const requestedCount = next.topics.length * next.questionCountPerTopic;
+        if (next.timingKind === 'immediate' && !next.windowTouched) {
+          setConfiguration({
+            ...next,
+            liveWindowMinutes:
+              suggestedQuizDuration(
+                next.mode,
+                actualCount,
+                next.timePerQuestionSeconds
+              ) / 60,
+          });
+        }
         if (
           next.timingKind === 'scheduled' &&
           !next.endTouched &&
@@ -123,7 +137,7 @@ export function QuizAdminClient({
     } else {
       timing = {
         kind: 'immediate',
-        liveWindowSeconds: configuration.liveWindowMinutes * 60,
+        liveWindowSeconds: Math.round(configuration.liveWindowMinutes * 60),
       };
     }
     setIsActivating(true);
@@ -166,6 +180,7 @@ export function QuizAdminClient({
       <QuizAuthoringForm
         disabled={isActivating}
         initialError={initialPrizeProductsError}
+        initialNextCursor={initialNextCursor}
         initialProducts={initialPrizeProducts}
         isGenerating={isGenerating}
         onGenerate={generate}

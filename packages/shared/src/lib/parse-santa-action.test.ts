@@ -50,6 +50,28 @@ describe('parseSantaAction', () => {
     });
   });
 
+  it.each([
+    'CAD',
+    'AUD',
+    'JPY',
+    'INR',
+    'BRL',
+    'AED',
+    'EGP',
+    'RWF',
+    'TZS',
+    'UGX',
+  ])('parses a price with %s currency text', (currency) => {
+    const result = parseSantaAction(
+      `ACTION:ADD_TO_CART|PRODUCT:Phone|PRICE:1200 ${currency}`
+    );
+    expect(result).toEqual({
+      type: 'ADD_TO_CART',
+      productName: 'Phone',
+      price: 1200,
+    });
+  });
+
   it('trims surrounding whitespace from the product name', () => {
     const result = parseSantaAction(
       'ACTION:ADD_TO_CART|PRODUCT:  MacBook Air  |PRICE:999000'
@@ -93,6 +115,30 @@ describe('parseSantaActions', () => {
     expect(
       parseSantaActions('ACTION:ADD_TO_CART|PRODUCT:Case|PRICE:12,34')
     ).toEqual([]);
+  });
+
+  it('parses a catalog name containing a pipe delimiter', () => {
+    expect(
+      parseSantaAction(
+        'ACTION:ADD_TO_CART|PRODUCT:USB-C | 65W Charger|PRICE:12,000'
+      )
+    ).toEqual({
+      type: 'ADD_TO_CART',
+      productName: 'USB-C | 65W Charger',
+      price: 12000,
+    });
+  });
+
+  it('skips a malformed directive before a later valid action', () => {
+    expect(
+      parseSantaAction(
+        'ACTION:ADD_TO_CART|PRODUCT:Broken|PRICE:invalid then ACTION:ADD_TO_CART|PRODUCT:Valid Phone|PRICE:100000'
+      )
+    ).toEqual({
+      type: 'ADD_TO_CART',
+      productName: 'Valid Phone',
+      price: 100000,
+    });
   });
 });
 

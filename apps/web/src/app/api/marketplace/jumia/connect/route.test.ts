@@ -10,8 +10,14 @@ const mockUpsert = vi.fn();
 const mockSelect = vi.fn().mockReturnValue({ single: vi.fn() });
 const mockGetMerchant = vi.fn();
 const mockToUserAccess = vi.fn();
+const { mockHasPermission } = vi.hoisted(() => ({
+  mockHasPermission: vi.fn(
+    (_access: unknown, _resource: string, _action: string) => true
+  ),
+}));
 const mockAuthenticateApiRequest = vi.fn();
 const mockFeaturePlanTier = vi.fn(() => 'pro');
+const mockPurgeOrphanedAuthorization = vi.fn().mockResolvedValue(true);
 const mockGetJumiaAuthUrl = vi
   .fn()
   .mockReturnValue('https://jumia.com/auth?state=xyz');
@@ -52,6 +58,23 @@ const { mockGetConfiguredAppUrl, mockGetJumiaRedirectUri } = vi.hoisted(() => {
   };
 });
 
+function createMarketplaceIntegrationsBuilder() {
+  const thirdEq = vi.fn().mockResolvedValue({ data: [], error: null });
+  const secondEq = vi.fn(() => ({ eq: thirdEq }));
+  const firstEq = vi.fn(() => ({ eq: secondEq }));
+  return {
+    select: vi.fn(() => ({ eq: firstEq })),
+  };
+}
+
+function createJumiaAuthorizationsBuilder() {
+  const secondEq = vi.fn().mockResolvedValue({ data: [], error: null });
+  const firstEq = vi.fn(() => ({ eq: secondEq }));
+  return {
+    select: vi.fn(() => ({ eq: firstEq })),
+  };
+}
+
 function createUpsertBuilder() {
   return {
     upsert: (...args: unknown[]) => {
@@ -81,11 +104,29 @@ function createMerchantFeatureBuilder() {
 
 const mockSupabase = {
   auth: { getUser: mockGetUser },
-  from: vi.fn<(...args: unknown[]) => unknown>((table) =>
-    table === 'merchants'
-      ? createMerchantFeatureBuilder()
-      : createUpsertBuilder()
-  ),
+  rpc: vi.fn().mockResolvedValue({
+    data: [
+      {
+        authorization_id: 'auth-1',
+        integration_id: 'integration-1',
+        shop_id: 'shop-1',
+        inserted: true,
+      },
+    ],
+    error: null,
+  }),
+  from: vi.fn<(...args: unknown[]) => unknown>((table) => {
+    if (table === 'merchants') {
+      return createMerchantFeatureBuilder();
+    }
+    if (table === 'marketplace_integrations') {
+      return createMarketplaceIntegrationsBuilder();
+    }
+    if (table === 'jumia_authorizations') {
+      return createJumiaAuthorizationsBuilder();
+    }
+    return createUpsertBuilder();
+  }),
 };
 
 vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
@@ -97,6 +138,11 @@ vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: vi.fn().mockResolvedValue({ valid: true }),
 }));
 
+vi.mock('@/lib/jumia/purge-orphaned-jumia-authorization', () => ({
+  purgeOrphanedJumiaAuthorization: (...args: unknown[]) =>
+    mockPurgeOrphanedAuthorization(...args),
+}));
+
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: (...args: unknown[]) => mockGetMerchant(...args),
   toUserAccess: (...args: unknown[]) => mockToUserAccess(...args),
@@ -105,24 +151,87 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: (...args: unknown[]) =>
     mockAuthenticateApiRequest(...args),
-  hasPermission: vi.fn().mockReturnValue(true),
+  hasPermission: mockHasPermission,
 }));
 
-vi.mock('@/lib/jumia/helpers', () => ({
-  getJumiaAuthUrl: (...args: unknown[]) => mockGetJumiaAuthUrl(...args),
-  getJumiaRedirectUri: (appUrl: string) => mockGetJumiaRedirectUri(appUrl),
-  // VARIANT-TEST: REMOVE — diagnostic harness, see helpers.ts comment.
-  isJumiaAuthUrlVariant: (value: string | null | undefined) =>
-    value === 'A' ||
-    value === 'B' ||
-    value === 'C' ||
-    value === 'D' ||
-    value === 'E',
+vi.mock('@/lib/jumia/helpers', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/jumia/helpers')>(
+    '@/lib/jumia/helpers'
+  );
+  return {
+    ...actual,
+    getJumiaAuthUrl: (...args: unknown[]) => mockGetJumiaAuthUrl(...args),
+    getJumiaRedirectUri: (appUrl: string) => mockGetJumiaRedirectUri(appUrl),
+    isJumiaAuthUrlVariant: (value: string | null | undefined) =>
+      value === 'A' ||
+      value === 'B' ||
+      value === 'C' ||
+      value === 'D' ||
+      value === 'E',
+  };
+});
+
+vi.mock('@/lib/jumia/self-authorization', () => ({
+  validateJumiaSelfAuthorization: vi.fn().mockResolvedValue({
+    credentials: {
+      clientId: 'client-1',
+      refreshToken: 'refresh-1',
+      accessToken: 'access-1',
+    },
+    accessTokenExpiresAt: '2030-01-01T00:00:00.000Z',
+    refreshTokenExpiresAt: '2030-02-01T00:00:00.000Z',
+    shops: [
+      {
+        id: 'shop-1',
+        name: 'My Jumia Shop',
+        countryCode: 'NG',
+        marketplace: 'Jumia',
+      },
+    ],
+  }),
+}));
+
+vi.mock('@/lib/jumia/self-authorization-discovery-store', () => ({
+  claimJumiaSelfAuthorizationDiscovery: vi.fn().mockResolvedValue({
+    claimToken: 'claim-token-1',
+    credentialCiphertext: 'ciphertext',
+  }),
+  createJumiaSelfAuthorizationDiscovery: vi
+    .fn()
+    .mockResolvedValue('00000000-0000-4000-8000-000000000099'),
+  loadJumiaSelfAuthorizationDiscovery: vi.fn().mockResolvedValue('ciphertext'),
+  consumeJumiaSelfAuthorizationDiscovery: vi
+    .fn()
+    .mockResolvedValue('ciphertext'),
+  releaseJumiaSelfAuthorizationDiscovery: vi.fn().mockResolvedValue(undefined),
+  updateClaimedJumiaSelfAuthorizationDiscovery: vi
+    .fn()
+    .mockResolvedValue(undefined),
+}));
+
+const { mockDecrypt } = vi.hoisted(() => ({
+  mockDecrypt: vi.fn(() => ({
+    clientId: 'client-1',
+    refreshToken: 'refresh-1',
+    accessToken: 'access-1',
+  })),
+}));
+
+vi.mock('@/lib/jumia/authorization-crypto', () => ({
+  jumiaAuthorizationCrypto: {
+    encrypt: vi.fn(() => 'ciphertext'),
+    decrypt: mockDecrypt,
+    buildAuthorizationContext: vi.fn(
+      (merchantId: string, clientKeyHash: string) =>
+        `${merchantId}:${clientKeyHash}`
+    ),
+  },
 }));
 
 vi.mock('@/env', () => ({
   getConfiguredAppUrl: mockGetConfiguredAppUrl,
   getJumiaClientId: vi.fn(() => process.env.JUMIA_CLIENT_ID),
+  getJumiaAuthorizationEncryptionKey: vi.fn(() => 'a'.repeat(44)),
 }));
 
 const MERCHANT_CTX = {
@@ -189,6 +298,10 @@ function setupAuth() {
   });
 }
 
+import {
+  consumeJumiaSelfAuthorizationDiscovery,
+  createJumiaSelfAuthorizationDiscovery,
+} from '@/lib/jumia/self-authorization-discovery-store';
 import { DELETE, GET, POST } from './route';
 
 const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -211,11 +324,24 @@ function restoreEnv() {
 describe('Connect POST', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHasPermission.mockReset();
+    mockHasPermission.mockReturnValue(true);
     process.env.NEXT_PUBLIC_APP_URL = PUBLIC_APP_URL;
     process.env.JUMIA_CLIENT_ID = 'test-client-id';
     mockSelect.mockReturnValue({ single: vi.fn() });
     mockFeaturePlanTier.mockReturnValue('pro');
     mockGetJumiaAuthUrl.mockReturnValue('https://jumia.com/auth?state=xyz');
+    vi.mocked(createJumiaSelfAuthorizationDiscovery).mockResolvedValue(
+      '00000000-0000-4000-8000-000000000099'
+    );
+    vi.mocked(consumeJumiaSelfAuthorizationDiscovery).mockResolvedValue(
+      'ciphertext'
+    );
+    mockDecrypt.mockReturnValue({
+      clientId: 'client-1',
+      refreshToken: 'refresh-1',
+      accessToken: 'access-1',
+    });
   });
 
   afterEach(() => {
@@ -223,6 +349,7 @@ describe('Connect POST', () => {
   });
 
   it('returns 403 on CSRF failure', async () => {
+    setupAuth();
     const { checkCsrfProtection } = await import('@/lib/csrf');
     (checkCsrfProtection as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       valid: false,
@@ -262,6 +389,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );
@@ -277,6 +406,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );
@@ -301,6 +432,8 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
+        operation: 'discover',
+        clientId: 'client-1',
         refreshToken: 'tok',
       })
     );
@@ -323,6 +456,28 @@ describe('Connect POST', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 503 when self-authorization encryption is not configured', async () => {
+    setupAuth();
+    const { getJumiaAuthorizationEncryptionKey } = await import('@/env');
+    vi.mocked(getJumiaAuthorizationEncryptionKey).mockReturnValueOnce(
+      undefined
+    );
+
+    const res = await POST(
+      makePostRequest({
+        connectionType: 'self_authorization',
+        clientId: 'client-1',
+        discoveryId: '00000000-0000-4000-8000-000000000099',
+        selectedShopIds: ['shop-1'],
+      })
+    );
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({
+      error: 'Jumia self-authorization is not configured',
+    });
+  });
+
   it('saves integration on self_authorization success', async () => {
     setupAuth();
     mockSelect.mockReturnValue({
@@ -339,41 +494,34 @@ describe('Connect POST', () => {
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
-        refreshToken: 'tok-abc',
+        clientId: 'client-1',
+        discoveryId: '00000000-0000-4000-8000-000000000099',
+        selectedShopIds: ['shop-1'],
       })
     );
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.integration).toBeDefined();
-    expect(mockUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        merchant_id: MERCHANT_CTX.merchantId,
-        refresh_token: 'tok-abc',
-        shop_id: 'default',
-        platform: 'jumia',
-        is_active: true,
-      }),
-      expect.objectContaining({
-        onConflict: 'merchant_id,platform,shop_id',
-      })
+    expect(json.connected).toEqual([{ id: 'shop-1', name: 'My Jumia Shop' }]);
+    expect(mockSupabase.rpc).toHaveBeenCalledWith(
+      'persist_jumia_self_authorization_ordered',
+      expect.objectContaining({ p_merchant_id: MERCHANT_CTX.merchantId })
     );
   });
 
   it('returns 500 on DB insert error', async () => {
     setupAuth();
-    mockSelect.mockReturnValue({
-      single: vi.fn().mockResolvedValue({
-        data: null,
-        error: { message: 'unique violation' },
-      }),
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'unique violation' },
     });
 
     const res = await POST(
       makePostRequest({
         connectionType: 'self_authorization',
-        refreshToken: 'tok',
+        clientId: 'client-1',
+        discoveryId: '00000000-0000-4000-8000-000000000099',
+        selectedShopIds: ['shop-1'],
       })
     );
 
@@ -438,6 +586,8 @@ describe('Connect POST', () => {
 describe('Connect GET', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHasPermission.mockReset();
+    mockHasPermission.mockReturnValue(true);
     process.env.NEXT_PUBLIC_APP_URL = PUBLIC_APP_URL;
     process.env.JUMIA_CLIENT_ID = 'test-client-id';
     mockFeaturePlanTier.mockReturnValue('pro');
@@ -477,12 +627,23 @@ describe('Connect GET', () => {
   });
 
   it('returns 403 when permission is denied', async () => {
-    const { hasPermission } = await import('@/lib/api-auth');
-    (hasPermission as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+    mockHasPermission.mockReturnValueOnce(false);
 
     const res = await GET(makeGetRequest('?connectionType=oauth'));
 
     expect(res.status).toBe(403);
+    expect(mockGetJumiaAuthUrl).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 before OAuth initiation when manage permission is missing', async () => {
+    mockHasPermission.mockImplementation(
+      (_access, _resource, action) => action === 'view'
+    );
+
+    const res = await GET(makeGetRequest('?connectionType=oauth'));
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: 'Forbidden' });
     expect(mockGetJumiaAuthUrl).not.toHaveBeenCalled();
   });
 
@@ -573,9 +734,12 @@ describe('Connect GET', () => {
                   shop_id: 'shop-1',
                   shop_name: 'Jumia NG',
                   country_code: 'NG',
+                  marketplace_key: 'NG-main',
                   is_active: true,
                   last_sync_at: null,
                   sync_error: null,
+                  connection_method: 'self_authorization',
+                  token_expires_at: '2030-01-01T00:00:00.000Z',
                 },
               ],
             }),
@@ -595,9 +759,12 @@ describe('Connect GET', () => {
           shop_id: 'shop-1',
           shop_name: 'Jumia NG',
           country_code: 'NG',
+          marketplace_key: 'NG-main',
           is_active: true,
           last_sync_at: null,
           sync_error: null,
+          connection_method: 'self_authorization',
+          token_expires_at: '2030-01-01T00:00:00.000Z',
         },
       ],
     });
@@ -630,6 +797,9 @@ describe('Connect GET', () => {
 describe('Connect DELETE', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockHasPermission.mockReset();
+    mockHasPermission.mockReturnValue(true);
+    mockPurgeOrphanedAuthorization.mockResolvedValue('purged');
     setupAuth();
     mockAuthenticateApiRequest.mockResolvedValue({
       user: { id: 'u1' },
@@ -712,6 +882,7 @@ describe('Connect DELETE', () => {
     await expect(res.json()).resolves.toEqual({
       success: true,
       message: 'Jumia account disconnected',
+      cleanupPending: false,
     });
     expect(mockAuthenticateApiRequest).toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({ is_active: false });
@@ -782,6 +953,51 @@ describe('Connect DELETE', () => {
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({
       error: 'Failed to disconnect',
+    });
+  });
+
+  it('returns 409 when a reconnect wins the race during disconnect', async () => {
+    mockPurgeOrphanedAuthorization.mockResolvedValueOnce('reactivated');
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: INTEGRATION_ID },
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ maybeSingle });
+    const eqMerchant = vi.fn().mockReturnValue({ select });
+    const eqId = vi.fn().mockReturnValue({ eq: eqMerchant });
+    mockSupabase.from.mockReturnValueOnce({
+      update: vi.fn().mockReturnValue({ eq: eqId }),
+    });
+
+    const res = await DELETE(makeBearerDeleteRequest(`?id=${INTEGRATION_ID}`));
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toEqual({
+      error:
+        'Integration was reconnected during disconnect; try again if you still want to disconnect',
+    });
+  });
+
+  it('returns successful disconnect with cleanup pending when purge fails', async () => {
+    mockPurgeOrphanedAuthorization.mockResolvedValueOnce('failed');
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: INTEGRATION_ID },
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({ maybeSingle });
+    const eqMerchant = vi.fn().mockReturnValue({ select });
+    const eqId = vi.fn().mockReturnValue({ eq: eqMerchant });
+    mockSupabase.from.mockReturnValueOnce({
+      update: vi.fn().mockReturnValue({ eq: eqId }),
+    });
+
+    const res = await DELETE(makeBearerDeleteRequest(`?id=${INTEGRATION_ID}`));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      success: true,
+      message: 'Jumia account disconnected; credential cleanup is pending',
+      cleanupPending: true,
     });
   });
 

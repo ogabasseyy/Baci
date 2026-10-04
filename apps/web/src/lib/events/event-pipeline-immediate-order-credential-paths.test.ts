@@ -1,0 +1,109 @@
+import { describe, expect, it } from 'vitest';
+import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
+
+describe('eventPipelineImmediateOrderCredentialPaths', () => {
+  it('allows only the audited immediate-order notification edges', () => {
+    expect(eventPipelineImmediateOrderCredentialPaths).toHaveLength(25);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/env.ts',
+    ]);
+    // ZeptoMail's audit sink reaches the admin client: the same
+    // confirmation chain with the admin hop is registered exactly.
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/payforme-dva.ts',
+      'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+      'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+      'apps/web/src/env.ts',
+    ]);
+    // Extracted claimed-delivery helper: same audited senders behind one
+    // additional hop from the orders route and the helper root.
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+      'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+      'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+      'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+      'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/invoice-artifacts.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/payforme-dva.ts',
+      'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+      'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/confirmation-email.ts',
+      'apps/web/src/lib/zeptomail.ts',
+      'apps/web/src/lib/supabase/admin.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(eventPipelineImmediateOrderCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/orders/route.ts',
+      'apps/web/src/lib/immediate-order/deliver-claimed-notification.ts',
+      'apps/web/src/lib/immediate-order/payforme-dva.ts',
+      'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
+      'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
+      'apps/web/src/env.ts',
+    ]);
+  });
+});

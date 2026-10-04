@@ -1,5 +1,6 @@
 import { QUIZ_DEFAULT_TIME_ZONE } from '@baci/shared';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
+import { formatQuizDuration } from './quiz-format-duration';
 
 /**
  * Preview text for when the quiz closes. Scheduled quizzes show the
@@ -24,5 +25,5 @@ export function resolveQuizAuthoringClosesAt({
       quizDatetimeLocalToIso(scheduledEnd, QUIZ_DEFAULT_TIME_ZONE) ?? Number.NaN
     ).toLocaleString(undefined, { timeZone: QUIZ_DEFAULT_TIME_ZONE });
   }
-  return `About ${windowMinutes} minute${windowMinutes === '1' ? '' : 's'} after launch`;
+  return `After ${formatQuizDuration(Math.round(Number(windowMinutes) * 60))}`;
 }

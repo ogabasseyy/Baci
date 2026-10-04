@@ -58,6 +58,8 @@ export function usePaymentGatewayController() {
   const webViewRef = useRef<WebView>(null);
   const copiedGatewayTextRef = useRef<string | null>(null);
   const paymentCompletionStartedRef = useRef(false);
+  const paymentFailureRecordedRef = useRef(false);
+  const paymentFailureReferenceRef = useRef<string | undefined>(undefined);
   const savingsAuthorizationAbortRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const vtuConfirmationTokenRef = useRef(0);
@@ -78,6 +80,8 @@ export function usePaymentGatewayController() {
     loadTimeoutRef,
     navigationTimeoutRef,
     paymentCompletionStartedRef,
+    paymentFailureRecordedRef,
+    paymentFailureReferenceRef,
     savingsAuthorizationAbortRef,
     statusRef,
     vtuConfirmationTokenRef,
@@ -136,6 +140,7 @@ export function usePaymentGatewayController() {
     merchantSlug,
     orderId,
     orderNumber,
+    orderTotal,
     paymentKind,
     paymentMethod,
     reference,
@@ -159,6 +164,7 @@ export function usePaymentGatewayController() {
       merchantSlug,
       orderId,
       orderNumber,
+      orderTotal,
       paymentKind,
       paymentMethod,
       queryClient,
@@ -197,15 +203,31 @@ export function usePaymentGatewayController() {
     gateway,
     orderId,
     orderNumber,
+    orderTotal,
     paymentKind,
     reference,
     trackingToken,
     utilityType,
     markPaymentCompletionStarted: () => {
+      if (paymentCompletionStartedRef.current) {
+        return false;
+      }
       paymentCompletionStartedRef.current = true;
+      return true;
+    },
+    onTerminalVerificationFailure: (terminalFailure) => {
+      paymentCompletionStartedRef.current = false;
+      setPaymentStatus('error');
+      setErrorMessage(
+        terminalFailure === 'cancelled'
+          ? 'Payment was cancelled before completion. You can try again.'
+          : 'Payment could not be confirmed. Please try again.'
+      );
     },
     scheduleDelayedNavigation,
+    setProcessingStatus: () => setPaymentStatus('processing'),
     setSuccessStatus: () => setPaymentStatus('success'),
+    isMountedRef,
   });
 
   const handleClose = () => {
@@ -242,7 +264,10 @@ export function usePaymentGatewayController() {
     paymentMethod,
     clearPendingLoadTimeout,
     clearPendingNavigation,
+    gateway,
+    orderId,
     paymentKind,
+    reference,
     refs: gatewayRefs,
     returnTo,
     scheduleDelayedNavigation,

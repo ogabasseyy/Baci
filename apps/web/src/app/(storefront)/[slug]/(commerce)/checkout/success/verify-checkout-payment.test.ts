@@ -6,6 +6,8 @@ vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: request }));
 
 function handlers() {
   return {
+    capturePaymentCompleted: vi.fn(),
+    capturePaymentFailed: vi.fn(),
     clearCart: vi.fn(),
     redirectToCheckout: vi.fn(),
     scheduleFailedRedirect: vi.fn(),
@@ -19,6 +21,7 @@ function handlers() {
 const params = {
   merchantSlug: 'ogabassey',
   orderId: 'order-id',
+  paymentMethod: null,
   pendingRedvaultOrder: false,
   reference: null,
   trackingToken: null,
@@ -92,6 +95,73 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.clearCart).not.toHaveBeenCalled();
     expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'capture_hold_failed',
+    'completion_failed',
+    'order_fetch_failed',
+  ])('keeps a captured-but-unfinalized %s outcome pending instead of failing', async (finalizationOutcome) => {
+    // Exact route shape: HTTP 500 tagged with the outcome — the provider
+    // took the money, so the page must wait, never record
+    // payment_failed or redirect back to checkout (where a retry could
+    // duplicate the capture).
+    request.mockResolvedValue(
+      Response.json(
+        { error: 'Failed to finalize order', finalizationOutcome },
+        { status: 500 }
+      )
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 'failed', reason: 'payment_failed' },
+    { status: 'cancelled', reason: 'payment_cancelled' },
+    { status: 'abandoned', reason: 'payment_abandoned' },
+  ])('fails a $status reference verification with the matching failure event', async ({
+    status,
+    reason,
+  }) => {
+    // Exact route shape for terminal provider outcomes: the attempt can
+    // never settle, so the page shows failure/retry immediately instead
+    // of re-polling until the retry budget expires.
+    request.mockResolvedValue(
+      Response.json({
+        success: false,
+        status,
+        orderId: 'order-id',
+        orderNumber: 'ORD-1',
+        paymentMethod: 'paystack',
+      })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('failed');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).toHaveBeenCalledWith({
+      orderId: 'order-id',
+      orderNumber: 'ORD-1',
+      paymentMethod: 'paystack',
+      reference: 'reference',
+      reason,
+    });
+    expect(callbacks.scheduleFailedRedirect).toHaveBeenCalledTimes(1);
   });
 
   it('fails a revisited fully-refunded REDVAULT order without clearing the cart', async () => {
@@ -168,13 +238,15 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
   });
 
-  it('keeps the ordinary unknown-order network fallback', async () => {
+  it('holds the ordinary unknown-order network fallback pending', async () => {
+    // An offline lookup proves nothing: stay pending with the cart
+    // intact instead of confirming an unverified checkout.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const callbacks = handlers();
 
     await verifyCheckoutPayment(params, callbacks);
 
-    expect(callbacks.clearCart).toHaveBeenCalledOnce();
-    expect(callbacks.setStatus).toHaveBeenCalledWith('success');
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
   });
 });

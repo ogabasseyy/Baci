@@ -6,6 +6,7 @@ const mockEnv = vi.hoisted(() => ({
 
 vi.mock('@/env', () => ({
   env: mockEnv,
+  getJumiaEnvironment: () => mockEnv.JUMIA_ENVIRONMENT,
 }));
 
 import {

@@ -109,7 +109,10 @@ export async function GET(
     const blob = generateReceiptBlob(receiptOrder, data.receiptMerchant, {
       buyerReference: data.invoiceData.buyer_reference,
       documentDate: data.invoiceData.issue_date,
-      documentKind: 'invoice',
+      documentKind:
+        data.invoiceData.invoice_type_code === '325'
+          ? 'proforma_invoice'
+          : 'invoice',
       dueDate: data.invoiceData.due_date,
       firsCsid: data.invoiceData.firs_csid,
       firsIrn: data.invoiceData.firs_irn,
@@ -124,7 +127,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
-          'invoice',
+          data.invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
           data.order.order_number
         ),
         'Cache-Control': 'private, no-store',

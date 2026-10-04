@@ -9,7 +9,7 @@ import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer
 import { useCurrency } from '@/hooks/use-currency';
 import type { DeliveryMethod } from '../pages/checkout/types';
 
-interface MobileOrderSummaryProps {
+export interface MobileOrderSummaryProps {
     cart: CartItem[];
     cartTotal: number;
     deliveryCost: number;

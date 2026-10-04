@@ -103,9 +103,7 @@ describe('payment schedule selection', () => {
     expect(
       screen.queryByRole('button', { name: 'Pay in Installments' })
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('radio', { name: /generate invoice/i })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
   });
 
   describe('bugfix: stale installments tab after wallet makes installments ineligible', () => {
@@ -120,15 +118,26 @@ describe('payment schedule selection', () => {
         expect(setPaymentTab).toHaveBeenCalledWith('full');
       });
       expect(setPaymentMethod).not.toHaveBeenCalled();
-      expect(
-        screen.getByRole('radio', { name: /generate invoice/i })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Get a Proforma Invoice' })).toBeInTheDocument();
     });
   });
-  it('offers invoice creation without requiring an online payment gateway', () => {
-    const { setPaymentMethod } = renderPanel('full', false);
+  it('offers the invoice option exactly once, on its own tab', () => {
+    renderPanel('full');
 
-    fireEvent.click(screen.getByRole('radio', { name: /generate invoice/i }));
+    // The "Get a Proforma Invoice" tab owns invoice selection: no
+    // duplicate invoice card may appear under Pay in Full.
+    expect(
+      screen.getByRole('button', { name: 'Get a Proforma Invoice' })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /invoice/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers a proforma invoice without requiring an online payment gateway', () => {
+    const { setPaymentMethod } = renderPanel('invoice', false);
+
+    fireEvent.click(screen.getByRole('radio', { name: /get a proforma invoice/i }));
 
     expect(setPaymentMethod).toHaveBeenCalledWith('invoice');
   });
@@ -137,13 +146,14 @@ describe('payment schedule selection', () => {
     renderPanel('installments');
 
     expect(
-      screen.queryByRole('radio', { name: /generate invoice/i })
+      screen.queryByRole('radio', { name: /get a proforma invoice/i })
     ).not.toBeInTheDocument();
   });
 
   it.each([
     ['full', 'Pay in Full', 'Pay in Installments'],
     ['installments', 'Pay in Installments', 'Pay in Full'],
+    ['invoice', 'Get a Proforma Invoice', 'Pay in Full'],
   ] as const)('keeps the %s selection distinct when dark mode flattens neutral surfaces', (value, selected, inactive) => {
     renderPanel(value);
 
@@ -170,6 +180,7 @@ describe('payment schedule selection', () => {
   it.each([
     ['full', 'Pay in Installments', 'installments'],
     ['installments', 'Pay in Full', 'full'],
+    ['invoice', 'Pay in Full', 'full'],
   ] as const)('switches away from %s and clears the old gateway', (value, label, next) => {
     const { setPaymentTab, setPaymentMethod } = renderPanel(value);
 

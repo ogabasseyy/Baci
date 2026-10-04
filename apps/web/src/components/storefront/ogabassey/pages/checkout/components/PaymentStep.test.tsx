@@ -2,8 +2,13 @@ import { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { PaymentStep } from './PaymentStep';
 import type { PaymentMethod, PaymentTab } from '../types';
+
+vi.mock('@/lib/posthog/capture-client-event', () => ({
+  captureClientEvent: vi.fn(),
+}));
 
 // Mock PaymentLogos module
 vi.mock('../../../components/PaymentLogos', () => ({
@@ -164,14 +169,10 @@ describe('PaymentStep', () => {
       expect(stepContainer).toBeInTheDocument();
     });
 
-    it('hides payment options visually when currentStep is not payment', () => {
-      // Arrange & Act
-      const { container } = render(<PaymentStep {...defaultProps} currentStep="contact" />);
-
-      // Assert - the content is rendered but visually hidden via CSS grid-rows-[0fr] opacity-0
-      const gridContainer = container.querySelector('.grid-rows-\\[0fr\\]');
-      expect(gridContainer).toBeInTheDocument();
-      expect(gridContainer?.className).toContain('opacity-0');
+    it('hides collapsed payment controls from assistive technology', () => {
+      render(<PaymentStep {...defaultProps} currentStep="contact" />);
+      expect(screen.queryByRole('radio', { name: /paystack/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Payment Method' })).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('shows step number when no payment method is selected', () => {
@@ -416,6 +417,26 @@ describe('PaymentStep', () => {
       if (korapayLabel) fireEvent.click(korapayLabel);
 
       expect(setPaymentMethod).toHaveBeenCalledWith('korapay');
+    });
+
+    it('stamps method-selection events with the checkout currency', () => {
+      render(
+        <PaymentStep
+          {...defaultProps}
+          currency="GHS"
+          merchant={{
+            feature_settings: { korapay_enabled: true } as FeatureSettings,
+          }}
+        />
+      );
+
+      const korapayLabel = screen.getByText('Korapay').closest('label');
+      if (korapayLabel) fireEvent.click(korapayLabel);
+
+      expect(vi.mocked(captureClientEvent)).toHaveBeenCalledWith(
+        expect.stringContaining('method_selected'),
+        expect.objectContaining({ currency: 'GHS' })
+      );
     });
 
     it('clears a stale Paystack selection when Paystack is unavailable', () => {
@@ -958,12 +979,14 @@ describe('PaymentStep', () => {
       expect(screen.getByRole('button', { name: /place order/i })).toBeInTheDocument();
     });
 
-    it('shows Generate Invoice button text when payment method is invoice', () => {
+    it('shows proforma invoice button text when payment method is invoice', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} paymentMethod="invoice" />);
 
       // Assert
-      expect(screen.getByRole('button', { name: /generate invoice/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /get a proforma invoice for mobile/i })
+      ).toBeInTheDocument();
     });
 
     it('shows Send Payment Link button text when payment method is payforme', () => {

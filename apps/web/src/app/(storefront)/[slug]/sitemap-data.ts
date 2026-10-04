@@ -26,6 +26,7 @@ import {
   buildProductSitemapEntry,
   type ProductWithCategory,
 } from './build-product-sitemap-entry';
+import { getGamingGraphicsHubSitemapEntries } from './gaming-graphics-hub-sitemap';
 import { getCommercialSupportCategorySitemapEntries } from './get-commercial-support-category-sitemap-entries';
 import { getStaticSitemapEntries } from './get-static-sitemap-entries';
 import { getTrustPolicySitemapEntries } from './get-trust-policy-sitemap-entries';
@@ -431,6 +432,12 @@ export async function getCommercialSupportSitemapEntries(
   });
   const commercialEntries: MetadataRoute.Sitemap = [];
   const seenCommercialUrls = new Set<string>();
+  const graphicsHubEntries = await getGamingGraphicsHubSitemapEntries(context);
+
+  for (const entry of graphicsHubEntries) {
+    seenCommercialUrls.add(entry.url);
+    commercialEntries.push(entry);
+  }
 
   for (
     let index = 0;

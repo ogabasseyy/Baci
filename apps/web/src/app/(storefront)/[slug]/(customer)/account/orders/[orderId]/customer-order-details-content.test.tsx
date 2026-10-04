@@ -63,6 +63,31 @@ describe('CustomerOrderDetailsContent', () => {
     ).toBeInTheDocument();
   });
 
+  it('labels the CTA as a proforma invoice for unresolved 325 orders', () => {
+    render(
+      <CustomerOrderDetailsContent
+        order={{
+          ...baseOrder,
+          payment_status: 'unpaid',
+          payment_method: 'invoice',
+          current_document_kind: 'invoice',
+          invoice_type_code: '325',
+        }}
+        basePath="/ogabassey"
+        merchantSlug="ogabassey"
+      />
+    );
+
+    // Same document the invoice route downloads as a proforma file; the
+    // href keeps the invoice route segment.
+    expect(
+      screen.getByRole('link', { name: /download proforma invoice/i })
+    ).toHaveAttribute(
+      'href',
+      '/api/storefront/account/orders/order-1/invoice?merchantSlug=ogabassey'
+    );
+  });
+
   it('renders the receipt CTA and valid product routes once eligible', () => {
     render(
       <CustomerOrderDetailsContent

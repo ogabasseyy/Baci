@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { getCheckoutAuthorizationHeaders } from '@/services/redvault';
 import {
   initializeRedvaultCheckout,
@@ -10,6 +11,9 @@ import { redvaultOrderResponse } from './redvault-order-review.test-utils';
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('@/services/redvault', () => ({
   getCheckoutAuthorizationHeaders: jest.fn(),
+}));
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentStarted: jest.fn(),
 }));
 
 it('rejects incomplete persisted summaries before requesting a payment', async () => {
@@ -68,6 +72,36 @@ it('completes account sync before navigating to the gateway', async () => {
     expect(onReady.mock.invocationCallOrder[0]).toBeLessThan(
       (router.push as jest.Mock).mock.invocationCallOrder[0]
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+it('opens the funnel attempt once the provider reference returns', async () => {
+  jest.clearAllMocks();
+  const { originalFetch } = mockSuccessfulInitialize();
+  try {
+    await expect(
+      initializeRedvaultCheckoutById({
+        orderId: 'order-rv',
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada',
+        customerPhone: '08012345678',
+        amount: '5750',
+      })
+    ).resolves.toBe('ready');
+    // The review path bypasses finalizeCheckoutPayment: without this
+    // start, the later provider-verified completion would dangle.
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledTimes(1);
+    expect(trackCheckoutPaymentStarted).toHaveBeenCalledWith({
+      orderId: 'order-rv',
+      paymentMethod: 'uba_redvault',
+      reference: 'RV-test',
+      value: 5750,
+    });
+    expect(
+      (trackCheckoutPaymentStarted as jest.Mock).mock.invocationCallOrder[0]
+    ).toBeLessThan((router.push as jest.Mock).mock.invocationCallOrder[0]);
   } finally {
     global.fetch = originalFetch;
   }

@@ -26,12 +26,41 @@ describe('bugfix: restore gift-wrapping fees in resumed summaries', () => {
 
     expect(resumed.gift_wrapping_fee).toBe(1500);
     expect(
-      resumed.subtotal +
+      (resumed.subtotal ?? 0) +
         resumed.shipping_cost +
         (resumed.tax_amount ?? 0) +
         (resumed.gift_wrapping_fee ?? 0) -
         (resumed.discount_amount ?? 0),
     ).toBe(resumed.total);
+  });
+});
+
+describe('resumed funnel currency', () => {
+  it('carries the stamped order currency, normalized to uppercase', () => {
+    const resumed = mapApiOrderToResumedOrder({
+      id: 'order-3',
+      currency: 'usd',
+      total: 100,
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000000',
+      items: [],
+    });
+
+    expect(resumed.currency).toBe('USD');
+  });
+
+  it('leaves currency undefined when the payload omits it', () => {
+    const resumed = mapApiOrderToResumedOrder({
+      id: 'order-4',
+      total: 100,
+      customer_name: 'Ada Lovelace',
+      customer_email: 'ada@example.com',
+      customer_phone: '+2348000000000',
+      items: [],
+    });
+
+    expect(resumed.currency).toBeUndefined();
   });
 });
 
@@ -60,7 +89,34 @@ describe('bugfix: authenticated resume only exposes shipping_fee', () => {
 
     expect(resumed.shipping_cost).toBe(2500);
     expect(
-      resumed.subtotal + resumed.shipping_cost,
+      (resumed.subtotal ?? 0) + resumed.shipping_cost,
     ).toBe(resumed.total);
   });
+});
+
+describe('nullable persisted subtotal', () => {
+  it.each([
+    null,
+    undefined,
+    Number.POSITIVE_INFINITY,
+    'not-a-number',
+    '   ',
+  ])(
+    'preserves invalid value %s as absent so checkout can derive it from stamped adjustments',
+    (subtotal) => {
+      const resumed = mapApiOrderToResumedOrder({
+        id: 'order-5',
+        subtotal,
+        shipping_cost: 1_000,
+        tax_amount: 750,
+        discount_amount: 500,
+        gift_wrapping_fee: 1_500,
+        total: 12_750,
+        customer_name: 'Ada',
+        items: [],
+      });
+
+      expect(resumed.subtotal).toBeUndefined();
+    },
+  );
 });

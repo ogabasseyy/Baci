@@ -22,7 +22,16 @@ type RedvaultInitializationInput = {
 };
 
 type RedvaultInitializationResult =
-  | { kind: 'authorization_url'; authorizationUrl: string }
+  | {
+      kind: 'authorization_url';
+      authorizationUrl: string;
+      /**
+       * Provider reference returned alongside the authorization URL (the
+       * Paystack-rails init response carries it): forwarded to the
+       * payment_started funnel event. Optional — older fixtures omit it.
+       */
+      reference?: string;
+    }
   | { kind: 'pending_reconciliation' }
   | { kind: 'captured_held' };
 
@@ -75,8 +84,13 @@ export async function initializeRedvaultPayment(
         : 'Unable to initialize Pay with UBA';
     throw new Error(message);
   }
+  const reference =
+    typeof (body as { reference?: unknown }).reference === 'string'
+      ? (body as { reference: string }).reference
+      : undefined;
   return {
     kind: 'authorization_url',
     authorizationUrl: (body as { authorization_url: string }).authorization_url,
+    ...(reference ? { reference } : {}),
   };
 }

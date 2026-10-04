@@ -13,6 +13,7 @@ import {
 import { resolveQuizAuthoringClosesAt } from './quiz-authoring-close-preview';
 import { QuizAuthoringTimingFields } from './quiz-authoring-timing-fields';
 import { isQuizAuthoringWindowAllowed } from './quiz-authoring-window-allowed';
+import { suggestedQuizDuration } from './quiz-duration';
 import { QuizPlanSummary } from './quiz-plan-summary';
 import { QuizPrizeProductPicker } from './quiz-prize-product-picker';
 import { QuizTopicInput } from './quiz-topic-input';
@@ -23,12 +24,14 @@ import { useQuizAuthoringWindowSync } from './use-quiz-authoring-window-sync';
 export function QuizAuthoringForm({
   disabled,
   initialError,
+  initialNextCursor = null,
   initialProducts,
   isGenerating,
   onGenerate,
 }: {
   disabled: boolean;
   initialError?: string | null;
+  initialNextCursor?: string | null;
   initialProducts: QuizPrizeProduct[];
   isGenerating: boolean;
   onGenerate: (configuration: QuizDraftConfiguration) => void;
@@ -45,7 +48,9 @@ export function QuizAuthoringForm({
   );
   const [time, setTime] = useState('10');
   const [perTopic, setPerTopic] = useState('1');
-  const [windowMinutes, setWindowMinutes] = useState('5');
+  const [requestedWindowMinutes, setWindowMinutes] = useState<string | null>(
+    null
+  );
   const [difficulty, setDifficulty] = useState<'easy' | 'standard' | 'hard'>(
     'standard'
   );
@@ -60,6 +65,12 @@ export function QuizAuthoringForm({
   const [endTouched, setEndTouched] = useState(false);
   const questionCount = topics.length * clampNumber(Number(perTopic), 1, 20);
   const timePerQuestionSeconds = clampNumber(Number(time), 5, 60);
+  const suggestedSeconds = suggestedQuizDuration(
+    mode,
+    questionCount,
+    timePerQuestionSeconds
+  );
+  const windowMinutes = requestedWindowMinutes ?? String(suggestedSeconds / 60);
   useQuizAuthoringWindowSync({
     endTouched,
     mode,
@@ -79,7 +90,7 @@ export function QuizAuthoringForm({
   // anyway, so when the scheduled start passes the button disables and the
   // timing alert appears without any further interaction.
   const retickClock = useQuizAuthoringClock();
-  const liveWindowMinutes = clampNumber(Number(windowMinutes), 1, 120);
+  const liveWindowMinutes = Number(windowMinutes);
   const timingValid = isQuizAuthoringWindowAllowed({
     liveWindowMinutes,
     mode,
@@ -122,6 +133,7 @@ export function QuizAuthoringForm({
       difficulty,
       endTouched,
       liveWindowMinutes,
+      windowTouched: requestedWindowMinutes !== null,
       mode,
       prizeProduct,
       questionCountPerTopic: clampNumber(Number(perTopic), 1, 20),
@@ -150,6 +162,7 @@ export function QuizAuthoringForm({
           <QuizPrizeProductPicker
             disabled={disabled}
             initialError={initialError}
+            initialNextCursor={initialNextCursor}
             initialProducts={initialProducts}
             onSelect={setPrizeProduct}
             selectedProduct={prizeProduct}

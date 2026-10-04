@@ -3,6 +3,7 @@ import z from 'zod';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
+import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
 import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
@@ -394,6 +395,14 @@ const serverSchema = z
     JUMIA_ENVIRONMENT: z.enum(['staging', 'production']).default('staging'),
     JUMIA_CLIENT_ID: z.string().optional(),
     JUMIA_CLIENT_SECRET: z.string().optional(),
+    JUMIA_AUTHORIZATION_ENCRYPTION_KEY: optionalTrimmedStringSchema.refine(
+      (value) =>
+        value === undefined || Buffer.from(value, 'base64').length === 32,
+      {
+        message:
+          'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+      }
+    ),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -403,12 +412,9 @@ const serverSchema = z
       Boolean(process.env.GITHUB_REPOSITORY);
     // These bounded VPS workers never sign agentic JWTs, so they should not
     // fail boot on unrelated signing material.
-    const isNonAgenticWorker = [
-      'ai-storefront-jobs',
-      'event-pipeline',
-      'petrock-reconciliation',
-      'quiz-finalization',
-    ].includes(process.env.BACI_WORKER_PROFILE ?? '');
+    const isNonAgenticWorker = isNonAgenticWorkerProfile(
+      process.env.BACI_WORKER_PROFILE
+    );
 
     if (
       value.NODE_ENV !== 'production' ||
@@ -741,6 +747,8 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         JUMIA_ENVIRONMENT: process.env.JUMIA_ENVIRONMENT,
         JUMIA_CLIENT_ID: process.env.JUMIA_CLIENT_ID,
         JUMIA_CLIENT_SECRET: process.env.JUMIA_CLIENT_SECRET,
+        JUMIA_AUTHORIZATION_ENCRYPTION_KEY:
+          process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY,
         INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
         CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
         CLOUDFLARE_ZONE_ID: process.env.CLOUDFLARE_ZONE_ID,
@@ -1111,6 +1119,15 @@ export const getImeiIdentifierEncryptionKey = () => {
   const key = trimSecret(
     process.env.IMEI_IDENTIFIER_ENCRYPTION_KEY ??
       env?.IMEI_IDENTIFIER_ENCRYPTION_KEY
+  );
+  return key || undefined;
+};
+
+export const getJumiaAuthorizationEncryptionKey = () => {
+  if (isBrowserRuntime()) return undefined;
+  const key = trimSecret(
+    process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY ??
+      env?.JUMIA_AUTHORIZATION_ENCRYPTION_KEY
   );
   return key || undefined;
 };

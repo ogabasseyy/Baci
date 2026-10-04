@@ -83,6 +83,33 @@ describe('renderBankDetailsHtml', () => {
     expect(html).not.toContain('javascript:');
   });
 
+  it('suppresses transfer instructions when no balance remains due', () => {
+    const html = renderBankDetailsHtml({
+      order: createReceiptOrder({
+        total: 0,
+        subtotal: 0,
+        amount_paid: 0,
+        balance: 0,
+        payment_status: 'unpaid',
+        virtual_account: {
+          account_name: 'Ada Buyer',
+          account_number: '1234567890',
+          bank_name: 'Wema Bank',
+        },
+      }),
+      merchant: createReceiptMerchant(),
+      options: {},
+      brandPrimary: '#111827',
+      brandAccent: '#d10f1f',
+      contactEmail: null,
+      contactPhone: null,
+      isPaid: false,
+    });
+
+    expect(html).toBe('');
+    expect(html).not.toContain('Transfer here for instant order confirmation');
+  });
+
   it('renders manual merchant bank details for invoice payments', () => {
     const html = renderBankDetailsHtml({
       order: createReceiptOrder({ currency: 'INR' }),

@@ -20,18 +20,15 @@ import {
   jumiaErrorResponse,
 } from '@/lib/jumia/client';
 import { updateStock } from '@/lib/jumia/feeds';
+import {
+  getPushReadyJumiaStockMappings,
+  loadJumiaStockMappings,
+} from '@/lib/jumia/load-jumia-stock-mappings';
+import { reconcileJumiaStockFeeds } from '@/lib/jumia/reconcile-jumia-stock-feeds';
+import { updateJumiaStockTracking } from '@/lib/jumia/update-jumia-stock-tracking';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
-import { getEffectiveStock } from '@/lib/product-stock';
 import { createClient } from '@/lib/supabase/server';
-
-interface ProductMapping {
-  id: string;
-  product_id: string;
-  variant_id: string | null;
-  jumia_seller_sku: string | null;
-  jumia_product_id: string | null;
-  baci_stock_at_last_sync: number | null;
-}
+import { resolveJumiaStockUpdates } from './resolve-jumia-stock-updates';
 
 export async function POST(request: NextRequest) {
   try {
@@ -101,7 +98,6 @@ export async function POST(request: NextRequest) {
       return featureGateResponse;
     }
 
-    // Load Jumia client (validates integration ownership + active status)
     let jumiaClient: JumiaClient;
     try {
       jumiaClient = await JumiaClient.forIntegration(
@@ -116,15 +112,14 @@ export async function POST(request: NextRequest) {
       throw clientError;
     }
 
-    // Fetch synced product mappings for this shop
-    const { data: mappings, error: mappingsError } = await supabase
-      .from('jumia_product_mappings')
-      .select(
-        'id, product_id, variant_id, jumia_seller_sku, jumia_product_id, baci_stock_at_last_sync'
-      )
-      .eq('merchant_id', merchantId)
-      .eq('jumia_shop_id', jumiaClient.shopId)
-      .eq('sync_status', 'synced');
+    const { mappings, error: mappingsError } = await loadJumiaStockMappings(
+      supabase,
+      {
+        merchantId,
+        shopId: jumiaClient.shopId,
+        marketplaceKey: jumiaClient.marketplaceKey,
+      }
+    );
 
     if (mappingsError) {
       console.error(
@@ -146,121 +141,55 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Filter to push-ready mappings (must have seller SKU and product ID)
-    const pushReady: ProductMapping[] = [];
-    let skipped = 0;
-
-    for (const m of mappings) {
-      if (!m.jumia_seller_sku?.trim() || !m.jumia_product_id?.trim()) {
-        skipped++;
-        continue;
-      }
-      pushReady.push(m as ProductMapping);
+    // Settle previously accepted stock feeds first: a later rejection resets
+    // the cursor so the mapping is retried instead of skipped forever.
+    const reconciliation = await reconcileJumiaStockFeeds(
+      supabase,
+      jumiaClient,
+      { mappings }
+    );
+    if (reconciliation.failures > 0) {
+      console.error(
+        '[Jumia Stock Sync] Stock feed reconciliation failed for',
+        reconciliation.failures,
+        'mapping(s)'
+      );
     }
+
+    const { pushReady, skipped: initialSkipped } =
+      getPushReadyJumiaStockMappings(mappings);
 
     if (pushReady.length === 0) {
       return NextResponse.json({
         success: true,
         updated: 0,
-        skipped,
+        skipped: initialSkipped,
         message: 'No push-ready mappings (missing seller SKU or product ID)',
       });
     }
 
-    // Batch-resolve stock: collect IDs and query in bulk
-    const variantIds = Array.from(
-      new Set(
-        pushReady.flatMap((mapping) =>
-          mapping.variant_id ? [mapping.variant_id] : []
-        )
-      )
-    );
-    const productOnlyIds = Array.from(
-      new Set(pushReady.filter((m) => !m.variant_id).map((m) => m.product_id))
-    );
-
-    const variantStockMap = new Map<string, number>();
-    const productStockMap = new Map<string, number>();
-    let fetchErrors = 0;
-
-    // Fetch variant stock in batch
-    if (variantIds.length > 0) {
-      const { data: variants, error: variantsError } = await supabase
-        .from('product_variants')
-        .select('id, stock_quantity')
-        .in('id', variantIds);
-
-      if (variantsError) {
-        fetchErrors++;
-        console.error(
-          '[Jumia Stock Sync] Failed to fetch variant stock:',
-          variantsError
-        );
-      }
-      for (const v of variants || []) {
-        variantStockMap.set(
-          v.id,
-          Math.max(0, Math.trunc(Number(v.stock_quantity) || 0))
-        );
-      }
-    }
-
-    // Fetch product stock in batch
-    if (productOnlyIds.length > 0) {
-      const { data: products, error: productsError } = await supabase
-        .from('products')
-        .select('id, stock, stock_quantity')
-        .in('id', productOnlyIds);
-
-      if (productsError) {
-        fetchErrors++;
-        console.error(
-          '[Jumia Stock Sync] Failed to fetch product stock:',
-          productsError
-        );
-      }
-      for (const p of products || []) {
-        productStockMap.set(p.id, getEffectiveStock(p));
-      }
-    }
-
-    // Build updates for changed stock only
-    const stockUpdates: Array<{
-      mappingId: string;
-      sellerSku: string;
-      id: string;
-      stock: number;
-    }> = [];
-
-    for (const mapping of pushReady) {
-      const stock = mapping.variant_id
-        ? variantStockMap.get(mapping.variant_id)
-        : productStockMap.get(mapping.product_id);
-
-      if (stock === undefined) {
-        skipped++;
-        continue;
-      }
-
-      // Only push if stock has actually changed
-      if (stock === mapping.baci_stock_at_last_sync) {
-        continue;
-      }
-
-      if (!mapping.jumia_seller_sku || !mapping.jumia_product_id) {
-        skipped++;
-        continue;
-      }
-
-      stockUpdates.push({
-        mappingId: mapping.id,
-        sellerSku: mapping.jumia_seller_sku,
-        id: mapping.jumia_product_id,
-        stock,
-      });
-    }
+    const {
+      stockUpdates,
+      skipped: resolutionSkipped,
+      fetchErrors,
+    } = await resolveJumiaStockUpdates(supabase, merchantId, pushReady);
+    const skipped = initialSkipped + resolutionSkipped;
 
     if (stockUpdates.length === 0) {
+      if (fetchErrors > 0 || reconciliation.failures > 0) {
+        // Nothing was pushed: reporting "up to date" would mask the failure.
+        return NextResponse.json({
+          success: false,
+          updated: 0,
+          skipped,
+          ...(fetchErrors > 0 && { fetchErrors }),
+          ...(reconciliation.failures > 0 && {
+            reconciliationFailures: reconciliation.failures,
+          }),
+          message:
+            'Stock sync could not complete for some products; nothing was pushed',
+        });
+      }
       return NextResponse.json({
         success: true,
         updated: 0,
@@ -269,7 +198,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Push stock to Jumia
     const feedId = await updateStock(
       jumiaClient,
       stockUpdates.map(({ sellerSku, id, stock }) => ({
@@ -279,26 +207,19 @@ export async function POST(request: NextRequest) {
       }))
     );
 
-    // Update tracking columns on all pushed mappings (batched upsert)
-    const now = new Date().toISOString();
-    let trackingFailures = 0;
+    const { trackingFailures } = await updateJumiaStockTracking(supabase, {
+      updates: stockUpdates.map((update) => ({
+        mappingId: update.mappingId,
+        stock: update.stock,
+      })),
+      feedId,
+    });
 
-    const bulkUpdates = stockUpdates.map((update) => ({
-      id: update.mappingId,
-      baci_stock_at_last_sync: update.stock,
-      last_stock_synced_at: now,
-      last_feed_id: feedId,
-    }));
-
-    const { error: bulkError } = await supabase
-      .from('jumia_product_mappings')
-      .upsert(bulkUpdates, { onConflict: 'id', ignoreDuplicates: false });
-
-    if (bulkError) {
-      trackingFailures = stockUpdates.length;
+    if (trackingFailures > 0) {
       console.error(
-        '[Jumia Stock Sync] Bulk tracking update failed:',
-        bulkError
+        '[Jumia Stock Sync] Stock tracking update failed for',
+        trackingFailures,
+        'mapping(s)'
       );
     }
 
@@ -309,6 +230,9 @@ export async function POST(request: NextRequest) {
       feedId,
       ...(trackingFailures > 0 && { trackingFailures }),
       ...(fetchErrors > 0 && { fetchErrors: fetchErrors }),
+      ...(reconciliation.failures > 0 && {
+        reconciliationFailures: reconciliation.failures,
+      }),
       message: `Pushed ${stockUpdates.length} stock updates to Jumia`,
     });
   } catch (error) {

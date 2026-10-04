@@ -109,6 +109,26 @@ describe('buildStorefrontAccountDocumentBundle', () => {
           created_at: '2026-03-22T10:10:00.000Z',
           description: 'Card payment',
           metadata: { payment_method: 'card' },
+          status: 'completed',
+        },
+        // Non-payments never reach customer payment surfaces: a failed
+        // retry and a still-pending attempt moved no money, so neither
+        // belongs in the history card nor the receipt listing.
+        {
+          id: 'tx-2',
+          amount: 110000,
+          created_at: '2026-03-22T10:05:00.000Z',
+          description: 'Card payment',
+          metadata: { payment_method: 'card' },
+          status: 'failed',
+        },
+        {
+          id: 'tx-3',
+          amount: 110000,
+          created_at: '2026-03-22T10:06:00.000Z',
+          description: 'Card payment',
+          metadata: { payment_method: 'card' },
+          status: 'pending',
         },
       ],
       paymentAccount: {
@@ -144,7 +164,10 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     expect(result.invoiceData.items[0]?.vat_category_code).toBe('S');
     expect(result.invoiceData.amount_paid).toBe(110000);
     expect(result.invoiceData.firs_irn).toBe('IRN-2026-001');
-    expect(result.order.transactions?.[0]?.id).toBe('tx-1');
+    expect(result.order.transactions?.map((entry) => entry.id)).toEqual([
+      'tx-1',
+    ]);
+    expect(result.receiptOrder.transactions).toHaveLength(1);
     expect(result.receiptOrder.virtual_account?.account_number).toBe(
       '1234567890'
     );
@@ -894,5 +917,134 @@ describe('buildStorefrontAccountDocumentBundle', () => {
     expect(result.invoiceData.items[0]).not.toHaveProperty('vat_rate');
     expect(result.invoiceData.items[0]).not.toHaveProperty('vat_amount');
     expect(result.invoiceData.tax_exclusive_amount).toBe(104000);
+  });
+
+  it.each([
+    {
+      label: 'unpaid invoice order holding the stored 380 default',
+      paymentMethod: 'invoice',
+      paymentStatus: 'unpaid',
+      storedTypeCode: '380',
+      expected: '325',
+    },
+    {
+      label: 'unpaid invoice order without a stored code',
+      paymentMethod: 'invoice',
+      paymentStatus: 'unpaid',
+      storedTypeCode: null,
+      expected: '325',
+    },
+    {
+      label: 'paid invoice order',
+      paymentMethod: 'invoice',
+      paymentStatus: 'paid',
+      storedTypeCode: '380',
+      expected: '380',
+    },
+    {
+      label: 'card order with the stored default',
+      paymentMethod: 'card',
+      paymentStatus: 'unpaid',
+      storedTypeCode: '380',
+      expected: '380',
+    },
+  ])('resolves $expected for an $label', ({
+    paymentMethod,
+    paymentStatus,
+    storedTypeCode,
+    expected,
+  }) => {
+    const result = buildStorefrontAccountDocumentBundle({
+      merchant: {
+        business_name: 'Test Store',
+        logo_url: null,
+        email: null,
+        phone: null,
+        support_email: null,
+        support_phone: null,
+        business_address: null,
+        cac_rc_number: null,
+        tax_identification_number: null,
+        legal_entity_name: null,
+        brand_colors: null,
+        vat_registration_status: null,
+        vat_rate: null,
+        bank_code: null,
+        bank_account_number: null,
+        bank_name: null,
+        bank_account_name: null,
+        social_media: null,
+        pages: null,
+        registered_address: null,
+      },
+      customer: {
+        first_name: null,
+        last_name: null,
+        email: null,
+        phone: null,
+      },
+      order: {
+        id: 'order-proforma-1',
+        order_number: 'INV-00042',
+        created_at: '2026-09-01T10:00:00.000Z',
+        updated_at: null,
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+        currency: 'NGN',
+        total: 110000,
+        subtotal: 100000,
+        shipping_fee: 0,
+        tax_amount: 10000,
+        discount_amount: 0,
+        amount_paid: 0,
+        shipping_address: null,
+        customer_name: null,
+        customer_email: null,
+        customer_phone: null,
+        payment_method: paymentMethod,
+        is_credit_order: false,
+        tracking_number: null,
+        shipping_provider: null,
+        invoice_type_code: storedTypeCode,
+        invoice_issue_date: null,
+        tax_point_date: null,
+        payment_due_date: null,
+        buyer_reference: null,
+        purchase_order_reference: null,
+        tax_exclusive_amount: 100000,
+        tax_inclusive_amount: 110000,
+        invoice_note: null,
+        firs_irn: null,
+        firs_csid: null,
+        firs_qr_code: null,
+        payment_terms: null,
+        notes: null,
+      },
+      itemRows: [
+        {
+          id: 'item-1',
+          product_id: 'prod-1',
+          variant_id: null,
+          variant_name: null,
+          name: 'Proforma Widget',
+          quantity: 1,
+          price: 100000,
+          vat_category_code: null,
+          vat_rate: null,
+          vat_amount: null,
+        },
+      ],
+      transactions: [],
+      paymentAccount: null,
+      taxRows: [],
+      paymentStatus,
+      shippingStatus: 'pending',
+      currentDocumentKind: 'invoice',
+    });
+
+    expect(result.invoiceData.invoice_type_code).toBe(expected);
+    // Account views label from the customer-facing order projection, so it
+    // must carry the same resolved code as the generated invoice.
+    expect(result.order.invoice_type_code).toBe(expected);
   });
 });

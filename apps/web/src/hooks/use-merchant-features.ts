@@ -47,7 +47,7 @@ const DEFAULT_STOREFRONT_FEATURES: StorefrontFeatures = {
   orderTrackingEnabled: true,
   discountCodesEnabled: true,
   guestCheckoutEnabled: true,
-  shippingProviders: ['gigl', 'topship'],
+  shippingProviders: [],
   freeShippingThreshold: null,
   collectPhone: true,
   requireAccount: false,

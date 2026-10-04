@@ -147,6 +147,13 @@ export interface StorefrontOrder {
   discount_amount?: number;
   balance?: number;
   current_document_kind?: StorefrontDocumentKind;
+  /**
+   * Resolved Peppol invoice type code for the downloadable invoice document
+   * ('325' marks an unpaid invoice-method order as proforma). Views use it
+   * to label the invoice CTA/badge while the download href keeps the
+   * `current_document_kind` route segment.
+   */
+  invoice_type_code?: string;
   receipt_eligible?: boolean;
   /**
    * Server-derived gate for the customer "Cancel Order" CTA. Authoritative

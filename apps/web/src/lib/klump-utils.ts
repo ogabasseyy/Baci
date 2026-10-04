@@ -8,6 +8,8 @@ export interface BnplOrderItem {
 export interface BnplOrder {
   id: string;
   total: number | string;
+  currency?: string | null;
+  order_number?: string | null;
   shipping_cost?: number | string | null;
   shipping_fee?: number | string | null;
   customer_email?: string | null;

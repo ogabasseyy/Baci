@@ -1,0 +1,29 @@
+# Preview env keys permitted to carry real (non-blank) values into the
+# untrusted preview build job. One key per line, `#` comments allowed.
+#
+# Seeded 2026-10-01 from the live Preview inventory, MINUS the privileged
+# keys the redact step blanks (see preview-env-redact.sed): only
+# identifiers, endpoints, and platform plumbing remain. NEXT_PUBLIC_*
+# keys need no entry (public by definition) and blank assignments need
+# none (sensitive-marked keys arrive blank).
+#
+# Adding a name here is a conscious decision that branch builds may read
+# the real Preview value. Prefer marking the key sensitive in Vercel
+# instead; only allowlist values the build genuinely needs. Any new
+# non-blank server key fails the workflow until it is allowlisted here
+# with review, marked sensitive, or added to the redact patterns.
+ADDRESS_AUTOCOMPLETE_KV_REST_API_URL
+AUTONOMA_CLIENT_ID
+GO54_EMAIL
+KV_REST_API_URL
+NX_DAEMON
+OPENAI_AGENTIC_MERCHANT_SLUG
+PETROCK_API_BASE_URL
+TURBO_DOWNLOAD_LOCAL_ENABLED
+TURBO_RUN_SUMMARY
+VERCEL
+VERCEL_ENV
+VERCEL_TARGET_ENV
+ZEPTOMAIL_FROM_DOMAIN
+ZEPTOMAIL_FROM_NAME
+ZOHO_CLIENT_ID

@@ -1,4 +1,15 @@
+import { giglTrackingCredentialPaths } from './event-pipeline-credential-paths.gigl-tracking';
+
 export const eventPipelineCredentialPaths = [
+  ...['lookup', 'product', 'search'].map(
+    (operation) =>
+      [
+        `apps/web/src/app/api/agentic/catalog/${operation}/route.ts`,
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ] as const
+  ),
   [
     'apps/web/src/app/api/payments/initialize/route.ts',
     'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
@@ -103,56 +114,7 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/cloudflare-purge.ts',
     'apps/web/src/env.ts',
   ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
+  ...giglTrackingCredentialPaths,
   [
     'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
     'apps/web/src/env.ts',
@@ -164,6 +126,16 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/env.ts',
   ],
   [
+    'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+    'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+    'apps/web/src/lib/supabase/service.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
     'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
     'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
     'apps/web/src/lib/supabase/service.ts',
@@ -171,15 +143,6 @@ export const eventPipelineCredentialPaths = [
   ],
   [
     'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/proxy.ts',
-    'apps/web/src/lib/storefront-compare-page-hard-status.ts',
     'apps/web/src/env.ts',
   ],
   [
@@ -264,6 +227,14 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/env.ts',
   ],
   [
+    'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    'apps/web/src/env.ts',
+  ],
+  // Extracted Credit Direct failure responder (PR 3498): files the same
+  // audited inventory-confirmation review through the shared helper.
+  [
+    'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
     'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',

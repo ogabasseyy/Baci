@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { remediationGitWorkflowTestFixtures } from './remediation-git-workflow.test-helpers.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
 const { candidate, makeRunner } = remediationGitWorkflowTestFixtures;
 
 describe('remediation committed-branch retry', () => {
@@ -74,10 +75,21 @@ describe('remediation committed-branch retry', () => {
     };
 
     assert.throws(
-      () => runRemediationAutofix({ candidate, env, runner }),
+      () =>
+        runRemediationAutofix({
+          candidate,
+          containerIdentity: testContainerIdentity,
+          env,
+          runner,
+        }),
       /push network unavailable/
     );
-    const retried = runRemediationAutofix({ candidate, env, runner });
+    const retried = runRemediationAutofix({
+      candidate,
+      containerIdentity: testContainerIdentity,
+      env,
+      runner,
+    });
 
     assert.equal(retried.type, 'pr_opened');
     assert.equal(codexAttempts, 2);

@@ -20,6 +20,7 @@ import type {
   TaxSubtotal,
 } from '@/lib/invoice-generator';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
+import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import type {
   StorefrontAccountDocumentCustomerRow,
   StorefrontAccountDocumentItemRow,
@@ -81,6 +82,24 @@ function alignSingleZeroTaxSubtotalWithDocumentTotal(
   subtotal.taxable_amount = taxExclusiveAmount;
 }
 
+// Statuses representing provider-confirmed value movement. Only these
+// belong in customer payment surfaces (history card, receipt listing):
+// pending/processing attempts never moved money, failed/cancelled ones
+// never will. A refunded row is still a genuine historical receipt — the
+// order-level status already shows the reversal.
+const PROVIDER_CONFIRMED_TRANSACTION_STATUSES = ['completed', 'refunded'];
+
+export function isProviderConfirmedTransaction(row: {
+  status?: string | null;
+}): boolean {
+  return (
+    typeof row.status === 'string' &&
+    PROVIDER_CONFIRMED_TRANSACTION_STATUSES.includes(
+      row.status.trim().toLowerCase()
+    )
+  );
+}
+
 export function buildStorefrontAccountDocumentBundle({
   merchant,
   customer,
@@ -97,6 +116,12 @@ export function buildStorefrontAccountDocumentBundle({
   const currency = asString(order.currency) || 'NGN';
   const total = asNumber(order.total);
   const subtotal = asNumber(order.subtotal);
+  // Payment-proof surfaces must never list attempts that moved no money:
+  // filter once here so the receipt listing and the history card below
+  // both inherit only genuine receipts.
+  const confirmedTransactions = transactions.filter(
+    isProviderConfirmedTransaction
+  );
   const shippingFee = asNumber(order.shipping_fee);
   const taxAmount = asNumber(order.tax_amount);
   const discountAmount = asNumber(order.discount_amount);
@@ -119,6 +144,18 @@ export function buildStorefrontAccountDocumentBundle({
   const customerPhone =
     asString(order.customer_phone) || customer.phone || null;
   const receiptEligible = currentDocumentKind === 'receipt';
+  // Same proforma rule as the order invoice route: the stored 380 default
+  // must not win over 325 for unpaid invoice-method orders. Shared by the
+  // generated invoiceData and the customer-facing order projection so the
+  // account views label the same document the route downloads.
+  const invoiceTypeCode = resolveInvoiceTypeCode({
+    paymentMethod: order.payment_method,
+    isPaid: paymentStatus === 'paid',
+    wasPaid: paymentStatus === 'refunded',
+    paymentStatus,
+    amountPaid,
+    storedTypeCode: order.invoice_type_code,
+  });
   const registeredAddress = asRecord(merchant.registered_address);
   const sellerIsVatRegistered =
     merchant.vat_registration_status === 'registered';
@@ -155,11 +192,14 @@ export function buildStorefrontAccountDocumentBundle({
     lineExtensionTotal > 0;
   let allocatedVatAmount = 0;
 
-  const receiptMerchant: ReceiptMerchant = buildReceiptMerchant(merchant);
+  const receiptMerchant: ReceiptMerchant = buildReceiptMerchant(
+    merchant,
+    currency
+  );
   const receiptOrder: ReceiptOrder = buildReceiptOrder({
     order,
     orderItems,
-    transactions,
+    transactions: confirmedTransactions,
     paymentAccount,
     paymentStatus,
     shippingAddress,
@@ -371,6 +411,7 @@ export function buildStorefrontAccountDocumentBundle({
     discount_amount: discountAmount,
     balance,
     current_document_kind: currentDocumentKind,
+    invoice_type_code: invoiceTypeCode,
     receipt_eligible: receiptEligible,
     can_cancel: canCancel,
     customer_name: customerName,
@@ -380,7 +421,7 @@ export function buildStorefrontAccountDocumentBundle({
     merchant_support_phone: merchant.support_phone || null,
     rider_phone_number: merchant.rider_phone_number || null,
     notes: order.notes || null,
-    transactions: transactions.map((transaction) => ({
+    transactions: confirmedTransactions.map((transaction) => ({
       id: transaction.id || undefined,
       amount: asNumber(transaction.amount),
       created_at: transaction.created_at,
@@ -392,7 +433,7 @@ export function buildStorefrontAccountDocumentBundle({
 
   const invoiceData: InvoiceData = {
     invoice_number: order.order_number,
-    invoice_type_code: order.invoice_type_code || '380',
+    invoice_type_code: invoiceTypeCode,
     issue_date: order.invoice_issue_date
       ? new Date(order.invoice_issue_date)
       : order.transaction_date

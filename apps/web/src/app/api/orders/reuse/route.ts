@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { scheduleReusedOrderInventoryPurge } from '@/lib/schedule-reused-order-inventory-purge';
 import {
   enrichShippingAddressWithQuoteDestination,
   OrderQuoteDestinationMismatchError,
@@ -258,6 +259,11 @@ export async function POST(request: NextRequest) {
         { status: mappedError.status }
       );
     }
+
+    scheduleReusedOrderInventoryPurge({
+      merchantId: parsed.data.merchant_id,
+      supabase,
+    });
 
     // R14-3: if the checkout forwarded a merchant rate id (a reopened
     // merchant-rate order whose original post-create stamp may have failed),

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const originalMatchMedia = window.matchMedia;
 const mockAddToCart = vi.fn();
+const mockRouterPush = vi.hoisted(() => vi.fn());
 
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
@@ -33,7 +34,7 @@ vi.mock('next/link', () => ({
 }));
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(() => ({ slug: 'test', category: 'electronics' })),
-  useRouter: vi.fn(() => ({ push: vi.fn(), back: vi.fn() })),
+  useRouter: vi.fn(() => ({ push: mockRouterPush, back: vi.fn() })),
 }));
 vi.mock('@/hooks/cart', () => ({
   useCart: vi.fn(() => ({
@@ -102,7 +103,9 @@ import { CategoryPage } from './category-page';
 describe('CategoryPage', () => {
   beforeEach(() => {
     window.scrollTo = vi.fn();
+    window.history.replaceState({}, '', '/test-store/electronics');
     mockAddToCart.mockReset();
+    mockRouterPush.mockReset();
     yieldSpy.mockClear();
     filterHarness.onFilterChange = null;
     vi.mocked(useParams).mockReturnValue({

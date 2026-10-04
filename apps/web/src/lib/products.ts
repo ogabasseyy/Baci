@@ -83,6 +83,7 @@ export type ProductCondition = 'new' | 'used' | 'open_box' | 'refurbished';
 
 export interface ProductVariant {
   id: string;
+  inventory_tracking_policy?: string | null;
   product_id: string;
   merchant_id: string;
   attributes: Record<string, string>; // { color: 'Blue', storage: '128GB' }
@@ -201,6 +202,12 @@ export interface Product {
   slug?: string;
   compare_at_price?: number;
   cost_price?: number;
+  /**
+   * Base catalog unit price retained when the cart line prices from a
+   * condition offer or voucher. Quote subtotals prefer it so they match the
+   * server's canonical basis (variant.price_override ?? products.price).
+   */
+  catalogPrice?: number;
   low_stock_threshold?: number; // Default: 5
 
   // Multiple images

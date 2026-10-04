@@ -1,14 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import {
-  claimCheckoutPurchaseTracking,
-  clearRedvaultPurchaseTrackingContext,
-  loadRedvaultPurchaseTrackingContext,
-} from '@/lib/claim-checkout-purchase-tracking';
-import { clearPersistedRedvaultOrderWithRetry } from '@/lib/pending-redvault-order';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
-import { verifyRedvaultPayment } from '@/services/redvault';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
   beginSavingsAuthorizationCompletion,
@@ -18,7 +9,10 @@ import type {
   PaymentGatewayRefs,
   PaymentStatusSetter,
 } from './payment-gateway-controller.types';
+import type { OrderCompletionContext } from './payment-gateway-order-completion';
+import { settleOrderCompletion } from './payment-gateway-order-completion';
 import { handleVtuConfirmation } from './use-vtu-payment-completion';
+import { verifyRedvaultCompletion } from './verify-redvault-order-completion';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {
@@ -41,6 +35,7 @@ export function createPaymentGatewayCompletionHandlers({
   merchantSlug,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   paymentMethod,
   queryClient,
@@ -147,74 +142,50 @@ export function createPaymentGatewayCompletionHandlers({
       return;
     }
 
+    const completionContext: OrderCompletionContext = {
+      amount,
+      clearCart,
+      clearPendingLoadTimeout,
+      gateway,
+      isMountedRef,
+      orderId,
+      orderNumber,
+      orderTotal,
+      paymentCompletionStartedRef,
+      // The rails gateway and the selected method differ on the native
+      // REDVAULT route (Paystack rails, `uba_redvault` method): lanes
+      // that attribute the conversion read this, never `gateway`.
+      paymentMethod,
+      reference,
+      scheduleDelayedNavigation,
+      setErrorMessage,
+      setPaymentStatus,
+      trackingToken,
+    };
+
     let verifiedOrderNumber = orderNumber;
+    // A provider-confirmed REDVAULT payment completes exactly once below:
+    // the REDVAULT branch owns the ad purchase emission, so the generic
+    // verification block is skipped for it — otherwise a paid
+    // tracked-order lookup would emit the same ad purchase and legacy
+    // order_completed a second time under the other claim key. The
+    // funnel payment_completed is still emitted in the shared
+    // completion under its own claim.
+    let redvaultVerified = false;
     if (paymentMethod === 'uba_redvault') {
-      paymentCompletionStartedRef.current = true;
-      clearPendingLoadTimeout();
-      setPaymentStatus('processing');
-      try {
-        const outcome = await verifyRedvaultPayment(reference || '');
-        if (!isMountedRef.current) return;
-        if (outcome === 'pending' || outcome === 'held') {
-          setPaymentStatus(outcome);
-          return;
-        }
-        verifiedOrderNumber = outcome.orderNumber || orderNumber;
-        // The persisted fence must clear now: otherwise the next submit
-        // resolves this paid order, clears the new cart, and routes back
-        // here instead of placing the new purchase. Retry transient
-        // storage failures before degrading to best-effort — verification
-        // already succeeded, so cleanup must never revert to pending.
-        try {
-          await clearPersistedRedvaultOrderWithRetry();
-        } catch {
-          // A fence that will not clear is left for the next resolver
-          // pass; the verified payment still succeeds below.
-        }
-        try {
-          const trackingContext = await loadRedvaultPurchaseTrackingContext(
-            orderId || ''
-          );
-          if (
-            trackingContext &&
-            (await claimCheckoutPurchaseTracking(orderId || ''))
-          ) {
-            trackCheckoutRoutePurchaseCompleted({
-              ...trackingContext,
-              orderId: orderId || '',
-              orderNumber: verifiedOrderNumber || trackingContext.orderNumber,
-            });
-            await clearRedvaultPurchaseTrackingContext(orderId || '');
-          }
-        } catch {
-          // Verification already succeeded; ignore analytics failures.
-        }
-      } catch {
-        if (!isMountedRef.current) return;
-        setErrorMessage(
-          'We could not confirm your UBA payment yet. Do not pay again; check your orders shortly.'
-        );
-        setPaymentStatus('pending');
+      const outcome = await verifyRedvaultCompletion(completionContext);
+      if (!outcome.continueSharedCompletion) {
         return;
       }
+      verifiedOrderNumber = outcome.verifiedOrderNumber;
+      redvaultVerified = true;
     }
 
-    paymentCompletionStartedRef.current = true;
-    clearPendingLoadTimeout();
-    setPaymentStatus('success');
-    await clearCart();
-    scheduleDelayedNavigation(() => {
-      router.replace({
-        pathname: '/order-success',
-        params: {
-          orderId: orderId || '',
-          orderNumber: verifiedOrderNumber || '',
-          paymentMethod: gateway,
-          reference: reference || '',
-          ...(trackingToken && { trackingToken }),
-        },
-      });
-    });
+    await settleOrderCompletion(
+      completionContext,
+      verifiedOrderNumber,
+      redvaultVerified
+    );
   };
 
   return { beginPaymentCompletion, beginVtuPaymentCompletion };

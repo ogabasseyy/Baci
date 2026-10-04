@@ -1,105 +1,64 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createPublicClient } from './supabase/public';
 
-interface MerchantDomainRow {
-  domain: string;
-  is_primary: boolean | null;
-  status: string;
-  domain_type: string;
+export type PublicDomainResolution =
+  | { outcome: 'resolved'; value: string }
+  | { outcome: 'not-found' }
+  | { outcome: 'unavailable' };
+
+type PublicDomainResolverName =
+  | 'resolve_storefront_custom_domain'
+  | 'resolve_storefront_domain_slug';
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
-function isMerchantDomainRow(value: unknown): value is MerchantDomainRow {
-  if (!value || typeof value !== 'object') return false;
-  const domain = Reflect.get(value, 'domain');
-  const isPrimary = Reflect.get(value, 'is_primary');
-  const status = Reflect.get(value, 'status');
-  const domainType = Reflect.get(value, 'domain_type');
-  return (
-    typeof domain === 'string' &&
-    (typeof isPrimary === 'boolean' || isPrimary === null) &&
-    typeof status === 'string' &&
-    typeof domainType === 'string'
-  );
-}
-
-export async function fetchSlugForDomain(
-  supabase: SupabaseClient,
-  domain: string
-): Promise<string | null> {
+async function resolvePublicDomain(
+  rpcName: PublicDomainResolverName,
+  args: Record<string, string>
+): Promise<PublicDomainResolution> {
   try {
-    const { data, error } = await supabase
-      .from('domains')
-      .select('merchants!inner(slug)')
-      .eq('domain', domain)
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle();
+    const { data, error } = await createPublicClient({
+      clientInfo: 'baci-domain-cache-resolver',
+    }).rpc(rpcName, args);
 
     if (error) {
-      console.error('[Domain Cache] Failed to fetch slug for domain', {
-        domain,
-        error,
+      console.error('[Domain Cache] Public domain resolver failed', {
+        rpcName,
+        code: error.code,
       });
-      return null;
+      return { outcome: 'unavailable' };
     }
-    if (!data) return null;
+    if (data === null) return { outcome: 'not-found' };
+    if (isNonEmptyString(data)) return { outcome: 'resolved', value: data };
 
-    if (!data.merchants || typeof data.merchants !== 'object') return null;
-    const merchant = Array.isArray(data.merchants)
-      ? data.merchants[0]
-      : data.merchants;
-    if (!merchant || typeof merchant !== 'object') return null;
-    const slug = Reflect.get(merchant, 'slug');
-    return typeof slug === 'string' ? slug : null;
-  } catch (error) {
-    console.error('[Domain Cache] Error fetching slug for domain', {
-      domain,
-      error,
-    });
-    return null;
-  }
-}
-
-export async function fetchCustomDomain(
-  supabase: SupabaseClient,
-  merchantSlug: string
-): Promise<string | null> {
-  try {
-    const { data: merchant, error } = await supabase
-      .from('merchants')
-      .select('id, domains!left(domain, is_primary, status, domain_type)')
-      .eq('slug', merchantSlug)
-      .maybeSingle();
-
-    if (error) {
-      console.error('[Domain Cache] Failed to fetch merchant domain data', {
-        merchantSlug,
-        error,
-      });
-      return null;
-    }
-    if (!merchant) return null;
-
-    const rawDomains = Reflect.get(merchant, 'domains');
-    const domains = Array.isArray(rawDomains)
-      ? rawDomains.filter(isMerchantDomainRow)
-      : [];
-    const activeCustomDomains =
-      domains?.filter(
-        (domain) =>
-          domain.status === 'active' &&
-          (domain.domain_type === 'custom' ||
-            domain.domain_type === 'purchased') &&
-          typeof domain.domain === 'string'
-      ) ?? [];
-    const primaryDomain = activeCustomDomains.find(
-      (domain) => domain.is_primary
+    console.error(
+      '[Domain Cache] Public domain resolver returned malformed data',
+      {
+        rpcName,
+      }
     );
-
-    if (primaryDomain) return primaryDomain.domain;
-    return activeCustomDomains.length === 1
-      ? activeCustomDomains[0].domain
-      : null;
+    return { outcome: 'unavailable' };
   } catch {
-    return null;
+    console.error('[Domain Cache] Public domain resolver was unavailable', {
+      rpcName,
+    });
+    return { outcome: 'unavailable' };
   }
+}
+
+export function fetchSlugForDomain(
+  domain: string
+): Promise<PublicDomainResolution> {
+  return resolvePublicDomain('resolve_storefront_domain_slug', {
+    p_domain: domain,
+  });
+}
+
+export function fetchCustomDomain(
+  merchantSlug: string
+): Promise<PublicDomainResolution> {
+  return resolvePublicDomain('resolve_storefront_custom_domain', {
+    p_slug: merchantSlug,
+  });
 }

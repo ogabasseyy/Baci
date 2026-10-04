@@ -2,6 +2,9 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
+import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
@@ -22,6 +25,24 @@ describe('event pipeline credential-path authority', () => {
     );
 
     expect(manifest.authority.credentialPaths).toEqual([
+      [
+        'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/product/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/agentic/catalog/search/route.ts',
+        'apps/web/src/lib/agentic/mutation-request.ts',
+        'apps/web/src/lib/agentic/request-integrity.ts',
+        'apps/web/src/env.ts',
+      ],
       [
         'apps/web/src/app/api/payments/initialize/route.ts',
         'apps/web/src/lib/payments/initialize-redvault-paystack-checkout.ts',
@@ -126,56 +147,7 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/cloudflare-purge.ts',
         'apps/web/src/env.ts',
       ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
+      ...eventPipelineGiglCredentialPaths,
       [
         'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
         'apps/web/src/env.ts',
@@ -187,6 +159,16 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
+        'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
+        'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+        'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+        'apps/web/src/lib/supabase/service.ts',
+        'apps/web/src/env.ts',
+      ],
+      [
         'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
         'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
         'apps/web/src/lib/supabase/service.ts',
@@ -194,15 +176,6 @@ describe('event pipeline credential-path authority', () => {
       ],
       [
         'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/proxy.ts',
-        'apps/web/src/lib/storefront-compare-page-hard-status.ts',
         'apps/web/src/env.ts',
       ],
       [
@@ -291,10 +264,18 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/supabase/admin.ts',
         'apps/web/src/env.ts',
       ],
+      [
+        'apps/web/src/app/api/payments/credit-direct/webhook/customer-inventory-failure.ts',
+        'apps/web/src/lib/payments/file-inventory-confirmation-review.ts',
+        'apps/web/src/lib/supabase/admin.ts',
+        'apps/web/src/env.ts',
+      ],
+      ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
+      ...eventPipelineChatCredentialPaths,
     ]);
   });
 });

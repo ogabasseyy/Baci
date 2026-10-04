@@ -34,4 +34,40 @@ describe('remediation container', () => {
     assert.match(dockerignore, /^\.env$/m);
     assert.match(dockerignore, /^\.env\.\*$/m);
   });
+
+  it('preserves a real shell for the read-only wrapper launch', () => {
+    const dockerfile = readFileSync(
+      join(workerRoot, 'Dockerfile.codex-remediator'),
+      'utf8'
+    );
+
+    assert.match(
+      dockerfile,
+      /cp \/bin\/dash \/usr\/local\/libexec\/\.baci-internal\/dash/
+    );
+    assert.match(
+      dockerfile,
+      /cp \/bin\/bash \/usr\/local\/libexec\/\.baci-internal\/bash/
+    );
+    assert.match(
+      dockerfile,
+      /mkdir -m 700 \/usr\/local\/libexec\/\.baci-internal/
+    );
+    assert.match(
+      dockerfile,
+      /chmod 700 \/usr\/local\/libexec\/\.baci-internal\/bash \/usr\/local\/libexec\/\.baci-internal\/dash/
+    );
+    assert.match(
+      dockerfile,
+      /touch[\s\\\n]+(?:.*\\\n\s+)*\s+\/usr\/local\/libexec\/baci-shell-bash/
+    );
+    assert.match(
+      dockerfile,
+      /touch[\s\\\n]+(?:.*\\\n\s+)*\s+\/usr\/local\/libexec\/baci-shell-dash/
+    );
+    assert.doesNotMatch(
+      dockerfile,
+      /cp \/bin\/(?:bash|dash) \/usr\/local\/libexec\/baci-shell-/
+    );
+  });
 });

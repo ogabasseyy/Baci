@@ -1,8 +1,14 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ createClient: vi.fn() }));
-vi.mock('@/lib/agentic/scoped-supabase', () => ({
-  createAgenticScopedSupabaseClient: mocks.createClient,
+const mocks = vi.hoisted(() => ({
+  createPublicClient: vi.fn(),
+  resolveAgenticChatTenant: vi.fn(),
+}));
+vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
+  resolveAgenticChatTenant: mocks.resolveAgenticChatTenant,
+}));
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: mocks.createPublicClient,
 }));
 vi.mock('@/lib/storefront-search', () => ({
   searchStorefrontProducts: vi.fn(),
@@ -14,7 +20,19 @@ import {
   handleSearchProducts,
 } from './chat-tool-handlers';
 
-beforeEach(() => vi.clearAllMocks());
+const OGABASSEY_MERCHANT_ID = '3bc72679-c0f7-4db4-9054-6a4a4a95a498';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.resolveAgenticChatTenant.mockResolvedValue({
+    agenticCheckoutEnabled: true,
+    businessName: 'Ogabassey',
+    currencyCode: 'NGN',
+    merchantId: OGABASSEY_MERCHANT_ID,
+    merchantSlug: 'ogabassey',
+    priceNegotiationEnabled: true,
+  });
+});
 
 it.each([
   'search',
@@ -25,31 +43,35 @@ it.each([
   const query = Object.assign(Promise.resolve(failure), {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue(failure),
     maybeSingle: vi.fn().mockResolvedValue(failure),
   });
   const from = vi.fn(() => query);
-  mocks.createClient.mockReturnValue({ from });
-  const result =
-    tool === 'search'
-      ? await handleSearchProducts({ query: '' })
-      : tool === 'details'
+  mocks.createPublicClient.mockReturnValue({ from });
+  if (tool === 'search') {
+    await expect(handleSearchProducts({ query: '' })).rejects.toThrow(
+      'Catalog search temporarily unavailable'
+    );
+  } else {
+    const result =
+      tool === 'details'
         ? await handleGetProductDetails({ productId: 'phone' })
         : await handleGetRecommendations({
             productId: 'phone',
             type: 'accessories',
           });
+    expect(result).toEqual(tool === 'details' ? null : []);
+  }
   expect(from).toHaveBeenCalledWith('products');
   expect(query.select).toHaveBeenCalled();
-  expect(result).toEqual(
-    tool === 'search'
-      ? { products: [], total: 0 }
-      : tool === 'details'
-        ? null
-        : []
-  );
 });
 
 it.each([
@@ -85,7 +107,7 @@ it.each([
     single: vi.fn().mockResolvedValue({ data: row, error: null }),
     maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
   });
-  mocks.createClient.mockReturnValue({ from: () => query });
+  mocks.createPublicClient.mockReturnValue({ from: () => query });
 
   if (tool === 'search') await handleSearchProducts({ query: '' });
   else if (tool === 'details')

@@ -26,6 +26,14 @@ interface UseCreditDirectVerificationOptions {
 
 interface OrderStatusResponse {
   payment_status?: string | null;
+  total?: unknown;
+  currency?: unknown;
+  inventory_confirmed?: boolean;
+}
+
+export interface CreditDirectConfirmedOrder {
+  total?: number;
+  currency?: string;
 }
 
 /**
@@ -33,7 +41,10 @@ interface OrderStatusResponse {
  * is pending confirmation. Credit Direct's SDK offers no redirect URL or
  * status API, so once its hosted popup replaces the launcher page the only
  * way to detect completion is watching the order's payment_status flip to
- * bnpl_approved/paid via the provider webhook.
+ * bnpl_approved/paid via the provider webhook. Confirmation additionally
+ * requires the server-confirmed inventory proof: the webhook writes
+ * approval before inventory confirmation lands (rolling it back on
+ * failure), so the approved status alone can precede a rollback.
  */
 export function useCreditDirectVerification({
   active,
@@ -47,10 +58,16 @@ export function useCreditDirectVerification({
 }: UseCreditDirectVerificationOptions) {
   const [phase, setPhase] = useState<CreditDirectVerificationPhase>('idle');
   const [pollEpoch, setPollEpoch] = useState(0);
+  // Retains the confirming read's revenue fields so the first conversion
+  // capture carries value/currency (a later lookup would be suppressed by
+  // the once-guard).
+  const [confirmedOrder, setConfirmedOrder] =
+    useState<CreditDirectConfirmedOrder | null>(null);
 
   useEffect(() => {
     if (!active || !orderId) {
       setPhase('idle');
+      setConfirmedOrder(null);
       return;
     }
 
@@ -58,6 +75,7 @@ export function useCreditDirectVerification({
     let timer: ReturnType<typeof setTimeout> | null = null;
     let activeController: AbortController | null = null;
     setPhase('polling');
+    setConfirmedOrder(null);
 
     const query = new URLSearchParams({ merchant_slug: merchantSlug });
     if (trackingToken) query.set('token', trackingToken);
@@ -81,8 +99,24 @@ export function useCreditDirectVerification({
         if (response.ok) {
           const order = (await response.json()) as OrderStatusResponse;
           const paymentStatus = order.payment_status || '';
-          if (CONFIRMED_PAYMENT_STATUSES.has(paymentStatus)) {
-            if (!disposed) setPhase('confirmed');
+          if (
+            CONFIRMED_PAYMENT_STATUSES.has(paymentStatus) &&
+            order.inventory_confirmed === true
+          ) {
+            if (!disposed) {
+              const confirmedTotal = Number(order.total);
+              const confirmedCurrency =
+                typeof order.currency === 'string' && order.currency.trim()
+                  ? order.currency.trim()
+                  : undefined;
+              setConfirmedOrder({
+                ...(Number.isFinite(confirmedTotal)
+                  ? { total: confirmedTotal }
+                  : {}),
+                ...(confirmedCurrency ? { currency: confirmedCurrency } : {}),
+              });
+              setPhase('confirmed');
+            }
             return;
           }
           if (CANCELLED_PAYMENT_STATUSES.has(paymentStatus)) {
@@ -128,5 +162,5 @@ export function useCreditDirectVerification({
 
   const restart = () => setPollEpoch((epoch) => epoch + 1);
 
-  return { phase, restart };
+  return { phase, restart, confirmedOrder };
 }

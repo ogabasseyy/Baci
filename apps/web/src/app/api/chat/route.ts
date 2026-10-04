@@ -22,6 +22,7 @@ import crypto from 'node:crypto';
 import { headers } from 'next/headers';
 import z from 'zod';
 import { checkRateLimit } from '@/ai/provider';
+import { withChatTenantHeader } from '@/app/api/chat/chat-tenant';
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import {
@@ -29,11 +30,16 @@ import {
   buildChatMessages,
   CUSTOMER_CHAT_TIMEOUT_MS,
   createClientClosedRequestResponse,
+  createRouteDeadline,
   createStaticChatFallbackResponse,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
+  withTimeout,
 } from '@/app/api/chat/route-helpers';
-import { runChatProviderChain } from '@/app/api/chat/run-chat-provider-chain';
+import {
+  GEMINI_PROVIDER_TIMEOUT_MS,
+  runChatProviderChain,
+} from '@/app/api/chat/run-chat-provider-chain';
 import { runOllamaChat } from '@/app/api/chat/run-ollama-chat';
 import {
   getAiChatModel,
@@ -44,6 +50,8 @@ import {
   getOllamaBaseUrl,
   getOllamaBasicAuth,
 } from '@/env';
+import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import { getCurrencyConfig } from '@/lib/currency';
 import { createLlmChatResponse } from '@/lib/llm-chat';
 import { sanitizeHtml } from '@/lib/sanitize';
 
@@ -78,6 +86,14 @@ function generateSessionId(ip: string): string {
 
 export async function POST(req: Request) {
   try {
+    const remainingRouteMs = createRouteDeadline(CUSTOMER_CHAT_TIMEOUT_MS);
+    // Hold back one chain attempt for the Gemini fallback: without a
+    // reserve, a hung first-choice stage burns the whole route budget and
+    // the chain below runs with ~0ms, serving the static fallback without
+    // ever attempting Gemini.
+    const firstStageTimeoutMs = () =>
+      Math.max(0, remainingRouteMs() - GEMINI_PROVIDER_TIMEOUT_MS);
+
     const headersList = await headers();
     const forwardedFor = headersList.get('x-forwarded-for');
     const realIp = headersList.get('x-real-ip');
@@ -124,6 +140,23 @@ export async function POST(req: Request) {
     const { messages, sessionId: providedSessionId } = validation.data;
     const sessionId = providedSessionId || generateSessionId(clientIp);
 
+    // The chat tools self-resolve this same tenant; resolving here fails the
+    // whole request closed (503) instead of letting providers run unscoped,
+    // and attests the resolving tenant on every response below. The lookup
+    // shares the request-wide deadline so a stalled dependency cannot push
+    // the handler past maxDuration before the providers start.
+    const tenant = await withTimeout(
+      resolveAgenticChatTenant(req),
+      remainingRouteMs(),
+      'Chat tenant lookup timed out'
+    ).catch(() => null);
+    if (!tenant) {
+      return new Response(
+        JSON.stringify({ error: 'Chat is unavailable for this storefront' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const sanitizedMessages = messages.map((msg) => ({
       ...msg,
       content: msg.role === 'user' ? sanitizeHtml(msg.content) : msg.content,
@@ -152,16 +185,25 @@ export async function POST(req: Request) {
           bearer,
           model: chatModel,
           messages: buildChatMessages(sanitizedMessages, chatModel, {
+            checkoutEnabled: tenant.agenticCheckoutEnabled,
+            currency: getCurrencyConfig(undefined, tenant.currencyCode),
+            merchantName: tenant.businessName,
             toolsEnabled: false,
           }),
           signal: req.signal,
-          timeoutMs: CUSTOMER_CHAT_TIMEOUT_MS,
+          timeoutMs: firstStageTimeoutMs(),
         });
         const bufferedResponse = await bufferTextResponse(llmResponse);
-        return await negotiateChatAgentUiResponse(req, bufferedResponse);
+        return withChatTenantHeader(
+          await negotiateChatAgentUiResponse(req, bufferedResponse),
+          tenant.merchantSlug
+        );
       } catch (error) {
         if (isChatAbortError(error, req.signal)) {
-          return createClientClosedRequestResponse();
+          return withChatTenantHeader(
+            createClientClosedRequestResponse(),
+            tenant.merchantSlug
+          );
         }
 
         console.warn(
@@ -175,17 +217,24 @@ export async function POST(req: Request) {
       const ollamaBaseUrl = getOllamaBaseUrl();
       if (ollamaBaseUrl) {
         const response = await runOllamaChat(req, sanitizedMessages, {
+          agenticCheckoutEnabled: tenant.agenticCheckoutEnabled,
           baseUrl: ollamaBaseUrl,
           model: getAiChatModel(),
           basicAuth: getOllamaBasicAuth(),
+          currency: getCurrencyConfig(undefined, tenant.currencyCode),
+          merchantName: tenant.businessName,
+          timeoutMs: firstStageTimeoutMs(),
           executeToolCall: (call) =>
             executeAgenticChatToolForOllama(
               call.function.name,
               call.function.arguments,
-              sessionId
+              sessionId,
+              tenant.agenticCheckoutEnabled
             ),
         });
-        if (response) return response;
+        if (response) {
+          return withChatTenantHeader(response, tenant.merchantSlug);
+        }
       }
     }
 
@@ -194,7 +243,11 @@ export async function POST(req: Request) {
       result = await runChatProviderChain({
         messages: sanitizedMessages,
         abortSignal: req.signal,
+        agenticCheckoutEnabled: tenant.agenticCheckoutEnabled,
+        currency: getCurrencyConfig(undefined, tenant.currencyCode),
+        merchantName: tenant.businessName,
         sessionId,
+        timeoutMs: remainingRouteMs(),
       });
     } catch (error) {
       if (isChatAbortError(error, req.signal)) {
@@ -208,18 +261,24 @@ export async function POST(req: Request) {
     }
 
     if (!result?.text.trim()) {
-      return await negotiateChatAgentUiResponse(
-        req,
-        createStaticChatFallbackResponse()
+      return withChatTenantHeader(
+        await negotiateChatAgentUiResponse(
+          req,
+          createStaticChatFallbackResponse()
+        ),
+        tenant.merchantSlug
       );
     }
 
-    return await negotiateChatAgentUiResponse(
-      req,
-      new Response(result.text, {
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      }),
-      result.events
+    return withChatTenantHeader(
+      await negotiateChatAgentUiResponse(
+        req,
+        new Response(result.text, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        }),
+        result.events
+      ),
+      tenant.merchantSlug
     );
   } catch (error) {
     if (isChatAbortError(error, req.signal)) {

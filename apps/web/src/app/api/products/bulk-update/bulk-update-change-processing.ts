@@ -45,6 +45,7 @@ async function processBulkUpdateChange({
   merchantBusinessName,
   merchantId,
   onPurgeEntries,
+  onResolvedProductIds,
   supabase,
 }: {
   change: BulkUpdateChange;
@@ -52,6 +53,7 @@ async function processBulkUpdateChange({
   merchantBusinessName: string;
   merchantId: string;
   onPurgeEntries?: (entries: StorefrontProductPurgeEntry[]) => void;
+  onResolvedProductIds?: (productIds: string[]) => void;
   supabase: SupabaseClient;
 }): Promise<ProductChangeResult> {
   const result = emptyProductChangeResult();
@@ -117,6 +119,11 @@ async function processBulkUpdateChange({
         BULK_PURGE_ROW_COLUMNS
       );
       if (error) throw error;
+      onResolvedProductIds?.(
+        (updatedRows as BulkPurgeProductRow[] | null | undefined)
+          ?.map((row) => row.id?.trim())
+          .filter((id): id is string => Boolean(id)) ?? []
+      );
       onPurgeEntries?.(
         getBulkPurgeEntries(
           updatedRows as BulkPurgeProductRow[] | null,
@@ -190,6 +197,11 @@ async function processBulkUpdateChange({
         .eq('merchant_id', merchantId)
         .select(BULK_PURGE_ROW_COLUMNS);
       if (error) throw error;
+      onResolvedProductIds?.(
+        (archivedRows as BulkPurgeProductRow[] | null | undefined)
+          ?.map((row) => row.id?.trim())
+          .filter((id): id is string => Boolean(id)) ?? []
+      );
       onPurgeEntries?.(
         getBulkPurgeEntries(
           archivedRows as BulkPurgeProductRow[] | null,
@@ -229,6 +241,7 @@ export async function processBulkUpdateChanges({
   merchantBusinessName,
   merchantId,
   onPurgeEntries,
+  onResolvedProductIds,
   supabase,
 }: {
   changes: BulkUpdateChange[];
@@ -236,6 +249,7 @@ export async function processBulkUpdateChanges({
   merchantBusinessName: string;
   merchantId: string;
   onPurgeEntries?: (entries: StorefrontProductPurgeEntry[]) => void;
+  onResolvedProductIds?: (productIds: string[]) => void;
   supabase: SupabaseClient;
 }): Promise<ProductChangeResult> {
   const summary = emptyProductChangeResult();
@@ -256,6 +270,7 @@ export async function processBulkUpdateChanges({
             merchantBusinessName,
             merchantId,
             onPurgeEntries,
+            onResolvedProductIds,
             supabase,
           })
         )

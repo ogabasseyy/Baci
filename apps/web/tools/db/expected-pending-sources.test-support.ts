@@ -1,15 +1,21 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
+import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending-sources.test-support';
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
+import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
+import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
+import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
+import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
+import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
@@ -64,96 +70,7 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260722150000_s1_merchants_authenticated_containment.sql',
     sha256: '3fdc876b7699184efe079f9d9412301eac3b893aefc193868baef6e9bb448d76',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000001_merchant_payment_credentials.sql',
-    sha256: '67f823ff2e8758874e04d1e66365995dcf10840cf8e4db1180164e848afcc95e',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000002_byok_direct_settlements.sql',
-    sha256: '4127cea6c8c3b54f96c7cc051817100ec4c2cc536592cee670eef18ea921e330',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000003_paypal_capture_persist_reconciliation_issue.sql',
-    sha256: 'dda2363ed20ac43cf85923f54280f26033479337e33f358149c6eae04432529c',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000004_delete_merchant_payment_credential_role.sql',
-    sha256: '0308b957a622c68bfa02f79dacda3243b61b678b91fdb20f4d3accb4994d3a73',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000005_orders_paid_transaction_marker.sql',
-    sha256: '0b4f1455a50879471e899afeecdaefb0b03e1e1a7b5657c571cd400d7e8a6c5d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000006_orders_paid_transaction_marker_index.sql',
-    sha256: '6b2f4f4139702abcd5be077a069769114d47b7f0302a7c4d69d8b6441007df51',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000007_credit_customer_wallet_order_refund.sql',
-    sha256: 'd34e31e49b9d5a7ea3a2631d7a29d45a06e5cc0db76ce80019ea2a02dad4519e',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000008_touch_merchant_credential_validated_by_environment.sql',
-    sha256: '59247745bfa511c70e4c4d0bfdb26abc8652c5565ef9e994c1a29247deee8f1b',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000009_public_snapshot_paypal_flags.sql',
-    sha256: 'f2fe9d9345c4728a1a34f8cd44e6f1456fae2f18d88da6f7449cefce8d0a1de8',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000010_transactions_refund_statuses.sql',
-    sha256: '951c980acd5d98a49d10160e0d830b50bfe9c9c7ed33585dce2327bdd4b8d986',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000011_transactions_refund_pending_index.sql',
-    sha256: 'f74bd1af1d8237976468e4df510b577e8b4de0947ba117fe9abb36cac6811e51',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000012_include_paypal_capture_persist_review_type.sql',
-    sha256: '6f396c1d148a7971eaf4eaaea4e896211569f3b536fd65d71ea296fa63ccfcb5',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000013_replace_merchant_payment_credential_pair.sql',
-    sha256: '33d873748cd948a92c4cb32d2f12d3dba06670810fd4dc9b735fc54dac8ea0cc',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000014_mark_savings_redemptions_reversed.sql',
-    sha256: 'fd3391ef880d88b3b2f7083888a43099476489b52f6311dd004151efbebfe66d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000015_drop_legacy_credential_validation_touch.sql',
-    sha256: 'cd91c66fed1a158455c83928e4eae42d3f3dd8a1db826c235e68857e689049fb',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000016_mark_paypal_transaction_refunded.sql',
-    sha256: '6078df1576ec4ea3c94d565a6180242a688186c5e8e25ef943bb23144e6fa3c7',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000017_order_payment_snapshot_merchant_country.sql',
-    sha256: '6bb7429b5f50c4116febc9c5c41cd1244105b9d0852944954825c6139ea64718',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260723000018_byok_fee_accrual_ledger.sql',
-    sha256: 'de216327cc42bd2a1814771969823be8b598a3d00f4504e313a250e3f1baf5d0',
-  },
+  ...EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES,
   ...ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES,
   {
     repositoryPath:
@@ -244,13 +161,55 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '34d9b431e3d16cfac0765c43d4c62fc9cd4421d295636245594cb1e2a1f8b9e3',
   },
   ...EXPECTED_QUIZ_LIVE_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260805090300_add_least_privilege_gigl_tracking_worker.sql',
+    sha256: '428d5dbcd1de46aa145882c9911b87ff8311ad51d407bfa40155044c1be0b9ab',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805091000_converge_gigl_tracking_worker_nologin.sql',
+    sha256: '905c85dbec6badd8d2d2246f7283a5df97bb6511e61b5751a09687a0cf2f7aad',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805113000_restore_gigl_tracking_postgrest_capability.sql',
+    sha256: 'a639ded915cb661e199187c31381c85c75b07930dbab9aa61cc29e4290f85ae7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260805170000_isolate_gigl_tracking_postgrest_capability.sql',
+    sha256: 'c8073d92cb844bb9569c59e5c52b8a46a15d03e3e5c03f4e152c692a04311877',
+  },
   ...EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES,
   ...EXPECTED_PAYSTACK_PENDING_SOURCES,
   ...ADMIN_PLATFORM_PENDING_SOURCES,
   ...EXPECTED_EXPENSE_PENDING_SOURCES,
   ...EXPECTED_NEGOTIATION_PENDING_SOURCES,
+  ...EXPECTED_INVENTORY_PENDING_SOURCES,
   ...EXPECTED_PENDING_TAIL_SOURCES.late,
   ...EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES,
+  ...EXPECTED_JUMIA_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260825154500_persist_shipment_shipping_quote.sql',
+    sha256: '2e59aa9417a7245388e5e2af82669dc7b8edbd20f1052fa29889ba4049b08d7b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260826130000_add_follow_up_notification_preference.sql',
+    sha256: '073009158808b2a75df6251c12dcaa5110c8ba65c8d166ef9df45520af6800a9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260826140000_read_follow_up_notification_preference_rpc.sql',
+    sha256: '5df571384c2ce0cc9396d7f2e752eb710ea8bd44816504ad8aaf7de4214d2597',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260827080000_bind_follow_up_notification_preference_to_invoice.sql',
+    sha256: 'ad413b38e0df617994e0c4ad3cded3f856eecaa62fe16897cf682d6434d86920',
+  },
   {
     repositoryPath:
       'supabase/migrations/20260831153000_optimize_storefront_pdp_semantic_reads.sql',
@@ -289,4 +248,36 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20260920200000_stale_feed_manifest_on_offer_change.sql',
     sha256: '7de47f950351dfd8945be917d091dc50fd5ca80948566b20eb617c5c43e83718',
   },
-].sort((a, b) => a.repositoryPath.localeCompare(b.repositoryPath));
+  {
+    repositoryPath:
+      'supabase/migrations/20260921130000_include_tracking_order_amount_paid.sql',
+    sha256: '2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260921180100_include_tracking_order_payment_accounts.sql',
+    sha256: 'e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9',
+  },
+  ...EXPECTED_PENDING_SEPT_SOURCES,
+  ...EXPECTED_PLAN_TIER_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20260926120000_public_storefront_domain_resolution.sql',
+    sha256: 'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
+    sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
+  },
+  ...EXPECTED_DISCOVERY_PENDING_SOURCES,
+]
+  .sort((left, right) =>
+    left.repositoryPath.localeCompare(right.repositoryPath)
+  )
+  .filter(
+    (source, index, sources) =>
+      sources.findIndex(
+        (candidate) => candidate.repositoryPath === source.repositoryPath
+      ) === index
+  );

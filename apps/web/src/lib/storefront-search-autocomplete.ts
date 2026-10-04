@@ -179,7 +179,6 @@ async function fetchStorefrontAutocompleteProducts({
     query,
     limit,
     includeDidYouMean: false,
-    trackAnalytics: false,
   });
 
   if (ranked.productIds.length === 0) {

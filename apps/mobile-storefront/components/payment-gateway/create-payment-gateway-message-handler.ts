@@ -1,11 +1,7 @@
-import { router } from 'expo-router';
 import type { MutableRefObject } from 'react';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
-import {
-  isPlainRecord,
-  PAYMENT_KINDS,
-  type PaymentKind,
-} from './payment-gateway.helpers';
+import { isPlainRecord, type PaymentKind } from './payment-gateway.helpers';
+import { handleCryptoSuccessMessage } from './payment-gateway-crypto-success';
 
 const getTrimmedString = (value: unknown) =>
   typeof value === 'string' ? value.trim() : '';
@@ -29,25 +25,26 @@ interface CreatePaymentGatewayMessageHandlerInput {
   customerIdentifier?: string;
   orderId?: string;
   orderNumber?: string;
+  orderTotal?: number;
   paymentKind?: PaymentKind;
   reference?: string;
   trackingToken?: string;
   utilityType?: string;
-  markPaymentCompletionStarted: () => void;
+  markPaymentCompletionStarted: () => boolean;
+  onTerminalVerificationFailure: (
+    terminalFailure: 'failed' | 'cancelled' | 'abandoned'
+  ) => void;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setProcessingStatus: () => void;
   setSuccessStatus: () => void;
+  /**
+   * Controller liveness: the crypto verification/tracking awaits can run
+   * for seconds, and a shopper who left and built a new cart must not
+   * have it erased by this stale handler. Optional so existing callers
+   * and tests without a controller keep today's behavior.
+   */
+  isMountedRef?: MutableRefObject<boolean>;
 }
-
-const getFiniteNumber = (value: unknown) => {
-  const trimmedValue = typeof value === 'string' ? value.trim() : '';
-  const numberValue =
-    typeof value === 'number'
-      ? value
-      : trimmedValue
-        ? Number(trimmedValue)
-        : Number.NaN;
-  return Number.isFinite(numberValue) ? numberValue : undefined;
-};
 
 function handleClipboardText({
   copiedGatewayTextRef,
@@ -113,13 +110,17 @@ export function createPaymentGatewayMessageHandler({
   gateway,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
   reference,
   trackingToken,
   utilityType,
   markPaymentCompletionStarted,
+  onTerminalVerificationFailure,
   scheduleDelayedNavigation,
+  setProcessingStatus,
   setSuccessStatus,
+  isMountedRef,
 }: CreatePaymentGatewayMessageHandlerInput) {
   const pendingGatewayTextRef: MutableRefObject<string | null> = {
     current: null,
@@ -171,59 +172,25 @@ export function createPaymentGatewayMessageHandler({
     }
 
     if (data.type === 'crypto_success') {
-      const cryptoOrderId =
-        getTrimmedString(data.orderId) || getTrimmedString(orderId);
-      const cryptoReference =
-        getTrimmedString(data.reference) || getTrimmedString(reference);
-
-      if (paymentKind === PAYMENT_KINDS.VTU) {
-        const cryptoAmount = getFiniteNumber(data.amount) ?? amount ?? 0;
-        const cryptoCustomerIdentifier =
-          getTrimmedString(data.customerIdentifier) ||
-          getTrimmedString(customerIdentifier);
-        if (!utilityType || !cryptoReference || cryptoAmount <= 0) {
-          console.error('Unable to route VTU crypto payment success:', {
-            amount: cryptoAmount,
-            hasReference: Boolean(cryptoReference),
-            hasUtilityType: Boolean(utilityType),
-          });
-          return;
-        }
-
-        confirmVtuPaymentSuccess({
-          amount: cryptoAmount,
-          ...(cryptoCustomerIdentifier && {
-            customerIdentifier: cryptoCustomerIdentifier,
-          }),
-          reference: cryptoReference,
-        });
-        return;
-      }
-
-      if (!cryptoOrderId || !cryptoReference) {
-        console.error('Unable to route crypto payment success:', {
-          hasOrderId: Boolean(cryptoOrderId),
-          hasReference: Boolean(cryptoReference),
-        });
-        return;
-      }
-
-      markPaymentCompletionStarted();
-      setSuccessStatus();
-      await clearCart();
-      scheduleDelayedNavigation(() => {
-        router.replace({
-          pathname: '/order-success',
-          params: {
-            orderId: cryptoOrderId,
-            orderNumber: getTrimmedString(orderNumber),
-            paymentMethod: getTrimmedString(gateway) || 'crypto',
-            reference: cryptoReference,
-            ...(getTrimmedString(trackingToken) && {
-              trackingToken: getTrimmedString(trackingToken),
-            }),
-          },
-        });
+      await handleCryptoSuccessMessage(data, {
+        amount,
+        clearCart,
+        confirmVtuPaymentSuccess,
+        customerIdentifier,
+        gateway,
+        isMountedRef,
+        markPaymentCompletionStarted,
+        onTerminalVerificationFailure,
+        orderId,
+        orderNumber,
+        orderTotal,
+        paymentKind,
+        reference,
+        scheduleDelayedNavigation,
+        setProcessingStatus,
+        setSuccessStatus,
+        trackingToken,
+        utilityType,
       });
       return;
     }

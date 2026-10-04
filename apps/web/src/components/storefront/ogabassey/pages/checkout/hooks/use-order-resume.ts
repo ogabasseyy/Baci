@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { mapApiOrderToResumedOrder } from '../map-api-order-to-resumed-order';
-import type { PaymentMethod, ResumedOrder } from '../types';
+import type { PaymentMethod, PaymentTab, ResumedOrder } from '../types';
 
 interface SetCheckoutFieldsFn {
   (values: {
@@ -22,7 +22,7 @@ interface UseOrderResumeOptions {
   resumeOrderId: string | null;
   preferredGateway: 'credpal' | 'credit_direct' | null;
   setCheckoutFields: SetCheckoutFieldsFn;
-  setPaymentTab: (tab: 'full' | 'installments') => void;
+  setPaymentTab: (tab: PaymentTab) => void;
   setPaymentMethod: (method: PaymentMethod) => void;
 }
 

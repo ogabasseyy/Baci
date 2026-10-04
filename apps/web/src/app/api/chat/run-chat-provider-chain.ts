@@ -4,19 +4,29 @@ import {
   generateTextWithChain,
 } from '@/ai/generate-text-with-chain';
 import { getTextProviderChain } from '@/ai/text-provider-chain';
-import { AGENTIC_SYSTEM_PROMPT } from '@/config/agentic-chat-system-prompt';
+import { buildAgenticSystemPrompt } from '@/config/agentic-chat-system-prompt';
+import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
+import type { CurrencyConfig } from '@/lib/currency';
 import type { StorefrontAgentUiEvent } from '@/schemas/storefront-agent-ui-contract';
 import { createAiSdkAgenticChatTools } from './chat-tool-runtime';
 import { createChatPresentationEventCollector } from './create-chat-presentation-event-collector';
-import { CUSTOMER_CHAT_TIMEOUT_MS } from './route-helpers';
 
 const GEMINI_PROVIDER_PREFIX = 'google:';
-const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
-const TEXT_ONLY_FALLBACK_SYSTEM_PROMPT =
-  "You are Ogabassey's shopping assistant. Keep replies brief, helpful, and honest. " +
-  'You do not have access to live inventory, current prices, checkout actions, orders, or payment status in this recovery mode. ' +
-  'Never claim that you searched stock, added an item, generated a bank account, confirmed payment, or cancelled an order. ' +
-  'For current availability, pricing, checkout, or payments, direct the customer to the storefront or WhatsApp support.';
+/**
+ * One provider attempt's budget inside the chain. The chat route holds back
+ * this much from the first-choice stages so the fallback keeps one full
+ * attempt even when the first stage burns its budget.
+ */
+export const GEMINI_PROVIDER_TIMEOUT_MS = 25_000;
+function buildTextOnlyFallbackSystemPrompt(merchantName: string): string {
+  return (
+    `${buildStorefrontDisplayData(merchantName)} ` +
+    'Keep replies brief, helpful, and honest. ' +
+    'You do not have access to live inventory, current prices, checkout actions, orders, or payment status in this recovery mode. ' +
+    'Never claim that you searched stock, added an item, generated a bank account, confirmed payment, or cancelled an order. ' +
+    'For current availability, pricing, checkout, or payments, direct the customer to the storefront or WhatsApp support.'
+  );
+}
 const PRESENTATION_ONLY_FALLBACK_TEXT =
   'I found these live catalog options for you.';
 
@@ -37,12 +47,20 @@ interface AgenticChatProviderResult extends ChainTextResult {
  */
 export async function runChatProviderChain({
   abortSignal,
+  agenticCheckoutEnabled,
+  currency,
+  merchantName,
   messages,
   sessionId,
+  timeoutMs,
 }: {
   abortSignal: AbortSignal;
+  agenticCheckoutEnabled: boolean;
+  currency: CurrencyConfig;
+  merchantName: string;
   messages: ModelMessage[];
   sessionId: string;
+  timeoutMs: number;
 }): Promise<AgenticChatProviderResult> {
   let sideEffectExecuted = false;
   let activeProviderName: string | null = null;
@@ -57,6 +75,7 @@ export async function runChatProviderChain({
     presentationCollector = collector;
     presentationProviderName = providerName;
     return createAiSdkAgenticChatTools(sessionId, {
+      agenticCheckoutEnabled,
       onSideEffect: () => {
         sideEffectExecuted = true;
       },
@@ -75,7 +94,7 @@ export async function runChatProviderChain({
       !provider.name.startsWith(GEMINI_PROVIDER_PREFIX) &&
       !provider.opportunistic
   );
-  const deadline = Date.now() + CUSTOMER_CHAT_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   const remainingTimeoutMs = () => Math.max(0, deadline - Date.now());
   const onProviderError = (providerName: string, error: unknown) => {
     // Snapshot only the just-finished attempt. A subsequent empty collector
@@ -131,7 +150,10 @@ export async function runChatProviderChain({
       overallTimeoutMs: remainingTimeoutMs(),
       perProviderTimeoutMs: GEMINI_PROVIDER_TIMEOUT_MS,
       shouldStopWalk: () => sideEffectExecuted,
-      system: AGENTIC_SYSTEM_PROMPT,
+      system: buildAgenticSystemPrompt(merchantName, {
+        checkoutEnabled: agenticCheckoutEnabled,
+        currency,
+      }),
       createToolsForAttempt,
     });
   } catch (error) {
@@ -179,7 +201,7 @@ export async function runChatProviderChain({
       onProviderAttempt,
       overallTimeoutMs: fallbackTimeoutMs,
       perProviderTimeoutMs: GEMINI_PROVIDER_TIMEOUT_MS,
-      system: TEXT_ONLY_FALLBACK_SYSTEM_PROMPT,
+      system: buildTextOnlyFallbackSystemPrompt(merchantName),
     });
 
     console.info(

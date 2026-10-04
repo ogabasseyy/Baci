@@ -69,7 +69,7 @@ describe('PaymentMethodSelector', () => {
       />
     );
 
-    expect(screen.getByText('Generate Invoice')).toBeTruthy();
+    expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
     expect(screen.getByText('Pay for Me')).toBeTruthy();
 
     // Selecting a terminal pay_later intent projects onto BOTH the tab and its
@@ -91,7 +91,7 @@ describe('PaymentMethodSelector', () => {
       />
     );
 
-    expect(screen.getByText('Generate Invoice')).toBeTruthy();
+    expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
     expect(screen.queryByText('Pay for Me')).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe('PaymentMethodSelector', () => {
     );
 
     expect(screen.queryByText('Pay Small Small')).toBeNull();
-    expect(screen.getByText('Generate Invoice')).toBeTruthy();
+    expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
     expect(screen.getByText('Pay for Me')).toBeTruthy();
   });
 
@@ -683,7 +683,7 @@ describe('PaymentMethodSelector', () => {
       expect(screen.getByText('Pay in Full')).toBeTruthy();
       expect(screen.getByText('Pay Small Small')).toBeTruthy();
       expect(screen.getByText('Pay for Me')).toBeTruthy();
-      expect(screen.getByText('Generate Invoice')).toBeTruthy();
+      expect(screen.getByText('Get a Proforma Invoice')).toBeTruthy();
       expect(screen.getAllByRole('radio').length).toBeGreaterThanOrEqual(4);
     });
 

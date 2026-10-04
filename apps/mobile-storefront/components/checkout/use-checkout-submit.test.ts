@@ -4,18 +4,18 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { CartPriceChange, RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
-import {
-  type UseCheckoutSubmitParams,
-  useCheckoutSubmit,
-} from './use-checkout-submit';
+import { useCheckoutSubmit } from './use-checkout-submit';
+import { address, cartItem, createParams } from './use-checkout-submit.setup';
 
 const mockRepriceCartItems = jest.fn() as jest.MockedFunction<
   (items: CartItem[], merchantId: string) => Promise<RepriceResult>
 >;
 const mockCreateOrder =
   jest.fn<typeof import('@/services/orders').createOrder>();
-const mockSubmitBnplCheckout = jest.fn();
+const mockSubmitBnplCheckout =
+  jest.fn<typeof import('./checkout-bnpl-submit').submitBnplCheckout>();
 const mockBuildCheckoutOrderRequest = jest.fn();
 const mockValidateCheckoutSubmission =
   jest.fn<
@@ -66,11 +66,14 @@ jest.mock('@/lib/wallet-payment-helpers', () => ({
 }));
 
 jest.mock('@/services/analytics', () => ({
+  trackCheckoutInvoiceGenerated: jest.fn(),
   trackCheckoutStep: jest.fn(),
 }));
 
 jest.mock('@/services/tiktok-checkout-route-tracking', () => ({
-  trackCheckoutRoutePurchaseCompleted: jest.fn(),
+  // Async like the real tracker: the finalizer shares the in-flight
+  // emission promise with the completion lane.
+  trackCheckoutRoutePurchaseCompleted: jest.fn(async () => undefined),
 }));
 
 jest.mock('@/stores/cart-store', () => ({
@@ -82,7 +85,11 @@ jest.mock('@/hooks/use-merchant', () => ({
 }));
 
 jest.mock('./checkout-bnpl-submit', () => ({
-  submitBnplCheckout: (...args: unknown[]) => mockSubmitBnplCheckout(...args),
+  submitBnplCheckout: (
+    ...args: Parameters<
+      typeof import('./checkout-bnpl-submit').submitBnplCheckout
+    >
+  ) => mockSubmitBnplCheckout(...args),
 }));
 
 jest.mock('./checkout-order-builders', () => ({
@@ -184,71 +191,6 @@ const mockedUseCartStore = (
   }
 ).useCartStore;
 
-const cartItem: CartItem = {
-  id: 'line-1',
-  name: 'iPhone 15 Pro',
-  price: 1200000,
-  product_id: 'product-1',
-  quantity: 1,
-  slug: 'iphone-15-pro',
-};
-
-const address = {
-  address: '1 Test Way',
-  city: 'Ikeja',
-  email: 'customer@example.com',
-  firstName: 'Ada',
-  lastName: 'Okafor',
-  phone: '08012345678',
-  state: 'Lagos',
-};
-
-function createRef<T>(current: T): MutableRefObject<T> {
-  return { current };
-}
-
-function createParams(
-  overrides: Partial<UseCheckoutSubmitParams> = {}
-): UseCheckoutSubmitParams {
-  return {
-    accountPassword: '',
-    appliedDiscountCode: null,
-    availablePaymentMethods: ['paystack'],
-    clearCart: jest.fn<() => void | Promise<void>>(),
-    currentShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    customer: null,
-    deliveryFee: 1500,
-    deliveryMethod: 'door',
-    getLiveSavingsSelection:
-      jest.fn<UseCheckoutSubmitParams['getLiveSavingsSelection']>(),
-    getShippingProvider: () => 'gigl',
-    isAuthenticated: false,
-    isLoadingQuotes: false,
-    isOrderInFlight: createRef(false),
-    isProcessing: false,
-    mobileCheckoutIdempotencyRef: createRef(null),
-    orderTotals: { taxAmount: 0 },
-    paymentSettings: { klump_enabled: true },
-    paymentTab: 'full',
-    resolvedShippingQuoteContextKey: 'door:Lagos:Ikeja',
-    requiresShippingQuote: true,
-    saveAsDefaultAddress: false,
-    saveDetails: false,
-    selectedPayment: 'paystack',
-    selectedQuote: undefined,
-    selectedSavedAddressId: null,
-    setIsProcessing: jest.fn(),
-    setPendingOrder: jest.fn(),
-    setShowCryptoSelection: jest.fn(),
-    setStep: jest.fn(),
-    user: null,
-    walletBalance: 0,
-    walletFundedBankTransferOptionEnabled: false,
-    walletSelection: undefined,
-    ...overrides,
-  };
-}
-
 describe('useCheckoutSubmit', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -265,40 +207,14 @@ describe('useCheckoutSubmit', () => {
     // (proceed). Default to valid so the freeze step, which now runs after
     // validation, is reached.
     mockValidateCheckoutSubmission.mockReturnValue(true);
-    mockCreateOrder.mockResolvedValue({
-      amountDueToGateway: 1201500,
-      order: {
-        created_at: '2026-07-09T12:00:00.000Z',
-        id: 'order-1',
-        order_number: 'ORD-1',
-        payment_status: 'pending',
-        shipping_status: 'pending',
-        total: 1201500,
-      },
-      wallet: null,
-    });
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        effectiveCheckoutGeneration: 'gen-1',
+      })
+    );
     jest.spyOn(Alert, 'alert').mockImplementation(() => {
       // Suppress native alerts in tests.
     });
-  });
-
-  it('does not create a REDVAULT order without a review callback', async () => {
-    const params = createParams({
-      onRedvaultOrder: undefined,
-      selectedPayment: 'uba_redvault',
-    });
-    const { result } = renderHook(() => useCheckoutSubmit(params));
-
-    await act(async () => {
-      await result.current(address);
-    });
-
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to continue',
-      expect.stringMatching(/review is unavailable/i)
-    );
-    expect(mockCreateOrder).not.toHaveBeenCalled();
-    expect(params.isOrderInFlight.current).toBe(false);
   });
 
   it('blocks a non-REDVAULT submit while a persisted REDVAULT fence is unresolved', async () => {
@@ -481,11 +397,16 @@ describe('useCheckoutSubmit', () => {
     });
 
     // Standard path taken (createOrder called); BNPL flow NOT taken.
+    // Creation attributes to the selected BNPL method through the
+    // finalization tracking call.
+    const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
+      '@/services/tiktok-checkout-route-tracking'
+    ) as { trackCheckoutRoutePurchaseCompleted: jest.Mock };
     expect(mockCreateOrder).toHaveBeenCalled();
-    expect(mockCreateOrder).toHaveBeenCalledWith(expect.anything(), {
-      checkoutGeneration: 'gen-1',
-    });
     expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();
+    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethod: 'credit_direct' })
+    );
   });
 
   it('forces a non-POD method for a voucher-only cart so the prize order is marked paid', async () => {
@@ -600,6 +521,110 @@ describe('useCheckoutSubmit', () => {
     });
 
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('defers invoice_generated for an unpaid invoice order with an amount due', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 1201500,
+      effectiveCheckoutGeneration: 'gen-1',
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-unpaid',
+        order_number: 'ORD-INV-1',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 1201500,
+      },
+      wallet: null,
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // The server builds the artifacts asynchronously in after(): submit
+    // must not book the conversion — the success screen captures it once
+    // the lookup carries the terminal delivery flag.
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
+  });
+
+  it('defers invoice_generated for a zero-total unpaid invoice order', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    // A 100% discount zeroes the gateway amount while the order stays
+    // unpaid; the server still generates and emails the proforma — but
+    // asynchronously, so submit still must not record it.
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 0,
+      effectiveCheckoutGeneration: 'gen-1',
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-zero',
+        order_number: 'ORD-INV-0',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 0,
+      },
+      wallet: null,
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
+  });
+
+  it('skips invoice_generated when wallet coverage pays a selected invoice order in full', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: { 'line-1': 1200000 },
+    });
+    mockCreateOrder.mockResolvedValue({
+      amountDueToGateway: 0,
+      effectiveCheckoutGeneration: 'gen-1',
+      order: {
+        created_at: '2026-07-09T12:00:00.000Z',
+        id: 'order-invoice-paid',
+        order_number: 'ORD-INV-2',
+        payment_status: 'paid',
+        shipping_status: 'pending',
+        total: 1201500,
+      },
+      wallet: { amountUsed: 1201500, newBalance: 0, transactionId: 'tx-1' },
+    });
+    const { trackCheckoutInvoiceGenerated } = jest.requireMock(
+      '@/services/analytics'
+    ) as { trackCheckoutInvoiceGenerated: jest.Mock };
+    const params = createParams({ selectedPayment: 'invoice' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // No unpaid proforma outcome occurred: the order routes straight to
+    // paid completion and must not also book a proforma conversion.
+    expect(trackCheckoutInvoiceGenerated).not.toHaveBeenCalled();
   });
 
   it('engages the in-flight lock before fence resolution to block double taps', async () => {
@@ -741,5 +766,122 @@ describe('useCheckoutSubmit', () => {
     expect(mockCreateOrder).not.toHaveBeenCalled();
     expect(setIsProcessing).not.toHaveBeenCalled();
     expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('preserves the payforme method so the server dispatches the payment request', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const params = createParams({ selectedPayment: 'payforme' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // Pay for Me keeps its own persisted identity (never collapsed to
+    // invoice): the server keys its explicit dispatch branch — payment
+    // request email plus transfer details — off this stored method.
+    expect(mockBuildCheckoutOrderRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethodForOrder: 'payforme' })
+    );
+    expect(mockCreateOrder).toHaveBeenCalled();
+  });
+
+  it('threads the nested Klump order id into init failures', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const initError = new Error('klump init failed');
+    mockSubmitBnplCheckout.mockImplementation((params) => {
+      params.onOrderCreated?.('order-klump-1');
+      throw initError;
+    });
+    const { handleCheckoutSubmitError } = jest.requireMock(
+      './checkout-submit-error'
+    ) as { handleCheckoutSubmitError: jest.Mock };
+    const params = createParams({ selectedPayment: 'klump' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // The nested BNPL submit committed order-klump-1 before Klump init
+    // threw: the outer catch must report with that identity.
+    expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
+      initError,
+      'klump',
+      'order-klump-1'
+    );
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('threads the committed order id into post-creation init failures', async () => {
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    const initError = new Error('provider init threw');
+    const { finalizeCheckoutPayment } = jest.requireMock(
+      './checkout-payment-finalization'
+    ) as { finalizeCheckoutPayment: jest.Mock };
+    finalizeCheckoutPayment.mockImplementation(() => {
+      throw initError;
+    });
+    const { handleCheckoutSubmitError } = jest.requireMock(
+      './checkout-submit-error'
+    ) as { handleCheckoutSubmitError: jest.Mock };
+    const params = createParams({ selectedPayment: 'paystack' });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    // createOrder committed order-1 before finalization threw: the error
+    // path must carry the id so the funnel failure joins to the order.
+    expect(mockCreateOrder).toHaveBeenCalled();
+    expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
+      initError,
+      'paystack',
+      'order-1'
+    );
+    expect(params.isOrderInFlight.current).toBe(false);
+  });
+
+  it('attributes completion to the auth user id, not the customer-row id', async () => {
+    // The server conversion payload joins on external_id: the signed-in
+    // auth identity wins cross-device matching, never the storefront
+    // customer row.
+    mockRepriceCartItems.mockResolvedValue({ changes: [], priceById: {} });
+    // Unique order identity: the durable purchase claim persists across
+    // tests in this file, so reusing the default order would read as an
+    // already-recorded conversion and skip the tracking under test.
+    mockCreateOrder.mockResolvedValue(
+      createOrderResponseFixture({
+        orderId: 'order-auth-1',
+        orderNumber: 'ORD-A1',
+      })
+    );
+    const { trackCheckoutRoutePurchaseCompleted } = jest.requireMock(
+      '@/services/tiktok-checkout-route-tracking'
+    ) as { trackCheckoutRoutePurchaseCompleted: jest.Mock };
+    const params = createParams({
+      customer: { email: 'customer@example.com', id: 'customer-row-1' },
+      isAuthenticated: true,
+      selectedPayment: 'paystack',
+      user: { id: 'auth-user-1' },
+    });
+
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+
+    await act(async () => {
+      await result.current(address);
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalled();
+    expect(trackCheckoutRoutePurchaseCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: 'order-auth-1',
+        userId: 'auth-user-1',
+      })
+    );
   });
 });

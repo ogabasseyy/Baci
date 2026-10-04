@@ -1,37 +1,57 @@
 /**
- * Google Place Details API Route (New API - places.googleapis.com)
- * Server-side proxy to keep API key secure.
- * Uses retry logic to handle transient network errors like ECONNRESET.
+ * Google Place Details (Legacy) API route.
+ * Proxies address-only requests server-side so the Google API key stays private.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { fetchLegacyPlacesJson } from '../legacy-places';
 
 const GOOGLE_API_KEY =
   process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
-const NEW_PLACES_API_BASE = 'https://places.googleapis.com/v1';
+const LEGACY_PLACES_DETAILS_URL =
+  'https://maps.googleapis.com/maps/api/place/details/json';
+const MAX_SESSION_TOKEN_LENGTH = 256;
+const ADDRESS_FIELDS = [
+  'address_components',
+  'formatted_address',
+  'geometry',
+].join(',');
 
-// Simple retry wrapper for fetch
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  retries = 2,
-  delay = 500
-): Promise<Response> {
-  try {
-    return await fetch(url, options);
-  } catch (error: unknown) {
-    const isRetryable =
-      error instanceof Error &&
-      (error.message.includes('ECONNRESET') ||
-        error.message.includes('fetch failed') ||
-        error.message.includes('socket'));
+interface LegacyAddressComponent {
+  long_name?: string;
+  types?: string[];
+}
 
-    if (isRetryable && retries > 0) {
-      console.warn(`[Places API] Fetch failed, retrying... (${retries} left)`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return fetchWithRetry(url, options, retries - 1, delay * 2);
-    }
-    throw error;
+interface LegacyPlaceResult {
+  address_components?: LegacyAddressComponent[];
+  formatted_address?: string;
+  geometry?: {
+    location?: {
+      lat?: number;
+      lng?: number;
+    } | null;
+  } | null;
+  place_id?: string;
+}
+
+interface LegacyPlaceDetailsResponse {
+  error_message?: string;
+  result?: LegacyPlaceResult;
+  status?: string;
+}
+
+function getUpstreamStatusCode(status: string): number {
+  switch (status) {
+    case 'INVALID_REQUEST':
+      return 400;
+    case 'NOT_FOUND':
+    case 'ZERO_RESULTS':
+      return 404;
+    case 'OVER_QUERY_LIMIT':
+    case 'OVER_DAILY_LIMIT':
+      return 429;
+    default:
+      return 502;
   }
 }
 
@@ -51,6 +71,13 @@ export async function GET(request: NextRequest) {
     const placeId = searchParams.get('placeId');
     const sessionToken = searchParams.get('sessionToken');
 
+    if (sessionToken && sessionToken.length > MAX_SESSION_TOKEN_LENGTH) {
+      return NextResponse.json(
+        { error: 'Invalid sessionToken format' },
+        { status: 400 }
+      );
+    }
+
     if (!placeId) {
       return NextResponse.json(
         { error: 'placeId is required' },
@@ -58,74 +85,75 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Validate placeId format to prevent SSRF attacks
-    // Google Place IDs are alphanumeric with some special chars, max ~300 chars
-    const placeIdPattern = /^[A-Za-z0-9_-]{1,300}$/;
     const cleanPlaceId = placeId.startsWith('places/')
-      ? placeId.slice(7)
+      ? placeId.slice('places/'.length)
       : placeId;
 
-    if (!placeIdPattern.test(cleanPlaceId)) {
+    // Place IDs are opaque and can be longer or contain characters outside a
+    // narrow alphanumeric pattern. URLSearchParams safely encodes them for this
+    // fixed endpoint; reject empty or oversized inputs.
+    if (cleanPlaceId.length === 0 || cleanPlaceId.length > 4000) {
       return NextResponse.json(
         { error: 'Invalid placeId format' },
         { status: 400 }
       );
     }
 
-    // Construct resource name safely
-    const resourceName = `places/${cleanPlaceId}`;
+    const detailsUrl = new URL(LEGACY_PLACES_DETAILS_URL);
+    detailsUrl.searchParams.set('place_id', cleanPlaceId);
+    detailsUrl.searchParams.set('fields', ADDRESS_FIELDS);
+    detailsUrl.searchParams.set('key', GOOGLE_API_KEY);
 
-    // Fields we need for address parsing
-    const fields = [
-      'addressComponents',
-      'formattedAddress',
-      'location',
-      'reviews',
-      'rating',
-      'userRatingCount',
-    ].join(',');
-
-    const detailsUrl = new URL(`${NEW_PLACES_API_BASE}/${resourceName}`);
     if (sessionToken) {
-      detailsUrl.searchParams.set('sessionToken', sessionToken);
+      detailsUrl.searchParams.set('sessiontoken', sessionToken);
     }
 
-    const response = await fetchWithRetry(detailsUrl.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': fields,
-      },
-    });
+    const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
+      detailsUrl.toString()
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Places API] Details error:', response.status, errorText);
+    if (!fetched.ok) {
+      console.error('[Places API] Details HTTP error:', fetched.status);
       return NextResponse.json(
-        { error: 'Failed to fetch place details', details: errorText },
-        { status: response.status }
+        {
+          error: 'Failed to fetch place details',
+          code: 'PLACES_DETAILS_HTTP_ERROR',
+        },
+        { status: fetched.status === 429 ? 429 : 502 }
       );
     }
 
-    const data = await response.json();
-
-    // Parse address components (New API format uses `longText`)
-    interface AddressComponent {
-      types?: string[];
-      longText?: string;
+    const data = fetched.data;
+    if (data.status !== 'OK' || !data.result) {
+      const upstreamStatus = data.status || 'UNKNOWN_ERROR';
+      console.error('[Places API] Details returned:', upstreamStatus);
+      return NextResponse.json(
+        {
+          error: 'Failed to fetch place details',
+          code: 'PLACES_DETAILS_UPSTREAM_ERROR',
+        },
+        { status: getUpstreamStatusCode(upstreamStatus) }
+      );
     }
-    const components: AddressComponent[] = Array.isArray(data.addressComponents)
-      ? data.addressComponents
-      : [];
 
+    const result = data.result;
+    const components = Array.isArray(result.address_components)
+      ? result.address_components
+      : [];
     const getComponent = (type: string) =>
       components.find((component) => component.types?.includes(type))
-        ?.longText || '';
+        ?.long_name || '';
+
+    const coordinates = result.geometry?.location;
+    const location =
+      typeof coordinates?.lat === 'number' &&
+      typeof coordinates.lng === 'number'
+        ? { latitude: coordinates.lat, longitude: coordinates.lng }
+        : null;
 
     const details = {
-      placeId: data.name,
-      formattedAddress: data.formattedAddress || '',
+      placeId: `places/${result.place_id || cleanPlaceId}`,
+      formattedAddress: result.formatted_address || '',
       streetNumber: getComponent('street_number'),
       route: getComponent('route'),
       city:
@@ -133,12 +161,12 @@ export async function GET(request: NextRequest) {
       state: getComponent('administrative_area_level_1'),
       country: getComponent('country'),
       postalCode: getComponent('postal_code'),
-      location: data.location || null,
+      location,
     };
 
     return NextResponse.json({ details });
-  } catch (error) {
-    console.error('[Places API] Details error:', error);
+  } catch {
+    console.error('[Places API] Details request failed');
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

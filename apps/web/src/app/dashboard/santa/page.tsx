@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
+import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import { getMerchantForUser } from '@/lib/merchant-server';
 import SantaClientPage from './client-page';
 
@@ -13,8 +14,8 @@ export const metadata: Metadata = {
 export default async function SantaPage() {
   const { merchant } = await getMerchantForUser();
 
-  // Guard: Only allow 'ogabassey' merchant to access this page
-  if (merchant?.slug !== 'ogabassey') {
+  const configuredMerchantSlug = getConfiguredAgenticMerchantSlug();
+  if (!configuredMerchantSlug || merchant?.slug !== configuredMerchantSlug) {
     notFound();
   }
 

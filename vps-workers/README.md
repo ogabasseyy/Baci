@@ -7,10 +7,10 @@
 This package is intentionally installed outside the root pnpm workspace, so it
 keeps its own `pnpm-lock.yaml` for frozen production installs.
 
-The Jumia order sync, import queue, and AI storefront generation wrappers do not run TypeScript from this
-production-only worker install. They delegate to a separate full Baci monorepo
-checkout, resolved from `BACI_REPO_DIR` or `/opt/baci/app`, via
-`bin/run-web-script.sh`.
+The Jumia order sync, import queue, AI storefront generation, and GIGL tracking
+wrappers do not run TypeScript from this production-only
+worker install. They delegate to a separate full Baci monorepo checkout,
+resolved from `BACI_REPO_DIR` or `/opt/baci/app`, via `bin/run-web-script.sh`.
 
 ## Configuring BACI_REPO_DIR
 
@@ -42,8 +42,10 @@ pnpm install --frozen-lockfile
 
 The VPS wrappers run `apps/web/src/scripts/process-import-jobs.ts`,
 `apps/web/src/scripts/sync-jumia-orders.ts`, and
-`apps/web/src/scripts/process-ai-storefront-jobs.ts` directly through the
-`tsx` runtime dependency in the full checkout, with no prior compilation step.
+`apps/web/src/scripts/process-ai-storefront-jobs.ts`,
+and `apps/web/src/scripts/process-gigl-tracking.ts` directly through
+the `tsx` runtime dependency in the full checkout, with no prior compilation
+step.
 That dependency is not part of the standalone `/home/bassey/baci-workers`
 production-only install, so keep the separate `apps/web` checkout dependencies
 installed before enabling these cron entries.
@@ -76,20 +78,28 @@ chmod 600 /home/bassey/baci-workers/.env
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_JUMIA_CREDENTIAL_KEY=...
 IMEI_IDENTIFIER_ENCRYPTION_KEY=...
 PETROCK_API_TOKEN=...
 PETROCK_API_BASE_URL=https://api.petrock.biz/api/reseller/v1
 PETROCK_ENABLED=true
 PETROCK_ENABLED_TIERS=blacklist
 PETROCK_REMEDIATION_ENABLED=true
+GIGL_BASE_URL=...
+GIGL_EMAIL=...
+GIGL_PASSWORD=...
+GIGL_TRACKING_WORKER_TOKEN=...
 QUIZ_PHASE=1a
 QUIZ_PRODUCTION_APPROVED=false
 # Required when QUIZ_PHASE=production:
 QUIZ_RPC_SERVER_SECRET=...
 QUIZ_DEVICE_HASH_PEPPER=...
-EXPO_ACCESS_TOKEN=...
+EXPO_ACCESS_TOKEN=... # optional; authenticated Expo delivery when configured
 JUMIA_CLIENT_ID=...
+JUMIA_AUTHORIZATION_ENCRYPTION_KEY=...
 BACI_WEB_BASE_URL=...
+# Same server-side credential as the web internal revalidation endpoint.
+INTERNAL_API_SECRET=...
 CRON_SECRET=...
 OLLAMA_STOREFRONT_BASE_URL=http://localhost:11434
 OLLAMA_STOREFRONT_MODEL=gemma4:e4b
@@ -137,14 +147,18 @@ Variable purposes:
 - `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL used by web scripts and standalone workers.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Public Supabase key required by the web runtime configuration.
 - `SUPABASE_SERVICE_ROLE_KEY`: Server-only Supabase key for worker writes; never expose it to browsers or commit it.
+- `SUPABASE_JUMIA_CREDENTIAL_KEY`: Dedicated server-only Supabase key for the restricted Jumia credential RPC; it must be configured separately from the generic worker service-role key.
 - `IMEI_IDENTIFIER_ENCRYPTION_KEY`: Server-only key used to decrypt identifiers for claimed Petrock reconciliation work.
 - `PETROCK_API_TOKEN`: Petrock reseller API token required by the direct reconciliation worker.
 - `PETROCK_API_BASE_URL`: Optional Petrock reseller API base; defaults to the production reseller endpoint.
 - `PETROCK_ENABLED`, `PETROCK_ENABLED_TIERS`, `PETROCK_REMEDIATION_ENABLED`: Explicit Petrock rollout values copied from the reviewed web production configuration. The direct-worker preflight requires all three to prevent an accidental configuration mismatch.
+- `GIGL_BASE_URL`, `GIGL_EMAIL`, `GIGL_PASSWORD`: GIGL provider configuration used by the direct shipment-tracking worker. The base URL must be credential-free HTTPS.
+- `GIGL_TRACKING_WORKER_TOKEN`: Signed, time-bounded PostgREST token whose `role` is exactly `gigl_tracking_worker`. Mint it outside the VPS with a trusted Supabase signing key, store only the scoped token on the VPS, and rotate it before its expiry. Never copy a JWT signing key or service-role credential to the worker host. Release and readiness gates perform a non-mutating live call to one of the five lease-bound wrappers before accepting the credential.
 - `QUIZ_PHASE`, `QUIZ_PRODUCTION_APPROVED`: Explicit quiz launch gate values copied from web production. They must be present even for the fail-closed `1a`/`false` state.
 - `QUIZ_RPC_SERVER_SECRET`, `QUIZ_DEVICE_HASH_PEPPER`: Required by the shared environment schema when `QUIZ_PHASE=production`; the device pepper must be at least 32 characters.
-- `EXPO_ACCESS_TOKEN`: Expo token used for push notification delivery and related mobile app operations.
+- `EXPO_ACCESS_TOKEN`: Optional Expo token used for authenticated push delivery. Receipt polling and unrelated direct workers remain deployable when it is absent.
 - `JUMIA_CLIENT_ID`: Jumia application/client identifier used when refreshing integration credentials.
+- `JUMIA_AUTHORIZATION_ENCRYPTION_KEY`: Base64-encoded 32-byte server-only key used to decrypt and rotate self-authorized Jumia grants.
 - `BACI_WEB_BASE_URL`: HTTPS base URL for retained web cron endpoint calls and direct Petrock remediation URLs, for example `https://ogabassey.com`. Direct Petrock execution rejects credentials and non-HTTPS values.
 - `CRON_SECRET`: Shared secret that must match the web deployment and protect cron endpoints.
 - `OLLAMA_STOREFRONT_BASE_URL`: Local/private Ollama base URL for async storefront generation. Use `http://localhost:11434` when Ollama runs on the same VPS.
@@ -196,13 +210,15 @@ secret value.
 
 `deploy.sh` runs `jobs/preflight-direct-web-workers.mjs` before installing the
 crontab. The preflight checks the Supabase values, credential-free HTTPS web
-origin, Petrock token/encryption key/rollout flags, explicit quiz gates, and
-the two additional quiz production secrets. It prints only variable names and
-fixed validation reasons, never values. Each direct TypeScript CLI repeats its
-essential preflight at runtime so later configuration drift exits nonzero
-instead of returning a successful skip.
+and GIGL origins, the restricted GIGL tracking credential, Petrock
+token/encryption-key/rollout flags, explicit quiz gates, and the two additional
+quiz production secrets. It prints only variable names and fixed validation
+reasons, never values. Each direct TypeScript CLI repeats its essential
+preflight at runtime so later configuration drift exits nonzero instead of
+returning a successful skip.
 
-Worker deployment also refuses a dirty local checkout and requires the
+Worker deployment also refuses a dirty local checkout, proves the restricted
+GIGL token can execute its reviewed wrapper without claiming work, and requires the
 configured `BACI_REPO_DIR` checkout on the VPS to be at the exact same Git SHA
 as the deploying repository, with both direct scripts and `tsx` present. Update
 and install that full checkout first; the crontab is not replaced when this
@@ -229,13 +245,18 @@ $CRON_SECRET`; `/api/cron/process-settlements` uses `POST` and the others use
 - `/api/cron/wallet-payouts`
 - `/api/inventory/push-alerts`
 
-Petrock reconciliation and quiz finalization are deliberately absent from this
-allowlist. Their minute schedules invoke `bin/process-petrock-reconciliation.sh`
-and `bin/process-quiz-finalization.sh` directly against the full Baci checkout.
-Those scripts use the server-side Supabase/admin and job-specific environment;
-they do not send `CRON_SECRET` or make HTTP calls to the web deployment. A
-nonzero exit is retained in the matching persistent cron log, but no verified
-pager transport is configured.
+Petrock reconciliation, GIGL tracking, and quiz finalization are deliberately
+absent from this allowlist. Their schedules
+invoke the matching `bin/process-*.sh` wrapper directly against the full Baci
+checkout. The GIGL poller uses its restricted database role rather than the
+Supabase service role. These scripts do not send `CRON_SECRET` or make HTTP
+calls to the web deployment. The GIGL tracking API route remains an
+authenticated manual fallback, but Vercel Cron no longer schedules it. The
+notification route remains on Vercel until its legacy admin-client graph is
+capability-split. Removing the five-minute tracking schedule avoids 2,016
+scheduled function executions per week. A nonzero exit is retained in the
+matching persistent cron log, but no
+verified pager transport is configured.
 
 Merchant cancellation refund and email outbox work uses the trusted
 `/api/cron/process-settlements?cancellationsOnly=true` mode every five minutes;

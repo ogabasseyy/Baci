@@ -4,6 +4,15 @@ import type { ResumedOrder } from './types';
 export function mapApiOrderToResumedOrder(
   orderData: Record<string, unknown>,
 ): ResumedOrder {
+  const rawSubtotal = orderData.subtotal;
+  const parsedSubtotal =
+    typeof rawSubtotal === 'number' ||
+    (typeof rawSubtotal === 'string' && rawSubtotal.trim().length > 0)
+      ? Number(rawSubtotal)
+      : Number.NaN;
+  const subtotal = Number.isFinite(parsedSubtotal)
+    ? parsedSubtotal
+    : undefined;
   const shippingAddress =
     orderData.shipping_address &&
     typeof orderData.shipping_address === 'object' &&
@@ -14,13 +23,20 @@ export function mapApiOrderToResumedOrder(
   return {
     id: String(orderData.id ?? ''),
     short_id: String(orderData.short_id ?? ''),
-    subtotal: Number(orderData.subtotal) || 0,
+    subtotal,
     // Authenticated order detail selects `shipping_fee`; public tracking exposes `shipping_cost`.
     shipping_cost:
       Number(orderData.shipping_cost ?? orderData.shipping_fee) || 0,
     tax_amount: Number(orderData.tax_amount) || 0,
     discount_amount: Number(orderData.discount_amount) || 0,
     gift_wrapping_fee: Number(orderData.gift_wrapping_fee) || 0,
+    // Stamped order currency (normalized like the fresh-flow charge
+    // currency): resumed funnel events must not inherit the merchant's
+    // current payout currency.
+    currency:
+      typeof orderData.currency === 'string' && orderData.currency.trim()
+        ? orderData.currency.trim().toUpperCase()
+        : undefined,
     total: Number(orderData.total) || 0,
     customer_name: String(orderData.customer_name ?? ''),
     customer_email: String(orderData.customer_email ?? ''),

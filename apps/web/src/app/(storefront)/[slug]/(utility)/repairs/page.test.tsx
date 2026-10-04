@@ -1,5 +1,10 @@
 import { screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { connection } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCachedMerchant } from '@/lib/cached-data';
+import { getRepairDevicesForMerchant } from '@/lib/repairs/repairs-catalog-data';
+
+vi.mock('next/server', () => ({ connection: vi.fn() }));
 
 vi.mock('next/headers', () => ({
   headers: vi.fn(async () => ({
@@ -35,11 +40,55 @@ vi.mock('@/lib/repairs/repairs-catalog-data', () => ({
 const { default: RepairsPage, generateStaticParams } = await import('./page');
 
 describe('RepairsPage static params', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getCachedMerchant).mockResolvedValue({
+      id: 'merchant-1',
+      slug: 'ogabassey',
+      business_type: 'electronics',
+      feature_settings: { repairs_catalog_enabled: true },
+    } as Awaited<ReturnType<typeof getCachedMerchant>>);
+  });
+
+  it('waits for a real request before reading the uncached catalog', async () => {
+    let connected = false;
+    vi.mocked(connection).mockImplementation(async () => {
+      connected = true;
+    });
+    vi.mocked(getRepairDevicesForMerchant).mockImplementation(async () => {
+      if (!connected) throw new Error('catalog read during prerender');
+      return [{ brand: 'Apple', devices: [] }];
+    });
+    const page = RepairsPage({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+    const child = page.props.children[1].props.children;
+    const result = await child.type(child.props);
+    expect(result.props.groups).toEqual([{ brand: 'Apple', devices: [] }]);
+  });
   it('prerenders both OgaBassey host identifiers so the lab hero can land in the static shell', () => {
     expect(generateStaticParams()).toEqual([
       { slug: 'ogabassey.com' },
       { slug: 'ogabassey' },
     ]);
+  });
+
+  it('keeps the empty-catalog fallback for genuine database failures', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(connection).mockResolvedValue(undefined);
+    vi.mocked(getRepairDevicesForMerchant).mockRejectedValue(
+      new Error('database unavailable')
+    );
+    const page = RepairsPage({
+      params: Promise.resolve({ slug: 'ogabassey' }),
+    });
+    const child = page.props.children[1].props.children;
+    try {
+      const result = await child.type(child.props);
+      expect(result.props.groups).toEqual([]);
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 
   it('does not await params in the page — the committed hero does', () => {

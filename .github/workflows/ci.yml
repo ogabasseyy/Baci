@@ -240,14 +240,6 @@ jobs:
           filter: ''
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
-      - name: Hydrate storefront inventory authority
-        run: |
-          set -euo pipefail
-          source_sha="$(jq -r '.originMainSha' docs/superpowers/evidence/storefront-edge/task-1a-inventory.json)"
-          if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
-            git fetch --no-tags --depth=1 origin "$source_sha"
-          fi
-          git cat-file -e "${source_sha}^{commit}"
       - name: Run web vitest shard
         run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
 
@@ -296,8 +288,16 @@ jobs:
           pnpm --filter @baci/web db:replay:chronological
           --sql-check supabase/tests/order_notification_outbox_rpc_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_permissions.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_claims.sql
+          --sql-check supabase/migrations/tests/immediate_order_notification_proof_claims.sql
+          --sql-check supabase/migrations/tests/sessionless_payment_reference_snapshot.sql
+          --sql-check supabase/migrations/tests/order_notification_delivered_lookup.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_delivered_token.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_pending.sql
+          --sql-check supabase/migrations/tests/tracking_order_notification_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql
           --sql-check supabase/tests/agentic_paystack_dva_alias_conflict.sql
+          --sql-check supabase/tests/shipping_provider_settings.sql
           --sql-check supabase/tests/negotiation_customer_contact.sql
           --sql-check supabase/tests/storefront_pdp_preflight_relation_category.sql
           --sql-check supabase/tests/storefront_cluster_guide_candidates_rpc.sql
@@ -307,6 +307,23 @@ jobs:
           --sql-check supabase/migrations/tests/admin_order_transaction_discount_cleanup.sql
           --sql-check supabase/migrations/tests/persist_quiz_award_amount_snapshot.sql
           --sql-check supabase/tests/search_products_not_archived_nulls.sql
+          --sql-check supabase/tests/product_discovery_embeddings_public_boundary.sql
+          --sql-check supabase/tests/product_discovery_guarded_metadata_update.sql
+          --sql-check supabase/tests/product_discovery_combined_search.sql
+          --sql-check supabase/tests/product_discovery_search_document_units.sql
+          --sql-check supabase/tests/product_discovery_variant_recall.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_text.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_identity.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_identity_exact.sql
+          --sql-check supabase/tests/product_discovery_public_variant_projection.sql
+          --sql-check supabase/tests/product_discovery_condition_offer_publication_bounds.sql
+          --sql-check supabase/tests/product_discovery_attribute_digest_v6.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_condition.sql
+          --sql-check supabase/tests/product_discovery_variant_recall_input_bounds.sql
+          --sql-check supabase/tests/mcp_search_browse_ascii.sql
+          --sql-check supabase/tests/mcp_search_browse_anchors.sql
+          --sql-check supabase/tests/product_discovery_fact_condition.sql
+          --sql-check supabase/tests/product_discovery_fact_excluded_types.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_publication_v2.sql
           --sql-check supabase/migrations/tests/quiz_instant_deadline_runtime_gate_v2.sql
           --sql-check supabase/migrations/tests/quiz_live_score_publication_gate_v2.sql
@@ -315,6 +332,7 @@ jobs:
           --sql-check supabase/migrations/tests/quiz_instant_retry_pending_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_results_wakeup_player_access_v2.sql
           --sql-check supabase/migrations/tests/quiz_test_publication_control_rls_v2.sql
+          --sql-check supabase/migrations/tests/quiz_start_guard_context_v2.sql
           --sql-check supabase/migrations/tests/quiz_cascade_score_consistency_v2.sql
           --sql-check supabase/migrations/tests/quiz_runtime_gate_stale_health_v2.sql
           --sql-check supabase/migrations/tests/quiz_score_repair_quiescence_gate_v2.sql
@@ -322,6 +340,8 @@ jobs:
           --sql-check supabase/migrations/tests/repair_pickup_payment_confirmation.sql
           --sql-check supabase/migrations/tests/repair_pickup_receiver_projection.sql
           --sql-check supabase/migrations/tests/find_resumable_repair_pickup.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_payment_receipts.sql
+          --sql-check supabase/migrations/tests/mobile_repair_pickup_claim_lease.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_terminal.sql
           --sql-check supabase/migrations/tests/claim_repair_pickup_booking_manual_fulfilled.sql
           --sql-check supabase/migrations/tests/normalize_nigerian_repair_pickup_receiver_phone.sql
@@ -337,6 +357,18 @@ jobs:
           --sql-check supabase/migrations/tests/finish_push_unregistered.sql
           --sql-check supabase/migrations/tests/plan_transfer_wallet_binding.sql
           --sql-check supabase/migrations/tests/plan_transfer_excess_projection.sql
+          --sql-check supabase/tests/repair_booking_rpc.sql
+          --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
+          --sql-check supabase/migrations/tests/santa_catalog_projection.sql
+          --sql-check supabase/migrations/tests/guest_snapshot_inventory_proof.sql
+          --sql-check supabase/migrations/tests/immediate_notification_completion_proof.sql
+          --sql-check supabase/migrations/tests/pr3468_followup_payment_hardening.sql
+          --sql-check supabase/migrations/tests/credit_direct_inventory_proof.sql
+          --sql-check supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
+          --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
+          --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
+          --sql-check supabase/tests/mcp_search_option_windows.sql
+          --sql-check supabase/tests/mcp_search_option_windows_guard.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL
@@ -347,7 +379,7 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -365,6 +397,12 @@ jobs:
         run: bash .github/scripts/run-migration-applier-tests.sh
       - name: Verify Migration Versions
         run: bash .github/scripts/check-migration-versions.sh
+      - name: Verify GIGL Enforcement Migration Names
+        run: bash .github/scripts/check-gigl-enforcement-migration-names.sh
+      - name: Test Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.test.sh
+      - name: Verify Mobile Gem Floors
+        run: bash .github/scripts/check-mobile-gem-floors.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs
@@ -382,10 +420,14 @@ jobs:
           pnpm --dir vps-workers test &&
           node --test
           .github/scripts/current-main-deploy-guard.test.mjs
+          .github/scripts/deploy-mcp-server.test.mjs
           .github/scripts/deploy-vps-readiness-checkout.test.mjs
           .github/scripts/deploy-with-retry-current-main.test.mjs
+          .github/scripts/deploy-with-retry-overlap.test.mjs
+          .github/scripts/deploy-with-retry-overlap-rollback.test.mjs
           .github/scripts/deploy-with-retry.test.mjs
           .github/scripts/run-pinned-vercel.test.mjs
+          .github/scripts/assert-preview-env-allowlist.test.mjs
           .github/scripts/assert-vercel-pulled-sensitive-env.test.mjs
           .github/scripts/ensure-vercel-sensitive-env.test.mjs
           .github/scripts/inject-prebuilt-env-secret.jwk.test.mjs
@@ -395,6 +437,26 @@ jobs:
           .github/scripts/storefront-release-coherence-warming.test.mjs
           .github/scripts/storefront-release-config.test.mjs
           .github/scripts/storefront-release-marker.test.mjs
+          .github/scripts/check-gigl-cutover-latch.test.mjs
+          .github/scripts/check-gigl-enforcement-migration-names.test.mjs
+          .github/scripts/check-gigl-cutover-latch-scope.test.mjs
+          .github/scripts/gigl-dotenv.test.mjs
+          .github/scripts/resolve-gigl-latch-identity.test.mjs
+          .github/scripts/verify-gigl-fallback-token.test.mjs
+          .github/scripts/smoke-gigl-worker-capability.test.mjs
+          .github/scripts/refuse-publish-on-promote-overlap.test.mjs
+          .github/scripts/probe-gigl-hook-reload.test.mjs
+          .github/scripts/preview-workflow-contract.test.mjs
+          .github/scripts/preview-workflow-contract-parsing.test.mjs
+          .github/scripts/preview-workflow-redact-contract.test.mjs
+          .github/scripts/preview-env-turbo-cache.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-guardrails.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-hardening.test.mjs
+          .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
+          .github/scripts/materialize-preview-prebuilt-refs.test.mjs
+          .github/scripts/preview-deploy-run.test.mjs
+          && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'
         run: pnpm --filter @baci/web verify:quiz-assets
@@ -438,7 +500,7 @@ jobs:
         run: pnpm --filter @baci/web check:quiz-approval
       - name: Run Storefront Guardrail Unit Tests
         if: needs.changes.outputs.mobile_storefront == 'true'
-        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts --runInBand
+        run: pnpm --filter @baci/mobile-storefront exec jest scripts/check-platform-drift.test.ts scripts/check-module-size.test.ts scripts/check-ad-tracking-native-config.test.ts scripts/validate-fastfile-submit-version-guard.test.ts scripts/validate-fastfile-submit-version-guard-settle.test.ts --runInBand && ruby apps/mobile-storefront/scripts/asc_version_slot_load_test.rb && ruby apps/mobile-storefront/scripts/asc_version_slot_settle_test.rb
       - name: Verify Storefront Ad Tracking Native Config
         if: needs.changes.outputs.mobile_storefront == 'true'
         run: pnpm --filter @baci/mobile-storefront check:ad-tracking-native-config

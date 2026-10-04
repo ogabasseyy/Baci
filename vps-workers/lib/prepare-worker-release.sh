@@ -13,11 +13,17 @@ prepare_worker_release() {
   echo "==> Staging worker files at $VPS:$STAGING_DIR"
   rsync -av --delete --exclude='.env*' --exclude='node_modules' --exclude='logs' --exclude='locks' \
     "$WORKER_ROOT/" "$VPS:$STAGING_DIR/"
+  # The GIGL scoped-env filter reads the shared dotenv through the same
+  # tested parser as the CI gates; ship it next to the filter (single
+  # source: .github/scripts/gigl-dotenv.sh) so the two can never
+  # disagree on export/quote/comment forms.
+  rsync -av "$WORKER_ROOT/../.github/scripts/gigl-dotenv.sh" "$VPS:$STAGING_DIR/bin/gigl-dotenv.sh"
   if ! ssh "$VPS" "test -f '$REMOTE_DIR/.env'"; then
     echo "Missing $VPS:$REMOTE_DIR/.env; create it before running this deploy." >&2
     exit 1
   fi
   ssh "$VPS" "cp '$REMOTE_DIR/.env' '$STAGING_DIR/.env'"
+  ssh "$VPS" "printf '%s' '$APP_SHA' > '$STAGING_DIR/app-checkout.sha'"
 
   echo "==> Installing staged dependencies on VPS"
   ssh "$VPS" "cd '$STAGING_DIR' && CI=true pnpm install --frozen-lockfile --prod"
@@ -26,90 +32,268 @@ prepare_worker_release() {
   NODE_BIN=$(ssh "$VPS" "command -v node || echo /usr/bin/node")
   echo "    Using Node: $NODE_BIN"
 
-  echo "==> Validating direct Petrock and quiz worker environment"
+  echo "==> Validating direct worker environment"
   if ! ssh "$VPS" "cd '$STAGING_DIR' && $NODE_BIN '$STAGING_DIR/jobs/preflight-direct-web-workers.mjs'"; then
     echo "Direct-worker environment preflight failed; live worker files and crontab were not changed." >&2
     exit 1
   fi
 
-  echo "==> Verifying direct-worker application checkout"
-  ssh "$VPS" "bash -s -- '$STAGING_DIR' '$APP_SHA'" <<'REMOTE_SH'
-set -euo pipefail
+  echo "==> Provisioning immutable application checkout for $APP_SHA"
+  # The provisioner ships inside the staged tree, so this revision's own
+  # checkout logic runs (not whatever a previous promote installed).
+  ssh "$VPS" "bash '$STAGING_DIR/lib/provision-immutable-checkout.sh' '$STAGING_DIR' '$APP_SHA'"
 
-remote_dir="$1"
-expected_sha="$2"
-env_file="$remote_dir/.env"
-repo_dir="$(
-  awk '
-    /^BACI_REPO_DIR=/ {
-      sub(/^BACI_REPO_DIR=/, "")
-      print
-      exit
-    }
-  ' "$env_file"
-)"
-repo_dir="${repo_dir%\"}"
-repo_dir="${repo_dir#\"}"
-repo_dir="${repo_dir%\'}"
-repo_dir="${repo_dir#\'}"
-
-case "$repo_dir" in
-  /*) ;;
-  *)
-    echo "BACI_REPO_DIR must be an absolute path." >&2
-    exit 1
-    ;;
-esac
-
-actual_sha="$(git -C "$repo_dir" rev-parse --verify HEAD)"
-if [ -n "$(git -C "$repo_dir" status --porcelain=v1 --untracked-files=all)" ]; then
-  echo "Direct-worker checkout is dirty." >&2
-  exit 1
-fi
-if [ "$actual_sha" != "$expected_sha" ]; then
-  echo "Direct-worker checkout does not match the deploying commit." >&2
-  exit 1
-fi
-
-for script_path in \
-  apps/web/src/scripts/process-petrock-reconciliation.ts \
-  apps/web/src/scripts/process-quiz-finalization.ts
-do
-  if [ ! -f "$repo_dir/$script_path" ]; then
-    echo "Direct-worker checkout is missing $script_path." >&2
+  echo "==> Verifying the live GIGL database capability"
+  gigl_capability_status=0
+  ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
+  if [ "$gigl_capability_status" -eq 42 ]; then
+    # Exit 42 means the wrapper RPCs or the worker grant are missing.
+    # Deferrable on a missing/vacuous latch (nothing proven yet), on
+    # initial rollout (RPCs land via db-migrations minutes later), or
+    # after a PROVEN latch only with boundary proof below (a
+    # coordinated wrapper migration would deadlock on refusal, since
+    # readiness needs the new worker before db-migrations). Otherwise
+    # the 42 means the grant/membership/schema regressed: refuse to
+    # promote over the previously-proven worker. (Latch:
+    # scope:sha:fingerprint.)
+    gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
+    gigl_latch_scope="${gigl_latch%%:*}"
+    gigl_latch_fp="${gigl_latch##*:}"
+    gigl_latch_rest="${gigl_latch#*:}"
+    gigl_latch_sha="${gigl_latch_rest%%:*}"
+    gigl_defer_ok=""
+    gigl_defer_reason="wrapper RPCs are not deployed yet"
+    if [ -z "$gigl_latch" ]; then
+      gigl_defer_ok=1
+    fi
+    if [ "$gigl_latch_scope" = "disabled" ] && [ "$gigl_latch_fp" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+      gigl_defer_ok=1
+    fi
+    if [ -z "$gigl_defer_ok" ] && [[ "$gigl_latch_sha" =~ ^[0-9a-f]{40}$ ]]; then
+      # Proof, not proximity: defer ONLY when the candidate changes the
+      # worker capability boundary (wrappers, worker role, scope hook)
+      # since the latched revision. An unrelated GIGL table migration,
+      # or a latch SHA this checkout cannot resolve (shallow/GC'd —
+      # fetched first), must NOT explain the 42: a revoked grant or a
+      # missing wrapper then defers instead of failing closed. The
+      # enforcement-migration naming check keeps any boundary change
+      # inside gigl-named files, so scoping the diff there cannot miss
+      # one; added/removed lines only (context mentions prove nothing,
+      # and a malformed latch skips this branch and refuses below).
+      git -C "$WORKER_ROOT/.." cat-file -e "$gigl_latch_sha^{commit}" 2>/dev/null \
+        || git -C "$WORKER_ROOT/.." fetch --quiet origin "$gigl_latch_sha" 2>/dev/null \
+        || true
+      gigl_capability_proof=""
+      if git -C "$WORKER_ROOT/.." cat-file -e "$gigl_latch_sha^{commit}" 2>/dev/null; then
+        gigl_capability_proof="$(git -C "$WORKER_ROOT/.." diff "$gigl_latch_sha" "$APP_SHA" -- 'supabase/migrations/*gigl*' 2>/dev/null | grep -E '^[+-][^+-].*(gigl_worker_|gigl_tracking_worker|enforce_gigl_tracking_worker_request_scope)' || true)"
+      fi
+      if [ -n "$gigl_capability_proof" ]; then
+        gigl_defer_ok=1
+        gigl_defer_reason="candidate changes the GIGL worker capability boundary since the latched revision"
+      fi
+    fi
+    if [ -n "$gigl_defer_ok" ]; then
+      echo "GIGL $gigl_defer_reason; deferring capability verification to the post-migration smoke." >&2
+    else
+      echo "GIGL capability check reports missing RPCs/grant, but a previous smoke proved this worker (latch scope: $gigl_latch_scope) and no capability-boundary migration since the latched revision explains it; refusing to promote a worker that cannot claim tracking work. Investigate the revoked grant/membership or regressed schema. If the database was restored from a pre-migration backup, remove $REMOTE_DIR/.gigl-capability-smoke-ok on the VPS and rerun this deploy." >&2
+      exit 1
+    fi
+  elif [ "$gigl_capability_status" -ne 0 ]; then
+    echo "GIGL database capability verification failed; live worker files and crontab were not changed." >&2
     exit 1
   fi
-done
-
-for wrapper_path in \
-  "$remote_dir/bin/process-petrock-reconciliation.sh" \
-  "$remote_dir/bin/process-quiz-finalization.sh"
-do
-  if [ ! -x "$wrapper_path" ]; then
-    echo "Missing or non-executable direct-worker wrapper: $wrapper_path" >&2
-    exit 1
-  fi
-done
-
-tsx_bin="$repo_dir/apps/web/node_modules/.bin/tsx"
-if [ ! -x "$tsx_bin" ] || ! "$tsx_bin" --version >/dev/null; then
-  echo "Direct-worker checkout is missing the reviewed web toolchain." >&2
-  exit 1
-fi
-REMOTE_SH
 }
 
 promote_worker_release() {
   echo "==> Promoting validated worker files to $VPS:$REMOTE_DIR"
-  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$STAGING_DIR' '$REMOTE_DIR'" <<'REMOTE_SH'
+  # Promote also holds the GIGL runtime lock exclusive across the file
+  # sync and flip (cron takes it non-blocking, so a straddling tick
+  # skips instead of running mixed-revision; a running poll delays
+  # promote by at most one tick; deploy-then-gigl order vs gigl-only
+  # cron means no cycle). The remote script additionally quiesces
+  # EVERY scheduled worker lock plus the persistent `--loop` services
+  # (stopped first, restarted by an EXIT trap covering aborts too),
+  # because the flipped checkout symlink is shared. The locks dir is
+  # pre-created because flock will not create parents.
+  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"
 remote_dir="$2"
+expected_sha="$3"
 
 mkdir -p "$remote_dir"
-rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' \
-  "$staging_dir/" "$remote_dir/"
+# The capability-smoke latch survives promotes: it records that a live
+# smoke proved token+hook function, which a worker redeploy (same .env,
+# same token) does not invalidate. Without this exclude, --delete would
+# wipe it every deploy.sh run and re-freeze web pushes until re-smoked.
+# Safety net: check-gigl-cutover-latch.sh binds the latch to
+# app-checkout.sha at read time, so promoting a DIFFERENT tree (rollback
+# or the exit-42 unverified path) invalidates the preserved latch until
+# a fresh smoke re-latches the installed revision.
 mkdir -p "$remote_dir/logs" "$remote_dir/locks"
+
+# Quiesce every scheduled worker plus the persistent services across
+# the sync and flip (shared helper, also used by emergency rollback):
+# the checkout symlink is shared, so a non-GIGL tick that lands
+# mid-promote could read half-synced wrappers or straddle two
+# revisions. Sourced from STAGING (the revision being installed), so a
+# newly added service is covered; the sourced functions live in this
+# shell's memory, so the rsync below cannot disturb them.
+# shellcheck source=quiesce-worker-release.sh
+. "$staging_dir/lib/quiesce-worker-release.sh"
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
+
+# Snapshot the pre-promote live tree BEFORE the rsync below mutates
+# it: if the checkout flip then refuses, the rsync has already
+# replaced bin/, jobs/, lib/, config/, dependencies, and the SHA
+# marker while app-live still points at the previous checkout, and
+# restoring the snapshot keeps the quiesce EXIT trap from restarting
+# services against that mixed release. Missing entries (first deploy)
+# are skipped on both legs; a snapshot failure refuses the promote
+# before anything is mutated. The backup sits BESIDE the live dir and
+# is OWNED by this deployment (named after the unique staging dir):
+# the deploy lock serializes promotes but releases before the
+# post-flip record and possible rollback, so a shared backup would
+# let a second deploy clobber the first's snapshot mid-record. It
+# SURVIVES success for rollback_worker_release below; deploy.sh
+# removes it after a successful record. Other deploys' orphaned
+# snapshots retire here by age only (a concurrent live deploy keeps
+# its own; a >60-minute post-flip stall is operator territory, and a
+# later rollback fails loud on the missing snapshot like any other
+# snapshot loss).
+pre_promote_backup="${staging_dir}.pre-promote-backup"
+rm -rf "$pre_promote_backup"
+find "$(dirname "$remote_dir")" -maxdepth 1 -name '*.pre-promote-backup' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+mkdir -p "$pre_promote_backup"
+for entry in bin jobs lib config node_modules app-checkout.sha; do
+  if [ -e "$remote_dir/$entry" ]; then
+    cp -a "$remote_dir/$entry" "$pre_promote_backup/$entry" || exit 1
+  fi
+done
+
+rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
+  "$staging_dir/" "$remote_dir/"
+
+# Snapshot the checkout pointer for rollback: the flip's one-time
+# legacy migration lossily rewrites .env (deletes every `=`-spelling)
+# and creates the app-live sibling symlink. The target file records
+# the pre-flip link (or NOSYMLINK) so first-deploy rollback removes
+# or re-points exactly that — no invented defaults: like the flip,
+# an unset BACI_REPO_DIR resolves empty (and the flip then fails
+# before mutating, so this snapshot goes unconsumed).
+if [ -e "$remote_dir/.env" ]; then
+  cp -a "$remote_dir/.env" "$pre_promote_backup/.env"
+  # shellcheck source=../bin/gigl-dotenv.sh
+  . "$staging_dir/bin/gigl-dotenv.sh"
+  snapshot_link="$(gigl_dotenv_value "$remote_dir/.env" 'BACI_REPO_DIR')"
+  if [ -L "$snapshot_link" ]; then readlink "$snapshot_link"; else echo "NOSYMLINK"; fi > "$pre_promote_backup/app-live-target"
+fi
+
+# Atomically switch the delegated checkout to this release's immutable
+# per-SHA worktree inside this same deploy lock, so wrappers, SHA
+# marker, and executed code change together: cron resolves BACI_REPO_DIR
+# once per invocation, so no poll can run unverified code or straddle
+# two revisions mid-run.
+if ! bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected_sha"; then
+  echo "Checkout flip failed; restoring the pre-promote live tree." >&2
+  for entry in bin jobs lib config node_modules; do
+    if [ -e "$pre_promote_backup/$entry" ]; then
+      rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
+    else
+      rm -rf "$remote_dir/$entry"
+    fi
+  done
+  if [ -e "$pre_promote_backup/app-checkout.sha" ]; then
+    cp "$pre_promote_backup/app-checkout.sha" "$remote_dir/app-checkout.sha"
+  else
+    rm -f "$remote_dir/app-checkout.sha"
+  fi
+  # The flip can fail AFTER repointing (killed mid-flight, failed
+  # verification): reverse the checkout pointer from the snapshot too,
+  # or the trap restarts old wrappers against the candidate checkout.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" --restore-pointer "$remote_dir" "$pre_promote_backup"
+  rm -rf "$pre_promote_backup"
+  exit 1
+fi
+# No snapshot cleanup on success: rollback_worker_release needs it if
+# the post-flip overlap record fails (deploy.sh removes it after a
+# successful record).
+REMOTE_SH
+}
+
+# Restores the pre-promote live tree after a failed post-flip overlap
+# record. Call ONLY from deploy.sh's record-failure branch, which runs
+# before the cron transition and the service/crontab installs: at that
+# point the promote is the sole live mutation, so restoring the
+# snapshot plus the checkout pointer returns the VPS to its exact
+# pre-deploy state. Refuses when the live marker moved past this
+# deploy's SHA (a concurrent deploy landed: restoring then would wipe
+# the newer live tree, and the newer deploy's own records cover the
+# window). A missing snapshot fails loudly: the operator follows the
+# emergency rollback runbook.
+rollback_worker_release() {
+  echo "==> Rolling back the unrecorded worker promotion on $VPS:$REMOTE_DIR"
+  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
+set -euo pipefail
+
+staging_dir="$1"
+remote_dir="$2"
+expected_sha="$3"
+pre_promote_backup="${staging_dir}.pre-promote-backup"
+if [ ! -d "$pre_promote_backup" ]; then
+  echo "Rollback refused: no pre-promote snapshot at $pre_promote_backup; follow the emergency rollback runbook." >&2
+  exit 1
+fi
+
+# Same quiesce as promote (locks plus persistent services): ticks must
+# skip across the restore, and the EXIT trap restarts services after
+# the old tree is back — never against a half-restored mix.
+# shellcheck source=quiesce-worker-release.sh
+. "$staging_dir/lib/quiesce-worker-release.sh"
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
+
+# Refuse when a concurrent deploy landed after this promote: the live
+# marker moved past this SHA, so restoring this snapshot would wipe
+# the newer live tree. Read INSIDE the locks above so no promote can
+# interleave between the read and the restore. A missing marker
+# (first deploy) cannot verify — proceed.
+live_sha="$(cat "$remote_dir/app-checkout.sha" 2>/dev/null || true)"
+if [ -n "$live_sha" ] && [ "$live_sha" != "$expected_sha" ]; then
+  echo "Rollback refused: live checkout ($live_sha) moved past this promote ($expected_sha); a concurrent deploy landed. Reconcile manually via the emergency rollback runbook." >&2
+  exit 1
+fi
+
+for entry in bin jobs lib config node_modules; do
+  if [ -e "$pre_promote_backup/$entry" ]; then
+    rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
+  else
+    rm -rf "$remote_dir/$entry"
+  fi
+done
+if [ -e "$pre_promote_backup/app-checkout.sha" ]; then
+  cp "$pre_promote_backup/app-checkout.sha" "$remote_dir/app-checkout.sha"
+  # Flip the checkout pointer back: the old per-SHA worktree survives
+  # (promote GC keeps the previous release), so the standard flip —
+  # with its symlink verification — converges back exactly. A poll
+  # that launched against the new checkout keeps executing it (GC
+  # keeps the just-replaced target too); only new ticks see old code.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$(cat "$remote_dir/app-checkout.sha")"
+else
+  # First deploy (no previous tree): the flip may have run its
+  # one-time legacy migration (created the app-live sibling symlink
+  # and lossily re-pointed .env at it). Reverse exactly that from the
+  # pointer snapshot — otherwise the restarted legacy wrappers would
+  # execute candidate code through the leftover symlink. The link
+  # path comes from the REWRITTEN .env (its canonical line is the
+  # created symlink in the migration case, the untouched original in
+  # the pre-existing-symlink case), read BEFORE the .env restore.
+  # A pre-existing symlink (markerless manual state) is re-pointed to
+  # its pre-flip target instead of removed. Shared with promote's
+  # flip-failure handler: the flip can fail after repointing anywhere.
+  bash "$staging_dir/lib/flip-immutable-checkout.sh" --restore-pointer "$remote_dir" "$pre_promote_backup"
+  rm -f "$remote_dir/app-checkout.sha"
+fi
+rm -rf "$pre_promote_backup"
 REMOTE_SH
 }

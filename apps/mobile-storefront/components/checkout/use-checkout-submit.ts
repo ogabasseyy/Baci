@@ -1,23 +1,14 @@
+import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
-import { claimCheckoutPurchaseTracking } from '@/lib/claim-checkout-purchase-tracking';
 import type { ShippingAddressInput } from '@/lib/validation';
-import {
-  buildSavingsOrderFields,
-  buildWalletOrderFields,
-  getFullyPaidStoreCreditPaymentMethod,
-} from '@/lib/wallet-payment-helpers';
+import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
-import { trackCheckoutRoutePurchaseCompleted } from '@/services/tiktok-checkout-route-tracking';
 import { useCartStore } from '@/stores/cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
-import {
-  buildCheckoutOrderRequest,
-  createCheckoutSnapshot,
-} from './checkout-order-builders';
-import { runCheckoutPostOrderSideEffects } from './checkout-post-order-side-effects';
+import { createCheckoutSnapshot } from './checkout-order-builders';
 import {
   blockIfMixedPrizeCart,
   cartHasVoucherLine,
@@ -25,12 +16,15 @@ import {
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { resolveCheckoutStoreCreditSelections } from './checkout-store-credit';
 import { handleCheckoutSubmitError } from './checkout-submit-error';
-import { runRedvaultSubmitInitializationSideEffects } from './checkout-submit-redvault';
+import { createSubmittedOrderIdentity } from './checkout-submit-order-identity';
+import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
+import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollback-state';
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { isBnplPayment } from './is-bnpl-payment';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
-import { runFinalizeCheckoutPayment } from './run-finalize-checkout-payment';
-import { submitRedvaultCheckout } from './submit-redvault-checkout';
+import { runCheckoutFinalization } from './run-checkout-finalization';
+import { runRedvaultPostOrderBranch } from './run-redvault-post-order-branch';
+import { trackSubmittedCheckoutGeneration } from './track-submitted-checkout-generation';
 import type { UseCheckoutSubmitParams } from './use-checkout-submit.types';
 
 export type { UseCheckoutSubmitParams };
@@ -72,6 +66,9 @@ export function useCheckoutSubmit({
 }: UseCheckoutSubmitParams) {
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
+  // Late completion-tracking resolutions must not erase a newly created
+  // cart or navigate away from the shopper's screen.
+  const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
     const itemsSnapshot = [...useCartStore.getState().items];
     const {
@@ -127,6 +124,15 @@ export function useCheckoutSubmit({
     // The in-flight latch is already held (acquired before the fence
     // await above) and releases in the finally below.
     setIsProcessing(true);
+    const orderIdentity = createSubmittedOrderIdentity();
+    // Hoisted for the rollback path, which re-freezes these on cart restore.
+    let submitCreditFields: Record<string, unknown> | undefined;
+    let submitHadSortMarker: boolean | undefined;
+    // Inconclusive marker read: the catch path skips cleanup.
+    let rollbackCaptureInconclusive = false;
+    const submittedGeneration = trackSubmittedCheckoutGeneration(
+      checkoutGenerationSnapshot
+    );
     try {
       if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
         return;
@@ -147,11 +153,12 @@ export function useCheckoutSubmit({
           walletSelection,
         });
       trackCheckoutStep('review');
+      // Pay-for-me keeps its own persisted identity: collapsing it to
+      // 'invoice' would misclassify its documents as proforma and skip
+      // the server payforme dispatch branch.
       const paymentMethodForOrder = isVoucherOnlyCart
         ? 'card'
-        : selectedPayment === 'payforme'
-          ? 'invoice'
-          : selectedPayment;
+        : selectedPayment;
       const isBNPL = isBnplPayment(selectedPayment);
       if (isBNPL && !isVoucherOnlyCart) {
         await submitBnplCheckout({
@@ -168,6 +175,7 @@ export function useCheckoutSubmit({
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
           mobileCheckoutIdempotencyRef,
+          onOrderCreated: orderIdentity.captureCreatedOrder,
           paymentMethodForOrder,
           paymentSettings,
           selectedPayment,
@@ -177,119 +185,113 @@ export function useCheckoutSubmit({
         });
         return;
       }
-      const orderResponse = await createOrder(
-        {
-          ...buildCheckoutOrderRequest({
-            address,
-            customerEmail,
-            customerName,
-            customerPhone,
-            deliveryMethod,
-            discountCode: appliedDiscountCode,
-            itemsSnapshot,
-            paymentMethodForOrder,
-            selectedQuote,
-            shippingProvider: getShippingProvider(),
-            snapshot,
-          }),
-          ...(appliedDiscountCode
-            ? {}
-            : buildSavingsOrderFields(liveSavingsSelection)),
-          ...buildWalletOrderFields(liveWalletSelection),
-        },
-        { checkoutGeneration: checkoutGenerationSnapshot }
+      const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
+        address,
+        appliedDiscountCode,
+        customerEmail,
+        customerName,
+        customerPhone,
+        deliveryMethod,
+        itemsSnapshot,
+        liveSavingsSelection,
+        liveWalletSelection,
+        paymentMethodForOrder,
+        selectedQuote,
+        shippingProvider: getShippingProvider(),
+        snapshot,
+      });
+      const orderResponse = await createOrder(orderRequest, {
+        checkoutGeneration: checkoutGenerationSnapshot,
+      });
+      orderIdentity.captureCreatedOrder(orderResponse.order.id);
+      submittedGeneration.track(orderResponse);
+      const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
+        submittedGeneration.current(),
+        creditFields
       );
+      if (!rollbackCapture.ok) {
+        // Fail closed before finalization: without a conclusive sort
+        // mode, a failed finalize would empty the cart with no rollback
+        // path. The created order stands; the cart stays intact for retry.
+        rollbackCaptureInconclusive = true;
+        throw new Error(
+          'Checkout verification timed out; your cart is unchanged.'
+        );
+      }
+      submitCreditFields = rollbackCapture.creditFields;
+      submitHadSortMarker = rollbackCapture.hadSortMarker;
       const { order } = orderResponse;
       const completedPaymentMethod =
         getFullyPaidStoreCreditPaymentMethod(orderResponse) ?? selectedPayment;
       const orderNumber =
         order.order_number || order.id.slice(0, 8).toUpperCase();
-      if (selectedPayment === 'uba_redvault') {
-        await submitRedvaultCheckout({
-          checkoutGeneration: checkoutGenerationSnapshot,
+      if (
+        await runRedvaultPostOrderBranch({
+          accountPassword,
+          address,
+          checkoutGeneration: submittedGeneration.current(),
+          completedPaymentMethod,
+          customer,
           customerEmail,
           customerName,
           customerPhone,
-          onInitializationSuccess: () =>
-            runRedvaultSubmitInitializationSideEffects({
-              accountPassword,
-              address,
-              customerEmail,
-              customerId: customer?.id,
-              isAuthenticated,
-              orderId: order.id,
-              saveAsDefaultAddress,
-              saveDetails,
-              selectedSavedAddressId,
-              trackingToken: order.tracking_token ?? undefined,
-            }),
+          isAuthenticated,
+          itemsSnapshot,
           onRedvaultOrder,
+          order,
+          orderNumber,
           orderResponse,
-          trackingContext: {
-            customerEmail,
-            customerPhone,
-            items: itemsSnapshot,
-            orderNumber,
-            paymentMethod: completedPaymentMethod,
-            shipping: snapshot.deliveryFee,
-            subtotal: snapshot.subtotal,
-            tax: snapshot.taxAmount,
-            total: order.total,
-            userId: customer?.id ?? undefined,
-          },
-        });
+          saveAsDefaultAddress,
+          saveDetails,
+          selectedPayment,
+          selectedSavedAddressId,
+          snapshot,
+        })
+      ) {
         return;
       }
-      if (await claimCheckoutPurchaseTracking(order.id)) {
-        void trackCheckoutRoutePurchaseCompleted({
-          customerEmail,
-          customerPhone,
-          items: itemsSnapshot,
-          orderId: order.id,
-          orderNumber,
-          paymentMethod: completedPaymentMethod,
-          shipping: snapshot.deliveryFee,
-          subtotal: snapshot.subtotal,
-          tax: snapshot.taxAmount,
-          total: order.total,
-          userId: user?.id ?? undefined,
-        });
-      }
-      await runFinalizeCheckoutPayment({
+      await runCheckoutFinalization({
+        accountPassword,
+        address,
         clearCart,
+        completedPaymentMethod,
+        customer,
         customerEmail,
         customerName,
         customerPhone,
+        isAuthenticated,
+        isMountedRef,
         isOrderInFlight,
+        itemsSnapshot,
+        order,
         orderNumber,
         orderResponse,
-        runPostOrderSideEffects: () => {
-          void runCheckoutPostOrderSideEffects({
-            accountPassword,
-            address,
-            customerEmail,
-            customerId: customer?.id,
-            isAuthenticated,
-            saveAsDefaultAddress,
-            saveDetails,
-            selectedSavedAddressId,
-          });
-        },
+        saveAsDefaultAddress,
+        saveDetails,
         selectedPayment,
+        selectedSavedAddressId,
         setIsProcessing,
         setPendingOrder,
         setShowCryptoSelection,
-        shouldCreateWalletFundedBankTransferOrder:
-          walletFundedBankTransferOptionEnabled &&
-          selectedPayment === 'bank_transfer',
+        snapshot,
+        user,
+        walletFundedBankTransferOptionEnabled,
       });
     } catch (error) {
-      await restoreEmptiedCheckoutCart({
-        cartWideNegotiationActive: groupNegotiationSnapshot,
-        checkoutGeneration: checkoutGenerationSnapshot,
-        itemsSnapshot,
-      });
-      handleCheckoutSubmitError(error, selectedPayment);
+      if (!rollbackCaptureInconclusive) {
+        await restoreEmptiedCheckoutCart({
+          cartWideNegotiationActive: groupNegotiationSnapshot,
+          checkoutGeneration: submittedGeneration.current(),
+          creditFields: submitCreditFields,
+          hadSortMarker: submitHadSortMarker,
+          itemsSnapshot,
+        });
+      }
+      handleCheckoutSubmitError(
+        error,
+        selectedPayment,
+        orderIdentity.createdOrderId
+      );
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

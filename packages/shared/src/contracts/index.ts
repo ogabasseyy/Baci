@@ -2,6 +2,7 @@ export * from './builder-ai-edit';
 export * from './builder-design-capabilities';
 export * from './builder-design-capability-adapter';
 export * from './builder-preview-message';
+export * from './checkout-funnel-analytics';
 export * from './customers';
 export * from './domain-event';
 export * from './ecommerce-analytics';

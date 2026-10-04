@@ -28,6 +28,7 @@ describe('requestShippingOptions', () => {
         receiverPhone: '08000000000',
         receiverName: 'Ada',
         quoteItems: [{ name: 'Phone', quantity: 1, weight: 1, value: 5000 }],
+        cartSubtotal: 5000,
       })
     ).resolves.toEqual({ ok: true });
 
@@ -36,6 +37,7 @@ describe('requestShippingOptions', () => {
       expect.objectContaining({
         merchantId: 'merchant-1',
         shipmentType: 'domestic',
+        cart_subtotal: 5000,
       }),
       { headers: { 'x-baci-client': 'web-storefront' } }
     );
@@ -54,6 +56,7 @@ describe('requestShippingOptions', () => {
         receiverPhone: '08000000000',
         receiverName: 'Ada',
         quoteItems: [{ name: 'Phone', quantity: 1, weight: 1, value: 5000 }],
+        cartSubtotal: 5000,
       })
     ).rejects.toBe(error);
 

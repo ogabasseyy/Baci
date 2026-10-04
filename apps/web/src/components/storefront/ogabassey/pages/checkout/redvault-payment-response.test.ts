@@ -106,6 +106,21 @@ describe('REDVAULT checkout response handling', () => {
     );
   });
 
+  it('forwards the init reference for the payment_started funnel event', async () => {
+    const request = vi.fn().mockResolvedValue(
+      Response.json({
+        authorization_url: 'https://paystack.test/checkout',
+        reference: 'rv-ref-1',
+      })
+    );
+
+    await expect(initializeRedvaultPayment(input, request)).resolves.toEqual({
+      kind: 'authorization_url',
+      authorizationUrl: 'https://paystack.test/checkout',
+      reference: 'rv-ref-1',
+    });
+  });
+
   it('sends the order tracking token as guest initialization proof when present', async () => {
     const request = vi
       .fn()

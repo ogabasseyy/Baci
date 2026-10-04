@@ -49,6 +49,9 @@ t helper-glob-source-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cp 
 # --- globbed abspath exec (Codex P1: /usr/bin/ba?h) ---
 t helper-glob-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/ba?h \"\${GITHUB_WORKSPACE}/evil.sh\""
 t helper-glob-abspath-class 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/ba[rs]h \"\${GITHUB_WORKSPACE}/evil.sh\""
+# --- brace-expansion exec (cursor High: /usr/{..}/evil) ---
+t helper-brace-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/{../home/runner/work}/evil \"\${GITHUB_WORKSPACE}/x\""
+t helper-brace-scriptdir 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${SCRIPT_DIR}/{..}/evil\""
 
 # --- static eval (Codex P1: eval 'bash ./evil.sh') ---
 t helper-eval-static 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}eval 'bash ./evil.sh'"

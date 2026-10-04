@@ -53,7 +53,8 @@ def _contained_exec_path(path, root_re):
     if not m:
         return False
     if any(ch in path[m.end():]
-           for ch in ("$", "`", "\\", "*", "?", "[", "(")):
+           for ch in ("$", "`", "\\", "*", "?", "[", "(",
+                      "{", "}")):
         return False
     if not path[m.end():]:
         return True
@@ -103,9 +104,11 @@ def _safe_exec_path(path):
             # Glob metacharacters expand to a different path
             # than the approved literal (quoted or not: quoted
             # matches nothing and fails closed harmlessly).
+            # Braces count too: brace expansion runs before
+            # globbing and normpath never collapses {..}.
             return not any(ch in path
                            for ch in ("$", "`", "\\", "*", "?",
-                                      "[", "("))
+                                      "[", "(", "{", "}"))
         return False
     return False
 

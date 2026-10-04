@@ -81,6 +81,25 @@ describe('refined native pages', () => {
     expect(result).toEqual({ products: [], total: 0, nextOffset: null });
     expect(mockRpc).toHaveBeenCalledTimes(1);
   });
+  it('stops pagination at the supported RPC offset ceiling', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ product_id: 'p1', total_count: 3000 }],
+      error: null,
+    });
+    mockRead.mockResolvedValue({
+      data: [{ id: 'p1', price: 100 }],
+      error: null,
+    });
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      20,
+      1980
+    );
+    expect(result.products).toHaveLength(1);
+    expect(result.nextOffset).toBeNull();
+  });
   it('uses the matching option price and keeps ranked ordering and offset', async () => {
     mockRpc.mockResolvedValue({
       data: [

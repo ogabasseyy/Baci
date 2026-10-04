@@ -46,6 +46,18 @@ beforeEach(() => {
   });
 });
 describe('assisted search', () => {
+  it.each([
+    '!!',
+    '---',
+    '…',
+    '💥💥',
+  ])('rejects normalization-empty input %s before tenant/model work', async (query) => {
+    const response = await POST(request({ ...input, query }));
+    expect(response.status).toBe(400);
+    expect(mocks.tenant).not.toHaveBeenCalled();
+    expect(mocks.limit).not.toHaveBeenCalled();
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
   it('streams a bounded proposal without commerce actions', async () => {
     const response = await POST(request(input));
     expect(response.status).toBe(200);

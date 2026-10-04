@@ -1,5 +1,8 @@
 'use client';
-import { buildComparisonRows } from '@baci/shared/lib';
+import {
+  buildComparisonRows,
+  normalizeCanonicalProductCondition,
+} from '@baci/shared/lib';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useV2Comparison } from '@/components/storefront/ogabassey/providers/v2-comparison-context';
@@ -180,8 +183,13 @@ export function SearchComparisonTray({
             const liveMatch = matches.get(String(snapshot.id));
             const matchParams = new URLSearchParams();
             const variantId = snapshot.matchVariantId ?? liveMatch?.variantId;
-            const condition = snapshot.matchCondition ?? liveMatch?.condition;
             const offerId = snapshot.matchOfferId ?? liveMatch?.offerId;
+            // Exact IDs resolve the live option; a saved condition can change
+            // independently and must not invalidate that identity on the PDP.
+            const condition =
+              variantId || offerId
+                ? undefined
+                : normalizeCanonicalProductCondition(product?.condition);
             if (variantId) matchParams.set('variant_id', variantId);
             if (condition) matchParams.set('condition', condition);
             if (offerId) matchParams.set('offer_id', offerId);

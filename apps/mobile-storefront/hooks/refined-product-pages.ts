@@ -1,5 +1,6 @@
 import {
   getRefinedSearchArgs,
+  REFINED_SEARCH_MAX_OFFSET,
   readRefinedSearchRows,
   type SearchRefinements,
 } from '@baci/shared/lib';
@@ -78,7 +79,11 @@ async function fetchSingleRefinedProductsPage(
   return {
     products,
     total,
-    nextOffset: offset + limit < matches[0].total ? offset + limit : null,
+    nextOffset:
+      offset + limit < matches[0].total &&
+      offset + limit <= REFINED_SEARCH_MAX_OFFSET
+        ? offset + limit
+        : null,
   };
 }
 

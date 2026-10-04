@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
+import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
 import { supabase } from '@/lib/supabase';
 import type { Product } from '@/types/product';
 import { resolveProductRow, transformProduct } from './product-utils';
@@ -50,6 +51,9 @@ export function useComparisonProducts(selected: Product[]) {
           // available=0, so raw stock math here would mark purchasable
           // serialized options unavailable on refresh.
           let optionAvailable = false;
+          let liveCondition = normalizeProductConditionFilterValue(
+            option?.condition ?? product.condition
+          );
           if (match && (!(match.variantId || match.offerId) || option)) {
             const { data, error } = await withSupabaseRetry(async () =>
               supabase.rpc('get_storefront_search_price_options', {
@@ -61,14 +65,19 @@ export function useComparisonProducts(selected: Product[]) {
             const options = (data ?? []) as {
               variant_id: string | null;
               offer_id: string | null;
+              condition?: string;
             }[];
-            optionAvailable = match.variantId
-              ? options.some((o) => o.variant_id === match.variantId)
-              : match.offerId
-                ? options.some((o) => o.offer_id === match.offerId)
-                : options.some(
-                    (o) => o.variant_id === null && o.offer_id === null
-                  );
+            const liveOption = options.find((o) =>
+              match.variantId
+                ? o.variant_id === match.variantId
+                : match.offerId
+                  ? o.offer_id === match.offerId
+                  : o.variant_id === null && o.offer_id === null
+            );
+            optionAvailable = Boolean(liveOption);
+            liveCondition =
+              normalizeProductConditionFilterValue(liveOption?.condition) ??
+              liveCondition;
           }
           if (match && !optionAvailable)
             return {
@@ -84,7 +93,9 @@ export function useComparisonProducts(selected: Product[]) {
           return {
             product: {
               ...product,
-              searchMatch: match,
+              searchMatch: match
+                ? { ...match, condition: liveCondition }
+                : undefined,
               price: option?.price ?? product.price,
               // A matched option price must never pair with the parent's
               // strike-through: suppress it exactly as the search card does

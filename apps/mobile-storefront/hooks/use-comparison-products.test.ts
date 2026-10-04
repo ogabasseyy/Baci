@@ -30,6 +30,62 @@ jest.mock('@/lib/api', () => ({
 import { useComparisonProducts } from './use-comparison-products';
 
 it.each([
+  'variant',
+  'offer',
+  'base',
+] as const)('refreshes the condition used by %s detail links', async (kind) => {
+  const match = {
+    price: 100,
+    condition: 'new',
+    ...(kind === 'variant'
+      ? { variantId: 'v1' }
+      : kind === 'offer'
+        ? { offerId: 'o1' }
+        : {}),
+  };
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 200,
+    condition: 'Used',
+    variants: [{ id: 'v1', condition: 'used', price: 200 }],
+    offers: [{ id: 'o1', condition: 'used', price: 200 }],
+  });
+  mockRpc.mockResolvedValue({
+    data: [
+      {
+        variant_id: kind === 'variant' ? 'v1' : null,
+        offer_id: kind === 'offer' ? 'o1' : null,
+        condition: 'used',
+      },
+    ],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const snapshot = {
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    searchMatch: match,
+  } as Product;
+  const { result } = renderHook(() => useComparisonProducts([snapshot]), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children),
+  });
+  await waitFor(() =>
+    expect(result.current.products[0].searchMatch?.condition).toBe('used')
+  );
+  expect(result.current.products[0].searchMatch).toMatchObject({
+    ...match,
+    condition: 'used',
+  });
+  expect(result.current.unavailableIds).toEqual([]);
+  expect(snapshot.searchMatch?.condition).toBe('new');
+});
+
+it.each([
   false,
   true,
 ])('revalidates a matched base row (available=%s)', async (available) => {

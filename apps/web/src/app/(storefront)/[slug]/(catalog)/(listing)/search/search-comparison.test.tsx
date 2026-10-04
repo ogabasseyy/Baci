@@ -216,10 +216,10 @@ it('flags off-page matched snapshots as verify-on-product-page', () => {
   expect(detailLinks[1].getAttribute('href')).toContain(
     'offer_id=offer-open-box'
   );
-  expect(detailLinks[1].getAttribute('href')).toContain('condition=open_box');
+  expect(detailLinks[1].getAttribute('href')).not.toContain('condition=');
 });
 
-it('prefers the snapshot basis over a re-filtered live match', () => {
+it('uses the refreshed base condition instead of stale saved or re-filtered conditions', () => {
   mocks.state.compareItems = [
     { id: '1', name: 'One', slug: 'one' },
     {
@@ -232,13 +232,13 @@ it('prefers the snapshot basis over a re-filtered live match', () => {
   mocks.facts.mockReturnValue({
     products: [
       { id: '1', name: 'One', slug: 'one', price: 200 },
-      { id: '2', name: 'Two', slug: 'two', price: 300 },
+      { id: '2', name: 'Two', slug: 'two', price: 300, condition: 'used' },
     ],
     pending: false,
     error: false,
   });
-  // The current page re-filtered item 2 to a new-condition match, but the
-  // compared option was the open-box one stored at selection time.
+  // Base condition changed after selection; neither saved nor current
+  // search criteria may override the refreshed product facts.
   render(
     <SearchComparisonTray
       products={[
@@ -262,7 +262,7 @@ it('prefers the snapshot basis over a re-filtered live match', () => {
   const detailLinks = screen.getAllByRole('link', {
     name: 'View details and options',
   });
-  expect(detailLinks[1].getAttribute('href')).toContain('condition=open_box');
+  expect(detailLinks[1].getAttribute('href')).toContain('condition=used');
   expect(detailLinks[1].getAttribute('href')).not.toContain('condition=new');
 });
 

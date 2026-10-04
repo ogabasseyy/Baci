@@ -1,17 +1,10 @@
--- Atomically validate the rendered snapshot and mark dispatch start for
--- a manual-order document: a check-then-mark in app code races the
--- marker. Lock order is items/transactions, parents, tax, then the
--- per-order/per-merchant advisory gates — child-first matches the row
--- triggers, tax-after-parent matches the tax-rebuild trigger, and
--- sorted multi-key advisory holders keep every path acyclic. A payment,
--- contact correction, or item edit landing mid-dispatch aborts instead
--- of sending stale; the worker retries and converges. The snapshot
--- covers every rendered order/merchant input (issuer header compares
--- for every kind; payment instructions and tax compare for invoices
--- only; VAT/history/domain compare as count plus canonical rows), and
--- the sent kind lands in metadata so claim previews survive payments.
--- Safe predeploy: only the new worker calls it. DROP before CREATE:
--- the branding params changed the signature, which OR REPLACE cannot do.
+-- Atomically validate the rendered snapshot and mark dispatch start:
+-- app-code check-then-mark races the marker. Lock order (items/txns,
+-- parents, tax, advisory gates) matches the triggers and stays acyclic.
+-- Mid-dispatch edits abort instead of sending stale; the worker
+-- retries and converges. The snapshot covers every rendered input and
+-- the sent kind lands in metadata for claim previews. DROP before
+-- CREATE: past signature changes forbid OR REPLACE.
 DROP FUNCTION IF EXISTS public.mark_manual_document_dispatch_started(uuid, text, uuid, text, text, text, numeric, numeric, numeric, numeric, numeric, numeric, text, text, text, text, text, text, text, text, timestamptz, date, jsonb, uuid, uuid, text, text, integer, jsonb, text, text, text, text, text, text, text, integer, jsonb, integer, jsonb, text, text, text, jsonb, text, text, text, numeric, text, text, text, text, text, timestamptz, text, text, jsonb, date, text, text, text, text);
 CREATE OR REPLACE FUNCTION public.mark_manual_document_dispatch_started(
   p_outbox_id uuid,
@@ -242,8 +235,17 @@ BEGIN
     -- aborts an identical render.
     OR COALESCE(NULLIF(v_merchant_support_phone, ''), NULLIF(v_merchant_phone, ''))
       IS DISTINCT FROM COALESCE(NULLIF(p_merchant_support_phone, ''), NULLIF(p_merchant_phone, ''))
-    -- No custom domain: the claim URL falls back to the slug subdomain.
-    OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
+    -- The slug renders only through the claim-host fallback (no safe
+    -- custom domain) or the From fallback (both names empty): skip the
+    -- raw compare when an identical safe domain pins the host and
+    -- populated names pin From on both sides, or a custom-domain
+    -- rename sends an identical corrective duplicate.
+    OR (v_merchant_slug IS DISTINCT FROM p_merchant_slug
+      AND NOT (
+        v_claim_domain IS NOT DISTINCT FROM p_claim_domain
+        AND private.manual_document_domain_is_safe(v_claim_domain)
+        AND COALESCE(NULLIF(v_merchant_email_sender_name, ''), NULLIF(v_merchant_business_name, '')) IS NOT NULL
+        AND COALESCE(NULLIF(p_merchant_email_sender_name, ''), NULLIF(p_merchant_business_name, '')) IS NOT NULL))
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name
     OR v_merchant_logo_url IS DISTINCT FROM p_merchant_logo_url
     -- Only brand_colors.primary renders; raw JSONB would duplicate sends.

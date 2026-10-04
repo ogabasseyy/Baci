@@ -66,8 +66,10 @@ The current SDK requires an object schema at the root, so response fields retain
 their existing shape for the widget. Optional fields describe branches where
 data is absent; nullable fields describe explicitly unknown catalog facts.
 Human-readable `content` and widget metadata remain available alongside the
-structured result. Protocol-level tool errors (`isError: true`) are exempt from
-output validation in SDK 1.29; ordinary empty/unavailable responses are not.
+structured result. For tool execution errors (`isError: true`), SDK 1.29's server
+skips output validation. Its client permits absent `structuredContent` on an
+error but validates any structured content that is present, including errors.
+Ordinary empty/unavailable responses still require a valid structured result.
 
 References: [MCP tool output schemas](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
 [OpenAI MCP server guidance](https://developers.openai.com/plugins/build/mcp-server).

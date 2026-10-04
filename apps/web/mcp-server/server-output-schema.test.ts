@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { mcpServerTestSupport } from './server-test-support';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
@@ -6,6 +8,26 @@ const { getResultTools, postMcpJsonRpc, startMcpServerWithPostgrest } = mcpServe
 const { getResultRecord } = mcpServerTestSupport;
 
 describe('public MCP output contracts', () => {
+  it('allows a declared-schema delivery tool error without structured content in the real SDK client', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    const client = new Client({ name: 'output-contract-test', version: '1.0.0' });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
+      const { tools } = await client.listTools();
+      expect(tools.find((tool) => tool.name === 'get_delivery_fee_info')?.outputSchema).toBeDefined();
+      const result = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: '  ', city: 'Ikeja' } });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(result.content).toMatchObject([{ type: 'text', text: 'Please provide a valid Nigerian state and, if supplied, a valid city name.' }]);
+    } finally {
+      try {
+        await client.close();
+      } finally {
+        await server.close();
+      }
+    }
+  }, 30_000);
+
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

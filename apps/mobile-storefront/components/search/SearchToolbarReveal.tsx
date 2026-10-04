@@ -31,8 +31,10 @@ export function SearchToolbarReveal({
   return (
     <Animated.View
       testID="search-toolbar-reveal"
-      style={[{ overflow: 'hidden' }, container]}
-      pointerEvents={visible ? 'auto' : 'none'}
+      style={[
+        { overflow: 'hidden', pointerEvents: visible ? 'auto' : 'none' },
+        container,
+      ]}
       accessibilityElementsHidden={!visible}
       importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
     >

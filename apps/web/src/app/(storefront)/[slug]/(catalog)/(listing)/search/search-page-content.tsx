@@ -163,8 +163,8 @@ export async function SearchPageContent({
               </div>
 
               {/* Keyed by route query so client-side navigation remounts the
-          form, resetting the uncontrolled input and any validation
-          error for the new results. */}
+          form and draft session, resetting the controlled input and any
+          validation error for the new results. */}
               <SearchPageForm
                 key={query}
                 action={searchBasePath}

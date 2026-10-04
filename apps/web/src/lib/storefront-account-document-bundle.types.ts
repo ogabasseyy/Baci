@@ -121,6 +121,10 @@ export interface StorefrontAccountDocumentTransactionRow {
   gateway?: string | null;
   status?: string | null;
   transaction_type?: string | null;
+  // Staff-recorded method from get_customer_order_transactions: the RPC
+  // exposes it beside metadata, and the data layer casts its rows into
+  // this shape, so the projection merges it back for the PDF renderer.
+  payment_method?: string | null;
 }
 
 export interface StorefrontAccountDocumentPaymentAccountRow {

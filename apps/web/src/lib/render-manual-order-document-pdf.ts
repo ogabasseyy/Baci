@@ -144,6 +144,23 @@ export async function renderManualOrderDocumentPdf({
     tax_amount: row.tax_amount,
     exemption_reason: row.exemption_reason ?? undefined,
   }));
+  // Direct manual orders persist only the aggregate tax_amount with no
+  // order_tax_subtotals rows: synthesize the S subtotal exactly like the
+  // authenticated download path, or the emailed invoice omits the VAT
+  // Breakdown the download shows. The marker snapshots the raw rows.
+  if (
+    !isPaid &&
+    renderTaxSubtotals.length === 0 &&
+    order.tax_amount > 0 &&
+    merchant.vat_registration_status === 'registered'
+  ) {
+    renderTaxSubtotals.push({
+      vat_category_code: 'S',
+      vat_rate: merchant.vat_rate ?? 7.5,
+      taxable_amount: order.subtotal,
+      tax_amount: order.tax_amount,
+    });
+  }
   const assuranceTotal = sumAssuranceFees(order.order_items);
   if (!isPaid && assuranceTotal > 0) {
     const documentTaxExclusive = Number(

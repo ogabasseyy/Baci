@@ -10,10 +10,11 @@ describe('formatArchiveDate', () => {
     expect(formatArchiveDate('2024-02-05')).toBe('Feb 5, 2024');
   });
 
-  it('formats timestamps with the local date formatter', () => {
-    expect(formatArchiveDate('2024-02-05T10:00:00.000Z')).toMatch(
-      /Feb \d, 2024/
-    );
+  it('formats timestamps in the document timezone like the PDFs', () => {
+    // 23:30 UTC is already the next day in Lagos: the archive card must
+    // agree with the emailed/downloaded PDFs, not the browser timezone.
+    expect(formatArchiveDate('2024-02-04T23:30:00.000Z')).toBe('Feb 5, 2024');
+    expect(formatArchiveDate('2024-02-05T10:00:00.000Z')).toBe('Feb 5, 2024');
   });
 
   it('degrades nullish and invalid values to a dash', () => {

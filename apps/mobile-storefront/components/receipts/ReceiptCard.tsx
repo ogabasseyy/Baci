@@ -87,21 +87,22 @@ export function ReceiptCard({
   // receipt — and an explicit invoice kind never badges paid even under a
   // paid label (invalid manual rows open invoices). Absent kind (legacy
   // rows) falls back to the raw status.
+  // Legacy casings (Paid, PAID): normalize like the list paid-shortcut.
+  const paidLabel = item.payment_status.trim().toLowerCase() === 'paid';
   let displayStatus = item.payment_status;
   if (effectiveKind === 'receipt') {
     displayStatus = 'paid';
-  } else if (effectiveKind === 'invoice' && item.payment_status === 'paid') {
+  } else if (effectiveKind === 'invoice' && paidLabel) {
     displayStatus = 'unpaid';
   }
   // Money follows the ledger, not the badge: an invalid manual row can
   // carry a paid label while opening an invoice — badge/action say
   // Invoice, but the money still reads Paid, never Total.
-  const moneyPaid = displayStatus === 'paid' || item.payment_status === 'paid';
+  const moneyPaid = displayStatus === 'paid' || paidLabel;
   // Invalid manual rows (cancelled, underfunded) badge Invoice under a
   // paid ledger label: the money line must explain that no receipt
   // exists, or the Paid-plus-Invoice mix reads as a missing receipt.
-  const invalidPaidInvoice =
-    effectiveKind === 'invoice' && item.payment_status === 'paid';
+  const invalidPaidInvoice = effectiveKind === 'invoice' && paidLabel;
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem
@@ -111,12 +112,14 @@ export function ReceiptCard({
     : `Order #${item.order_number}`;
   // VoiceOver must hear what sighted users see: the badge kind plus the
   // money state and any explainer/balance, not the kind alone.
+  const balance = item.total - item.amount_paid;
+  // Hide corrupt balances: formatPrice degrades non-finite input to NGN 0.
+  const showBalance =
+    displayStatus === 'partially_paid' && Number.isFinite(balance);
   const accessibilityMoney = `${moneyPaid ? 'Paid' : 'Total'} ${formatPrice(item.total, item.currency)}`;
   const accessibilityLabel =
     `${config.label} for ${productTitle}, order ${item.order_number}, ${accessibilityMoney}` +
-    (displayStatus === 'partially_paid'
-      ? `, balance ${formatPrice(item.total - item.amount_paid, item.currency)}`
-      : '') +
+    (showBalance ? `, balance ${formatPrice(balance, item.currency)}` : '') +
     (invalidPaidInvoice ? ', payment recorded, invoice only, no receipt' : '');
 
   return (
@@ -192,10 +195,9 @@ export function ReceiptCard({
           <Text style={[styles.totalAmount, { color: colors.text }]}>
             {formatPrice(item.total, item.currency)}
           </Text>
-          {displayStatus === 'partially_paid' && (
+          {showBalance && (
             <Text style={[styles.balanceLabel, { color: '#D97706' }]}>
-              Balance:{' '}
-              {formatPrice(item.total - item.amount_paid, item.currency)}
+              Balance: {formatPrice(balance, item.currency)}
             </Text>
           )}
           {invalidPaidInvoice && (

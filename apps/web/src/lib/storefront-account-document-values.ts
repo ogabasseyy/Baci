@@ -254,3 +254,21 @@ export function resolveMoneyValue(
 export function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
+
+// The transaction RPC surfaces staff-recorded methods beside metadata
+// while the mapper keeps only the DVA entry there: merge the method
+// back so downloads print it like the emailed PDF instead of falling
+// back to the description. Shared by the order projection and the
+// receipt builder so both payloads carry the same method.
+export function mergeTransactionPaymentMethod(transaction: {
+  metadata: Record<string, unknown> | null;
+  payment_method?: string | null;
+}): Record<string, unknown> | null {
+  if (transaction.payment_method == null) {
+    return transaction.metadata;
+  }
+  return {
+    ...(transaction.metadata ?? {}),
+    payment_method: transaction.payment_method,
+  };
+}

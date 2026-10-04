@@ -121,6 +121,49 @@ describe('ReceiptCard', () => {
     ).toBeTruthy();
   });
 
+  it('honors an explicit invoice kind under a legacy-cased paid label', () => {
+    // Legacy Paid/PAID labels normalize like the list paid-shortcut: the
+    // badge still says Invoice, but the money line reads Paid with the
+    // invoice-only explainer instead of an unpaid Total.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'PAID',
+          document_kind: 'invoice',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+    expect(screen.getByText('Paid')).toBeTruthy();
+    expect(screen.queryByText('Total')).toBeNull();
+    expect(
+      screen.getByText('Payment recorded \u2014 invoice only, no receipt')
+    ).toBeTruthy();
+  });
+
+  it('hides the balance on corrupt totals instead of printing NGN 0', () => {
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          payment_status: 'partially_paid',
+          document_kind: 'invoice',
+          total: Number.NaN,
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/Balance:/)).toBeNull();
+    expect(screen.getByLabelText(/ for Test Phone, /)).toBeTruthy();
+    expect(screen.queryByLabelText(/balance/)).toBeNull();
+  });
+
   it('fails a stale manual receipt kind closed to invoice on terminal shipping', () => {
     // A cached entry can outlive a cancellation: the list-time kind says
     // receipt, but the card re-verifies through the promotion gate and

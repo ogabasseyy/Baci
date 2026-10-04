@@ -6,6 +6,7 @@ import type {
 } from '@/lib/storefront-account-document-bundle.types';
 import {
   asNumber,
+  mergeTransactionPaymentMethod,
   type normalizeShippingAddress,
 } from '@/lib/storefront-account-document-values';
 import type {
@@ -145,7 +146,7 @@ export function buildOrderProjection({
       amount: asNumber(transaction.amount),
       created_at: transaction.created_at,
       description: transaction.description,
-      metadata: transaction.metadata,
+      metadata: mergeTransactionPaymentMethod(transaction),
     })),
     virtual_account: virtualAccount || null,
   };

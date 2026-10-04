@@ -232,8 +232,11 @@ BEGIN
     -- cac/vat fields print nowhere; the trigger and this check skip them.
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
-    OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone
-    OR v_merchant_phone IS DISTINCT FROM p_merchant_phone
+    -- The contact phone renders resolved (support_phone, else phone):
+    -- compare resolved-to-resolved so a shadowed-column edit never
+    -- aborts an identical render.
+    OR COALESCE(NULLIF(v_merchant_support_phone, ''), NULLIF(v_merchant_phone, ''))
+      IS DISTINCT FROM COALESCE(NULLIF(p_merchant_support_phone, ''), NULLIF(p_merchant_phone, ''))
     -- No custom domain: the claim URL falls back to the slug subdomain.
     OR v_merchant_slug IS DISTINCT FROM p_merchant_slug
     OR v_merchant_email_sender_name IS DISTINCT FROM p_merchant_email_sender_name

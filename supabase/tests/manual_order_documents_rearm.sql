@@ -226,3 +226,15 @@ UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE or
 UPDATE public.merchants SET bank_code = '058' WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'code-only edit under a valid name keeps the invoice marker');
 UPDATE public.merchants SET bank_account_number = NULL, bank_name = NULL, bank_code = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
+-- The contact phone resolves (support_phone, else phone): editing the
+-- shadowed column changes no pixel and keeps the marker, while an
+-- effective change resets it.
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET support_phone = '+2348000000001' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'effective contact-phone change resets the invoice marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET phone = '+2348000000002' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'shadowed phone edit keeps the invoice marker');
+UPDATE public.merchants SET support_phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'support-phone removal resets the invoice marker');
+UPDATE public.merchants SET phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';

@@ -189,4 +189,9 @@ describe('connector connection helpers', () => {
     expect(unknown.status).toBe(500);
     expect(unknown.body.error).not.toContain('some_pg_internal');
   });
+  it('reports the connection cap without disclosing a database error', () => {
+    expect(
+      connectorManagementErrorToHttp('connector_connection_limit')
+    ).toMatchObject({ status: 409, body: { code: 'VERSION_CONFLICT' } });
+  });
 });

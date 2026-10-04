@@ -207,7 +207,7 @@ describe('dashboard Muse integration page', () => {
       merchantId: MERCHANT_ID,
       merchantWide: true,
     });
-    expect(JSON.parse(init.body)).not.toHaveProperty('connectionId');
+    expect(JSON.parse(init.body).connectionId).toEqual(expect.any(String));
     await waitFor(() => expect(connectButton).toBeEnabled());
     mockFetchWithCsrf.mockResolvedValueOnce(
       new Response('{}', { status: 500 })
@@ -384,5 +384,96 @@ describe('dashboard Muse integration page', () => {
     fireEvent.click(confirm);
 
     expect(await screen.findByText('Not connected')).toBeInTheDocument();
+  });
+  it('reuses the request ID after an indeterminate failure and replaces it after success', async () => {
+    render(<MuseIntegrationPage />);
+    const button = await screen.findByRole('button', { name: /connect muse/i });
+    mockFetchWithCsrf.mockRejectedValueOnce(new Error('response lost'));
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toBeEnabled());
+    mockFetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          token: 'mcn_retry',
+          refreshToken: 'refresh_retry',
+          grant,
+        }),
+        { status: 201 }
+      )
+    );
+    fireEvent.click(button);
+    await screen.findByText('mcn_retry');
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalledTimes(3));
+    const ids = mockFetchWithCsrf.mock.calls.map(
+      ([, init]) => JSON.parse(init.body).connectionId
+    );
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it('clears credentials and connection state when the merchant changes', async () => {
+    mockGetResponses({ connections: [grant] });
+    const view = render(<MuseIntegrationPage />);
+    const button = await screen.findByRole('button', { name: /connect muse/i });
+    mockFetchWithCsrf.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          token: 'mcn_old_store',
+          refreshToken: 'refresh_old',
+          grant,
+        }),
+        { status: 201 }
+      )
+    );
+    fireEvent.click(button);
+    await screen.findByText('mcn_old_store');
+    mockUseMerchant.mockReturnValue({
+      merchant: { id: 'another-merchant' },
+      staffAccess: OWNER_ACCESS,
+      loading: false,
+    });
+    global.fetch = vi.fn().mockRejectedValue(new Error('new merchant offline'));
+    view.rerender(<MuseIntegrationPage />);
+    expect(screen.queryByText('mcn_old_store')).not.toBeInTheDocument();
+    expect(screen.queryByText('Connected (1)')).not.toBeInTheDocument();
+    await screen.findByText('Status unavailable');
+  });
+
+  it('ignores a connect response arriving after a merchant switch', async () => {
+    let complete: (response: Response) => void = () => {};
+    mockFetchWithCsrf.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          complete = resolve;
+        })
+    );
+    const view = render(<MuseIntegrationPage />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: /connect muse/i })
+    );
+    mockUseMerchant.mockReturnValue({
+      merchant: { id: 'another-merchant' },
+      staffAccess: OWNER_ACCESS,
+      loading: false,
+    });
+    view.rerender(<MuseIntegrationPage />);
+    complete(
+      new Response(
+        JSON.stringify({
+          token: 'mcn_late_old_store',
+          refreshToken: 'refresh_old',
+          grant,
+        }),
+        { status: 201 }
+      )
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /connect muse/i })
+      ).toBeEnabled()
+    );
+    expect(screen.queryByText('mcn_late_old_store')).not.toBeInTheDocument();
   });
 });

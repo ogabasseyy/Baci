@@ -12,7 +12,7 @@
 
 import type { ConnectorScope } from '@/lib/connector/grant';
 
-export const CONNECTOR_MANIFEST_VERSION = 'r0.3';
+export const CONNECTOR_MANIFEST_VERSION = 'r0.4';
 
 export const CONNECTOR_INPUT_SCHEMA_DIALECT =
   'https://json-schema.org/draft/2020-12/schema';
@@ -34,6 +34,8 @@ export interface ConnectorStringProperty {
 
 export interface ConnectorStringArrayProperty {
   type: 'array';
+  maxItems: number;
+  uniqueItems: true;
   items: {
     type: 'string';
     format: 'uuid';
@@ -76,6 +78,8 @@ const MERCHANT_SELECTOR = uuidSelector(
 );
 const BRANCH_SELECTOR: ConnectorStringArrayProperty = {
   type: 'array',
+  maxItems: 200,
+  uniqueItems: true,
   items: { type: 'string', format: 'uuid' },
   description:
     'Resource selectors only. Every id must sit inside the grant branch allowlist.',

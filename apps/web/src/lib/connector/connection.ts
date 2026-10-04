@@ -170,6 +170,14 @@ export interface ConnectorManagementHttpError {
 export function connectorManagementErrorToHttp(
   message: string
 ): ConnectorManagementHttpError {
+  if (message.includes('connector_connection_limit'))
+    return {
+      status: 409,
+      body: connectorError(
+        'VERSION_CONFLICT',
+        'Disconnect an existing connection before creating another (limit 50).'
+      ),
+    };
   if (
     message.includes('connector_grant_forbidden') ||
     message.includes('connector_grant_merchant_wide_requires_owner') ||

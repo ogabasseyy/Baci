@@ -107,4 +107,21 @@ describe('connector manifest JSON Schema conformance (draft 2020-12)', () => {
     expect(ajvFor(levelsTool)({ limit: 0 })).toBe(false);
     expect(ajvFor(levelsTool)({ limit: 51 })).toBe(false);
   });
+  it('bounds and deduplicates branch selectors for every scoped read', () => {
+    for (const tool of CONNECTOR_MANIFEST.filter(
+      (entry) => entry.inputSchema.properties.branch_ids
+    )) {
+      const validate = ajvFor(tool);
+      expect(
+        validate({
+          branch_ids: Array.from(
+            { length: 201 },
+            (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`
+          ),
+        })
+      ).toBe(false);
+      expect(validate({ branch_ids: [BRANCH_ID, BRANCH_ID] })).toBe(false);
+      expect(validate({ branch_ids: [BRANCH_ID] })).toBe(true);
+    }
+  });
 });

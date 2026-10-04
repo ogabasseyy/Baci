@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useMerchant } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { ConnectForm } from './connect-form';
 import { ConnectionList } from './connection-list';
@@ -18,6 +19,15 @@ import { CredentialsCard } from './credentials-card';
 import { useMuseConnections } from './use-muse-connections';
 
 export default function MuseIntegrationPage() {
+  const { merchant, staffAccess } = useMerchant();
+  return (
+    <MerchantMusePage
+      key={`${merchant?.id ?? 'none'}:${staffAccess.isOwner}`}
+    />
+  );
+}
+
+function MerchantMusePage() {
   const model = useMuseConnections();
   const { merchant, loading, isOwner, statusError } = model;
   if (loading || !merchant) {

@@ -803,4 +803,23 @@ describe('/api/integrations/muse', () => {
     );
     expect(unknown.status).toBe(404);
   });
+  it.each([
+    POST,
+    DELETE,
+  ])('authenticates mutations before CSRF or malformed-body parsing', async (handler) => {
+    mockAuthenticateApiRequest.mockResolvedValueOnce({
+      error: 'missing',
+      user: null,
+      supabase: null,
+    });
+    const request = new NextRequest(
+      'https://usebaci.com/api/integrations/muse',
+      { method: 'POST', body: '{' }
+    );
+    const parse = vi.spyOn(request, 'json');
+    expect((await handler(request)).status).toBe(401);
+    expect(mockCheckCsrfProtection).not.toHaveBeenCalled();
+    expect(parse).not.toHaveBeenCalled();
+    expect(mockGetMerchantForApiRequest).not.toHaveBeenCalled();
+  });
 });

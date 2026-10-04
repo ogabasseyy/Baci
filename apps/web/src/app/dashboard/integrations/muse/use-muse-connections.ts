@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
@@ -42,6 +42,16 @@ async function fetchBranches(merchantId: string): Promise<BranchOption[]> {
 export function useMuseConnections() {
   const { merchant, staffAccess, loading } = useMerchant();
   const { toast } = useToast();
+  const active = useRef(true);
+  const pendingConnect = useRef<{ shape: string; connectionId: string } | null>(
+    null
+  );
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [branches, setBranches] = useState<BranchOption[]>([]);
@@ -65,8 +75,10 @@ export function useMuseConnections() {
     if (!merchantId) return;
     setStatusError(null);
     try {
-      setStatus(await fetchStatus(merchantId));
+      const next = await fetchStatus(merchantId);
+      if (active.current) setStatus(next);
     } catch {
+      if (!active.current) return;
       setStatus(null);
       setStatusError('Could not load the connector status.');
     }
@@ -114,16 +126,23 @@ export function useMuseConnections() {
   async function handleConnect() {
     if (!merchantId || connecting) return;
     setConnecting(true);
+    const requestBody = {
+      merchantId,
+      branchIds: merchantWide ? [] : branchIds,
+      expiresInSeconds: expiry === 'never' ? null : Number(expiry),
+      merchantWide,
+      scopes,
+    };
+    const shape = JSON.stringify(requestBody);
+    if (pendingConnect.current?.shape !== shape)
+      pendingConnect.current = { shape, connectionId: crypto.randomUUID() };
     try {
       const response = await fetchWithCsrf('/api/integrations/muse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          merchantId,
-          branchIds: merchantWide ? [] : branchIds,
-          expiresInSeconds: expiry === 'never' ? null : Number(expiry),
-          merchantWide,
-          scopes,
+          ...requestBody,
+          connectionId: pendingConnect.current.connectionId,
         }),
       });
       const data = (await response.json()) as Partial<OneTimeCredentials> & {
@@ -131,6 +150,7 @@ export function useMuseConnections() {
         error?: string;
         grant?: { grantId?: string };
       };
+      if (!active.current) return;
       if (!response.ok) {
         toast({
           title: 'Connection failed',
@@ -139,6 +159,7 @@ export function useMuseConnections() {
         });
         return;
       }
+      pendingConnect.current = null;
       // Credentials first: a status-refresh failure must never discard
       // the one-time pair or misreport this success as a failure.
       if (data.token && data.refreshToken) {
@@ -149,6 +170,7 @@ export function useMuseConnections() {
         });
       }
       await loadStatus();
+      if (!active.current) return;
       toast({
         title: 'Muse connected',
         description: data.alreadyConnected
@@ -156,6 +178,7 @@ export function useMuseConnections() {
           : 'Grant created for this merchant.',
       });
     } catch {
+      if (!active.current) return;
       toast({
         title: 'Connection failed',
         description: 'Could not connect Muse.',
@@ -182,6 +205,7 @@ export function useMuseConnections() {
         revoked?: boolean;
         error?: string;
       };
+      if (!active.current) return;
       if (!response.ok) {
         toast({
           title: 'Disconnect failed',
@@ -191,6 +215,7 @@ export function useMuseConnections() {
         return;
       }
       await loadStatus();
+      if (!active.current) return;
       // Only the revoked grant's own pair dies on screen: other
       // connections' credentials stay visible.
       if (credentials?.grantId === grantId) {
@@ -206,6 +231,7 @@ export function useMuseConnections() {
             : 'Connector access was revoked immediately.',
       });
     } catch {
+      if (!active.current) return;
       toast({
         title: 'Disconnect failed',
         description: 'Could not disconnect Muse.',

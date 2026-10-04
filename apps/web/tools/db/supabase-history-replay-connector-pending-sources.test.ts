@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 
-it('binds all six production connector migrations to their recorded bytes', () => {
+it('binds connector migrations to their recorded bytes', () => {
   const rows = CONNECTOR_PENDING_REPLAY_SOURCE_ROWS.split('\n');
-  expect(rows).toHaveLength(6);
+  expect(rows).toHaveLength(7);
   for (const row of rows) {
     const [hash, name] = row.split(' ');
     const bytes = readFileSync(

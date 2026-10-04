@@ -26,22 +26,35 @@ interface OwnerContext {
   merchantId: string;
 }
 
-export async function resolveOwnerContext(
-  request: NextRequest,
-  requestedMerchantId?: string | null
-): Promise<
-  { ok: true; context: OwnerContext } | { ok: false; response: NextResponse }
-> {
+export async function authenticateConnectorRequest(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase) {
     return {
-      ok: false,
+      ok: false as const,
       response: NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401, headers: PRIVATE_NO_STORE }
       ),
     };
   }
+
+  return {
+    ok: true as const,
+    auth: { ...auth, user: auth.user, supabase: auth.supabase },
+  };
+}
+
+export async function resolveOwnerContext(
+  request: NextRequest,
+  requestedMerchantId?: string | null,
+  authentication?: Awaited<ReturnType<typeof authenticateConnectorRequest>>
+): Promise<
+  { ok: true; context: OwnerContext } | { ok: false; response: NextResponse }
+> {
+  const authenticated =
+    authentication ?? (await authenticateConnectorRequest(request));
+  if (!authenticated.ok) return authenticated;
+  const { auth } = authenticated;
 
   const merchantContext = await getMerchantForApiRequest(
     auth.supabase,

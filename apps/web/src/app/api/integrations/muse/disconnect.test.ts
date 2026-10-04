@@ -6,6 +6,9 @@ vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: csrf }));
 vi.mock('./connection-helpers', async (original) => ({
   ...(await original<typeof import('./connection-helpers')>()),
   resolveOwnerContext: owner,
+  authenticateConnectorRequest: vi
+    .fn()
+    .mockResolvedValue({ ok: true, auth: {} }),
 }));
 
 import { disconnectConnector } from './disconnect';

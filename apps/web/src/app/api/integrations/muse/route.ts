@@ -16,6 +16,7 @@ import {
   connectorGrantRecordSchema,
 } from '@/schemas/connector';
 import {
+  authenticateConnectorRequest,
   PRIVATE_NO_STORE,
   readActiveConnections,
   readConnectionById,
@@ -24,26 +25,8 @@ import {
   resolveOwnerContext,
 } from './connection-helpers';
 
-/**
- * Owners-only Muse connector management (R1).
- *
- * - GET: every active connection for the owning merchant (scopes,
- *   branches, expiry). Never token hashes: the SELECT list is explicit and
- *   the column grant excludes credential columns.
- * - POST: connect — create one scoped grant per call, so a merchant can
- *   connect several agents independently. The opaque token pair is
- *   returned once; only hashes reach the database. An optional stable
- *   connectionId makes retries idempotent: a retry reissues fresh
- *   credentials for the matching grant (the old pair dies), so a lost
- *   first response never strands the connection.
- * - DELETE: disconnect one connection by grant id; its next connector
- *   call is denied. Other connections are unaffected.
- *
- * Server-side owner enforcement on every method: merchant-wide grants
- * require owner authority, and this interface is owners-only throughout.
- * Writes go through the grant RPCs (live membership re-checked inside);
- * reads run as the owner's session through RLS. No business tables are
- * touched here — grant rows only.
+/** Owner-authenticated, RLS-scoped grant management. Stable request IDs reissue
+ * matching credentials without extending expiry. Business data is never modified.
  */
 
 const merchantIdQuerySchema = z.strictObject({
@@ -51,6 +34,8 @@ const merchantIdQuerySchema = z.strictObject({
 });
 
 export async function GET(request: NextRequest) {
+  const authentication = await authenticateConnectorRequest(request);
+  if (!authentication.ok) return authentication.response;
   const query = merchantIdQuerySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams.entries())
   );
@@ -61,7 +46,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const resolved = await resolveOwnerContext(request, query.data.merchantId);
+  const resolved = await resolveOwnerContext(
+    request,
+    query.data.merchantId,
+    authentication
+  );
   if (!resolved.ok) {
     return resolved.response;
   }
@@ -80,6 +69,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authentication = await authenticateConnectorRequest(request);
+  if (!authentication.ok) return authentication.response;
   const { valid, response } = await checkCsrfProtection(request);
   if (!valid) {
     return (
@@ -106,7 +97,11 @@ export async function POST(request: NextRequest) {
   }
   const body = parsed.data;
 
-  const resolved = await resolveOwnerContext(request, body.merchantId);
+  const resolved = await resolveOwnerContext(
+    request,
+    body.merchantId,
+    authentication
+  );
   if (!resolved.ok) {
     return resolved.response;
   }

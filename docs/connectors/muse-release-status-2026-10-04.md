@@ -118,3 +118,25 @@ The owner explicitly approved the existing GitHub-hosted prebuilt dashboard/priv
 release workflow on 2026-10-04. This authorizes that deployment fallback; Muse
 submission and Terms acceptance remain separately recorded actions. CodeRabbit
 is skipped when unavailable under the owner's explicit instruction.
+
+## PR review follow-up
+
+PR #3629 found missing pg_cron provisioning in the isolated replay, now handled
+by a loopback-only runner prerequisite with cron execution disabled and source
+hash verification. The original six applied migration files remain unchanged.
+
+Current fixes enforce owner-only grant creation and tool-time authority in a
+new append-only migration; cap active grants at the 50 connections exposed by
+the management list under a merchant advisory lock; authenticate management
+requests before CSRF/body parsing; retain a stable browser connection ID across
+indeterminate retries; remount all merchant state on merchant/owner changes and
+ignore unmounted async completions; and reject duplicate or over-200 branch
+selectors before database access. The new SQL regression is in the CI replay.
+
+The suggestion to expose production-local refresh is declined: the current
+production contract deliberately disables all staging credential endpoints,
+including refresh, at both application and public proxy boundaries. Owners
+reissue through the authenticated, request-bound management API. Automatic Muse
+refresh is not claimed; an expired connection requires a new owner-authorized
+connection. The staging refresh proof does not establish a production refresh
+endpoint. No public access boundary was expanded as part of review fixes.

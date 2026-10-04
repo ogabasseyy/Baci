@@ -11,12 +11,15 @@ import {
   connectorGrantRecordSchema,
 } from '@/schemas/connector';
 import {
+  authenticateConnectorRequest,
   PRIVATE_NO_STORE,
   readFailureResponse,
   resolveOwnerContext,
 } from './connection-helpers';
 
 export async function disconnectConnector(request: NextRequest) {
+  const authentication = await authenticateConnectorRequest(request);
+  if (!authentication.ok) return authentication.response;
   const { valid, response } = await checkCsrfProtection(request);
   if (!valid) {
     return (
@@ -43,7 +46,11 @@ export async function disconnectConnector(request: NextRequest) {
   }
   const body = parsed.data;
 
-  const resolved = await resolveOwnerContext(request, body.merchantId);
+  const resolved = await resolveOwnerContext(
+    request,
+    body.merchantId,
+    authentication
+  );
   if (!resolved.ok) {
     return resolved.response;
   }

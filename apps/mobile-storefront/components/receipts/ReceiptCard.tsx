@@ -58,6 +58,10 @@ export function formatPrice(
   price: number,
   currency: string | null | undefined = 'NGN'
 ) {
+  // Same degrade-to-zero policy as the list's toDisplayMoney: every live
+  // caller normalizes first, but a non-finite value reaching this choke
+  // point must never render as NaN/Infinity currency.
+  if (!Number.isFinite(price)) return getPriceFormatter('NGN').format(0);
   return getPriceFormatter(currency ?? 'NGN').format(price);
 }
 

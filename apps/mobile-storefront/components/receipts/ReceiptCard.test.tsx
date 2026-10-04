@@ -165,6 +165,13 @@ describe('ReceiptCard', () => {
     expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
   });
 
+  it('degrades non-finite prices to zero instead of NaN currency', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(formatPrice(bad, 'USD')).toBe(formatPrice(0, 'NGN'));
+      expect(formatPrice(bad, 'USD')).not.toMatch(/NaN|Infinity/);
+    }
+  });
+
   describe('bugfix: animated order product images on receipts', () => {
     it('falls back to NGN pricing on null currency', () => {
       render(

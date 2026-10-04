@@ -229,10 +229,6 @@ const PENDING_SOURCES = [
   '66b2a6118c0e38b9570da65cff2e542b1a0ebb1b610a60bd0f65fe11d9d74fa3 20260930160070_manual_order_document_item_triggers.sql',
   '9b80b16e3c29f67432ba3798c25cfc3b750d6f9f750f388e582b5906e344fa1c 20260930160075_manual_order_document_domain_invalidation.sql',
   '1c35f5fbeec2011afab31211baac6abe25a2a21f6a865fcb1c34e6813a9bcf12 20260930160080_customer_payment_accounts_row_id.sql',
-<<<<<<< HEAD
-  'be6c9f8a3a2d1c6ff41c97c6eec23e953dee98fae830e36ff8edc15c9de28137 20260930160085_customer_order_tax_subtotals_rpc.sql',
-  '3a09d80a574be3043f1d2093abf170eb81b900ce3413ba5e8c7cdffe9dcb4d86 20260930160086_manual_order_document_snapshot_rpc.sql',
-  'b11ff4188ea0e61247b5684621f94bc283b856de54dbb1429e4f91f552568a40 20260930160100_verified_receipt_claim_redemption.sql',
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   'ef7469eab56a7b2273023e2b924308e816222a1cce18af2a9b7d0e8ecd470b18 20261008230000_mcp_guest_carts.sql',
   'c26c071f926457cfc07a951f9c5860e5d3b16136162fd70b5b6d85165c27a4c8 20261008230100_mcp_guest_cart_write_rpcs.sql',
@@ -243,15 +239,11 @@ const PENDING_SOURCES = [
   '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad 20261013194440_fix_shipping_quote_proof_canonicalization.sql',
   VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS,
   CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
-  '92ebac23dd4733c22156cd8db238979a4cf73df757a07d408ce6e5ca48c2fc60 20260930160200_preview_receipt_claim_document_kind.sql',
-  '35363f5fb224dc68406d51bc45e3e13881563ddf4532900f7b7fec63359c2701 20260930160300_enable_manual_order_document_triggers.sql',
-=======
   '232ea5ca4a164a1d276d058289650e5e7558cf6ba4d9ba7bce3e4bcc4dda16d6 20260930160085_customer_order_tax_subtotals_rpc.sql',
   '91c355da5b73bfe3105be6b62d15d97ae69514677be3338fa99c87c6b3dec016 20260930160086_manual_order_document_snapshot_rpc.sql',
   'f2b4f437001f70bed5796e59409ec89bf118cf962a4c841959e8e02dc565e533 20260930160100_verified_receipt_claim_redemption.sql',
   '8c390793c80ae754cae6c52ea0acbc9ee1897676603f702088c5fee5213d8363 20260930160200_preview_receipt_claim_document_kind.sql',
-  '65bcc2b2191c313bf9a3a4555a1dac5797a4ac8556b7d863d134d5a4a84370cd 20260930160300_enable_manual_order_document_triggers.sql',
->>>>>>> 14ee172df9 (fix(pr-3580): lint clean on touched files, re-pin replay sources)
+  '398d063e75a01037938fb9ac0a7404703d2d5b39120818fe5f4ece6ff961fbd7 20260930160300_enable_manual_order_document_triggers.sql',
   '9de04d37b8d31596a003470101ebc4a561f0084966c08c6c943490c629c2061d 20260930160350_manual_document_snapshot_builders.sql',
   'caa770460a06cc314e1a39512d12368b78f0b3e7b6e04ab4c26656d002966380 20260930160400_atomic_manual_document_dispatch.sql',
   PENDING_SOURCES_HEAD,

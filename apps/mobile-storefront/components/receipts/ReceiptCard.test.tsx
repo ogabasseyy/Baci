@@ -56,8 +56,7 @@ const receiptItem: ReceiptListItem = {
 
 describe('ReceiptCard', () => {
   it('badges a covered manual balance as a receipt under a non-paid label', () => {
-    // The preview promotes covered manual balances to receipts, so the
-    // card must agree — never "View Invoice" into a receipt artifact.
+    // Preview promotes covered balances: card agrees, never "View Invoice".
     render(
       <ReceiptCard
         item={{
@@ -88,9 +87,7 @@ describe('ReceiptCard', () => {
   });
 
   it('honors an explicit invoice kind under a paid label', () => {
-    // An invalid manual row (cancelled, underfunded) keeps the paid label
-    // but opens an invoice in the preview, so the card must badge invoice
-    // instead of "View Receipt" into an invoice.
+    // Invalid rows keep paid label but open invoice: badge invoice.
     render(
       <ReceiptCard
         item={{
@@ -106,25 +103,20 @@ describe('ReceiptCard', () => {
     expect(screen.getByText('Invoice')).toBeTruthy();
     expect(screen.getByText('View Invoice')).toBeTruthy();
     expect(screen.queryByText('View Receipt')).toBeNull();
-    // Badge says invoice, but the ledger says paid — the money label
-    // must not misstate payment state as an unpaid Total.
+    // Badge invoice + ledger paid: money reads Paid, never unpaid Total.
     expect(screen.getByText('Paid')).toBeTruthy();
     expect(screen.queryByText('Total')).toBeNull();
-    // The mixed signal gets an explanatory subtitle: no receipt exists.
     expect(
       screen.getByText('Payment recorded \u2014 invoice only, no receipt')
     ).toBeTruthy();
-    // VoiceOver hears the badge kind with the money state sighted users
-    // see, including the invoice-only explainer.
+    // VoiceOver hears badge + money + explainer like sighted users.
     expect(
       screen.getByLabelText(/Invoice for .* Paid .* invoice only, no receipt/)
     ).toBeTruthy();
   });
 
   it('honors an explicit invoice kind under a legacy-cased paid label', () => {
-    // Legacy Paid/PAID labels normalize like the list paid-shortcut: the
-    // badge still says Invoice, but the money line reads Paid with the
-    // invoice-only explainer instead of an unpaid Total.
+    // Legacy Paid/PAID normalize: badge Invoice, money Paid + explainer.
     render(
       <ReceiptCard
         item={{
@@ -146,8 +138,7 @@ describe('ReceiptCard', () => {
   });
 
   it('renders a non-string status as unpaid instead of crashing', () => {
-    // The list warns yet still returns schema-invalid rows: an unguarded
-    // trim would throw during render and blank the whole archive.
+    // List returns schema-invalid rows: unguarded trim blanks the archive.
     render(
       <ReceiptCard
         item={{
@@ -185,9 +176,7 @@ describe('ReceiptCard', () => {
   });
 
   it('fails a stale manual receipt kind closed to invoice on terminal shipping', () => {
-    // A cached entry can outlive a cancellation: the list-time kind says
-    // receipt, but the card re-verifies through the promotion gate and
-    // badges invoice like the preview opens.
+    // Cached kind can outlive cancellation: card re-verifies, badges invoice.
     render(
       <ReceiptCard
         item={{
@@ -238,8 +227,7 @@ describe('ReceiptCard', () => {
   });
 
   it('degrades malformed currencies to NGN instead of crashing', () => {
-    // Legacy rows can carry codes the sender would skip; Intl throws
-    // RangeError for them, which must not crash the list render.
+    // Legacy codes the sender skips throw RangeError; must not crash render.
     for (const currency of ['NAIRA', '', 'ZZZ']) {
       const { unmount } = render(
         <ReceiptCard
@@ -255,6 +243,24 @@ describe('ReceiptCard', () => {
     expect(formatPrice(150000, '')).toBe(formatPrice(150000, 'NGN'));
     // The fallback caches under the bad key: repeat renders rethrow nothing.
     expect(formatPrice(150000, 'NAIRA')).toBe(formatPrice(150000, 'NGN'));
+  });
+
+  it('prefixes unassigned currencies with the code instead of NGN', () => {
+    // Hermes throws for codes Node accepts: render the code like the PDF.
+    const RealFormat = Intl.NumberFormat;
+    const spy = jest.spyOn(Intl, 'NumberFormat').mockImplementation(((
+      ...a: [string, Intl.NumberFormatOptions]
+    ) => {
+      if (a[1]?.currency === 'ZZY') throw new RangeError('unassigned');
+      return new RealFormat(...a);
+    }) as unknown as typeof Intl.NumberFormat);
+    try {
+      expect(formatPrice(150000, 'ZZY')).toBe(
+        `ZZY ${(150000).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('degrades non-finite prices to zero instead of NaN currency', () => {

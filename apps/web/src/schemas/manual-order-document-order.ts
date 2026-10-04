@@ -1,20 +1,23 @@
 import {
+  isDecimalMoney,
   MANUAL_ORDER_CURRENCY_CODE_PATTERN,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
 import { z } from 'zod';
 
-// Database NULLs must fail closed, never coerce to zero: z.coerce.number()
-// turns null into 0, which would advertise money the claim RPC rejects and
-// loop the dispatch marker stale (SQL null is distinct from coerced zero).
-// Staff set the value and the order triggers re-arm the document.
+// Money must match the strict gates exactly: z.coerce.number() alone
+// accepts '', true, hex, and padded strings the mobile promotion gate
+// demotes, so the sender would email a receipt the app badges invoice.
+// Only strict decimals pass (nulls fail closed, never coerce to zero —
+// SQL null is distinct from coerced zero and would loop the marker
+// stale). Staff set the value and the order triggers re-arm the document.
 const number = z.preprocess(
-  (value) => (value === null ? Number.NaN : value),
+  (value) => (isDecimalMoney(value) ? value : Number.NaN),
   z.coerce.number().finite().nonnegative()
 );
 const positiveNumber = z.preprocess(
-  (value) => (value === null ? Number.NaN : value),
+  (value) => (isDecimalMoney(value) ? value : Number.NaN),
   z.coerce.number().finite().positive()
 );
 const nullableText = z.string().nullable();

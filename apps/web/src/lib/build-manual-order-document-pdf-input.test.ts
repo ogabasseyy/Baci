@@ -167,4 +167,20 @@ describe('buildManualOrderDocumentPdfInput', () => {
     expect(receiptMerchant.bank_name).toBeNull();
     expect(receiptMerchant.bank_account_name).toBeNull();
   });
+
+  it('resolves blank bank names from the code for the PDF generator', () => {
+    // The generator renders bank_name only: pass the unresolved blank
+    // through and the attachment omits the bank entirely.
+    const { receiptMerchant } = buildManualOrderDocumentPdfInput({
+      order: manualDocumentOrderSchema.parse(orderRow),
+      merchant: manualDocumentMerchantSchema.parse({
+        ...merchantRow,
+        bank_name: '',
+      }),
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: paymentAccount,
+    });
+
+    expect(receiptMerchant.bank_name).toBe('Access Bank');
+  });
 });

@@ -1,3 +1,4 @@
+import { MANUAL_ORDER_CURRENCY_CODE_PATTERN } from '@baci/shared/receipt';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import type React from 'react';
@@ -38,14 +39,12 @@ function getPriceFormatter(currency: string): Intl.NumberFormat {
         minimumFractionDigits: 0,
       });
     } catch (error) {
-      // Malformed or unknown currency codes (legacy rows the sender
-      // would skip) degrade to NGN instead of crashing the list render
-      // with RangeError. A regex alone cannot cover well-formed but
-      // unassigned codes, so construction itself is guarded. The NGN
-      // fallback caches under the bad key so a legacy code rethrows
-      // once, not every render; NGN itself rethrows instead of
-      // recursing, so a broken default fails fast instead of looping.
+      // Malformed codes (legacy rows the sender would skip) degrade to
+      // NGN, cached under the bad key so they rethrow once. NGN rethrows
+      // so a broken default fails fast; well-formed-but-unassigned codes
+      // rethrow for formatPrice to render code-prefixed like the PDF.
       if (currency === 'NGN') throw error;
+      if (MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(currency)) throw error;
       const fallback = getPriceFormatter('NGN');
       PRICE_FORMATTER_CACHE.set(currency, fallback);
       return fallback;
@@ -59,11 +58,17 @@ export function formatPrice(
   price: number,
   currency: string | null | undefined = 'NGN'
 ) {
-  // Same degrade-to-zero policy as the list's toDisplayMoney: every live
-  // caller normalizes first, but a non-finite value reaching this choke
-  // point must never render as NaN/Infinity currency.
+  // Non-finite values degrade to zero like the list's toDisplayMoney.
   if (!Number.isFinite(price)) return getPriceFormatter('NGN').format(0);
-  return getPriceFormatter(currency ?? 'NGN').format(price);
+  const code = currency ?? 'NGN';
+  try {
+    return getPriceFormatter(code).format(price);
+  } catch (error) {
+    if (code === 'NGN') throw error;
+    // Well-formed but unassigned on Hermes: prefix the code like Node's
+    // ICU and the PDF instead of mislabeling as NGN.
+    return `${code} ${price.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+  }
 }
 
 interface ReceiptCardProps {
@@ -82,13 +87,10 @@ export function ReceiptCard({
   // A cached entry can outlive a terminal shipping flip: fail a stale
   // receipt kind closed to invoice through the promotion gate.
   const effectiveKind = resolveReceiptCardKind(item);
-  // Badge/action follow the effective document kind both ways: a covered
-  // manual balance under a non-paid label opens a receipt, so the card says
-  // receipt — and an explicit invoice kind never badges paid even under a
-  // paid label (invalid manual rows open invoices). Absent kind (legacy
-  // rows) falls back to the raw status.
-  // Legacy casings (Paid, PAID) normalize like the list paid-shortcut,
-  // typeof guard included: the list warns yet still returns invalid rows.
+  // Badge/action follow the effective kind both ways: covered manual
+  // opens receipt; explicit invoice never badges paid. Absent kind
+  // (legacy rows) falls back to the raw status; legacy casings (Paid,
+  // PAID) normalize like the list paid-shortcut, typeof guard included.
   const paidLabel =
     typeof item.payment_status === 'string' &&
     item.payment_status.trim().toLowerCase() === 'paid';
@@ -98,11 +100,9 @@ export function ReceiptCard({
   } else if (effectiveKind === 'invoice' && paidLabel) {
     displayStatus = 'unpaid';
   }
-  // Money follows the ledger, not the badge: a paid label on an invoice
-  // still reads Paid, never Total.
+  // Money follows the ledger: a paid label on an invoice still reads Paid.
   const moneyPaid = displayStatus === 'paid' || paidLabel;
-  // Invalid manual rows badge Invoice under a paid label: the money line
-  // must explain that no receipt exists.
+  // Invalid manual rows badge Invoice under paid: explain no receipt exists.
   const invalidPaidInvoice = effectiveKind === 'invoice' && paidLabel;
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
@@ -111,8 +111,7 @@ export function ReceiptCard({
         item.items.length > 1 ? ` +${item.items.length - 1} more` : ''
       }`
     : `Order #${item.order_number}`;
-  // VoiceOver must hear what sighted users see: the badge kind plus the
-  // money state and any explainer/balance, not the kind alone.
+  // VoiceOver hears badge + money + explainer/balance, not kind alone.
   const balance = item.total - item.amount_paid;
   // Hide corrupt balances: formatPrice degrades non-finite input to NGN 0.
   const showBalance =

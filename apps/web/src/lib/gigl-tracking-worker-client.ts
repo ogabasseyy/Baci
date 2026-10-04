@@ -27,7 +27,11 @@ const EXPECTED_WORKER_ROLE = 'gigl_tracking_worker';
 // that can replay it against the real endpoint; the host pin below is
 // the backstop. GIGL_SUPABASE_ORIGIN_ALLOWLIST (comma-separated
 // hostnames, no scheme or port) EXTENDS this pin for preview, local,
-// and test origins — it can only add origins, never remove the pin.
+// and test origins — it can only add origins, never remove the pin —
+// and only when NODE_ENV is not production. Production ignores the
+// extension entirely (see below): the VPS scoped runner forwards the
+// whole GIGL_* namespace, so a stale preview entry must never widen
+// the production pin.
 const EXPECTED_SUPABASE_HOST = 'aivqthbxdshhltbwipbr.supabase.co';
 
 function normalizeHostname(hostname: string): string {
@@ -149,8 +153,19 @@ function createValidatedPostgrestClient(
       'GIGL tracking worker Supabase URL must be a credential-free https:// URL'
     );
   }
+  // The allowlist extension applies only outside production. VPS
+  // cron, the capability smoke, and every Vercel deployment run with
+  // NODE_ENV=production, and the scoped runner forwards every GIGL_*
+  // variable — so honoring the extension there would let a stale
+  // preview entry plus a mistyped URL send the worker JWT to a host
+  // that can replay it. Production pins to EXPECTED_SUPABASE_HOST
+  // exactly; anything else throws below before any request is built.
+  const originAllowlist =
+    (env.NODE_ENV ?? '').trim().toLowerCase() === 'production'
+      ? ''
+      : (env.GIGL_SUPABASE_ORIGIN_ALLOWLIST ?? '');
   const allowedOrigins = new Set(
-    (env.GIGL_SUPABASE_ORIGIN_ALLOWLIST ?? '')
+    originAllowlist
       .split(',')
       .map((entry) => normalizeHostname(entry))
       .filter((entry) => entry !== '')

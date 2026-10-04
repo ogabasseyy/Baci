@@ -165,8 +165,8 @@ test('refuses the attempt when the alias response is unparseable', () => {
 
   try {
     // HTTP 200 without the REQUIRED deploymentId: an API shape
-    // change must never read as "no previous" (first deploy is a
-    // 404, covered by the next test).
+    // change must never read as "no previous" (a missing alias 404
+    // fails closed too, covered by the next test).
     const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
       DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
       MAX_ATTEMPTS: '1',
@@ -186,33 +186,37 @@ test('refuses the attempt when the alias response is unparseable', () => {
   }
 });
 
-test('promotes without a rollback target on the first deploy', () => {
+test('refuses the attempt when the production alias is missing', () => {
   const fakeCommand = makeFakeCommand('success');
   const { checkPath, callsPath } = writeCountingOverlapCheck(
     fakeCommand.tempDir,
     'exit 0'
   );
-  writeFakeCurl(fakeCommand.binDir, fakeCommand.tempDir);
+  const curlCallsPath = writeFakeCurl(
+    fakeCommand.binDir,
+    fakeCommand.tempDir
+  );
 
   try {
-    // No production alias yet (404): first deploy.
+    // No production alias (404): this workflow deploys an
+    // established alias, so 404 is a deleted/mistyped alias or a
+    // masked authorization failure — an unknown rollback target,
+    // never a first deploy. Abort before staging.
     const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
       DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
+      MAX_ATTEMPTS: '1',
       ...vercelEnv,
       CURL_BODY: '{}',
       CURL_CODE: '404',
     });
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      /no previous production deployment found; overlap rollbacks in this run will fail loud instead/
-    );
-    assert.equal(
-      readFileSync(fakeCommand.promotedFile, 'utf8').trim(),
-      'https://baci-success.vercel.app'
-    );
-    assert.equal(readFileSync(callsPath, 'utf8').trim(), '2');
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /was not found \(HTTP 404\)/);
+    assert.match(result.stderr, /Refusing to stage without a rollback target/);
+    assert.match(result.stdout, /Deploy failed after 1 attempts/);
+    assert.throws(() => readFileSync(fakeCommand.promotedFile, 'utf8'));
+    assert.throws(() => readFileSync(callsPath, 'utf8'));
+    assert.equal(readFileSync(curlCallsPath, 'utf8').trim(), '1');
   } finally {
     rmSync(fakeCommand.tempDir, { recursive: true, force: true });
   }

@@ -169,15 +169,20 @@ flock -x "$REMOTE_DIR/locks/gigl-tracking.lock" bash -c '
   # Full quiesce (same helper as promote): stops the persistent
   # services (auto-restarted on shell exit, even on abort) and holds
   # every scheduled worker lock, so other ticks skip instead of
-  # straddling. Sourced from LIVE (the revision actually running). If
-  # the helper itself is absent, lib/ is destroyed and the other
-  # workers are already down — proceed with the two locks.
-  if [ -f "$remote_dir/lib/quiesce-worker-release.sh" ]; then
-    . "$remote_dir/lib/quiesce-worker-release.sh"
-    quiesce_worker_release "$remote_dir" || exit 1
-  else
-    echo "WARNING: quiesce helper missing; continuing with deploy+GIGL locks only." >&2
+  # straddling. Sourced from LIVE (the revision actually running).
+  # No fallback: without the helper, unrelated cron ticks and
+  # persistent services keep running while the rsyncs below replace
+  # the shared trees — the mixed-release state this rollback exists
+  # to repair. Restore the helper from the rollback target first,
+  # then re-run this block:
+  #   cp <base>/app-<sha>/vps-workers/lib/quiesce-worker-release.sh \
+  #     "$remote_dir/lib/quiesce-worker-release.sh"
+  if [ ! -f "$remote_dir/lib/quiesce-worker-release.sh" ]; then
+    echo "ERROR: quiesce helper missing; refusing to restore shared trees while other workers may be running. Restore it from the rollback target (see above) and re-run." >&2
+    exit 1
   fi
+  . "$remote_dir/lib/quiesce-worker-release.sh"
+  quiesce_worker_release "$remote_dir" || exit 1
   rsync -a --delete <base>/app-<sha>/vps-workers/bin/ "$remote_dir/bin/"
   rsync -a --delete <base>/app-<sha>/vps-workers/jobs/ "$remote_dir/jobs/"
   rsync -a --delete <base>/app-<sha>/vps-workers/lib/ "$remote_dir/lib/"

@@ -13,8 +13,10 @@ import { runScript } from './deploy-with-retry.run-script.mjs';
 
 // Split from deploy-with-retry-overlap.test.mjs (near the 300-line
 // limit): post-promote overlap recovery coverage — the `vercel
-// rollback` path, the self-rollback refusal, and first-deploy
-// overlap without a rollback target.
+// rollback` path, the self-rollback refusal, and ambiguous-promote
+// recovery. (A missing-alias 404 used to stage without a rollback
+// target; capture now refuses before staging, covered in the parent
+// suite, so no first-deploy overlap test remains here.)
 
 test('rolls back to the previous production deployment on post-promote overlap', () => {
   const fakeCommand = makeFakeCommand('success');
@@ -117,41 +119,6 @@ test('refuses a rollback to the just-promoted candidate itself', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /IS the just-promoted candidate; manually reconcile/);
     // Promoted but unrolled-back: no rollback ran at all.
-    assert.equal(
-      readFileSync(fakeCommand.promotedFile, 'utf8').trim(),
-      'https://baci-success.vercel.app'
-    );
-    assert.throws(() => readFileSync(fakeCommand.rollbackFile, 'utf8'));
-    assert.equal(readFileSync(callsPath, 'utf8').trim(), '3');
-  } finally {
-    rmSync(fakeCommand.tempDir, { recursive: true, force: true });
-  }
-});
-
-test('fails loud without rollback when the first deploy overlaps post-promote', () => {
-  const fakeCommand = makeFakeCommand('success');
-  const { checkPath, callsPath } = writeCountingOverlapCheck(
-    fakeCommand.tempDir,
-    'if [ "$calls" -ge 1 ]; then exit 1; fi\nexit 0'
-  );
-  writeFakeCurl(fakeCommand.binDir, fakeCommand.tempDir);
-
-  try {
-    // No production alias yet (404): first deploy.
-    const result = runScript(fakeCommand, ['fake-vercel', 'deploy'], {
-      DEPLOY_PROMOTE_OVERLAP_CHECK: checkPath,
-      PROMOTE_ATTEMPTS: '2',
-      ...vercelEnv,
-      CURL_BODY: '{}',
-      CURL_CODE: '404',
-    });
-
-    assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /No previous production deployment to roll back to; manually reconcile/
-    );
-    // Published but unrolled-back: the recorded target is untouched.
     assert.equal(
       readFileSync(fakeCommand.promotedFile, 'utf8').trim(),
       'https://baci-success.vercel.app'

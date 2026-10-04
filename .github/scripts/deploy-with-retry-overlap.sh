@@ -41,18 +41,20 @@ _run_vercel_rollback() {
 
 # Prints `uid|url` for the deployment CURRENTLY SERVING production
 # (the rollback target if the post-promote overlap verification
-# fails), or nothing when no production deployment exists yet (first
-# deploy — the caller warns and proceeds without a net). Returns 1
-# when the answer is unknowable: the caller fails the attempt rather
-# than staging a deployment it could not roll back. Resolves the
-# production ALIAS (`GET /v4/aliases/{alias}` returns the attached
-# deployment's REQUIRED deploymentId field), never newest-production:
-# staged candidates — ours (CALL BEFORE THE FIRST STAGING) or an
-# orphaned one from a past failed run — also carry target=production
-# and would misresolve. The projectId scope guards against a
-# mistyped alias resolving into another project (404s instead). A 404
-# means first deploy; anything else unparseable fails closed (an API
-# shape change must never read as "no previous").
+# fails). Returns 1 when the answer is unknowable: the caller fails
+# the attempt rather than staging a deployment it could not roll
+# back. Resolves the production ALIAS (`GET /v4/aliases/{alias}`
+# returns the attached deployment's REQUIRED deploymentId field),
+# never newest-production: staged candidates — ours (CALL BEFORE THE
+# FIRST STAGING) or an orphaned one from a past failed run — also
+# carry target=production and would misresolve. The projectId scope
+# guards against a mistyped alias resolving into another project
+# (404s instead). A 404 fails closed like any other unresolvable
+# answer: this workflow deploys an established production alias, so a
+# missing alias means deleted/mistyped configuration or a masked
+# authorization failure — an unknown rollback target, never a first
+# deploy. An API shape change must likewise never read as "no
+# previous": anything unparseable fails closed.
 capture_previous_production_deployment() {
   local capture_query
   local capture_body
@@ -73,10 +75,16 @@ capture_previous_production_deployment() {
   case "$capture_code" in
     2*) ;;
     404)
-      # No production alias yet: first deploy. (Any other 4xx/5xx
-      # falls through to the fail-closed branch below.)
+      # The configured production alias MUST exist (see header): a
+      # 404 is a deleted/mistyped alias or a masked authorization
+      # failure, i.e. an unknown rollback target. Abort before
+      # staging rather than promoting without recovery: if the
+      # post-promote overlap check then tripped, the stale-read
+      # candidate would stay serving with only a manual-reconcile
+      # error to show for it.
+      echo "Cannot capture the current production deployment: the production alias '${OVERLAP_PRODUCTION_ALIAS}' was not found (HTTP 404). Refusing to stage without a rollback target; restore the alias or fix its spelling, then re-run." >&2
       rm -f "$capture_body"
-      return 0
+      return 1
       ;;
     *)
       echo "Cannot capture the current production deployment: Vercel API returned HTTP ${capture_code:-curl-failed}." >&2
@@ -136,9 +144,11 @@ recover_ambiguous_promote() {
 # back now. On overlap, re-promotes the captured previous production
 # deployment (retried; the raw promote bypasses the overlap check the
 # rolled-back run is listed in) and returns 1. With no previous
-# deployment (first deploy), fails loud with a manual-reconcile
-# directive instead of an automatic rollback. previous_capture is
-# `uid|url` (either half missing still verifies against the other).
+# deployment captured (defensive: capture now refuses rather than
+# returning empty, so this means the capture contract regressed),
+# fails loud with a manual-reconcile directive instead of an
+# automatic rollback. previous_capture is `uid|url` (either half
+# missing still verifies against the other).
 verify_post_promote_overlap() {
   local new_target="$1"
   local previous_capture="$2"

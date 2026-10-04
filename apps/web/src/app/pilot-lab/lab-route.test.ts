@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   stat,
   utimes,
@@ -168,6 +169,34 @@ describe('getLabConfig', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '');
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', '');
     await expect(getLabConfig()).rejects.toThrow(/INPUT_ROOT/);
+  });
+
+  it('treats an empty public dir as unset, never as a relative root', async () => {
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    // Stage under <sandbox>/public, then run the loader from <sandbox>:
+    // empty must fall back to <cwd>/public (staged → load succeeds);
+    // resolving '' relatively would look in <sandbox>/__pilot (missing)
+    // and fail closed instead.
+    const sandbox = await realpath(await mkdtemp(join(tmpdir(), 'pilot-cwd-')));
+    const stagedPublic = join(sandbox, 'public');
+    await mkdir(stagedPublic, { recursive: true });
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', stagedPublic);
+    await stageRouteFiles({ ...lab, publicDir: stagedPublic });
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', '');
+    const previousCwd = process.cwd();
+    process.chdir(sandbox);
+    try {
+      const config = await getLabConfig();
+      expect(config.stagedPaths.length).toBeGreaterThan(0);
+      for (const entry of config.stagedPaths) {
+        expect(entry.path.startsWith(sandbox)).toBe(true);
+      }
+    } finally {
+      process.chdir(previousCwd);
+    }
   });
 
   it('fails closed on unstaged bytes, then serves once staged', async () => {

@@ -175,8 +175,11 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
       'merchant image pilot: set BACI_IMAGE_PILOT_INPUT_ROOT and BACI_IMAGE_PILOT_OUTPUT_ROOT to serve the lab routes'
     );
   }
+  // Empty counts as unset (same falsy check as the required roots): an
+  // empty public dir must fall back to <cwd>/public, never resolve
+  // '__pilot' against '' into a CWD-relative root.
   const publicDir =
-    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR ?? join(process.cwd(), 'public');
+    process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || join(process.cwd(), 'public');
   const inventoryPath = join(inputRoot, 'inventory.json');
   const acceptancesPath = join(outputRoot, 'acceptances.json');
   // The cache key commits to stat fingerprints, not content: re-reading

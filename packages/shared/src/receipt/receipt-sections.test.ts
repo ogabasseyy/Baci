@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { renderLogoHtml, renderTermsHtml } from './receipt-sections';
-import type { ReceiptMerchant } from './types';
+import {
+  renderLogoHtml,
+  renderPaymentHistoryHtml,
+  renderTermsHtml,
+} from './receipt-sections';
+import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 function createReceiptMerchant(
   overrides: Partial<ReceiptMerchant> = {}
@@ -116,5 +120,28 @@ describe('renderTermsHtml', () => {
     });
 
     expect(html).toBe('');
+  });
+});
+
+describe('renderPaymentHistoryHtml', () => {
+  it('pins transaction dates to the Lagos document timezone', () => {
+    // 23:30 UTC is already the next calendar day in Lagos (UTC+1):
+    // the pinned timezone shows 7 Feb regardless of runner locale.
+    const html = renderPaymentHistoryHtml(
+      {
+        transactions: [
+          {
+            amount: 5000,
+            created_at: '2024-02-06T23:30:00.000Z',
+            description: null,
+            metadata: { payment_method: 'card' },
+          },
+        ],
+      } as ReceiptOrder,
+      (amount: number) => `NGN ${amount}`
+    );
+
+    expect(html).toContain('7 Feb 2024');
+    expect(html).not.toContain('6 Feb 2024');
   });
 });

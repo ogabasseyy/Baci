@@ -226,28 +226,47 @@ export async function sendManualOrderDocument({
       );
     }
     providerAccepted = true;
+    // The provider accepted this attempt's mail: record its hash as
+    // known-delivered on EVERY post-acceptance path — including stale
+    // and failed outcomes below — so later rotations cannot orphan the
+    // link the customer already holds.
+    const recordAcceptedToken = async () => {
+      const { data: markedClaimId, error: markError } = await supabase.rpc(
+        'mark_manual_document_claim_sent',
+        {
+          p_claim_id: prepared.claim_id,
+          p_merchant_id: row.merchant_id,
+          p_mailed_token_hash: claim.tokenHash,
+        }
+      );
+      return !markError && markedClaimId === prepared.claim_id;
+    };
     // A data change reset the marker after dispatch: the PDF is stale,
     // so fail for a bounded corrective retry instead of recording sent.
     const lease = await checkManualDocumentDispatchLease(supabase, row.id);
-    if (lease === 'unknown')
+    if (lease === 'unknown') {
+      if (!(await recordAcceptedToken()))
+        return {
+          status: 'failed',
+          error: 'sent_claim_marker_failed',
+          deliveryOutcome: 'unknown',
+        };
       return {
         status: 'failed',
         error: 'dispatch_lease_check_failed',
         deliveryOutcome: 'unknown',
       };
-    if (lease === 'reset')
+    }
+    if (lease === 'reset') {
+      if (!(await recordAcceptedToken()))
+        return {
+          status: 'failed',
+          error: 'sent_claim_marker_failed',
+          deliveryOutcome: 'unknown',
+        };
       return { status: 'failed', error: 'document_changed_during_send' };
-    const { data: markedClaimId, error: markError } = await supabase.rpc(
-      'mark_manual_document_claim_sent',
-      {
-        p_claim_id: prepared.claim_id,
-        p_merchant_id: row.merchant_id,
-        // The provider accepted this attempt's mail: record its hash as
-        // known-delivered so later rejected rotations cannot orphan it.
-        p_mailed_token_hash: claim.tokenHash,
-      }
-    );
-    if (markError || markedClaimId !== prepared.claim_id)
+    }
+    if (!(await recordAcceptedToken()))
       return {
         status: 'failed',
         error: 'sent_claim_marker_failed',

@@ -151,18 +151,22 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid, boolean)
   FROM PUBLIC, anon, authenticated;
 
--- Rendered shipping subset, mirroring both renderers (shared HTML preview
--- and the emailed PDF read exactly these six keys): admin-only keys like
--- name/phone and the legacy flat address never reach the document, so
--- edits confined to them must not invalidate an identical render. The
--- control-character separator keeps key-boundary collisions from masking
--- a real change; NULL and '' both drop like the renderers' falsy filter.
+-- Rendered shipping subset, canonicalized exactly like the builders:
+-- legacy mobile-admin aliases (address, postalCode) fall back onto the
+-- canonical keys, and NULL/absent/'' collapse per key (the renderers
+-- falsy-filter). Admin-only keys (name, phone, and any other key the
+-- builders do not read) never reach the document, so edits confined to
+-- them must not invalidate an identical render. The control-character
+-- separator keeps key-boundary collisions from masking a real change.
 CREATE OR REPLACE FUNCTION private.rendered_shipping_address(p_address jsonb)
 RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
   SELECT concat_ws(chr(31),
-    p_address->>'address_line1', p_address->>'address_line2',
-    p_address->>'city', p_address->>'state',
-    p_address->>'postal_code', p_address->>'country');
+    NULLIF(COALESCE(p_address->>'address_line1', p_address->>'address'), ''),
+    NULLIF(p_address->>'address_line2', ''),
+    NULLIF(p_address->>'city', ''),
+    NULLIF(p_address->>'state', ''),
+    NULLIF(COALESCE(p_address->>'postal_code', p_address->>'postalCode'), ''),
+    NULLIF(p_address->>'country', ''));
 $function$;
 REVOKE ALL ON FUNCTION private.rendered_shipping_address(jsonb)
   FROM PUBLIC, anon, authenticated;

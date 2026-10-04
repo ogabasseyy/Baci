@@ -169,12 +169,21 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
       // The detail schema accepts explicit null locality (mobile-admin's
       // "same as customer" persists nulls); the generator types locality
       // as optional strings, so normalize null to absent — the renderer
-      // falsy-filters both identically.
+      // falsy-filters both identically. Legacy mobile-admin aliases map
+      // exactly like the email builder, or the preview drops the street
+      // and postcode the emailed PDF displays.
       shipping_address: receiptDetail.shipping_address && {
         ...receiptDetail.shipping_address,
+        address_line1:
+          receiptDetail.shipping_address.address_line1 ||
+          receiptDetail.shipping_address.address ||
+          undefined,
         city: receiptDetail.shipping_address.city ?? undefined,
         state: receiptDetail.shipping_address.state ?? undefined,
-        postal_code: receiptDetail.shipping_address.postal_code ?? undefined,
+        postal_code:
+          receiptDetail.shipping_address.postal_code ||
+          receiptDetail.shipping_address.postalCode ||
+          undefined,
       },
       virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
       // Null entries are dropped before generation: the generator

@@ -43,9 +43,7 @@ describe('resolveArchiveDocumentKind', () => {
   });
 
   it('defaults missing kinds to invoice', () => {
-    expect(
-      resolveArchiveDocumentKind({} as StorefrontOrder)
-    ).toBe('invoice');
+    expect(resolveArchiveDocumentKind({} as StorefrontOrder)).toBe('invoice');
     expect(
       resolveArchiveDocumentKind({
         current_document_kind: 'invoice',

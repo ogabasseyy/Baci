@@ -180,7 +180,7 @@ describe('renderPaymentHistoryHtml', () => {
             metadata: { payment_method: { name: 'cash' } },
           },
         ],
-      } as ReceiptOrder,
+      } as unknown as ReceiptOrder,
       (amount: number) => `NGN ${amount}`
     );
 

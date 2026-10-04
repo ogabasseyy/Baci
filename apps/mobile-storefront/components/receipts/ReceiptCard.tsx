@@ -87,21 +87,22 @@ export function ReceiptCard({
   // receipt — and an explicit invoice kind never badges paid even under a
   // paid label (invalid manual rows open invoices). Absent kind (legacy
   // rows) falls back to the raw status.
-  // Legacy casings (Paid, PAID): normalize like the list paid-shortcut.
-  const paidLabel = item.payment_status.trim().toLowerCase() === 'paid';
+  // Legacy casings (Paid, PAID) normalize like the list paid-shortcut,
+  // typeof guard included: the list warns yet still returns invalid rows.
+  const paidLabel =
+    typeof item.payment_status === 'string' &&
+    item.payment_status.trim().toLowerCase() === 'paid';
   let displayStatus = item.payment_status;
   if (effectiveKind === 'receipt') {
     displayStatus = 'paid';
   } else if (effectiveKind === 'invoice' && paidLabel) {
     displayStatus = 'unpaid';
   }
-  // Money follows the ledger, not the badge: an invalid manual row can
-  // carry a paid label while opening an invoice — badge/action say
-  // Invoice, but the money still reads Paid, never Total.
+  // Money follows the ledger, not the badge: a paid label on an invoice
+  // still reads Paid, never Total.
   const moneyPaid = displayStatus === 'paid' || paidLabel;
-  // Invalid manual rows (cancelled, underfunded) badge Invoice under a
-  // paid ledger label: the money line must explain that no receipt
-  // exists, or the Paid-plus-Invoice mix reads as a missing receipt.
+  // Invalid manual rows badge Invoice under a paid label: the money line
+  // must explain that no receipt exists.
   const invalidPaidInvoice = effectiveKind === 'invoice' && paidLabel;
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];

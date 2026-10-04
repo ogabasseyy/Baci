@@ -208,12 +208,64 @@ def unquote(token):
         return token[1:-1]
     return token
 
+_ANSI_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b",
+                "E": "\x1b", "f": "\f", "n": "\n",
+                "r": "\r", "t": "\t", "v": "\v",
+                "\\": "\\", "'": "'", '"': '"', "?": "?"}
+
+
+def _decode_ansi_c(token, i):
+    # Decode one $'...' body starting past the quote; returns
+    # (value, index past the closing quote, or end). Octal,
+    # hex, unicode, and control escapes per the bash manual;
+    # an unknown escape degrades to its letter ($'\q' is q).
+    # Never raises (modulo the code-point ceiling): hostile
+    # input must drift, never crash the audit.
+    out, n = [], len(token)
+    while i < n:
+        ch = token[i]
+        if ch == "'":
+            return "".join(out), i + 1
+        if ch != "\\" or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        e = token[i + 1]
+        if e in _ANSI_SIMPLE:
+            out.append(_ANSI_SIMPLE[e])
+            i += 2
+        elif re.match(r"[0-7]", e):
+            m = re.match(r"[0-7]{1,3}", token[i + 1:])
+            out.append(chr(int(m.group(0), 8) % 256))
+            i += 1 + len(m.group(0))
+        elif re.match(r"[xuU]", e):
+            width = {"x": 2, "u": 4, "U": 8}[e]
+            m = re.match(r"[0-9a-fA-F]{1,%d}" % width,
+                         token[i + 2:])
+            if m:
+                out.append(chr(int(m.group(0), 16)
+                               % 0x110000))
+                i += 2 + len(m.group(0))
+            else:
+                out.append(e)
+                i += 2
+        elif e == "c" and i + 2 < n:
+            out.append(chr(ord(token[i + 2].upper()) & 0x1F))
+            i += 3
+        else:
+            out.append(e)
+            i += 2
+    return "".join(out), i
+
+
 def _bare_word(token):
     # Bash word value: strip quotes, unescape backslashes
     # (single quotes literal -- same profile as _dequote in
-    # runner.py). Escaped externals still execute (ba\sh runs
-    # bash), so dispatch and denylists match the bare spelling;
-    # escaped builtins/keywords/assigns are dead (verified), so
+    # runner.py). Dollar-prefixed quoting decodes ($'ba''sh'
+    # executes bash; $".." follows double-quote rules).
+    # Escaped externals still execute (ba\sh runs bash), so
+    # dispatch and denylists match the bare spelling; escaped
+    # builtins/keywords/assigns are dead (verified), so
     # bare-matching them over-approximates safely.
     out, quote, i = "", None, 0
     while i < len(token):
@@ -229,6 +281,13 @@ def _bare_word(token):
             i += 2
         elif quote == '"' and ch == '"':
             quote, i = None, i + 1
+        elif not quote and ch == "$" and i + 1 < len(token) \
+                and token[i + 1] in ("'", '"'):
+            if token[i + 1] == "'":
+                decoded, i = _decode_ansi_c(token, i + 2)
+                out += decoded
+            else:
+                quote, i = '"', i + 2
         elif not quote and ch in ("'", '"'):
             quote, i = ch, i + 1
         else:

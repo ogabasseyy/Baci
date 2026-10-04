@@ -93,7 +93,10 @@ def _safe_exec_path(path):
         return _contained_exec_path(path, r"^/home/runner/")
     if path.startswith("/"):
         norm = posixpath.normpath(path)
-        if re.match(r"^/(usr|bin|sbin|opt|etc)/", norm) \
+        # No /opt: /opt/hostedtoolcache is runner-writable
+        # (chmod 777 at image build), so bytes staged there
+        # execute with the helper token.
+        if re.match(r"^/(usr|bin|sbin|etc)/", norm) \
                 or re.match(r"^/lib[^/]*/", norm) \
                 or norm == "/":
             return not any(ch in path for ch in ("$", "`", "\\"))

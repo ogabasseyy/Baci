@@ -85,9 +85,15 @@ def _strip_heredocs(raw_lines):
         while i < len(line):
             ch = line[i]
             if quote:
-                if ch == quote:
-                    quote = None
-                i += 1
+                # Backslash escapes inside double quotes only
+                # (\" stays literal: "x\" <<EOF" is data, not a
+                # heredoc opener); single quotes have no escapes.
+                if quote == '"' and ch == "\\":
+                    i += 2
+                else:
+                    if ch == quote:
+                        quote = None
+                    i += 1
             elif ch in ("'", '"'):
                 quote, i = ch, i + 1
             elif ch == "\\":

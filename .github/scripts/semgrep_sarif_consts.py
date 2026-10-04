@@ -36,7 +36,7 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "java", "javac", "run-parts", "sqlite3", "gcc", "cc",
              "g++", "c++", "clang", "clang++", "jshell",
              "ssh-keygen", "pwsh", "powershell", "swift",
-             "swiftc"}
+             "swiftc", "script"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -51,6 +51,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # ship on the ubuntu runner image; swift executes program
 # operands (ships on ubuntu-latest); swiftc loads compiler
 # plugins (-load-plugin-executable) that execute at build.
+# script -c runs its command operand (util-linux, on the
+# ubuntu runner); bare script opens an interactive shell.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+)(?:-\d[\d.]*)?$")

@@ -79,7 +79,10 @@ def _redirect_target(text, i, targets):
         quote, j = text[i], i + 1
         while j < len(text) and text[j] != quote:
             j += 1
-        targets.append(text[i + 1:j])
+        # Bare-worded like dispatch operands (quote removal
+        # joins trusted-""scripts/... onto the trusted tree).
+        targets.append(_bare_word(text[i:j + 1] if j < len(text)
+                                  else text[i:j]))
         return j + 1
     j = i
     while j < len(text) and text[j] not in (" ", "\t", ";",
@@ -87,7 +90,7 @@ def _redirect_target(text, i, targets):
                                             "(", ")"):
         j += 1
     if j > i:
-        targets.append(text[i:j])
+        targets.append(_bare_word(text[i:j]))
     return j
 
 def _dup_target(text, i, targets):
@@ -98,7 +101,7 @@ def _dup_target(text, i, targets):
                                             "|", "&", "<", ">",
                                             "(", ")"):
         j += 1
-    word = text[i:j]
+    word = _bare_word(text[i:j])
     if word and word != "-" and not re.fullmatch(r"\d+-?", word):
         targets.append(word)
     return j

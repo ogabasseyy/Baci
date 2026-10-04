@@ -703,5 +703,42 @@ t checkout-flow-anchored 1 "checkout-flow-with" happy.sarif "$S${FS}        with
 t checkout-flow-alias 1 "checkout-flow-with" happy.sarif "$S${FS}        with:${FS}r${FS}with:${FS}with: *head_inputs"
 t ref-alias-unresolved 1 "pr-ref-unresolved" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}*prsha"
 
+# --- round 8: github.token bindings, data-returning expressions, DOTALL ---
+t secretbind-github-token 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Token leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ github.token }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-github-token-bracket 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Token leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ github['token'] }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-bracket 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Bracket leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ secrets['META_API_KEY'] }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-token-dynamic 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Token leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ github[inputs.field] }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-case 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Case leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ case(secrets.META_API_KEY != '', secrets.META_API_KEY, '') }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-case-fp 0 "" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Bool compare${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          OK: \${{ secrets.META_API_KEY != '' }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\$OK\""
+t secretbind-dotall 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Literal leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: |-${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}            \${{${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}              secrets.META_API_KEY${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}            }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-format 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Format leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ format('k={0}', secrets.META_API_KEY) }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-or-data 1 "secret-step-unexpected-binding" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Or leak${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          LEAK: \${{ false || secrets.META_API_KEY }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\${LEAK:0:4} \${LEAK:4}\""
+t secretbind-contains-fp 0 "" happy.sarif "$S${FS}      - name: Verify head fresh${FS}b${FS}      - name: Bool contains${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        env:${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          OK: \${{ contains(secrets.META_API_KEY, 'x') }}${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}        run: |${RS}$S${FS}      - name: Verify head fresh${FS}b${FS}          echo \"\$OK\""
+
+# --- round 8: llvm/versioned binutils, time peel, script, dequote, ANSI-C ---
+t llvm-objcopy 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}llvm-objcopy -I binary -O binary \"\${GITHUB_WORKSPACE}/evil.sh\" \"\${SCRIPT_DIR}/diff.sh\""
+t objcopy-versioned 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}objcopy-12 -I binary -O binary \"\${GITHUB_WORKSPACE}/evil.sh\" \"\${SCRIPT_DIR}/diff.sh\""
+t time-o 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/time -o /tmp/timing bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t time-format 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}time -f '%e' bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t time-output-eq 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}time --output=/tmp/x bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t time-version-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}time --version"
+t script-c 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}script -q -c 'bash \"\${GITHUB_WORKSPACE}/evil.sh\"' /dev/null"
+t script-bare 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}script /dev/null"
+t environ-dequote 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}base64 /proc/self/en\"\"viron"
+t redirect-dequote 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}echo pwn > trusted-\"\"scripts/.github/scripts/muse-review/diff.sh"
+t heredoc-false 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf '%s\\n' \"x\\\" <<EOF\"
+bash \"\${GITHUB_WORKSPACE}/evil.sh\"
+EOF"
+t ansi-c 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\$'ba''sh' \"\${GITHUB_WORKSPACE}/evil.sh\""
+t ansi-c-hex 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\$'\\x62ash' \"\${GITHUB_WORKSPACE}/evil.sh\""
+t opt-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/opt/hostedtoolcache/evil"
+t usr-exec-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/usr/bin/true"
+
+# --- round 8: installer curl config (Codex P1: --config + curlrc) ---
+t curl-config 1 "helper-network-tool" happy.sarif "$I${FS}curl --disable --proto${FS}r${FS}curl --disable --proto${FS}curl --disable --config /tmp/evil.curl --proto"
+t curl-K 1 "helper-network-tool" happy.sarif "$I${FS}curl --disable --proto${FS}r${FS}curl --disable --proto${FS}curl --disable -K /tmp/evil.curl --proto"
+t curl-nodisable 1 "helper-network-tool" happy.sarif "$I${FS}curl --disable --proto${FS}r${FS}curl --disable --proto${FS}curl --proto"
+t curl-disable-notfirst 1 "helper-network-tool" happy.sarif "$I${FS}curl --disable --proto${FS}r${FS}curl --disable --proto${FS}curl --proto --disable"
+
 printf '\nhardening suite: %d passed, %d failed%s\n' "$pass" "$fail" "${fail_names:+ ($fail_names)}"
 [[ "$fail" -eq 0 ]]

@@ -1,4 +1,7 @@
 # Muse Code PR reviewer (advisory only, never blocks merges).
+# Fail-closed exception: a missing trusted-scripts checkout exits 1
+# (red-X signal only — this job is not a required check, so a
+# default-branch incident never blocks merges, just the reviews).
 # Operations guide (billing, key hygiene, layout, prerequisites):
 # .github/muse-code-review.md
 name: Muse Code Review

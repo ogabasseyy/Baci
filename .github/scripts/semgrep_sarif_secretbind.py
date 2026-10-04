@@ -8,27 +8,101 @@ from semgrep_sarif_consts import (AGENT_SECRET_BINDINGS,
                                   SECRET_BINDINGS)
 from semgrep_sarif_shell import map_key_value, unquote_value
 
-_EXPR = re.compile(r"\$\{\{(.*?)\}\}")
+_EXPR = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
 _DOT = re.compile(r"secrets\s*\.\s*([A-Za-z_]\w*)")
 _BRACKET = re.compile(r"secrets\s*\[\s*['\"]([A-Za-z_]\w*)"
                       r"['\"]\s*\]")
 _DYNAMIC = re.compile(r"secrets\s*\[(?!\s*['\"])")
+_TOKEN = re.compile(r"github\s*\.\s*token\b",
+                    re.IGNORECASE)
+_TOKEN_BRACKET = re.compile(r"github\s*\[\s*['\"]token"
+                            r"['\"]\s*\]", re.IGNORECASE)
+_TOKEN_DYNAMIC = re.compile(r"github\s*\[(?!\s*['\"])",
+                            re.IGNORECASE)
+# Bracket refs after literal stripping (secrets['K'] sheds
+# to secrets['']): the surviving shape proves a quoted key.
+_BRACKET_LIT = re.compile(r"secrets\s*\[\s*(''|\"\")\s*\]")
+_TOKEN_BRACKET_LIT = re.compile(
+    r"github\s*\[\s*(''|\"\")\s*\]", re.IGNORECASE)
 _WHOLE = re.compile(r"toJSON\s*\(\s*(?:github|secrets)\s*\)",
                     re.IGNORECASE)
-_OPS = ("==", "!=", "&&", "||", ">", "<")
+_BOOL_FUNCS = {"contains", "startswith", "endswith",
+               "success", "failure", "cancelled", "always"}
 _IDENT = r"[A-Za-z_]\w*"
 
 
-def _booleanized(span):
-    # True when the interpolation is an expression context
-    # (comparison/logic over the secret) rather than a string
-    # carrying it: string literals stripped first so a '>'
-    # inside quotes cannot misclassify.
+def _strip_literals(span):
+    # String literals shed first so a '>' or secret-shaped
+    # word inside quotes cannot misclassify the expression.
     code = re.sub(r"\"(?:[^\"\\]|\\.)*\"", "\"\"", span)
-    code = re.sub(r"'[^']*'", "''", code)
-    if any(op in code for op in _OPS):
-        return True
-    return re.search(r"![^=]", code) is not None
+    return re.sub(r"'[^']*'", "''", code)
+
+
+def _split_top(code, seps):
+    # Split on separators at paren depth 0 (two-char ops
+    # first); quotes already stripped by the caller.
+    parts, buf, depth, i = [], "", 0, 0
+    while i < len(code):
+        ch = code[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        if not depth:
+            hit = next((s for s in seps
+                        if code.startswith(s, i)), None)
+            if hit:
+                parts.append(buf)
+                buf = ""
+                i += len(hit)
+                continue
+        buf += ch
+        i += 1
+    parts.append(buf)
+    return parts
+
+
+def _carries_secret(span):
+    # True when the interpolation evaluates to secret data
+    # (bound value carries it) rather than a boolean over it.
+    # Comparisons (!=, ==, >, <) and unary ! return booleans;
+    # ||/&& return an operand's value, so any carrying side
+    # carries; calls to known-boolean functions return
+    # booleans, every other call (case, format, join, ...)
+    # carries when any argument does. A bare secret/token
+    # reference carries.
+    code = _strip_literals(span).strip()
+    if not code:
+        return False
+    if code.startswith("("):
+        depth, i = 0, 0
+        while i < len(code):
+            depth += 1 if code[i] == "(" else 0
+            depth -= 1 if code[i] == ")" else 0
+            i += 1
+            if not depth:
+                break
+        if i == len(code):
+            return _carries_secret(code[1:-1])
+    if len(_split_top(code, ("||", "&&"))) > 1:
+        return any(_carries_secret(p)
+                   for p in _split_top(code, ("||", "&&")))
+    if len(_split_top(code, ("==", "!=", ">=", "<=",
+                             ">", "<"))) > 1:
+        return False
+    if code.startswith("!"):
+        return False
+    m = re.fullmatch(r"([A-Za-z_]\w*)\s*\((.*)\)", code,
+                     re.DOTALL)
+    if m:
+        if m.group(1).lower() in _BOOL_FUNCS:
+            return False
+        return any(_carries_secret(p)
+                   for p in _split_top(m.group(2), (",",)))
+    return _DOT.search(code) is not None \
+        or _BRACKET_LIT.search(code) is not None \
+        or _TOKEN.search(code) is not None \
+        or _TOKEN_BRACKET_LIT.search(code) is not None
 
 
 def _record(bound, drift, idx, agent_idx, name, key):
@@ -41,18 +115,27 @@ def _record(bound, drift, idx, agent_idx, name, key):
 
 
 def _bindings_in_value(bound, drift, idx, agent_idx, name, value):
-    # Every secrets ref carried by one mapping value: dot and
-    # quoted-bracket keys bind (unless booleanized), dynamic
-    # keys and whole-object toJSON bind unconditionally (no
-    # allowlistable key).
+    # Every secrets/github.token ref carried by one mapping
+    # value: dot and quoted-bracket keys bind (unless the span
+    # evaluates boolean), dynamic keys and whole-object toJSON
+    # bind unconditionally (no allowlistable key). The
+    # github.token key cannot collide with secrets KEYs (the
+    # dot is not an identifier char), so no legit binding
+    # allowlists it by accident.
     for span in _EXPR.findall(value or ""):
-        if _DYNAMIC.search(span) or _WHOLE.search(span):
+        if _DYNAMIC.search(span) \
+                or _TOKEN_DYNAMIC.search(span) \
+                or _WHOLE.search(span):
             _record(bound, drift, idx, agent_idx, name, "")
             continue
-        if _booleanized(span):
+        if not _carries_secret(span):
             continue
         for key in _DOT.findall(span) + _BRACKET.findall(span):
             _record(bound, drift, idx, agent_idx, name, key)
+        if _TOKEN.search(span) \
+                or _TOKEN_BRACKET.search(span):
+            _record(bound, drift, idx, agent_idx, name,
+                     "github.token")
 
 
 def _flow_pairs(text):

@@ -104,12 +104,15 @@ def audit_step_commands(ctx, drift):
         r"|github\s*\[(?!\s*['\"])",
         re.IGNORECASE)
     LOOSE_ALLOW = STRICT_ALLOW | {"git", "rm"}
-    GIT_SAFE_FLAGS = {"--no-pager", "-v", "--version", "-h",
-                      "--help"}
+    # No --help flag and no help subcommand: git help renders
+    # through man.viewer, and a PR-controlled repo config names
+    # an arbitrary man.<tool>.cmd that git executes through a
+    # shell. -h prints short usage to stdout (no viewer).
+    GIT_SAFE_FLAGS = {"--no-pager", "-v", "--version", "-h"}
     GIT_DANGER_FLAGS = {"-c", "--config", "--config-env",
                         "--exec-path", "-p", "--paginate",
                         "--git-dir", "--work-tree"}
-    GIT_READ_SUBCOMMANDS = {"cat-file", "help", "version"}
+    GIT_READ_SUBCOMMANDS = {"cat-file", "version"}
     # (e) Secret bindings are allowlisted by the secretbind
     # scan (block scalars resolved, flow pairs covered). The
     # agent step, any other run.sh consumer, and the
@@ -256,10 +259,15 @@ def audit_step_commands(ctx, drift):
                             nxt = rest[i + 1] if i + 1 < len(rest) \
                                 else ""
                             nxt = nxt.rstrip("/")
-                            if nxt != "${GITHUB_WORKSPACE}" \
-                                    and not nxt.startswith(
-                                        "${GITHUB_WORKSPACE}/"
-                                        "trusted-scripts"):
+                            trusted = ("${GITHUB_WORKSPACE}/"
+                                       "trusted-scripts")
+                            if nxt not in ("${GITHUB_WORKSPACE}",
+                                           trusted) \
+                                    and not (
+                                        nxt.startswith(
+                                            trusted + "/")
+                                        and ".." not in
+                                        nxt.split("/")):
                                 bad_git = True
                                 break
                             i += 2
@@ -273,7 +281,8 @@ def audit_step_commands(ctx, drift):
                     if not bad_git and sub is not None:
                         if sub not in GIT_READ_SUBCOMMANDS:
                             bad_git = True
-                        elif any(a in ("--filters", "--textconv")
+                        elif any(a in ("--filters", "--textconv",
+                                       "--help")
                                  for a in rest[i:]):
                             bad_git = True
                     if bad_git and "secret-step-untrusted-command" \

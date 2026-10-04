@@ -39,6 +39,36 @@ def _peel_command_opts(words, j):
             return j
     return j
 
+_TIME_VALUE_OPTS = {"-o", "--output", "-f", "--format"}
+
+
+def _peel_time_opts(words, i):
+    # Index of time's command past its options (GNU time
+    # consumes options first; -o/-f take attached-or-next
+    # values, --output=/--format= glue theirs). Unknown
+    # options skip (a value-taking future flag then audits
+    # its value as the command: over-approx, fail-closed).
+    # -- terminates options; --version/--help print and run
+    # nothing, so skipping them to an empty rest is exact.
+    while i < len(words):
+        tok = words[i]
+        if tok == "--":
+            return i + 1
+        if tok in _TIME_VALUE_OPTS:
+            i += 2
+        elif tok.startswith(("--output=", "--format=")):
+            i += 1
+        elif tok.startswith("--"):
+            i += 1
+        elif re.fullmatch(r"-[a-zA-Z]+", tok):
+            at = next((k for k, ch in enumerate(tok[1:])
+                       if ch in "of"), -1)
+            i += 2 if at == len(tok) - 2 else 1
+        else:
+            return i
+    return i
+
+
 def _peel_keyword(word):
     # Wrapper keywords match bare, or by basename behind a safe
     # exec path (/usr/bin/timeout peels exactly like timeout,
@@ -59,7 +89,8 @@ def _peel_keyword(word):
 def peel_prefix(words):
     # Strip VAR= assigns, timeout + duration, transparent
     # wrappers (with their options: exec -a name, command -p,
-    # -- terminators, time -p) and control keywords; returns
+    # -- terminators, time -o/-f/--output/--format) and
+    # control keywords; returns
     # (argv0, rest). sudo/doas peel bare (their pre-words always
     # drift via the privilege rule). Nesting re-enters: builtin
     # exec cmd parses exec's options on the next pass.
@@ -93,9 +124,7 @@ def peel_prefix(words):
             if i < len(words) and words[i] == "--":
                 i += 1
         elif key == "time":
-            i += 1
-            while i < len(words) and words[i] == "-p":
-                i += 1
+            i = _peel_time_opts(words, i + 1)
         elif key in ("sudo", "doas"):
             i += 1
         elif word in STRIP_WORDS:

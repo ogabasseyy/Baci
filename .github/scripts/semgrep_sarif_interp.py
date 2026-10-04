@@ -3,6 +3,7 @@ execution wrappers, privilege primitives, and loader/startup
 rebinding for token-bearing helper content.
 """
 import re
+from semgrep_sarif_binutils import _canon_binutils
 from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
                                 audit_find_output)
 from semgrep_sarif_embeds import _check_awk, _check_perl
@@ -15,6 +16,7 @@ from semgrep_sarif_poison import audit_env_dump, audit_ps_env
 from semgrep_sarif_programs import jq_program_has_env
 from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
                                   NET_DENY, _GCC_RE, _LD_SO_RE)
+from semgrep_sarif_install import _installer_curl_ok
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
 
@@ -59,7 +61,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
             drift.append("helper-untrusted-exec")
     base = argv0.rsplit("/", 1)[-1]
     if base in NET_DENY \
-            and not (src == "install.sh" and base == "curl") \
+            and not (src == "install.sh" and base == "curl"
+                     and _installer_curl_ok(rest)) \
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
     if (base in LOAD_DENY or _GCC_RE.match(base)
@@ -73,7 +76,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
         # below), but -plugin loads a DSO whose constructor
         # runs before linking completes.
         drift.append("helper-code-loader")
-    if base in COPY_TOOLS:
+    if base in COPY_TOOLS or _canon_binutils(base):
         audit_copy_dest(base, rest, drift, src)
     elif base == "alias":
         # Alias definitions hide command dispatch (alias

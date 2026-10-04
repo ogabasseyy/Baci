@@ -21,7 +21,8 @@ from semgrep_sarif_scan import github_cmdfile_kind
 from semgrep_sarif_zone import _write_zone
 from semgrep_sarif_sed import audit_sed_programs
 from semgrep_sarif_tar import audit_tar_exec
-from semgrep_sarif_binutils import (_dash_o_output,
+from semgrep_sarif_binutils import (_canon_binutils,
+                                     _dash_o_output,
                                      audit_binutils_targets)
 from semgrep_sarif_words import (_flag_value, _operands,
                                  _tool_operands)
@@ -123,6 +124,9 @@ def audit_link_sources(base, rest, drift):
 
 
 def audit_copy_dest(base, rest, drift, src=""):
+    # LLVM-prefixed/versioned binutils audit as their GNU
+    # original (llvm-objcopy plants the same bytes).
+    base = _canon_binutils(base) or base
     if base == "install" and src == "install.sh":
         # Structurally audited: the binding rules pin its
         # operands exactly, so the helper pass stands down.

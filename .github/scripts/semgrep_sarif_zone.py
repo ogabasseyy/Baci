@@ -3,6 +3,7 @@ unzoneable globs, /proc alias collapse, and environ reads.
 """
 import posixpath
 import re
+from semgrep_sarif_shell import _bare_word, tokenize
 
 
 MUSE_BIN_RE = (r"^(?:\$(?:\{HOME\}|HOME)/|~/)"
@@ -29,7 +30,11 @@ def has_proc_environ(text):
     # Any /proc path resolving to an environ file: direct,
     # dot-dot, or /root-aliased spellings (/proc/self/root/
     # /proc/self/environ reads our own secrets). Step secrets
-    # past exact-value masking, whatever the reader.
+    # past exact-value masking, whatever the reader. Words
+    # dequote first (quote removal joins /proc/self/en""viron
+    # into the environ path); space-joined so separate words
+    # cannot fuse into a phantom match.
+    text = " ".join(_bare_word(w) for w in tokenize(text))
     for m in re.finditer(
             r"(?:^|[^/\w])(/proc/\S*?/environ(?![\w]))", text):
         if re.fullmatch(r"/proc/[^/]+/environ",

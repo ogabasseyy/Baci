@@ -14,6 +14,25 @@ WANT_DEST = '"${install_dir}/muse"'
 _VALUE_FLAGS = {"-m", "-o", "-g"}
 
 
+def _installer_curl_ok(rest):
+    # The install.sh download curl stays exempt from the
+    # network rule only when it cannot load attacker config:
+    # --disable/-q first (curl reads $CURL_HOME/.curlrc or
+    # $HOME/.curlrc unless disabled as the first parameter)
+    # and no -K/--config anywhere (a config imports upload-file
+    # plus an attacker url as command-line arguments).
+    if not rest or rest[0] not in ("-q", "--disable"):
+        return False
+    for tok in rest:
+        if tok in ("-K", "--config") \
+                or tok.startswith("--config=") \
+                or tok.startswith("-K"):
+            return False
+        if re.fullmatch(r"-[a-zA-Z]+", tok) and "K" in tok:
+            return False
+    return True
+
+
 def _install_operands(words):
     # Non-flag operands of an install command. Unknown --flags
     # consume a value (fail closed: a miscounted operand drifts

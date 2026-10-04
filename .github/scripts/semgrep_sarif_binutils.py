@@ -36,6 +36,23 @@ def _objcopy_dumps(rest):
     return dumps
 
 
+_BINUTILS_RE = re.compile(
+    r"^(?:llvm-)?(objcopy|ld|as|strip|ar|ranlib)"
+    r"(?:-\d[\d.]*)?$")
+
+
+def _canon_binutils(base):
+    # Canonical audited name for LLVM-prefixed (llvm-objcopy)
+    # and versioned (objcopy-12) binutils spellings, else None.
+    # Same destination semantics as the GNU originals (llvm-as
+    # without -o writes stdout: the implicit zone then
+    # over-approximates, fail-closed). Cross-prefixed
+    # (x86_64-linux-gnu-) and renamed-linker (ld.lld/ld.gold)
+    # spellings stay uncovered (residual).
+    m = _BINUTILS_RE.match(base)
+    return m.group(1) if m else None
+
+
 def _ar_archive(rest):
     # Archive operand of ar: the operand past the operation
     # letters (undashed) or the first operand (dashed-op

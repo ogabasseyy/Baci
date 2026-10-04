@@ -104,4 +104,16 @@ describe('NotificationsScreen', () => {
 
     expect(mockRouterPush).toHaveBeenCalledWith('/orders');
   });
+
+  it('waits for auth hydration before mounting the inbox on a fallback merchant', () => {
+    mockUseRequireAuth.mockReturnValue({ isLoading: true, redirectTo: null });
+    mockUseAuthStore.mockReturnValue(null);
+
+    render(<NotificationsScreen />);
+
+    expect(
+      screen.getByLabelText('Loading notifications')
+    ).toBeOnTheScreen();
+    expect(mockSavingsNotificationsScreen).not.toHaveBeenCalled();
+  });
 });

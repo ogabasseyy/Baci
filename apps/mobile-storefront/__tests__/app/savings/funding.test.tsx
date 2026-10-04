@@ -33,7 +33,8 @@ const defaultActiveGoal = () => ({
   target_amount: 250000,
   title: 'iPhone savings',
 });
-let mockActiveGoal = defaultActiveGoal();
+let mockActiveGoal: ReturnType<typeof defaultActiveGoal> | null =
+  defaultActiveGoal();
 
 jest.mock('expo-router', () => ({
   Redirect: (props: unknown) => {
@@ -255,7 +256,7 @@ describe('SavingsPlanFundingRoute', () => {
 
   it('accepts UUID v7 goal ids emitted by the backend', () => {
     const v7GoalId = '01932f3e-7a2d-7c1e-b4d5-9f8e7d6c5b4a';
-    mockActiveGoal = { ...mockActiveGoal, id: v7GoalId };
+    mockActiveGoal = { ...defaultActiveGoal(), id: v7GoalId };
     mockParams = { amount: '250000', goalId: v7GoalId };
     render(<SavingsPlanFundingRoute />);
 
@@ -285,6 +286,21 @@ describe('SavingsPlanFundingRoute', () => {
       screen.getByText(/no longer matches your active savings plan/i)
     ).toBeOnTheScreen();
     expect(screen.queryByText(/cached plan balance/i)).toBeNull();
+  });
+
+  it('prompts a refresh when no plan is cached instead of reporting a dead link', () => {
+    mockActiveGoal = null;
+    render(<SavingsPlanFundingRoute />);
+
+    expect(
+      screen.getByText(/could not find your active savings plan/i)
+    ).toBeOnTheScreen();
+    expect(
+      screen.queryByText(/no longer matches your active savings plan/i)
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Refresh plan progress' })
+    ).toBeOnTheScreen();
   });
 
   it('copies the ready plan account number and confirms', async () => {

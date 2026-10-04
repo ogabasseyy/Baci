@@ -138,7 +138,9 @@ function SavingsPlanFundingScreen() {
             <Text style={[styles.copy, { color: colors.error }]}>
               {amountExceedsCachedRemaining && activeMerchantId
                 ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'
-                : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
+                : activeGoal === null && activeMerchantId
+                  ? 'We could not find your active savings plan in the cached wallet. Refresh plan progress below — if the plan still does not appear, return to savings and choose the plan again.'
+                  : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
             </Text>
           ) : (
             <SavingsPlanFundingDetails

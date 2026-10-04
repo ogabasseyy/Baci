@@ -1,5 +1,5 @@
 import { Redirect, router, Stack } from 'expo-router';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { SavingsNotificationsScreen } from '@/components/notifications/SavingsNotificationsScreen';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -12,12 +12,20 @@ import { useAuthStore } from '@/stores/auth-store';
 export default function NotificationsScreen() {
   const merchantId = useAuthStore((state) => state.merchantId);
   const userId = useAuthStore((state) => state.user?.id ?? null);
-  const { redirectTo } = useRequireAuth();
+  const { isLoading: authLoading, redirectTo } = useRequireAuth();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
   if (redirectTo) {
     return <Redirect href={redirectTo} />;
+  }
+  // Wait for auth hydration before resolving the merchant scope: mounting
+  // the inbox on the configured fallback while the auth merchant is still
+  // null would fire a transient wrong-merchant fetch (server 404s it, but
+  // the error flashes). The fallback still applies after hydration for
+  // genuinely merchant-less contexts.
+  if (authLoading) {
+    return <ActivityIndicator accessibilityLabel="Loading notifications" />;
   }
 
   // This route intentionally hosts the savings inbox: the previous screen

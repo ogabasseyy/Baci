@@ -25,6 +25,30 @@ describe('variant output failure contracts', () => {
     expect(mcpToolOutputSchemas.get_product.safeParse(detail.structuredContent).success).toBe(true);
   });
 
+  it.each([
+    { label: 'negative variant price', offer: false, row: { attributes: {}, price_override: -1, stock_quantity: 2, condition: 'new', images: [] } },
+    { label: 'missing tracked stock', offer: false, row: { attributes: {}, price_override: null, condition: 'new', images: [] } },
+    { label: 'negative offer price', offer: true, row: { condition: 'new', price: -1, stock_quantity: 2, grade: null, condition_notes: null } },
+  ])('returns truthful unavailable results for $label', async ({ offer, row }) => {
+    const supabase = createSupabase();
+    supabase.query.single.mockResolvedValue({ data: { id: 'phone-1', name: 'Phone', manage_stock: true, has_variants: !offer, has_condition_offers: offer, color: null, color_images: null }, error: null });
+    supabase.rpc.mockResolvedValue({ data: [row], error: null });
+    const variants = await loadMcpProductVariants({
+      args: { product_id: 'phone-1' }, merchantId: 'merchant-1', supabase: supabase as unknown as SupabaseClient,
+      sanitizeString: (value) => value, formatPrice: String,
+    });
+    const detail = await buildMcpProductDetail({
+      product: { id: 'phone-1', name: 'Phone', slug: null, price: 100000, compare_at_price: null, images: [], description: null, stock_quantity: 0, manage_stock: true, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: !offer, has_condition_offers: offer, schema_markup: null },
+      supabase: supabase as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined,
+    });
+    expect(variants.structuredContent).toMatchObject({ status: 'unavailable', variants: [], condition_offers: [] });
+    expect(detail.structuredContent).toMatchObject({ status: 'unavailable', products: [] });
+    expect(mcpToolOutputSchemas.get_product_variants.safeParse(variants.structuredContent).success).toBe(true);
+    expect(mcpToolOutputSchemas.get_product.safeParse(detail.structuredContent).success).toBe(true);
+    expect(variants.content[0].text).not.toContain('-1');
+    expect(detail.content[0].text).not.toContain('-1');
+  });
+
   it('explicitly reports successful lookups when neither returns options', async () => {
     const supabase = createSupabase();
     supabase.rpc.mockResolvedValue({ data: [], error: null });

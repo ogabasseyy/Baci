@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
 import type { z } from 'zod';
-import type { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantColorValue } from './variant-color-value';
@@ -235,7 +235,7 @@ export async function loadMcpProductVariants({
     }
   }
 
-  return {
+  const result: ProductVariantsResult = {
     content: [{ type: 'text', text }],
     structuredContent: {
       product_name: product.name,
@@ -258,4 +258,8 @@ export async function loadMcpProductVariants({
       offer_lookup_failed: offerLookupFailed,
     },
   };
+  if (!mcpToolOutputSchemas.get_product_variants.safeParse(result.structuredContent).success) {
+    return unavailableOptions('Product options are temporarily unavailable.');
+  }
+  return result;
 }

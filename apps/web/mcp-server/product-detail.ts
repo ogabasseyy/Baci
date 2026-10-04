@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
 import type { z } from 'zod';
-import type { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
@@ -216,7 +216,7 @@ export async function buildMcpProductDetail({
   const productPageUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
   text += `\n\n🔗 [View Product](${productPageUrl})`;
 
-  return {
+  const result: ProductDetailResult = {
     content: [{ type: 'text', text }],
     structuredContent: {
       products: [formatted],
@@ -241,4 +241,14 @@ export async function buildMcpProductDetail({
       'openai/widgetPrefersBorder': true,
     },
   };
+  const trackedStockMissing = product.manage_stock === true &&
+    [...variants, ...conditionOffers].some((option) => !Number.isFinite(option.stock_quantity));
+  if (trackedStockMissing || !mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success) {
+    const message = 'Product details are temporarily unavailable.';
+    return {
+      content: [{ type: 'text', text: message }],
+      structuredContent: { products: [], status: 'unavailable', message },
+    };
+  }
+  return result;
 }

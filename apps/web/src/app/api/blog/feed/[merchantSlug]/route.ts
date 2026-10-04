@@ -13,8 +13,8 @@ import {
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
 import {
-  filterPublicBlogPosts,
   isPublicBlogCategory,
+  isPublicBlogPost,
 } from '@/lib/public-blog-content-quality';
 import { sanitizeForFeed } from '@/lib/sanitize';
 import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
@@ -257,19 +257,22 @@ async function fetchPublicFeedPosts(
     const postBatch = Array.isArray(posts) ? (posts as BlogPost[]) : [];
     // Judge visibility on fully normalized copies, but emit the raw slug:
     // URLs percent-encode it (identity-preserving + XML-safe) while the
-    // predicate must see the same stripped text the feed renders.
-    const normalizedBatch = postBatch.map(normalizeBlogFeedPostForFilter);
-    const visibleNormalized = new Set(filterPublicBlogPosts(normalizedBatch));
-    for (const [index, post] of postBatch.entries()) {
-      const judged = normalizedBatch[index];
-      if (judged && visibleNormalized.has(judged)) {
-        publicPosts.push({
+    // predicate must see the same stripped text the feed renders. Pairs keep
+    // each post attached to its own verdict (filterPublicBlogPosts is
+    // Array.filter over this same predicate).
+    const judgedBatch = postBatch.map((post) => ({
+      post,
+      predicate: normalizeBlogFeedPostForFilter(post),
+    }));
+    publicPosts.push(
+      ...judgedBatch
+        .filter(({ predicate }) => isPublicBlogPost(predicate))
+        .map(({ post, predicate }) => ({
           ...post,
-          title: judged.title,
-          category: judged.category,
-        });
-      }
-    }
+          title: predicate.title,
+          category: predicate.category,
+        }))
+    );
     hasMoreRows = postBatch.length === RSS_QUERY_BATCH_SIZE;
     offset += RSS_QUERY_BATCH_SIZE;
   }

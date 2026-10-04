@@ -43,12 +43,21 @@ const feedGraphemeSegmenter =
 
 export function truncateFeedText(value: string, maxLength: number): string {
   const stripped = stripInvalidXml10Characters(value);
+  // Iterate lazily: materializing every grapheme of a multi-megabyte post
+  // before slicing costs hundreds of MB and seconds on cache misses.
   const units = feedGraphemeSegmenter
-    ? [...feedGraphemeSegmenter.segment(stripped)].map(
-        (segment) => segment.segment
-      )
-    : Array.from(stripped);
-  return units.slice(0, maxLength).join('');
+    ? feedGraphemeSegmenter.segment(stripped)
+    : stripped;
+  let result = '';
+  let count = 0;
+  for (const unit of units) {
+    if (count >= maxLength) {
+      break;
+    }
+    result += typeof unit === 'string' ? unit : unit.segment;
+    count += 1;
+  }
+  return result;
 }
 
 /**

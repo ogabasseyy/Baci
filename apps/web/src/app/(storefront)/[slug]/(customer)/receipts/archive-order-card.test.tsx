@@ -14,7 +14,9 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-function createOrder(overrides: Partial<StorefrontOrder> = {}): StorefrontOrder {
+function createOrder(
+  overrides: Partial<StorefrontOrder> = {}
+): StorefrontOrder {
   return {
     id: 'order-1',
     order_number: 'ORD-100',
@@ -66,6 +68,8 @@ describe('ArchiveOrderCard', () => {
       '/api/storefront/account/orders/order-1/invoice?merchantSlug=shop'
     );
     const viewOrder = screen.getByText('View Order').closest('a');
-    expect(viewOrder?.getAttribute('href')).toBe('/shop/account/orders/order-1');
+    expect(viewOrder?.getAttribute('href')).toBe(
+      '/shop/account/orders/order-1'
+    );
   });
 });

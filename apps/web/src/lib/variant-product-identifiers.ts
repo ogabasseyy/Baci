@@ -4,40 +4,36 @@ export interface ProductManufacturerIdentifiers {
 }
 
 /**
- * Prefer nonblank variant identifier strings using GMC key normalization.
- * Parent fallback stays verbatim to preserve existing schema/feed output.
+ * Prefer nonblank variant identifier strings after Google Merchant key
+ * normalization. Parent fallback is retained for compatibility, then trimmed
+ * so schema and feed consumers emit consistent identifiers; that fallback is
+ * intentionally different from Google's omit-unknown policy.
  */
 export function resolveVariantProductIdentifiers(
   attributes: Readonly<Record<string, unknown>> | null | undefined,
   parent: ProductManufacturerIdentifiers
 ): { gtin?: string; mpn?: string } {
-  const normalizedAttributes: { gtin?: unknown; mpn?: unknown } = {};
+  const normalizedAttributes: { gtin?: string; mpn?: string } = {};
   for (const [key, value] of Object.entries(attributes ?? {})) {
     const normalizedKey = key
       .trim()
       .toLowerCase()
       .replace(/[\s-]+/g, '_');
     if (normalizedKey === 'gtin' || normalizedKey === 'mpn') {
-      // GMC preserves finite numeric collisions, while identifier output remains string-only.
-      const normalizedValue =
-        typeof value === 'string'
-          ? value.trim()
-          : typeof value === 'number' && Number.isFinite(value)
-            ? value
-            : '';
-      if (normalizedValue !== '') {
+      // Ignore unusable values so duplicate numeric/junk keys cannot erase a valid ID.
+      const normalizedValue = typeof value === 'string' ? value.trim() : '';
+      if (normalizedValue) {
         normalizedAttributes[normalizedKey] = normalizedValue;
       }
     }
   }
 
   const resolve = (
-    variantValue: unknown,
+    variantValue: string | undefined,
     parentValue: string | null | undefined
   ) => {
-    const normalizedVariantValue =
-      typeof variantValue === 'string' ? variantValue.trim() : '';
-    return normalizedVariantValue || parentValue || undefined;
+    const normalizedParentValue = parentValue?.trim();
+    return variantValue || normalizedParentValue || undefined;
   };
 
   return {

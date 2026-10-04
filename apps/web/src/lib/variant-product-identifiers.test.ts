@@ -11,16 +11,16 @@ describe('resolveVariantProductIdentifiers', () => {
     ).toEqual({ gtin: '00012345678901', mpn: 'MODEL-A' });
   });
 
-  it('falls back to the original parent values for blank or non-string attributes', () => {
+  it('trims parent fallbacks when variant values are blank or non-string', () => {
     expect(
       resolveVariantProductIdentifiers(
         { gtin: '   ', mpn: 123 },
         { gtin: ' PARENT-GTIN ', mpn: 'PARENT-MPN' }
       )
-    ).toEqual({ gtin: ' PARENT-GTIN ', mpn: 'PARENT-MPN' });
+    ).toEqual({ gtin: 'PARENT-GTIN', mpn: 'PARENT-MPN' });
   });
 
-  it('matches Google Merchant normalized identifier keys and uses the last normalized key', () => {
+  it('matches Google Merchant key normalization and uses the last usable string', () => {
     expect(
       resolveVariantProductIdentifiers(
         {
@@ -42,12 +42,15 @@ describe('resolveVariantProductIdentifiers', () => {
     ).toEqual({ gtin: 'VALID' });
   });
 
-  it('lets a finite numeric duplicate key override then falls back to the parent', () => {
+  it('ignores numeric and other non-string values without erasing a valid duplicate', () => {
     expect(
       resolveVariantProductIdentifiers(
-        { gtin: 'VALID', ' GTIN ': 123 },
+        { gtin: ' VALID ', ' GTIN ': 123, 'gtin ': false },
         { gtin: 'PARENT-GTIN' }
       )
+    ).toEqual({ gtin: 'VALID' });
+    expect(
+      resolveVariantProductIdentifiers({ gtin: 123 }, { gtin: 'PARENT-GTIN' })
     ).toEqual({ gtin: 'PARENT-GTIN' });
   });
 
@@ -68,5 +71,14 @@ describe('resolveVariantProductIdentifiers', () => {
 
   it('omits identifiers when neither variant nor parent provides values', () => {
     expect(resolveVariantProductIdentifiers({}, {})).toEqual({});
+    expect(
+      resolveVariantProductIdentifiers(
+        { gtin: ' ', mpn: false },
+        {
+          gtin: '  ',
+          mpn: '\t',
+        }
+      )
+    ).toEqual({});
   });
 });

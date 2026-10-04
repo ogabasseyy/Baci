@@ -655,6 +655,7 @@ export function generateProductSchema(
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
+  const productIdentifiers = resolveVariantProductIdentifiers(null, product);
   const structuredDataProductUrl = parseStructuredDataUrl(options.productUrl);
   const acceptedPaymentMethod = normalizeAcceptedPaymentMethods(
     options.acceptedPaymentMethods
@@ -760,18 +761,18 @@ export function generateProductSchema(
     schema.sku = product.sku;
   }
 
-  if (product.gtin) {
-    schema.gtin = product.gtin;
-    if (product.gtin.length === 13) {
-      schema.gtin13 = product.gtin;
+  if (productIdentifiers.gtin) {
+    schema.gtin = productIdentifiers.gtin;
+    if (productIdentifiers.gtin.length === 13) {
+      schema.gtin13 = productIdentifiers.gtin;
     }
-    if (product.gtin.length === 14) {
-      schema.gtin14 = product.gtin;
+    if (productIdentifiers.gtin.length === 14) {
+      schema.gtin14 = productIdentifiers.gtin;
     }
   }
 
-  if (product.mpn) {
-    schema.mpn = product.mpn;
+  if (productIdentifiers.mpn) {
+    schema.mpn = productIdentifiers.mpn;
   }
 
   // Relation-backed category metadata outranks the deprecated text column.

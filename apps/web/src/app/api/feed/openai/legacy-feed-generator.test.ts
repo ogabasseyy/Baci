@@ -107,6 +107,39 @@ describe('generateOpenAIFeed', () => {
     ]);
   });
 
+  it('trims parent identifiers and ignores numeric variant collisions', () => {
+    const lines = generateOpenAIFeed(
+      [
+        product({
+          gtin: ' 00000000000011 ',
+          mpn: '   ',
+          variants: [
+            {
+              id: 'variant-numeric-collision',
+              sku: 'SKU-RED',
+              attributes: {
+                gtin: ' VARIANT-GTIN ',
+                ' GTIN ': 123,
+                mpn: false,
+              } as unknown as Record<string, string>,
+              stock_quantity: 1,
+            },
+          ],
+        }),
+        product({ gtin: '  ', mpn: '\t' }),
+      ],
+      merchant,
+      'https://ogabassey.com'
+    );
+
+    expect(
+      lines.map(parseLine).map(({ gtin, mpn }) => ({ gtin, mpn }))
+    ).toEqual([
+      { gtin: 'VARIANT-GTIN', mpn: undefined },
+      { gtin: undefined, mpn: undefined },
+    ]);
+  });
+
   it('builds canonical policy URLs and normalizes trailing base URL slashes', () => {
     const [line] = generateOpenAIFeed(
       [product({ manage_stock: false, stock: 0 })],

@@ -131,6 +131,8 @@ function buildSimpleFeedItem({
     return null;
   }
 
+  const productIdentifiers = resolveVariantProductIdentifiers(null, product);
+
   const stockCount =
     product.manage_stock === false
       ? UNLIMITED_STOCK_QUANTITY
@@ -155,8 +157,8 @@ function buildSimpleFeedItem({
     enable_search: true,
     enable_checkout: true,
     id: itemId,
-    gtin: product.gtin || undefined,
-    mpn: product.mpn || undefined,
+    gtin: productIdentifiers.gtin,
+    mpn: productIdentifiers.mpn,
     title: product.name,
     description: buildPlainDescription(product),
     link: buildAgentProductUrl({ baseUrl, product }),

@@ -57,6 +57,16 @@ const ShippingAddressSchema = z.object({
   country: z.string().optional(),
 });
 
+// Receipt-local widening (checkout keeps the strict shared shape):
+// mobile-admin's "same as customer" edit persists explicit null locality,
+// which the sender accepts as nullish and the renderer filters as falsy.
+// Rejecting null here would fail the whole detail closed on a valid doc.
+const ReceiptShippingAddressSchema = ShippingAddressSchema.extend({
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  postal_code: z.string().nullable().optional(),
+});
+
 const VirtualAccountSchema = z.object({
   account_number: z.string(),
   bank_name: z.string(),
@@ -138,7 +148,7 @@ export const ReceiptDetailSchema = z.object({
   customer_name: z.string().nullable(),
   customer_email: z.string(),
   customer_phone: z.string().nullable(),
-  shipping_address: ShippingAddressSchema.nullable(),
+  shipping_address: ReceiptShippingAddressSchema.nullable(),
   // Stored Peppol type code (orders.invoice_type_code, default 380):
   // an explicit non-default code survives the proforma derivation.
   invoice_type_code: z.string().nullable().optional(),

@@ -7,29 +7,132 @@
 -- Safe predeploy: only a new function plus a trigger that ships DISABLED;
 -- no live contract changes.
 
+-- Resolved merchant address line, mirroring getMerchantAddressLine: the
+-- registered parts joined exactly like the renderer (falsy parts dropped,
+-- ', ' separator), falling back to the business address when empty.
+-- Invoices print this; receipts always print the business address.
+CREATE OR REPLACE FUNCTION private.resolved_merchant_address_line(
+  p_registered_address jsonb, p_business_address text
+)
+RETURNS text LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path = '' AS $function$
+  SELECT CASE
+    WHEN coalesce(concat_ws(', ',
+      NULLIF(p_registered_address->>'street', ''),
+      NULLIF(p_registered_address->>'city', ''),
+      NULLIF(p_registered_address->>'state', ''),
+      NULLIF(p_registered_address->>'postal_code', ''),
+      NULLIF(p_registered_address->>'country', '')), '') <> ''
+    THEN concat_ws(', ',
+      NULLIF(p_registered_address->>'street', ''),
+      NULLIF(p_registered_address->>'city', ''),
+      NULLIF(p_registered_address->>'state', ''),
+      NULLIF(p_registered_address->>'postal_code', ''),
+      NULLIF(p_registered_address->>'country', ''))
+    ELSE p_business_address
+  END;
+$function$;
+REVOKE ALL ON FUNCTION private.resolved_merchant_address_line(jsonb, text)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.rearm_manual_documents_after_merchant_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_bank_changed boolean;
+  v_shared_changed boolean;
+  v_business_address_changed boolean;
+  v_resolved_address_changed boolean;
+  v_validation_changed boolean;
+  v_snapshot_changed boolean;
 BEGIN
-  -- Completing a merchant profile (slug, VAT rate) re-arms rows the worker
-  -- terminally skipped as merchant_validation_failed: only order and item
-  -- changes invoke the order re-enqueue, so without this the corrected
-  -- document is permanently lost. Undispatched processing rows re-arm too:
-  -- a correction racing validation would otherwise let the worker record
-  -- a terminal skip from its stale read. Other skip reasons keep their own
+  -- Change flags first: both re-arm halves below gate on them.
+  v_validation_changed :=
+    OLD.slug IS DISTINCT FROM NEW.slug
+    OR OLD.email IS DISTINCT FROM NEW.email
+    OR OLD.vat_rate IS DISTINCT FROM NEW.vat_rate;
+  v_bank_changed :=
+    OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
+    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
+    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name;
+  v_shared_changed :=
+    OLD.slug IS DISTINCT FROM NEW.slug
+    OR OLD.business_name IS DISTINCT FROM NEW.business_name
+    OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
+    OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
+    OR OLD.support_email IS DISTINCT FROM NEW.support_email
+    OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
+    OR OLD.phone IS DISTINCT FROM NEW.phone
+    OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
+    OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
+    OR (OLD.brand_colors->>'primary') IS DISTINCT FROM (NEW.brand_colors->>'primary');
+  v_business_address_changed :=
+    OLD.business_address IS DISTINCT FROM NEW.business_address;
+  -- Invoices print the RESOLVED line (registered when nonempty, else the
+  -- business address): a business_address edit under a nonempty registered
+  -- address changes no invoice pixel and must not go corrective. Receipts
+  -- always print the business address. Each kind resets independently so
+  -- multi-field edits invalidate the union, never a subset.
+  v_resolved_address_changed :=
+    private.resolved_merchant_address_line(OLD.registered_address, OLD.business_address)
+    IS DISTINCT FROM
+    private.resolved_merchant_address_line(NEW.registered_address, NEW.business_address);
+  -- Rendered snapshot inputs: validation-repair fields plus every field
+  -- the renderers print. cac_rc_number, vat_registration_status, and
+  -- bank_code print nowhere, so edits confined to them re-arm nothing.
+  -- The bank half mirrors the invalidation below: the fallback card
+  -- requires an account number to render at all.
+  v_snapshot_changed :=
+    v_validation_changed
+    OR v_shared_changed
+    OR v_business_address_changed
+    OR v_resolved_address_changed
+    OR (v_bank_changed
+      AND (OLD.bank_account_number IS NOT NULL
+        OR NEW.bank_account_number IS NOT NULL));
+  -- Completing a merchant profile re-arms rows the worker terminally
+  -- skipped as merchant_validation_failed: only order and item changes
+  -- invoke the order re-enqueue, so without this the corrected document
+  -- is permanently lost. The skipped-row re-arm gates on merchant-table
+  -- validation inputs ONLY: slug feeds the claim-host gate (the custom
+  -- domain itself lives in public.domains, covered by its own trigger),
+  -- email is the schema's only other required field, and the VAT rate is
+  -- its only other failable field (finite, non-negative) — every other
+  -- merchants column is nullable or catch-guarded. Re-arming skipped
+  -- rows on an unrelated profile save burns an attempt for a
+  -- re-validation that cannot change. Other skip reasons keep their own
   -- re-arm paths; sent and possibly-dispatched rows stay terminal. The
-  -- worker re-validates the merchant on the next attempt, so a still-invalid
-  -- profile simply skips again until staff finish the correction.
-  UPDATE public.order_notification_outbox AS n
-  SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
-    locked_by = NULL, locked_at = NULL, last_error = NULL,
-    skip_reason = NULL, skipped_at = NULL, updated_at = now()
-  WHERE n.merchant_id = NEW.id
-    AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
-    AND ((n.status = 'skipped' AND n.skip_reason = 'merchant_validation_failed')
-      OR n.status = 'processing')
-    AND n.dispatch_started_at IS NULL;
+  -- worker re-validates the merchant on the next attempt, so a
+  -- still-invalid profile simply skips again until staff finish the
+  -- correction.
+  IF v_validation_changed THEN
+    UPDATE public.order_notification_outbox AS n
+    SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+      locked_by = NULL, locked_at = NULL, last_error = NULL,
+      skip_reason = NULL, skipped_at = NULL, updated_at = now()
+    WHERE n.merchant_id = NEW.id
+      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'skipped' AND n.skip_reason = 'merchant_validation_failed'
+      AND n.dispatch_started_at IS NULL;
+  END IF;
+  -- Undispatched processing rows re-arm when the edit can repair
+  -- validation or alter the rendered snapshot: the worker may have
+  -- snapshotted any rendered field already (branding, contacts,
+  -- addresses), and a correction racing the snapshot read would
+  -- otherwise let the worker record a terminal skip from its stale
+  -- values. Edits confined to unrendered fields (cac_rc_number,
+  -- vat_registration_status, bank_code) keep the lease: repeated
+  -- unrelated saves must not starve delivery. Marked rows stay for
+  -- the invalidation half below; sent and possibly-dispatched rows
+  -- stay terminal.
+  IF v_snapshot_changed THEN
+    UPDATE public.order_notification_outbox AS n
+    SET status = 'pending', attempt_count = 0, next_attempt_at = NULL,
+      locked_by = NULL, locked_at = NULL, last_error = NULL,
+      skip_reason = NULL, skipped_at = NULL, updated_at = now()
+    WHERE n.merchant_id = NEW.id
+      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.status = 'processing'
+      AND n.dispatch_started_at IS NULL;
+  END IF;
   -- A snapshot-relevant merchant edit landing mid-dispatch resets the
   -- markers of the kinds that render it, so the lease check aborts
   -- instead of recording a stale document as sent. Rendered branding
@@ -37,8 +140,10 @@ BEGIN
   -- issuer/contact fields. cac_rc_number, vat_registration_status, and
   -- vat_rate print nowhere (validation inputs only), so they reset
   -- nothing: an accepted, visually unchanged attachment must not go
-  -- corrective. registered_address renders on invoices only (receipts
-  -- print business_address), so it resets invoice markers alone.
+  -- corrective. Addresses resolve per kind like the renderer: receipts
+  -- print business_address, invoices print the registered line when it
+  -- renders nonempty (else business_address) — a business_address edit
+  -- under a nonempty registered address resets receipt markers alone.
   -- Bank fields reset invoice markers only, and only for NGN orders
   -- without a selected virtual account: receipts render no payment
   -- instructions, foreign-currency invoices strip all bank details, and
@@ -46,35 +151,24 @@ BEGIN
   -- prints (name/number/account name only) and the fallback card
   -- requires an account number to render at all, so code-only edits and
   -- numberless-merchant edits reset nothing either. The dispatch RPC
-  -- compares the same rendered-only subset.
-  v_bank_changed :=
-    OLD.bank_account_number IS DISTINCT FROM NEW.bank_account_number
-    OR OLD.bank_name IS DISTINCT FROM NEW.bank_name
-    OR OLD.bank_account_name IS DISTINCT FROM NEW.bank_account_name;
-  IF OLD.slug IS DISTINCT FROM NEW.slug
-    OR OLD.business_name IS DISTINCT FROM NEW.business_name
-    OR OLD.legal_entity_name IS DISTINCT FROM NEW.legal_entity_name
-    OR OLD.business_address IS DISTINCT FROM NEW.business_address
-    OR OLD.tax_identification_number IS DISTINCT FROM NEW.tax_identification_number
-    OR OLD.support_email IS DISTINCT FROM NEW.support_email
-    OR OLD.support_phone IS DISTINCT FROM NEW.support_phone
-    OR OLD.phone IS DISTINCT FROM NEW.phone
-    OR OLD.email_sender_name IS DISTINCT FROM NEW.email_sender_name
-    OR OLD.logo_url IS DISTINCT FROM NEW.logo_url
-    OR (OLD.brand_colors->>'primary') IS DISTINCT FROM (NEW.brand_colors->>'primary')
-  THEN
+  -- compares the same rendered-only subset. Each kind resets
+  -- independently so multi-field edits invalidate the union, never a
+  -- subset.
+  IF v_shared_changed OR v_business_address_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
     WHERE n.merchant_id = NEW.id
-      AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
+      AND n.event_type = 'manual_order_receipt'
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
-  ELSIF OLD.registered_address IS DISTINCT FROM NEW.registered_address THEN
+  END IF;
+  IF v_shared_changed OR v_resolved_address_changed THEN
     UPDATE public.order_notification_outbox AS n
     SET dispatch_started_at = NULL, updated_at = now()
     WHERE n.merchant_id = NEW.id
       AND n.event_type = 'manual_order_invoice'
       AND n.status = 'processing' AND n.dispatch_started_at IS NOT NULL;
-  ELSIF v_bank_changed
+  END IF;
+  IF v_bank_changed
     AND (OLD.bank_account_number IS NOT NULL
       OR NEW.bank_account_number IS NOT NULL) THEN
     UPDATE public.order_notification_outbox AS n

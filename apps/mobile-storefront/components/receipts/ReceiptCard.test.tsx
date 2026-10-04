@@ -121,6 +121,35 @@ describe('ReceiptCard', () => {
     ).toBeTruthy();
   });
 
+  it('fails a stale manual receipt kind closed to invoice on terminal shipping', () => {
+    // A cached entry can outlive a cancellation: the list-time kind says
+    // receipt, but the card re-verifies through the promotion gate and
+    // badges invoice like the preview opens.
+    render(
+      <ReceiptCard
+        item={{
+          ...receiptItem,
+          recorded_by_user_id: 'staff-1',
+          import_job_id: null,
+          external_source: null,
+          payment_status: 'paid',
+          shipping_status: 'cancelled',
+          subtotal: 150000,
+          shipping_fee: 0,
+          tax_amount: 0,
+          discount_amount: 0,
+          document_kind: 'receipt',
+        }}
+        colors={Colors.light}
+        onPress={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Invoice')).toBeTruthy();
+    expect(screen.getByText('View Invoice')).toBeTruthy();
+    expect(screen.queryByText('View Receipt')).toBeNull();
+  });
+
   it('renders the receipt product title', () => {
     render(
       <ReceiptCard

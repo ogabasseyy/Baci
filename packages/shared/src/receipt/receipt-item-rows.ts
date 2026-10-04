@@ -15,7 +15,7 @@ import {
   getReceiptItemVatLines,
   type MoneyFormatter,
 } from './receipt-money';
-import type { ReceiptOrder } from './types';
+import type { ReceiptDocumentKind, ReceiptOrder } from './types';
 
 // Item-line rendering for the shared receipt HTML, split out so the
 // section module stays under the 300-line gate. Line math and labels
@@ -24,14 +24,19 @@ import type { ReceiptOrder } from './types';
 
 function renderReceiptItemMetaHtml(
   item: ReceiptOrder['items'][number],
-  formatMoney: MoneyFormatter
+  formatMoney: MoneyFormatter,
+  documentKind: ReceiptDocumentKind
 ): string {
   // Line math and labels come from the shared receipt-money helpers the
   // emailed PDF consumes too, so the preview can never disagree with the
-  // sent document.
+  // sent document. VAT lines are invoice-only like the PDF's isInvoice
+  // gate: receipt previews must not show VAT detail the receipt
+  // artifact omits.
   const lines = [
     ...getReceiptItemDetailLines(item),
-    ...getReceiptItemVatLines(item, formatMoney),
+    ...(documentKind === 'receipt'
+      ? []
+      : getReceiptItemVatLines(item, formatMoney)),
   ];
   if (lines.length === 0) return '';
   return `<div class="cell-line-meta">${lines
@@ -41,7 +46,8 @@ function renderReceiptItemMetaHtml(
 
 export function renderItemRows(
   order: ReceiptOrder,
-  formatMoney: MoneyFormatter
+  formatMoney: MoneyFormatter,
+  documentKind: ReceiptDocumentKind
 ): string {
   if (order.items.length === 0) {
     const fulfillmentHtml = renderFulfillmentRowsHtml(
@@ -127,7 +133,7 @@ export function renderItemRows(
         <td class="cell-item">
           <div>${escapeHtml(itemLabel)}</div>
           ${descriptionHtml}
-          ${renderReceiptItemMetaHtml(item, formatMoney)}
+          ${renderReceiptItemMetaHtml(item, formatMoney, documentKind)}
           ${fulfillmentHtml}
         </td>
         <td class="cell-qty">${item.quantity}</td>

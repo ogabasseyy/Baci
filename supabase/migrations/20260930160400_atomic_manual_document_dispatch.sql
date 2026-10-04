@@ -230,17 +230,24 @@ BEGIN
     OR v_order.firs_irn IS DISTINCT FROM p_firs_irn
     OR v_order.firs_csid IS DISTINCT FROM p_firs_csid
     OR v_order.created_at IS DISTINCT FROM p_order_created_at
-    OR v_order.shipping_address IS DISTINCT FROM p_shipping_address
+    OR private.rendered_shipping_address(v_order.shipping_address)
+      IS DISTINCT FROM private.rendered_shipping_address(p_shipping_address)
     OR v_item_count IS DISTINCT FROM p_item_count::bigint
     OR v_items IS DISTINCT FROM p_items
     OR v_merchant_business_name IS DISTINCT FROM p_merchant_business_name
     OR v_merchant_legal_entity_name IS DISTINCT FROM p_merchant_legal_entity_name
-    OR v_merchant_business_address IS DISTINCT FROM p_merchant_business_address
-    -- Registered address prints on invoices only (receipts use the
-    -- business address); cac/vat fields print nowhere, so the trigger
-    -- and this check both ignore them like the reserved bank slot.
+    -- Addresses resolve per kind like getMerchantAddressLine: receipts
+    -- print business_address; invoices print the registered line when it
+    -- renders nonempty, else business_address. Compare the resolved line
+    -- so a shadowed-column edit never aborts an identical render.
+    OR (NOT v_compare_invoice_only
+      AND v_merchant_business_address IS DISTINCT FROM p_merchant_business_address)
     OR (v_compare_invoice_only
-      AND v_merchant_registered_address IS DISTINCT FROM p_merchant_registered_address)
+      AND private.resolved_merchant_address_line(v_merchant_registered_address, v_merchant_business_address)
+        IS DISTINCT FROM
+        private.resolved_merchant_address_line(p_merchant_registered_address, p_merchant_business_address))
+    -- cac/vat fields print nowhere, so the trigger and this check both
+    -- ignore them like the reserved bank slot.
     OR v_merchant_tax_identification_number IS DISTINCT FROM p_merchant_tax_identification_number
     OR v_merchant_support_email IS DISTINCT FROM p_merchant_support_email
     OR v_merchant_support_phone IS DISTINCT FROM p_merchant_support_phone

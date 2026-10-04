@@ -18085,6 +18085,7 @@ export type Database = {
           gateway: string | null;
           id: string;
           order_id: string;
+          payment_method: string | null;
           status: string | null;
           transaction_type: string | null;
         }[];

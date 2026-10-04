@@ -17,6 +17,7 @@ const lookups = {
           gateway: 'paystack',
           status: 'completed',
           transaction_type: 'payment',
+          payment_method: 'bank_transfer',
         },
         {
           id: 'txn-2',
@@ -28,6 +29,7 @@ const lookups = {
           gateway: 'paystack',
           status: 'pending',
           transaction_type: 'payment',
+          payment_method: null,
         },
       ],
     ],
@@ -95,7 +97,7 @@ describe('transformStorefrontOrdersForDisplay', () => {
         amount: 150000,
         created_at: '2026-09-30T12:00:00Z',
         description: 'Transfer',
-        metadata: null,
+        metadata: { payment_method: 'bank_transfer' },
       },
     ]);
     expect(entry.virtual_account).toMatchObject({
@@ -206,6 +208,7 @@ describe('transformStorefrontOrdersForDisplay', () => {
                 gateway: null,
                 status: 'completed',
                 transaction_type: 'payment',
+                payment_method: null,
               },
             ],
           ],

@@ -156,6 +156,7 @@ describe('storefront account document data fetching', () => {
           gateway: null,
           status: 'completed',
           transaction_type: 'payment',
+          payment_method: null,
         },
       ],
       error: null,

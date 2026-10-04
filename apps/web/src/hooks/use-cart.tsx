@@ -1,6 +1,10 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  mergeAssuranceChoice,
+  resolveAssuranceDefault,
+} from '@/hooks/cart/cart-assurance-policy';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
@@ -410,9 +414,10 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
-          // An explicit incoming choice wins; an absent one preserves the
-          // stored choice so silent adds never flip an opt-out.
-          hasAssurance: normalizedOptions?.hasAssurance ?? item.hasAssurance,
+          hasAssurance: mergeAssuranceChoice(
+            normalizedOptions?.hasAssurance,
+            item.hasAssurance
+          ),
         };
         return newCart;
       }
@@ -440,7 +445,7 @@ export const CartProvider = ({
           negotiationStatus: 'none',
           hasAssurance:
             normalizedOptions?.hasAssurance ??
-            (enableSmartCartPro && merchantSlug === 'ogabassey'),
+            resolveAssuranceDefault({ enableSmartCartPro, merchantSlug }),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];

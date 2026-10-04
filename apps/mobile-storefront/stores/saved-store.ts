@@ -96,7 +96,11 @@ export const useSavedStore = create<SavedState>()(
             name: product.name,
             slug: product.slug,
             price: product.price,
-            compare_at_price: product.compare_at_price,
+            // A matched option price must never pair with the parent's
+            // strike-through: suppress it exactly as the search card does.
+            compare_at_price: product.searchMatch
+              ? undefined
+              : product.compare_at_price,
             image: product.image,
             brand: product.brand,
             condition: product.condition,
@@ -139,7 +143,11 @@ export const useSavedStore = create<SavedState>()(
             name: product.name,
             slug: product.slug,
             price: product.price,
-            compare_at_price: product.compare_at_price,
+            // A matched option price must never pair with the parent's
+            // strike-through: suppress it exactly as the search card does.
+            compare_at_price: product.searchMatch
+              ? undefined
+              : product.compare_at_price,
             image: product.image,
             brand: product.brand,
             condition: product.condition,

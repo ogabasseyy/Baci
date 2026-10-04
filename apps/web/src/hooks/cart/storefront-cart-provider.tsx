@@ -6,6 +6,10 @@ import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
+import {
+  mergeAssuranceChoice,
+  resolveAssuranceDefault,
+} from './cart-assurance-policy';
 import { CartContext } from './cart-context';
 import {
   DEFAULT_ASSURANCE_RATE,
@@ -376,8 +380,10 @@ export function StorefrontCartProvider({
       return;
     }
 
-    const assuranceEnabledByDefault =
-      enableSmartCartPro && merchantSlugRef.current === 'ogabassey';
+    const assuranceEnabledByDefault = resolveAssuranceDefault({
+      enableSmartCartPro,
+      merchantSlug: merchantSlugRef.current,
+    });
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const cartItemId = generateCartItemId(
@@ -398,10 +404,10 @@ export function StorefrontCartProvider({
           ...existingItem,
           quantity: existingItem.quantity + quantity,
           cartItemId: existingItem.cartItemId || cartItemId,
-          // An explicit incoming choice wins; an absent one preserves the
-          // stored choice so silent adds never flip an opt-out.
-          hasAssurance:
-            normalizedOptions?.hasAssurance ?? existingItem.hasAssurance,
+          hasAssurance: mergeAssuranceChoice(
+            normalizedOptions?.hasAssurance,
+            existingItem.hasAssurance
+          ),
         };
         result = nextCart;
       } else {

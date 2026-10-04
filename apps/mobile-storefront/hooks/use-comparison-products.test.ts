@@ -173,6 +173,34 @@ it('keeps the parent strike-through when no option matched', async () => {
   expect(mockRpc).not.toHaveBeenCalled();
 });
 
+it('marks every id unavailable when refresh fails over cached facts', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const snapshot = { id: 'p1', name: 'Phone', price: 100 } as Product;
+  client.setQueryData(
+    ['comparison-products', 'm1', 'p1'],
+    [
+      {
+        product: { id: 'p1', name: 'Phone', price: 100 },
+        unavailable: false,
+      },
+    ]
+  );
+  mockResolve.mockRejectedValue(new Error('offline'));
+  const { result } = renderHook(() => useComparisonProducts([snapshot]), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children),
+  });
+  await waitFor(() =>
+    expect(result.current.status).toContain(
+      'Open a product to check its current details'
+    )
+  );
+  expect(result.current.products).toHaveLength(1);
+  expect(result.current.unavailableIds).toEqual(['p1']);
+});
+
 it('fails closed when the purchasable projection errors', async () => {
   mockResolve.mockResolvedValue({
     id: 'p1',

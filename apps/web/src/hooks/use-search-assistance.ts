@@ -26,11 +26,11 @@ export function useSearchAssistance(query: string, enabled: boolean) {
     controller.current?.abort();
     const request = new AbortController();
     controller.current = request;
-    const requestId = crypto.randomUUID();
     setState({ query, pending: true });
     const timeout = setTimeout(() => request.abort(), 15000);
     try {
       if (!enabled) throw new Error('Unavailable');
+      const requestId = crypto.randomUUID();
       const response = await fetch('/api/search/assist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

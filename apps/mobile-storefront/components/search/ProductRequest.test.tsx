@@ -49,6 +49,14 @@ it('prefills the searched product and sends only after explicit submission', asy
     })
   );
 });
+it('re-prefills the draft when the query changes while closed', () => {
+  const view = render(
+    <ProductRequest query="iPhone 20" colors={Colors.light} />
+  );
+  view.rerender(<ProductRequest query="Galaxy S99" colors={Colors.light} />);
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  expect(screen.getByDisplayValue('Galaxy S99')).toBeTruthy();
+});
 it('retains the form and request identity after a failed submission', async () => {
   jest.mocked(submitProductRequest).mockRejectedValue(new Error('offline'));
   render(<ProductRequest query="iPhone 20" colors={Colors.light} />);

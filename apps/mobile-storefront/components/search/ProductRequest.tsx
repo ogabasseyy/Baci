@@ -33,6 +33,13 @@ export default function ProductRequest({
   const [open, setOpen] = useState(false);
   const [product, setProduct] = useState(query);
   const [contact, setContact] = useState('');
+  // A new search while the sheet is closed re-prefills the draft; never
+  // clobber text the shopper is editing (or typed) for the current query.
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery && !open) {
+    setPrevQuery(query);
+    setProduct(query);
+  }
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');

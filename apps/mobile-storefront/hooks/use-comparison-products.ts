@@ -114,9 +114,13 @@ export function useComparisonProducts(selected: Product[]) {
     // would present 0 as a current price. The status line already says
     // prices are refreshing, so this never flashes a false failure.
     unavailableIds:
-      query.data
-        ?.filter((item) => item.unavailable)
-        .map((item) => item.product.id) ?? products.map((p) => p.id),
+      // A settled refresh failure invalidates every cached fact: without
+      // their ids here the table would present stale prices as current.
+      query.isError
+        ? products.map((p) => p.id)
+        : (query.data
+            ?.filter((item) => item.unavailable)
+            .map((item) => item.product.id) ?? products.map((p) => p.id)),
     status: query.isFetching
       ? 'Refreshing prices and specifications…'
       : query.error

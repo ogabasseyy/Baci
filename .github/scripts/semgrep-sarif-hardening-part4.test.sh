@@ -197,6 +197,7 @@ t nm-plugin-eq 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}
 t ar-plugin 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ar --plugin \"\${GITHUB_WORKSPACE}/evil.so\" r lib.a x.o"
 t ranlib-plugin 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ranlib --plugin \"\${GITHUB_WORKSPACE}/evil.so\" lib.a"
 t ld-plugin-eq 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ld --plugin=\"\${GITHUB_WORKSPACE}/evil.so\" -o out in.o"
+t ld-target-prefix-plugin 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x86_64-linux-gnu-ld --plugin \"\${GITHUB_WORKSPACE}/evil.so\" --version"
 t nm-bare-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}nm /bin/true"
 t cd-sensitive 1 "helper-sensitive-cwd" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cd \"\${SCRIPT_DIR}\"
 cp \"\${GITHUB_WORKSPACE}/evil.sh\" diff.sh"
@@ -214,6 +215,14 @@ t sevenz-extract-cwd 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pip
 t dpkg-extract 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dpkg-deb -x \"\${GITHUB_WORKSPACE}/evil.deb\" \"\${GITHUB_WORKSPACE}\""
 t dpkg-extract-cwd 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dpkg-deb -x evil.deb"
 t dpkg-info-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dpkg-deb -f evil.deb Package"
+# --- jar destinations (Codex P1: -x into protected paths) ---
+t jar-extract-cwd 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jar -xf \"\${GITHUB_WORKSPACE}/evil.jar\""
+t jar-extract-dir 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jar -xf evil.jar -C \"\${SCRIPT_DIR}\""
+t jar-create 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jar -cf \"\${GITHUB_WORKSPACE}/out.jar\" -C classes ."
+t jar-list-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}jar -tf evil.jar"
+# --- upx destinations (Codex P1: -o overwrites muse binary) ---
+t upx-muse 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}upx -f -o \"\${HOME}/.local/bin/muse\" \"\${GITHUB_WORKSPACE}/evil\""
+t upx-inplace 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}upx \"\${GITHUB_WORKSPACE}/evil\""
 t hg-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}hg init \"\${RUNNER_TEMP}/audit-repo\"
 HGRCPATH=\"\${GITHUB_WORKSPACE}/evil.hgrc\" hg -R \"\${RUNNER_TEMP}/audit-repo\" status"
 t julia-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}julia \"\${GITHUB_WORKSPACE}/evil.jl\""

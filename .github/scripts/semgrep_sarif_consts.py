@@ -19,7 +19,7 @@ NET_DENY = {"aria2c", "axel", "busybox", "curl", "ftp", "lftp",
 
 # Build/package/container/provisioner drivers: each executes
 # repo-controlled files. Canonical names only (variants fail at
-# exec when absent); mix/stack/rake/port excluded (prose words).
+# exec when absent); mix/port excluded (prose words).
 LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "bazel", "bazelisk", "bmake", "brew", "buck2", "bun",
              "bundle", "cargo", "choco", "cmake", "conda", "crictl",
@@ -44,7 +44,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "runghc", "runhaskell", "ghc", "ghci",
              "cabal", "stack", "ant", "clang-tidy",
              "webpack", "webpack-dev-server", "cpack", "mono",
-             "bison"}
+             "bison", "javadoc", "protoc", "rake", "fastlane",
+             "swift-run", "swift-build", "swift-test",
+             "swift-package"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -93,7 +95,13 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # mono runs the managed-executable operand (ships on the
 # ubuntu runner). bison -S runs the skeleton operand through
 # m4 (m4_esyscmd executes repo scripts; ships on the ubuntu
-# runner).
+# runner). javadoc -doclet loads the doclet class (static
+# initializers run at load); protoc --plugin executes the
+# plugin binary; rake -f runs the Rakefile as Ruby;
+# fastlane runs the lane from the workspace Fastfile; the
+# standalone swift-run/swift-build/swift-test drivers build
+# and execute package products, swift-package evaluates
+# manifests (all ship on the ubuntu runner).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")

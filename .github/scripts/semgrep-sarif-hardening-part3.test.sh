@@ -170,6 +170,15 @@ t loader-cpack 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}
 t loader-mono 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mono \"\${GITHUB_WORKSPACE}/evil.exe\""
 # --- bison loader (Codex P1: -S skeleton runs m4_esyscmd) ---
 t loader-bison 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}bison -S \"\${GITHUB_WORKSPACE}/evil.m4\" \"\${GITHUB_WORKSPACE}/evil.y\""
+# --- javadoc/protoc/swift/rake/fastlane loaders (Codex P1s) ---
+t loader-javadoc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}javadoc -doclet Evil -docletpath \"\${GITHUB_WORKSPACE}/evil-doclet\" \"\${GITHUB_WORKSPACE}/X.java\""
+t loader-protoc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}protoc -I\"\${GITHUB_WORKSPACE}\" --plugin=protoc-gen-evil=\"\${GITHUB_WORKSPACE}/evil.sh\" --evil_out=/tmp evil.proto"
+t loader-swift-run 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}swift-run --package-path \"\${GITHUB_WORKSPACE}/evil-swift\" Evil"
+t loader-swift-build 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}swift-build --package-path \"\${GITHUB_WORKSPACE}/evil-swift\""
+t loader-swift-test 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}swift-test --package-path \"\${GITHUB_WORKSPACE}/evil-swift\""
+t loader-swift-package 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}swift-package --package-path \"\${GITHUB_WORKSPACE}/evil-swift\" describe"
+t loader-rake 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}rake -f \"\${GITHUB_WORKSPACE}/evil.rb\""
+t loader-fastlane 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}fastlane evil"
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

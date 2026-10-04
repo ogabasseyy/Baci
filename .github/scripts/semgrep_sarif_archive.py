@@ -138,3 +138,136 @@ def audit_dpkg_dest(rest, drift):
         _emit_zones([ops[1]], None, drift)
     else:
         _emit_zones([], "workspace", drift)
+
+
+_JAR_VALUE_LONGS = ("--file", "--manifest", "--main-class",
+                      "--release", "--module-version")
+
+
+def _jar_letters(word):
+    # Action coined by jar op letters (x extract, c/u/i
+    # write the archive, t/d read only), else None.
+    for ch in word:
+        if ch == "x":
+            return "x"
+        if ch in "cui":
+            return "w"
+        if ch in "td":
+            return "r"
+    return None
+
+
+def _jar_action(rest):
+    # First jar operation as (action, token index): x, w,
+    # r, or (None, None). Dashed bundles scanned left to
+    # right (value shorts f/e/m/C swallow the rest of
+    # their bundle, like getopt); a dashless pure-letter
+    # word (jar cf) also coins one. Flag values are
+    # skipped so -C/-f operands cannot misread as
+    # operations in any argument order.
+    skip = False
+    for idx, tok in enumerate(rest):
+        if skip:
+            skip = False
+            continue
+        if tok == "--":
+            return None, None
+        if tok == "--extract":
+            return "x", idx
+        if tok in ("--create", "--update"):
+            return "w", idx
+        if tok in ("--list", "--describe-module"):
+            return "r", idx
+        if tok in _JAR_VALUE_LONGS:
+            skip = True
+            continue
+        if tok.startswith(_JAR_VALUE_LONGS):
+            continue
+        m = re.fullmatch(r"-([a-zA-Z]+)", tok)
+        if m:
+            letters = m.group(1)
+            for pos, ch in enumerate(letters):
+                if ch in "femC":
+                    if pos == len(letters) - 1:
+                        skip = True
+                    break
+                hit = _jar_letters(ch)
+                if hit is not None:
+                    return hit, idx
+        elif re.fullmatch(r"[a-zA-Z]+", tok):
+            hit = _jar_letters(tok)
+            if hit is not None:
+                return hit, idx
+    return None, None
+
+
+def _jar_file(rest):
+    # The -f/--file archive operand (separate, =-glued,
+    # or bundled rest-of-token, else the next token):
+    # create/update/index write it.
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--":
+            return None
+        if tok in ("-f", "--file"):
+            return rest[i + 1] if i + 1 < len(rest) else None
+        if tok.startswith("--file="):
+            return tok.split("=", 1)[1]
+        m = re.fullmatch(r"-([a-zA-Z]+)", tok)
+        if m and "f" in m.group(1):
+            tail = m.group(1).split("f", 1)[1]
+            if tail:
+                return tail
+            return rest[i + 1] if i + 1 < len(rest) else None
+        i += 1
+    return None
+
+
+def _jar_dirs(rest):
+    # Every -C dir (separate or glued): extraction roots
+    # for the members that follow each one (a second flag
+    # would otherwise smuggle its destination).
+    dirs, i = [], 0
+    while i < len(rest):
+        tok = rest[i]
+        if tok == "--":
+            break
+        if tok == "-C" and i + 1 < len(rest):
+            dirs.append(rest[i + 1])
+            i += 2
+        elif re.fullmatch(r"-C\S+", tok):
+            dirs.append(tok[2:])
+            i += 1
+        else:
+            i += 1
+    return dirs
+
+
+def audit_jar_dest(rest, drift):
+    # jar destinations take the copy-target rule. -x extracts
+    # members under each -C dir (CWD when no -C: replacing
+    # trusted files by default, like tar without -C);
+    # -c/-u/-i write the -f archive (-f - is stdout, zoned
+    # with redirects). List/describe only read.
+    act, at = _jar_action(rest)
+    if act == "x":
+        dirs = _jar_dirs(rest)
+        if dirs:
+            _emit_zones(dirs, None, drift)
+        else:
+            _emit_zones([], "workspace", drift)
+    elif act == "w":
+        arch = _jar_file(rest)
+        if arch is None and at is not None \
+                and not rest[at].startswith("-"):
+            # Dashless create/update (jar cf archive): the
+            # archive is the first surviving operand past
+            # the operation word (a dashed -c without -f
+            # writes stdout, zoned with redirects).
+            ops = _tool_operands(rest[at + 1:], "femC",
+                                 _JAR_VALUE_LONGS)
+            if ops:
+                arch = ops[0]
+        if arch is not None:
+            _emit_zones([arch], None, drift)

@@ -31,7 +31,7 @@ COPY_TOOLS = {"cp", "mv", "ln", "install", "tee", "dd", "tar",
               "unzip", "zip", "patch", "ed", "ex", "sed",
               "objcopy", "ld", "as", "strip", "ar", "ranlib",
               "sort", "iconv", "shuf", "uniq", "split",
-              "csplit"}
+              "csplit", "upx"}
 
 
 def _sed_files(rest):
@@ -273,6 +273,12 @@ def audit_copy_dest(base, rest, drift, src=""):
             targets.append(pref)
         else:
             implicit = "workspace"
+    elif base == "upx":
+        # -o/--output destination, else the inputs are
+        # rewritten in place (list spellings fail closed:
+        # unzip precedent).
+        out = _dash_o_output(rest)
+        targets += [out] if out is not None else _operands(rest)
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
     if implicit is not None:

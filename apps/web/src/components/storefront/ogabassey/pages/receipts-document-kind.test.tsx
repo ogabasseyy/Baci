@@ -203,7 +203,7 @@ describe('OgabasseyV2Receipts document kind', () => {
     expect(modalProps.orderData.payment_status).toBe('pending');
   });
 
-  it('opens settled manual balances as receipts while keeping the partial badge', async () => {
+  it('opens settled manual balances as receipts with a paid badge', async () => {
     vi.mocked(fetch).mockResolvedValue(
       createJsonResponse({
         orders: [
@@ -234,7 +234,8 @@ describe('OgabasseyV2Receipts document kind', () => {
 
     render(<OgabasseyV2Receipts />);
 
-    expect(await screen.findByText('Partial')).toBeVisible();
+    expect(await screen.findByText('Paid')).toBeVisible();
+    expect(screen.queryByText('Partial')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'View Receipt' }));
     const modalProps = mockReceiptModal.mock.calls.at(-1)?.[0] as {
       orderData: { payment_status: string };

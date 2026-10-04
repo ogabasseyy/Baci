@@ -3,6 +3,8 @@ execution wrappers, privilege primitives, and loader/startup
 rebinding for token-bearing helper content.
 """
 import re
+from semgrep_sarif_archive import (ARCHIVE_TOOLS,
+                                   audit_archive_dest)
 from semgrep_sarif_binutils import _canon_binutils
 from semgrep_sarif_copy import (COPY_TOOLS, audit_copy_dest,
                                 audit_find_output)
@@ -85,6 +87,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
         drift.append("helper-code-loader")
     if base in COPY_TOOLS or _canon_binutils(base):
         audit_copy_dest(base, rest, drift, src)
+    elif base in ARCHIVE_TOOLS:
+        audit_archive_dest(rest, drift)
     elif base == "alias":
         # Alias definitions hide command dispatch (alias
         # leak='bash evil' + leak runs with no visible argv0).

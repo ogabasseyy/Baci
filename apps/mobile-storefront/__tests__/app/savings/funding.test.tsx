@@ -21,7 +21,7 @@ const mockUseSavingsPlanFunding = jest.fn();
 const mockKeyboardAwareScrollViewSpy = jest.fn();
 let mockUserId: string | null = 'customer-1';
 const mockAuthListeners = new Set<() => void>();
-let mockParams: Record<string, string> = {
+let mockParams: Record<string, string | string[]> = {
   amount: '250000',
   goalId: '430314fd-cd8b-4579-98d4-e9f345713dd6',
 };
@@ -159,6 +159,21 @@ describe('SavingsPlanFundingRoute', () => {
     expect(
       screen.getByText(/updates after a confirmed contribution/i)
     ).toBeOnTheScreen();
+  });
+
+  it('takes the first value when funding-link params repeat in the URL', () => {
+    mockParams = {
+      amount: ['250000', '999'],
+      goalId: [
+        '430314fd-cd8b-4579-98d4-e9f345713dd6',
+        '00000000-0000-4000-8000-000000000000',
+      ],
+    };
+
+    render(<SavingsPlanFundingRoute />);
+
+    expect(screen.getByText('₦250,000')).toBeOnTheScreen();
+    expect(screen.getByText('0001234567')).toBeOnTheScreen();
   });
 
   it('uses the shared keyboard-aware scroll view for small screens', () => {

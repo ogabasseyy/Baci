@@ -135,6 +135,7 @@ describe('useSavingsNotificationInbox', () => {
     });
 
     expect(result.current.notifications[0]?.readAt).toBeNull();
+    expect(result.current.actionError).toBe('Unavailable');
   });
 
   it('updates the inbox only after the server accepts a weekly digest opt-in', async () => {

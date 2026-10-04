@@ -18,7 +18,8 @@ import { useAuthStore } from '@/stores/auth-store';
 type RouteParams = { amount?: string | string[]; goalId?: string | string[] };
 
 function stringParam(value: string | string[] | undefined) {
-  return typeof value === 'string' ? value : '';
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
 }
 
 // Accepts any UUID version/variant shape: goal ids live in a Postgres uuid

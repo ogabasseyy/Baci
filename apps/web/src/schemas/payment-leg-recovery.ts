@@ -24,7 +24,7 @@ const result = purchaseCurrentRecoverySchemas.result
 
 export const paymentLegRecoverySchemas = {
   configuration: purchasePreparationSchemas.configuration.extend({
-    enabled: z.boolean(),
+    enabled: z.boolean().default(false),
   }),
   observation: z.strictObject({
     operationId: uuid,
@@ -37,7 +37,10 @@ export const paymentLegRecoverySchemas = {
       'reference_unverified',
     ]),
   }),
-  lookup: z.strictObject({ operationId: uuid, observationId: uuid }),
+  lookup: z.strictObject({
+    operationId: uuid,
+    observationId: uuid.nullable().default(null),
+  }),
   result,
   rows: z.array(z.strictObject({ result })).length(1),
 };

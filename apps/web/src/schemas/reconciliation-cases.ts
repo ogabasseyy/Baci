@@ -2,7 +2,14 @@ import { z } from 'zod';
 
 const uuid = z.uuid().transform((value) => value.toLowerCase());
 
-const readResult = z.strictObject({ goalId: uuid, caseId: uuid });
+const readResult = z.strictObject({
+  status: z.literal('absent'),
+  caseId: uuid,
+  goalId: uuid,
+  financialEffects: z.literal('UNKNOWN'),
+  fundsUse: z.literal('not_authorized'),
+  dispatch: z.literal('disabled'),
+});
 const listResult = z.strictObject({
   goalId: uuid,
   cases: z.array(z.strictObject({ caseId: uuid })),

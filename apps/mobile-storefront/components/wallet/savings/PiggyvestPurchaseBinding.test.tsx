@@ -21,28 +21,30 @@ it.each([
   const source = piggyvestSavingsScreenSchema.parse(fixture.source);
   let release: ((token: string) => void) | undefined;
   const csrf = jest.fn(async () => 'synthetic-csrf');
-  const fetchImplementation: typeof fetch = jest.fn(async (input) => {
-    const value = String(input).endsWith('/quote')
-      ? fixture.published
-      : fixture.receipt;
-    const bytes = new TextEncoder().encode(JSON.stringify(value));
-    const response = new Response(null, {
-      headers: { 'content-type': 'application/json' },
-    });
-    Object.defineProperties(response, {
-      url: { value: String(input) },
-      redirected: { value: false },
-      body: {
-        value: new ReadableStream({
-          start(controller) {
-            controller.enqueue(bytes);
-            controller.close();
-          },
-        }),
-      },
-    });
-    return response;
-  });
+  const fetchImplementation: typeof fetch = jest.fn(
+    async (input: RequestInfo | URL) => {
+      const value = String(input).endsWith('/quote')
+        ? fixture.published
+        : fixture.receipt;
+      const bytes = new TextEncoder().encode(JSON.stringify(value));
+      const response = new Response(null, {
+        headers: { 'content-type': 'application/json' },
+      });
+      Object.defineProperties(response, {
+        url: { value: String(input) },
+        redirected: { value: false },
+        body: {
+          value: new ReadableStream({
+            start(controller) {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+        },
+      });
+      return response;
+    }
+  );
   const client = createPiggyvestPurchaseClient({
     configuration: {
       mode: 'local_test',

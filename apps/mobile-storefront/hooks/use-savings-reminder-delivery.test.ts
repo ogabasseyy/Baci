@@ -54,7 +54,7 @@ it('ignores a response arriving after sign-out', async () => {
     })
   );
   const { rerender } = renderHook(
-    ({ registered }) =>
+    ({ registered }: { registered: boolean }) =>
       useSavingsReminderDelivery('user', 'merchant', registered),
     { initialProps: { registered: true } }
   );
@@ -76,7 +76,7 @@ it('preserves local fallback when capability lookup fails', async () => {
 it('clears persisted capability when registration is lost after a successful registration', async () => {
   mockFetch.mockResolvedValue({ deliveryEnabled: true });
   const { rerender } = renderHook(
-    ({ registered }) =>
+    ({ registered }: { registered: boolean }) =>
       useSavingsReminderDelivery('user', 'merchant', registered),
     { initialProps: { registered: true } }
   );
@@ -118,7 +118,7 @@ it.each([
   const oldScope = { userId: 'user', merchantId: 'merchant' };
   const nextScope = { ...oldScope, [field]: 'next' };
   const { rerender } = renderHook(
-    ({ userId, merchantId }) =>
+    ({ userId, merchantId }: { userId: string; merchantId: string }) =>
       useSavingsReminderDelivery(userId, merchantId, true),
     { initialProps: oldScope }
   );
@@ -156,7 +156,7 @@ it('clears a late persisted write before re-registering the same account', async
     available = false;
   });
   const { rerender, unmount } = renderHook(
-    ({ registered }) =>
+    ({ registered }: { registered: boolean }) =>
       useSavingsReminderDelivery('user', 'merchant', registered),
     { initialProps: { registered: true } }
   );

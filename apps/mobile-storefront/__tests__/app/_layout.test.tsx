@@ -20,13 +20,13 @@ import {
   resetCrashDiagnosticsForTest,
 } from '@/lib/crash-diagnostics';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
+import { mockActivateDueSavingsReminderNotification } from '@/test-support/root-layout-reminder-mock';
 
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
 const mockInitializeAuth = jest.fn<() => Promise<void>>();
 const mockCleanup = jest.fn();
 const mockRegisterPushNotifications = jest.fn();
 const mockPrefetchStartupStorefrontData = jest.fn<() => Promise<void>>();
-const mockActivateDueSavingsReminderNotification = jest.fn();
 const mockInitializeAdTrackingForStartup = jest.fn<() => Promise<void>>();
 const mockUseAppTrackingTransparency = jest.fn();
 const mockRootLayoutNavMount = jest.fn();

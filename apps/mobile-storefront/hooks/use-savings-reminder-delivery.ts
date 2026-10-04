@@ -5,6 +5,7 @@ import { fetchSavingsNotificationInbox } from '@/services/savings-notification-i
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 
 let capabilityMutations = Promise.resolve();
+const capabilityOwners = new Map<string, Set<symbol>>();
 
 export function useSavingsReminderDelivery(
   userId: string | null,
@@ -16,6 +17,16 @@ export function useSavingsReminderDelivery(
     let cancelled = false;
     const controller = new AbortController();
     const scope = { apiOrigin: EXPO_PUBLIC_API_URL, merchantId, userId };
+    const scopeKey = JSON.stringify([
+      scope.apiOrigin.trim(),
+      merchantId.trim(),
+      userId.trim(),
+    ]);
+    const owner = Symbol();
+    const clearIfUnowned = async () => {
+      if (!capabilityOwners.get(scopeKey)?.size)
+        await savingsNotificationCapability.clearAvailable(scope);
+    };
     const enqueue = (operation: () => Promise<void>) => {
       capabilityMutations = capabilityMutations
         .then(operation)
@@ -32,23 +43,30 @@ export function useSavingsReminderDelivery(
         await enqueue(async () => {
           if (cancelled) return;
           if (!inbox.deliveryEnabled) {
+            capabilityOwners.delete(scopeKey);
             await savingsNotificationCapability.clearAvailable(scope);
             return;
           }
           await savingsNotificationCapability.markAvailable(scope);
-          if (!cancelled) await cancelSavingsReminderNotification();
+          if (cancelled) return;
+          const owners = capabilityOwners.get(scopeKey) ?? new Set<symbol>();
+          owners.add(owner);
+          capabilityOwners.set(scopeKey, owners);
+          await cancelSavingsReminderNotification();
         });
       } catch {
         return;
       }
     }
     if (registered) void synchronize();
-    else
-      void enqueue(() => savingsNotificationCapability.clearAvailable(scope));
+    else void enqueue(clearIfUnowned);
     return () => {
       cancelled = true;
       controller.abort();
-      void enqueue(() => savingsNotificationCapability.clearAvailable(scope));
+      const owners = capabilityOwners.get(scopeKey);
+      owners?.delete(owner);
+      if (owners?.size === 0) capabilityOwners.delete(scopeKey);
+      if (!capabilityOwners.get(scopeKey)?.size) void enqueue(clearIfUnowned);
     };
   }, [merchantId, registered, userId]);
 }

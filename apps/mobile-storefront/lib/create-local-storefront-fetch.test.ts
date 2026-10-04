@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { createLocalStorefrontFetch } from './create-local-storefront-fetch';
 
 const options = {
@@ -14,7 +15,7 @@ it.each([
   options.supabaseOrigin,
 ])('injects the exact capability into Request and init headers at %s', async (origin) => {
   const transport = jest
-    .fn<typeof fetch>()
+    .fn<FetchImplementation>()
     .mockResolvedValue(new Response('{}'));
   const guarded = createLocalStorefrontFetch(transport, options);
   const request = new Request(`${origin}/auth/v1/otp`, {
@@ -47,7 +48,7 @@ it.each([
   'http://192.168.100.70.evil.test:4193/',
   'http://127.0.0.1:4193/',
 ])('never sends capability or requests to %s', async (url) => {
-  const transport = jest.fn<typeof fetch>();
+  const transport = jest.fn<FetchImplementation>();
   await expect(
     createLocalStorefrontFetch(transport, options)(url)
   ).rejects.toThrow('non-local request');
@@ -62,7 +63,7 @@ const forbiddenHeaders: Record<string, string>[] = [
 it.each(
   forbiddenHeaders
 )('rejects inherited credentials %j before transport', async (headers) => {
-  const transport = jest.fn<typeof fetch>();
+  const transport = jest.fn<FetchImplementation>();
   await expect(
     createLocalStorefrontFetch(transport, options)(options.apiOrigin, {
       headers,
@@ -73,7 +74,7 @@ it.each(
 
 it('accepts only the exact Auth issuer and blocks foreign local and hosted JWTs before transport', async () => {
   const transport = jest
-    .fn<typeof fetch>()
+    .fn<FetchImplementation>()
     .mockResolvedValue(new Response('{}'));
   const guarded = createLocalStorefrontFetch(transport, options);
   for (const issuer of [
@@ -104,7 +105,7 @@ it('requires a capability and rejects a transport that followed a redirect', asy
   });
   await expect(
     createLocalStorefrontFetch(
-      jest.fn<typeof fetch>().mockResolvedValue(response),
+      jest.fn<FetchImplementation>().mockResolvedValue(response),
       options
     )(options.apiOrigin)
   ).rejects.toThrow('redirected');

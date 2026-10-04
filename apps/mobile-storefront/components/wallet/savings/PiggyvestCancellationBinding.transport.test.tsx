@@ -43,36 +43,38 @@ it.each([
     interestDisposition: 'unresolved',
     dispatch: 'contract_gap',
   };
-  const fetchImplementation: typeof fetch = jest.fn(async (input, init) => {
-    const value =
-      init?.method === 'POST'
-        ? {
-            status: 'prepared',
-            goalId: fixture.goalId,
-            operationId: fixture.goalId,
-            collectionPaused: true,
-            dispatch: 'contract_gap',
-            interestDisposition: 'unresolved',
-          }
-        : quote;
-    const bytes = new TextEncoder().encode(JSON.stringify(value));
-    const response = new Response(null, {
-      headers: { 'content-type': 'application/json' },
-    });
-    Object.defineProperties(response, {
-      url: { value: String(input) },
-      redirected: { value: false },
-      body: {
-        value: new ReadableStream({
-          start(controller) {
-            controller.enqueue(bytes);
-            controller.close();
-          },
-        }),
-      },
-    });
-    return response;
-  });
+  const fetchImplementation: typeof fetch = jest.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const value =
+        init?.method === 'POST'
+          ? {
+              status: 'prepared',
+              goalId: fixture.goalId,
+              operationId: fixture.goalId,
+              collectionPaused: true,
+              dispatch: 'contract_gap',
+              interestDisposition: 'unresolved',
+            }
+          : quote;
+      const bytes = new TextEncoder().encode(JSON.stringify(value));
+      const response = new Response(null, {
+        headers: { 'content-type': 'application/json' },
+      });
+      Object.defineProperties(response, {
+        url: { value: String(input) },
+        redirected: { value: false },
+        body: {
+          value: new ReadableStream({
+            start(controller) {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+        },
+      });
+      return response;
+    }
+  );
   let release: ((token: string) => void) | undefined;
   const cancellation = await createPiggyvestCancellationClientBinding({
     mode: 'prepare',

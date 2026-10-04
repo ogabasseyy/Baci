@@ -64,7 +64,7 @@ export function AddressAutocomplete({
 
   const isMountedRef = useRef(true);
   const latestQueryRef = useRef(value);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<View>(null);
 
   useEffect(() => {

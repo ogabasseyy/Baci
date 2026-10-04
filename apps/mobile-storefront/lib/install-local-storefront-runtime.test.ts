@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { installLocalStorefrontRuntime } from './install-local-storefront-runtime';
 
 const mockExtra: Record<string, unknown> = {};
@@ -50,7 +51,7 @@ afterEach(() => {
 
 it('installs the capability guard before an SDK captures global fetch', async () => {
   const transport = jest
-    .fn<typeof fetch>()
+    .fn<FetchImplementation>()
     .mockResolvedValue(new Response('{}'));
   global.fetch = transport;
   installLocalStorefrontRuntime();

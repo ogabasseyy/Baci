@@ -1,8 +1,9 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { createSupabaseAuthTimeoutFetch } from './supabase-auth-timeout-fetch';
 
-function pendingAbortAwareFetch(): jest.MockedFunction<typeof fetch> {
-  return jest.fn<typeof fetch>(
+function pendingAbortAwareFetch(): jest.MockedFunction<FetchImplementation> {
+  return jest.fn<FetchImplementation>(
     (_input, init) =>
       new Promise<Response>((_resolve, reject) => {
         const abort = () => reject(new DOMException('Aborted', 'AbortError'));
@@ -54,7 +55,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       },
     });
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce(new Response(stalledBody, { status: 200 }))
       .mockImplementationOnce(
         () =>
@@ -89,7 +90,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       refresh_token: 'rotated-token',
     });
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockImplementationOnce(committedRequest)
       .mockResolvedValueOnce(recoveryResponse);
     const timedFetch = createSupabaseAuthTimeoutFetch(fetchImpl, 100);
@@ -109,7 +110,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       refresh_token: 'rotated-token',
     });
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockRejectedValueOnce(new TypeError('connection lost after commit'))
       .mockResolvedValueOnce(recoveryResponse);
     const timedFetch = createSupabaseAuthTimeoutFetch(fetchImpl, 100);
@@ -128,7 +129,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       refresh_token: 'rotated-token',
     });
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce(new Response(null, { status: 408 }))
       .mockResolvedValueOnce(recoveryResponse);
     const timedFetch = createSupabaseAuthTimeoutFetch(fetchImpl, 100);
@@ -147,7 +148,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       refresh_token: 'rotated-token',
     });
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce(
         new Response('{"access_token":', {
           headers: { 'Content-Type': 'application/json' },
@@ -174,7 +175,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       { status: 200 }
     );
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce(new Response('{}', { status: 200 }))
       .mockResolvedValueOnce(recovered);
 
@@ -231,7 +232,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
   it('clones a POST Request body before retrying refresh recovery', async () => {
     const requestBodies: string[] = [];
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockImplementation(async (input) => {
         if (input instanceof Request) requestBodies.push(await input.text());
         return requestBodies.length === 1
@@ -264,7 +265,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
       refresh_token: 'rotated-token',
     });
     let requestSignal: AbortSignal | undefined;
-    const fetchImpl = jest.fn<typeof fetch>(async (_input, init) => {
+    const fetchImpl = jest.fn<FetchImplementation>(async (_input, init) => {
       requestSignal = init?.signal ?? undefined;
       return response;
     });
@@ -283,7 +284,7 @@ describe('createSupabaseAuthTimeoutFetch', () => {
 
   it('does not add a timeout to non-refresh Supabase requests', async () => {
     const response = new Response(null, { status: 204 });
-    const fetchImpl = jest.fn<typeof fetch>(async () => response);
+    const fetchImpl = jest.fn<FetchImplementation>(async () => response);
     const timedFetch = createSupabaseAuthTimeoutFetch(fetchImpl);
 
     await expect(

@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
 import {
   buildProductQueryKey,
   CONSTANT_MERCHANT_ID,
@@ -35,33 +34,28 @@ export function useProductSearch({
   const { data: merchant } = useMerchant();
   const merchantId = merchant?.id || CONSTANT_MERCHANT_ID;
 
-  const resolveProduct = useCallback(
-    async (product: Product): Promise<Product> => {
-      if (!product.slug) {
-        throw new Error('Product has no slug to resolve');
-      }
-      const slug = product.slug;
-      return queryClient.fetchQuery({
-        queryKey: buildProductQueryKey(slug, merchantId),
-        queryFn: async () => {
-          const row = await resolveAndEvictProduct(
-            merchantId,
-            slug,
-            queryClient
+  // Plain function: React Compiler memoizes automatically; manual
+  // useCallback is prohibited by repo convention (AGENTS.md).
+  const resolveProduct = async (product: Product): Promise<Product> => {
+    if (!product.slug) {
+      throw new Error('Product has no slug to resolve');
+    }
+    const slug = product.slug;
+    return queryClient.fetchQuery({
+      queryKey: buildProductQueryKey(slug, merchantId),
+      queryFn: async () => {
+        const row = await resolveAndEvictProduct(merchantId, slug, queryClient);
+        const validated = ProductRowSchema.safeParse(row);
+        if (!validated.success) {
+          throw new Error(
+            `Product validation failed: ${validated.error.message}`
           );
-          const validated = ProductRowSchema.safeParse(row);
-          if (!validated.success) {
-            throw new Error(
-              `Product validation failed: ${validated.error.message}`
-            );
-          }
-          return augmentProduct(validated.data);
-        },
-        staleTime: 1000 * 60 * 5,
-      });
-    },
-    [merchantId, queryClient]
-  );
+        }
+        return augmentProduct(validated.data);
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+  };
 
   return { products, isLoading, isError, refetch, resolveProduct };
 }

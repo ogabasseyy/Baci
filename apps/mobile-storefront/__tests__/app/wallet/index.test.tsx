@@ -1013,6 +1013,21 @@ describe('WalletScreen', () => {
     ).toBeOnTheScreen();
   });
 
+  it('treats empty-array params as absent like the funding route', () => {
+    mockSearchParams = {
+      action: [],
+      savingsAmount: [],
+      savingsGoalId: [],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(
+      screen.getByText('savings-contribution-amount:')
+    ).toBeOnTheScreen();
+  });
+
   it('keeps the savings plan open if its wallet payment cannot start', async () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')

@@ -42,5 +42,8 @@ export default function WalletRoute({
 }
 
 function firstParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
+  // Same 'first value wins' coercion as the funding route's stringParam:
+  // a missing or empty param is '' (absent), never an array.
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
 }

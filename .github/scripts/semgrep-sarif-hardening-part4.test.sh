@@ -37,7 +37,7 @@ t helper-ld-audit 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${F
 t reviewer-ld-audit 1 "reviewer-env-poison" happy.sarif "$S${FS}          META_API_KEY:${FS}b${FS}          LD_AUDIT: /tmp/evil.so"
 
 # --- TAR_OPTIONS poison (Codex P1: checkpoint-action exec) ---
-t helper-tar-options 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v TAR_OPTIONS 'x'; export TAR_OPTIONS; tar -cf \"\${RUNNER_TEMP}/x.tar\" /dev/null"
+t helper-tar-options 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v TAR_OPTIONS '--checkpoint=1 --checkpoint-action=exec=\${GITHUB_WORKSPACE}/evil.sh'; export TAR_OPTIONS; tar -cf \"\${RUNNER_TEMP}/x.tar\" /dev/null"
 
 # --- runner-home exec (Codex P1: /home/runner/work allowlist) ---
 t helper-runner-abspath 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}/home/runner/work/Baci/Baci/evil.sh"

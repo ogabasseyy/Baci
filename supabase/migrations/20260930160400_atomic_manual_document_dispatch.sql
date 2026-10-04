@@ -261,7 +261,7 @@ BEGIN
           OR v_va_bank_name IS DISTINCT FROM p_va_bank_name
           OR v_va_account_name IS DISTINCT FROM p_va_account_name)
         OR (v_va_account_number IS NULL AND p_va_account_number IS NULL)
-          AND (v_merchant_bank_account_number IS NOT NULL OR p_merchant_bank_account_number IS NOT NULL)
+          AND (NULLIF(v_merchant_bank_account_number, '') IS NOT NULL OR NULLIF(p_merchant_bank_account_number, '') IS NOT NULL)
           AND (v_merchant_bank_account_number IS DISTINCT FROM p_merchant_bank_account_number
             OR private.resolved_merchant_bank_name(v_merchant_bank_name, v_merchant_bank_code)
               IS DISTINCT FROM p_merchant_bank_name

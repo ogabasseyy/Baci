@@ -164,6 +164,28 @@ describe('useReceiptPreview document kind', () => {
     expect(result.current.html).not.toContain('Proforma Invoice');
   });
 
+  it('renders invoice terms/notes/FIRS from the detail like the PDF', () => {
+    mockReceiptDetail = {
+      ...unpaidProformaDetail('NGN'),
+      invoice_note: 'Handle with care',
+      payment_due_date: '2026-05-20',
+      payment_terms: 'Net 30',
+      buyer_reference: 'PO-77',
+      firs_irn: 'IRN-1',
+      firs_csid: 'CSID-2',
+    };
+    const { result } = renderHook(() => useReceiptPreview());
+
+    act(() => {
+      result.current.openPreviewByOrderId('order-1');
+    });
+
+    expect(result.current.html).toContain('Invoice Terms');
+    expect(result.current.html).toContain('Payment Terms: Net 30');
+    expect(result.current.html).toContain('Handle with care');
+    expect(result.current.html).toContain('FIRS IRN: IRN-1');
+  });
+
   it('prefers an explicit caller kind over the derived one', () => {
     mockReceiptDetail = {
       ...unpaidProformaDetail('NGN'),

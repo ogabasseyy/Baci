@@ -135,6 +135,22 @@ describe('manualDocumentOrderSchema', () => {
     expect(parsed.shipping_address?.state).toBeNull();
   });
 
+  it('accepts explicit null address lines like any other null key', () => {
+    // Every key renders null as empty: rejecting null on one line while
+    // accepting it on locality would skip a valid document.
+    const parsed = manualDocumentOrderSchema.parse({
+      ...baseOrder,
+      shipping_address: {
+        address: null,
+        address_line1: null,
+        address_line2: null,
+        country: null,
+      },
+    });
+    expect(parsed.shipping_address?.address_line1).toBeNull();
+    expect(parsed.shipping_address?.country).toBeNull();
+  });
+
   it('keeps the archive gate in lockstep with the sender on item finances', () => {
     const money = {
       total: 5000,

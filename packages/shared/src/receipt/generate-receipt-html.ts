@@ -13,6 +13,7 @@ import { createMoneyFormatter, hexToRgba } from './receipt-money';
 import { renderBankDetailsHtml } from './receipt-payment-instructions';
 import {
   renderFinancialSummaryLines,
+  renderInvoiceTermsHtml,
   renderLogoHtml,
   renderPaymentHistoryHtml,
   renderQrHtml,
@@ -192,6 +193,7 @@ export function generateReceiptHtml(
       isPaid ? 'receipt' : isProforma ? 'proforma' : 'invoice'
     ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
+    invoiceTermsHtml: renderInvoiceTermsHtml(order, isPaid),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),
     socialItems: buildSocialItems(merchant.social_media),

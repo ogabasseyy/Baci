@@ -58,8 +58,9 @@ export function formatPrice(
   price: number,
   currency: string | null | undefined = 'NGN'
 ) {
-  // Non-finite values degrade to zero like the list's toDisplayMoney.
-  if (!Number.isFinite(price)) return getPriceFormatter('NGN').format(0);
+  // Non-finite values render a neutral placeholder, never a confident
+  // zero: a corrupt total must not mask as valid money on the card.
+  if (!Number.isFinite(price)) return '-';
   const code = currency ?? 'NGN';
   try {
     return getPriceFormatter(code).format(price);

@@ -188,3 +188,73 @@ describe('receipt detail covered-manual transaction failures', () => {
     expect(detail?.transactions).toEqual([]);
   });
 });
+
+const invoiceRow = {
+  id: 'order-1',
+  order_number: 'ORD-1',
+  payment_status: 'pending',
+  payment_method: 'paystack',
+  recorded_by_user_id: 'staff-1',
+  import_job_id: null,
+  external_source: null,
+  total: 500,
+  subtotal: 500,
+  shipping_fee: 0,
+  tax_amount: 0,
+  discount_amount: 0,
+  amount_paid: 0,
+  currency: 'NGN',
+  is_credit_order: false,
+  created_at: '2026-09-30T09:00:00.000Z',
+  notes: null,
+  customer_name: 'Buyer',
+  customer_email: 'buyer@example.com',
+  customer_phone: null,
+  shipping_address: null,
+  order_items: [{ id: 'item-1', name: 'Phone', quantity: 1, price: 500 }],
+};
+
+describe('receipt detail invoice terms and addresses', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('exposes invoice terms/notes/FIRS selected for the preview', async () => {
+    mockOrderSingle.mockResolvedValue({
+      data: {
+        ...invoiceRow,
+        invoice_note: 'Priority',
+        payment_due_date: '2026-05-20',
+        payment_terms: 'Net 30',
+        buyer_reference: 'PO-77',
+        firs_irn: 'IRN-1',
+        firs_csid: 'CSID-2',
+      },
+      error: null,
+    });
+    mockTransactionsRpc.mockResolvedValue({ data: [], error: null });
+
+    const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
+    expect(detail?.invoice_note).toBe('Priority');
+    expect(detail?.payment_terms).toBe('Net 30');
+  });
+
+  it('accepts explicit null address keys from the mobile-admin path', async () => {
+    mockOrderSingle.mockResolvedValue({
+      data: {
+        ...invoiceRow,
+        shipping_address: {
+          address_line1: null,
+          address_line2: null,
+          city: null,
+          country: null,
+        },
+      },
+      error: null,
+    });
+    mockTransactionsRpc.mockResolvedValue({ data: [], error: null });
+
+    const detail = await receiptDetailQueryOptions('order-1', scope).queryFn();
+    expect(detail).not.toBeNull();
+  });
+});

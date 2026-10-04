@@ -65,10 +65,13 @@ const ShippingAddressSchema = z.object({
 // preview normalizes them onto the canonical keys the generator reads.
 const ReceiptShippingAddressSchema = ShippingAddressSchema.extend({
   address: z.string().nullish(),
+  address_line1: z.string().nullish(),
+  address_line2: z.string().nullish(),
   city: z.string().nullable().optional(),
   state: z.string().nullable().optional(),
   postal_code: z.string().nullable().optional(),
   postalCode: z.string().nullish(),
+  country: z.string().nullish(),
 });
 
 const VirtualAccountSchema = z.object({
@@ -158,6 +161,14 @@ export const ReceiptDetailSchema = z.object({
   // Stored Peppol type code (orders.invoice_type_code, default 380):
   // an explicit non-default code survives the proforma derivation.
   invoice_type_code: z.string().nullable().optional(),
+  // Invoice-only terms/notes/FIRS: selected so the preview renders the
+  // same invoice the emailed PDF carries, never a partial document.
+  invoice_note: z.string().nullable().optional(),
+  payment_due_date: z.string().nullable().optional(),
+  payment_terms: z.string().nullable().optional(),
+  buyer_reference: z.string().nullable().optional(),
+  firs_irn: z.string().nullable().optional(),
+  firs_csid: z.string().nullable().optional(),
   recorded_by_user_id: z.string().nullable().optional(),
   import_job_id: z.string().nullable().optional(),
   external_source: z.string().nullable().optional(),

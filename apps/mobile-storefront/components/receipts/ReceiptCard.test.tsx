@@ -263,9 +263,9 @@ describe('ReceiptCard', () => {
     }
   });
 
-  it('degrades non-finite prices to zero instead of NaN currency', () => {
+  it('renders non-finite prices as a placeholder instead of zero', () => {
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(formatPrice(bad, 'USD')).toBe(formatPrice(0, 'NGN'));
+      expect(formatPrice(bad, 'USD')).toBe('-');
       expect(formatPrice(bad, 'USD')).not.toMatch(/NaN|Infinity/);
     }
   });

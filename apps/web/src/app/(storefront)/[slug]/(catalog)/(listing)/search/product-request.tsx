@@ -24,10 +24,13 @@ export function ProductRequest({
     sending.current = true;
     setPending(true);
     setError('');
-    const key = JSON.stringify([product.trim(), contact.trim()]);
-    if (key !== request.current.key)
-      request.current = { key, id: crypto.randomUUID() };
     try {
+      // Id creation runs inside the guarded region: crypto.randomUUID is
+      // unavailable in non-secure contexts, and a throw here must clear
+      // pending via finally rather than wedge the form.
+      const key = JSON.stringify([product.trim(), contact.trim()]);
+      if (key !== request.current.key)
+        request.current = { key, id: crypto.randomUUID() };
       await submitProductRequest('/api/storefront/product-requests', {
         query: product,
         contact,

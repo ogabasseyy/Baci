@@ -51,6 +51,38 @@ it('keeps failure visible without showing a sent confirmation', async () => {
   );
   expect(screen.queryByRole('status')).toBeNull();
 });
+it('recovers when id generation throws instead of wedging pending', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const randomUUID = vi
+    .spyOn(crypto, 'randomUUID')
+    .mockImplementationOnce(() => {
+      throw new TypeError('crypto unavailable');
+    });
+  try {
+    render(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Request this product' })
+    );
+    fireEvent.change(screen.getByLabelText('Email or phone number'), {
+      target: { value: 'shopper@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Couldn’t send')
+    );
+    // Pending cleared and the send lock released: the form stays usable.
+    expect(screen.getByLabelText('Requested product')).not.toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Send request' })
+    ).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('Request sent')
+    );
+  } finally {
+    randomUUID.mockRestore();
+  }
+});
 it('shows a retry signal instead of a validation error on idempotency conflict', async () => {
   vi.mocked(submitProductRequest).mockRejectedValue(
     new ProductRequestSubmitError(409, 'conflict')

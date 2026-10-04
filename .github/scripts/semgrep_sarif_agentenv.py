@@ -140,3 +140,19 @@ def audit_agent_env(ctx, drift):
             if "agent-env-home" not in drift:
                 drift.append("agent-env-home")
             break
+        m = re.match(r"""\s*\?\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|([A-Za-z_][A-Za-z0-9_.-]*))(?:\s*(?::.*|#.*))?$""",
+                     line)
+        if m:
+            # Explicit block keys (? HOME / ? "HOME" / single
+            # line ? HOME : val); flow-explicit is already
+            # covered above (the ? is irrelevant there).
+            if m.group(1) is not None:
+                qkey = _yaml_double_unescape(m.group(1))
+            elif m.group(2) is not None:
+                qkey = m.group(2).replace("''", "'")
+            else:
+                qkey = m.group(3)
+            if qkey == "HOME" \
+                    and "agent-env-home" not in drift:
+                drift.append("agent-env-home")
+                break

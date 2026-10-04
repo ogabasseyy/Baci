@@ -19,7 +19,7 @@ from semgrep_sarif_poison import audit_env_dump, audit_ps_env
 from semgrep_sarif_jq import _check_jq
 from semgrep_sarif_consts import (ENV_POISON, LOAD_DENY,
                                   NET_DENY, _GCC_RE, _LD_SO_RE,
-                                  _TCL_RE)
+                                  _TCL_RE, _TIDY_RE)
 from semgrep_sarif_install import _installer_curl_ok
 from semgrep_sarif_peel import peel_prefix
 from semgrep_sarif_xargs import audit_xargs
@@ -43,7 +43,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
             and "helper-network-tool" not in drift:
         drift.append("helper-network-tool")
     if (base in LOAD_DENY or _GCC_RE.match(base)
-            or _LD_SO_RE.match(base) or _TCL_RE.match(base)) \
+            or _LD_SO_RE.match(base) or _TCL_RE.match(base)
+            or _TIDY_RE.match(base)) \
             and "helper-code-loader" not in drift:
         drift.append("helper-code-loader")
     if ((_canon_binutils(base) or base)
@@ -157,7 +158,7 @@ def _check_command(argv0, rest, pre, drift, src=""):
     elif base in ("nice", "nohup", "stdbuf", "setsid", "parallel",
                   "flock", "chrt", "ionice", "taskset", "sg",
                   "tmux", "screen", "coproc", "fakeroot",
-                  "xvfb-run"):
+                  "xvfb-run", "prlimit", "timeout"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
         # coproc counts: it runs its command asynchronously with

@@ -42,7 +42,7 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "autoupdate", "ifnames", "aclocal",
              "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
              "runghc", "runhaskell", "ghc", "ghci",
-             "cabal", "stack", "ant"}
+             "cabal", "stack", "ant", "clang-tidy"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -82,6 +82,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # builds and executes project components (both ship on the
 # ubuntu runner). ant -f runs XML build files whose exec
 # task runs system commands (ships on ubuntu-latest).
+# clang-tidy --load runs a plugin DSO's init (ships on the
+# ubuntu runner); versioned spellings share the flag.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")
@@ -100,6 +102,9 @@ _TCL_RE = re.compile(r"^(?:tclsh|wish)\d+(?:\.\d+)?$")
 # Versioned Tcl shells (tclsh8.6, wish8.6, tclsh9.0) share
 # the file-operand mechanism; the bare names sit in
 # LOAD_DENY. expect ships unversioned only.
+_TIDY_RE = re.compile(r"^clang-tidy-\d+(?:\.\d+)?$")
+# Versioned clang-tidy (clang-tidy-18, clang-tidy-19)
+# shares --load with the bare name (in LOAD_DENY).
 
 
 SHELL_KEYWORDS = {"if", "then", "else", "elif", "fi", "for",

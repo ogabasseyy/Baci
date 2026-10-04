@@ -187,6 +187,15 @@ def _is_env_dump(argv0, rest):
         return True
     if argv0 == "set":
         return False
+    if any(("$" in tok or "`" in tok)
+           and not re.match(r"[A-Za-z_]\w*(\[[^\]]*\])?\+?=",
+                            tok)
+           for tok in rest):
+        # An unresolved word can expand to -p (printf -v p
+        # %s -p; declare "$p" GH_TOKEN prints the token);
+        # static NAME=/NAME+= (or subscript) assignments
+        # cannot be flags.
+        return True
     for tok in rest:
         if tok in ("-p", "-P"):
             return True

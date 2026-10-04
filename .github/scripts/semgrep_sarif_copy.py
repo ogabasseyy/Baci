@@ -175,6 +175,11 @@ def audit_copy_dest(base, rest, drift, src=""):
         dest = _flag_value(rest, ("-d",))
         if dest is not None:
             targets = [dest]
+        else:
+            # No -d: extraction lands in CWD (the workspace),
+            # like tar without -C. List/test/pipe spellings
+            # drift too: fail closed (at/crontab precedent).
+            implicit = "workspace"
     elif base == "zip":
         # -T only tests integrity, but -TT cmd runs cmd to
         # test (separate or attached word, possibly bundled:

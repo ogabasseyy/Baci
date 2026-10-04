@@ -26,7 +26,10 @@ Invocation-ownership residual (accepted, post-merge follow-up): this
 `pull_request` job's YAML is PR-revision code, so a same-repo PR could
 delete this step, force the `TRUSTED_CHANGED` signal, or point `filter_dir`
 at the head copy before the base auditor runs. The backstop is human:
-`.github/**` is CODEOWNERS-gated, so weakening the ~15-line invocation
-needs owner approval on a loud diff, while the ~5k-line auditor
-(unreviewable per-PR) stays base-pinned. A base-owned `pull_request_target`
-gate would close even the loud vector; tracked post-merge.
+`.github/CODEOWNERS` auto-requests `@ogabasseyy` on any `.github/**` diff,
+so weakening the ~15-line invocation is a loud diff to the owner — but
+full enforcement (require code-owner review, required SAST/selftest
+checks) is a repo-settings step for the owner post-merge, while the
+~5k-line auditor (unreviewable per-PR) stays base-pinned. A base-owned
+`pull_request_target` gate would close even the loud vector; tracked
+post-merge.

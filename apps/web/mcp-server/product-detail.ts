@@ -144,8 +144,10 @@ export async function buildMcpProductDetail({
 
   // Build detailed text response
   let text = `**${product.name}**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n`;
-  text += `**Price:** ${formatPrice(displayPrice)}`;
+  const displayPriceConfirmed = typeof displayPrice === 'number' && Number.isFinite(displayPrice) && displayPrice >= 0;
+  text += `**Price:** ${displayPriceConfirmed ? formatPrice(displayPrice) : 'Price unconfirmed'}`;
   if (
+    displayPriceConfirmed &&
     displayCompareAtPrice &&
     displayCompareAtPrice > displayPrice
   ) {

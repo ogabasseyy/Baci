@@ -41,7 +41,7 @@ export async function loadMcpProductVariants({
 
   if (!lookupLabel) {
     return {
-      structuredContent: { variants: [], condition_offers: [], status: 'invalid_input' },
+      structuredContent: { variants: [], condition_offers: [], status: 'invalid_input', message: 'Please provide a valid product ID or product name.' },
       content: [
         {
           type: 'text',

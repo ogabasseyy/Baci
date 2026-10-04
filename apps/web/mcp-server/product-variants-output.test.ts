@@ -98,7 +98,7 @@ describe('variant output failure contracts', () => {
       args: {}, merchantId: 'merchant-1', supabase: supabase as unknown as SupabaseClient,
       sanitizeString: (value) => value, formatPrice: String,
     });
-    expect(result.structuredContent).toMatchObject({ status: 'invalid_input', variants: [], condition_offers: [] });
+    expect(result.structuredContent).toMatchObject({ status: 'invalid_input', message: 'Please provide a valid product ID or product name.', variants: [], condition_offers: [] });
     expect(supabase.from).not.toHaveBeenCalled();
     expect(mcpToolOutputSchemas.get_product_variants.safeParse(result.structuredContent).success).toBe(true);
   });
@@ -112,6 +112,19 @@ describe('variant output failure contracts', () => {
     const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: 100, compare_at_price: null, images: [], description: null, stock_quantity: stock, manage_stock: tracked, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: String, getSafeCatalogImageUrl: () => undefined });
     expect(result.structuredContent.products).toHaveLength(1);
     expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
+  });
+
+  it.each([null, 0, 100])('reports detail price %s without inventing a zero', async (price) => {
+    const result = await buildMcpProductDetail({ product: { id: 'phone-1', name: 'Phone', slug: null, price: price as unknown as number, compare_at_price: 200, images: [], description: null, stock_quantity: null, manage_stock: false, condition: 'new', condition_detail: null, brand: null, category: null, has_variants: false, has_condition_offers: false, schema_markup: null }, supabase: createSupabase() as unknown as SupabaseClient, formatPrice: (value) => `NGN ${Number(value)}`, getSafeCatalogImageUrl: () => undefined });
+    expect(result.structuredContent.products).toMatchObject([{ price }]);
+    expect(mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success).toBe(true);
+    if (price === null) {
+      expect(result.content[0].text).toContain('**Price:** Price unconfirmed');
+      expect(result.content[0].text).not.toContain('NGN 0');
+      expect(result.content[0].text).not.toContain('% off');
+    } else {
+      expect(result.content[0].text).toContain(`**Price:** NGN ${price}`);
+    }
   });
 
 });

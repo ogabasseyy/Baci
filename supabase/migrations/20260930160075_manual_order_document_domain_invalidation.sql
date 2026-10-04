@@ -3,6 +3,8 @@
 -- receipt-claim URL, so in-flight manual dispatches reset their marker.
 -- Uses 60060's advisory-lock helpers (runtime-resolved). Trigger ships
 -- DISABLED; 20260930160300 enables it post-deploy.
+-- Safe predeploy: new private functions plus a DISABLED trigger; no live
+-- contract changes.
 
 CREATE OR REPLACE FUNCTION private.reset_manual_document_markers_for_merchant(p_merchant_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$

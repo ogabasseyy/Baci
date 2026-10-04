@@ -3,6 +3,7 @@
 -- this ownership-checked projection instead of relying on its table policy:
 -- without it the storefront availability gate validates an empty set and
 -- advertises invoices the email sender rejects as tax_breakdown_invalid.
+-- Safe predeploy: brand-new RPC name (no base definition), additive.
 CREATE OR REPLACE FUNCTION public.get_customer_order_tax_subtotals(
   p_order_ids uuid[]
 )

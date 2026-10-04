@@ -26,8 +26,12 @@ ALTER TABLE public.customers ENABLE TRIGGER reset_manual_markers_after_customer_
 -- rows never set the flag), each a single enqueue call that early-returns
 -- for ineligible rows. Cap the statement well under the 305s deploy drain
 -- so a pathological backlog fails fast instead of stalling postdeploy.
--- Session SET (not LOCAL): the applier may run statements outside an
--- explicit transaction, and RESET restores the default either way.
+-- The batch LIMIT makes every run bounded AND re-runs progressive: the
+-- NOT EXISTS anti-join skips rows a prior run enqueued, so a backlog
+-- larger than the batch drains across re-runs instead of timing out the
+-- same full scan forever. Session SET (not LOCAL): the applier may run
+-- statements outside an explicit transaction, and RESET restores the
+-- default either way.
 SET statement_timeout = '120s';
 SELECT count(*) FROM (
   SELECT private.enqueue_manual_order_document(o.id)
@@ -38,5 +42,6 @@ SELECT count(*) FROM (
       WHERE n.order_id = o.id
         AND n.event_type IN ('manual_order_invoice', 'manual_order_receipt')
     )
+  LIMIT 5000
 ) AS scanned;
 RESET statement_timeout;

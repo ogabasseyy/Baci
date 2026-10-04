@@ -16,6 +16,14 @@ export const MANUAL_ORDER_ITEM_FINANCIAL_FIELDS = [
 export type ManualOrderItemFinancialField =
   (typeof MANUAL_ORDER_ITEM_FINANCIAL_FIELDS)[number];
 
+// The sender schema and every promotion gate validate currency against
+// this one pattern (no global flag, so sharing the instance is stateless).
+// Well-formed but unassigned codes (e.g. ZZZ) pass: the sender emails them
+// as receipts and the PDF prints amounts without a currency symbol, so a
+// gate that demoted them would contradict the emailed kind. Symbol
+// rendering degrades per-renderer (mobile falls back to NGN).
+export const MANUAL_ORDER_CURRENCY_CODE_PATTERN = /^[A-Za-z]{3}$/;
+
 // Blank without dereference: nullish or whitespace-only strings are
 // absent; a present-but-malformed (non-string) marker disqualifies manual
 // status instead of throwing on .trim(). Detail fetches only warn on

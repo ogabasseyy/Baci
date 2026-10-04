@@ -5,6 +5,7 @@
 -- binding (processing + locked_by match) means a re-armed row whose claim
 -- was stolen reads NULL and fails for a bounded retry instead of emailing
 -- from a superseded snapshot.
+-- Safe predeploy: brand-new RPC names (no base definitions), additive.
 CREATE OR REPLACE FUNCTION public.get_manual_order_document_snapshot(
   p_outbox_id uuid,
   p_claim_owner text

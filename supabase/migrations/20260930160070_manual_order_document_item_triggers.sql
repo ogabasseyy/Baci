@@ -4,6 +4,8 @@
 -- private.enqueue_manual_order_document (runtime-resolved, so definition
 -- order between the two files is irrelevant). Triggers ship DISABLED;
 -- 20260930160300 enables them post-deploy.
+-- Safe predeploy: new private functions plus DISABLED triggers; no live
+-- contract changes.
 
 -- AFTER UPDATE keeps item corrections symmetric with order corrections: a
 -- stale/failed dispatch unblocked by an item edit re-arms the same way an

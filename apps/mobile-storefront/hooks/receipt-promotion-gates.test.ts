@@ -34,6 +34,14 @@ describe('isPromotedManualReceipt', () => {
     ).toBe(true);
   });
 
+  it('promotes well-formed-but-unassigned currency like the sender', () => {
+    // The badge must match the emailed kind: the sender schema accepts
+    // any 3-letter code and emails it as a receipt, so ZZZ promotes and
+    // only malformed codes demote (symbol rendering falls back to NGN).
+    expect(isPromotedManualReceipt(coveredRow({ currency: 'ZZZ' }))).toBe(true);
+    expect(isPromotedManualReceipt(coveredRow({ currency: 'US' }))).toBe(false);
+  });
+
   it('accepts mapped detail items and raw order rows alike', () => {
     expect(
       isPromotedManualReceipt(

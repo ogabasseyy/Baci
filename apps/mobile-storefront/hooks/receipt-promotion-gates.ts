@@ -3,6 +3,7 @@ import {
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
+  MANUAL_ORDER_CURRENCY_CODE_PATTERN,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
@@ -90,10 +91,13 @@ function hasValidContent(input: ManualReceiptPromotionInput): boolean {
     input.amountPaid,
   ].every(isValidMoney);
   if (!moneyValid) return false;
+  // Currency follows the sender schema's shared pattern: the badge must
+  // match the emailed kind, so well-formed-but-unassigned codes promote
+  // (the sender emails them as receipts) and only malformed codes demote.
   if (
     input.currency != null &&
     (typeof input.currency !== 'string' ||
-      !/^[A-Za-z]{3}$/.test(input.currency))
+      !MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(input.currency))
   ) {
     return false;
   }

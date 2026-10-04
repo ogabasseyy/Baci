@@ -1,4 +1,5 @@
 import {
+  MANUAL_ORDER_CURRENCY_CODE_PATTERN,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
 } from '@baci/shared/receipt';
@@ -58,7 +59,7 @@ export const manualDocumentOrderSchema = z.object({
   // exact code. Invalid values fail closed and re-arm on correction.
   currency: z
     .string()
-    .regex(/^[A-Za-z]{3}$/, 'Invalid currency code')
+    .regex(MANUAL_ORDER_CURRENCY_CODE_PATTERN, 'Invalid currency code')
     .nullish(),
   total: number,
   subtotal: number,

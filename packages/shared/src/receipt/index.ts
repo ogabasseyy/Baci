@@ -6,6 +6,7 @@ export {
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
+  MANUAL_ORDER_CURRENCY_CODE_PATTERN,
   MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
   type ManualOrderItemFinancialField,
 } from './manual-order-document-gates';

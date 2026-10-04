@@ -128,11 +128,15 @@ export default function RootLayout() {
   // covers cold starts; this foreground listener covers an app that stays
   // installed and running across the start date, converting the request
   // into the recurring series the next time the user foregrounds. Gated on
-  // the same boot-readiness signals via ref (read fresh on every event) so
-  // logged-out and pre-init foregrounds skip the storage/capability work.
+  // the same boot-readiness signals plus a signed-in user, via ref (read
+  // fresh on every event) so logged-out and pre-init foregrounds skip the
+  // storage/capability work without depending on the service's own guard.
   const bootReadyRef = useRef(false);
   bootReadyRef.current =
-    isInitialized && isStorageReady && isTrackingAuthorizationSettled;
+    Boolean(storeUser) &&
+    isInitialized &&
+    isStorageReady &&
+    isTrackingAuthorizationSettled;
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active' && bootReadyRef.current) {

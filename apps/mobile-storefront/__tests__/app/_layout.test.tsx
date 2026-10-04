@@ -357,6 +357,7 @@ describe('RootLayout storage boot gate', () => {
   });
 
   it('activates due savings reminders when the app foregrounds', async () => {
+    mockAuthState.user = { id: 'customer-1' };
     mockInitializeStorage.mockResolvedValue(undefined);
     const { addEventListener, restoreAppState } = mockAppStateListener();
 
@@ -386,7 +387,31 @@ describe('RootLayout storage boot gate', () => {
     }
   });
 
+  it('skips foreground reminder activation while logged out', async () => {
+    mockAuthState.user = null;
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(addEventListener).toHaveBeenCalled();
+      });
+
+      mockActivateDueSavingsReminderNotification.mockClear();
+      act(() => {
+        latestChangeHandler(addEventListener)('active');
+      });
+      expect(
+        mockActivateDueSavingsReminderNotification
+      ).not.toHaveBeenCalled();
+    } finally {
+      restoreAppState();
+    }
+  });
+
   it('skips foreground reminder activation before boot is ready', async () => {
+    mockAuthState.user = { id: 'customer-1' };
     mockAuthState.isInitialized = false;
     mockInitializeStorage.mockResolvedValue(undefined);
     const { addEventListener, restoreAppState } = mockAppStateListener();

@@ -49,9 +49,13 @@ BEGIN
     ORDER BY c.deleted_at NULLS FIRST
     LIMIT 1 FOR UPDATE;
     IF NOT FOUND THEN
+      -- Insert the normalized redeemer email: the claim row stores the
+      -- raw recipient spelling, but the merchant/email unique index is
+      -- case-sensitive, so a raw insert would let a later normalized
+      -- insert double the row. The explicit target names that index.
       INSERT INTO public.customers (merchant_id, email)
-      VALUES (v_claim.merchant_id, v_claim.customer_email)
-      ON CONFLICT DO NOTHING
+      VALUES (v_claim.merchant_id, p_email)
+      ON CONFLICT (merchant_id, email) WHERE (email IS NOT NULL) DO NOTHING
       RETURNING * INTO v_owner;
       IF NOT FOUND THEN
         SELECT c.* INTO v_owner FROM public.customers AS c

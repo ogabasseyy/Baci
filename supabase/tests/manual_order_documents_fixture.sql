@@ -14,6 +14,7 @@ CREATE TABLE public.customers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), me
 -- soft-deleted rows, so redemption tests prove link-failure handling instead
 -- of silently double-linking.
 CREATE UNIQUE INDEX idx_customers_merchant_user ON public.customers (merchant_id, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_customers_merchant_email ON public.customers (merchant_id, email) WHERE email IS NOT NULL;
 CREATE TABLE public.staff_members (merchant_id uuid, user_id uuid, status text);
 CREATE TABLE public.import_jobs (id uuid PRIMARY KEY, merchant_id uuid, status text);
 CREATE TABLE public.orders (

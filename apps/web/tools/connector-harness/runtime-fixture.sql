@@ -44,6 +44,7 @@ CREATE TABLE public.customers (id uuid PRIMARY KEY, user_id uuid REFERENCES auth
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY, merchant_id uuid REFERENCES public.merchants(id),
   customer_id uuid REFERENCES public.customers(id), branch_id uuid,
+  currency text DEFAULT 'NGN',
   payment_status text NOT NULL DEFAULT 'unpaid',
   shipping_status text NOT NULL DEFAULT 'pending',
   created_at timestamptz NOT NULL DEFAULT now()

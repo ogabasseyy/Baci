@@ -35,7 +35,9 @@ export interface HarnessAnalyticsSummary {
   orders: {
     count: number;
     paidCount: number;
-    paidRevenue: number;
+    paidRevenue: number | null;
+    currency: string | null;
+    paidRevenueByCurrency: Array<{ currency: string | null; amount: number }>;
     byShippingStatus: Array<{ status: string; count: number }>;
   };
   stock: {

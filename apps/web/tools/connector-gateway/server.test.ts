@@ -606,6 +606,45 @@ function freePort(): Promise<number> {
       expect(foreign.json.code).toBe('FORBIDDEN_SCOPE');
     });
 
+    it('keeps paid revenue separated by currency and retains branch scoping', async () => {
+      psql([
+        '-c',
+        `UPDATE public.orders SET currency='USD', payment_status='paid' WHERE id='a0000000-0000-4000-a000-000000000002'`,
+      ]);
+      try {
+        const { token } = await issueToken({ scopes: ['analytics:read'] });
+        const result = await post('/v0/tools/analytics.summary', token, {});
+        expect(result.status).toBe(200);
+        expect(result.json.summary).toMatchObject({
+          orders: {
+            count: 2,
+            paidCount: 2,
+            paidRevenue: null,
+            currency: null,
+            paidRevenueByCurrency: [
+              { currency: 'NGN', amount: 150 },
+              { currency: 'USD', amount: 75.5 },
+            ],
+          },
+        });
+        const branch = await post('/v0/tools/analytics.summary', token, {
+          branch_ids: [BRANCH_A],
+        });
+        expect(branch.json.summary).toMatchObject({
+          orders: {
+            paidRevenue: 150,
+            currency: 'NGN',
+            paidRevenueByCurrency: [{ currency: 'NGN', amount: 150 }],
+          },
+        });
+      } finally {
+        psql([
+          '-c',
+          `UPDATE public.orders SET currency='NGN', payment_status='unpaid' WHERE id='a0000000-0000-4000-a000-000000000002'`,
+        ]);
+      }
+    });
+
     it('aggregates analytics without leaking excluded branches', async () => {
       const { token } = await issueToken({
         scopes: ['orders:read', 'inventory:read', 'analytics:read'],

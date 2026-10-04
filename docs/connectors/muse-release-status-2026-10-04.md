@@ -177,3 +177,10 @@ The oversized-test finding cites an obsolete mandatory rule; current repository
 instructions set a modularity aim and do not require unrelated test churn.
 ADR-002 now distinguishes the completed invited pilot from the subsequently
 authorized owner self-service production/directory rollout.
+
+Analytics revenue is now grouped by each order's stored currency. The response
+includes `paidRevenueByCurrency`; scalar `paidRevenue` and `currency` are null
+for mixed or unknown paid currencies. No paid orders yields zero and a null
+currency. The HTTP/SQL regression verifies mixed currencies and branch scoping.
+The repeated cron finding is already addressed by the hash-verified replay
+applier installing pg_cron; the applied production migration remains immutable.

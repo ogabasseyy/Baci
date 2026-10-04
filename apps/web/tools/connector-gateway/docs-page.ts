@@ -34,7 +34,9 @@ export const GATEWAY_DOCS_HTML = `<!doctype html>
     <li><code>POST /v0/tools/inventory.levels</code> — read visible stock levels
       and low-stock signals.</li>
     <li><code>POST /v0/tools/analytics.summary</code> — read merchant-scoped
-      order, revenue, shipping, and stock aggregates.</li>
+      order, revenue, shipping, and stock aggregates. Revenue is grouped in
+      <code>paidRevenueByCurrency</code>; the scalar total is null for mixed or
+      unknown currencies.</li>
   </ul>
   <h2>Access and safety</h2>
   <p>All operations are read-only. They cannot create or change orders,

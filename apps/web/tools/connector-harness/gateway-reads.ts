@@ -168,6 +168,7 @@ export async function readInventoryLevels(
 }
 
 interface OrdersAggregateRow {
+  currency: string | null;
   count: number;
   paidCount: number;
   paidRevenue: number;
@@ -196,12 +197,14 @@ export async function readAnalyticsSummary(
 ): Promise<HarnessAnalyticsSummary> {
   const filter = effectiveBranchFilter(context, branchIds);
   const orderRows = (await txn`
-    SELECT COUNT(*)::int AS count,
+    SELECT NULLIF(UPPER(TRIM(currency)), '') AS currency, COUNT(*)::int AS count,
       COUNT(*) FILTER (WHERE payment_status = 'paid')::int AS "paidCount",
       COALESCE(SUM(total) FILTER (WHERE payment_status = 'paid'), 0)::float8 AS "paidRevenue"
     FROM public.orders
     WHERE merchant_id = ${context.merchantId}
       AND (${filter}::uuid[] IS NULL OR branch_id = ANY (${filter}::uuid[]))
+    GROUP BY NULLIF(UPPER(TRIM(currency)), '')
+    ORDER BY currency NULLS LAST
   `) as unknown as OrdersAggregateRow[];
   const shippingRows = (await txn`
     SELECT shipping_status AS status, COUNT(*)::int AS count
@@ -226,7 +229,14 @@ export async function readAnalyticsSummary(
       GROUP BY vi.variant_id, vi.branch_id
     ) levels
   `) as unknown as StockAggregateRow[];
-  const orders = orderRows[0] ?? { count: 0, paidCount: 0, paidRevenue: 0 };
+  const paidRevenueByCurrency = orderRows
+    .filter((row) => row.paidCount > 0)
+    .map((row) => ({ currency: row.currency, amount: row.paidRevenue }));
+  const singleCurrency =
+    paidRevenueByCurrency.length === 1 &&
+    paidRevenueByCurrency[0].currency !== null
+      ? paidRevenueByCurrency[0]
+      : null;
   const stock = stockRows[0] ?? {
     availableUnits: 0,
     lowStockLevels: 0,
@@ -234,9 +244,13 @@ export async function readAnalyticsSummary(
   };
   return {
     orders: {
-      count: orders.count,
-      paidCount: orders.paidCount,
-      paidRevenue: orders.paidRevenue,
+      count: orderRows.reduce((sum, row) => sum + row.count, 0),
+      paidCount: orderRows.reduce((sum, row) => sum + row.paidCount, 0),
+      paidRevenue:
+        singleCurrency?.amount ??
+        (paidRevenueByCurrency.length === 0 ? 0 : null),
+      currency: singleCurrency?.currency ?? null,
+      paidRevenueByCurrency,
       byShippingStatus: shippingRows.map((row) => ({
         status: row.status,
         count: row.count,

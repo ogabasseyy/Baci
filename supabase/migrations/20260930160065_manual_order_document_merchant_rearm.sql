@@ -114,8 +114,8 @@ BEGIN
     OR private.resolved_merchant_bank_name(OLD.bank_name, OLD.bank_code)
       IS DISTINCT FROM
       private.resolved_merchant_bank_name(NEW.bank_name, NEW.bank_code);
-  -- The slug renders only via the host/From fallbacks: a rename
-  -- under a safe domain and populated names resets nothing.
+  -- The slug renders via the host/From fallbacks or the ogabassey
+  -- app-link gate: other renames under a safe domain reset nothing.
   v_slug_changed := OLD.slug IS DISTINCT FROM NEW.slug;
   SELECT d.domain INTO v_active_domain
   FROM public.domains AS d
@@ -126,7 +126,8 @@ BEGIN
   v_slug_renders :=
     NOT private.manual_document_domain_is_safe(v_active_domain)
     OR COALESCE(NULLIF(OLD.email_sender_name, ''), NULLIF(OLD.business_name, '')) IS NULL
-    OR COALESCE(NULLIF(NEW.email_sender_name, ''), NULLIF(NEW.business_name, '')) IS NULL;
+    OR COALESCE(NULLIF(NEW.email_sender_name, ''), NULLIF(NEW.business_name, '')) IS NULL
+    OR (OLD.slug = 'ogabassey') IS DISTINCT FROM (NEW.slug = 'ogabassey');
   v_shared_changed :=
     (v_slug_changed AND v_slug_renders)
     OR OLD.business_name IS DISTINCT FROM NEW.business_name

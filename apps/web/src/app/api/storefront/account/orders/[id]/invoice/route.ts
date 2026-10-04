@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { isNonNegativeMoney } from '@baci/shared/receipt';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item-metadata';
@@ -89,6 +90,25 @@ export async function GET(
         },
         { status: 409 }
       );
+    }
+    // The availability gate skips tax for paid orders (the archive links
+    // the receipt, which prints no breakdown), but this route renders
+    // the breakdown on demand: validate what it prints, like the sender.
+    if (data.order.is_manual_order) {
+      const taxValid = (data.invoiceData.tax_subtotals ?? []).every((row) =>
+        [row.vat_rate, row.taxable_amount, row.tax_amount].every(
+          isNonNegativeMoney
+        )
+      );
+      if (!taxValid) {
+        return NextResponse.json(
+          {
+            error: 'Invoice is not available for this order',
+            code: 'INVOICE_NOT_AVAILABLE',
+          },
+          { status: 409 }
+        );
+      }
     }
 
     try {

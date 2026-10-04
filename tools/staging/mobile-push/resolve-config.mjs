@@ -47,6 +47,7 @@ export function resolveHostedStagingPushConfig(
           };
         if (name.includes('development-storefront-expo-config')) {
           const target = resolve(dirname(filename), name);
+          if (name.endsWith('.ts')) return load(target);
           return load(
             `${target}${name.endsWith('-production') ? '.ts' : '.js'}`
           );

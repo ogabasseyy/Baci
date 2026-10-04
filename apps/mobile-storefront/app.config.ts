@@ -14,7 +14,7 @@ const buildStorefrontConfig: (context: ConfigContext) => ExpoConfig =
   developmentStorefrontConfig
     ? () => developmentStorefrontConfig
     : (
-        require('./config/development-storefront-expo-config-production') as typeof import('./config/development-storefront-expo-config-production')
+        require('./config/development-storefront-expo-config-production.ts') as typeof import('./config/development-storefront-expo-config-production')
       ).buildStorefrontConfig;
 
 export default buildStorefrontConfig;

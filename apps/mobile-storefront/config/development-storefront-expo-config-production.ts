@@ -1,20 +1,18 @@
 import type { TikTokBusinessPlugin } from '@baci/tiktok-business';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { buildStorefrontAndroidIntentFilters } from './android-intent-filters.js';
+import { createExpoPlugins } from './expo-plugins.js';
+import { resolveUpdateChannel } from './resolve-update-channel.js';
+import { buildSentryExpoConfiguration } from './sentry-expo-config.js';
+import { isSentryConfigurationRequired } from './sentry-required-environment.js';
+import tiktokConstants from './tiktok-constants.js';
 
-const { createExpoPlugins } =
-  require('./expo-plugins.js') as typeof import('./expo-plugins');
-const { buildStorefrontAndroidIntentFilters } =
-  require('./android-intent-filters.js') as typeof import('./android-intent-filters');
-const { resolveUpdateChannel } =
-  require('./resolve-update-channel.js') as typeof import('./resolve-update-channel');
-const { buildSentryExpoConfiguration } =
-  require('./sentry-expo-config') as typeof import('./sentry-expo-config');
-const { isSentryConfigurationRequired } =
-  require('./sentry-required-environment') as typeof import('./sentry-required-environment');
+// tiktok-constants exports string literals, which Node's CJS named-export
+// detection skips; read them off the default export instead.
 const {
   DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID,
   DEFAULT_STOREFRONT_TIKTOK_IOS_TIKTOK_APP_ID,
-} = require('./tiktok-constants') as {
+} = tiktokConstants as {
   DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID: string;
   DEFAULT_STOREFRONT_TIKTOK_IOS_TIKTOK_APP_ID: string;
 };

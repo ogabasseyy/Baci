@@ -143,8 +143,10 @@ describe('SavingsPlanFundingRoute', () => {
 
     expect(screen.getByText('₦250,000')).toBeOnTheScreen();
     expect(screen.getByText('0001234567')).toBeOnTheScreen();
+    // The gate mock returns true, so the details must render the same
+    // staging copy the gate implies — never the production transfer copy.
     expect(
-      screen.getByText(/card payments cannot fund this savings plan/i)
+      screen.getByText(/do not send a real bank transfer/i)
     ).toBeOnTheScreen();
     expect(screen.queryByText(/I've made the transfer/i)).toBeNull();
     await act(async () => {

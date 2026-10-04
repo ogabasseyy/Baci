@@ -30,7 +30,13 @@ function validGoalId(value: string) {
   );
 }
 
-function parseRequestedAmount(value: string): number | null {
+export function parseRequestedAmount(value: string): number | null {
+  // Strict decimal-only: Number() accepts hex ("0x10"), exponents, and
+  // whitespace, so a crafted funding link must not reach the integer
+  // comparison in a non-decimal shape.
+  if (!/^\d+$/.test(value)) {
+    return null;
+  }
   const amount = Number(value);
   return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }

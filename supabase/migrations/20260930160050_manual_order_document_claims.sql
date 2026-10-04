@@ -51,10 +51,14 @@ BEGIN
   IF p_token_hash IS NULL OR p_token_hash !~ '^[a-f0-9]{64}$' THEN
     RETURN jsonb_build_object('status', 'skipped');
   END IF;
-  -- Lock the order before the outbox, matching the order-update trigger path
-  -- (which holds the order row while enqueue waits on the outbox): the reverse
-  -- order deadlocks against concurrent staff edits. The merchant scoping is
-  -- revalidated after both locks are held because the outbox row is unread yet.
+  -- Lock order: claim, then order, then customer, then outbox. Order
+  -- before outbox matches the order-update trigger path (which holds the
+  -- order while enqueue waits on the outbox); customer before outbox
+  -- matches the customer-restore/delete trigger paths (which hold the
+  -- customer while re-arming the outbox) — locking the outbox first here
+  -- deadlocks against a concurrent restore of the same customer. The
+  -- merchant scoping is revalidated after the outbox lock because the
+  -- outbox row is unread yet.
   -- Pre-lock the existing claim (if any) BEFORE the order and customer:
   -- redemption locks claim-then-order-then-customer, so any later claim
   -- lock deadlocks when a corrective retry races the recipient's
@@ -66,6 +70,13 @@ BEGIN
   SELECT o.* INTO v_order FROM public.orders AS o
   WHERE o.id = (SELECT n.order_id FROM public.order_notification_outbox AS n WHERE n.id = p_outbox_id)
   FOR SHARE;
+  -- Customer before the outbox (see above): keyed by the order's
+  -- staff-selected identity, independent of the outbox row.
+  SELECT c.* INTO v_customer FROM public.customers AS c
+  WHERE c.id = v_order.customer_id AND c.merchant_id = v_order.merchant_id
+    AND c.deleted_at IS NULL
+  FOR SHARE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
   SELECT n.* INTO v_notification FROM public.order_notification_outbox AS n
   WHERE n.id = p_outbox_id AND n.status = 'processing'
     AND n.locked_by = p_claim_owner AND n.dispatch_started_at IS NULL
@@ -96,15 +107,12 @@ BEGIN
         OR v_order.amount_paid >= v_order.total))
   THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
 
-  -- Bind by staff-selected customer identity, not email equality: the order's
-  -- email is the contact channel staff entered, and requiring the customers
-  -- row to agree would strand legitimate late corrections (verified sign-in
-  -- still gates redemption, and the order email stays the claim recipient).
-  SELECT c.* INTO v_customer FROM public.customers AS c
-  WHERE c.id = v_order.customer_id AND c.merchant_id = v_order.merchant_id
-    AND c.deleted_at IS NULL
-  FOR SHARE;
-  IF NOT FOUND THEN RETURN jsonb_build_object('status', 'skipped'); END IF;
+  -- v_customer was bound above (before the outbox lock): staff-selected
+  -- customer identity, not email equality — the order's email is the
+  -- contact channel staff entered, and requiring the customers row to
+  -- agree would strand legitimate late corrections (verified sign-in
+  -- still gates redemption, and the order email stays the claim
+  -- recipient).
 
   INSERT INTO public.receipt_claims (
     merchant_id, manual_notification_id, customer_id, customer_email, customer_name, token_hash

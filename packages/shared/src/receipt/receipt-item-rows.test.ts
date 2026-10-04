@@ -48,7 +48,8 @@ describe('renderItemRows', () => {
           },
         ],
       }),
-      formatMoney
+      formatMoney,
+      'receipt'
     );
 
     expect(html).toContain('Samsung Galaxy Fold 5 (Used)');
@@ -73,7 +74,8 @@ describe('renderItemRows', () => {
           },
         ],
       }),
-      formatMoney
+      formatMoney,
+      'invoice'
     );
 
     // The explicit extension wins over quantity x price like the emailed PDF.
@@ -91,7 +93,8 @@ describe('renderItemRows', () => {
       createReceiptOrder({
         items: [{ price: 1000, product_name: 'Cable', quantity: 2 }],
       }),
-      formatMoney
+      formatMoney,
+      'receipt'
     );
 
     expect(html).toContain('NGN 2,000');
@@ -115,11 +118,53 @@ describe('renderItemRows', () => {
           },
         ],
       }),
-      formatMoney
+      formatMoney,
+      'receipt'
     );
 
     expect(html.match(/Samsung Galaxy Fold 5 \(Used\)/g) ?? []).toHaveLength(1);
     expect(html.match(/IMEI: 353456789012345/g) ?? []).toHaveLength(1);
     expect(html).not.toContain('cell-item-description');
+  });
+
+  it('hides VAT lines on receipt previews like the emailed receipt', () => {
+    const html = renderItemRows(
+      createReceiptOrder({
+        items: [
+          {
+            price: 1000,
+            product_name: 'Cable',
+            quantity: 1,
+            vat_rate: 7.5,
+            vat_amount: 75,
+          },
+        ],
+      }),
+      formatMoney,
+      'receipt'
+    );
+
+    expect(html).not.toContain('VAT: 7.50%');
+    expect(html).not.toContain('cell-line-meta');
+  });
+
+  it('shows VAT lines on proforma previews like invoices', () => {
+    const html = renderItemRows(
+      createReceiptOrder({
+        items: [
+          {
+            price: 1000,
+            product_name: 'Cable',
+            quantity: 1,
+            vat_rate: 7.5,
+            vat_amount: 75,
+          },
+        ],
+      }),
+      formatMoney,
+      'proforma'
+    );
+
+    expect(html).toContain('VAT: 7.50%');
   });
 });

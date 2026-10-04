@@ -166,7 +166,16 @@ export function useReceiptPreview(options: ReceiptPreviewOptions = {}) {
         'Customer',
       customer_email: receiptDetail.customer_email,
       customer_phone: receiptDetail.customer_phone,
-      shipping_address: receiptDetail.shipping_address,
+      // The detail schema accepts explicit null locality (mobile-admin's
+      // "same as customer" persists nulls); the generator types locality
+      // as optional strings, so normalize null to absent — the renderer
+      // falsy-filters both identically.
+      shipping_address: receiptDetail.shipping_address && {
+        ...receiptDetail.shipping_address,
+        city: receiptDetail.shipping_address.city ?? undefined,
+        state: receiptDetail.shipping_address.state ?? undefined,
+        postal_code: receiptDetail.shipping_address.postal_code ?? undefined,
+      },
       virtual_account: showBankDetails ? receiptDetail.virtual_account : null,
       // Null entries are dropped before generation: the generator
       // dereferences every item, so a corrupt row must degrade to fewer

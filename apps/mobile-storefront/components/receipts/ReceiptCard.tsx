@@ -1,8 +1,10 @@
+import { isManualOrderRecord } from '@baci/shared/receipt';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import type React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BRAND, SHADOWS } from '@/constants/Colors';
+import { isPromotedManualReceipt } from '@/hooks/receipt-promotion-gates';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ReceiptListItem } from '@/types/receipt';
 import { formatReceiptDate } from './receipt-date';
@@ -78,18 +80,46 @@ export function ReceiptCard({
   onPress,
   onPrefetch,
 }: ReceiptCardProps) {
+  // Fail closed on stale kinds: the list computes document_kind through
+  // the promotion gate, but a cached entry can outlive a terminal
+  // shipping flip — re-verify manual receipts through the same gate so
+  // a cancelled row never badges Receipt/View Receipt. Non-manual rows
+  // keep the list kind (the paid shortcut owns them, not this gate).
+  let effectiveKind = item.document_kind;
+  if (
+    effectiveKind === 'receipt' &&
+    isManualOrderRecord({
+      recordedByUserId: item.recorded_by_user_id,
+      importJobId: item.import_job_id,
+      externalSource: item.external_source,
+    }) &&
+    !isPromotedManualReceipt({
+      recordedByUserId: item.recorded_by_user_id,
+      importJobId: item.import_job_id,
+      externalSource: item.external_source,
+      paymentStatus: item.payment_status,
+      shippingStatus: item.shipping_status,
+      total: item.total,
+      subtotal: item.subtotal,
+      shippingFee: item.shipping_fee,
+      taxAmount: item.tax_amount,
+      discountAmount: item.discount_amount,
+      amountPaid: item.amount_paid,
+      currency: item.currency,
+      items: item.items,
+    })
+  ) {
+    effectiveKind = 'invoice';
+  }
   // Badge/action follow the effective document kind both ways: a covered
   // manual balance under a non-paid label opens a receipt, so the card says
   // receipt — and an explicit invoice kind never badges paid even under a
   // paid label (invalid manual rows open invoices). Absent kind (legacy
   // rows) falls back to the raw status.
   let displayStatus = item.payment_status;
-  if (item.document_kind === 'receipt') {
+  if (effectiveKind === 'receipt') {
     displayStatus = 'paid';
-  } else if (
-    item.document_kind === 'invoice' &&
-    item.payment_status === 'paid'
-  ) {
+  } else if (effectiveKind === 'invoice' && item.payment_status === 'paid') {
     displayStatus = 'unpaid';
   }
   // Money follows the ledger, not the badge: an invalid manual row can
@@ -100,7 +130,7 @@ export function ReceiptCard({
   // paid ledger label: the money line must explain that no receipt
   // exists, or the Paid-plus-Invoice mix reads as a missing receipt.
   const invalidPaidInvoice =
-    item.document_kind === 'invoice' && item.payment_status === 'paid';
+    effectiveKind === 'invoice' && item.payment_status === 'paid';
   const config = getPaymentConfig(displayStatus);
   const firstItem = item.items[0];
   const productTitle = firstItem

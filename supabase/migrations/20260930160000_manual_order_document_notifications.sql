@@ -151,6 +151,22 @@ $$;
 REVOKE ALL ON FUNCTION private.enqueue_manual_order_document(uuid, boolean)
   FROM PUBLIC, anon, authenticated;
 
+-- Rendered shipping subset, mirroring both renderers (shared HTML preview
+-- and the emailed PDF read exactly these six keys): admin-only keys like
+-- name/phone and the legacy flat address never reach the document, so
+-- edits confined to them must not invalidate an identical render. The
+-- control-character separator keeps key-boundary collisions from masking
+-- a real change; NULL and '' both drop like the renderers' falsy filter.
+CREATE OR REPLACE FUNCTION private.rendered_shipping_address(p_address jsonb)
+RETURNS text LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
+  SELECT concat_ws(chr(31),
+    p_address->>'address_line1', p_address->>'address_line2',
+    p_address->>'city', p_address->>'state',
+    p_address->>'postal_code', p_address->>'country');
+$function$;
+REVOKE ALL ON FUNCTION private.rendered_shipping_address(jsonb)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.enqueue_manual_document_after_order_update()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -195,7 +211,8 @@ BEGIN
     OR NEW.tax_amount IS DISTINCT FROM OLD.tax_amount
     OR NEW.discount_amount IS DISTINCT FROM OLD.discount_amount
     OR NEW.order_number IS DISTINCT FROM OLD.order_number
-    OR NEW.shipping_address IS DISTINCT FROM OLD.shipping_address
+    OR private.rendered_shipping_address(NEW.shipping_address)
+      IS DISTINCT FROM private.rendered_shipping_address(OLD.shipping_address)
     OR NEW.customer_email IS DISTINCT FROM OLD.customer_email
     OR NEW.customer_id IS DISTINCT FROM OLD.customer_id
     OR NEW.customer_name IS DISTINCT FROM OLD.customer_name

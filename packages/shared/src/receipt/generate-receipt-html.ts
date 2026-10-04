@@ -184,7 +184,13 @@ export function generateReceiptHtml(
     docTitle,
     isPaid,
     isProforma,
-    itemRows: renderItemRows(order, formatMoney),
+    // The effective kind mirrors docTitle above: VAT detail lines render
+    // for invoices and proformas only, like the emailed PDF.
+    itemRows: renderItemRows(
+      order,
+      formatMoney,
+      isPaid ? 'receipt' : isProforma ? 'proforma' : 'invoice'
+    ),
     logoHtml: renderLogoHtml(merchant, storeName, options.svgXml),
     paymentHistoryHtml: renderPaymentHistoryHtml(order, formatMoney),
     qrHtml: renderQrHtml(options, isPaid),

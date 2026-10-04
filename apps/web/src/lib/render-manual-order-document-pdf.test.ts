@@ -88,7 +88,7 @@ describe('render manual order document pdf', () => {
     });
     expect(options?.taxSubtotals).toEqual([
       {
-        exemption_reason: null,
+        exemption_reason: undefined,
         taxable_amount: 883721,
         tax_amount: 66279,
         vat_category_code: 'S',
@@ -144,6 +144,57 @@ describe('render manual order document pdf', () => {
     // Matches receipt-pdf-generator's invoice_issue_date ?? transaction_date
     // ?? created_at chain: transaction_date wins over created_at.
     expect(options?.documentDate).toBe('2026-09-28T09:00:00Z');
+  });
+
+  it('reconciles the assurance premium into the rendered breakdown only', async () => {
+    const taxRows = [
+      {
+        id: 'tax-1',
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+        taxable_amount: 100000,
+        tax_amount: 7500,
+        exemption_reason: null,
+      },
+    ];
+    const order = manualDocumentOrderSchema.parse({
+      ...orderFixture,
+      payment_status: 'unpaid',
+      amount_paid: 0,
+      order_items: orderFixture.order_items.map((item) => ({
+        ...item,
+        assurance_fee: 5000,
+      })),
+    });
+    const merchant = manualDocumentMerchantSchema.parse(merchantFixture);
+
+    const rendered = await renderManualOrderDocumentPdf({
+      taxRows,
+      transactionRows: [],
+      order,
+      merchant,
+      recipientEmail: 'ada@example.com',
+      preferredPaymentAccount: null,
+      isPaid: false,
+      pdfDocumentKind: 'invoice',
+      invoiceTypeCode: null,
+    });
+
+    // Rendered breakdown matches the download path (premium folded into
+    // an O subtotal); the snapshot still carries the stored rows.
+    const [, , options] = mockedPdf.mock.calls[0];
+    expect(options?.taxSubtotals).toContainEqual({
+      vat_category_code: 'O',
+      vat_rate: 0,
+      taxable_amount: 5000,
+      tax_amount: 0,
+      exemption_reason: expect.any(String),
+    });
+    expect(rendered.taxSubtotals).toHaveLength(1);
+    expect(rendered.taxSubtotals[0]).toMatchObject({
+      vat_category_code: 'S',
+      taxable_amount: 100000,
+    });
   });
 
   it('prefers the explicit invoice note over staff order notes', async () => {

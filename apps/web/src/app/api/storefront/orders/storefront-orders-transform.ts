@@ -170,8 +170,9 @@ export function transformStorefrontOrdersForDisplay(
       receipt_completion_date: receiptCompletionDate,
       // Settled payment history for the preview Payment table: mirrors the
       // sender filter so partial manual invoices show the same payments as
-      // the emailed document. The RPC exposes no payment_method, so rows
-      // render by description like the generator fallback.
+      // the emailed document. The method rides as metadata.payment_method
+      // exactly like the generator input, so the preview's
+      // method → description → 'Payment' fallback agrees with the email.
       transactions: (lookups.transactionsByOrderId.get(order.id) ?? [])
         .filter(
           (transaction) =>
@@ -183,7 +184,9 @@ export function transformStorefrontOrdersForDisplay(
           amount: Number(transaction.amount ?? 0),
           created_at: transaction.created_at,
           description: transaction.description,
-          metadata: null,
+          metadata: transaction.payment_method
+            ? { payment_method: transaction.payment_method }
+            : null,
         })),
       total: order.total,
       subtotal: order.subtotal,

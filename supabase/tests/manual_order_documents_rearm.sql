@@ -59,10 +59,17 @@ INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, cu
 VALUES ('10000000-0000-4000-8000-000000000025', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000025', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'merchant_validation_failed', skipped_at = now(), attempt_count = 2 WHERE order_id = '10000000-0000-4000-8000-000000000025';
-UPDATE public.merchants SET business_name = 'Fixture Fixed' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.merchants SET vat_rate = 10 WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND attempt_count = 0 AND skip_reason IS NULL AND skipped_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000025'), 'merchant correction re-arms the skipped row');
+-- The skipped-row re-arm gates on validation inputs only: an unrelated
+-- profile edit must not burn an attempt on a re-validation that cannot
+-- change. (Undispatched processing rows still re-arm on any merchant
+-- edit — the worker may have snapshotted a rendered field already.)
+UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'merchant_validation_failed', skipped_at = now(), attempt_count = 2 WHERE order_id = '10000000-0000-4000-8000-000000000025';
+UPDATE public.merchants SET business_name = 'Fixture Fixed' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'skipped' AND skip_reason = 'merchant_validation_failed' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000025'), 'unrelated merchant edit leaves the skipped row alone');
 UPDATE public.order_notification_outbox SET status = 'skipped', skip_reason = 'ineligible_manual_order', skipped_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000025';
-UPDATE public.merchants SET business_name = 'Fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.merchants SET vat_rate = 7.5, business_name = 'Fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'skipped' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000025'), 'merchant update leaves other skip reasons alone');
 -- A monetary or order-number correction alone re-arms a terminal row the worker gave up on.
 INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, customer_email, payment_status, amount_paid)
@@ -155,6 +162,33 @@ INSERT INTO public.orders (id, merchant_id, customer_id, recorded_by_user_id, cu
 VALUES ('10000000-0000-4000-8000-000000000077', '10000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000010', 'buyer@example.com', 'unpaid', 0);
 INSERT INTO public.order_items (order_id, name, quantity, price) VALUES ('10000000-0000-4000-8000-000000000077', 'Device', 1, 100);
 UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
-UPDATE public.merchants SET support_phone = '+2348000000099' WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.merchants SET slug = 'fixture-fixed' WHERE id = '10000000-0000-4000-8000-000000000001';
 SELECT pg_temp.assert_true((SELECT status = 'pending' AND locked_by IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'merchant correction re-arms the processing row');
-UPDATE public.merchants SET support_phone = NULL WHERE id = '10000000-0000-4000-8000-000000000001';
+UPDATE public.merchants SET slug = 'fixture' WHERE id = '10000000-0000-4000-8000-000000000001';
+-- An unrendered-field edit keeps an undispatched processing lease:
+-- repeated unrelated saves must not starve delivery.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET cac_rc_number = 'RC999' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND locked_by = 'm2-worker' FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'unrendered merchant edit keeps the processing lease');
+UPDATE public.merchants SET cac_rc_number = 'RC123' WHERE id = '10000000-0000-4000-8000-000000000001';
+-- A business_address edit under a nonempty registered address resets
+-- receipt markers alone: invoices render the registered line, so the
+-- invoice send is pixel-identical and stays undispatched-but-claimed.
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000076' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000076' AND event_type = 'manual_order_receipt';
+UPDATE public.order_notification_outbox SET status = 'processing', locked_by = 'm2-worker', locked_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.merchants SET business_address = '2 Marina St' WHERE id = '10000000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000076' AND event_type = 'manual_order_receipt'), 'shadowed business edit still resets the receipt marker');
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND locked_by = 'm2-worker' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'shadowed business edit keeps the invoice marker and lease');
+UPDATE public.merchants SET business_address = '1 Market St' WHERE id = '10000000-0000-4000-8000-000000000001';
+-- Admin-only shipping keys (name/phone/flat address) never invalidate an
+-- in-flight send; rendered locality keys do. The NULL-to-object write
+-- below consumes the 077 marker via the rendered change, so re-mark first.
+UPDATE public.orders SET shipping_address = '{"address": "12 Allen Ave", "city": "Lagos", "state": null, "name": "Ada", "phone": ""}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'rendered shipping write invalidates the marker');
+UPDATE public.order_notification_outbox SET dispatch_started_at = now() WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice';
+UPDATE public.orders SET shipping_address = shipping_address || '{"name": "Ade", "phone": "08012345678"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NOT NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'admin-only shipping edit keeps the marker');
+UPDATE public.orders SET shipping_address = shipping_address || '{"city": "Abuja"}' WHERE id = '10000000-0000-4000-8000-000000000077';
+SELECT pg_temp.assert_true((SELECT status = 'processing' AND dispatch_started_at IS NULL FROM public.order_notification_outbox WHERE order_id = '10000000-0000-4000-8000-000000000077' AND event_type = 'manual_order_invoice'), 'rendered shipping edit resets the marker');

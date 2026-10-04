@@ -1,6 +1,11 @@
 import { isNonNegativeMoney } from '@baci/shared/receipt';
 import type { z } from 'zod';
 import { buildManualOrderDocumentPdfInput } from '@/lib/build-manual-order-document-pdf-input';
+import {
+  reconcileAssuranceTaxSubtotal,
+  sumAssuranceFees,
+} from '@/lib/insurance-assurance-line';
+import type { TaxSubtotal } from '@/lib/invoice-generator';
 import type {
   DispatchTaxSubtotal,
   DispatchTransaction,
@@ -127,6 +132,29 @@ export async function renderManualOrderDocumentPdf({
         throw new ManualDocumentValidationError('tax_breakdown_invalid');
     }
   }
+  // The assurance premium renders as a line item but was never folded into
+  // the stored tax rows: reconcile a COPY for the breakdown exactly like
+  // the download path, while the marker still snapshots the stored rows.
+  // (Null exemptions map to undefined-absent; the generator only tests
+  // truthiness, so the render is identical.)
+  const renderTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((row) => ({
+    vat_category_code: row.vat_category_code,
+    vat_rate: row.vat_rate,
+    taxable_amount: row.taxable_amount,
+    tax_amount: row.tax_amount,
+    exemption_reason: row.exemption_reason ?? undefined,
+  }));
+  const assuranceTotal = sumAssuranceFees(order.order_items);
+  if (!isPaid && assuranceTotal > 0) {
+    const documentTaxExclusive = Number(
+      (order.subtotal + order.shipping_fee - order.discount_amount).toFixed(2)
+    );
+    reconcileAssuranceTaxSubtotal(
+      renderTaxSubtotals,
+      documentTaxExclusive,
+      assuranceTotal
+    );
+  }
   const { receiptOrder, receiptMerchant } = buildManualOrderDocumentPdfInput({
     order,
     merchant,
@@ -159,7 +187,7 @@ export async function renderManualOrderDocumentPdf({
       order.created_at,
     logoDataUri,
     invoiceNotes: order.invoice_note || order.notes || undefined,
-    taxSubtotals: taxSubtotals.map(({ id: _id, ...breakdown }) => breakdown),
+    taxSubtotals: renderTaxSubtotals,
   });
   return { pdf, taxSubtotals, transactions };
 }

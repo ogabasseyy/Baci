@@ -144,6 +144,10 @@ t varmap-at-op 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefa
 t varmap-home-path-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${HOME}/.local/bin/muse\" --version"
 t varmap-assign-op-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}note=\"\${note} [done]\""
 
+# --- predefined shell vars (Codex P1: ${BASH} in argv0) ---
+t varmap-bash 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\"\${BASH}\" \"\${GITHUB_WORKSPACE}/evil.sh\""
+t varmap-shell 1 "helper-unresolved-command" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}\$SHELL -c true"
+
 # --- CORE-qualified perl calls (Codex P1: CORE::open) ---
 t perl-core-open 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::open(my \$fh, \"|-\", \"bash\", \"\$ENV{GITHUB_WORKSPACE}/evil.sh\");"
 t perl-core-sysopen 1 "helper-perl-danger" happy.sarif "$P${FS}use warnings;${FS}a${FS}CORE::sysopen(my \$fh, \$f, O_RDWR);"

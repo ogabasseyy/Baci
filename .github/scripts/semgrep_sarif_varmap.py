@@ -9,6 +9,7 @@ edges. Carry vars never follow edges (they stay literal
 anchors). Residual: non-name targets (arr[0], $dyn) pop.
 """
 import re
+from semgrep_sarif_consts import SHELL_EXEC_VARS
 from semgrep_sarif_nameref import _split_top, follow_nameref
 from semgrep_sarif_shell import strip_comments
 from semgrep_sarif_varcollect import CARRY_VARS, _collect_piece
@@ -100,5 +101,10 @@ def audit_unresolved_argv(argv0, stale, drift):
         return
     m = re.match(r"\$(?:\{([A-Za-z_]\w*)[^}]*\}"
                  r"|([A-Za-z_]\w*))", argv0)
-    if m and (m.group(1) or m.group(2)) in stale:
+    name = (m.group(1) or m.group(2)) if m else None
+    if name in stale or name in SHELL_EXEC_VARS:
+        # Shell-predefined executable paths (BASH, SHELL)
+        # drift like stale names: never assigned in-tree, so
+        # the staleness rule alone would bless them while
+        # bash executes a real interpreter.
         drift.append("helper-unresolved-command")

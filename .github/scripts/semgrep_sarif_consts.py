@@ -40,7 +40,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "lldb", "dotnet", "tclsh", "expect", "wish",
              "autoconf", "autoheader", "autom4te", "autoreconf",
              "autoupdate", "ifnames", "aclocal",
-             "kotlinc", "kotlinc-jvm", "kotlin", "kapt"}
+             "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
+             "runghc", "runhaskell", "ghc", "ghci"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -73,6 +74,9 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # ifnames/aclocal scan and expand workspace .m4 macros.
 # kotlinc -script executes .kts top-level code (kotlin runs
 # classes/scripts, kapt runs annotation processors).
+# runghc/runhaskell interpret the file operand; ghc runs
+# Template Haskell splices at compile time (-e evaluates);
+# ghci is the same front end, interactive.
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")
@@ -159,6 +163,15 @@ ENV_POISON = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH",
 # the command hash table (bash 4.0+); SSH_ASKPASS programs
 # run on remote auth (sshpass's env counterpart); TAR_OPTIONS
 # prepends tar flags (checkpoint-action=exec runs commands).
+
+
+SHELL_EXEC_VARS = frozenset(("BASH", "SHELL"))
+# Bash-predefined variables evaluating to executable paths
+# (BASH is the current bash pathname; SHELL the login shell):
+# never assigned in-tree, so never stale -- but ${BASH} in
+# command position executes a real interpreter. Other
+# predefined values (RANDOM, SECONDS, UID) cannot name an
+# executable, so the set stays at these two.
 
 
 # Bash exported-function encoding (round 14, P1 4176327352):

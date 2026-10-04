@@ -78,12 +78,14 @@ describe('savings goals route helpers', () => {
 
   it('fingerprints the raw requested plan deterministically', () => {
     const input = {
+      breakFeePercent: 5,
       contributionAmount: 20000,
       contributionFrequency: 'weekly',
       initialContributionAmount: 0,
       maturityDate: '2026-12-31',
       preferredDebitTime: null,
       productId: 'product-1',
+      savedPaymentMethodId: 'payment-method-1',
       sourceMode: 'manual',
       startDate: '2026-10-04',
       targetAmount: 800000,
@@ -103,10 +105,26 @@ describe('savings goals route helpers', () => {
     expect(
       buildGoalRequestFingerprint({
         ...input,
+        savedPaymentMethodId: 'payment-method-2',
+      })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({ ...input, breakFeePercent: 10 })
+    ).not.toBe(first);
+    expect(
+      buildGoalRequestFingerprint({
+        ...input,
         variantId: undefined,
         initialContributionAmount: undefined,
       })
     ).toBe(first);
+    expect(
+      buildGoalRequestFingerprint({
+        ...input,
+        breakFeePercent: null,
+        savedPaymentMethodId: null,
+      })
+    ).not.toBe(first);
   });
 
   it('does not classify unknown unavailable failures as missing resources', () => {

@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
-  SAVINGS_DEVICE_PRODUCT_SELECT,
-  SavingsDeviceProductSchema,
+  asSavingsDeviceQueryClient,
+  readSavingsDeviceProduct,
 } from '@/lib/customer-savings-device';
 import { resolveCustomerSavingsNonpaymentContext } from '@/lib/customer-savings-nonpayment-context';
 import { getCustomerSavingsNonpaymentSettings } from '@/lib/customer-savings-nonpayment-settings';
@@ -67,24 +67,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const recoveryProductId = goalResult.data?.product_id ?? null;
     if (recoveryProductId) {
-      const productResult = await context.supabase
-        .from('products')
-        .select(SAVINGS_DEVICE_PRODUCT_SELECT)
-        .eq('merchant_id', context.merchant.id)
-        .eq('id', recoveryProductId)
-        .eq('status', 'active')
-        .maybeSingle();
-      if (productResult.error) {
-        throw productResult.error;
-      }
-      const productValidation = SavingsDeviceProductSchema.safeParse(
-        productResult.data
-      );
-      const recoveredVariant = productValidation.success
-        ? ((productValidation.data.variants ?? []).find(
-            (variant) => variant.id === parsed.data.variantId
-          ) ?? null)
-        : null;
+      const product = await readSavingsDeviceProduct({
+        merchantId: context.merchant.id,
+        productId: recoveryProductId,
+        supabase: asSavingsDeviceQueryClient(context.supabase),
+      });
+      const recoveredVariant =
+        (product?.variants ?? []).find(
+          (variant) => variant.id === parsed.data.variantId
+        ) ?? null;
       if (
         !recoveredVariant ||
         !isStorefrontProductVariantPublic(recoveredVariant)

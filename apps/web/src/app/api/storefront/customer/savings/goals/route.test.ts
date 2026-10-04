@@ -62,6 +62,28 @@ function createProductQuery(result: {
   return query;
 }
 
+const VARIANTS_RPC = 'get_storefront_product_variants';
+const CREATE_RPC = 'create_customer_savings_goal';
+
+function createRoutedRpc({
+  variantRows,
+  create,
+}: {
+  variantRows: unknown;
+  create: { data: unknown; error: unknown };
+}) {
+  return vi.fn((fn: string) => {
+    if (fn === VARIANTS_RPC) {
+      return Promise.resolve({ data: variantRows, error: null });
+    }
+    return Promise.resolve(create);
+  });
+}
+
+function createRpcCalls(rpc: ReturnType<typeof vi.fn>) {
+  return rpc.mock.calls.filter(([fn]) => fn === CREATE_RPC);
+}
+
 function simpleProductData() {
   return {
     condition: 'used',
@@ -281,11 +303,14 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: {
-          code: 'XX000',
-          message: 'database unavailable',
+      rpc: createRoutedRpc({
+        variantRows: [],
+        create: {
+          data: null,
+          error: {
+            code: 'XX000',
+            message: 'database unavailable',
+          },
         },
       }),
     };
@@ -326,11 +351,14 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: {
-          code: 'P0001',
-          message: 'insufficient_wallet_balance',
+      rpc: createRoutedRpc({
+        variantRows: [],
+        create: {
+          data: null,
+          error: {
+            code: 'P0001',
+            message: 'insufficient_wallet_balance',
+          },
         },
       }),
     };
@@ -364,21 +392,22 @@ describe('/api/storefront/customer/savings/goals', () => {
 
   it('rejects creating a multi-variant savings goal without an exact variant', async () => {
     const productQuery = createProductQuery({
-      data: {
-        ...simpleProductData(),
-        variants: [
-          {
-            attributes: { storage: '256GB' },
-            id: '00000000-0000-4000-8000-000000000102',
-            price_override: '850000',
-          },
-        ],
-      },
+      data: simpleProductData(),
       error: null,
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn(),
+      rpc: createRoutedRpc({
+        variantRows: [
+          {
+            attributes: { storage: '256GB' },
+            id: '00000000-0000-4000-8000-000000000102',
+            price_override: '850000',
+            product_id: '00000000-0000-4000-8000-000000000101',
+          },
+        ],
+        create: { data: null, error: null },
+      }),
     };
     mockResolveCustomerSavingsContext.mockResolvedValue({
       customer: { id: 'customer-1' },
@@ -404,28 +433,29 @@ describe('/api/storefront/customer/savings/goals', () => {
 
     expect(response.status).toBe(400);
     expect(body.code).toBe('SAVINGS_DEVICE_VARIANT_REQUIRED');
-    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(createRpcCalls(mockSupabase.rpc)).toHaveLength(0);
   });
 
   it('persists the selected variant snapshot and rejects a stale lower price', async () => {
     const productQuery = createProductQuery({
-      data: {
-        ...simpleProductData(),
-        variants: [
+      data: simpleProductData(),
+      error: null,
+    });
+    const mockSupabase = {
+      from: vi.fn(() => productQuery),
+      rpc: createRoutedRpc({
+        variantRows: [
           {
             attributes: { storage: '256GB' },
             condition: 'used',
             id: '00000000-0000-4000-8000-000000000102',
             price_override: '850000',
             primary_image: 'https://cdn.example.com/iphone-256.jpg',
+            product_id: '00000000-0000-4000-8000-000000000101',
           },
         ],
-      },
-      error: null,
-    });
-    const mockSupabase = {
-      from: vi.fn(() => productQuery),
-      rpc: vi.fn(),
+        create: { data: null, error: null },
+      }),
     };
     mockResolveCustomerSavingsContext.mockResolvedValue({
       customer: { id: 'customer-1' },
@@ -453,20 +483,37 @@ describe('/api/storefront/customer/savings/goals', () => {
     expect((await staleResponse.json()).code).toBe(
       'SAVINGS_DEVICE_PRICE_STALE'
     );
-    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(createRpcCalls(mockSupabase.rpc)).toHaveLength(0);
 
-    mockSupabase.rpc.mockResolvedValue({
-      data: [
-        {
-          contribution_id: 'contrib-1',
-          current_amount: '20000',
-          goal_id: 'goal-1',
-          goal_status: 'active',
-          success: true,
-          wallet_balance: '180000',
-        },
-      ],
-      error: null,
+    mockSupabase.rpc.mockImplementation((fn: string) => {
+      if (fn === VARIANTS_RPC) {
+        return Promise.resolve({
+          data: [
+            {
+              attributes: { storage: '256GB' },
+              condition: 'used',
+              id: '00000000-0000-4000-8000-000000000102',
+              price_override: '850000',
+              primary_image: 'https://cdn.example.com/iphone-256.jpg',
+              product_id: '00000000-0000-4000-8000-000000000101',
+            },
+          ],
+          error: null,
+        });
+      }
+      return Promise.resolve({
+        data: [
+          {
+            contribution_id: 'contrib-1',
+            current_amount: '20000',
+            goal_id: 'goal-1',
+            goal_status: 'active',
+            success: true,
+            wallet_balance: '180000',
+          },
+        ],
+        error: null,
+      });
     });
 
     const response = await POST(
@@ -507,7 +554,7 @@ describe('/api/storefront/customer/savings/goals', () => {
         contribution_frequency: 'daily',
         current_amount: '20000',
         goal_request_fingerprint:
-          '7a974bbbfd7784d4f727a48dc6efa9cf9e1763823ba44325bb09168394173f62',
+          'a194ea9a76e7314f89befa69ae163b6b0e905fd05d809060ca516e05dfb33c72',
         id: 'goal-replayed',
         status: 'active',
       },
@@ -646,11 +693,14 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: null,
-        error: {
-          code: 'P0001',
-          message: 'mismatched_goal_idempotency_payload',
+      rpc: createRoutedRpc({
+        variantRows: [],
+        create: {
+          data: null,
+          error: {
+            code: 'P0001',
+            message: 'mismatched_goal_idempotency_payload',
+          },
         },
       }),
     };

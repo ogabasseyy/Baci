@@ -204,4 +204,31 @@ describe('deliverSavingsExpoPush', () => {
       ticketId: null,
     });
   });
+
+  it.each([429, 503])(
+    'stays retryable when a %s response has an empty body',
+    async (status) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(new Response(null, { status }))
+      );
+      const input = {
+        token: 'ExponentPushToken[hidden]',
+        title: 'Title',
+        body: 'Body',
+        data: {
+          type: 'savings',
+          goalId: 'goal-1',
+          notificationId: 'notification-1',
+          merchantId: 'merchant-1',
+        } as const,
+        channelId: 'savings' as const,
+      };
+
+      await expect(deliverSavingsExpoPush(input)).resolves.toEqual({
+        outcome: 'retryable',
+        ticketId: null,
+      });
+    }
+  );
 });

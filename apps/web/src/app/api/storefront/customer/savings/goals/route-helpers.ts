@@ -65,12 +65,14 @@ export function toSavingsRouteNumber(value: unknown) {
 }
 
 export type GoalRequestFingerprintInput = {
+  breakFeePercent?: number | null;
   contributionAmount: number;
   contributionFrequency: string;
   initialContributionAmount?: number | null;
   maturityDate: string;
   preferredDebitTime?: string | null;
   productId: string;
+  savedPaymentMethodId?: string | null;
   sourceMode: string;
   startDate: string;
   targetAmount: number;
@@ -99,6 +101,8 @@ export function buildGoalRequestFingerprint(
     input.startDate,
     input.maturityDate,
     input.sourceMode,
+    input.savedPaymentMethodId ?? null,
+    input.breakFeePercent ?? 0,
   ]);
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }

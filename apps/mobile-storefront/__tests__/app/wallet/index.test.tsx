@@ -74,10 +74,11 @@ type MockWalletContentProps = {
 const mockRedirect = jest.fn<({ href }: { href: string }) => ReactNode>();
 const mockRouterPush = jest.fn();
 let mockSearchParams: {
-  action?: string;
-  requiredAmount?: string;
-  returnTo?: string;
-  savingsAmount?: string;
+  action?: string | string[];
+  requiredAmount?: string | string[];
+  returnTo?: string | string[];
+  savingsAmount?: string | string[];
+  savingsGoalId?: string | string[];
 } = {};
 const mockStorefrontScreenShell =
   jest.fn<({ children, edges }: MockStorefrontScreenShellProps) => void>();
@@ -992,6 +993,21 @@ describe('WalletScreen', () => {
 
     expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
     expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    expect(
+      screen.getByText('savings-contribution-amount:500')
+    ).toBeOnTheScreen();
+  });
+
+  it('takes the first value when savings params repeat in the URL', () => {
+    mockSearchParams = {
+      action: ['savings', 'fund'],
+      savingsAmount: ['500', '999'],
+      savingsGoalId: ['goal-1', 'goal-2'],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
     expect(
       screen.getByText('savings-contribution-amount:500')
     ).toBeOnTheScreen();

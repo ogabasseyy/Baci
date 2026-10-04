@@ -85,18 +85,27 @@ export async function deliverSavingsExpoPush(
       }),
       signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
     });
+    // Classify transient HTTP status before parsing: a 429/5xx from Expo
+    // or an intermediary may carry an empty or non-JSON body, and a parse
+    // throw here would be recorded as terminal unknown instead of retried.
+    if (response.status === 429 || response.status >= 500) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignore body-drain failures; the outcome is already decided.
+      }
+      return { outcome: 'retryable', ticketId: null };
+    }
     const payload: unknown = await response.json();
     if (response.ok) return readTicket(payload);
-    if (isExpoRequestError(payload)) {
-      // Expo rate limits and outages are transient: 429/5xx re-queues for
-      // a later run instead of discarding the notification. Only other 4xx
-      // responses are terminally rejected.
-      if (response.status === 429 || response.status >= 500) {
-        return { outcome: 'retryable', ticketId: null };
-      }
-      if (response.status >= 400 && response.status < 600) {
-        return { outcome: 'rejected', ticketId: null };
-      }
+    // 429/5xx already returned retryable above; only other 4xx responses
+    // with a documented Expo error envelope are terminally rejected.
+    if (
+      isExpoRequestError(payload) &&
+      response.status >= 400 &&
+      response.status < 500
+    ) {
+      return { outcome: 'rejected', ticketId: null };
     }
     return { outcome: 'unknown', ticketId: null };
   } catch {

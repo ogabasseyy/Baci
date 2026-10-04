@@ -54,6 +54,7 @@ import {
 } from '@/lib/paystack';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
+import { prefundedCardWebhookBoundary } from '@/lib/piggyvest/prefunded-card-webhook-boundary';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
@@ -696,6 +697,15 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ message: 'Event ignored' });
       }
+    }
+
+    // First-card prefunded payments reconcile through dedicated first-card
+    // handling, which is not active: ask Paystack to retry instead of
+    // letting the legacy flow file the webhook as a zero-candidate review
+    // (whose 200 would stop retries while the money stays unreconciled).
+    if (gateway === 'paystack') {
+      const firstCardBoundary = prefundedCardWebhookBoundary(body);
+      if (firstCardBoundary) return firstCardBoundary;
     }
 
     // Input validation - intentional guard, not a bypass

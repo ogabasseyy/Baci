@@ -132,7 +132,7 @@ function SavingsPlanFundingScreen() {
           <Text style={[styles.title, { color: colors.text }]}>
             Fund your plan
           </Text>
-          {!isCurrentPlan || !activeMerchantId ? (
+          {!isCurrentPlan || amount === null || !activeMerchantId ? (
             <Text style={[styles.copy, { color: colors.error }]}>
               {amountExceedsCachedRemaining && activeMerchantId
                 ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'

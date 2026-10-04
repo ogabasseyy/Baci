@@ -20,23 +20,27 @@ export default function WalletRoute({
   // URL (same nonce), a new tap of the nudge mints a fresh one.
   const { action, intent, requiredAmount, returnTo, savingsAmount, savingsGoalId } =
     useLocalSearchParams<{
-      action?: string;
-      intent?: string;
-      requiredAmount?: string;
-      returnTo?: string;
-      savingsAmount?: string;
-      savingsGoalId?: string;
+      action?: string | string[];
+      intent?: string | string[];
+      requiredAmount?: string | string[];
+      returnTo?: string | string[];
+      savingsAmount?: string | string[];
+      savingsGoalId?: string | string[];
     }>();
 
   return (
     <WalletScreen
-      action={action}
-      intent={intent}
+      action={firstParam(action)}
+      intent={firstParam(intent)}
       presentation={presentation}
-      requiredAmount={requiredAmount}
-      returnTo={returnTo}
-      savingsAmount={savingsAmount}
-      savingsGoalId={savingsGoalId}
+      requiredAmount={firstParam(requiredAmount)}
+      returnTo={firstParam(returnTo)}
+      savingsAmount={firstParam(savingsAmount)}
+      savingsGoalId={firstParam(savingsGoalId)}
     />
   );
+}
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

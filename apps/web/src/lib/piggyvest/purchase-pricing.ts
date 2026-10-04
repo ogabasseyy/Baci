@@ -1,8 +1,9 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  asSavingsDeviceQueryClient,
+  readSavingsDeviceProduct,
   resolveSavingsDeviceSelection,
-  SAVINGS_DEVICE_PRODUCT_SELECT,
 } from '@/lib/customer-savings-device';
 import { purchasePricingSchemas as schemas } from '@/schemas/purchase-pricing';
 import { resolvePiggyvestCustomerPolicyContext } from './customer-policy-context';
@@ -48,16 +49,13 @@ export function createAuthenticatedPurchasePricing(options: {
           goal.customer_id !== scope.customerId
         )
           throw new Error('Unavailable');
-        const productRead = await options.supabase
-          .from('products')
-          .select(SAVINGS_DEVICE_PRODUCT_SELECT)
-          .eq('id', goal.product_id)
-          .eq('merchant_id', scope.merchantId)
-          .eq('status', 'active')
-          .maybeSingle();
-        if (productRead.error) throw new Error('Unavailable');
-        const product = schemas.product.parse(productRead.data);
-        if (product.id !== goal.product_id) throw new Error('Unavailable');
+        const product = await readSavingsDeviceProduct({
+          merchantId: scope.merchantId,
+          productId: goal.product_id,
+          supabase: asSavingsDeviceQueryClient(options.supabase),
+        });
+        if (!product || product.id !== goal.product_id)
+          throw new Error('Unavailable');
         const device = resolveSavingsDeviceSelection({
           product,
           variantId: goal.variant_id,

@@ -49,6 +49,28 @@ function queryFor(result: { data: unknown; error: unknown }) {
   return query;
 }
 
+const RECOVERY_RPC = 'resolve_completed_customer_savings_goal_variant';
+const VARIANTS_RPC = 'get_storefront_product_variants';
+
+let variantRows: unknown = [{ ...publicVariant, product_id: 'product-1' }];
+let recoveryResult: { data: unknown; error: unknown } = {
+  data: [{ success: true, goal_id: input.goalId, goal_status: 'completed' }],
+  error: null,
+};
+
+function mockRpcRouter() {
+  mocks.rpc.mockImplementation((fn: string) => {
+    if (fn === VARIANTS_RPC) {
+      return Promise.resolve({ data: variantRows, error: null });
+    }
+    return Promise.resolve(recoveryResult);
+  });
+}
+
+function recoveryCalls() {
+  return mocks.rpc.mock.calls.filter(([fn]) => fn === RECOVERY_RPC);
+}
+
 function mockVisibilityTables({
   goal = { data: { id: input.goalId, product_id: 'product-1' }, error: null },
   product = {
@@ -58,19 +80,21 @@ function mockVisibilityTables({
       price: 100,
       images: [],
       condition: 'new',
-      variants: [publicVariant],
     },
     error: null,
   },
+  variants = [{ ...publicVariant, product_id: 'product-1' }],
 }: {
   goal?: { data: unknown; error: unknown };
   product?: { data: unknown; error: unknown };
+  variants?: unknown;
 } = {}) {
   mocks.from.mockImplementation((table: string) => {
     if (table === 'customer_savings_goals') return queryFor(goal);
     if (table === 'products') return queryFor(product);
     throw new Error(`Unexpected table: ${table}`);
   });
+  variantRows = variants;
 }
 
 describe('completed savings variant recovery', () => {
@@ -89,12 +113,13 @@ describe('completed savings variant recovery', () => {
     });
     mocks.settings.mockResolvedValue({ savingsEnabled: true });
     mockVisibilityTables();
-    mocks.rpc.mockResolvedValue({
+    recoveryResult = {
       data: [
         { success: true, goal_id: input.goalId, goal_status: 'completed' },
       ],
       error: null,
-    });
+    };
+    mockRpcRouter();
   });
 
   it('rejects unauthenticated requests before context resolution', async () => {
@@ -155,12 +180,12 @@ describe('completed savings variant recovery', () => {
   });
 
   it('rejects a successful row for a different goal', async () => {
-    mocks.rpc.mockResolvedValue({
+    recoveryResult = {
       data: [
         { success: true, goal_id: 'other-goal', goal_status: 'completed' },
       ],
       error: null,
-    });
+    };
     expect((await POST(request())).status).toBe(500);
   });
 
@@ -185,13 +210,13 @@ describe('completed savings variant recovery', () => {
   });
 
   it('returns conflict for a goal that cannot be recovered', async () => {
-    mocks.rpc.mockResolvedValue({
+    recoveryResult = {
       data: null,
       error: {
         message: 'savings_goal_not_legacy_variant_recoverable',
         code: 'P0001',
       },
-    });
+    };
     expect((await POST(request())).status).toBe(409);
   });
 
@@ -203,25 +228,19 @@ describe('completed savings variant recovery', () => {
   });
 
   it('rejects malformed success data', async () => {
-    mocks.rpc.mockResolvedValue({ data: [{ success: false }], error: null });
+    recoveryResult = { data: [{ success: false }], error: null };
     expect((await POST(request())).status).toBe(500);
   });
 
-  it('rejects a retained UUID for an archived variant without calling the RPC', async () => {
+  it('rejects a retained UUID for an archived variant without recovering', async () => {
     mockVisibilityTables({
-      product: {
-        data: {
-          id: 'product-1',
-          name: 'Device',
-          price: 100,
-          images: [],
-          condition: 'new',
-          variants: [
-            { ...publicVariant, archived_at: '2026-09-01T00:00:00Z' },
-          ],
+      variants: [
+        {
+          ...publicVariant,
+          product_id: 'product-1',
+          archived_at: '2026-09-01T00:00:00Z',
         },
-        error: null,
-      },
+      ],
     });
     const response = await POST(request());
     expect(response.status).toBe(404);
@@ -229,37 +248,25 @@ describe('completed savings variant recovery', () => {
       code: 'SAVINGS_DEVICE_VARIANT_NOT_FOUND',
       error: 'Savings device variant is not available',
     });
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(recoveryCalls()).toHaveLength(0);
   });
 
-  it('rejects a variant that left the product without calling the RPC', async () => {
-    mockVisibilityTables({
-      product: {
-        data: {
-          id: 'product-1',
-          name: 'Device',
-          price: 100,
-          images: [],
-          condition: 'new',
-          variants: [],
-        },
-        error: null,
-      },
-    });
+  it('rejects a variant that left the product without recovering', async () => {
+    mockVisibilityTables({ variants: [] });
     expect((await POST(request())).status).toBe(404);
-    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(recoveryCalls()).toHaveLength(0);
   });
 
   it('defers to the RPC when the goal row is absent', async () => {
     mockVisibilityTables({ goal: { data: null, error: null } });
-    mocks.rpc.mockResolvedValue({
+    recoveryResult = {
       data: null,
       error: {
         message: 'savings_goal_not_legacy_variant_recoverable',
         code: 'P0001',
       },
-    });
+    };
     expect((await POST(request())).status).toBe(409);
-    expect(mocks.rpc).toHaveBeenCalled();
+    expect(recoveryCalls()).toHaveLength(1);
   });
 });

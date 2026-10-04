@@ -39,6 +39,9 @@ export function SavingsPlanFundingDetails({
   const [bvn, setBvn] = useState('');
   const isLoading = phase === 'loading';
   const needsIdentity = !isHostedStaging && requiresIdentity;
+  // Staging never collects BVN: when identity is required there, say who
+  // completes it instead of looping on a generic account lookup.
+  const stagingIdentityBlocked = isHostedStaging && requiresIdentity;
   const isPending = phase === 'pending';
   // The funding fetch path does not schema-validate the response, so a ready
   // account with an empty number must not render a card whose copy button
@@ -87,6 +90,7 @@ export function SavingsPlanFundingDetails({
           onBvnChange={setBvn}
           onFetchExisting={onFetchExisting}
           onFetchWithIdentity={() => onFetchWithIdentity(bvn)}
+          stagingIdentityBlocked={stagingIdentityBlocked}
         />
       )}
     </View>
@@ -151,6 +155,7 @@ function AccountLookup({
   onBvnChange,
   onFetchExisting,
   onFetchWithIdentity,
+  stagingIdentityBlocked,
 }: {
   bvn: string;
   colors: FundingColors;
@@ -161,6 +166,7 @@ function AccountLookup({
   onBvnChange: (value: string) => void;
   onFetchExisting: () => void;
   onFetchWithIdentity: () => void;
+  stagingIdentityBlocked: boolean;
 }) {
   return (
     <View
@@ -174,7 +180,9 @@ function AccountLookup({
           ? 'Your dedicated account is being prepared. Check its status again shortly.'
           : needsIdentity
             ? 'Enter the 11-digit BVN linked to this plan to set up its dedicated account.'
-            : 'Looking for your existing dedicated account.'}
+            : stagingIdentityBlocked
+              ? 'This plan needs an identity check that approved operators complete in the test environment. Ask an operator to continue, then check the account status again.'
+              : 'Looking for your existing dedicated account.'}
       </Text>
       {needsIdentity ? (
         <TextInput

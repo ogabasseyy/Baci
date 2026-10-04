@@ -91,6 +91,16 @@ export function authenticatedReader(actor = actorId): SupabaseClient {
       };
       return reader;
     },
+    async rpc(fn: string, params: Record<string, unknown>) {
+      if (fn !== 'get_storefront_product_variants')
+        throw new Error('Unexpected RPC');
+      const response = await query(
+        'purchase_pricing_customer',
+        'SELECT * FROM public.get_storefront_product_variants($1)',
+        [params.p_product_ids]
+      );
+      return { data: response.rows, error: null };
+    },
   } as unknown as SupabaseClient;
 }
 export function configuration() {

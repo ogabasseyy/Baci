@@ -1,21 +1,12 @@
 import { NextResponse } from 'next/server';
 import {
+  readSavingsDeviceProduct,
   resolveSavingsDeviceSelection,
-  SAVINGS_DEVICE_PRODUCT_SELECT,
-  SavingsDeviceProductSchema,
+  type SavingsDeviceQueryClient,
   type SavingsDeviceSnapshot,
 } from '@/lib/customer-savings-device';
 
-type EqChain = {
-  eq: (column: string, value: string) => EqChain;
-  maybeSingle: () => PromiseLike<{ data: unknown; error: unknown }>;
-};
-
-export type SavingsProductQueryClient = {
-  from: (table: 'products') => {
-    select: (columns: typeof SAVINGS_DEVICE_PRODUCT_SELECT) => EqChain;
-  };
-};
+export type SavingsProductQueryClient = SavingsDeviceQueryClient;
 
 export async function prepareCreateSavingsGoalDevice({
   merchantId,
@@ -39,22 +30,13 @@ export async function prepareCreateSavingsGoalDevice({
       };
     }
 > {
-  const productResult = await supabase
-    .from('products')
-    .select(SAVINGS_DEVICE_PRODUCT_SELECT)
-    .eq('merchant_id', merchantId)
-    .eq('id', productId)
-    .eq('status', 'active')
-    .maybeSingle();
+  const product = await readSavingsDeviceProduct({
+    merchantId,
+    productId,
+    supabase,
+  });
 
-  if (productResult.error) {
-    throw productResult.error;
-  }
-
-  const productValidation = SavingsDeviceProductSchema.safeParse(
-    productResult.data
-  );
-  if (!productValidation.success) {
+  if (!product) {
     return {
       response: NextResponse.json(
         {
@@ -68,7 +50,7 @@ export async function prepareCreateSavingsGoalDevice({
 
   const device = resolveSavingsDeviceSelection({
     clientTargetAmount: targetAmount,
-    product: productValidation.data,
+    product,
     variantId,
   });
   if (!device.ok) {

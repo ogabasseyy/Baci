@@ -100,6 +100,12 @@ describe('SavingsPlanFundingDetails', () => {
     );
 
     expect(screen.queryByLabelText('BVN for plan account')).toBeNull();
+    expect(
+      screen.getByText(/approved operators complete in the test environment/i)
+    ).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Check account status' })
+    ).toBeOnTheScreen();
   });
 
   it('withholds the account card when a ready account has an empty number', () => {

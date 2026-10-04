@@ -6,9 +6,9 @@ import {
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
+  asSavingsDeviceQueryClient,
+  readSavingsDeviceProduct,
   resolveSavingsDeviceSelection,
-  SAVINGS_DEVICE_PRODUCT_SELECT,
-  SavingsDeviceProductSchema,
 } from '@/lib/customer-savings-device';
 import { customerSavingsGoalDeviceSwapSchema } from '@/schemas/customer-savings';
 import {
@@ -92,21 +92,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const productResult = await resolved.supabase
-      .from('products')
-      .select(SAVINGS_DEVICE_PRODUCT_SELECT)
-      .eq('merchant_id', resolved.merchant.id)
-      .eq('id', parsed.data.productId)
-      .eq('status', 'active')
-      .maybeSingle();
-    if (productResult.error) {
-      throw productResult.error;
-    }
-
-    const productValidation = SavingsDeviceProductSchema.safeParse(
-      productResult.data
-    );
-    if (!productValidation.success) {
+    const product = await readSavingsDeviceProduct({
+      merchantId: resolved.merchant.id,
+      productId: parsed.data.productId,
+      supabase: asSavingsDeviceQueryClient(resolved.supabase),
+    });
+    if (!product) {
       return NextResponse.json(
         {
           code: 'SAVINGS_DEVICE_PRODUCT_NOT_FOUND',
@@ -117,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const device = resolveSavingsDeviceSelection({
-      product: productValidation.data,
+      product,
       variantId: parsed.data.variantId,
     });
     if (!device.ok) {
@@ -134,10 +125,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_customer_id: resolved.customer.id,
         p_goal_id: parsed.data.goalId,
         p_merchant_id: resolved.merchant.id,
-        p_product_id: productValidation.data.id,
+        p_product_id: product.id,
         p_product_snapshot: device.snapshot,
         p_target_amount: device.targetAmount,
-        p_title: productValidation.data.name,
+        p_title: product.name,
         p_variant_id: device.variantId,
       }
     );

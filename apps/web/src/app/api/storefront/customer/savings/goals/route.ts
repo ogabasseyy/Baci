@@ -6,14 +6,12 @@ import {
 } from '@/app/api/storefront/customer/savings/shared';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { asSavingsDeviceQueryClient } from '@/lib/customer-savings-device';
 import {
   customerSavingsCreateGoalSchema,
   customerSavingsGoalsQuerySchema,
 } from '@/schemas/customer-savings';
-import {
-  prepareCreateSavingsGoalDevice,
-  type SavingsProductQueryClient,
-} from './prepare-create-savings-goal-device';
+import { prepareCreateSavingsGoalDevice } from './prepare-create-savings-goal-device';
 import {
   buildGoalRequestFingerprint,
   formatSavingsGoal,
@@ -196,12 +194,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // returning a stale goal.
     const requestFingerprint = parsed.data.goalIdempotencyKey
       ? buildGoalRequestFingerprint({
+          breakFeePercent: parsed.data.breakFeePercent,
           contributionAmount: parsed.data.contributionAmount,
           contributionFrequency: parsed.data.contributionFrequency,
           initialContributionAmount: parsed.data.initialContributionAmount,
           maturityDate: parsed.data.maturityDate,
           preferredDebitTime: parsed.data.preferredDebitTime,
           productId: parsed.data.productId,
+          savedPaymentMethodId: parsed.data.savedPaymentMethodId,
           sourceMode: parsed.data.sourceMode,
           startDate: parsed.data.startDate,
           targetAmount: parsed.data.targetAmount,
@@ -253,28 +253,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const productQueryClient: SavingsProductQueryClient = {
-      from: (table) => ({
-        select: (columns) => {
-          const query = resolved.supabase.from(table).select(columns);
-          const chain = {
-            eq: (column: string, value: string) => {
-              query.eq(column, value);
-              return chain;
-            },
-            maybeSingle: async () => {
-              const { data, error } = await query.maybeSingle();
-              return { data, error };
-            },
-          };
-          return chain;
-        },
-      }),
-    };
     const deviceResult = await prepareCreateSavingsGoalDevice({
       merchantId: resolved.merchant.id,
       productId: parsed.data.productId,
-      supabase: productQueryClient,
+      supabase: asSavingsDeviceQueryClient(resolved.supabase),
       targetAmount: parsed.data.targetAmount,
       variantId: parsed.data.variantId,
     });

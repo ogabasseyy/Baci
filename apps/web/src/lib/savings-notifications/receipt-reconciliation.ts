@@ -114,12 +114,19 @@ export async function reconcileSavingsNotificationReceipts(
       counts.pending += 1;
       continue;
     }
-    const status: SavingsReceiptStatus =
-      receipt.status === 'ok' ? 'provider_confirmed' : 'receipt_failed';
     const error =
-      status === 'receipt_failed' && isRecord(receipt.details)
+      receipt.status === 'error' && isRecord(receipt.details)
         ? knownReceiptError(receipt.details.error)
         : null;
+    // Expo asks that per-device rate limiting be retried slowly: leaving
+    // the ticket unrecorded keeps it pending for a later run instead of
+    // finalizing a temporary limit as a permanent failure.
+    if (receipt.status === 'error' && error === 'MessageRateExceeded') {
+      counts.pending += 1;
+      continue;
+    }
+    const status: SavingsReceiptStatus =
+      receipt.status === 'ok' ? 'provider_confirmed' : 'receipt_failed';
     try {
       const recorded = await dependencies.recordReceipt(
         row.ticket_id,

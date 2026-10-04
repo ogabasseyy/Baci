@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { withSupabaseRetry } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import type { Product } from '@/types/product';
 import { resolveProductRow, transformProduct } from './product-utils';
 import { useMerchant } from './use-merchant';
@@ -43,13 +45,27 @@ export function useComparisonProducts(selected: Product[]) {
               ? product.offers?.find((o) => o.id === match.offerId)
               : undefined;
           // Exact matched options require a fresh matching option; never substitute a parent silently.
-          const optionAvailable = option
-            ? match?.variantId
-              ? (!('in_stock' in option) || option.in_stock !== false) &&
-                (row?.manage_stock === false ||
-                  (option.stock_quantity ?? product.stock_quantity ?? 0) > 0)
-              : row?.manage_stock === false || (option.stock_quantity ?? 0) > 0
-            : false;
+          // Purchasability comes from the same serialized-aware projection
+          // search uses: the hydrated row maps serialized options to
+          // available=0, so raw stock math here would mark purchasable
+          // serialized options unavailable on refresh.
+          let optionAvailable = false;
+          if (option && match && (match.variantId || match.offerId)) {
+            const { data, error } = await withSupabaseRetry(async () =>
+              supabase.rpc('get_storefront_search_price_options', {
+                p_merchant_id: merchant.id,
+                p_product_id: product.id,
+              })
+            );
+            if (error) throw error;
+            const options = (data ?? []) as {
+              variant_id: string | null;
+              offer_id: string | null;
+            }[];
+            optionAvailable = match.variantId
+              ? options.some((o) => o.variant_id === match.variantId)
+              : options.some((o) => o.offer_id === match.offerId);
+          }
           if (match && (match.variantId || match.offerId) && !optionAvailable)
             return {
               product: {

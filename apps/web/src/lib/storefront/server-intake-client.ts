@@ -6,11 +6,13 @@ import { createServiceClient } from '@/lib/supabase/service';
 // only so direct anon calls cannot bypass the intake route's proxy IP gate;
 // this module is the single server-only path to it, limited to exactly
 // submit_storefront_product_request. The client is never handed out —
-// callers get only this narrow function. The backend key inherently
-// bypasses RLS; this brand confines the approved call graph, not that
-// capability. Provision SUPABASE_STOREFRONT_INTAKE_KEY (EXECUTE on the
-// submit RPC only); the client fails closed without it and never falls
-// back to the full service key.
+// callers get only this narrow function. Provision a dedicated
+// SUPABASE_STOREFRONT_INTAKE_KEY service-role JWT: the separate secret
+// gives rotation independence and blast-radius accounting, but like every
+// branded service client in this repo it inherently bypasses RLS — the
+// narrow call graph (Zod route, IP gate, single RPC) is the control, not
+// the key. The client fails closed without it and never falls back to
+// the shared service key.
 
 interface SubmitProductRequestRpc {
   rpc(

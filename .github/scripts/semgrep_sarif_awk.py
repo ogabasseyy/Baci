@@ -16,6 +16,14 @@ def _scan_awk_program(prog, drift):
     # Strings blank first (regex alternation and "a|b" pass);
     # dynamic targets fail closed upward; getline-from-file,
     # /dev/stdout, and || pass.
+    if prog.lstrip("\"'")[:1] in ("$", "`") \
+            and "helper-untrusted-exec" not in drift:
+        # Whole-word dynamic program (stale $prog,
+        # command substitution): the scanner sees the
+        # literal while gawk runs the expanded value.
+        # $0/$1 inside literal code start elsewhere.
+        # Leading quotes stripped (attached -e'$p').
+        drift.append("helper-untrusted-exec")
     for m in re.finditer(r">{1,2}\s*\"((?:[^\"\\]|\\.)*)\"",
                          prog):
         _zone_target(m.group(1), drift)

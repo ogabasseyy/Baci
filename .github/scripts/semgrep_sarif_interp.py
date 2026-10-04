@@ -160,7 +160,8 @@ def _check_command(argv0, rest, pre, drift, src=""):
                   "flock", "chrt", "ionice", "taskset", "sg",
                   "tmux", "screen", "coproc", "fakeroot",
                   "xvfb-run", "prlimit", "timeout", "setarch",
-                  "linux32", "linux64"):
+                  "linux32", "linux64", "dbus-run-session",
+                  "dbus-launch"):
         # Execution wrappers obscure the real argv0; none is used
         # today, so any use fails closed (exotics stay residual).
         # coproc counts: it runs its command asynchronously with

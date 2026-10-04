@@ -1,6 +1,7 @@
 """7-Zip destination audit: extraction -o dir and archive
 mutation (a/u/d/rn archive operand) zone like copy targets.
-Bare extraction restores static members (silent, like tar).
+Extraction without -o lands in CWD (implicit workspace
+write, like tar without -C / unzip without -d).
 """
 import re
 from semgrep_sarif_scan import github_cmdfile_kind
@@ -52,15 +53,22 @@ def audit_archive_dest(rest, drift):
     # 7z/7za destinations take the copy-target rule: the
     # extraction dir, or the archive operand a/u/d/rn mutate.
     targets = []
+    implicit = None
     cmd, arch = _seven_z_parts(rest)
     if cmd in _EXTRACT_CMDS:
         outd = _seven_z_outdir(rest)
         if outd is not None:
             targets = [outd]
+        else:
+            # No -o: full-path extraction lands in CWD (the
+            # workspace), replacing trusted files by default.
+            implicit = "workspace"
     elif cmd in _MUTATE_CMDS and arch is not None:
         targets = [arch]
     zones = {_write_zone(t) for t in targets}
     zones.discard(None)
+    if implicit is not None:
+        zones.add(implicit)
     if "trusted" in zones \
             and "helper-trusted-write" not in drift:
         drift.append("helper-trusted-write")

@@ -43,7 +43,7 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
              "kotlinc", "kotlinc-jvm", "kotlin", "kapt",
              "runghc", "runhaskell", "ghc", "ghci",
              "cabal", "stack", "ant", "clang-tidy",
-             "webpack", "webpack-dev-server"}
+             "webpack", "webpack-dev-server", "cpack"}
 # java runs source files, classes, and jars (all repo-
 # controlled inputs execute); javac runs annotation
 # processors off the classpath; run-parts executes every
@@ -87,7 +87,8 @@ LOAD_DENY = {"ansible", "ansible-playbook", "apt", "apt-get", "apk",
 # ubuntu runner); versioned spellings share the flag.
 # webpack --config executes the config's top-level code
 # (global on the ubuntu runner); webpack-dev-server shares
-# the config mechanism.
+# the config mechanism. cpack --config runs CMake-language
+# code (execute_process runs children; ships with CMake).
 _GCC_RE = re.compile(
     r"^(?:[a-z0-9_]+-)*(?:cc|c\+\+|gcc|g\+\+|clang|"
     r"clang\+\+|gfortran)(?:-\d[\d.]*)?$")

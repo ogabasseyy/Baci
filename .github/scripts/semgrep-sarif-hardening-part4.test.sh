@@ -209,7 +209,7 @@ t popd-bare 1 "helper-sensitive-cwd" happy.sarif "$H${FS}set -euo pipefail${FS}a
 # --- round 12: 7z destinations, hg/julia loaders ---
 t sevenz-extract 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}7z x \"\${GITHUB_WORKSPACE}/evil.7z\" \"-o\${SCRIPT_DIR}\" -y"
 t sevenz-add 1 "helper-trusted-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}7z a \"\${SCRIPT_DIR}/plant.7z\" loot"
-t sevenz-extract-cwd-fp 0 "" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}7z x evil.7z"
+t sevenz-extract-cwd 1 "helper-workspace-write" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}7z x \"\${GITHUB_WORKSPACE}/evil.7z\" -y"
 t hg-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}hg init \"\${RUNNER_TEMP}/audit-repo\"
 HGRCPATH=\"\${GITHUB_WORKSPACE}/evil.hgrc\" hg -R \"\${RUNNER_TEMP}/audit-repo\" status"
 t julia-loader 1 "helper-code-loader" happy.sarif "$H${FS}set -euo pipefail${FS}a${FS}julia \"\${GITHUB_WORKSPACE}/evil.jl\""

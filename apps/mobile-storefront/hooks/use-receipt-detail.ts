@@ -3,7 +3,6 @@ import {
   isManualOrderRecord,
   isNonNegativeMoney,
   isSettledManualBalance,
-  MANUAL_ORDER_ITEM_FINANCIAL_FIELDS,
 } from '@baci/shared/receipt';
 import { useQuery } from '@tanstack/react-query';
 import { withSupabaseRetry } from '@/lib/api';
@@ -13,6 +12,11 @@ import { supabase } from '@/lib/supabase';
 import { ReceiptDetailSchema } from '@/schemas/receipt';
 import { useAuthStore } from '@/stores/auth-store';
 import type { ReceiptDetail } from '@/types/receipt';
+import {
+  DETAIL_HEADER_MONEY_FIELDS,
+  DETAIL_ITEM_MONEY_FIELDS,
+  receiptMoneyOverrides,
+} from './receipt-detail-money';
 import { mapCustomerPaymentAccountRpcRows } from './receipt-payment-account-mappers';
 import {
   isPromotableManualDocument,
@@ -204,6 +208,9 @@ async function fetchReceiptDetail(
       : null;
   const detail = {
     ...order,
+    // PostgREST numerics arrive as decimal strings (headers, price, item
+    // fees alike): coerce before the gate or valid orders fail closed.
+    ...receiptMoneyOverrides(order, DETAIL_HEADER_MONEY_FIELDS),
     // The column permits NULL but the renderers read a plain boolean:
     // normalize absent to false so a valid order never fails closed.
     is_credit_order: order.is_credit_order ?? false,
@@ -212,22 +219,9 @@ async function fetchReceiptDetail(
       if (item == null) {
         return item;
       }
-      // PostgREST numeric item columns (assurance_fee, vat_amount, ...)
-      // arrive as decimal strings while the schema gates numbers: coerce
-      // like the list's toDisplayMoney or a valid order fails closed.
-      // Unparseable values stay NaN so the schema still fails corrupt
-      // money closed instead of masking it to zero.
-      const overrides: Record<string, number> = {};
-      const raw = item as unknown as Record<string, unknown>;
-      for (const field of MANUAL_ORDER_ITEM_FINANCIAL_FIELDS) {
-        const value = raw[field];
-        if (value != null && typeof value !== 'number') {
-          overrides[field] = Number(value);
-        }
-      }
       return {
         ...item,
-        ...overrides,
+        ...receiptMoneyOverrides(item, DETAIL_ITEM_MONEY_FIELDS),
         product_name: item.name,
         // Rendered description like the emailed PDF input: without
         // this the app link opens a document missing descriptions

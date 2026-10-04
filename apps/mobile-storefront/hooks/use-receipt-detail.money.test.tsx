@@ -161,4 +161,90 @@ describe('receipt detail string money', () => {
 
     expect(detail).toBeNull();
   });
+
+  it('opens detail when headers, price, and history arrive as strings', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    mockSingle.mockResolvedValue({
+      data: partialManualOrder({
+        total: '100.00',
+        subtotal: '100',
+        shipping_fee: '0',
+        discount_amount: '0',
+        tax_amount: '0',
+        amount_paid: '50.00',
+        order_items: [
+          {
+            id: 'item-1',
+            name: 'Phone',
+            quantity: 1,
+            price: '100',
+            assurance_fee: '150.00',
+          },
+        ],
+      }),
+      error: null,
+    });
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          amount: '50.00',
+          created_at: '2026-05-24T10:00:00.000Z',
+          description: null,
+          dva_account_number: null,
+          gateway: null,
+          order_id: 'order-9',
+          payment_method: null,
+          status: 'completed',
+          transaction_type: 'payment',
+        },
+      ],
+      error: null,
+    });
+
+    const detail = (await (
+      receiptDetailQueryOptions('order-9') as QueryOptions
+    ).queryFn()) as {
+      total: unknown;
+      amount_paid: unknown;
+      balance: unknown;
+      items: { price: unknown; assurance_fee: unknown }[];
+      transactions: { amount: unknown }[];
+    } | null;
+
+    expect(detail).not.toBeNull();
+    expect(detail).toMatchObject({
+      total: 100,
+      amount_paid: 50,
+      balance: 50,
+    });
+    expect(detail?.items[0]).toMatchObject({
+      price: 100,
+      assurance_fee: 150,
+    });
+    expect(detail?.transactions[0]).toMatchObject({ amount: 50 });
+  });
+
+  it('fails detail closed on blank or boolean money, never masking', async () => {
+    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
+    for (const overrides of [
+      { total: '' },
+      { total: true },
+      { amount_paid: '' },
+    ]) {
+      mockSingle.mockResolvedValue({
+        data: partialManualOrder(overrides),
+        error: null,
+      });
+      mockRpc.mockResolvedValueOnce({ data: [], error: null });
+      mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+      const detail = await (
+        receiptDetailQueryOptions('order-9') as QueryOptions
+      ).queryFn();
+
+      // Number('') is 0 and Number(true) is 1: both must fail closed.
+      expect(detail).toBeNull();
+    }
+  });
 });

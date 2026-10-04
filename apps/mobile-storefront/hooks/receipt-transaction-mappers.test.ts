@@ -32,6 +32,19 @@ describe('mapCustomerTransactionRpcRows', () => {
     expect(mapCustomerTransactionRpcRows(null)).toEqual([]);
   });
 
+  it('coerces PostgREST decimal amounts strictly for the detail gate', () => {
+    const mapped = mapCustomerTransactionRpcRows([
+      { amount: '1000.50', created_at: '2026-08-27T12:00:00.000Z' },
+      { amount: '', created_at: '2026-08-27T12:00:00.000Z' },
+      { amount: true, created_at: '2026-08-27T12:00:00.000Z' },
+    ]);
+
+    expect(mapped[0]?.amount).toBe(1000.5);
+    // Blank/bool must fail the detail closed, never mask to 0/1.
+    expect(mapped[1]?.amount).toBeNaN();
+    expect(mapped[2]?.amount).toBeNaN();
+  });
+
   it('carries the recorded payment method into metadata like the email', () => {
     expect(
       mapCustomerTransactionRpcRows([

@@ -1,9 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 type CartHandoffResult = {
   content: Array<{ type: 'text'; text: string }>;
   structuredContent?: Record<string, unknown>;
 };
+
+/** Downgrades corrupt handoff payloads to a schema-valid error instead of letting SDK output validation throw. */
+function guardCartHandoffResult(result: CartHandoffResult): CartHandoffResult {
+  if (mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success) return result;
+  return {
+    content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+    structuredContent: { success: false, message: 'Unable to prepare cart link.' },
+  };
+}
 
 export async function prepareCartHandoff({
   supabase,
@@ -59,15 +69,15 @@ export async function prepareCartHandoff({
   }
 
   if (unavailable || !product) {
-    return {
+    return guardCartHandoffResult({
       content: [{ type: 'text', text: 'This product is not currently available to add to cart.' }],
       structuredContent: { success: false },
-    };
+    });
   }
 
   if (product.has_variants === true || product.has_condition_offers === true) {
     const productUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug || productId)}`;
-    return {
+    return guardCartHandoffResult({
       content: [{
         type: 'text',
         text: `Choose the available options for **${product.name}** on Ogabassey before adding it to your cart.\n\n[Select product options](${productUrl})`,
@@ -78,7 +88,7 @@ export async function prepareCartHandoff({
         product_id: productId,
         product_url: productUrl,
       },
-    };
+    });
   }
 
   const cartUrl = `https://ogabassey.com/cart?item_id=${encodeURIComponent(productId)}&qty=${quantity}`;
@@ -87,7 +97,7 @@ export async function prepareCartHandoff({
     ? formatPrice(product.price)
     : '';
 
-  return {
+  return guardCartHandoffResult({
     content: [
       {
         type: 'text',
@@ -101,6 +111,6 @@ export async function prepareCartHandoff({
       quantity,
       cart_url: cartUrl,
     },
-  };
+  });
 
 }

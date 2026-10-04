@@ -91,6 +91,20 @@ describe('public MCP output contracts', () => {
     }
   }, 30_000);
 
+  it('accepts isError results with structured content present in the real SDK client', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    const client = new Client({ name: 'is-error-structured-test', version: '1.0.0' });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
+      const result = await client.callTool({ name: 'search_products', arguments: { query: 'affordable phone' } });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ status: 'error', products: [] });
+      expect(mcpToolOutputSchemas.search_products.safeParse(result.structuredContent).success).toBe(true);
+    } finally {
+      try { await client.close(); } finally { await server.close(); }
+    }
+  }, 30_000);
+
   it('publishes a meaningful output schema for every public tool', async () => {
     const server = await startMcpServerWithPostgrest({});
     try {

@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { describe, expect, it, vi } from 'vitest';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { prepareCartHandoff } from './cart-handoff';
 import { mcpServerTestSupport } from './server-test-support';
 
 const { getResultRecord, postMcpJsonRpc, startMcpServerWithPostgrest } = mcpServerTestSupport;
@@ -172,5 +175,24 @@ describe('MCP cart handoff', () => {
     } finally {
       await server.close();
     }
+  });
+
+  it('downgrades corrupt catalog rows to a schema-valid cart error', async () => {
+    const query = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      single: vi.fn(async () => ({
+        data: { name: null, slug: 'null-name', price: 100, manage_stock: false, stock_quantity: 0, has_variants: false, has_condition_offers: false },
+        error: null,
+      })),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    const supabase = { from: vi.fn(() => query), rpc: vi.fn() } as unknown as SupabaseClient;
+    const result = await prepareCartHandoff({
+      supabase, merchantId: 'merchant-1', productId: 'null-name-product', quantity: 1, formatPrice: String,
+    });
+    expect(result.structuredContent).toMatchObject({ success: false, message: 'Unable to prepare cart link.' });
+    expect(mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success).toBe(true);
   });
 });

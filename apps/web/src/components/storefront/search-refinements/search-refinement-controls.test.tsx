@@ -164,3 +164,22 @@ it('puts smart chips above the toolbar and applies a query-backed processor', ()
     expect.stringContaining('processor=Intel+Core+i7')
   );
 });
+
+it('uses merchant currency for applied chips, desktop fields and mobile fields', () => {
+  render(
+    <SearchRefinementControls
+      {...props}
+      currency="USD"
+      criteria={{ ...props.criteria, minPrice: 100 }}
+    />
+  );
+  expect(
+    screen.getByRole('group', { name: 'Applied filters' })
+  ).toHaveTextContent('$100');
+  expect(screen.getByLabelText(/Minimum price \(.*\$\)/)).toHaveValue('100');
+  fireEvent.click(screen.getByRole('button', { name: 'Price' }));
+  expect(
+    within(screen.getByRole('dialog')).getByLabelText(/Minimum price \(.*\$\)/)
+  ).toHaveValue('100');
+  expect(screen.queryByLabelText('Minimum price (₦)')).toBeNull();
+});

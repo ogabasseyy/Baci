@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -268,6 +268,64 @@ describe('ProductDetailClient', () => {
     });
 
     expect(screen.getByText('₦400000')).toBeInTheDocument();
+  });
+
+  it('honors the exact matched offer even when it has the parent condition', async () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=new&offer_id=offer-cheaper')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      has_condition_offers: true,
+      offers: [
+        {
+          id: 'offer-expensive',
+          condition: 'new',
+          price: 500000,
+          stock_quantity: 5,
+        },
+        {
+          id: 'offer-cheaper',
+          condition: 'new',
+          price: 400000,
+          stock_quantity: 2,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+    await waitFor(() =>
+      expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedPrice: 400000, selectedStock: 2 })
+      )
+    );
+    expect(screen.getByText('₦400000')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'New' })[0]);
+    expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selectedPrice: 550000, selectedStock: 10 })
+    );
+  });
+
+  it('does not substitute a same-condition offer for a route offer with a different condition', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=new&offer_id=offer-used')
+    );
+    const product: Product = {
+      ...makeBaseProduct(),
+      has_condition_offers: true,
+      offers: [
+        { id: 'offer-new', condition: 'new', price: 400000, stock_quantity: 2 },
+        {
+          id: 'offer-used',
+          condition: 'used',
+          price: 300000,
+          stock_quantity: 1,
+        },
+      ],
+    };
+    render(<ProductDetailClient product={product} />);
+    expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selectedPrice: 550000, selectedStock: 10 })
+    );
   });
 
   it('falls back to the default priced variant when route params cannot be resolved', async () => {

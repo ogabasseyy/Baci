@@ -17,6 +17,7 @@ import {
 } from './search-refinement-fields';
 
 interface Props {
+  currency?: string;
   processors?: string[];
   conditions?: NonNullable<SearchRefinements['condition']>[];
   restoreFocus: () => void;
@@ -34,6 +35,7 @@ interface Props {
   apply: (draft: RefinementDraft) => void;
 }
 export function SearchRefinementSheet({
+  currency,
   restoreFocus,
   panel,
   setPanel,
@@ -108,6 +110,7 @@ export function SearchRefinementSheet({
             ))
           ) : (
             <SearchRefinementFields
+              currency={currency}
               draft={draft}
               onChange={(next) => {
                 setDraft(next);

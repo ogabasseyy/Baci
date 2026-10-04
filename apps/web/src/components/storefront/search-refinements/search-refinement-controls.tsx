@@ -4,7 +4,6 @@ import {
   emptySearchRefinements,
   getSearchQuickFilterGroups,
   getSearchRefinementChips,
-  parseSearchRefinements,
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { ArrowDownUp, ChevronDown, SlidersHorizontal } from 'lucide-react';
@@ -17,8 +16,10 @@ import {
   useTransition,
 } from 'react';
 import { asRoute } from '@/lib/routes';
+import { getSearchCurrencyFormatter } from './search-currency';
 import {
   createRefinementDraft,
+  parseRefinementDraft,
   type RefinementDraft,
   SearchRefinementFields,
 } from './search-refinement-fields';
@@ -28,6 +29,7 @@ import { SearchToolbarReveal } from './search-toolbar-reveal';
 import { useDesktopRefinementDraft } from './use-desktop-refinement-draft';
 
 interface Props {
+  currency?: string;
   processors?: string[];
   conditions?: NonNullable<SearchRefinements['condition']>[];
   children?: ReactNode;
@@ -39,19 +41,8 @@ interface Props {
   facetError?: boolean;
   invalidFilters?: boolean;
 }
-function parseDraft(draft: RefinementDraft) {
-  return parseSearchRefinements({
-    brand: draft.brands,
-    category: draft.categoryId,
-    condition: draft.condition,
-    processor: draft.processor,
-    minPrice: draft.minimum,
-    maxPrice: draft.maximum,
-    sort: draft.sort,
-    minRating: draft.minRating?.toString(),
-  });
-}
 export function SearchRefinementControls({
+  currency = 'NGN',
   query,
   basePath,
   criteria,
@@ -109,7 +100,7 @@ export function SearchRefinementControls({
     setPanel('filters');
   };
   const apply = (value: RefinementDraft) => {
-    const result = parseDraft(value);
+    const result = parseRefinementDraft(value);
     if (!result.success) {
       setError(result.error);
       return;
@@ -138,7 +129,11 @@ export function SearchRefinementControls({
       });
     }
   };
-  const chips = getSearchRefinementChips(criteria, categories);
+  const chips = getSearchRefinementChips(
+    criteria,
+    categories,
+    getSearchCurrencyFormatter(currency).format
+  );
 
   return (
     <div aria-busy={pending}>
@@ -257,6 +252,7 @@ export function SearchRefinementControls({
           className="hidden space-y-3 rounded-xl border border-store-background-text/10 p-4 lg:block lg:w-64 lg:shrink-0"
         >
           <SearchRefinementFields
+            currency={currency}
             draft={desktopDraft}
             onChange={desktopChange}
             brands={brands}
@@ -273,6 +269,7 @@ export function SearchRefinementControls({
         restoreFocus={() => trigger.current?.focus()}
         {...{
           panel,
+          currency,
           setPanel,
           focusGroup,
           criteria,

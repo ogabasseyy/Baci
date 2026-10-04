@@ -2,6 +2,7 @@
 
 import type React from 'react';
 import { createContext, use, useEffect, useRef, useState } from 'react';
+import { comparisonSnapshotSchema } from '@/schemas/comparison-snapshot';
 import type { Product } from '../types';
 
 interface V2ComparisonContextType {
@@ -30,21 +31,13 @@ function getComparisonStorageKey(storageNamespace?: string | null) {
     : COMPARISON_STORAGE_KEY;
 }
 
-// Only objects with a usable id can hydrate the tray, so stale-schema or
-// tampered rows never render as comparison facts or crash id lookups.
-// Shared by the stateful hydrate path and the pre-hydration read used
-// during card renders.
-function hasUsableComparisonId(entry: unknown): entry is Product {
-  if (typeof entry !== 'object' || entry === null) return false;
-  const id = (entry as { id?: unknown }).id;
-  return (typeof id === 'string' && id.length > 0) || typeof id === 'number';
-}
-
 function readValidStoredComparisonItems(stored: string): Product[] {
   const parsed: unknown = JSON.parse(stored);
-  return Array.isArray(parsed)
-    ? parsed.filter(hasUsableComparisonId)
-    : [];
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((entry) => {
+    const result = comparisonSnapshotSchema.safeParse(entry);
+    return result.success ? [result.data] : [];
+  });
 }
 
 export const useV2Comparison = () => {

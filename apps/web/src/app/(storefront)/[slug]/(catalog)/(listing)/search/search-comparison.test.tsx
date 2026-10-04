@@ -201,3 +201,45 @@ it('hides comparison again when the search changes, including returning to the o
   ).toBeNull();
   expect(mocks.state.compareItems).toHaveLength(2);
 });
+
+it('formats refreshed comparison prices in merchant currency', () => {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one' },
+    { id: '2', name: 'Two', slug: 'two' },
+  ];
+  mocks.facts.mockReturnValue({
+    products: [
+      {
+        id: '2',
+        name: 'Two',
+        slug: 'two',
+        price: 300,
+        brand: 'Apple',
+        product_key_specs: { storage: '128 GB' },
+      },
+    ],
+    pending: false,
+    error: false,
+  });
+  render(
+    <SearchComparisonTray
+      products={[]}
+      pathPrefix=""
+      merchantId="m1"
+      currency="USD"
+    />
+  );
+  expect(
+    screen.queryByRole('button', { name: 'View comparison (2)' })
+  ).toBeNull();
+  expect(mocks.facts).toHaveBeenLastCalledWith('m1', ['1', '2'], false);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  expect(
+    screen.getByRole('button', { name: 'View comparison (2)' })
+  ).toBeTruthy();
+  expect(mocks.facts).toHaveBeenLastCalledWith('m1', ['1', '2'], true);
+  expect(screen.getByText(/\$300/)).toBeTruthy();
+  expect(screen.queryByText(/₦300/)).toBeNull();
+  expect(screen.getByText('storage: 128 GB')).toBeTruthy();
+  expect(screen.getByText('Open product for current price')).toBeTruthy();
+});

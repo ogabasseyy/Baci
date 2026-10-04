@@ -137,7 +137,7 @@ describe('V2ComparisonProvider', () => {
 
   it('ignores corrupt entries in the pre-hydration membership read', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(
-      JSON.stringify([baseProduct, null, 'not-an-object', { name: 'No id' }])
+      JSON.stringify([baseProduct, null, 'not-an-object', { name: 'No id' }, { id: 'missing' }])
     );
 
     function MembershipConsumer() {
@@ -167,7 +167,8 @@ describe('V2ComparisonProvider', () => {
         null,
         'not-an-object',
         { name: 'No id here' },
-        { id: 42, name: 'Numeric id is usable' },
+        { ...baseProduct, id: 42, name: 'Numeric id is usable' },
+        { id: 'incomplete' },
       ])
     );
 

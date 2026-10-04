@@ -4,15 +4,107 @@ import { createElement, type ReactNode } from 'react';
 import type { Product } from '@/types/product';
 
 const mockResolve = jest.fn();
+beforeEach(() => mockResolve.mockReset());
 jest.mock('./product-utils', () => ({
   resolveProductRow: (...args: unknown[]) => mockResolve(...args),
-  transformProduct: (row: unknown) => row,
+  // Mirror the production transform's null-to-false normalization; availability
+  // must still use the raw explicit management flag.
+  transformProduct: (row: unknown) =>
+    row && typeof row === 'object' && 'manage_stock' in row
+      ? { ...row, manage_stock: row.manage_stock ?? false }
+      : row,
 }));
 jest.mock('./use-merchant', () => ({
   useMerchant: () => ({ data: { id: 'm1' } }),
 }));
 
 import { useComparisonProducts } from './use-comparison-products';
+
+it.each([
+  {
+    searchMatch: { variantId: 'v1' },
+    variants: [{ id: 'v1', price: 200, in_stock: false }],
+    manage_stock: true,
+  },
+  {
+    searchMatch: { variantId: 'v1' },
+    variants: [{ id: 'v1', price: 200, stock_quantity: 0 }],
+    manage_stock: true,
+  },
+  {
+    searchMatch: { variantId: 'v1' },
+    variants: [{ id: 'v1', price: 200 }],
+    stock_quantity: 0,
+    manage_stock: true,
+  },
+  {
+    searchMatch: { offerId: 'o1' },
+    offers: [{ id: 'o1', price: 200, stock_quantity: 0 }],
+    manage_stock: true,
+  },
+  {
+    searchMatch: { offerId: 'o1' },
+    offers: [{ id: 'o1', price: 200 }],
+    manage_stock: null,
+  },
+])('marks depleted or unverified exact options unavailable %#', async (fixture) => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    ...fixture,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: fixture.searchMatch,
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.status).toContain('unavailable'));
+  expect(result.current.unavailableIds).toEqual(['p1']);
+});
+
+it('allows an unmanaged offer even when scalar stock is zero', async () => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    manage_stock: false,
+    offers: [{ id: 'o1', price: 200, stock_quantity: 0 }],
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { offerId: 'o1' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(200));
+  expect(result.current.unavailableIds).toEqual([]);
+});
 
 it('refreshes merchant-scoped snapshots and keeps matched identities without mutating selection', async () => {
   const snapshot = {
@@ -25,6 +117,8 @@ it('refreshes merchant-scoped snapshots and keeps matched identities without mut
   mockResolve.mockResolvedValue({
     id: 'p1',
     price: 150,
+    stock_quantity: 1,
+    manage_stock: true,
     name: 'iPhone',
     variants: [
       {

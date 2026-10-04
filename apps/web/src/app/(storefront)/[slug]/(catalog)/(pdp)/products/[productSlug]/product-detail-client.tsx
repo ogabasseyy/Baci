@@ -248,29 +248,33 @@ export default function ProductDetailClient({
   // Honor it only when it names one of this product's own offers and matches
   // the selected condition, so the PDP charges the price the card displayed.
   const offerIdParam = searchParams.get('offer_id');
+  const [ignoredRouteOfferId, setIgnoredRouteOfferId] = useState<string | null>(
+    null
+  );
   const routeOfferId =
     offerIdParam &&
+    offerIdParam !== ignoredRouteOfferId &&
     product.offers?.some((o: { id: string }) => String(o.id) === offerIdParam)
       ? offerIdParam
       : null;
-  const selectedOffer =
-    !usesVariantConditions &&
-    selectedCondition !==
-      (normalizeCanonicalProductCondition(product.condition) || 'new')
-      ? (routeOfferId &&
-          product.offers?.find(
-            (o: { id: string; condition: string }) =>
-              String(o.id) === routeOfferId &&
-              normalizeCanonicalProductCondition(o.condition) ===
-                selectedCondition
-          )) ||
+  const selectedOffer = usesVariantConditions
+    ? null
+    : (routeOfferId &&
         product.offers?.find(
-          (o: { condition: string }) =>
-            normalizeCanonicalProductCondition(o.condition) ===
-            selectedCondition
-        ) ||
-        null
-      : null;
+          (offer: { id: string; condition: string }) =>
+            String(offer.id) === routeOfferId &&
+            normalizeCanonicalProductCondition(offer.condition) ===
+              selectedCondition
+        )) ||
+      (selectedCondition !==
+      (normalizeCanonicalProductCondition(product.condition) || 'new')
+        ? product.offers?.find(
+            (offer: { condition: string }) =>
+              normalizeCanonicalProductCondition(offer.condition) ===
+              selectedCondition
+          )
+        : null) ||
+      null;
   const conditionLabels: Record<string, string> = {
     new: 'New',
     used: 'Premium Used',
@@ -291,6 +295,7 @@ export default function ProductDetailClient({
     usesVariantRouteSelection ? 'variants' : 'simple',
     routeCondition,
     routeVariantId ?? '',
+    offerIdParam ?? '',
     Object.entries(routeSelectionAttributes)
       .map(([key, value]) => `${key}=${value}`)
       .sort()
@@ -299,6 +304,7 @@ export default function ProductDetailClient({
   const [prevRouteSeedKey, setPrevRouteSeedKey] = useState<string | null>(null);
   if (routeSeedKey !== prevRouteSeedKey) {
     setPrevRouteSeedKey(routeSeedKey);
+    setIgnoredRouteOfferId(null);
 
     if (!usesVariantRouteSelection) {
       if (routeCondition && routeCondition !== selectedCondition) {
@@ -483,6 +489,7 @@ export default function ProductDetailClient({
   };
 
   const handleConditionChange = (condition: ProductCondition) => {
+    setIgnoredRouteOfferId(offerIdParam);
     setSelectedCondition(condition);
 
     if (!usesVariantConditions) {

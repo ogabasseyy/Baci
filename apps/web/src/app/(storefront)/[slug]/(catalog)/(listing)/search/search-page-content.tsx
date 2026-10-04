@@ -198,6 +198,7 @@ export async function SearchPageContent({
 
             {query && !searchFailed && effectiveResult.products.length > 0 && (
               <SearchComparisonTray
+                currency={merchantCurrency}
                 products={effectiveResult.products}
                 pathPrefix={pathPrefix}
                 merchantId={merchant.id}
@@ -205,6 +206,7 @@ export async function SearchPageContent({
             )}
             {query && (
               <SearchRefinementControls
+                currency={merchantCurrency}
                 key={query}
                 query={query}
                 basePath={searchBasePath}

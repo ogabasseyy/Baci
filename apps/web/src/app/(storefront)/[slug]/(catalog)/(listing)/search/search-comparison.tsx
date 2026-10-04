@@ -93,10 +93,12 @@ export function SearchCompareButton({
   );
 }
 export function SearchComparisonTray({
+  currency = 'NGN',
   products,
   pathPrefix,
   merchantId,
 }: {
+  currency?: string;
   products: NormalizedProduct[];
   pathPrefix: string;
   merchantId: string;
@@ -177,7 +179,7 @@ export function SearchComparisonTray({
                   {product
                     ? new Intl.NumberFormat('en-NG', {
                         style: 'currency',
-                        currency: 'NGN',
+                        currency,
                       }).format(product.price)
                     : 'Open product for current price'}
                 </p>

@@ -33,3 +33,6 @@ INSERT INTO public.products(id,merchant_id,name,brand,status,price,condition,man
 VALUES ('20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','serial device','Serial','active',100,'new',true,0,'serialized_strict',false,true,'serial device','serialdevice',to_tsvector('simple','serial device'),to_tsvector('simple','serial device'));
 INSERT INTO public.product_variants VALUES ('20000000-0000-4000-8000-000000000010','20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','new',100,9,'serialized_strict',false),('20000000-0000-4000-8000-000000000011','20000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','used',200,0,'serialized_strict',false);
 INSERT INTO public.fixture_serialized_counts VALUES ('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000010',0),('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000011',1);
+
+-- A nullable management flag does not imply unlimited inventory.
+UPDATE public.products SET stock_quantity=1 WHERE id='00000000-0000-4000-8000-000000000004';

@@ -6,7 +6,8 @@ export interface SearchRefinementChip {
 }
 export function getSearchRefinementChips(
   criteria: SearchRefinements,
-  categories: { id: string; name: string }[]
+  categories: { id: string; name: string }[],
+  formatPrice: (price: number) => string = (price) => `₦${price}`
 ): SearchRefinementChip[] {
   const chips: SearchRefinementChip[] = criteria.brands.map((brand) => ({
     key: `brand:${brand}`,
@@ -44,7 +45,7 @@ export function getSearchRefinementChips(
   if (criteria.minPrice !== undefined || criteria.maxPrice !== undefined)
     chips.push({
       key: 'price',
-      label: `₦${criteria.minPrice ?? 0} – ${criteria.maxPrice === undefined ? 'Any' : `₦${criteria.maxPrice}`}`,
+      label: `${formatPrice(criteria.minPrice ?? 0)} – ${criteria.maxPrice === undefined ? 'Any' : formatPrice(criteria.maxPrice)}`,
       next: { ...criteria, minPrice: undefined, maxPrice: undefined },
     });
   if (criteria.minRating)

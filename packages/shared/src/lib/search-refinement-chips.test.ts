@@ -51,3 +51,22 @@ it('adds only query-backed quick groups and keeps an active processor removable'
       ?.next.processor
   ).toBeUndefined();
 });
+
+it('formats price chips in merchant currency without changing numeric criteria', () => {
+  const criteria = {
+    brands: [],
+    sort: 'relevance' as const,
+    minPrice: 100,
+    maxPrice: 200,
+  };
+  const chip = getSearchRefinementChips(
+    criteria,
+    [],
+    (price) => `$${price}`
+  )[0];
+  expect(chip.label).toContain('$100');
+  expect(chip.label).toContain('$200');
+  expect(chip.next.minPrice).toBeUndefined();
+  expect(chip.next.maxPrice).toBeUndefined();
+  expect(criteria.minPrice).toBe(100);
+});

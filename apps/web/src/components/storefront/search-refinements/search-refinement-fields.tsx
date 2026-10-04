@@ -1,6 +1,10 @@
 'use client';
-import type { SearchRefinements } from '@baci/shared/lib';
+import {
+  parseSearchRefinements,
+  type SearchRefinements,
+} from '@baci/shared/lib';
 import { type ReactNode, useState } from 'react';
+import { getSearchCurrencyFormatter } from './search-currency';
 export interface RefinementDraft
   extends Omit<SearchRefinements, 'minPrice' | 'maxPrice'> {
   minimum: string;
@@ -13,7 +17,20 @@ export const createRefinementDraft = (
   minimum: criteria.minPrice?.toString() ?? '',
   maximum: criteria.maxPrice?.toString() ?? '',
 });
+export function parseRefinementDraft(draft: RefinementDraft) {
+  return parseSearchRefinements({
+    brand: draft.brands,
+    category: draft.categoryId,
+    condition: draft.condition,
+    processor: draft.processor,
+    minPrice: draft.minimum,
+    maxPrice: draft.maximum,
+    sort: draft.sort,
+    minRating: draft.minRating?.toString(),
+  });
+}
 export function SearchRefinementFields({
+  currency = 'NGN',
   processors = [],
   focusGroup,
   conditions = ['new', 'used', 'open_box'],
@@ -23,6 +40,7 @@ export function SearchRefinementFields({
   categories,
   onPriceApply,
 }: {
+  currency?: string;
   processors?: string[];
   focusGroup?: string;
   conditions?: NonNullable<SearchRefinements['condition']>[];
@@ -32,6 +50,10 @@ export function SearchRefinementFields({
   categories: { id: string; name: string }[];
   onPriceApply?: () => void;
 }) {
+  const symbol =
+    getSearchCurrencyFormatter(currency)
+      .formatToParts(0)
+      .find((part) => part.type === 'currency')?.value ?? currency;
   const [expanded, setExpanded] = useState(focusGroup ?? '');
   const [brandQuery, setBrandQuery] = useState('');
   const visible = [...new Set([...brands, ...draft.brands])].filter((brand) =>
@@ -81,7 +103,7 @@ export function SearchRefinementFields({
       >
         <div className="space-y-2">
           <label className="block text-sm">
-            Minimum price (₦)
+            Minimum price ({symbol})
             <input
               className={inputClass}
               inputMode="decimal"
@@ -92,7 +114,7 @@ export function SearchRefinementFields({
             />
           </label>
           <label className="block text-sm">
-            Maximum price (₦)
+            Maximum price ({symbol})
             <input
               className={inputClass}
               inputMode="decimal"

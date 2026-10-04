@@ -34,7 +34,14 @@ export function useComparisonProducts(selected: Product[]) {
               ? product.offers?.find((o) => o.id === match.offerId)
               : undefined;
           // Exact matched options require a fresh matching option; never substitute a parent silently.
-          if (match && (match.variantId || match.offerId) && !option)
+          const optionAvailable = option
+            ? match?.variantId
+              ? (!('in_stock' in option) || option.in_stock !== false) &&
+                (row?.manage_stock === false ||
+                  (option.stock_quantity ?? product.stock_quantity ?? 0) > 0)
+              : row?.manage_stock === false || (option.stock_quantity ?? 0) > 0
+            : false;
+          if (match && (match.variantId || match.offerId) && !optionAvailable)
             return {
               product: {
                 ...product,

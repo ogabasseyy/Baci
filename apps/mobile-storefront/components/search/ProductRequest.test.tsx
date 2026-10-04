@@ -106,3 +106,28 @@ it('shows a retry signal instead of a validation error on idempotency conflict',
     expect(screen.getByText(/conflicts with an earlier one/)).toBeTruthy()
   );
 });
+
+it('allows a new request after a successful request and query change', async () => {
+  jest.mocked(submitProductRequest).mockResolvedValue();
+  const view = render(
+    <ProductRequest query="iPhone 20" colors={Colors.light} />
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.changeText(
+    screen.getByLabelText('Email or phone number'),
+    'shopper@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() =>
+    expect(screen.getByText(/Request sent to the store/)).toBeTruthy()
+  );
+  view.rerender(<ProductRequest query="Galaxy S99" colors={Colors.light} />);
+  expect(screen.queryByText(/Request sent to the store/)).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  expect(screen.getByDisplayValue('Galaxy S99')).toBeTruthy();
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+  expect(jest.mocked(submitProductRequest).mock.calls[1][1].query).toBe(
+    'Galaxy S99'
+  );
+});

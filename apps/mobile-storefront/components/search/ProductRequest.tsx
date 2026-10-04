@@ -36,15 +36,17 @@ export default function ProductRequest({
   // A new search while the sheet is closed re-prefills the draft; never
   // clobber text the shopper is editing (or typed) for the current query.
   const [prevQuery, setPrevQuery] = useState(query);
-  if (query !== prevQuery && !open) {
-    setPrevQuery(query);
-    setProduct(query);
-  }
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const request = useRef({ key: '', id: '' });
   const sending = useRef(false);
+  if (query !== prevQuery && !open && !pending) {
+    setPrevQuery(query);
+    setProduct(query);
+    setSent(false);
+    setError('');
+  }
   const { height } = useWindowDimensions();
   async function submit() {
     if (sending.current) return;

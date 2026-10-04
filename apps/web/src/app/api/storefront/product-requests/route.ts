@@ -2,13 +2,9 @@ import { productRequestSchema } from '@baci/shared/lib';
 import { logger } from '@/lib/logger';
 import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-client';
 
-// Public intake for storefront product requests. The submit RPC is
-// service-role only, so all callers come through here: the proxy adds a
-// trusted per-IP network gate (rate-limit-routes) in front of the DB's
-// per-contact and per-merchant budgets. The route never constructs a
-// service client itself; the server-only intake helper owns the single
-// branded RPC call. No session is involved, so there is no ambient
-// authority for CSRF to abuse.
+// Public intake uses a restricted NOINHERIT/NOBYPASSRLS role with one RPC
+// grant. The proxy adds the IP gate; the RPC enforces durable contact and
+// merchant budgets. No session authority or service client is used.
 export async function POST(request: Request) {
   let input: unknown;
   try {

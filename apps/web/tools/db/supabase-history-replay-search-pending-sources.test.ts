@@ -18,6 +18,9 @@ describe('search pending replay sources', () => {
       '20261003194500_storefront_category_facets.sql',
       '20261003230000_storefront_search_refinement_fixes.sql',
       '20261004060000_search_inventory_option_guards.sql',
+      '20261004130000_search_price_options_offer_base_rows.sql',
+      '20261004150000_search_price_options_offer_scope_null_stock.sql',
+      '20261004170000_restrict_storefront_product_request_intake.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

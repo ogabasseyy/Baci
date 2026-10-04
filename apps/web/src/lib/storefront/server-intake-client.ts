@@ -1,18 +1,6 @@
 import 'server-only';
-
-import { createServiceClient } from '@/lib/supabase/service';
-
-// Public product-request intake boundary. The submit RPC is service-role
-// only so direct anon calls cannot bypass the intake route's proxy IP gate;
-// this module is the single server-only path to it, limited to exactly
-// submit_storefront_product_request. The client is never handed out —
-// callers get only this narrow function. Provision a dedicated
-// SUPABASE_STOREFRONT_INTAKE_KEY service-role JWT: the separate secret
-// gives rotation independence and blast-radius accounting, but like every
-// branded service client in this repo it inherently bypasses RLS — the
-// narrow call graph (Zod route, IP gate, single RPC) is the control, not
-// the key. The client fails closed without it and never falls back to
-// the shared service key.
+import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 
 interface SubmitProductRequestRpc {
   rpc(
@@ -26,18 +14,41 @@ interface SubmitProductRequestRpc {
   ): Promise<{ error: { code?: string; message?: string } | null }>;
 }
 
+/** Reject privileged/misconfigured credentials before constructing a client.
+ * Supabase verifies the JWT signature; this local check constrains configuration.
+ */
+function intakeToken(): string {
+  const token = process.env.SUPABASE_STOREFRONT_INTAKE_KEY;
+  try {
+    if (token?.split('.').length !== 3) throw new Error();
+    const claims: unknown = JSON.parse(
+      Buffer.from(token.split('.')[1], 'base64url').toString('utf8')
+    );
+    if (
+      !claims ||
+      typeof claims !== 'object' ||
+      !('role' in claims) ||
+      claims.role !== 'storefront_intake'
+    )
+      throw new Error();
+  } catch {
+    throw new Error('Restricted storefront intake credential is unavailable');
+  }
+  return token;
+}
+
 export function submitStorefrontProductRequest(args: {
   p_query: string;
   p_contact: string;
   p_merchant_slug: string;
   p_request_id: string;
 }): Promise<{ error: { code?: string; message?: string } | null }> {
-  // The RPC postdates generated Database types; the cast is contained here
-  // so no other module names an untyped privileged call.
-  const client = createServiceClient(
-    'storefront-public-intake'
-  ) as unknown as SubmitProductRequestRpc;
+  const token = intakeToken();
+  // Publishable gateway key plus a signed JWT for a NOINHERIT/NOBYPASSRLS
+  // role granted this intake RPC with no direct request-table access.
+  const client = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    auth: { persistSession: false, autoRefreshToken: false },
+    accessToken: async () => token,
+  }) as unknown as SubmitProductRequestRpc;
   return client.rpc('submit_storefront_product_request', args);
 }
-
-export type { StorefrontPublicIntakeServiceClient } from '@/lib/supabase/service';

@@ -17,6 +17,39 @@ vi.mock('./host', async (importOriginal) => {
 import { getApiSecurityContext, runApiSecurityStage } from './api-security';
 
 describe('API security stage', () => {
+  it('blocks foreign browser origins for sessionless search assistance', async () => {
+    const request = new NextRequest('https://usebaci.com/api/search/assist', {
+      method: 'POST',
+      headers: {
+        origin: 'https://foreign.example',
+        'content-type': 'application/json',
+      },
+    });
+    const response = await runApiSecurityStage(
+      request,
+      getApiSecurityContext('/api/search/assist', 'usebaci.com', 'POST')
+    );
+    expect(response?.status).toBe(403);
+  });
+  it.each([
+    undefined,
+    'https://usebaci.com',
+  ])('allows native or same-origin public assistance: %s', async (origin) => {
+    const request = new NextRequest('https://usebaci.com/api/search/assist', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(origin ? { origin } : {}),
+      },
+    });
+    expect(
+      await runApiSecurityStage(
+        request,
+        getApiSecurityContext('/api/search/assist', 'usebaci.com', 'POST')
+      )
+    ).toBeNull();
+  });
+
   it('maps legacy analytics POST and alias API paths to their guarded route', () => {
     expect(
       getApiSecurityContext('/analytics/conversion', 'usebaci.com', 'POST')

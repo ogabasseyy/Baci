@@ -84,5 +84,13 @@ CREATE TRIGGER erase_storefront_product_request_inbox
 AFTER DELETE ON public.storefront_product_requests
 FOR EACH ROW WHEN (OLD.notification_id IS NOT NULL)
 EXECUTE FUNCTION private.erase_storefront_product_request_inbox();
-SELECT cron.schedule('storefront-product-request-inbox', '* * * * *', 'SELECT private.deliver_storefront_product_requests();');
+-- Replay environments may not provision pg_cron. Intake remains durable;
+-- production must provision Cron before merchant inbox delivery is enabled.
+DO $schedule$
+BEGIN
+  IF pg_catalog.to_regprocedure('cron.schedule(text,text,text)') IS NOT NULL THEN
+    PERFORM cron.schedule('storefront-product-request-inbox', '* * * * *', 'SELECT private.deliver_storefront_product_requests();');
+  END IF;
+END;
+$schedule$;
 COMMIT;

@@ -175,6 +175,15 @@ BEGIN
   END IF;
   SELECT rc.* INTO v_claim FROM public.receipt_claims AS rc
   WHERE rc.token_hash = p_token_hash FOR UPDATE;
+  IF NOT FOUND THEN
+    -- Previous-token grace: the bearer may hold the mailed link from the
+    -- attempt before a retry rotation. All checks below run against the
+    -- current row (email, expiry, linkage), so a corrected recipient
+    -- still fails the old bearer closed.
+    SELECT rc.* INTO v_claim FROM public.receipt_claims AS rc
+    WHERE rc.previous_token_hash = p_token_hash
+    LIMIT 1 FOR UPDATE;
+  END IF;
   IF NOT FOUND THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
   IF v_claim.expires_at <= now() THEN RETURN jsonb_build_object('status', 'expired'); END IF;
   IF v_claim.customer_email_normalized IS DISTINCT FROM v_email THEN
@@ -231,7 +240,10 @@ BEGIN
         AND (o.merchant_id IS DISTINCT FROM v_claim.merchant_id
           OR o.customer_id IS DISTINCT FROM v_claim.customer_id)
     ) THEN RETURN jsonb_build_object('status', 'customer_link_failed'); END IF;
-  RETURN private.redeem_receipt_claim_v2(p_token_hash, p_source);
+  -- The v2 core resolves by current token_hash only, so a graced
+  -- previous-hash bearer hands over the row's current hash: same locked
+  -- row, same re-validation, same click tracking.
+  RETURN private.redeem_receipt_claim_v2(v_claim.token_hash, p_source);
 END;
 $$;
 REVOKE ALL ON FUNCTION private.redeem_verified_receipt_claim(text, text)

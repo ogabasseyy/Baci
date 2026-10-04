@@ -39,7 +39,8 @@ export const createComparisonStore = () =>
     addProduct: (product) => {
       const state = get();
 
-      // Check if already in comparison
+      // Identity is product-keyed by design: one row per product, so a
+      // second option of the same product replaces nothing and is rejected.
       if (state.products.some((p) => String(p.id) === String(product.id))) {
         return false;
       }

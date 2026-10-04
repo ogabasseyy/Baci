@@ -22,6 +22,9 @@ export async function fetchAvailableBrands(
       sort_by: _sort,
       result_limit: _limit,
       result_offset: _offset,
+      // The brands RPC has no processor parameter; forwarding it fails
+      // PostgREST resolution, so brand options stay processor-unscoped.
+      processor_filter: _processor,
       ...args
     } = getRefinedSearchArgs(
       merchantId,

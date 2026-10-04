@@ -156,6 +156,8 @@ export const V2ComparisonProvider: React.FC<{
     // the only writer besides remove/clear). The updater below stays the
     // single tray writer so same-tick mutations still chain correctly.
     const source = hydratedComparisonItems ?? compareItems;
+    // Identity is product-keyed by design: one row per product, so a
+    // second option of the same product counts as already present.
     const isDuplicate = source.some(
       (p) => String(p.id) === String(product.id)
     );

@@ -72,3 +72,20 @@ describe('fetchAvailableBrands complete search facets', () => {
     ).toEqual([' Samsung ', 'Apple']);
   });
 });
+
+describe('fetchAvailableBrands processor refinements', () => {
+  it('omits the processor filter the brands RPC cannot accept', async () => {
+    mockRpc.mockReset();
+    mockFrom.mockReset();
+    mockRpc.mockResolvedValue({ data: [{ brand: 'Apple' }], error: null });
+    const result = await fetchAvailableBrands('merchant-1', {
+      search: 'laptop',
+      refinements: { brands: [], sort: 'relevance', processor: 'M3' },
+    });
+    expect(result).toEqual(['Apple']);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_search_brands',
+      expect.not.objectContaining({ processor_filter: expect.anything() })
+    );
+  });
+});

@@ -9,10 +9,12 @@ const useIsomorphicLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 type BlogReviewHandoffImporterProps = {
+  disabled?: boolean;
   onImport: (draft: PlatformAdminBlogFormState) => boolean | undefined;
 };
 
 export function BlogReviewHandoffImporter({
+  disabled = false,
   onImport,
 }: BlogReviewHandoffImporterProps) {
   const [message, setMessage] = useState('');
@@ -21,9 +23,12 @@ export function BlogReviewHandoffImporter({
   useIsomorphicLayoutEffect(() => {
     onImportRef.current = onImport;
   }, [onImport]);
+  useIsomorphicLayoutEffect(() => {
+    if (disabled) importGenerationRef.current += 1;
+  }, [disabled]);
 
   const handleFile = async (file?: File) => {
-    if (!file) return;
+    if (!file || disabled) return;
     const generation = ++importGenerationRef.current;
     if (file.size > MAX_FILE_SIZE) {
       setMessage('The review file is larger than 2 MB (2,000,000 bytes).');
@@ -75,6 +80,7 @@ export function BlogReviewHandoffImporter({
       </label>
       <input
         accept="application/json,.json"
+        disabled={disabled}
         id="review-handoff-file"
         onChange={(event) => {
           void handleFile(event.currentTarget.files?.[0]);

@@ -1,3 +1,4 @@
+import { MAX_REVIEW_HANDOFF_CONTENT_LENGTH } from '@/config/blog-review-handoff';
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
 import { generateSlug } from '@/lib/blog-utils';
 import { sanitizeHtml } from '@/lib/sanitize';
@@ -7,8 +8,6 @@ import {
   blogPostSchema,
 } from '@/lib/validations/blog';
 import type { PlatformAdminBlogFormState } from './blog-types';
-
-export const MAX_REVIEW_HANDOFF_CONTENT_LENGTH = 1_000_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

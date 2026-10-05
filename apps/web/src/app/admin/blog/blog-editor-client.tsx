@@ -223,7 +223,9 @@ export function BlogEditorClient({
 
       {!isEditMode && (
         <BlogReviewHandoffImporter
+          disabled={saving}
           onImport={(draft) => {
+            if (saving) return false;
             const changed = Object.entries(form).some(
               ([key, value]) =>
                 JSON.stringify(value) !==

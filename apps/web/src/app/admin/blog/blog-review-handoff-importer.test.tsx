@@ -25,6 +25,25 @@ const handoff = {
 };
 
 describe('BlogReviewHandoffImporter', () => {
+  it('disables selection while saving and invalidates reads even after saving ends', async () => {
+    const onImport = vi.fn();
+    const { rerender } = render(
+      <BlogReviewHandoffImporter onImport={onImport} />
+    );
+    const pending = Promise.withResolvers<string>();
+    const file = new File([], 'pending.json');
+    vi.spyOn(file, 'text').mockReturnValue(pending.promise);
+    fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+      target: { files: [file] },
+    });
+    rerender(<BlogReviewHandoffImporter disabled onImport={onImport} />);
+    expect(screen.getByLabelText('Review handoff JSON')).toBeDisabled();
+    rerender(<BlogReviewHandoffImporter onImport={onImport} />);
+    await act(async () => pending.resolve(JSON.stringify(handoff)));
+    expect(onImport).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).not.toHaveTextContent('Draft loaded');
+  });
+
   it.each([
     2_000_000, 2_000_001,
   ])('enforces the advertised decimal byte limit at %s bytes', async (size) => {

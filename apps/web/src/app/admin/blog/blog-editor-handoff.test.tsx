@@ -26,12 +26,14 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
     onFormChange,
     onContentDirty,
     onUploadFeatured,
+    onSubmit,
   }: {
     form: PlatformAdminBlogFormState;
     contentResetKey: number;
     onFormChange: (form: PlatformAdminBlogFormState) => void;
     onContentDirty?: () => void;
     onUploadFeatured: () => void;
+    onSubmit: () => void;
   }) => (
     <>
       <input
@@ -50,6 +52,9 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
         Upload cover
       </button>
       <output aria-label="Featured image">{form.featured_image_url}</output>
+      <button type="button" onClick={onSubmit}>
+        Create Post
+      </button>
     </>
   ),
 }));
@@ -68,6 +73,36 @@ function importHandoff() {
     target: { files: [new File([JSON.stringify(handoff)], 'handoff.json')] },
   });
 }
+
+it('blocks a pending handoff read once the create request starts', async () => {
+  render(<BlogEditorClient mode="create" />);
+  importHandoff();
+  await screen.findByText(
+    'Draft loaded for review. It has not been saved or published.'
+  );
+  const pendingRead = Promise.withResolvers<string>();
+  const file = new File([], 'pending.json');
+  vi.spyOn(file, 'text').mockReturnValue(pendingRead.promise);
+  fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+    target: { files: [file] },
+  });
+  const pendingSave = Promise.withResolvers<Response>();
+  fetchWithCsrf.mockReturnValueOnce(pendingSave.promise);
+  fireEvent.click(screen.getByRole('button', { name: 'Create Post' }));
+  expect(screen.getByLabelText('Review handoff JSON')).toBeDisabled();
+  await act(async () =>
+    pendingRead.resolve(
+      JSON.stringify({ ...handoff, title: 'Discarded newer article' })
+    )
+  );
+  expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article');
+  await act(async () =>
+    pendingSave.resolve(
+      new Response(JSON.stringify({ error: 'Test failure' }), { status: 500 })
+    )
+  );
+  expect(screen.getByLabelText('Review handoff JSON')).toBeEnabled();
+});
 
 it('imports directly into an unchanged form and resets the rich-text editor', async () => {
   const confirm = vi.spyOn(window, 'confirm');

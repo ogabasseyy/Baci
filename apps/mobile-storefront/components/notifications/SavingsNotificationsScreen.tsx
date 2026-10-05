@@ -23,11 +23,20 @@ export function SavingsNotificationsScreen({
   });
 
   const openNotification = (notification: SavingsNotification) => {
-    void inbox.markRead(notification.id).catch(() => undefined);
-    router.push({
-      pathname: '/wallet',
-      params: { action: 'savings', savingsGoalId: notification.goalId },
-    });
+    // Await the mark-read so a failure keeps the user on this screen, where
+    // the actionError banner renders. Navigating first would strand that
+    // error on a screen the user just left.
+    void (async () => {
+      try {
+        await inbox.markRead(notification.id);
+      } catch {
+        return;
+      }
+      router.push({
+        pathname: '/wallet',
+        params: { action: 'savings', savingsGoalId: notification.goalId },
+      });
+    })();
   };
 
   return (

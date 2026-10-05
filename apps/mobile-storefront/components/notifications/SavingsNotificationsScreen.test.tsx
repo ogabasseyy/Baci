@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import type { useSavingsNotificationInbox } from '@/hooks/use-savings-notification-inbox';
 import { getSavingsNotificationAccessibilityLabel } from './SavingsNotificationList';
@@ -114,7 +119,7 @@ describe('SavingsNotificationsScreen', () => {
     expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the authenticated wallet savings route and persists the read state for a tapped notification', () => {
+  it('opens the authenticated wallet savings route and persists the read state for a tapped notification', async () => {
     mockUseSavingsNotificationInbox.mockReturnValue({
       ...mockUseSavingsNotificationInbox(),
       notifications: [notification],
@@ -136,13 +141,45 @@ describe('SavingsNotificationsScreen', () => {
     );
 
     expect(mockMarkRead).toHaveBeenCalledWith(notification.id);
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/wallet',
-      params: {
-        action: 'savings',
-        savingsGoalId: '00000000-0000-4000-8000-000000000002',
-      },
+    await waitFor(() => {
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        pathname: '/wallet',
+        params: {
+          action: 'savings',
+          savingsGoalId: '00000000-0000-4000-8000-000000000002',
+        },
+      });
     });
+  });
+
+  it('stays on the inbox with the action error visible when marking read fails', async () => {
+    mockMarkRead.mockRejectedValueOnce(new Error('Offline'));
+    mockUseSavingsNotificationInbox.mockReturnValue({
+      ...mockUseSavingsNotificationInbox(),
+      actionError: 'Offline',
+      notifications: [notification],
+    });
+
+    render(
+      <SavingsNotificationsScreen
+        merchantId="00000000-0000-4000-8000-000000000010"
+        userId="user-a"
+      />
+    );
+    fireEvent.press(
+      screen.getByRole('button', {
+        name: getSavingsNotificationAccessibilityLabel(
+          notification.title,
+          notification.createdAt
+        ),
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockMarkRead).toHaveBeenCalledWith(notification.id);
+    });
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(screen.getByText('Offline')).toBeOnTheScreen();
   });
 
   it('keeps the weekly digest opt-in disabled until the customer enables it', () => {

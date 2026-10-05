@@ -22,6 +22,20 @@ function patchRequest(body?: Record<string, unknown>) {
 describe('PATCH /api/admin/blog/posts/[id]', () => {
   beforeEach(resetBlogPostRouteMocks);
 
+  it.each([
+    '',
+    '   ',
+  ])('clears empty intent metadata through PATCH: %j', async (empty) => {
+    const response = await PATCH(
+      patchRequest({ intent: empty, intent_source: empty }),
+      blogPostRouteContext()
+    );
+    expect(response.status).toBe(200);
+    expect(blogPostSupabaseMock.update).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: null, intent_source: null })
+    );
+  });
+
   it('checks auth before csrf on write requests', async () => {
     blogPostRouteMocks.getPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',

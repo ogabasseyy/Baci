@@ -112,7 +112,17 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   return {
-    ...metadata,
+    ...validatedMetadata.data,
+    // API metadata may be nullable/optional; controlled form fields need strings.
+    author_name: validatedMetadata.data.author_name ?? 'Baci Editorial',
+    category: validatedMetadata.data.category ?? '',
+    excerpt: validatedMetadata.data.excerpt ?? '',
+    featured_image_alt: validatedMetadata.data.featured_image_alt ?? '',
+    focus_keyword: validatedMetadata.data.focus_keyword ?? '',
+    seo_description: validatedMetadata.data.seo_description ?? '',
+    seo_title: validatedMetadata.data.seo_title ?? '',
+    slug:
+      validatedMetadata.data.slug ?? generateSlug(validatedMetadata.data.title),
     content,
     featured_image_height: readDimension(featuredImage.height),
     featured_image_url: featuredImageUrl,

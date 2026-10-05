@@ -95,6 +95,22 @@ it('confirms body edits before their debounced form update arrives', async () =>
   expect(screen.getByLabelText('Editor reset')).toHaveTextContent('0');
 });
 
+it('protects an unsaved imported article when importing again without intent', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  render(<BlogEditorClient mode="create" />);
+  importHandoff();
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
+  expect(confirm).not.toHaveBeenCalled();
+  importHandoff();
+  expect(
+    await screen.findByText('Import cancelled. Your article is unchanged.')
+  ).toBeInTheDocument();
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(screen.getByLabelText('Article')).toHaveTextContent('Imported body');
+});
+
 it('keeps an imported image when an older featured upload finishes later', async () => {
   const pending = Promise.withResolvers<Response>();
   fetchWithCsrf.mockReturnValueOnce(pending.promise);

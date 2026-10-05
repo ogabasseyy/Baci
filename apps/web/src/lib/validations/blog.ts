@@ -182,6 +182,8 @@ export function sanitizeBlogPostData(
           'seo_title',
           'seo_description',
           'focus_keyword',
+          'intent',
+          'intent_source',
         ];
         sanitized[key] = nullableFields.includes(key) ? null : undefined;
       } else {

@@ -50,6 +50,11 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (!content.trim()) {
     throw new Error('Article content is empty after sanitization');
   }
+  if (/^[[{]/u.test(content.trimStart())) {
+    throw new Error(
+      'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
+    );
+  }
 
   const featuredImage = isRecord(value.featured_image)
     ? value.featured_image
@@ -62,6 +67,11 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === 'string')
     : [];
+  if (tags.some((tag) => tag.includes(','))) {
+    throw new Error(
+      'Imported tag names cannot contain commas. Use separate tags or rename the tag.'
+    );
+  }
   const imageVariants = isRecord(featuredImage.variants)
     ? Object.fromEntries(
         Object.entries(featuredImage.variants).filter(

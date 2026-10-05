@@ -1,0 +1,51 @@
+import { expect, it } from 'vitest';
+import { sanitizeBlogPostData } from '@/lib/validations/blog';
+import { toApiPayload } from './blog-api-payload';
+import { parseReviewHandoff } from './parse-review-handoff';
+
+const handoff = {
+  schema_version: 'baci-blog-review-handoff/v1',
+  title: 'Article',
+  content_html: '<p>Article body</p>',
+  featured_image: { url: 'https://cdn.example.com/cover.webp' },
+};
+
+it.each([
+  '{"foo":"bar"}',
+  '{"type":"doc","content":{}}',
+  '{"type":"doc","content":[]}',
+  '[{"type":"paragraph"}]',
+  '  {"foo":"bar"} <p>Body</p>',
+  '<script>bad()</script>{"foo":"bar"}',
+])('rejects content that could enter the structured-content path: %s', (content_html) => {
+  expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    'HTML'
+  );
+});
+
+it('accepts JSON examples inside HTML paragraphs', () => {
+  expect(
+    parseReviewHandoff({ ...handoff, content_html: '<p>{"foo":"bar"}</p>' })
+      .content
+  ).toBe('<p>{"foo":"bar"}</p>');
+});
+
+it.each([
+  'Research, Development',
+  'One,Two',
+])('rejects a tag that would be split on save: %s', (tag) => {
+  expect(() =>
+    parseReviewHandoff({ ...handoff, tags: ['Valid', tag] })
+  ).toThrow('commas');
+});
+
+it('round-trips representable tag names through the save sanitizer', () => {
+  const form = parseReviewHandoff({
+    ...handoff,
+    tags: [' Research & Development ', 'Nigeria'],
+  });
+  expect(sanitizeBlogPostData(toApiPayload(form)).tags).toEqual([
+    'Research & Development',
+    'Nigeria',
+  ]);
+});

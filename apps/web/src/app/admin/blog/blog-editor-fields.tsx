@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { BlogEditorialMetadataFields } from './blog-editorial-metadata-fields';
 import type {
   PlatformAdminBlogFormState,
   PlatformAdminBlogStatus,
@@ -131,6 +132,7 @@ export function BlogEditorFields({
           }
         />
 
+        <BlogEditorialMetadataFields form={form} onFormChange={onFormChange} />
         <Label htmlFor="excerpt">Excerpt</Label>
         <Textarea
           id="excerpt"

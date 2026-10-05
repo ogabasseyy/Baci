@@ -36,7 +36,7 @@ export function toApiPayload(
     intent_source: toOptionalString(input.intent_source ?? ''),
     seo_description: toOptionalString(input.seo_description),
     seo_title: toOptionalString(input.seo_title),
-    slug: input.slug || undefined,
+    slug: input.slug.trim() || undefined,
     status: input.status,
     tags: input.tags,
     title: input.title,

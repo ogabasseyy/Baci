@@ -7,6 +7,24 @@ const fetchWithCsrf = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf }));
 
 it.each([
+  false,
+  true,
+])('normalizes slugs without sending a null clear value: PATCH=%s', (clearEmptyToNull) => {
+  for (const [slug, expected] of [
+    ['  guide  ', 'guide'],
+    ['   ', undefined],
+    ['', undefined],
+  ]) {
+    expect(
+      toApiPayload(
+        { ...DEFAULT_PLATFORM_BLOG_FORM_STATE, slug: slug ?? '' },
+        { clearEmptyToNull }
+      ).slug
+    ).toBe(expected);
+  }
+});
+
+it.each([
   '',
   null,
 ])('omits %s metadata on create and clears it explicitly on PATCH', async (empty) => {

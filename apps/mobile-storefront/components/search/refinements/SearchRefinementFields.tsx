@@ -225,7 +225,12 @@ export function SearchRefinementFields({
             !draft.condition,
             'radio'
           )}
-          {conditions.map((value) =>
+          {[
+            ...new Set([
+              ...conditions,
+              ...(draft.condition ? [draft.condition] : []),
+            ]),
+          ].map((value) =>
             action(
               value === 'open_box'
                 ? 'Open Box'

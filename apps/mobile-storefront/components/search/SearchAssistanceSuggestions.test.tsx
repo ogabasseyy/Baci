@@ -59,3 +59,18 @@ it('keeps search available when assistance fails', () => {
   expect(screen.getByRole('alert')).toBeTruthy();
   expect(screen.getByText('Ask about this search')).toBeTruthy();
 });
+it.each([
+  'a',
+  'a'.repeat(121),
+  '!!',
+])('hides the action for queries the request schema rejects (%s)', (query) => {
+  mockAssistance.enabled = true;
+  render(<SearchAssistanceSuggestions {...props} query={query} />);
+  expect(screen.queryByText('Ask about this search')).toBeNull();
+  expect(mockAssistance.ask).not.toHaveBeenCalled();
+});
+it('shows the action at the 120-character bound', () => {
+  mockAssistance.enabled = true;
+  render(<SearchAssistanceSuggestions {...props} query={'a'.repeat(120)} />);
+  expect(screen.getByText('Ask about this search')).toBeTruthy();
+});

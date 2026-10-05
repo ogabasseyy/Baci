@@ -6,14 +6,19 @@ import {
 } from './search-refinements';
 
 const money = z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER);
+// Single source for the assistance query rule (trimmed 2–120 chars plus a
+// catalog term): the request schema, the proposal schema, and both
+// storefront gates validate against this field so the advertised action
+// can never promise a request the API would reject.
+export const searchAssistanceQuerySchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(120)
+  .refine((value) => Boolean(buildProductSearchQuery(value).normalized));
 export const searchAssistanceProposalSchema = z
   .object({
-    query: z
-      .string()
-      .trim()
-      .min(2)
-      .max(120)
-      .refine((value) => Boolean(buildProductSearchQuery(value).normalized)),
+    query: searchAssistanceQuerySchema,
     explanation: z.string().trim().min(1).max(320),
     filters: z
       .object({

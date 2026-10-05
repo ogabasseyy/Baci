@@ -5,7 +5,7 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { useSearchAssistance } from '@/hooks/use-search-assistance';
-import { parseStorefrontSearchQueryParam } from '@/lib/storefront-search-params';
+import { searchAssistanceRequestSchema } from '@/schemas/search-assistance';
 
 export function AssistedSearchSuggestions({
   query,
@@ -19,7 +19,14 @@ export function AssistedSearchSuggestions({
   basePath: string;
 }) {
   const assistance = useSearchAssistance(query, enabled);
-  if (!enabled || !parseStorefrontSearchQueryParam(query)) return null;
+  // The request schema rejects one-character, over-120-character, and
+  // normalization-empty queries, so the action hides outside those bounds
+  // instead of advertising a request that can only 400.
+  if (
+    !enabled ||
+    !searchAssistanceRequestSchema.shape.query.safeParse(query).success
+  )
+    return null;
   let proposalHref: string | null = null;
   if (assistance.proposal) {
     try {

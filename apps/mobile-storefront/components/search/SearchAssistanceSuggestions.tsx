@@ -1,6 +1,6 @@
+import { searchAssistanceQuerySchema } from '@baci/shared/lib';
 import type { ComponentProps } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { isSearchableQuery } from '@/hooks/is-searchable-query';
 import { useSearchAssistance } from '@/hooks/use-search-assistance';
 import SearchAssistance from './SearchAssistance';
 
@@ -8,10 +8,12 @@ export default function SearchAssistanceSuggestions(
   props: ComponentProps<typeof SearchAssistance>
 ) {
   const assistance = useSearchAssistance(props.query);
+  // Same bounds as the request schema (trimmed 2–120 chars plus a catalog
+  // term): the length-only gate used to advertise overlong queries that
+  // the API always rejects.
   const canAsk =
     assistance.enabled &&
-    props.query.trim().length >= 2 &&
-    isSearchableQuery(props.query);
+    searchAssistanceQuerySchema.safeParse(props.query).success;
   const actionStyle = {
     minHeight: 44,
     justifyContent: 'center' as const,

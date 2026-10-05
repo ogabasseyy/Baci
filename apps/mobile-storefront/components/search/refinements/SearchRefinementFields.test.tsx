@@ -80,3 +80,16 @@ it('projects only available conditions and processors into selectable options', 
   fireEvent.press(view.getByLabelText('M1'));
   expect(props.setDraft).toHaveBeenCalledWith({ ...draft, processor: 'M1' });
 });
+it('keeps the draft condition selectable after it leaves the facet response', () => {
+  const view = render(
+    <SearchRefinementFields
+      {...props}
+      focusGroup="condition"
+      conditions={['new']}
+      draft={{ ...draft, condition: 'used' }}
+    />
+  );
+  const retained = view.getByLabelText('Used');
+  expect(retained).toBeTruthy();
+  expect(retained.props.accessibilityState.selected).toBe(true);
+});

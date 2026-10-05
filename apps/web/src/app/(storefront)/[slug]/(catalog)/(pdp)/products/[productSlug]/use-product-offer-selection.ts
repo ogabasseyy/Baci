@@ -6,6 +6,7 @@ import {
 } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { Product, ProductVariant } from '@/lib/products';
+import { createProductSelectionHandlers } from './product-selection-handlers';
 import {
   areSelectionAttributesEqual,
   conditionDescriptions,
@@ -212,74 +213,22 @@ export function useProductOfferSelection(product: Product) {
       isStockManaged,
     });
 
-  const handleAttributeChange = (attributeKey: string, value: string) => {
-    const newAttributes = { ...selectedAttributes, [attributeKey]: value };
-    setSelectedAttributes(newAttributes);
-
-    if (!product.variants) {
-      return;
-    }
-
-    if (usesVariantRouteSelection) {
-      const nextSelection = resolveVariantDisplaySelection(product, {
-        attributes: {
-          ...routeSelectionAttributes,
-          ...newAttributes,
-        },
-        condition: usesVariantConditions ? selectedCondition : undefined,
-      });
-
-      if (nextSelection) {
-        setSelectedVariant(nextSelection.variant);
-        setSelectedAttributes(nextSelection.attributes);
-        if (nextSelection.variant.primary_image) {
-          setSelectedImage(nextSelection.variant.primary_image);
-        }
-      } else {
-        setSelectedVariant(null);
-      }
-      return;
-    }
-
-    const matchingVariant = product.variants.find((v) =>
-      Object.entries(newAttributes).every(
-        ([key, val]) => v.attributes[key] === val
-      )
-    );
-
-    if (matchingVariant) {
-      setSelectedVariant(matchingVariant);
-      if (matchingVariant.primary_image) {
-        setSelectedImage(matchingVariant.primary_image);
-      }
-    } else {
-      setSelectedVariant(null);
-    }
-  };
-
-  const handleConditionChange = (condition: ProductCondition) => {
-    setIgnoredRouteOfferId(offerIdParam);
-    setSelectedCondition(condition);
-
-    if (!usesVariantConditions) {
-      return;
-    }
-
-    const nextSelection = resolveVariantDisplaySelection(product, {
-      attributes: selectionAttributes,
-      condition,
+  const { handleAttributeChange, handleConditionChange } =
+    createProductSelectionHandlers({
+      offerIdParam,
+      product,
+      routeSelectionAttributes,
+      selectedAttributes,
+      selectedCondition,
+      selectionAttributes,
+      setIgnoredRouteOfferId,
+      setSelectedAttributes,
+      setSelectedCondition,
+      setSelectedImage,
+      setSelectedVariant,
+      usesVariantConditions,
+      usesVariantRouteSelection,
     });
-
-    if (nextSelection) {
-      setSelectedVariant(nextSelection.variant);
-      setSelectedAttributes(nextSelection.attributes);
-      if (nextSelection.variant.primary_image) {
-        setSelectedImage(nextSelection.variant.primary_image);
-      }
-    } else {
-      setSelectedVariant(null);
-    }
-  };
 
   return {
     attributeOptions,

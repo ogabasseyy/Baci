@@ -53,6 +53,22 @@ it('hides the optional flow when disabled', () => {
   render(<AssistedSearchSuggestions {...props} enabled={false} />);
   expect(screen.queryByRole('button')).toBeNull();
 });
+it.each([
+  'a',
+  'a'.repeat(121),
+  '!!',
+])('hides the action for queries the request schema rejects (%s)', (query) => {
+  render(<AssistedSearchSuggestions {...props} query={query} />);
+  expect(
+    screen.queryByRole('button', { name: 'Ask about this search' })
+  ).toBeNull();
+});
+it('shows the action at the 120-character bound', () => {
+  render(<AssistedSearchSuggestions {...props} query={'a'.repeat(120)} />);
+  expect(
+    screen.getByRole('button', { name: 'Ask about this search' })
+  ).toBeInTheDocument();
+});
 it('keeps conflicting proposals from navigating', () => {
   state.proposal = {
     query: 'iphone',

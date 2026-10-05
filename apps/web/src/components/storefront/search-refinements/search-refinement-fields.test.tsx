@@ -69,3 +69,24 @@ it('shows only available conditions and collapses other mobile groups', () => {
     screen.queryByRole('option', { name: 'Used' })
   ).not.toBeInTheDocument();
 });
+
+it('keeps the draft condition selectable after it leaves the facet response', () => {
+  render(
+    <SearchRefinementFields
+      focusGroup="condition"
+      conditions={['new']}
+      brands={[]}
+      categories={[]}
+      draft={createRefinementDraft({
+        brands: [],
+        sort: 'relevance',
+        condition: 'used',
+      })}
+      onChange={vi.fn()}
+    />
+  );
+  expect(screen.getByRole('option', { name: 'Used' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Condition' })).toHaveValue(
+    'used'
+  );
+});

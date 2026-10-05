@@ -50,8 +50,8 @@ export * from './product-image-alt';
 export * from './product-inventory';
 export {
   type ProductRequest,
-  productRequestSchema,
   ProductRequestSubmitError,
+  productRequestSchema,
   submitProductRequest,
 } from './product-request';
 export * from './product-search';
@@ -87,6 +87,7 @@ export {
   parseSearchAssistanceProposal,
   type SearchAssistanceProposal,
   searchAssistanceProposalSchema,
+  searchAssistanceQuerySchema,
 } from './shopping-assistance';
 export {
   createAssistanceDecoder,

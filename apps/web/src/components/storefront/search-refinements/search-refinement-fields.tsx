@@ -243,7 +243,12 @@ export function SearchRefinementFields({
             }
           >
             <option value="">Any condition</option>
-            {conditions.map((value) => (
+            {[
+              ...new Set([
+                ...conditions,
+                ...(draft.condition ? [draft.condition] : []),
+              ]),
+            ].map((value) => (
               <option key={value} value={value}>
                 {value === 'new'
                   ? 'New'

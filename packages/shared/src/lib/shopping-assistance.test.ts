@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   mergeAssistedRefinements,
   parseSearchAssistanceProposal,
+  searchAssistanceQuerySchema,
 } from './shopping-assistance';
 
 describe('assisted search proposals', () => {
@@ -61,5 +62,17 @@ describe('assisted search proposals', () => {
         proposal
       )
     ).toThrow('price range');
+  });
+  it('bounds the shared query rule at 2–120 trimmed chars plus a catalog term', () => {
+    expect(searchAssistanceQuerySchema.safeParse('ab').success).toBe(true);
+    expect(searchAssistanceQuerySchema.safeParse('a'.repeat(120)).success).toBe(
+      true
+    );
+    expect(searchAssistanceQuerySchema.safeParse('a').success).toBe(false);
+    expect(searchAssistanceQuerySchema.safeParse('a'.repeat(121)).success).toBe(
+      false
+    );
+    expect(searchAssistanceQuerySchema.safeParse('!!').success).toBe(false);
+    expect(searchAssistanceQuerySchema.safeParse('  ab  ').success).toBe(true);
   });
 });

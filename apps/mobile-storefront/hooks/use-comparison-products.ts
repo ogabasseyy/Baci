@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useIsFocused } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { withSupabaseRetry } from '@/lib/api';
 import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
 import { supabase } from '@/lib/supabase';
@@ -113,6 +115,18 @@ export function useComparisonProducts(selected: Product[]) {
       );
     },
   });
+  // The app-wide client disables focus refetching and the stack keeps the
+  // comparison screen mounted, so returning from a pushed PDP would
+  // otherwise leave the "current prices" status over stale facts. Refetch
+  // only on false-to-true transitions: mount already fetches via
+  // refetchOnMount, and refetching on every focus render would double-fetch.
+  const isFocused = useIsFocused();
+  const wasFocusedRef = useRef(isFocused);
+  useEffect(() => {
+    const wasFocused = wasFocusedRef.current;
+    wasFocusedRef.current = isFocused;
+    if (isFocused && !wasFocused) void query.refetch();
+  }, [isFocused, query]);
   const products =
     query.data?.map((item) => item.product) ??
     selected.map((snapshot) => ({

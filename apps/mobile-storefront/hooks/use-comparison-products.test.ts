@@ -26,6 +26,10 @@ jest.mock('@/lib/supabase', () => ({
 jest.mock('@/lib/api', () => ({
   withSupabaseRetry: (fn: () => Promise<unknown>) => fn(),
 }));
+let mockIsFocused = true;
+jest.mock('expo-router', () => ({
+  useIsFocused: () => mockIsFocused,
+}));
 
 import { useComparisonProducts } from './use-comparison-products';
 
@@ -513,4 +517,38 @@ it.each([
   rerender({ items: selected(2) });
   await waitFor(() => expect(result.current.products[0].price).toBe(250));
   expect(mockResolve).toHaveBeenCalledTimes(2);
+});
+
+it('refetches facts when the screen regains focus, without double-fetching on mount', async () => {
+  mockIsFocused = true;
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 150,
+    manage_stock: false,
+  });
+  mockRpc.mockResolvedValue({ data: [], error: null });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const items = [{ id: 'p1', name: 'Phone', price: 100 } as Product];
+  const { result, rerender } = renderHook(
+    ({ focused }: { focused: boolean }) => {
+      mockIsFocused = focused;
+      return useComparisonProducts(items);
+    },
+    {
+      initialProps: { focused: true },
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(150));
+  // Mount stays single-fetch: focus was already true on first render.
+  expect(mockResolve).toHaveBeenCalledTimes(1);
+  // Pushing a PDP blurs the still-mounted screen; returning refocuses it.
+  rerender({ focused: false });
+  rerender({ focused: true });
+  await waitFor(() => expect(mockResolve).toHaveBeenCalledTimes(2));
+  mockIsFocused = true;
 });

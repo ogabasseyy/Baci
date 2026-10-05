@@ -107,8 +107,16 @@ export function useProductOfferSelection(product: Product) {
     setIgnoredRouteOfferId(null);
 
     if (!usesVariantRouteSelection) {
-      if (routeCondition && routeCondition !== selectedCondition) {
-        setSelectedCondition(routeCondition);
+      // An ID-only offer that stops resolving (removed offer, or offer_id
+      // leaving the URL) clears the route condition; reseed to the parent
+      // default instead of keeping the stale offer condition, which could
+      // otherwise fall through to a different same-condition offer.
+      const nextCondition =
+        routeCondition ||
+        normalizeCanonicalProductCondition(product.condition) ||
+        'new';
+      if (nextCondition !== selectedCondition) {
+        setSelectedCondition(nextCondition);
       }
     } else {
       const fallbackVariantSelection = resolveDefaultVariantSelection(product, {

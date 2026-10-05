@@ -1,3 +1,4 @@
+import { buildProductSearchQuery } from '@baci/shared/lib';
 import Link from 'next/link';
 import { asRoute } from '@/lib/routes';
 import { ProductRequest } from './product-request';
@@ -17,6 +18,12 @@ export function SearchPageNoResultsPanel({
   hasActiveRefinements = false,
   merchantSlug,
 }: SearchPageNoResultsPanelProps) {
+  // Normalization-empty queries (e.g. "?q=!!") survive sanitization but
+  // carry no catalog term, and the intake schema rejects them for lacking
+  // a letter or number — so the request form would only ever 400. Hide it
+  // with the same normalization native search and intake use.
+  const hasSearchableQuery =
+    buildProductSearchQuery(searchQuery).normalized !== '';
   return (
     <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
       <h2 className="text-xl font-semibold text-store-background-text">
@@ -25,7 +32,7 @@ export function SearchPageNoResultsPanel({
       <p className="mt-2 text-sm text-store-background-text/55">
         We could not find any products matching “{searchQuery}”.
       </p>
-      {merchantSlug && !hasActiveRefinements && (
+      {merchantSlug && !hasActiveRefinements && hasSearchableQuery && (
         <ProductRequest
           key={searchQuery}
           query={searchQuery}

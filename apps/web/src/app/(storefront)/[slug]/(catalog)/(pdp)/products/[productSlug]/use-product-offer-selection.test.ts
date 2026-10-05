@@ -138,6 +138,42 @@ describe('useProductOfferSelection', () => {
     expect(result.current.currentPrice).toBe(80);
   });
 
+  it('reseeds to the parent condition when the routed offer disappears', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=o1'));
+    const { result, rerender } = renderHook(
+      ({ product }) => useProductOfferSelection(product),
+      { initialProps: { product: baseProduct } }
+    );
+    expect(result.current.selectedCondition).toBe('used');
+    expect(result.current.selectedOffer?.id).toBe('o1');
+    // A refresh removes o1 while another used offer survives: the stale
+    // condition must not fall through to the surviving same-condition offer.
+    rerender({
+      product: {
+        ...baseProduct,
+        offers: (baseProduct.offers ?? []).map((offer) =>
+          offer.id === 'o1' ? { ...offer, id: 'o3', price: 70 } : offer
+        ),
+      },
+    });
+    expect(result.current.selectedCondition).toBe('new');
+    expect(result.current.selectedOffer).toBeNull();
+    expect(result.current.currentPrice).toBe(100);
+  });
+
+  it('reseeds to the parent condition when offer_id leaves the URL', () => {
+    mockUseSearchParams.mockReturnValue(new URLSearchParams('offer_id=o1'));
+    const { result, rerender } = renderHook(() =>
+      useProductOfferSelection(baseProduct)
+    );
+    expect(result.current.selectedCondition).toBe('used');
+    mockUseSearchParams.mockReturnValue(new URLSearchParams(''));
+    rerender();
+    expect(result.current.selectedCondition).toBe('new');
+    expect(result.current.selectedOffer).toBeNull();
+    expect(result.current.currentPrice).toBe(100);
+  });
+
   it('seeds the default variant and follows attribute changes', () => {
     const { result } = renderHook(() =>
       useProductOfferSelection(variantProduct)

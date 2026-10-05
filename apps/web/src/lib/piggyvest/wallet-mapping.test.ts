@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolvePiggyvestWalletMapping } from './wallet-mapping';
+import {
+  recordPiggyvestWalletMapping,
+  resolvePiggyvestWalletMapping,
+} from './wallet-mapping';
 
 const configuration = {
   environment: 'staging',
@@ -66,6 +69,81 @@ describe('resolvePiggyvestWalletMapping', () => {
     expect(
       await resolvePiggyvestWalletMapping({ configuration, input, execute })
     ).toBeNull();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('recordPiggyvestWalletMapping', () => {
+  const recordInput = {
+    providerWalletId: 'synthetic-wallet',
+    providerCustomerId: 'synthetic-customer',
+    merchantId: configuration.expectedMerchantId,
+    customerId: '00000000-0000-4000-8000-000000000003',
+    goalId: '00000000-0000-4000-8000-000000000004',
+  };
+
+  it('records the binding with the full identity scope', async () => {
+    const execute = vi.fn(async () => ({ rows: [{ recorded: true }] }));
+
+    await expect(
+      recordPiggyvestWalletMapping({
+        configuration,
+        input: recordInput,
+        execute,
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      'SELECT piggyvest_staging.record_wallet_goal_mapping($1::uuid, $2::text, $3::text, $4::uuid, $5::uuid, $6::uuid) AS recorded',
+      [
+        configuration.integrationId,
+        recordInput.providerWalletId,
+        recordInput.providerCustomerId,
+        recordInput.merchantId,
+        recordInput.customerId,
+        recordInput.goalId,
+      ]
+    );
+  });
+
+  it('refuses a cross-merchant record without querying', async () => {
+    const execute = vi.fn();
+
+    await expect(
+      recordPiggyvestWalletMapping({
+        configuration,
+        input: { ...recordInput, merchantId: recordInput.customerId },
+        execute,
+      })
+    ).resolves.toBe(false);
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { rows: [] },
+    { rows: [{ recorded: false }] },
+    { rows: [{}] },
+  ])('fails closed when durability cannot be proven', async (response) => {
+    await expect(
+      recordPiggyvestWalletMapping({
+        configuration,
+        input: recordInput,
+        execute: async () => response,
+      })
+    ).resolves.toBe(false);
+  });
+
+  it('redacts SQL failures instead of throwing', async () => {
+    const execute = vi.fn(async () => {
+      throw new Error('sensitive SQL detail');
+    });
+
+    await expect(
+      recordPiggyvestWalletMapping({
+        configuration,
+        input: recordInput,
+        execute,
+      })
+    ).resolves.toBe(false);
     expect(execute).toHaveBeenCalledTimes(1);
   });
 });

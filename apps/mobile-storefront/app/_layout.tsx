@@ -9,12 +9,12 @@ import {
 } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
 import { AnimatedSplash } from '@/components/AnimatedSplash';
 import { ErrorFallback } from '@/components/ErrorBoundary';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
 import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparency';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
 import {
   installCrashDiagnostics,
@@ -24,7 +24,6 @@ import { offlineQueue } from '@/lib/offline-queue';
 import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-order-handler';
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
-import { activateDueSavingsReminderSafely } from '@/services/activate-savings-reminder-safely';
 import { initAnalytics } from '@/services/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -117,34 +116,12 @@ export default function RootLayout() {
     }
   }, [isInitialized]);
 
-  useEffect(() => {
-    if (isInitialized && isStorageReady && isTrackingAuthorizationSettled) {
-      activateDueSavingsReminderSafely();
-    }
-  }, [isInitialized, isStorageReady, isTrackingAuthorizationSettled]);
-
-  // A future-dated manual plan stores only a pending request — no OS
-  // notification exists until its start date passes. The boot effect above
-  // covers cold starts; this foreground listener covers an app that stays
-  // installed and running across the start date, converting the request
-  // into the recurring series the next time the user foregrounds. Gated on
-  // the same boot-readiness signals plus a signed-in user, via ref (read
-  // fresh on every event) so logged-out and pre-init foregrounds skip the
-  // storage/capability work without depending on the service's own guard.
-  const bootReadyRef = useRef(false);
-  bootReadyRef.current =
-    Boolean(storeUser) &&
-    isInitialized &&
-    isStorageReady &&
-    isTrackingAuthorizationSettled;
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active' && bootReadyRef.current) {
-        activateDueSavingsReminderSafely();
-      }
-    });
-    return () => subscription.remove();
-  }, []);
+  useSavingsReminderActivation({
+    storeUser,
+    isInitialized,
+    isStorageReady,
+    isTrackingAuthorizationSettled,
+  });
 
   const { isStartupAdTrackingReady } = useStartupAdTrackingInitialization({
     isInitialized,

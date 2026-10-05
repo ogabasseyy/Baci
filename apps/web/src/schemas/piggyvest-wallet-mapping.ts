@@ -26,4 +26,22 @@ export const piggyvestWalletMappingSchemas = {
         .strict()
     )
     .max(1),
+  recordInput: z
+    .object({
+      providerWalletId: piggyvestProviderIdSchema,
+      providerCustomerId: piggyvestProviderIdSchema,
+      merchantId: z.uuid(),
+      customerId: z.uuid(),
+      goalId: z.uuid(),
+    })
+    .strict(),
+  recordResponse: z
+    .array(
+      z
+        .object({
+          recorded: z.boolean(),
+        })
+        .strict()
+    )
+    .length(1),
 };

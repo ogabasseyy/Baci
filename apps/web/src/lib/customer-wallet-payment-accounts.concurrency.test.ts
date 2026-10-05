@@ -140,7 +140,11 @@ describe('customer wallet payment account conflicts', () => {
     });
   });
 
-  it('reactivates the own slot when a retry collides with an inactive row', async () => {
+  // Contract change (Codex P1 + retained-DVA spec non-goals): a disabled
+  // row is never reactivated by a funding retry — re-enable requires a
+  // separately reviewed workflow. This test previously asserted the
+  // spec-violating silent reactivation.
+  it('refuses to reactivate a disabled slot when a retry collides with it', async () => {
     mockNewDedicatedAccount();
     const accountQuery = createMaybeSingleQuery(null);
     const orderAliasQuery = createSelectRowsQuery([]);
@@ -154,6 +158,46 @@ describe('customer wallet payment account conflicts', () => {
       ...existingAccountRow,
       account_number: '1111111111',
       status: 'disabled',
+    });
+    const supabase = {
+      from: vi
+        .fn()
+        .mockReturnValueOnce(accountQuery)
+        .mockReturnValueOnce(orderAliasQuery)
+        .mockReturnValueOnce(insertQuery)
+        .mockReturnValueOnce(rereadQuery)
+        .mockReturnValueOnce(receiverQuery)
+        .mockReturnValueOnce(stalledQuery),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer,
+        merchant,
+        supabase,
+      })
+    ).rejects.toMatchObject({
+      code: 'WALLET_DVA_DISABLED_ACCOUNT',
+    });
+  });
+
+  it('reactivates a pending_review slot when the provider identity matches', async () => {
+    mockNewDedicatedAccount();
+    const accountQuery = createMaybeSingleQuery(null);
+    const orderAliasQuery = createSelectRowsQuery([]);
+    const { query: insertQuery } = createInsertErrorQuery({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint',
+    });
+    const rereadQuery = createMaybeSingleQuery(null);
+    const receiverQuery = createMaybeSingleQuery(null);
+    const stalledQuery = createMaybeSingleQuery({
+      ...existingAccountRow,
+      account_number: '2222222222',
+      provider_account_id: '98',
+      provider_customer_code: 'CUS_new',
+      status: 'pending_review',
     });
     const reactivatedRow = {
       ...existingAccountRow,
@@ -192,6 +236,46 @@ describe('customer wallet payment account conflicts', () => {
     );
   });
 
+  it('rejects a pending_review slot when the provider identity differs', async () => {
+    mockNewDedicatedAccount();
+    const accountQuery = createMaybeSingleQuery(null);
+    const orderAliasQuery = createSelectRowsQuery([]);
+    const { query: insertQuery } = createInsertErrorQuery({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint',
+    });
+    const rereadQuery = createMaybeSingleQuery(null);
+    const receiverQuery = createMaybeSingleQuery(null);
+    const stalledQuery = createMaybeSingleQuery({
+      ...existingAccountRow,
+      account_number: '1111111111',
+      provider_account_id: '97',
+      provider_customer_code: 'CUS_existing',
+      status: 'pending_review',
+    });
+    const supabase = {
+      from: vi
+        .fn()
+        .mockReturnValueOnce(accountQuery)
+        .mockReturnValueOnce(orderAliasQuery)
+        .mockReturnValueOnce(insertQuery)
+        .mockReturnValueOnce(rereadQuery)
+        .mockReturnValueOnce(receiverQuery)
+        .mockReturnValueOnce(stalledQuery),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer,
+        merchant,
+        supabase,
+      })
+    ).rejects.toMatchObject({
+      code: 'WALLET_DVA_PENDING_REVIEW_CONFLICT',
+    });
+  });
+
   it('converges on the winner when a concurrent retry reactivates first', async () => {
     // This request provisions dedicated account A (2222222222) but loses
     // the reactivation race; the concurrent retry already flipped the slot
@@ -207,8 +291,10 @@ describe('customer wallet payment account conflicts', () => {
     const receiverQuery = createMaybeSingleQuery(null);
     const stalledQuery = createMaybeSingleQuery({
       ...existingAccountRow,
-      account_number: '1111111111',
-      status: 'disabled',
+      account_number: '2222222222',
+      provider_account_id: '98',
+      provider_customer_code: 'CUS_new',
+      status: 'pending_review',
     });
     const { maybeSingle, neq, query: updateQuery } = createUpdateQuery(null);
     maybeSingle.mockResolvedValue({ data: null, error: null });
@@ -254,8 +340,8 @@ describe('customer wallet payment account conflicts', () => {
 
   it('propagates the update error when reactivation fails on an inactive row', async () => {
     // Unlike the lost race above, the guarded update itself errors (the
-    // slot is still disabled): converging on the reread row would return
-    // a DVA that was never reactivated.
+    // slot is still pending_review): converging on the reread row would
+    // return a DVA that was never reactivated.
     mockNewDedicatedAccount();
     const accountQuery = createMaybeSingleQuery(null);
     const orderAliasQuery = createSelectRowsQuery([]);
@@ -267,8 +353,10 @@ describe('customer wallet payment account conflicts', () => {
     const receiverQuery = createMaybeSingleQuery(null);
     const stalledQuery = createMaybeSingleQuery({
       ...existingAccountRow,
-      account_number: '1111111111',
-      status: 'disabled',
+      account_number: '2222222222',
+      provider_account_id: '98',
+      provider_customer_code: 'CUS_new',
+      status: 'pending_review',
     });
     const { maybeSingle, query: updateQuery } = createUpdateQuery(null);
     maybeSingle.mockResolvedValue({
@@ -277,8 +365,10 @@ describe('customer wallet payment account conflicts', () => {
     });
     const stalledRereadQuery = createMaybeSingleQuery({
       ...existingAccountRow,
-      account_number: '1111111111',
-      status: 'disabled',
+      account_number: '2222222222',
+      provider_account_id: '98',
+      provider_customer_code: 'CUS_new',
+      status: 'pending_review',
     });
     const supabase = {
       from: vi

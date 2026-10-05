@@ -91,6 +91,7 @@ beforeEach(() => {
     status: 'ready',
     accounts,
   });
+  vi.mocked(base.execute).mockResolvedValue({ rows: [{ recorded: true }] });
 });
 
 describe('ensurePiggyvestPlanFunding', () => {
@@ -160,6 +161,28 @@ describe('ensurePiggyvestPlanFunding', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /synthetic-customer|synthetic-wallet/
     );
+    expect(base.execute).toHaveBeenCalledWith(
+      expect.stringContaining('record_wallet_goal_mapping'),
+      [
+        configuration.integrationId,
+        'synthetic-wallet',
+        'synthetic-customer',
+        merchantId,
+        customerId,
+        goalId,
+      ]
+    );
+  });
+
+  it('stays mapping-pending when the wallet binding cannot be proven durable', async () => {
+    vi.mocked(base.execute).mockResolvedValueOnce({ rows: [] });
+
+    const result = await ensurePiggyvestPlanFunding(base);
+
+    expect(result).toEqual({ status: 'pending', code: 'MAPPING_PENDING' });
+    expect(
+      vi.mocked(retrievePiggyvestStagingFundingAccounts)
+    ).not.toHaveBeenCalled();
   });
 
   it('recovers an already-dispatched customer before provisioning the wallet', async () => {

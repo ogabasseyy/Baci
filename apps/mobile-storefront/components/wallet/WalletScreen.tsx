@@ -20,10 +20,10 @@ import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import { startSavingsWalletTopUp } from './start-savings-wallet-top-up';
 import { useWalletAppearance } from './use-wallet-appearance';
+import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { useWalletSavingsAmount } from './use-wallet-savings-amount';
-import { fundWallet, redeemWalletPoints } from './wallet-screen.handlers';
 import {
   deriveWalletDisplayData,
   getWalletLoadingMessage,
@@ -69,13 +69,35 @@ export function WalletScreen({
   } = useMerchantPaymentSettings();
   const redeemMutation = useRedeemPoints();
   const createFundingAccountMutation = useCreateWalletFundingAccount();
-  const [redeemPoints, setRedeemPoints] = useState('');
-  const [showRedeemPanel, setShowRedeemPanel] = useState(
-    routeAction === 'redeem'
-  );
-  const [fundAmount, setFundAmount] = useState(routeRequiredAmount);
-  const [showFundPanel, setShowFundPanel] = useState(routeAction === 'fund');
-  const [isFundPending, setIsFundPending] = useState(false);
+  const activeMerchantId =
+    pickMerchantId(merchantId, CONFIG.MERCHANT_ID) ?? undefined;
+  const {
+    fundAmount,
+    fundReturnTo,
+    handleFundWallet,
+    handleRedeemPoints,
+    isFundPending,
+    redeemPoints,
+    resetFundPanel,
+    resetRedeemPanel,
+    setFundAmount,
+    setFundReturnTo,
+    setIsFundPending,
+    setRedeemPoints,
+    setShowFundPanel,
+    setShowRedeemPanel,
+    showFundPanel,
+    showRedeemPanel,
+  } = useWalletFundRedeemPanels({
+    activeMerchantId,
+    activeMerchantSlug: CONFIG.MERCHANT_SLUG?.trim() || undefined,
+    customer,
+    redeemPointsMutation: redeemMutation.mutateAsync,
+    routeAction,
+    routeRequiredAmount,
+    user,
+    walletReturnTo,
+  });
   const [savingsContributionAmount, setSavingsContributionAmount] =
     useWalletSavingsAmount(routeAction, savingsAmount);
   const [showSavingsProgressModal, setShowSavingsProgressModal] = useState(
@@ -84,9 +106,6 @@ export function WalletScreen({
   const [isAddingSavingsContribution, setIsAddingSavingsContribution] =
     useState(false);
   const savingsContributionIdempotencyKeyRef = useRef<string | null>(null);
-  const [fundReturnTo, setFundReturnTo] = useState(walletReturnTo);
-  const activeMerchantId =
-    pickMerchantId(merchantId, CONFIG.MERCHANT_ID) ?? undefined;
   const hasSavedCards = useWalletSavedCards(customer?.id, activeMerchantId);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
   const hasMerchantContext = Boolean(activeMerchantId || activeMerchantSlug);
@@ -134,34 +153,6 @@ export function WalletScreen({
     setShowSavingsProgressModal,
     walletReturnTo,
   });
-  const resetFundPanel = () => {
-    setShowFundPanel(false);
-    setFundAmount('');
-    setFundReturnTo(walletReturnTo);
-  };
-  const resetRedeemPanel = () => {
-    setShowRedeemPanel(false);
-    setRedeemPoints('');
-  };
-  const handleFundWallet = () =>
-    fundWallet({
-      activeMerchantId,
-      activeMerchantSlug,
-      customer,
-      fundAmount,
-      resetFundPanel,
-      setIsFundPending,
-      user,
-      walletReturnTo: fundReturnTo,
-    });
-  const handleRedeemPoints = () =>
-    redeemWalletPoints({
-      clearRedeemPoints: () => setRedeemPoints(''),
-      closeRedeemPanel: () => setShowRedeemPanel(false),
-      customerId: customer?.id,
-      rawPoints: redeemPoints,
-      redeemPoints: redeemMutation.mutateAsync,
-    });
   if (authLoading) {
     return <WalletScreenView colors={colors} presentation={presentation} />;
   }

@@ -13,7 +13,6 @@ import {
 } from '@/schemas/customer-savings';
 import { prepareCreateSavingsGoalDevice } from './prepare-create-savings-goal-device';
 import {
-  buildGoalRequestFingerprint,
   formatSavingsGoal,
   mapSavingsRpcErrorStatus,
   resolveCreateGoalRpcRow,
@@ -21,6 +20,7 @@ import {
   toSavingsRouteNumber,
   toSavingsRpcError,
 } from './route-helpers';
+import { tryReplaySavingsGoalCreation } from './route-replay';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -158,74 +158,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return resolved.response;
     }
 
-    // Idempotent replay before catalogue validation and feature gates: if
-    // creation committed but the response was lost, the retained key
-    // recovers the goal even when the product/variant was archived since
-    // or the merchant disabled savings/auto-debit after creation. The
-    // fingerprint must match exactly — an edited plan falls through to the
-    // normal path so the RPC raises mismatched_goal_idempotency_payload
-    // instead of returning a stale goal.
-    const requestFingerprint = parsed.data.goalIdempotencyKey
-      ? buildGoalRequestFingerprint({
-          breakFeePercent: parsed.data.breakFeePercent,
-          contributionAmount: parsed.data.contributionAmount,
-          contributionFrequency: parsed.data.contributionFrequency,
-          earlyEndFeeAccepted: parsed.data.earlyEndFeeAccepted,
-          initialContributionAmount: parsed.data.initialContributionAmount,
-          maturityDate: parsed.data.maturityDate,
-          metadata: parsed.data.metadata,
-          preferredDebitTime: parsed.data.preferredDebitTime,
-          productId: parsed.data.productId,
-          savedPaymentMethodId: parsed.data.savedPaymentMethodId,
-          sourceMode: parsed.data.sourceMode,
-          startDate: parsed.data.startDate,
-          targetAmount: parsed.data.targetAmount,
-          title: parsed.data.title ?? 'Device savings goal',
-          variantId: parsed.data.variantId,
-        })
-      : null;
-    if (parsed.data.goalIdempotencyKey && requestFingerprint) {
-      const replayResult = await resolved.supabase
-        .from('customer_savings_goals')
-        .select(
-          'id, status, current_amount, contribution_amount, contribution_frequency, goal_request_fingerprint'
-        )
-        .eq('merchant_id', resolved.merchant.id)
-        .eq('customer_id', resolved.customer.id)
-        .eq('goal_idempotency_key', parsed.data.goalIdempotencyKey)
-        .maybeSingle();
-      if (replayResult.error) {
-        throw replayResult.error;
-      }
-      if (
-        replayResult.data &&
-        replayResult.data.goal_request_fingerprint === requestFingerprint
-      ) {
-        const walletResult = await resolved.supabase
-          .from('customer_wallets')
-          .select('available_balance')
-          .eq('merchant_id', resolved.merchant.id)
-          .eq('customer_id', resolved.customer.id)
-          .maybeSingle();
-        if (walletResult.error) {
-          throw walletResult.error;
-        }
-        return NextResponse.json({
-          contributionAmount: toSavingsRouteNumber(
-            replayResult.data.contribution_amount
-          ),
-          contributionFrequency: replayResult.data.contribution_frequency,
-          contributionId: null,
-          currentAmount: toSavingsRouteNumber(replayResult.data.current_amount),
-          goalId: replayResult.data.id,
-          goalStatus: replayResult.data.status,
-          success: true,
-          walletBalance: toSavingsRouteNumber(
-            walletResult.data?.available_balance ?? 0
-          ),
-        });
-      }
+    const replay = await tryReplaySavingsGoalCreation({
+      customerId: resolved.customer.id,
+      goalInput: parsed.data,
+      merchantId: resolved.merchant.id,
+      supabase: resolved.supabase,
+    });
+    if (replay.kind === 'replayed') {
+      return replay.response;
     }
+    const requestFingerprint = replay.requestFingerprint;
 
     const featureSettings = await getCustomerSavingsFeatureSettings({
       customerId: resolved.customer.id,

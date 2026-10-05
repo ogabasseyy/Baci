@@ -98,7 +98,8 @@ function mockSupabase(
       },
     ],
     error: null,
-  }
+  },
+  bridgeResult: { data: unknown; error: unknown } = { data: [], error: null }
 ): {
   client: SupabaseClient;
   upsert: ReturnType<typeof vi.fn>;
@@ -113,7 +114,9 @@ function mockSupabase(
   const verifySelect = vi.fn(() => ({
     eq: vi.fn(() => ({ maybeSingle: async () => verifyResult })),
   }));
-  const rpc = vi.fn(async () => rpcResult);
+  const rpc = vi.fn(async (fn: string) =>
+    fn === 'resolve_staging_wallet_owner' ? bridgeResult : rpcResult
+  );
   return {
     client: {
       from: vi.fn((table: string) =>
@@ -191,6 +194,44 @@ describe('recordInflowCredit', () => {
     expect(error).toBeInstanceOf(InflowLedgerError);
     expect(error).toMatchObject({ code: 'INFLOW_LEDGER_UNMAPPED' });
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('credits a dedicated wallet resolved through the staging bridge', async () => {
+    const { client } = mockSupabase(
+      {
+        data: [{ provider_transaction_id: 'provider-txn-synthetic-001' }],
+        error: null,
+      },
+      { data: null, error: null },
+      { data: STORED_CREDIT_ROW, error: null },
+      {
+        data: [
+          {
+            success: true,
+            outcome: 'projected',
+            contribution_id: 'd3b2a1f0-9c8e-4b7a-8f6e-5d4c3b2a1908',
+            goal_id: 'e4c3b2a1-0d9f-4c8b-9a7f-6e5d4c3b2a19',
+            projected_amount: 17500,
+            goal_current_amount: 17500,
+            goal_status: 'active',
+          },
+        ],
+        error: null,
+      },
+      {
+        data: [
+          {
+            customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
+            merchant_id: '43e157b6-179c-432a-9392-e0827da96d82',
+          },
+        ],
+        error: null,
+      }
+    );
+
+    await expect(recordInflowCredit(client, inflowEvent)).resolves.toBe(
+      'credited'
+    );
   });
 
   it('fails retryable without credit on a customer mismatch', async () => {

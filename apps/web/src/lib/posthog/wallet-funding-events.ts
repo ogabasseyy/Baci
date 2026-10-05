@@ -34,10 +34,12 @@ export const WALLET_FUNDING_TELEMETRY = {
     // (@/lib/customer-wallet-payment-account-types) …
     customerNameRequired: 'CUSTOMER_NAME_REQUIRED',
     customerPhoneRequired: 'CUSTOMER_PHONE_REQUIRED',
+    disabledAccount: 'WALLET_DVA_DISABLED_ACCOUNT',
     gatewayNotConfigured: 'GATEWAY_NOT_CONFIGURED',
     paystackCustomerError: 'PAYSTACK_CUSTOMER_ERROR',
     paystackDvaError: 'PAYSTACK_DVA_ERROR',
     orderAliasConflict: 'WALLET_DVA_ORDER_ALIAS_CONFLICT',
+    pendingReviewConflict: 'WALLET_DVA_PENDING_REVIEW_CONFLICT',
     receiverConflict: 'WALLET_DVA_RECEIVER_CONFLICT',
     storageError: 'WALLET_DVA_STORAGE_ERROR',
     subaccountConflict: 'WALLET_DVA_SUBACCOUNT_CONFLICT',

@@ -71,6 +71,11 @@ export const PIGGYVEST_POSTGRES_STATEMENTS = {
     parameters: 4,
     roles: ['piggyvest_staging_provisioner'],
   },
+  recordWalletGoalMapping: {
+    text: 'SELECT piggyvest_staging.record_wallet_goal_mapping($1::uuid, $2::text, $3::text, $4::uuid, $5::uuid, $6::uuid) AS recorded',
+    parameters: 6,
+    roles: ['piggyvest_staging_provisioner'],
+  },
   prepareProvisioning: {
     text: 'SELECT intent_id, outcome, status FROM piggyvest_staging.prepare_provisioning_intent($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::bytea)',
     parameters: 6,

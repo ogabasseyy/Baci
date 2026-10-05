@@ -353,6 +353,7 @@ jobs:
           --sql-check supabase/migrations/tests/claim_push_tokenless_retry.sql
           --sql-check supabase/migrations/tests/requeue_push_rate_limited.sql
           --sql-check supabase/migrations/tests/plan_transfer_goal_projection.sql
+          --sql-check supabase/migrations/tests/staging_wallet_mapping_bridges.sql
           --sql-check supabase/migrations/tests/plan_transfer_projection_grants.sql
           --sql-check supabase/migrations/tests/finish_push_unregistered.sql
           --sql-check supabase/migrations/tests/plan_transfer_wallet_binding.sql

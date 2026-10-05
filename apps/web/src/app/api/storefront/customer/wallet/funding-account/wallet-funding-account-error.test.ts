@@ -16,7 +16,11 @@ describe('walletAccountErrorStatus', () => {
 
   it('maps configuration and DVA conflict codes to 409', () => {
     expect(walletAccountErrorStatus('GATEWAY_NOT_CONFIGURED')).toBe(409);
+    expect(walletAccountErrorStatus('WALLET_DVA_DISABLED_ACCOUNT')).toBe(409);
     expect(walletAccountErrorStatus('WALLET_DVA_ORDER_ALIAS_CONFLICT')).toBe(
+      409
+    );
+    expect(walletAccountErrorStatus('WALLET_DVA_PENDING_REVIEW_CONFLICT')).toBe(
       409
     );
     expect(walletAccountErrorStatus('WALLET_DVA_SUBACCOUNT_CONFLICT')).toBe(

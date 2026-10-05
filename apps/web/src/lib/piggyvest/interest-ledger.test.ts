@@ -67,6 +67,7 @@ function mockSupabase(options: {
   listResult?: { data: unknown; error: unknown };
   mappingResult?: { data: unknown; error: unknown };
   verifyResult?: { data: unknown; error: unknown };
+  bridgeResult?: { data: unknown; error: unknown };
 }): {
   client: SupabaseClient;
   upsert: ReturnType<typeof vi.fn>;
@@ -93,6 +94,7 @@ function mockSupabase(options: {
       maybeSingle: async () => verifyResult,
     })),
   }));
+  const bridgeResult = options.bridgeResult ?? { data: [], error: null };
   return {
     client: {
       from: vi.fn((table: string) =>
@@ -100,6 +102,7 @@ function mockSupabase(options: {
           ? { select: mappingSelect }
           : { upsert, select: verifySelect }
       ),
+      rpc: vi.fn(async () => bridgeResult),
     } as unknown as SupabaseClient,
     upsert,
     mappingEq,

@@ -10,6 +10,7 @@ import { recoverPiggyvestProvisioning } from './provisioning-recovery-client';
 import { createPiggyvestProvisioningRecoveryStore } from './provisioning-recovery-store';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
 import { projectPiggyvestStagingProviderConfiguration } from './staging-provider-configuration';
+import { recordPiggyvestWalletMapping } from './wallet-mapping';
 
 type EnsureInput = {
   configuration: unknown;
@@ -210,6 +211,28 @@ export async function ensurePiggyvestPlanFunding(
 
   const providerCustomerId = walletStep.ids.providerCustomerId;
   const providerWalletId = walletStep.ids.providerWalletId;
+  const mappingRecorded = await recordPiggyvestWalletMapping({
+    configuration: {
+      environment: config.environment,
+      integrationId: config.integrationId,
+      expectedMerchantId: config.expectedMerchantId,
+    },
+    input: {
+      providerWalletId,
+      providerCustomerId,
+      merchantId: input.customer.merchantId,
+      customerId: input.customer.customerId,
+      goalId: input.customer.goalId,
+    },
+    execute: input.execute,
+  });
+  if (!mappingRecorded) {
+    // The binding is the only durable link between the dedicated wallet
+    // and its goal: funding-accounts retrieval requires it, and so do
+    // inflow/interest intake. Stay pending (idempotent re-record on
+    // retry) rather than returning accounts no webhook can attribute.
+    return { status: 'pending', code: 'MAPPING_PENDING' };
+  }
   try {
     const funding = await retrievePiggyvestStagingFundingAccounts({
       configuration: projectPiggyvestStagingProviderConfiguration(config),

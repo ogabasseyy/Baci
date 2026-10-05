@@ -12,7 +12,9 @@ export function walletAccountErrorStatus(code: string) {
 
   if (
     code === 'GATEWAY_NOT_CONFIGURED' ||
+    code === 'WALLET_DVA_DISABLED_ACCOUNT' ||
     code === 'WALLET_DVA_ORDER_ALIAS_CONFLICT' ||
+    code === 'WALLET_DVA_PENDING_REVIEW_CONFLICT' ||
     code === 'WALLET_DVA_SUBACCOUNT_CONFLICT'
   ) {
     return 409;

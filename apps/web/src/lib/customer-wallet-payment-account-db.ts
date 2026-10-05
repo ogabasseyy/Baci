@@ -311,15 +311,25 @@ export async function persistWalletPaymentAccount({
     }
 
     // The unique slot covers inactive rows: a retry after a
-    // disabled/pending_review row lands here. Self-heal by reactivating the
-    // customer's own slot with the live provider account instead of
-    // surfacing the raw constraint error.
+    // disabled/pending_review row lands here. A disabled row is never
+    // reactivated here — re-enable requires a separately reviewed workflow
+    // that resolves the original disable reason, and a new funding request
+    // is insufficient authority (retained-DVA contract). A pending_review
+    // row is repaired only when the immutable provider identity matches;
+    // anything else stays conflict evidence for review instead of being
+    // overwritten.
     const stalledAccount = await findCustomerWalletPaymentAccountAnyStatus({
       customerId,
       merchantId,
       supabase,
     });
     if (stalledAccount) {
+      if (stalledAccount.status === 'disabled') {
+        throw new CustomerWalletPaymentAccountError(
+          'WALLET_DVA_DISABLED_ACCOUNT',
+          'This wallet transfer account was disabled after review. Contact support to re-enable it.'
+        );
+      }
       if (
         stalledAccount.provider_subaccount_code !==
         account.providerSubaccountCode
@@ -327,6 +337,19 @@ export async function persistWalletPaymentAccount({
         throw new CustomerWalletPaymentAccountError(
           'WALLET_DVA_SUBACCOUNT_CONFLICT',
           'Existing wallet DVA belongs to a different Paystack subaccount'
+        );
+      }
+      if (
+        stalledAccount.status === 'pending_review' &&
+        (stalledAccount.provider_customer_code !==
+          account.providerCustomerCode ||
+          stalledAccount.account_number !== account.accountNumber ||
+          (stalledAccount.provider_account_id ?? null) !==
+            (account.providerAccountId ?? null))
+      ) {
+        throw new CustomerWalletPaymentAccountError(
+          'WALLET_DVA_PENDING_REVIEW_CONFLICT',
+          'Existing wallet DVA is under review for a different Paystack account'
         );
       }
       return reactivateWalletPaymentAccount({

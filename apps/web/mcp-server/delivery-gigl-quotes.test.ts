@@ -46,6 +46,25 @@ describe('GIG quote preparation', () => {
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], weight_kg }] }, deps)).toMatchObject({ status: 'needs_weight' });
     expect(getQuotes).not.toHaveBeenCalled();
   });
+  it.each([{ weight_value: 101, weight_unit: 'kg' }, { weight_value: 101000, weight_unit: 'g' }])('asks for a confirmed weight above the MCP catalog ceiling %#', async (catalogWeight) => {
+    const { deps, getQuotes } = fixture(catalogWeight);
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'needs_weight' });
+    expect(getQuotes).not.toHaveBeenCalled();
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], weight_kg: 0.8 }] }, deps)).toMatchObject({ status: 'quoted' });
+    expect(getQuotes.mock.calls[0]?.[0].items[0].weight).toBe(0.8);
+  });
+  it('accepts the catalog per-unit ceiling without capping total shipment weight', async () => {
+    const { deps, getQuotes } = fixture({ weight_value: 100, weight_unit: 'kg' });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
+    expect(getQuotes.mock.calls[0]?.[0].items[0]).toMatchObject({ weight: 100, quantity: 2 });
+  });
+  it.each([false, null])('treats variant stock as unconfirmed when the parent is untracked %s', async (manage_stock) => {
+    const { deps, getQuotes, rpc } = fixture({ has_variants: true, manage_stock });
+    const original = rpc.getMockImplementation();
+    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'quoted' });
+    expect(getQuotes).toHaveBeenCalledOnce();
+  });
   it.each(['', '  ', undefined])('filters an unusable service label %s', async (serviceTier) => {
     const { deps, getQuotes } = fixture();
     getQuotes.mockResolvedValue([{ provider: 'GIGL', price: 4200, currency: 'NGN', expiresAt: new Date('2099-01-01'), serviceTier }]);

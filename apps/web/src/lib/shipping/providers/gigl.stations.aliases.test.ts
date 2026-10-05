@@ -93,6 +93,20 @@ describe('GIGL city/state consistency without coordinates', () => {
     ]);
     return service;
   }
+  it('rejects contradictory sender city/state through the same resolver', async () => {
+    await expect(
+      (await service()).findStationForCity('Ikeja', 'Rivers')
+    ).resolves.toBeNull();
+  });
+  it('preserves normalized sender matches and unknown-city state fallback', async () => {
+    const lookup = await service();
+    await expect(
+      lookup.findStationForCity(' IKEJA ', 'Lagos State')
+    ).resolves.toMatchObject({ StationId: 4 });
+    await expect(
+      lookup.findStationForCity('Unknown locality', 'Rivers')
+    ).resolves.toMatchObject({ StationId: 8 });
+  });
   it('rejects an exact city in a contradictory state instead of falling back', async () => {
     await expect(
       (await service()).resolveStationForLocation({

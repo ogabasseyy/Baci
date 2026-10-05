@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
-import type { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
+import { MCP_DELIVERY_MAX_UNIT_WEIGHT_KG, type mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 import type { QuoteRequest, ShippingQuote } from '../src/lib/shipping/types';
 import { resolveMerchantCurrencyConfig } from '../src/lib/resolve-merchant-currency';
 import { randomUUID } from 'node:crypto';
@@ -52,10 +52,12 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
       price = variant.price_override ?? product.price;
       stock = variant.stock_quantity;
     } else if (item.variant_id) return unavailable();
+    // Untracked parents also leave variant stock unconfirmed, matching the public catalog.
     if (product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
-    const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= 100 ? item.weight_kg : undefined;
-    const weight = productWeightToKg(product.weight_value, product.weight_unit) ?? buyerWeight;
+    const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= MCP_DELIVERY_MAX_UNIT_WEIGHT_KG ? item.weight_kg : undefined;
+    const catalogWeight = productWeightToKg(product.weight_value, product.weight_unit);
+    const weight = catalogWeight !== null && catalogWeight <= MCP_DELIVERY_MAX_UNIT_WEIGHT_KG ? catalogWeight : buyerWeight;
     if (!weight) return { status: 'needs_weight', message: `The catalog has no usable package weight for ${product.name}. Provide the packed weight in kilograms of one unit of this product. GIG multiplies that weight by quantity; do not enter the combined weight of all units. If only a combined weight is known, confirm the per-unit packed weight or delivery at checkout. Do not guess.`, quotes: [] };
     items.push({ name: product.name, value: price, quantity: item.quantity, weight });
   }

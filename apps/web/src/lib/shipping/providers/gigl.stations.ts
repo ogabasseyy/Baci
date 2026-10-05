@@ -215,24 +215,11 @@ export class GiglStationsService {
     timeout?: number,
     signal?: AbortSignal
   ): Promise<GiglStation | null> {
-    const stations = await this.getStations(timeout, signal);
-    const normalizedCity = normalizeGiglLocation(city);
-    const normalizedState = normalizeGiglLocation(state);
-
-    let station = stations.find((s) => {
-      const cityName = normalizeGiglLocation(s.City || '');
-      const stationName = normalizeGiglLocation(s.StationName || '');
-      return cityName === normalizedCity || stationName === normalizedCity;
-    });
-
-    if (!station) {
-      station = stations.find((s) => {
-        const stateName = normalizeGiglLocation(s.StateName || s.State || '');
-        return stateName === normalizedState;
-      });
-    }
-
-    return station || null;
+    const resolution = await this.resolveStationForLocation(
+      { city, state },
+      { timeout, signal }
+    );
+    return resolution?.station ?? null;
   }
 
   async resolveStationForLocation(

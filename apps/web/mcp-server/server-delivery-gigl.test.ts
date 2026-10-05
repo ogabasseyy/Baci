@@ -6,6 +6,10 @@ import { mcpServerTestSupport } from './server-test-support';
 
 it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provider without booking or writes', async () => {
   const requests: string[] = [];
+  let variantPolicy = 'off';
+  let variantStock = 5;
+  let parentManageStock: boolean | null = true;
+  let simpleStrict = false;
   const shipmentBodies: Array<Record<string, unknown>> = [];
   const fixture = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -19,8 +23,16 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
       if (url.pathname === '/rest/v1/merchants') res.end(JSON.stringify({ id: 'merchant-1' }));
       else if (url.pathname === '/rest/v1/rpc/resolve_storefront_public_snapshot_v2') res.end(JSON.stringify([{ resolution_status: 'found', merchant_data: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' }, feature_settings: { shipping_providers: ['gigl'] } }]));
       else if (url.pathname === '/rest/v1/rpc/get_storefront_shipping_sender') res.end(JSON.stringify({ business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', state_code: 'LA', country: 'NG' }));
-      else if (url.pathname === '/rest/v1/rpc/get_storefront_product_variants') res.end(JSON.stringify([{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', price_override: 80000, stock_quantity: 5 }]));
-      else if (url.pathname === '/rest/v1/products') res.end(JSON.stringify([{ id: 'bfab9f45-7c2e-4744-be8e-9540af062406', name: 'Camera', price: 66700, weight_value: null, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }, { id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', name: 'Phone fixture', price: 50000, weight_value: 1, weight_unit: 'kg', has_variants: true, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }]));
+      else if (url.pathname === '/rest/v1/rpc/get_storefront_pdp_core_v2') {
+        const { p_merchant_id, p_product_slug } = JSON.parse(body);
+        expect(p_merchant_id).toBe('merchant-1');
+        const product = p_product_slug === 'bfab9f45-7c2e-4744-be8e-9540af062406'
+          ? { id: p_product_slug, name: 'Camera', price: 66700, weight_value: null, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: simpleStrict ? 0 : 5, product_variants: [] }
+          : { id: p_product_slug, name: 'Phone fixture', price: 50000, weight_value: 1, weight_unit: 'kg', has_variants: true, has_condition_offers: false, manage_stock: parentManageStock, stock_quantity: 5, product_variants: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: p_product_slug, price_override: 80000, stock_quantity: variantStock, inventory_tracking_policy: variantPolicy }] };
+        res.end(JSON.stringify([{ resolution_status: 'found', product_data: { ...product, merchant_id: 'merchant-1', status: 'active', variants_truncated: false } }]));
+      }
+      // Anonymous RLS exposes no variant rows; the quote must use public RPCs.
+      else if (url.pathname === '/rest/v1/product_variants') res.end('[]');
       else res.writeHead(404).end('{}');
       return;
     }
@@ -47,16 +59,40 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     const selectedVariant = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
     expect(selectedVariant.structuredContent).toMatchObject({ status: 'quoted', fee: 1100 });
     expect(shipmentBodies.at(-1)).toMatchObject({ ShipmentItems: [{ ItemName: 'Phone fixture', Value: 80000, Quantity: 1, Weight: 1 }] });
+    variantPolicy = 'serialized_strict';
+    variantStock = 0;
+    parentManageStock = false;
+    const pricedBeforeStrict = shipmentBodies.length;
+    const depleted = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
+    expect(depleted.structuredContent).toMatchObject({ status: 'unavailable', quote_available: false });
+    expect(shipmentBodies).toHaveLength(pricedBeforeStrict);
+    variantStock = 1;
+    const aggregate = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: Array.from({ length: 2 }, () => ({ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 })) } });
+    expect(aggregate.structuredContent).toMatchObject({ status: 'unavailable' });
+    expect(shipmentBodies).toHaveLength(pricedBeforeStrict);
+    variantPolicy = 'serialized_then_unlimited';
+    variantStock = 0;
+    const unlimited = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 2 }] } });
+    expect(unlimited.structuredContent).toMatchObject({ status: 'quoted' });
+    variantPolicy = 'off';
+    parentManageStock = null;
+    const pricedBeforeNull = shipmentBodies.length;
+    const nullPolicy = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
+    expect(nullPolicy.structuredContent).toMatchObject({ status: 'unavailable' });
+    simpleStrict = true;
+    const simpleAnchor = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 1, weight_kg: 0.4 }] } });
+    expect(simpleAnchor.structuredContent).toMatchObject({ status: 'unavailable' });
+    expect(shipmentBodies).toHaveLength(pricedBeforeNull);
+    simpleStrict = false;
     const pricedBeforeMismatch = shipmentBodies.length;
     const mismatchedDestination = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Rivers', city: 'Ikeja', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 1, weight_kg: 0.4 }] } });
     expect(mismatchedDestination.structuredContent).toMatchObject({ status: 'unavailable', state: 'Rivers', fee: null, quote_available: false, quotes: [] });
     expect(shipmentBodies).toHaveLength(pricedBeforeMismatch);
     const allowedRequests = new Set([
       'GET /rest/v1/merchants',
-      'GET /rest/v1/products',
       'POST /rest/v1/rpc/resolve_storefront_public_snapshot_v2',
       'POST /rest/v1/rpc/get_storefront_shipping_sender',
-      'POST /rest/v1/rpc/get_storefront_product_variants',
+      'POST /rest/v1/rpc/get_storefront_pdp_core_v2',
       'POST /login',
       'GET /localstations/get',
       'POST /price/v3',

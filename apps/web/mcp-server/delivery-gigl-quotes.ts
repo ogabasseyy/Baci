@@ -1,4 +1,3 @@
-import { getPublicSerializedVariantSummariesByProductId } from '../src/lib/public-serialized-variant-summary';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { MCP_DELIVERY_MAX_UNIT_WEIGHT_KG, type mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
@@ -32,16 +31,28 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
   if (resolveMerchantCurrencyConfig({ country: 'NG', payout_currency: typeof merchant.payout_currency === 'string' ? merchant.payout_currency : null }).code !== 'NGN') return unavailable();
   const origin = await resolvePublicMerchantSender(supabase, merchantId);
   if (!origin.ok || !origin.sender || !['NG', 'NGA', 'NIGERIA'].includes(origin.country?.trim().toUpperCase() ?? '')) return unavailable();
-  const { data: products, error } = await supabase.from('products')
-    .select('id, name, price, weight_value, weight_unit, has_variants, has_condition_offers, manage_stock, stock_quantity')
-    .eq('merchant_id', merchantId).eq('status', 'active')
-    .in('id', input.items.map((item) => item.product_id));
-  if (error || !products) return unavailable();
-  const summaries = await getPublicSerializedVariantSummariesByProductId(supabase, merchantId, input.items.map((item) => item.product_id)).catch(() => null);
-  if (!summaries) return unavailable();
+  // The anonymous PDP snapshot resolves anchor/variant policies and public
+  // serialized units inside the published merchant boundary. Direct variant
+  // table reads can silently return no rows under anonymous RLS.
+  const deadline = AbortSignal.timeout(8000);
+  const products = await Promise.all([...new Set(input.items.map((item) => item.product_id))].map(async (productId) => {
+    const query = supabase.rpc('get_storefront_pdp_core_v2', {
+      p_merchant_id: merchantId, p_product_slug: productId,
+    });
+    const bounded = typeof query.abortSignal === 'function' ? query.abortSignal(deadline).retry(false) : query;
+    const { data, error } = await bounded;
+    const row: unknown = !error && Array.isArray(data) ? data[0] : null;
+    if (!row || typeof row !== 'object' || !('resolution_status' in row) || row.resolution_status !== 'found' || !('product_data' in row)) return null;
+    const product = row.product_data;
+    if (!product || typeof product !== 'object' || Array.isArray(product)) return null;
+    const projected = product as Record<string, unknown>;
+    if (projected.id !== productId || projected.merchant_id !== merchantId || projected.status !== 'active' || projected.variants_truncated === true || ![true, false, null].includes(projected.manage_stock as boolean | null)) return null;
+    return projected;
+  })).catch(() => null);
+  if (!products || products.some((product) => !product)) return unavailable();
   const items: QuoteRequest['items'] = [];
   for (const item of input.items) {
-    const product = products.find((row) => row.id === item.product_id);
+    const product = products.find((row) => row?.id === item.product_id);
     if (!product || typeof product.name !== 'string' || !product.name.trim()) return unavailable();
     let price: unknown = product.price;
     let stock: unknown = product.stock_quantity;
@@ -49,17 +60,22 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
     if (product.has_condition_offers) return { status: 'needs_selection', message: 'This product has condition offers. Confirm its exact offer and delivery at checkout.', quotes: [] };
     if (product.has_variants) {
       if (!item.variant_id) return { status: 'needs_selection', message: 'Select the exact catalog variant before quoting delivery.', quotes: [] };
-      const { data: variants, error: variantError } = await supabase.rpc('get_storefront_product_variants', { p_product_ids: [product.id] });
-      const variant = !variantError && Array.isArray(variants) ? variants.find((row) => row.product_id === product.id && row.id === item.variant_id) : undefined;
-      if (!variant) return unavailable();
-      price = variant.price_override ?? product.price;
-      stock = variant.stock_quantity;
-    } else if (item.variant_id) return unavailable();
-    const summary = summaries.find((row) => row.productId === product.id && row.variantId === (item.variant_id ?? null));
-    if (summary?.inventoryTrackingPolicy === 'serialized_strict' && (!Number.isFinite(summary.publicAvailableUnits) || summary.publicAvailableUnits < requestedQuantity)) return unavailable();
-    // Serialized summaries are authoritative; then-unlimited remains purchasable.
-    // Other untracked parents leave legacy variant stock unconfirmed.
-    if (!summary && product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
+      const variant: unknown = Array.isArray(product.product_variants) ? product.product_variants.find((row: unknown) => row !== null && typeof row === 'object' && 'id' in row && row.id === item.variant_id) : undefined;
+      if (!variant || typeof variant !== 'object' || !('product_id' in variant) || variant.product_id !== product.id) return unavailable();
+      const projected = variant as Record<string, unknown>;
+      price = projected.price_override ?? product.price;
+      stock = projected.stock_quantity ?? product.stock_quantity;
+      const policy = projected.inventory_tracking_policy;
+      if (!['off', 'serialized_strict', 'serialized_then_unlimited'].includes(policy as string)) return unavailable();
+      // Serialized strict never inherits parent stock; then-unlimited permits
+      // quoting even when only some (or no) serialized units remain.
+      if (policy === 'serialized_strict') stock = projected.stock_quantity;
+      if (policy !== 'serialized_then_unlimited' && (policy === 'serialized_strict' || product.manage_stock !== false) && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
+    } else {
+      if (item.variant_id) return unavailable();
+      // The PDP hydrates simple anchor policy into manage_stock and stock.
+      if (product.manage_stock !== false && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
+    }
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
     const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= MCP_DELIVERY_MAX_UNIT_WEIGHT_KG ? item.weight_kg : undefined;
     const catalogWeight = productWeightToKg(product.weight_value, product.weight_unit);

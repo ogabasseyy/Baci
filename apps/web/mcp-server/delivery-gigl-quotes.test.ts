@@ -1,45 +1,47 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
 
-vi.mock('../src/lib/public-serialized-variant-summary', () => ({ getPublicSerializedVariantSummariesByProductId: vi.fn().mockResolvedValue([]) }));
-import { getPublicSerializedVariantSummariesByProductId } from '../src/lib/public-serialized-variant-summary';
-beforeEach(() => { vi.mocked(getPublicSerializedVariantSummariesByProductId).mockReset().mockResolvedValue([]); });
-
 const productId = 'bfab9f45-7c2e-4744-be8e-9540af062406';
+const variantId = 'c985e013-7c2b-4655-a560-4085f27cd168';
 const input = { state: 'Lagos', city: 'Ikeja', items: [{ product_id: productId, quantity: 2 }] };
 function fixture(overrides = {}) {
-  const product = { id: productId, name: 'Camera', price: 66700, weight_value: 500, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5, ...overrides };
+  const product: Record<string, unknown> = { merchant_id: 'merchant-1', status: 'active', product_variants: [], variants_truncated: false, id: productId, name: 'Camera', price: 66700, weight_value: 500, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5, ...overrides };
   const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockResolvedValue({ data: [product], error: null }) };
-  const supabase = { from: vi.fn(() => query), rpc: vi.fn().mockImplementation((name: string, _args?: unknown) => Promise.resolve(name === 'resolve_storefront_public_snapshot_v2' ? { data: [{ resolution_status: 'found', merchant_data: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' }, feature_settings: { shipping_providers: ['gigl'] } }], error: null } : { data: { business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', phone: '', state_code: 'LA', country: 'NG' }, error: null })) };
+  const supabase = { from: vi.fn(() => query), rpc: vi.fn().mockImplementation((name: string, _args?: unknown) => Promise.resolve(name === 'get_storefront_pdp_core_v2' ? { data: [{ resolution_status: 'found', product_data: product }], error: null } : name === 'resolve_storefront_public_snapshot_v2' ? { data: [{ resolution_status: 'found', merchant_data: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' }, feature_settings: { shipping_providers: ['gigl'] } }], error: null } : { data: { business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', phone: '', state_code: 'LA', country: 'NG' }, error: null })) };
   const getQuotes = vi.fn().mockResolvedValue([{ provider: 'GIGL', price: 4200, serviceTier: 'GoStandard', currency: 'NGN', expiresAt: new Date('2099-01-01'), isStationPickup: false }]);
-  return { deps: { supabase: supabase as never, merchantId: 'merchant-1', getQuotes }, getQuotes, query, rpc: supabase.rpc };
+  return { deps: { supabase: supabase as never, merchantId: 'merchant-1', getQuotes }, getQuotes, query, product, rpc: supabase.rpc };
 }
 
 describe('GIG quote preparation', () => {
-  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('uses serialized availability for an untracked zero-stock variant %s', async (inventoryTrackingPolicy) => {
-    const variantId = 'c985e013-7c2b-4655-a560-4085f27cd168';
-    const { deps, getQuotes, rpc } = fixture({ has_variants: true, manage_stock: false });
-    const original = rpc.getMockImplementation();
-    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: variantId, product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
-    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId, inventoryTrackingPolicy, publicAvailableUnits: 0 }]);
-    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: inventoryTrackingPolicy === 'serialized_strict' ? 'unavailable' : 'quoted' });
-    expect(getQuotes).toHaveBeenCalledTimes(inventoryTrackingPolicy === 'serialized_strict' ? 0 : 1);
+  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('uses anonymous hydrated serialized availability on an untracked parent %s', async (policy) => {
+    const { deps, getQuotes, product } = fixture({ has_variants: true, manage_stock: false });
+    product.product_variants = [{ id: variantId, product_id: productId, price_override: 80000, stock_quantity: 0, inventory_tracking_policy: policy }];
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: policy === 'serialized_strict' ? 'unavailable' : 'quoted' });
+    expect(getQuotes).toHaveBeenCalledTimes(policy === 'serialized_strict' ? 0 : 1);
   });
-  it.each([0, 1, NaN, Infinity])('rejects insufficient strict serialized units on an untracked parent %s', async (publicAvailableUnits) => {
-    const { deps, getQuotes } = fixture({ manage_stock: false });
-    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId: null, inventoryTrackingPolicy: 'serialized_strict', publicAvailableUnits }]);
+  it.each([0, 1, NaN, Infinity, null])('rejects insufficient strict serialized units %s', async (stock_quantity) => {
+    const { deps, getQuotes, product } = fixture({ has_variants: true, manage_stock: false });
+    product.product_variants = [{ id: variantId, product_id: productId, stock_quantity, inventory_tracking_policy: 'serialized_strict' }];
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('preserves a purchasable simple anchor snapshot %s', async (policy) => {
+    const { deps } = fixture({ manage_stock: policy === 'serialized_strict', stock_quantity: policy === 'serialized_strict' ? 2 : 0 });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
+  });
+  it.each([
+    { data: [], error: null }, { data: null, error: { message: 'private' } },
+    { data: [{ resolution_status: 'not_found', product_data: null }], error: null },
+  ])('fails closed when the anonymous product snapshot cannot be read %#', async (response) => {
+    const { deps, getQuotes, rpc } = fixture();
+    const original = rpc.getMockImplementation();
+    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_pdp_core_v2' ? Promise.resolve(response) as never : original?.(name, args) as never);
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable' });
     expect(getQuotes).not.toHaveBeenCalled();
   });
-  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('preserves purchasable serialized policy %s', async (inventoryTrackingPolicy) => {
-    const { deps } = fixture({ manage_stock: false });
-    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId: null, inventoryTrackingPolicy, publicAvailableUnits: inventoryTrackingPolicy === 'serialized_strict' ? 2 : 0 }]);
-    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
-  });
-  it('fails closed when the public serialized summary cannot be read', async () => {
-    const { deps, getQuotes } = fixture();
-    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockRejectedValue(new Error('private database detail'));
+  it.each([{ merchant_id: 'other' }, { variants_truncated: true }, { status: 'draft' }])('rejects unsafe or partial public projections %#', async (overrides) => {
+    const { deps, getQuotes } = fixture(overrides);
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable' });
     expect(getQuotes).not.toHaveBeenCalled();
   });
@@ -88,12 +90,33 @@ describe('GIG quote preparation', () => {
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
     expect(getQuotes.mock.calls[0]?.[0].items[0]).toMatchObject({ weight: 100, quantity: 2 });
   });
-  it.each([false, null])('treats variant stock as unconfirmed when the parent is untracked %s', async (manage_stock) => {
-    const { deps, getQuotes, rpc } = fixture({ has_variants: true, manage_stock });
-    const original = rpc.getMockImplementation();
-    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
+  it.each([false])('treats variant stock as unconfirmed when the parent is untracked %s', async (manage_stock) => {
+    const { deps, getQuotes, product } = fixture({ has_variants: true, manage_stock });
+    product.product_variants = [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, inventory_tracking_policy: 'off', stock_quantity: 0 }];
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'quoted' });
     expect(getQuotes).toHaveBeenCalledOnce();
+  });
+  it('does not quote a depleted legacy variant under a null stock policy', async () => {
+    const { deps, getQuotes, product } = fixture({ has_variants: true, manage_stock: null });
+    product.product_variants = [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, inventory_tracking_policy: 'off', stock_quantity: 0 }];
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it.each([0, 1, null])('rejects insufficient simple stock under a null parent policy %s', async (stock_quantity) => {
+    const { deps, getQuotes } = fixture({ manage_stock: null, stock_quantity });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it.each([null, true])('preserves stocked legacy variants including inherited parent quantity %s', async (manage_stock) => {
+    const { deps, product } = fixture({ has_variants: true, manage_stock });
+    product.product_variants = [{ id: variantId, product_id: productId, stock_quantity: null, inventory_tracking_policy: 'off' }];
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: 'quoted' });
+  });
+  it('fails closed for an absent effective variant policy', async () => {
+    const { deps, product, getQuotes } = fixture({ has_variants: true, manage_stock: false });
+    product.product_variants = [{ id: variantId, product_id: productId, stock_quantity: 5 }];
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
   });
   it.each(['', '  ', undefined])('filters an unusable service label %s', async (serviceTier) => {
     const { deps, getQuotes } = fixture();
@@ -116,9 +139,8 @@ describe('GIG quote preparation', () => {
     expect(getQuotes).not.toHaveBeenCalled();
   });
   it('does not quote a sold-out selected variant', async () => {
-    const { deps, getQuotes, rpc } = fixture({ has_variants: true });
-    const original = rpc.getMockImplementation();
-    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
+    const { deps, getQuotes, product } = fixture({ has_variants: true });
+    product.product_variants = [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, inventory_tracking_policy: 'off', stock_quantity: 0 }];
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'unavailable' });
     expect(getQuotes).not.toHaveBeenCalled();
   });
@@ -165,9 +187,8 @@ describe('GIG quote preparation', () => {
     expect(getQuotes).not.toHaveBeenCalled();
   });
   it('uses the selected variant override instead of the parent price', async () => {
-    const { deps, getQuotes, rpc } = fixture({ has_variants: true });
-    const original = rpc.getMockImplementation();
-    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 5 }], error: null }) as never : original?.(name, args) as never);
+    const { deps, getQuotes, product } = fixture({ has_variants: true });
+    product.product_variants = [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, inventory_tracking_policy: 'off', stock_quantity: 5 }];
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'quoted' });
     expect(getQuotes.mock.calls[0]?.[0].items[0].value).toBe(80000);
   });

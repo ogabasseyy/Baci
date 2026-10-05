@@ -26,6 +26,29 @@ const handoff = {
 
 describe('BlogReviewHandoffImporter', () => {
   it.each([
+    2_000_000, 2_000_001,
+  ])('enforces the advertised decimal byte limit at %s bytes', async (size) => {
+    const onImport = vi.fn();
+    render(<BlogReviewHandoffImporter onImport={onImport} />);
+    const file = new File(
+      [JSON.stringify(handoff).padEnd(size, ' ')],
+      'boundary.json'
+    );
+    expect(file.size).toBe(size);
+    fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+      target: { files: [file] },
+    });
+    if (size === 2_000_000) {
+      await waitFor(() => expect(onImport).toHaveBeenCalledOnce());
+    } else {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'The review file is larger than 2 MB (2,000,000 bytes).'
+      );
+      expect(onImport).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
     '{',
     'not JSON',
     '{"title":}',

@@ -26,7 +26,7 @@ export function BlogReviewHandoffImporter({
     if (!file) return;
     const generation = ++importGenerationRef.current;
     if (file.size > MAX_FILE_SIZE) {
-      setMessage('The review file is larger than 2 MB.');
+      setMessage('The review file is larger than 2 MB (2,000,000 bytes).');
       return;
     }
 

@@ -89,7 +89,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     seo_description: readText(value.seo_description),
     excerpt: readText(value.excerpt),
     category: readText(value.category),
-    intent_source: readText(value.intent_source) || 'unmapped_task_type',
+    intent_source: readText(value.intent_source) || null,
   };
   const validatedMetadata = blogPostSchema
     .pick({
@@ -118,7 +118,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     featured_image_url: featuredImageUrl,
     featured_image_variants: imageVariants,
     featured_image_width: readDimension(featuredImage.width),
-    intent: (intent || 'unknown') as BlogIntent,
+    intent: intent ? (intent as BlogIntent) : null,
     status: 'draft',
     tags: tags
       .map((tag) => tag.trim())

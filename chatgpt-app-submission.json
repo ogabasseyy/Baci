@@ -95,12 +95,12 @@
     "get_delivery_fee_info": {
       "annotations": {
         "readOnlyHint": true,
-        "openWorldHint": false,
+        "openWorldHint": true,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Returns policy guidance for a destination without booking delivery or charging a fee.",
-        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "read_only_justification": "Returns delivery policy or a live estimate without booking delivery, charging a fee, or changing a cart.",
+        "open_world_justification": "May call the external GIG carrier for a read-only delivery estimate.",
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
       }
     }
@@ -143,7 +143,7 @@
       "user_prompt": "Using Ogabassey, how much is delivery to Ikeja, Lagos?",
       "file_attachment_urls": null,
       "tools_triggered": "get_delivery_fee_info",
-      "expected_output": "Explains that Ogabassey does not publish a fixed fee or numeric quote, links the current shipping policy, and directs the shopper to checkout to confirm the destination-specific fee and timing.",
+      "expected_output": "Without selected shipment items, explains the delivery policy and asks for product IDs, quantities and exact variants before a live GIG estimate. Requests confirmed per-unit packed weight if needed; never invents rates or weights. With eligible items, returns available live estimates or explains why unavailable, and directs final confirmation to checkout.",
       "expected_output_url": null
     }
   ],

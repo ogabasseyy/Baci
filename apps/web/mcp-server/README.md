@@ -170,7 +170,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `get_ucp_cart` | Read a UCP cart session |
 | `get_product` | Get detailed product information |
 | `get_product_variants` | Get variants, conditions, prices, and availability for a product |
-| `get_delivery_fee_info` | Explain where to confirm the final delivery fee at checkout |
+| `get_delivery_fee_info` | Get live GIG estimates for selected catalog items and destination; ask for missing shipment details |
 | `get_store_info` | Shipping, returns, payment info |
 | `lookup_ucp_catalog_items` | Fetch exact product IDs through the UCP catalog lookup route |
 | `search_ucp_catalog` | Search Ogabassey products using the UCP catalog route |
@@ -294,3 +294,9 @@ Expected healthy response:
                         │  (In ChatGPT) │
                         └──────────────┘
 ```
+
+### GIG estimates in ChatGPT
+
+Configure the existing production GIG account using `GIGL_ENABLED=true`, `GIGL_BASE_URL`, `GIGL_EMAIL` and `GIGL_PASSWORD` in the server environment. Keep credentials server-side. The tool uses the anonymous-safe published merchant origin and active catalog items under RLS. It never books shipping or changes carts, orders or payments. City-only requests ask for products and quantities; missing catalog weights require a buyer-confirmed packed weight in kilograms of one unit of each product. GIG multiplies that per-unit weight by quantity: two units at 0.4kg each mean 0.8kg total. If the buyer only knows the combined package weight, ask for the per-unit packed weight or confirm at checkout; do not pass that combined total as a unit weight. Select an exact variant when applicable; condition offers currently require checkout. Quotes include expiry and door/station-pickup type and must be reconfirmed at checkout. The tool does not invent fixed rates or a default weight.
+
+MCP delivery estimates enforce a 100 kg per-unit input bound for both converted catalog weight and buyer-confirmed weight. This is an MCP input limit, not a documented GIG freight limit; larger stored values require a confirmed packed weight within the bound or checkout confirmation. No catalog value is clamped. The existing anonymous public PDP snapshot resolves anchor and variant policies and serialized inventory: strict available-unit counts must cover the aggregate selected quantity, including on untracked parents; serialized-then-unlimited remains purchasable. Other tracked parents, including legacy null stock policies, enforce hydrated catalog stock; only explicitly untracked parents leave legacy variant counts unconfirmed. Snapshot lookup errors, mismatched tenant/product identity, and truncated variant projections fail closed. No direct anonymous variant-table read is used. Sender and receiver station matching both reject contradictory exact city/state pairs without coordinates; exact city matches remain usable when the carrier omits state metadata.

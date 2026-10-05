@@ -5,6 +5,7 @@ import { applySupabaseCurrentTreeSources } from './apply-supabase-current-tree-s
 import { applySupabaseReplaySql } from './apply-supabase-replay-sql';
 import { canonicalJsonValue } from './canonical-json-value';
 import { createSupabaseReplayProjectId } from './create-supabase-replay-project-id';
+import { createSupabaseReplaySqlApplier } from './create-supabase-replay-sql-applier';
 import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
@@ -172,10 +173,11 @@ export async function runSupabaseHistoryReplay(
         )
     )
       throw new Error('Replay bootstrap order mismatch');
-    // biome-ignore format: keep this orchestration module within its 300-line cap.
-    const fileArgs = ['-X', '-w', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=sqlstate', '-f'];
-    const apply = (sqlPath: string) =>
-      run(contract.psqlBin, [...fileArgs, sqlPath], { env });
+    const apply = createSupabaseReplaySqlApplier(
+      run,
+      contract.psqlBin,
+      databaseUrl
+    );
     for (const [index, source] of orderedSources.slice(125).entries()) {
       const ordinal = index + 126;
       const sqlPath = await runtime.materializeSource(

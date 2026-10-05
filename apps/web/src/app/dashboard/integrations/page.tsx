@@ -1,4 +1,4 @@
-import { ArrowRight, ShoppingBag } from 'lucide-react';
+import { ArrowRight, Bot, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,15 @@ export const metadata = {
 };
 
 const integrations = [
+  {
+    id: 'muse',
+    name: 'Muse',
+    description:
+      'Read-only AI access to orders, inventory, and analytics through a scoped, revocable grant.',
+    href: '/dashboard/integrations/muse',
+    icon: <Bot className="size-10 text-primary" aria-label="Muse" />,
+    color: 'bg-primary/10',
+  },
   {
     id: 'google-merchant',
     name: 'Google Merchant Center',

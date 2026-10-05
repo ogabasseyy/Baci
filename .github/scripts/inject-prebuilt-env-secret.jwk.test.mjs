@@ -173,10 +173,10 @@ test('generated JWK stand-in accepts a fully resolved nonempty fallback', () => 
   assert.match(stdout, /verified.*legacy signing-secret fallback/i);
 });
 
-test('generated JWK stand-in accepts only explicit blank dotenv forms', () => {
+test('generated JWK stand-in accepts explicit blanks and the CLI sensitive marker', () => {
   const generatedValues = [];
 
-  for (const blankValue of ['', "''", '""']) {
+  for (const blankValue of ['', "''", '""', '"[SENSITIVE]"']) {
     const file = makePulledJwkEnvFile(blankValue);
     const stdout = run([JWK_KEY, file, GENERATE_ES256_JWK_STANDIN]);
     const generatedValue = parseSingleQuotedValue(file, JWK_KEY);

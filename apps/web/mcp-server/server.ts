@@ -62,6 +62,9 @@ import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { createSearchProductsToolConfig } from './search-products-tool-config';
 import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
+import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
+import { GiglProvider } from '../src/lib/shipping/providers/gigl';
+import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.constants';
 
 // =============================================================================
 // CONFIGURATION
@@ -70,6 +73,8 @@ import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
+// Preserve GIG authentication and station caches across stateless MCP requests.
+const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -1300,7 +1305,7 @@ function createOgabasseyServer() {
     'add_to_cart',
     {
       outputSchema: mcpToolOutputSchemas.add_to_cart,
-      title: 'Add to Cart',
+      title: 'Prepare Ogabassey Cart Link',
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -2027,8 +2032,13 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  // The public shipping policy does not publish a fixed fee schedule.
-  registerDeliveryFeeInfoTool(server, sanitizeString);
+  registerDeliveryFeeInfoTool(server, sanitizeString, async (input) => {
+    const merchantId = await getMerchantId();
+    if (!merchantId || !isGiglRuntimeConfigured()) {
+      return { status: 'unavailable', message: 'Live GIG quotes are unavailable. Confirm delivery at checkout.', quotes: [] };
+    }
+    return loadDeliveryGiglQuotes(input, { supabase, merchantId, getQuotes: (request) => gigl.getQuotes(request) });
+  });
 
   // [REMOVED] ask_santa
 

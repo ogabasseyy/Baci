@@ -17,15 +17,15 @@ describe('registerDeliveryFeeInfoTool', () => {
     expect(registeredTool?.name).toBe('get_delivery_fee_info');
     expect(registeredTool?.config).toMatchObject({
       title: 'Check Delivery Fee Information',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       _meta: {
         'openai/toolInvocation/invoking': 'Checking delivery information...',
         'openai/toolInvocation/invoked': 'Delivery information ready',
       },
     });
     const config = registeredTool?.config as { inputSchema: Record<string, unknown>; description: string };
-    expect(Object.keys(config.inputSchema)).toEqual(['state', 'city']);
-    expect(config.description).toContain('cannot provide a numeric quote');
+    expect(Object.keys(config.inputSchema)).toEqual(['state', 'city', 'items', 'delivery_preference']);
+    expect(config.description).toContain('live GIG Logistics');
     const inputSchema = config.inputSchema as {
       state: { safeParse: (value: string) => { success: boolean } };
       city: { safeParse: (value: string) => { success: boolean } };
@@ -41,7 +41,7 @@ describe('registerDeliveryFeeInfoTool', () => {
     expect(result).toEqual({
       content: [{
         type: 'text',
-        text: 'Ogabassey does not publish a fixed delivery fee for Ikeja, Lagos. Enter the delivery address at checkout to confirm the fee, eligibility for any free delivery, and timing. Read the current shipping policy: https://ogabassey.com/shipping',
+        text: expect.stringContaining('Which Ogabassey products and quantities'),
       }],
       structuredContent: {
         city: 'Ikeja',
@@ -49,7 +49,9 @@ describe('registerDeliveryFeeInfoTool', () => {
         policy_url: 'https://ogabassey.com/shipping',
         quote_available: false,
         state: 'Lagos',
-        status: 'requires_checkout',
+        status: 'needs_items',
+        message: expect.any(String),
+        quotes: [],
       },
     });
   });
@@ -71,7 +73,7 @@ describe('registerDeliveryFeeInfoTool', () => {
 
     expect(sanitizeString).toHaveBeenCalledExactlyOnceWith(' Ogun ', 50);
     expect(result.structuredContent).toMatchObject({ city: null, state: 'Ogun' });
-    expect(result.content[0]?.text).toContain('for Ogun.');
+    expect(result.content[0]?.text).toContain('products and quantities');
   });
 
   it.each([

@@ -106,7 +106,7 @@ describe('MCP policy and widget responses', () => {
         })
       );
       const shipping = tools.find((tool) => tool.name === 'get_delivery_fee_info');
-      expect(shipping?.description).toContain('cannot provide a numeric quote');
+      expect(shipping?.description).toContain('live GIG Logistics');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('address');
       expect(shipping?.inputSchema.properties).not.toHaveProperty('estimated_weight');
 
@@ -124,7 +124,7 @@ describe('MCP policy and widget responses', () => {
         fee: null,
         policy_url: 'https://ogabassey.com/shipping',
         quote_available: false,
-        status: 'requires_checkout',
+        status: 'needs_items',
       });
       expect(JSON.stringify(result)).not.toMatch(/GIGL|Topship|₦[0-9]|same day/i);
     } finally {

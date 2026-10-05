@@ -241,7 +241,7 @@ export class GiglStationsService {
   ): Promise<GiglStationResolution | null> {
     const stations = await this.getStations(options?.timeout, options?.signal);
     const normalizedCity = normalizeGiglLocation(location.city);
-    const cityStation = stations.find((station) =>
+    const cityStations = stations.filter((station) =>
       [station.City, station.StationName]
         .filter((value): value is string => Boolean(value))
         .some((value) => normalizeGiglLocation(value) === normalizedCity)
@@ -271,8 +271,17 @@ export class GiglStationsService {
       }
     }
 
-    if (cityStation) return { station: cityStation };
     const normalizedState = normalizeGiglLocation(location.state);
+    // An exact city in another state is contradictory. Do not silently quote
+    // that city or fall back to a different station in the requested state.
+    if (cityStations.length) {
+      const cityStation = cityStations.find((station) =>
+        [station.StateName, station.State]
+          .filter((value): value is string => Boolean(value))
+          .some((value) => normalizeGiglLocation(value) === normalizedState)
+      );
+      return cityStation ? { station: cityStation } : null;
+    }
     const stateStation = stations.find((station) =>
       [station.StateName, station.State]
         .filter((value): value is string => Boolean(value))

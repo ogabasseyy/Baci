@@ -62,3 +62,58 @@ describe('GIGL station state aliases', () => {
     ).resolves.toBeNull();
   });
 });
+
+describe('GIGL city/state consistency without coordinates', () => {
+  async function service() {
+    const { GiglStationsService } = await import('./gigl.stations');
+    const service = new GiglStationsService({} as never);
+    vi.spyOn(service, 'getStations').mockResolvedValue([
+      {
+        StationId: 4,
+        StationName: 'IKEJA',
+        City: 'Ikeja',
+        StateName: 'Lagos',
+        StationCode: undefined,
+        State: undefined,
+        Address: undefined,
+        Latitude: undefined,
+        Longitude: undefined,
+      },
+      {
+        StationId: 8,
+        StationName: 'PORT HARCOURT',
+        City: 'Port Harcourt',
+        StateName: 'Rivers',
+        StationCode: undefined,
+        State: undefined,
+        Address: undefined,
+        Latitude: undefined,
+        Longitude: undefined,
+      },
+    ]);
+    return service;
+  }
+  it('rejects an exact city in a contradictory state instead of falling back', async () => {
+    await expect(
+      (await service()).resolveStationForLocation({
+        city: 'Ikeja',
+        state: 'Rivers',
+      })
+    ).resolves.toBeNull();
+  });
+  it('preserves normalized matching pairs and state fallback for unknown cities', async () => {
+    const lookup = await service();
+    await expect(
+      lookup.resolveStationForLocation({
+        city: ' IKEJA ',
+        state: 'Lagos State',
+      })
+    ).resolves.toMatchObject({ station: { StationId: 4 } });
+    await expect(
+      lookup.resolveStationForLocation({
+        city: 'Unknown locality',
+        state: 'Rivers',
+      })
+    ).resolves.toMatchObject({ station: { StationId: 8 } });
+  });
+});

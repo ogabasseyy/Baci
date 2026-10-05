@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const MCP_DELIVERY_FEE_INFO_DESCRIPTION =
+  'Get live GIG Logistics delivery estimates for selected Ogabassey catalog products and quantities to a Nigerian city/state. Ask for products, quantity, city and any missing packed weight of one unit of each product before quoting. Weight is per unit and is multiplied by quantity; if given a combined package weight, ask for the per-unit packed weight. Never invent rates or weights. Returns door or station-pickup estimates with expiry; final address, eligibility and price must be confirmed at checkout. This tool does not modify a cart, place an order, book shipping or take payment.';
+
 export const mcpDeliveryFeeInfoInputSchema = z.object({
   state: z.string().min(2).max(50).describe('Nigerian delivery state'),
   city: z.string().min(2).max(100).optional().describe('Delivery city'),

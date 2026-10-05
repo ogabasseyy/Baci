@@ -47,6 +47,10 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     const selectedVariant = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
     expect(selectedVariant.structuredContent).toMatchObject({ status: 'quoted', fee: 1100 });
     expect(shipmentBodies.at(-1)).toMatchObject({ ShipmentItems: [{ ItemName: 'Phone fixture', Value: 80000, Quantity: 1, Weight: 1 }] });
+    const pricedBeforeMismatch = shipmentBodies.length;
+    const mismatchedDestination = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Rivers', city: 'Ikeja', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 1, weight_kg: 0.4 }] } });
+    expect(mismatchedDestination.structuredContent).toMatchObject({ status: 'unavailable', state: 'Rivers', fee: null, quote_available: false, quotes: [] });
+    expect(shipmentBodies).toHaveLength(pricedBeforeMismatch);
     const allowedRequests = new Set([
       'GET /rest/v1/merchants',
       'GET /rest/v1/products',

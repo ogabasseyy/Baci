@@ -1,6 +1,11 @@
+import { z } from 'zod';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
+import {
+  MCP_DELIVERY_FEE_INFO_DESCRIPTION,
+  mcpDeliveryFeeInfoInputSchema,
+} from '../schemas/mcp-delivery-fee-info';
 import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
@@ -169,28 +174,10 @@ export const PUBLIC_MCP_TOOLS = [
   {
     name: 'get_delivery_fee_info',
     title: 'Check Delivery Fee Information',
-    description:
-      'Explain that no fixed delivery fee is published and direct shoppers to checkout to confirm their destination-specific fee and timing.',
-    inputSchema: {
-      $schema: DRAFT_07_SCHEMA,
-      type: 'object',
-      properties: {
-        state: {
-          type: 'string',
-          minLength: 2,
-          maxLength: 50,
-          description:
-            'Nigerian state for delivery (e.g., Lagos, Abuja, Rivers)',
-        },
-        city: {
-          description: 'City within the state',
-          type: 'string',
-          minLength: 2,
-          maxLength: 100,
-        },
-      },
-      required: ['state'],
-    },
+    description: MCP_DELIVERY_FEE_INFO_DESCRIPTION,
+    inputSchema: z.toJSONSchema(mcpDeliveryFeeInfoInputSchema, {
+      target: 'draft-7',
+    }),
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
 ] as const;

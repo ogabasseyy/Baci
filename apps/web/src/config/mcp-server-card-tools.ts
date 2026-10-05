@@ -178,6 +178,6 @@ export const PUBLIC_MCP_TOOLS = [
     inputSchema: z.toJSONSchema(mcpDeliveryFeeInfoInputSchema, {
       target: 'draft-7',
     }),
-    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+    annotations: { ...READ_ONLY_TOOL_ANNOTATIONS, openWorldHint: true },
   },
 ] as const;

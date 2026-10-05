@@ -12,4 +12,9 @@ it('publishes the complete live delivery input contract in the server card', () 
   );
   expect(tool?.description).toContain('per unit');
   expect(tool?.description).toContain('checkout');
+  expect(tool?.annotations).toMatchObject({
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: true,
+  });
 });

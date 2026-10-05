@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": [],
+    "types": ["node"]
+  },
+  "include": [
+    "mcp-server/server.ts",
+    "mcp-server/server-output-schema.test.ts",
+    "mcp-server/product-variants-output.test.ts",
+    "mcp-server/product-variants-color-evidence.test.ts",
+    "mcp-server/browse-catalog-facets.test.ts",
+    "mcp-server/server-cart-handoff.test.ts",
+    "mcp-server/variant-attribute-text-value.test.ts",
+    "mcp-server/delivery-fee-quotes.test.ts",
+    "mcp-server/delivery-gigl-quotes.test.ts",
+    "mcp-server/server-delivery-gigl.test.ts"
+  ],
+  "exclude": ["node_modules"]
+}

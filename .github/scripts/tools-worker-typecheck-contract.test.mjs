@@ -27,15 +27,34 @@ async function readWebFilter(filterPath = '.github/filters/ci.yml') {
   return { webFilter, webFilterIndex, workflow };
 }
 
-test('the Quality Gate generates route types and reaches the tools and worker TypeScript project', async () => {
+test('the Quality Gate generates route types and reaches the tools, worker, and MCP TypeScript projects', async () => {
   const pkg = JSON.parse(await readFile('apps/web/package.json', 'utf8'));
   const toolsTsconfig = JSON.parse(await readFile('apps/web/tsconfig.tools-workers.json', 'utf8'));
+  const mcpTsconfig = JSON.parse(await readFile('apps/web/tsconfig.mcp.json', 'utf8'));
+  const webTsconfig = JSON.parse(await readFile('apps/web/tsconfig.json', 'utf8'));
   const configTest = await readFile('.github/scripts/resolve-ci-test-plan-config.test.mjs', 'utf8');
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
+  assert.equal(pkg.scripts['typecheck:mcp'], 'tsc --noEmit -p tsconfig.mcp.json');
+  assert.equal(mcpTsconfig.extends, './tsconfig.json');
+  assert.equal(webTsconfig.compilerOptions.strict, true);
+  assert.notEqual(mcpTsconfig.compilerOptions.strict, false);
+  assert.deepEqual(mcpTsconfig.include, [
+    'mcp-server/server.ts',
+    'mcp-server/server-output-schema.test.ts',
+    'mcp-server/product-variants-output.test.ts',
+    'mcp-server/product-variants-color-evidence.test.ts',
+    'mcp-server/browse-catalog-facets.test.ts',
+    'mcp-server/server-cart-handoff.test.ts',
+    'mcp-server/variant-attribute-text-value.test.ts',
+    'mcp-server/delivery-fee-quotes.test.ts',
+    'mcp-server/delivery-gigl-quotes.test.ts',
+    'mcp-server/server-delivery-gigl.test.ts',
+  ]);
+  assert.ok(!mcpTsconfig.exclude.includes('mcp-server'));
   assert.deepEqual(toolsTsconfig.compilerOptions.types, [
     'node', 'vitest/globals', '@testing-library/jest-dom', 'google.maps',
   ]);

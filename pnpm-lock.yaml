@@ -1051,6 +1051,12 @@ importers:
       ai:
         specifier: ^6.0.205
         version: 6.0.205(zod@4.4.3)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1135,6 +1141,9 @@ importers:
       openai:
         specifier: ^6.42.0
         version: 6.42.0(ws@8.21.0)(zod@4.4.3)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       posthog-js:
         specifier: ^1.396.6
         version: 1.396.6
@@ -1259,6 +1268,9 @@ importers:
       change-case:
         specifier: ^5.4.4
         version: 5.4.4
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
       jsdom:
         specifier: ^27.4.0
         version: 27.4.0
@@ -10661,6 +10673,10 @@ packages:
   postcss@8.5.23:
     resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
     engines: {node: ^10 || ^12 || >=14}
+
+  postgres@3.4.9:
+    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
+    engines: {node: '>=12'}
 
   posthog-js@1.396.6:
     resolution: {integrity: sha512-ARI5k7sXak74lmSWGQ4Wwk+uEkpM0Za+KTc/1E6EVk6BIo916VS9tzVAQ6IinDPuPu+ODFlFb9/5gVHnOaY4Uw==}
@@ -25289,6 +25305,8 @@ snapshots:
       nanoid: 3.3.17
       picocolors: 1.1.1
       source-map-js: 1.2.1
+
+  postgres@3.4.9: {}
 
   posthog-js@1.396.6:
     dependencies:

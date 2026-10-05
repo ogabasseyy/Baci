@@ -1,0 +1,28 @@
+# R0 staging transport: path-allowlist proxy in front of the connector harness.
+#
+# Only Muse discovery/tool paths are exposed to the HTTPS tunnel.
+# Owner-secret endpoints (/v0/issue-token, /v0/refresh, /v0/revoke) and
+# /health stay reachable ONLY on 127.0.0.1:3101 (direct to harness).
+#
+# Usage (from apps/web):
+#   caddy run --config tools/connector-harness/Caddyfile
+{
+	auto_https off
+	admin off
+}
+
+:3120 {
+	bind 127.0.0.1
+
+	@allowed {
+		path /openapi.json /v0/tools/*
+	}
+	handle @allowed {
+		reverse_proxy 127.0.0.1:3101
+	}
+
+	# Default deny: everything else (issue/refresh/revoke/health/unknown).
+	handle {
+		respond "Not found." 404
+	}
+}

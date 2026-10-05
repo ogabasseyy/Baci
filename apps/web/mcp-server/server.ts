@@ -1,3 +1,4 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
  * Ogabassey ChatGPT MCP Server
@@ -61,6 +62,9 @@ import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { createSearchProductsToolConfig } from './search-products-tool-config';
 import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
+import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
+import { GiglProvider } from '../src/lib/shipping/providers/gigl';
+import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.constants';
 
 // =============================================================================
 // CONFIGURATION
@@ -69,6 +73,8 @@ import { registerDeliveryFeeInfoTool } from './delivery-fee-info';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
+// Preserve GIG authentication and station caches across stateless MCP requests.
+const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -1298,7 +1304,8 @@ function createOgabasseyServer() {
   server.registerTool(
     'add_to_cart',
     {
-      title: 'Add to Cart',
+      outputSchema: mcpToolOutputSchemas.add_to_cart,
+      title: 'Prepare Ogabassey Cart Link',
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -1326,6 +1333,7 @@ function createOgabasseyServer() {
         if (!merchantId) {
           return {
             content: [{ type: 'text', text: '❌ Unable to access store.' }],
+            structuredContent: { success: false, message: 'Store temporarily unavailable.' },
           };
         }
 
@@ -1340,6 +1348,7 @@ function createOgabasseyServer() {
         console.error('Add to cart error:', error);
         return {
           content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
+          structuredContent: { success: false, message: 'Unable to prepare cart link.' },
         };
       }
     }
@@ -1642,6 +1651,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product',
     {
+      outputSchema: mcpToolOutputSchemas.get_product,
       title: 'Get Product Details',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -1658,7 +1668,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1678,7 +1688,7 @@ function createOgabasseyServer() {
               text: 'Please provide a valid product ID or product name.',
             },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'invalid_input' as const, message: 'Please provide a valid product ID or product name.' },
         };
       }
 
@@ -1710,12 +1720,17 @@ function createOgabasseyServer() {
               message: productError.message,
             })
           );
+          const message = 'Product lookup is temporarily unavailable.';
+          return {
+            content: [{ type: 'text', text: message }],
+            structuredContent: { products: [], status: 'unavailable' as const, message },
+          };
         }
         return {
           content: [
             { type: 'text', text: `Product "${lookupLabel}" not found.` },
           ],
-          structuredContent: { products: [] },
+          structuredContent: { products: [], status: 'not_found' as const, message: `Product "${lookupLabel}" not found.` },
         };
       }
 
@@ -1848,6 +1863,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_store_info',
     {
+      outputSchema: mcpToolOutputSchemas.get_store_info,
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
@@ -1877,6 +1893,7 @@ function createOgabasseyServer() {
       };
       return {
         content: [{ type: 'text', text: info[args.topic || 'general'] }],
+        structuredContent: { topic: args.topic || 'general', message: info[args.topic || 'general'] },
       };
     }
   );
@@ -1885,6 +1902,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_product_variants',
     {
+      outputSchema: mcpToolOutputSchemas.get_product_variants,
       title: 'Get Product Variants',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
@@ -1900,6 +1918,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { variants: [], condition_offers: [], status: 'unavailable', message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1911,6 +1930,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'browse_categories',
     {
+      outputSchema: mcpToolOutputSchemas.browse_categories,
       title: 'Browse Categories',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of product categories available in the store.',
@@ -1925,6 +1945,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1932,8 +1953,13 @@ function createOgabasseyServer() {
         supabase, merchantId, facet: 'category',
       });
 
+      if (categories === null) {
+        const message = 'Category lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
+      }
+
       if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }] };
+        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
       }
 
       const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
@@ -1949,6 +1975,7 @@ function createOgabasseyServer() {
   server.registerTool(
     'get_brands',
     {
+      outputSchema: mcpToolOutputSchemas.get_brands,
       title: 'Get Available Brands',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of brands available in the store.',
@@ -1969,6 +1996,7 @@ function createOgabasseyServer() {
       if (!merchantId) {
         return {
           content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+          structuredContent: { brands: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
         };
       }
 
@@ -1977,8 +2005,13 @@ function createOgabasseyServer() {
         category: args.category ? sanitizeString(args.category, 50) : undefined,
       });
 
+      if (brands === null) {
+        const message = 'Brand lookup is temporarily unavailable.';
+        return { content: [{ type: 'text', text: message }], structuredContent: { brands: [], status: 'unavailable' as const, message } };
+      }
+
       if (brands.length === 0) {
-        return { content: [{ type: 'text', text: 'No brands found.' }] };
+        return { content: [{ type: 'text', text: 'No brands found.' }], structuredContent: { brands: [], status: 'empty' as const } };
       }
 
       const categoryText = args.category ? ` in ${args.category}` : '';
@@ -1999,8 +2032,13 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  // The public shipping policy does not publish a fixed fee schedule.
-  registerDeliveryFeeInfoTool(server, sanitizeString);
+  registerDeliveryFeeInfoTool(server, sanitizeString, async (input) => {
+    const merchantId = await getMerchantId();
+    if (!merchantId || !isGiglRuntimeConfigured()) {
+      return { status: 'unavailable', message: 'Live GIG quotes are unavailable. Confirm delivery at checkout.', quotes: [] };
+    }
+    return loadDeliveryGiglQuotes(input, { supabase, merchantId, getQuotes: (request) => gigl.getQuotes(request) });
+  });
 
   // [REMOVED] ask_santa
 

@@ -75,6 +75,25 @@ describe('loadMcpBrowseFacetValues', () => {
     expect(offerQuery.in).toHaveBeenCalledWith('product_id', ['used-phone']);
   });
 
+  it('returns null when the catalog query fails instead of an empty list', async () => {
+    const query = {
+      select: vi.fn(), eq: vi.fn(), or: vi.fn(), ilike: vi.fn(),
+      then: (resolve: (value: { data: null; error: Error }) => unknown) =>
+        Promise.resolve({ data: null, error: new Error('catalog unavailable') }).then(resolve),
+    };
+    query.select.mockReturnValue(query);
+    query.eq.mockReturnValue(query);
+    query.or.mockReturnValue(query);
+    query.ilike.mockReturnValue(query);
+    const supabase = {
+      from: vi.fn(() => query),
+      rpc: vi.fn(),
+    } as unknown as SupabaseClient;
+
+    expect(await loadMcpBrowseFacetValues({ supabase, merchantId: 'merchant-1', facet: 'category' }))
+      .toBeNull();
+  });
+
   it('keeps successful offer-batch stock when another batch lookup fails', async () => {
     const rows = Array.from({ length: 101 }, (_, index) => ({
       id: `offer-${index}`,

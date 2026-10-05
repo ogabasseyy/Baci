@@ -73,6 +73,8 @@ import { isGiglRuntimeConfigured } from '../src/lib/shipping/providers/gigl.cons
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
+// Preserve GIG authentication and station caches across stateless MCP requests.
+const gigl = new GiglProvider();
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -2030,7 +2032,6 @@ function createOgabasseyServer() {
   // [REMOVED] book_repair
 
 
-  const gigl = new GiglProvider();
   registerDeliveryFeeInfoTool(server, sanitizeString, async (input) => {
     const merchantId = await getMerchantId();
     if (!merchantId || !isGiglRuntimeConfigured()) {

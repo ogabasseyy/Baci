@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import type { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 import type { QuoteRequest, ShippingQuote } from '../src/lib/shipping/types';
+import { resolveMerchantCurrencyConfig } from '../src/lib/resolve-merchant-currency';
 import { randomUUID } from 'node:crypto';
 import { resolvePublicMerchantSender } from '../src/app/api/shipping/quotes/resolve-public-merchant-sender';
 import { productWeightToKg } from '../src/lib/shipping/product-weight-to-kg';
@@ -19,6 +20,15 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
 }): Promise<DeliveryQuoteResult> {
   if (!input.items?.length || !input.city) return unavailable();
   const { supabase, merchantId, getQuotes } = deps;
+  // Reuse the existing anonymous, published storefront projection. Missing
+  // settings inherit the canonical empty carrier allowlist and fail closed.
+  const { data: snapshots, error: snapshotError } = await supabase.rpc('resolve_storefront_public_snapshot_v2', { p_identifier: 'ogabassey' });
+  const snapshot = !snapshotError && Array.isArray(snapshots) ? snapshots[0] : undefined;
+  const merchant = snapshot?.merchant_data;
+  const carriers: unknown = snapshot?.feature_settings?.shipping_providers;
+  const merchantCountry = typeof merchant?.country === 'string' ? merchant.country.trim().toUpperCase() : '';
+  if (snapshot?.resolution_status !== 'found' || merchant?.id !== merchantId || !['NG', 'NGA', 'NIGERIA'].includes(merchantCountry) || !Array.isArray(carriers) || !carriers.some((carrier: unknown) => typeof carrier === 'string' && carrier.trim().toLowerCase() === 'gigl')) return unavailable();
+  if (resolveMerchantCurrencyConfig({ country: 'NG', payout_currency: typeof merchant.payout_currency === 'string' ? merchant.payout_currency : null }).code !== 'NGN') return unavailable();
   const origin = await resolvePublicMerchantSender(supabase, merchantId);
   if (!origin.ok || !origin.sender || !['NG', 'NGA', 'NIGERIA'].includes(origin.country?.trim().toUpperCase() ?? '')) return unavailable();
   const { data: products, error } = await supabase.from('products')
@@ -44,7 +54,8 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
     } else if (item.variant_id) return unavailable();
     if (product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
-    const weight = productWeightToKg(product.weight_value, product.weight_unit) ?? item.weight_kg;
+    const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= 100 ? item.weight_kg : undefined;
+    const weight = productWeightToKg(product.weight_value, product.weight_unit) ?? buyerWeight;
     if (!weight) return { status: 'needs_weight', message: `The catalog has no usable package weight for ${product.name}. Provide the packed weight in kilograms, or confirm delivery at checkout. Do not guess.`, quotes: [] };
     items.push({ name: product.name, value: price, quantity: item.quantity, weight });
   }
@@ -55,7 +66,7 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
   }).catch(() => []);
   const quotes: DeliveryOutput['quotes'] = [];
   for (const quote of providerQuotes) {
-    if (quote.provider !== 'GIGL' || quote.currency !== 'NGN' || !(quote.expiresAt instanceof Date) || !Number.isFinite(quote.expiresAt.getTime()) || quote.expiresAt.getTime() <= Date.now() || !Number.isFinite(quote.price) || quote.price < 0) continue;
+    if (typeof quote.serviceTier !== 'string' || !quote.serviceTier.trim() || quote.provider !== 'GIGL' || quote.currency !== 'NGN' || !(quote.expiresAt instanceof Date) || !Number.isFinite(quote.expiresAt.getTime()) || quote.expiresAt.getTime() <= Date.now() || !Number.isFinite(quote.price) || quote.price < 0) continue;
     if (input.delivery_preference === 'door' && quote.isStationPickup) continue;
     if (input.delivery_preference === 'pickup_station' && !quote.isStationPickup) continue;
     quotes.push({ provider: 'GIGL', service: quote.serviceTier, fee: quote.price, currency: 'NGN', delivery_type: quote.isStationPickup ? 'pickup_station' : 'door', expires_at: quote.expiresAt.toISOString(), station_name: quote.stationName ?? quote.pickupStationName ?? null, station_address: quote.stationAddress ?? quote.pickupStationAddress ?? null });

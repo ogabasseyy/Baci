@@ -94,6 +94,28 @@ describe('GIGL city/state consistency without coordinates', () => {
     return service;
   }
   it.each([
+    'LA',
+    'NG-LA',
+    ' la ',
+    'ng-la',
+  ])('resolves Nigerian state code %s for sender and receiver', async (state) => {
+    const lookup = await service();
+    await expect(
+      lookup.findStationForCity('Ikeja', state)
+    ).resolves.toMatchObject({ StationId: 4 });
+    await expect(
+      lookup.resolveStationForLocation({ city: 'Ikeja', state })
+    ).resolves.toMatchObject({ station: { StationId: 4 } });
+    await expect(
+      lookup.findStationForCity('Unknown locality', state)
+    ).resolves.toMatchObject({ StationId: 4 });
+  });
+  it('rejects a contradictory canonical state code', async () => {
+    await expect(
+      (await service()).findStationForCity('Ikeja', 'NG-RI')
+    ).resolves.toBeNull();
+  });
+  it.each([
     undefined,
     '  ',
   ])('preserves an exact city with absent state metadata %s', async (state) => {

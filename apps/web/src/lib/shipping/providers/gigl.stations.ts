@@ -11,7 +11,10 @@ import type {
   GiglStationResolution,
   NearestGiglDirectoryLookup,
 } from './gigl.directory';
-import { normalizeGiglLocation } from './gigl.location-normalizer';
+import {
+  normalizeGiglLocation,
+  normalizeGiglState,
+} from './gigl.location-normalizer';
 import type { GiglServiceCentre, GiglStation } from './gigl.schemas';
 import { giglSchemas } from './gigl.schemas';
 
@@ -258,14 +261,14 @@ export class GiglStationsService {
       }
     }
 
-    const normalizedState = normalizeGiglLocation(location.state);
+    const normalizedState = normalizeGiglState(location.state);
     // An exact city in another state is contradictory. Do not silently quote
     // that city or fall back to a different station in the requested state.
     if (cityStations.length) {
       const cityStation = cityStations.find((station) => {
         const states = [station.StateName, station.State]
           .filter((value): value is string => typeof value === 'string')
-          .map(normalizeGiglLocation)
+          .map(normalizeGiglState)
           .filter(Boolean);
         // Missing provider metadata is not evidence of a contradictory state.
         return states.length === 0 || states.includes(normalizedState);
@@ -275,7 +278,7 @@ export class GiglStationsService {
     const stateStation = stations.find((station) =>
       [station.StateName, station.State]
         .filter((value): value is string => Boolean(value))
-        .some((value) => normalizeGiglLocation(value) === normalizedState)
+        .some((value) => normalizeGiglState(value) === normalizedState)
     );
     return stateStation ? { station: stateStation } : null;
   }

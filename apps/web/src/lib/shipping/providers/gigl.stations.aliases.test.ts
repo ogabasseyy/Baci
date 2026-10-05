@@ -110,6 +110,34 @@ describe('GIGL city/state consistency without coordinates', () => {
       lookup.findStationForCity('Unknown locality', state)
     ).resolves.toMatchObject({ StationId: 4 });
   });
+  it.each([
+    'Nassarawa',
+    ' nassarawa ',
+  ])('resolves subdivision alias %s for sender and receiver', async (state) => {
+    const lookup = await service();
+    const stations = await lookup.getStations();
+    vi.mocked(lookup.getStations).mockResolvedValue([
+      {
+        ...stations[0],
+        StationId: 9,
+        StationName: 'LAFIA',
+        City: 'Lafia',
+        StateName: 'Nasarawa',
+      },
+    ]);
+    await expect(
+      lookup.findStationForCity('Lafia', state)
+    ).resolves.toMatchObject({ StationId: 9 });
+    await expect(
+      lookup.resolveStationForLocation({ city: 'Lafia', state })
+    ).resolves.toMatchObject({ station: { StationId: 9 } });
+    await expect(
+      lookup.findStationForCity('Unknown locality', state)
+    ).resolves.toMatchObject({ StationId: 9 });
+    await expect(
+      lookup.findStationForCity('Lafia', 'Lagos')
+    ).resolves.toBeNull();
+  });
   it('rejects a contradictory canonical state code', async () => {
     await expect(
       (await service()).findStationForCity('Ikeja', 'NG-RI')

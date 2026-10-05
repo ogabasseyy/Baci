@@ -1,4 +1,7 @@
-import { getSubdivisions } from '../merchant-rates/subdivisions';
+import {
+  getSubdivisions,
+  resolveSubdivisionCode,
+} from '../merchant-rates/subdivisions';
 
 const ABUJA_LOCATION_ALIASES = [
   'abuja',
@@ -19,11 +22,13 @@ export function normalizeGiglLocation(value: string): string {
   return ABUJA_LOCATION_ALIASES.includes(normalized) ? 'abuja' : normalized;
 }
 
-/** Resolve state codes without interpreting city names as subdivision codes. */
+/** Resolve canonical state names, aliases and codes separately from city names. */
 export function normalizeGiglState(value: string): string {
-  const code = value.trim().toUpperCase();
+  const code =
+    resolveSubdivisionCode('NG', value) ??
+    resolveSubdivisionCode('NG', `NG-${value.trim()}`);
   const subdivision = getSubdivisions('NG').find(
-    (entry) => entry.code === code || entry.code === `NG-${code}`
+    (entry) => entry.code === code
   );
   return normalizeGiglLocation(subdivision?.name ?? value);
 }

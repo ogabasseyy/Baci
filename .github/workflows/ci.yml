@@ -358,6 +358,7 @@ jobs:
           --sql-check supabase/migrations/tests/finish_push_unregistered.sql
           --sql-check supabase/migrations/tests/plan_transfer_wallet_binding.sql
           --sql-check supabase/migrations/tests/plan_transfer_excess_projection.sql
+          --sql-check supabase/migrations/tests/plan_transfer_interest_headroom.sql
           --sql-check supabase/tests/repair_booking_rpc.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql

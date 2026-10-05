@@ -149,12 +149,48 @@ export const mcpToolOutputSchemas = {
     status: z.enum(['empty', 'unavailable']).optional(),
     message: z.string().optional(),
   }),
-  get_delivery_fee_info: z.object({
-    city: z.string().nullable(),
-    fee: z.null(),
-    policy_url: z.literal('https://ogabassey.com/shipping'),
-    quote_available: z.literal(false),
-    state: z.string(),
-    status: z.literal('requires_checkout'),
-  }),
+  get_delivery_fee_info: z
+    .object({
+      city: z.string().nullable(),
+      fee: z.number().nonnegative().nullable(),
+      policy_url: z.literal('https://ogabassey.com/shipping'),
+      quote_available: z.boolean(),
+      state: z.string(),
+      status: z.enum([
+        'quoted',
+        'needs_items',
+        'needs_city',
+        'needs_weight',
+        'needs_selection',
+        'unavailable',
+      ]),
+      message: z.string(),
+      quotes: z.array(
+        z.object({
+          provider: z.literal('GIGL'),
+          service: z.string(),
+          fee: z.number().nonnegative(),
+          currency: z.literal('NGN'),
+          delivery_type: z.enum(['door', 'pickup_station']),
+          expires_at: z.iso.datetime(),
+          station_name: z.string().nullable(),
+          station_address: z.string().nullable(),
+        })
+      ),
+    })
+    .refine(
+      (result) =>
+        result.status === 'quoted'
+          ? result.quote_available &&
+            result.quotes.length > 0 &&
+            (result.fee === null ||
+              result.quotes.some((quote) => quote.fee === result.fee))
+          : !result.quote_available &&
+            result.fee === null &&
+            result.quotes.length === 0,
+      {
+        message:
+          'Delivery availability and fees must match the returned quote state',
+      }
+    ),
 };

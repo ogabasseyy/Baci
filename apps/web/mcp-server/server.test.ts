@@ -255,10 +255,10 @@ describe('MCP streamable HTTP probe compatibility', () => {
       policy_url: 'https://ogabassey.com/shipping',
       quote_available: false,
       state: 'Lagos',
-      status: 'requires_checkout',
+      status: 'needs_items',
     });
     expect(result.content).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: 'text', text: expect.stringContaining('confirm the fee') }),
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('final fee') }),
     ]));
     expect(JSON.stringify(result.content)).not.toMatch(/₦\s*[\d,]+/);
   });

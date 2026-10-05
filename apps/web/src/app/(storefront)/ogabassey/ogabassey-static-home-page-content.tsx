@@ -19,7 +19,11 @@ interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
-  /** Set when the parent page already supplied critical styles and heading. */
+  /**
+   * Set when the parent page already supplied critical styles, heading, AND
+   * the hero preload hint. Suppresses all downstream hints, so only set this
+   * alongside an upstream committed slot that emits the live slide-0 link.
+   */
   omitCommittedHero?: boolean;
 }
 
@@ -57,15 +61,18 @@ export async function OgabasseyStaticHomePageContent({
   const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
   // Public immutable asset hints do not render shopping UI. Publication and
   // tenant checks remain in the request child (see the hero-shell contract).
-  // Single preload owner: the first-flush committed slot already emits a
-  // scanner-visible <link> for the committed URL, so re-emitting the flight
-  // hint for the same URL only duplicates it. Emit only when live slide-0
-  // rotated away from the committed constant — then the early hint covers
-  // a stale asset and the true LCP image still needs its hint. Origin
-  // preconnect stays covered by OgabasseyStaticResourceHints either way.
+  // Single preload owner: the static page sets omitCommittedHero because the
+  // upstream committed slot already emits a scanner-visible <link> for the
+  // live slide-0 URL, so any downstream hint for that URL would only
+  // duplicate it. Emit downstream hints solely in the standalone
+  // composition, where this component owns the hero; there the flight hint
+  // additionally stays silent while live slide-0 still matches the
+  // committed constant. Origin preconnect stays covered by
+  // OgabasseyStaticResourceHints either way.
   if (
     committedMobileLcpUrl &&
-    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL
+    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL &&
+    !omitCommittedHero
   ) {
     preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
   }
@@ -93,9 +100,11 @@ export async function OgabasseyStaticHomePageContent({
         </>
       ) : (
         <>
-          {committedMobileLcpUrl ? (
-            <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
-          ) : null}
+          {/*
+            No hero preload hint here: whenever this branch renders with a
+            live URL, omitCommittedHero is set and the upstream committed
+            slot already owns the scanner-visible hint for that URL.
+          */}
           <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
             <OgabasseyHomePageContent
               omitDocumentHeading={omitCommittedHero}

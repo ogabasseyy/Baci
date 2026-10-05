@@ -3,6 +3,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('production MCP proxy configuration', () => {
+  it('passes the configured GIG quote deadline into the production container', () => {
+    const compose = readFileSync(join(process.cwd(), 'mcp-server/docker-compose.yml'), 'utf8');
+
+    expect(compose).toContain(
+      'GIGL_QUOTE_TIMEOUT_MS=${GIGL_QUOTE_TIMEOUT_MS:-5000}'
+    );
+  });
+
   it('requires an explicit trusted-proxy choice behind the loopback binding', () => {
     const compose = readFileSync(join(process.cwd(), 'mcp-server/docker-compose.yml'), 'utf8');
 

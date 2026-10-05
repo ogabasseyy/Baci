@@ -56,7 +56,7 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
     const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= 100 ? item.weight_kg : undefined;
     const weight = productWeightToKg(product.weight_value, product.weight_unit) ?? buyerWeight;
-    if (!weight) return { status: 'needs_weight', message: `The catalog has no usable package weight for ${product.name}. Provide the packed weight in kilograms, or confirm delivery at checkout. Do not guess.`, quotes: [] };
+    if (!weight) return { status: 'needs_weight', message: `The catalog has no usable package weight for ${product.name}. Provide the packed weight in kilograms of one unit of this product. GIG multiplies that weight by quantity; do not enter the combined weight of all units. If only a combined weight is known, confirm the per-unit packed weight or delivery at checkout. Do not guess.`, quotes: [] };
     items.push({ name: product.name, value: price, quantity: item.quantity, weight });
   }
   const providerQuotes = await getQuotes({

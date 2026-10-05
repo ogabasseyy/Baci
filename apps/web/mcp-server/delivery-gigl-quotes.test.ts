@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
 
 const productId = 'bfab9f45-7c2e-4744-be8e-9540af062406';
@@ -84,6 +85,14 @@ describe('GIG quote preparation', () => {
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted', quotes: [{ fee: 4200 }] });
     expect(getQuotes.mock.calls[0]?.[0]).toMatchObject({ merchantId: 'merchant-1', sender: { city: 'Ikeja', state: 'Lagos' }, receiver: { city: 'Ikeja', state: 'Lagos' }, items: [{ name: 'Camera', value: 66700, weight: 0.5, quantity: 2 }] });
   });
+  it('defines buyer weight per unit and asks for one unit when quantity exceeds one', async () => {
+    expect(mcpDeliveryFeeInfoInputSchema.shape.items.unwrap().element.shape.weight_kg.description).toContain('one unit');
+    const { deps, getQuotes } = fixture({ weight_value: null });
+    const result = await loadDeliveryGiglQuotes(input, deps);
+    expect(result.message).toContain('one unit');
+    expect(result.message).toContain('combined');
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
   it('asks for weight instead of substituting an invented kilogram', async () => {
     const { deps, getQuotes } = fixture({ weight_value: null });
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'needs_weight', quotes: [] });
@@ -94,10 +103,12 @@ describe('GIG quote preparation', () => {
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'needs_selection', quotes: [] });
     expect(getQuotes).not.toHaveBeenCalled();
   });
-  it('uses a buyer supplied packed weight only when catalog weight is missing', async () => {
+  it('uses buyer supplied packed weight per unit for multiple units only when catalog weight is missing', async () => {
     const { deps, getQuotes } = fixture({ weight_value: null });
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], weight_kg: 0.8 }] }, deps)).toMatchObject({ status: 'quoted' });
-    expect(getQuotes.mock.calls[0]?.[0].items[0].weight).toBe(0.8);
+    expect(getQuotes.mock.calls[0]?.[0].items[0]).toMatchObject({ weight: 0.8, quantity: 2 });
+    const items = getQuotes.mock.calls[0]?.[0].items;
+    expect(items.reduce((total: number, item: { weight: number; quantity: number }) => total + item.weight * item.quantity, 0)).toBe(1.6);
   });
   it.each([NaN, Infinity, -1, null])('does not quote a corrupt catalog value %s', async (price) => {
     const { deps, getQuotes } = fixture({ price });

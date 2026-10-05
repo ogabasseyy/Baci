@@ -22,7 +22,7 @@ export const mcpDeliveryFeeInfoInputSchema = z.object({
           .max(100)
           .optional()
           .describe(
-            'Use only a package weight explicitly supplied by the buyer when catalog weight is unavailable; never guess'
+            'Packed weight in kilograms of one unit of this product, explicitly confirmed by the buyer when catalog weight is unavailable. GIG multiplies it by quantity. If the buyer supplies a combined package weight, ask for the per-unit packed weight instead; never guess'
           ),
       })
     )

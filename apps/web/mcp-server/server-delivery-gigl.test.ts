@@ -20,7 +20,7 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
       else if (url.pathname === '/rest/v1/rpc/resolve_storefront_public_snapshot_v2') res.end(JSON.stringify([{ resolution_status: 'found', merchant_data: { id: 'merchant-1', country: 'NG', payout_currency: 'NGN' }, feature_settings: { shipping_providers: ['gigl'] } }]));
       else if (url.pathname === '/rest/v1/rpc/get_storefront_shipping_sender') res.end(JSON.stringify({ business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', state_code: 'LA', country: 'NG' }));
       else if (url.pathname === '/rest/v1/rpc/get_storefront_product_variants') res.end(JSON.stringify([{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', price_override: 80000, stock_quantity: 5 }]));
-      else if (url.pathname === '/rest/v1/products') res.end(JSON.stringify([{ id: 'bfab9f45-7c2e-4744-be8e-9540af062406', name: 'Camera', price: 66700, weight_value: 500, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }, { id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', name: 'Phone fixture', price: 50000, weight_value: 1, weight_unit: 'kg', has_variants: true, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }]));
+      else if (url.pathname === '/rest/v1/products') res.end(JSON.stringify([{ id: 'bfab9f45-7c2e-4744-be8e-9540af062406', name: 'Camera', price: 66700, weight_value: null, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }, { id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', name: 'Phone fixture', price: 50000, weight_value: 1, weight_unit: 'kg', has_variants: true, has_condition_offers: false, manage_stock: true, stock_quantity: 5 }]));
       else res.writeHead(404).end('{}');
       return;
     }
@@ -40,10 +40,10 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
   try {
     server = await mcpServerTestSupport.startMcpServer({ NEXT_PUBLIC_SUPABASE_URL: baseUrl, GIGL_ENABLED: 'true', GIGL_BASE_URL: baseUrl, GIGL_EMAIL: 'fixture@example.test', GIGL_PASSWORD: 'fixture-password' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
-    const result = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 2 }] } });
+    const result = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 2, weight_kg: 0.4 }] } });
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toMatchObject({ status: 'quoted', fee: 1100, quote_available: true, quotes: [{ provider: 'GIGL', fee: 1100, delivery_type: 'door' }, { provider: 'GIGL', fee: 1100, delivery_type: 'door' }] });
-    expect(shipmentBodies[0]).toMatchObject({ SenderStationId: 4, ReceiverStationId: 4, ShipmentItems: [{ ItemName: 'Camera', Value: 66700, Quantity: 2, Weight: 0.5 }] });
+    expect(shipmentBodies[0]).toMatchObject({ SenderStationId: 4, ReceiverStationId: 4, ShipmentItems: [{ ItemName: 'Camera', Value: 66700, Quantity: 2, Weight: 0.4 }] });
     const selectedVariant = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
     expect(selectedVariant.structuredContent).toMatchObject({ status: 'quoted', fee: 1100 });
     expect(shipmentBodies.at(-1)).toMatchObject({ ShipmentItems: [{ ItemName: 'Phone fixture', Value: 80000, Quantity: 1, Weight: 1 }] });

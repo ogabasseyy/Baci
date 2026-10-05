@@ -17,7 +17,7 @@ export function registerDeliveryFeeInfoTool(
       title: 'Check Delivery Fee Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       description:
-        'Get live GIG Logistics delivery estimates for selected Ogabassey catalog products and quantities to a Nigerian city/state. Ask for products, quantity, city and any missing package weight before quoting. Never invent rates or weights. Returns door or station-pickup estimates with expiry; final address, eligibility and price must be confirmed at checkout. This tool does not modify a cart, place an order, book shipping or take payment.',
+        'Get live GIG Logistics delivery estimates for selected Ogabassey catalog products and quantities to a Nigerian city/state. Ask for products, quantity, city and any missing packed weight of one unit of each product before quoting. Weight is per unit and is multiplied by quantity; if given a combined package weight, ask for the per-unit packed weight. Never invent rates or weights. Returns door or station-pickup estimates with expiry; final address, eligibility and price must be confirmed at checkout. This tool does not modify a cart, place an order, book shipping or take payment.',
       inputSchema: mcpDeliveryFeeInfoInputSchema.shape,
       _meta: {
         'openai/toolInvocation/invoking': 'Checking delivery information...',

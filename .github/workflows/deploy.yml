@@ -198,7 +198,9 @@ jobs:
   # state unreachable instead of merely unlikely.
   db-migrations:
     needs: [vps-drain-readiness]
-    if: github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success'
+    # A skipped changes ancestor on manual dispatch must not skip this job.
+    # Readiness must still succeed before migrations can run.
+    if: always() && github.ref == 'refs/heads/main' && needs.vps-drain-readiness.result == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: production

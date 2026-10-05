@@ -1,3 +1,4 @@
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 
@@ -10,6 +11,7 @@ export function registerDeliveryFeeInfoTool(
   server.registerTool(
     'get_delivery_fee_info',
     {
+      outputSchema: mcpToolOutputSchemas.get_delivery_fee_info,
       title: 'Check Delivery Fee Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:

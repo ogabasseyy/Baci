@@ -1,4 +1,7 @@
-export function getMcpOfferAvailability(manageStock: boolean | null | undefined, quantity: number | null | undefined) {
+export function getMcpOfferAvailability(manageStock: boolean | null | undefined, quantity: number | null | undefined): {
+  availability: 'unconfirmed' | 'in_stock' | 'out_of_stock';
+  label: string;
+} {
   if (manageStock !== true) return { availability: 'unconfirmed', label: 'Confirm availability' };
   return Number(quantity ?? 0) > 0
     ? { availability: 'in_stock', label: 'In Stock' }

@@ -262,11 +262,14 @@ export class GiglStationsService {
     // An exact city in another state is contradictory. Do not silently quote
     // that city or fall back to a different station in the requested state.
     if (cityStations.length) {
-      const cityStation = cityStations.find((station) =>
-        [station.StateName, station.State]
-          .filter((value): value is string => Boolean(value))
-          .some((value) => normalizeGiglLocation(value) === normalizedState)
-      );
+      const cityStation = cityStations.find((station) => {
+        const states = [station.StateName, station.State]
+          .filter((value): value is string => typeof value === 'string')
+          .map(normalizeGiglLocation)
+          .filter(Boolean);
+        // Missing provider metadata is not evidence of a contradictory state.
+        return states.length === 0 || states.includes(normalizedState);
+      });
       return cityStation ? { station: cityStation } : null;
     }
     const stateStation = stations.find((station) =>

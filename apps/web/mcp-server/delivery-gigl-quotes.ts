@@ -1,3 +1,4 @@
+import { getPublicSerializedVariantSummariesByProductId } from '../src/lib/public-serialized-variant-summary';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
 import { MCP_DELIVERY_MAX_UNIT_WEIGHT_KG, type mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
@@ -36,6 +37,8 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
     .eq('merchant_id', merchantId).eq('status', 'active')
     .in('id', input.items.map((item) => item.product_id));
   if (error || !products) return unavailable();
+  const summaries = await getPublicSerializedVariantSummariesByProductId(supabase, merchantId, input.items.map((item) => item.product_id)).catch(() => null);
+  if (!summaries) return unavailable();
   const items: QuoteRequest['items'] = [];
   for (const item of input.items) {
     const product = products.find((row) => row.id === item.product_id);
@@ -52,8 +55,11 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
       price = variant.price_override ?? product.price;
       stock = variant.stock_quantity;
     } else if (item.variant_id) return unavailable();
-    // Untracked parents also leave variant stock unconfirmed, matching the public catalog.
-    if (product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
+    const summary = summaries.find((row) => row.productId === product.id && row.variantId === (item.variant_id ?? null));
+    if (summary?.inventoryTrackingPolicy === 'serialized_strict' && (!Number.isFinite(summary.publicAvailableUnits) || summary.publicAvailableUnits < requestedQuantity)) return unavailable();
+    // Serialized summaries are authoritative; then-unlimited remains purchasable.
+    // Other untracked parents leave legacy variant stock unconfirmed.
+    if (!summary && product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
     const buyerWeight = typeof item.weight_kg === 'number' && Number.isFinite(item.weight_kg) && item.weight_kg > 0 && item.weight_kg <= MCP_DELIVERY_MAX_UNIT_WEIGHT_KG ? item.weight_kg : undefined;
     const catalogWeight = productWeightToKg(product.weight_value, product.weight_unit);

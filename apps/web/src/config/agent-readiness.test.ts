@@ -54,6 +54,12 @@ afterEach(() => {
 });
 
 describe('agent readiness config', () => {
+  it('publishes bounded live delivery guidance', async () => {
+    const config = await importAgentReadiness({});
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('live GIG estimates');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('per-unit');
+    expect(config.BACI_AGENT_SKILL_MARKDOWN).toContain('product IDs');
+  });
   it('uses production Ogabassey discovery defaults', async () => {
     const config = await importAgentReadiness({});
 

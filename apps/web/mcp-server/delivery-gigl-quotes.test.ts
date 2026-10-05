@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mcpDeliveryFeeInfoInputSchema } from '../src/schemas/mcp-delivery-fee-info';
 import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
+
+vi.mock('../src/lib/public-serialized-variant-summary', () => ({ getPublicSerializedVariantSummariesByProductId: vi.fn().mockResolvedValue([]) }));
+import { getPublicSerializedVariantSummariesByProductId } from '../src/lib/public-serialized-variant-summary';
+beforeEach(() => { vi.mocked(getPublicSerializedVariantSummariesByProductId).mockReset().mockResolvedValue([]); });
 
 const productId = 'bfab9f45-7c2e-4744-be8e-9540af062406';
 const input = { state: 'Lagos', city: 'Ikeja', items: [{ product_id: productId, quantity: 2 }] };
@@ -13,6 +17,32 @@ function fixture(overrides = {}) {
 }
 
 describe('GIG quote preparation', () => {
+  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('uses serialized availability for an untracked zero-stock variant %s', async (inventoryTrackingPolicy) => {
+    const variantId = 'c985e013-7c2b-4655-a560-4085f27cd168';
+    const { deps, getQuotes, rpc } = fixture({ has_variants: true, manage_stock: false });
+    const original = rpc.getMockImplementation();
+    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: variantId, product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
+    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId, inventoryTrackingPolicy, publicAvailableUnits: 0 }]);
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: variantId }] }, deps)).toMatchObject({ status: inventoryTrackingPolicy === 'serialized_strict' ? 'unavailable' : 'quoted' });
+    expect(getQuotes).toHaveBeenCalledTimes(inventoryTrackingPolicy === 'serialized_strict' ? 0 : 1);
+  });
+  it.each([0, 1, NaN, Infinity])('rejects insufficient strict serialized units on an untracked parent %s', async (publicAvailableUnits) => {
+    const { deps, getQuotes } = fixture({ manage_stock: false });
+    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId: null, inventoryTrackingPolicy: 'serialized_strict', publicAvailableUnits }]);
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it.each(['serialized_strict', 'serialized_then_unlimited'] as const)('preserves purchasable serialized policy %s', async (inventoryTrackingPolicy) => {
+    const { deps } = fixture({ manage_stock: false });
+    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockResolvedValue([{ productId, variantId: null, inventoryTrackingPolicy, publicAvailableUnits: inventoryTrackingPolicy === 'serialized_strict' ? 2 : 0 }]);
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
+  });
+  it('fails closed when the public serialized summary cannot be read', async () => {
+    const { deps, getQuotes } = fixture();
+    vi.mocked(getPublicSerializedVariantSummariesByProductId).mockRejectedValue(new Error('private database detail'));
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
   it.each([[], null, ['topship']])('does not call GIG when merchant carriers are disabled %s', async (shipping_providers) => {
     const { deps, rpc, getQuotes } = fixture();
     const original = rpc.getMockImplementation();

@@ -93,6 +93,31 @@ describe('GIGL city/state consistency without coordinates', () => {
     ]);
     return service;
   }
+  it.each([
+    undefined,
+    '  ',
+  ])('preserves an exact city with absent state metadata %s', async (state) => {
+    const lookup = await service();
+    vi.mocked(lookup.getStations).mockResolvedValue([
+      {
+        StationId: 4,
+        StationName: 'IKEJA',
+        City: 'Ikeja',
+        StateName: state,
+        State: undefined,
+        StationCode: undefined,
+        Address: undefined,
+        Latitude: undefined,
+        Longitude: undefined,
+      },
+    ]);
+    await expect(
+      lookup.resolveStationForLocation({ city: 'Ikeja', state: 'Lagos' })
+    ).resolves.toMatchObject({ station: { StationId: 4 } });
+    await expect(
+      lookup.findStationForCity('Ikeja', 'Lagos')
+    ).resolves.toMatchObject({ StationId: 4 });
+  });
   it('rejects contradictory sender city/state through the same resolver', async () => {
     await expect(
       (await service()).findStationForCity('Ikeja', 'Rivers')

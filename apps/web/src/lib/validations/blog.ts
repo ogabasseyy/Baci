@@ -23,6 +23,7 @@ const featuredImageDimensionSchema = z
   .number()
   .int()
   .positive()
+  .max(2_147_483_647, 'Image dimensions exceed the database integer range')
   .nullable()
   .optional();
 

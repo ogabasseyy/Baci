@@ -128,7 +128,6 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
 }
 
 function readDimension(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0
-    ? value
-    : null;
+  const result = blogPostSchema.shape.featured_image_width.safeParse(value);
+  return result.success ? (result.data ?? null) : null;
 }

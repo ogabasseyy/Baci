@@ -23,6 +23,34 @@ function setup(upload: (file: File) => Promise<typeof uploadedImage>) {
 }
 
 describe('useBlogFeaturedImageUpload', () => {
+  it('clears imported alt text when a replacement cover succeeds', async () => {
+    const { result } = setup(vi.fn().mockResolvedValue(uploadedImage));
+    act(() =>
+      result.current.setForm({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_url: 'https://cdn.example.com/old.webp',
+        featured_image_alt: 'The previous cover',
+      })
+    );
+    await act(async () => result.current.uploadFeatured(file));
+    expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
+    expect(result.current.form.featured_image_alt).toBe('');
+  });
+
+  it('preserves existing alt text when replacement fails', async () => {
+    const { result } = setup(
+      vi.fn().mockRejectedValue(new Error('Upload failed'))
+    );
+    act(() =>
+      result.current.setForm({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_alt: 'The current cover',
+      })
+    );
+    await act(async () => result.current.uploadFeatured(file));
+    expect(result.current.form.featured_image_alt).toBe('The current cover');
+  });
+
   it('applies a completed upload with all image metadata', async () => {
     const { result, toast } = setup(vi.fn().mockResolvedValue(uploadedImage));
     await act(async () => result.current.uploadFeatured(file));
@@ -52,6 +80,7 @@ describe('useBlogFeaturedImageUpload', () => {
         ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
         featured_image_url: 'https://cdn.example.com/handoff.webp',
         featured_image_width: 1600,
+        featured_image_alt: 'Imported cover',
       });
     });
     await act(async () => {
@@ -62,6 +91,7 @@ describe('useBlogFeaturedImageUpload', () => {
       'https://cdn.example.com/handoff.webp'
     );
     expect(result.current.form.featured_image_width).toBe(1600);
+    expect(result.current.form.featured_image_alt).toBe('Imported cover');
     expect(result.current.uploadingFeatured).toBe(false);
     expect(toast).not.toHaveBeenCalled();
   });

@@ -35,6 +35,7 @@ export function useBlogFeaturedImageUpload({
       setForm((current) => ({
         ...current,
         featured_image_url: result.url,
+        featured_image_alt: '',
         featured_image_width: result.width ?? null,
         featured_image_height: result.height ?? null,
         featured_image_variants: result.variants ?? {},

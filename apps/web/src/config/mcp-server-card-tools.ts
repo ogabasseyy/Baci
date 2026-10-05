@@ -82,7 +82,7 @@ export const PUBLIC_MCP_TOOLS = [
   },
   {
     name: 'add_to_cart',
-    title: 'Add to Cart',
+    title: 'Prepare Ogabassey Cart Link',
     description:
       'Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
     inputSchema: {

@@ -20,9 +20,9 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
   if (!input.items?.length || !input.city) return unavailable();
   const { supabase, merchantId, getQuotes } = deps;
   const origin = await resolvePublicMerchantSender(supabase, merchantId);
-  if (!origin.ok || !origin.sender || !['NG', 'Nigeria'].includes(origin.country ?? '')) return unavailable();
+  if (!origin.ok || !origin.sender || !['NG', 'NGA', 'NIGERIA'].includes(origin.country?.trim().toUpperCase() ?? '')) return unavailable();
   const { data: products, error } = await supabase.from('products')
-    .select('id, name, price, weight_value, weight_unit, has_variants, has_condition_offers')
+    .select('id, name, price, weight_value, weight_unit, has_variants, has_condition_offers, manage_stock, stock_quantity')
     .eq('merchant_id', merchantId).eq('status', 'active')
     .in('id', input.items.map((item) => item.product_id));
   if (error || !products) return unavailable();
@@ -31,6 +31,8 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
     const product = products.find((row) => row.id === item.product_id);
     if (!product || typeof product.name !== 'string' || !product.name.trim()) return unavailable();
     let price: unknown = product.price;
+    let stock: unknown = product.stock_quantity;
+    const requestedQuantity = input.items.filter((selected) => selected.product_id === item.product_id && selected.variant_id === item.variant_id).reduce((total, selected) => total + selected.quantity, 0);
     if (product.has_condition_offers) return { status: 'needs_selection', message: 'This product has condition offers. Confirm its exact offer and delivery at checkout.', quotes: [] };
     if (product.has_variants) {
       if (!item.variant_id) return { status: 'needs_selection', message: 'Select the exact catalog variant before quoting delivery.', quotes: [] };
@@ -38,7 +40,9 @@ export async function loadDeliveryGiglQuotes(input: DeliveryInput, deps: {
       const variant = !variantError && Array.isArray(variants) ? variants.find((row) => row.product_id === product.id && row.id === item.variant_id) : undefined;
       if (!variant) return unavailable();
       price = variant.price_override ?? product.price;
+      stock = variant.stock_quantity;
     } else if (item.variant_id) return unavailable();
+    if (product.manage_stock === true && (typeof stock !== 'number' || !Number.isFinite(stock) || stock < requestedQuantity)) return unavailable();
     if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return unavailable();
     const weight = productWeightToKg(product.weight_value, product.weight_unit) ?? item.weight_kg;
     if (!weight) return { status: 'needs_weight', message: `The catalog has no usable package weight for ${product.name}. Provide the packed weight in kilograms, or confirm delivery at checkout. Do not guess.`, quotes: [] };

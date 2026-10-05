@@ -4,7 +4,7 @@ import { loadDeliveryGiglQuotes } from './delivery-gigl-quotes';
 const productId = 'bfab9f45-7c2e-4744-be8e-9540af062406';
 const input = { state: 'Lagos', city: 'Ikeja', items: [{ product_id: productId, quantity: 2 }] };
 function fixture(overrides = {}) {
-  const product = { id: productId, name: 'Camera', price: 66700, weight_value: 500, weight_unit: 'g', has_variants: false, has_condition_offers: false, ...overrides };
+  const product = { id: productId, name: 'Camera', price: 66700, weight_value: 500, weight_unit: 'g', has_variants: false, has_condition_offers: false, manage_stock: true, stock_quantity: 5, ...overrides };
   const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockResolvedValue({ data: [product], error: null }) };
   const supabase = { from: vi.fn(() => query), rpc: vi.fn().mockResolvedValue({ data: { business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', phone: '', state_code: 'LA', country: 'NG' }, error: null }) };
   const getQuotes = vi.fn().mockResolvedValue([{ provider: 'GIGL', price: 4200, serviceTier: 'GoStandard', currency: 'NGN', expiresAt: new Date('2099-01-01'), isStationPickup: false }]);
@@ -12,6 +12,33 @@ function fixture(overrides = {}) {
 }
 
 describe('GIG quote preparation', () => {
+  it.each([0, 1, null, NaN, Infinity, -1])('does not quote insufficient or unconfirmed tracked stock %s', async (stock_quantity) => {
+    const { deps, getQuotes } = fixture({ stock_quantity });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'unavailable', quotes: [] });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it('preserves untracked inventory quotes', async () => {
+    const { deps } = fixture({ manage_stock: false, stock_quantity: null });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
+  });
+  it('checks the combined quantity of repeated selected product lines', async () => {
+    const { deps, getQuotes } = fixture({ stock_quantity: 3 });
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [input.items[0], input.items[0]] }, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it('does not quote a sold-out selected variant', async () => {
+    const { deps, getQuotes, rpc } = fixture({ has_variants: true });
+    const original = rpc.getMockImplementation();
+    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 0 }], error: null }) as never : original?.(name, args) as never);
+    expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'unavailable' });
+    expect(getQuotes).not.toHaveBeenCalled();
+  });
+  it.each(['ng', 'nigeria', 'NGA', ' NG '])('accepts equivalent Nigerian country projection %s', async (country) => {
+    const { deps, rpc } = fixture();
+    rpc.mockResolvedValue({ data: { business_name: 'Ogabassey', business_address: '2 Olaide Tomori Street, Ikeja, Lagos', state_code: 'LA', country }, error: null });
+    expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted' });
+  });
+
   it('prices catalog items with converted stored weight and public merchant origin', async () => {
     const { deps, getQuotes } = fixture();
     expect(await loadDeliveryGiglQuotes(input, deps)).toMatchObject({ status: 'quoted', quotes: [{ fee: 4200 }] });
@@ -40,7 +67,7 @@ describe('GIG quote preparation', () => {
   it('uses the selected variant override instead of the parent price', async () => {
     const { deps, getQuotes, rpc } = fixture({ has_variants: true });
     const original = rpc.getMockImplementation();
-    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000 }], error: null }) as never : original?.(name, args) as never);
+    rpc.mockImplementation((name: string, args: unknown) => name === 'get_storefront_product_variants' ? Promise.resolve({ data: [{ id: 'c985e013-7c2b-4655-a560-4085f27cd168', product_id: productId, price_override: 80000, stock_quantity: 5 }], error: null }) as never : original?.(name, args) as never);
     expect(await loadDeliveryGiglQuotes({ ...input, items: [{ ...input.items[0], variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168' }] }, deps)).toMatchObject({ status: 'quoted' });
     expect(getQuotes.mock.calls[0]?.[0].items[0].value).toBe(80000);
   });

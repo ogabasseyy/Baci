@@ -201,4 +201,34 @@ describe('POST /api/admin/blog/posts', () => {
     );
     expect(mockRevalidatePlatformBlog).toHaveBeenCalledWith('launch-faster');
   });
+
+  it.each([
+    null,
+    '',
+    '   ',
+  ])('accepts unset editorial metadata on POST: %j', async (value) => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/admin/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Guide',
+          slug: 'guide',
+          content: '<p>Guide</p>',
+          author_name: 'Editorial',
+          intent: value,
+          intent_source: value,
+          focus_keyword: value,
+        }),
+      })
+    );
+    expect(response.status).toBe(201);
+    expect(mockSupabase.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: null,
+        intent_source: null,
+        focus_keyword: null,
+      })
+    );
+  });
 });

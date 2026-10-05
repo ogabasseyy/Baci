@@ -110,8 +110,8 @@ export const createPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional(),
-  intent: z.enum(BLOG_INTENTS).optional(),
-  intent_source: z.string().max(100).optional(),
+  intent: z.enum(BLOG_INTENTS).optional().nullable(),
+  intent_source: z.string().max(100).optional().nullable(),
   category: z.string().max(100).optional(),
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
@@ -122,7 +122,7 @@ export const createPostSchema = z.object({
   status: z.enum(['draft', 'published', 'archived']).optional(),
   seo_title: z.string().max(70).optional(),
   seo_description: z.string().max(160).optional(),
-  focus_keyword: z.string().max(50).optional(),
+  focus_keyword: z.string().max(50).optional().nullable(),
   embedded_products: embeddedProductIdsSchema.optional(),
 });
 

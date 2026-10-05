@@ -26,6 +26,43 @@ const handoff = {
 
 describe('BlogReviewHandoffImporter', () => {
   it.each([
+    '{',
+    'not JSON',
+    '{"title":}',
+  ])('shows a friendly message for malformed JSON %s', async (text) => {
+    const onImport = vi.fn();
+    render(<BlogReviewHandoffImporter onImport={onImport} />);
+    fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+      target: { files: [new File([text], 'broken.json')] },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'This file is not valid JSON.'
+      )
+    );
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest import callback when a pending read finishes', async () => {
+    const oldImport = vi.fn();
+    const latestImport = vi.fn().mockReturnValue(false);
+    const { rerender } = render(
+      <BlogReviewHandoffImporter onImport={oldImport} />
+    );
+    const pending = Promise.withResolvers<string>();
+    const file = new File([], 'pending.json');
+    vi.spyOn(file, 'text').mockReturnValue(pending.promise);
+    fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+      target: { files: [file] },
+    });
+    rerender(<BlogReviewHandoffImporter onImport={latestImport} />);
+    await act(async () => pending.resolve(JSON.stringify(handoff)));
+    expect(oldImport).not.toHaveBeenCalled();
+    expect(latestImport).toHaveBeenCalledOnce();
+    expect(screen.getByRole('status')).toHaveTextContent('Import cancelled.');
+  });
+
+  it.each([
     'success',
     'failure',
   ] as const)('ignores an older read finishing with %s after a newer import', async (outcome) => {

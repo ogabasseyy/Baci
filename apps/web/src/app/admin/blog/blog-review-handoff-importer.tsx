@@ -1,10 +1,12 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { parseReviewHandoff } from './parse-review-handoff';
 
 const MAX_FILE_SIZE = 2_000_000;
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 type BlogReviewHandoffImporterProps = {
   onImport: (draft: PlatformAdminBlogFormState) => boolean | undefined;
@@ -16,7 +18,7 @@ export function BlogReviewHandoffImporter({
   const [message, setMessage] = useState('');
   const onImportRef = useRef(onImport);
   const importGenerationRef = useRef(0);
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     onImportRef.current = onImport;
   }, [onImport]);
 
@@ -31,7 +33,14 @@ export function BlogReviewHandoffImporter({
     try {
       const text = await file.text();
       if (generation !== importGenerationRef.current) return;
-      const draft = parseReviewHandoff(JSON.parse(text) as unknown);
+      let value: unknown;
+      try {
+        value = JSON.parse(text) as unknown;
+      } catch {
+        setMessage('This file is not valid JSON.');
+        return;
+      }
+      const draft = parseReviewHandoff(value);
       if (onImportRef.current(draft) === false) {
         setMessage('Import cancelled. Your article is unchanged.');
         return;

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { initializeLabRuntime } from '../../lab-route';
 import { type LabTestAsset, setupLabRoots } from '../../lab-test-roots';
 import PilotLabStoreRoute from './page';
 
@@ -174,6 +175,7 @@ async function setupFullRoots() {
   vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
   vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
   vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+  await initializeLabRuntime();
   return roots;
 }
 
@@ -212,6 +214,10 @@ async function renderStore(storeSlug: string, arm?: string): Promise<string> {
 
 describe('pilot-lab store routes', () => {
   afterEach(() => {
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.runtime')
+    );
     vi.unstubAllEnvs();
   });
 
@@ -426,6 +432,7 @@ describe('pilot-lab store routes', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderStore('zorvexa', 'pilot');
     expect(html).toContain('data-pilot-lab-status="missing-binding"');
     expect(html).toContain('header-logo — missing binding');
@@ -445,6 +452,7 @@ describe('pilot-lab store routes', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderStore('squishyland', 'pilot');
     expect(html).toContain('data-pilot-lab-status="not-optimized"');
     expect(html).toContain('squishy-blue-soap — not optimized');

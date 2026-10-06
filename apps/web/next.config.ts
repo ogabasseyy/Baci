@@ -6,6 +6,7 @@ import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
+import { assertPilotPublicAssets } from './src/config/pilot-public-assets';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -20,6 +21,9 @@ import {
   getPostHogUiHost,
   isPostHogSourceMapUploadEnabled,
 } from './src/lib/posthog/config';
+
+// Public assets bypass route guards; refuse non-lab builds with staged data.
+assertPilotPublicAssets(path.join(__dirname, 'public'));
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.

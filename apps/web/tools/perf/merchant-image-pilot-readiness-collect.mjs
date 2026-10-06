@@ -3,32 +3,13 @@
 // and the measured geometry the pure checks verdict. Split from the
 // driver (merchant-image-pilot-readiness.mjs) under the repo line ceiling.
 
-// No-AVIF emulation: remove AVIF candidates (typed <source> elements and
-// AVIF preload links) from the served document, so a real browser must
-// select the WebP fallback exactly as a no-AVIF browser would. Returns
-// the stripped document plus the stripped count — a run that strips
-// nothing proves no fallback and must fail, not pass vacuously.
-export function stripAvifCandidates(html) {
-  let stripped = 0;
-  const body = String(html)
-    .replace(/<source\b[^>]*type="image\/avif"[^>]*>/gi, () => {
-      stripped += 1;
-      return '';
-    })
-    .replace(/<link\b[^>]*type="image\/avif"[^>]*>/gi, () => {
-      stripped += 1;
-      return '';
-    });
-  return { body, stripped };
-}
-
 export async function collectSurface(page, url, surface, options = {}) {
   const consoleErrors = [];
   const failedRequests = [];
   const imageUrls = [];
   const origin = new URL(url).origin;
-  const stripAvif = options.stripAvif === true;
-  let strippedAvif = 0;
+  const disableAvif = options.disableAvif === true;
+  let avifDisabled = false;
   page.on('console', (message) => {
     if (message.type() === 'error') {
       consoleErrors.push(message.text().slice(0, 200));
@@ -60,9 +41,8 @@ export async function collectSurface(page, url, surface, options = {}) {
   page.on('response', (response) => {
     const responseUrl = response.url();
     const foreign = isForeign(responseUrl);
-    if (stripAvif && isAvifUrl(responseUrl)) {
-      // Strip hole: no AVIF candidate survived to be requested, so any
-      // AVIF response is an unlisted reference, not a fallback.
+    if (disableAvif && isAvifUrl(responseUrl)) {
+      // Unsupported AVIF must not be fetched by this fallback profile.
       failedRequests.push(
         `avif served despite no-avif ${responseUrl.slice(-80)}`
       );
@@ -86,16 +66,14 @@ export async function collectSurface(page, url, surface, options = {}) {
       `${foreign ? 'cross-origin ' : ''}requestfailed ${requestUrl.slice(-80)} (${request.failure()?.errorText ?? 'unknown'})`
     );
   });
-  if (stripAvif) {
-    await page.route(
-      (routeUrl) => routeUrl.href === url,
-      async (route) => {
-        const response = await route.fetch();
-        const stripped = stripAvifCandidates(await response.text());
-        strippedAvif += stripped.stripped;
-        await route.fulfill({ body: stripped.body, response });
-      }
-    );
+  if (disableAvif) {
+    // Preserve the complete server/client hydration tree. Chromium changes
+    // format support, not HTML; unsupported CDP commands fail before navigation.
+    const session = await page.context().newCDPSession(page);
+    await session.send('Emulation.setDisabledImageTypes', {
+      imageTypes: ['avif'],
+    });
+    avifDisabled = true;
   }
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   const geometry = await page.evaluate((surface) => {
@@ -188,6 +166,8 @@ export async function collectSurface(page, url, surface, options = {}) {
         (entry) => entry.initiatorType === 'link' && entry.name.endsWith('.css')
       );
     return {
+      avifCandidates: document.querySelectorAll('source[type="image/avif"]')
+        .length,
       devicePixelRatio: window.devicePixelRatio,
       gridDisplay: grid ? getComputedStyle(grid).display : 'n/a-hero',
       heading: rectOf(heading),
@@ -216,5 +196,5 @@ export async function collectSurface(page, url, surface, options = {}) {
       viewportWidth: window.innerWidth,
     };
   }, surface);
-  return { consoleErrors, failedRequests, geometry, imageUrls, strippedAvif };
+  return { avifDisabled, consoleErrors, failedRequests, geometry, imageUrls };
 }

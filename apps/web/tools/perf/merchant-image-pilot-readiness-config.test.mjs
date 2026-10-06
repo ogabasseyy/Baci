@@ -44,10 +44,10 @@ describe('merchant-image-pilot-readiness profiles', () => {
     expect(READINESS_PROFILES['mobile-390-dpr2-noavif']).toMatchObject({
       deviceScaleFactor: 2,
       isMobile: true,
-      stripAvif: true,
+      disableAvif: true,
       viewport: { height: 844, width: 390 },
     });
-    expect(READINESS_PROFILES['mobile-390-dpr2'].stripAvif ?? false).toBe(
+    expect(READINESS_PROFILES['mobile-390-dpr2'].disableAvif ?? false).toBe(
       false
     );
   });

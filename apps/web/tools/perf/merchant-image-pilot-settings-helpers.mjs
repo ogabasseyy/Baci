@@ -156,7 +156,7 @@ export function findCacheHits(har) {
 //   {"event":"profile-reset","freshProfile":true,
 //    "profileDir":"<runner profile path>","resetAt":"<ISO datetime>",
 //    "tool":"<runner name>"}
-// The reset must precede the earliest HAR navigation by at most one
+// A single reset certifies only one HAR navigation and must precede it by at most one
 // hour: a stale (or post-run) reset proves nothing about this run.
 export function verifyCacheProvenance(text, pages, sourceLabel) {
   if (text === null || text === undefined) {
@@ -186,6 +186,12 @@ export function verifyCacheProvenance(text, pages, sourceLabel) {
     return {
       error:
         'cache-provenance artifact must be a runner profile-reset record {event, freshProfile, profileDir, resetAt, tool}',
+      ok: false,
+    };
+  }
+  if (pages?.length > 1) {
+    return {
+      error: 'one cache reset can certify exactly one HAR iteration',
       ok: false,
     };
   }

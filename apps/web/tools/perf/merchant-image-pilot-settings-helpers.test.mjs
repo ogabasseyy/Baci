@@ -195,6 +195,10 @@ describe('merchant-image-pilot-settings helpers', () => {
       ok: true,
       summary: 'browsertime@2026-10-04T00:09:00.000Z',
     });
+    expect(verifyCacheProvenance(valid, [...pages, ...pages]).error).toMatch(
+      /exactly one HAR iteration/
+    );
+    expect(verifyCacheProvenance(valid, [...pages, {}]).ok).toBe(false);
     // Unreadable, malformed, and misshapen artifacts fail closed.
     expect(verifyCacheProvenance(null, pages, 'missing.json').error).toMatch(
       /cannot read/

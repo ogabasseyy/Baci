@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  collectSurface,
-  stripAvifCandidates,
-} from './merchant-image-pilot-readiness-collect.mjs';
+import { collectSurface } from './merchant-image-pilot-readiness-collect.mjs';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -167,61 +164,32 @@ describe('collectSurface', () => {
     );
   });
 
-  it('strips AVIF candidates while keeping the WebP fallback', () => {
-    const html = [
-      '<link rel="preload" as="image" type="image/avif" imagesrcset="/__pilot/g/a.avif 48w" data-pilot-lab-preload="pilot">',
-      '<picture data-pilot-lab-picture="pilot">',
-      '<source type="image/avif" srcset="/__pilot/g/a.avif 48w">',
-      '<source type="image/webp" srcset="/__pilot/g/w.webp 48w">',
-      '<img src="/__pilot/g/w.webp">',
-      '</picture>',
-    ].join('');
-    const stripped = stripAvifCandidates(html);
-    expect(stripped.stripped).toBe(2);
-    expect(stripped.body).not.toContain('image/avif');
-    expect(stripped.body).toContain('image/webp');
-    expect(stripped.body).toContain('<img src="/__pilot/g/w.webp">');
-    expect(stripAvifCandidates('<p>no candidates</p>').stripped).toBe(0);
-  });
-
-  it('routes the no-avif document through the strip and fails AVIF responses', async () => {
+  it('disables AVIF before navigating without changing hydration markup', async () => {
     stubBrowser({ selectedImg: fakeImg(), slotImg: null });
-    const routes = [];
-    const avifHtml =
-      '<source type="image/avif" srcset="/__pilot/g/a.avif 48w"><img src="/__pilot/g/w.webp">';
-    let fulfilled = null;
-    const fakeRoute = {
-      fetch: async () => ({ text: async () => avifHtml }),
-      fulfill: (arg) => {
-        fulfilled = arg;
-      },
-    };
+    const order = [];
+    const send = vi.fn(() => {
+      order.push('emulate');
+      return Promise.resolve();
+    });
     const page = {
       ...fakePage(),
-      // Navigation runs the registered document route, like Playwright.
-      goto: async () => {
-        for (const [, handler] of routes) {
-          await handler(fakeRoute);
-        }
+      context: () => ({ newCDPSession: async () => ({ send }) }),
+      goto: () => {
+        order.push('navigate');
+        return Promise.resolve();
       },
-      route: (predicate, handler) => {
-        routes.push([predicate, handler]);
-      },
+      route: vi.fn(),
     };
-    const url = 'https://lab/pilot-lab/store/omnimart';
-    const collected = await collectSurface(page, url, 'grid', {
-      stripAvif: true,
+    const collected = await collectSurface(page, 'https://lab/store', 'grid', {
+      disableAvif: true,
     });
-    // One document route, matching only the navigated URL.
-    expect(routes).toHaveLength(1);
-    const [predicate] = routes[0];
-    expect(predicate(new URL(url))).toBe(true);
-    expect(predicate(new URL('https://lab/__pilot/g/a.avif'))).toBe(false);
-    // The fulfilled document lost its AVIF candidate and the count shows it.
-    expect(fulfilled.body).not.toContain('image/avif');
-    expect(fulfilled.body).toContain('<img src="/__pilot/g/w.webp">');
-    expect(collected.strippedAvif).toBe(1);
-    // Any AVIF response past the strip is a hole, not a fallback.
+    expect(send).toHaveBeenCalledWith('Emulation.setDisabledImageTypes', {
+      imageTypes: ['avif'],
+    });
+    expect(order).toEqual(['emulate', 'navigate']);
+    expect(page.route).not.toHaveBeenCalled();
+    expect(collected.avifDisabled).toBe(true);
+    expect(collected.geometry.avifCandidates).toBe(1);
     page.listeners.response({
       headers: () => ({ 'content-type': 'image/avif' }),
       status: () => 200,
@@ -232,22 +200,31 @@ describe('collectSurface', () => {
     ]);
   });
 
-  it('installs no route on standard profiles', async () => {
-    stubBrowser({ selectedImg: fakeImg(), slotImg: null });
-    let routed = false;
+  it('fails closed before navigation when format emulation is unavailable', async () => {
+    const goto = vi.fn();
     const page = {
       ...fakePage(),
-      route: () => {
-        routed = true;
-      },
+      goto,
+      context: () => ({
+        newCDPSession: async () => ({
+          send: () => Promise.reject(new Error('unsupported command')),
+        }),
+      }),
     };
-    const collected = await collectSurface(
-      page,
-      'https://lab/pilot-lab/store/omnimart',
-      'grid'
-    );
-    expect(routed).toBe(false);
-    expect(collected.strippedAvif).toBe(0);
+    await expect(
+      collectSurface(page, 'https://lab/store', 'grid', {
+        disableAvif: true,
+      })
+    ).rejects.toThrow('unsupported command');
+    expect(goto).not.toHaveBeenCalled();
+  });
+
+  it('does not change format support on standard profiles', async () => {
+    stubBrowser({ selectedImg: fakeImg(), slotImg: null });
+    const page = { ...fakePage(), context: vi.fn() };
+    const collected = await collectSurface(page, 'https://lab/store', 'grid');
+    expect(page.context).not.toHaveBeenCalled();
+    expect(collected.avifDisabled).toBe(false);
   });
 
   it('records console, request, and image-URL hygiene', async () => {

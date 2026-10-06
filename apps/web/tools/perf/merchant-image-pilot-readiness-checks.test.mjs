@@ -251,7 +251,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
     stagedOriginal: '/__pilot/originals/x.png',
   };
   const pilotImg = {
-    box: { height: 40, width: 40 },
+    box: { height: 40, width: 40, x: 8, y: 8 },
     complete: true,
     currentSrc: 'https://lab/__pilot/abc/x.avif',
     naturalHeight: 80,
@@ -520,6 +520,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         heading: { height: 1, width: 1, x: 0, y: 0 },
         imgObjectFit: 'cover',
         selected: { height: 300, width: 180, x: 8, y: 120 },
+        avifCandidates: 3,
         selectedImg: webpImg,
         slots: [{ ...goodSlot, img: webpImg }, cardSlot],
         stylesheetBytes: 1200,
@@ -528,7 +529,7 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
         viewportWidth: 390,
       },
       imageUrls: ['https://lab/__pilot/abc/x.webp'],
-      strippedAvif: 3,
+      avifDisabled: true,
     };
     const options = {
       arm: 'pilot',
@@ -538,11 +539,14 @@ describe('merchant-image-pilot-readiness slot mounts', () => {
       surface: 'grid',
     };
     expect(surfaceProblems(base, options)).toEqual([]);
-    // Stripped nothing: the page had no AVIF to fall back from.
-    expect(surfaceProblems({ ...base, strippedAvif: 0 }, options)).toEqual([
-      'no-avif run stripped no AVIF candidates',
-    ]);
-    // AVIF bytes still fetched: a strip hole, not a fallback.
+    // No retained candidates: the page had no AVIF to fall back from.
+    expect(
+      surfaceProblems(
+        { ...base, geometry: { ...base.geometry, avifCandidates: 0 } },
+        options
+      )
+    ).toEqual(['no-avif run has no retained AVIF candidates']);
+    // AVIF bytes still fetched: unsupported format was requested.
     expect(
       surfaceProblems(
         {

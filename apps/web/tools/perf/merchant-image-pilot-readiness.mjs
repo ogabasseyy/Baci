@@ -119,15 +119,15 @@ async function run() {
           });
           try {
             const page = await context.newPage();
-            // No-AVIF profiles strip AVIF candidates on the pilot arm so
+            // No-AVIF profiles disable format support on the pilot arm so
             // the run must prove WebP fallback selection; control keeps
             // full Chrome (format-honest originals, Chrome baseline).
-            const expectNoAvif = device.stripAvif === true && arm === 'pilot';
+            const expectNoAvif = device.disableAvif === true && arm === 'pilot';
             const collected = await collectSurface(
               page,
               `${args.origin}/pilot-lab/store/${store.slug}?arm=${arm}`,
               surface,
-              { stripAvif: expectNoAvif }
+              { disableAvif: expectNoAvif }
             );
             surfaces[arm] = collected;
             const problems = surfaceProblems(collected, {

@@ -2,7 +2,6 @@
 
 import { Eye, Minus, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
 import { ThemedButton, ThemedCard } from '@/components/themed';
 import { CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +10,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
+import { LabProductCardImage } from './lab-product-card-image';
 import type { ProjectedPilotImage } from './next-image-adapter';
 
 // Lab-only clone of StorefrontProductCard
@@ -37,48 +37,6 @@ export {
   labCardSlot,
   labProductFixture,
 } from './lab-fixtures';
-
-export function LabProductCardImage({
-  imageHint,
-  placeholder,
-  projection,
-}: {
-  imageHint: string;
-  placeholder: string;
-  projection: ProjectedPilotImage;
-}) {
-  // Immediate paint parity with the control's next/image blur placeholder
-  // (data URL, zero requests); removed on decode like the framework's.
-  const [loaded, setLoaded] = useState(false);
-  const style = loaded
-    ? undefined
-    : { backgroundImage: `url("${placeholder}")`, backgroundSize: 'cover' };
-  return (
-    <picture data-pilot-lab-card-image="true" style={style}>
-      {projection.sources.map((source) => (
-        <source
-          key={source.format}
-          sizes={projection.sizes}
-          srcSet={source.srcSet}
-          type={`image/${source.format}`}
-        />
-      ))}
-      <img
-        src={projection.fallbackSrc}
-        alt={projection.alt}
-        data-ai-hint={imageHint}
-        width={projection.width}
-        height={projection.height}
-        sizes={projection.sizes}
-        loading={projection.loading}
-        fetchPriority={projection.fetchPriority}
-        decoding="async"
-        className="object-cover w-full h-auto aspect-video"
-        onLoad={() => setLoaded(true)}
-      />
-    </picture>
-  );
-}
 
 interface LabStorefrontProductCardProps {
   product: Product;

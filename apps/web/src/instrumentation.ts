@@ -51,6 +51,13 @@ function getRequestTenantContext(
 export async function register() {
   // Only register in server-side environments (Node.js runtime)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // Standalone starts can reuse serialized Next config: recheck the actual
+    // runtime public tree, including lab-built artifacts started with flag off.
+    const [{ assertPilotPublicAssets }, { join }] = await Promise.all([
+      import('@/config/pilot-public-assets'),
+      import('node:path'),
+    ]);
+    assertPilotPublicAssets(join(process.cwd(), 'public'));
     if (process.env.BACI_IMAGE_PILOT_LAB === '1') {
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'

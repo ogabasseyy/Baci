@@ -86,6 +86,35 @@ For browser evidence:
 
 ## Review packet to return
 
+### Lab isolation and fallback readiness (review follow-up)
+
+- Non-lab Next configuration and Node startup reject staged merchant files in
+  `public/__pilot`. Only the three hash-verified committed synthetic fillers
+  are permitted. Keep lab builds/workspaces separate from deployable artifacts;
+  use a clean public tree for non-lab builds. The gate never deletes evidence.
+- The no-AVIF profile uses Chromium CDP format emulation, not HTML rewriting;
+  server markup and client hydration props remain identical. An unsupported
+  CDP command fails before navigation. Retained AVIF candidates, confirmed
+  emulation, WebP selection, and zero AVIF responses remain required.
+- Browser coverage is not yet cleared: the bounded Chrome smoke selected
+  WebP with clean hydration but still fetched an explicit AVIF preload.
+  The readiness gate rejects this, rather than suppressing the request. Do
+  not count this profile as passed or use it for performance comparisons.
+- The opt-in `Pilot codec compatibility` workflow tests a native unsupported-
+  codec candidate: pinned Playwright 1.55.1 WebKit on Windows 2022. Run via
+  workflow dispatch, or apply the `pilot-codec-check` PR label (subsequent
+  pushes to that labelled PR rerun it). It installs only the isolated locked
+  runtime in `.github/fixtures/pilot-codec`, never the application workspace.
+  The synthetic loopback fixture must prove AVIF decode unsupported, WebP
+  decode supported, no AVIF request, unchanged picture sources, successful
+  hydration and working interaction. It uploads JSON plus a screenshot.
+  A pass validates this browser/fixture only, not the pilot surface matrix,
+  current Safari, mobile performance or CWV. Integrate and run actual pilot
+  pages only after this prerequisite is observed green. No app build, secrets,
+  merchant data, deployment or production navigation is part of this job.
+- One reset-provenance record certifies only one HAR navigation. Multi-page
+  reports require separate single-navigation evidence, not one shared reset.
+
 Provide:
 
 1. Exact worktree, branch, base/HEAD, commit list if permitted and `git status`; manifest of task-owned changed/new files. State whether anything was pushed/deployed (expected: no).

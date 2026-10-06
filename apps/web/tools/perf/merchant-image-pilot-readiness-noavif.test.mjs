@@ -4,24 +4,28 @@ import { noAvifSurfaceProblems } from './merchant-image-pilot-readiness-noavif.m
 describe('no-avif fallback proof', () => {
   const base = {
     imageUrls: ['https://lab/__pilot/abc/x.webp'],
-    strippedAvif: 3,
+    avifDisabled: true,
+    geometry: { avifCandidates: 3 },
   };
 
-  it('passes a pilot run that stripped, avoided AVIF, and fetched WebP', () => {
+  it('passes a pilot run that retained candidates, avoided AVIF, and fetched WebP', () => {
     expect(noAvifSurfaceProblems(base, 'pilot')).toEqual([]);
   });
 
-  it('ignores the control arm (unstripped Chrome baseline)', () => {
+  it('ignores the control arm (normal Chrome baseline)', () => {
     expect(noAvifSurfaceProblems({ imageUrls: [] }, 'control')).toEqual([]);
   });
 
-  it('fails a vacuous run that stripped no AVIF candidates', () => {
+  it('fails a vacuous run that has no AVIF candidates', () => {
     expect(
-      noAvifSurfaceProblems({ ...base, strippedAvif: 0 }, 'pilot')
-    ).toEqual(['no-avif run stripped no AVIF candidates']);
+      noAvifSurfaceProblems(
+        { ...base, geometry: { avifCandidates: 0 } },
+        'pilot'
+      )
+    ).toEqual(['no-avif run has no retained AVIF candidates']);
   });
 
-  it('fails AVIF bytes fetched past the strip', () => {
+  it('fails AVIF bytes fetched despite disabled support', () => {
     expect(
       noAvifSurfaceProblems(
         {
@@ -36,6 +40,12 @@ describe('no-avif fallback proof', () => {
     ).toEqual([
       'no-avif run fetched AVIF bytes: https://lab/__pilot/abc/x.avif',
     ]);
+  });
+
+  it('requires confirmed browser emulation', () => {
+    expect(
+      noAvifSurfaceProblems({ ...base, avifDisabled: false }, 'pilot')
+    ).toEqual(['no-avif run did not confirm browser format emulation']);
   });
 
   it('fails a run that fetched no WebP fallback', () => {

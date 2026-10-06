@@ -5,6 +5,7 @@ import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
+import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
 import {
   runSavingsGoalSubmission,
@@ -142,7 +143,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       if (!input.initialContributionIdempotencyKey) {
         input.setInitialContributionIdempotencyKey(idempotencyKey);
       }
-      await addSavingsContribution({
+      const contributionResult = await addSavingsContribution({
         amount,
         goalId,
         idempotencyKey,
@@ -150,6 +151,16 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         merchantSlug: input.activeMerchantSlug,
       });
       if (!mountedRef.current) return;
+      // Completion reconciliation for the deferred path: the reminder was
+      // retained at creation because the transfer was unconfirmed — now that
+      // a confirmed contribution completes the goal, cancel it.
+      if (contributionResult.goalStatus === 'completed') {
+        try {
+          await cancelSavingsReminderNotification(goalId);
+        } catch {
+          // Reminder cleanup is best effort after a confirmed contribution.
+        }
+      }
       input.setInitialContributionIdempotencyKey(null);
       input.setCreatedGoalId?.(null);
       input.setShowTransferModal(false);

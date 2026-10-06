@@ -121,15 +121,17 @@ export async function runSavingsGoalSubmission(
     if (!isCurrent()) return;
     if (input.sourceMode === 'manual') {
       try {
-        // Base the decision on the intended initial transfer, not the
-        // requested one: a deferred transfer is requested as 0 now, but
-        // the user is about to move effectiveInitialContribution — so a
-        // deferred transfer that fully funds the goal must cancel any
-        // reminder instead of scheduling a recurring one.
-        const intendedInitialContribution = input.deferInitialContribution
-          ? input.effectiveInitialContribution
-          : requestInitialContribution;
-        if (input.targetValue > intendedInitialContribution) {
+        // A deferred transfer is unconfirmed: the goal is created with an
+        // initial contribution of 0, and the customer may leave the funding
+        // screen without sending anything. Always schedule the reminder for
+        // deferred plans — completion reconciliation cancels it once a
+        // confirmed contribution completes the goal. Only an immediate
+        // (requested-now) contribution that fully funds the goal at creation
+        // may cancel instead of scheduling.
+        if (
+          input.deferInitialContribution ||
+          input.targetValue > requestInitialContribution
+        ) {
           await scheduleSavingsReminderNotification({
             contributionAmount: input.contributionValue,
             frequency: input.frequency,

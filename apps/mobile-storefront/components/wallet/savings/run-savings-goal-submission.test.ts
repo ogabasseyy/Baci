@@ -278,9 +278,27 @@ describe('runSavingsGoalSubmission', () => {
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
   });
 
-  it('cancels reminders when the deferred transfer fully funds the goal', async () => {
+  // Previously asserted that a full-intent deferred transfer cancels the
+  // reminder at creation. That treated an UNCONFIRMED intended transfer as
+  // complete: the goal is created with initialContributionAmount 0, so a
+  // customer who abandons the funding screen is left with an empty active
+  // plan and no reminder. The reminder is now retained until a confirmed
+  // contribution completes the goal (see submitBankTransferContribution).
+  it('schedules reminders when the deferred transfer intends to fully fund the goal', async () => {
     const input = createInput({
       deferInitialContribution: true,
+      effectiveInitialContribution: 800000,
+      targetValue: 800000,
+    });
+
+    await runSavingsGoalSubmission(input, validation);
+
+    expect(mockScheduleSavingsReminderNotification).toHaveBeenCalledTimes(1);
+    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels reminders when an immediate contribution fully funds the goal', async () => {
+    const input = createInput({
       effectiveInitialContribution: 800000,
       targetValue: 800000,
     });

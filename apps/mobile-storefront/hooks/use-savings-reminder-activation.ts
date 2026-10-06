@@ -26,11 +26,25 @@ export function useSavingsReminderActivation({
   isStorageReady: boolean;
   isTrackingAuthorizationSettled: boolean;
 }) {
+  // Signed-out boots must not activate: reminder storage is device-global,
+  // and without a user the service falls back to local scheduling, which
+  // would surface the previous account's goal titles and amounts.
+  const storeUserId = storeUser?.id ?? null;
   useEffect(() => {
-    if (isInitialized && isStorageReady && isTrackingAuthorizationSettled) {
+    if (
+      storeUserId &&
+      isInitialized &&
+      isStorageReady &&
+      isTrackingAuthorizationSettled
+    ) {
       activateDueSavingsReminderSafely();
     }
-  }, [isInitialized, isStorageReady, isTrackingAuthorizationSettled]);
+  }, [
+    storeUserId,
+    isInitialized,
+    isStorageReady,
+    isTrackingAuthorizationSettled,
+  ]);
 
   const bootReadyRef = useRef(false);
   bootReadyRef.current =

@@ -156,4 +156,29 @@ describe('security-integrity-find-installed-roots', () => {
       /12-level upward-walk cap/
     );
   });
+
+  it('finds duplicates under sibling workspaces', () => {
+    // A mini-monorepo: the caller sits in apps/web, the duplicate in
+    // apps/sibling. The `packages:` globs (block list, quoted, with a
+    // trailing section) must expand to cover the sibling install.
+    const ws = mkdtempSync(join(tmpdir(), 'ws-fixture-'));
+    try {
+      writeFileSync(
+        join(ws, 'pnpm-workspace.yaml'),
+        'packages:\n  - "apps/*"\n  - "packages/*"\nallowBuilds:\n  foo: true\n'
+      );
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      const sib = join(ws, 'apps', 'sibling', 'node_modules', 'dup');
+      mkdirSync(sib, { recursive: true });
+      writeFileSync(
+        join(sib, 'package.json'),
+        JSON.stringify({ name: 'dup', version: '0.0.0' })
+      );
+      expect(findInstalledRoots('dup', join(ws, 'apps', 'web'))).toEqual([
+        realpathSync(sib),
+      ]);
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });

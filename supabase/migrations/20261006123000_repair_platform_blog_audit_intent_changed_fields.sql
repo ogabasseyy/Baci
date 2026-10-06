@@ -69,7 +69,6 @@ BEGIN
       CASE WHEN NEW.category IS DISTINCT FROM OLD.category THEN 'category' END,
       CASE WHEN NEW.tags IS DISTINCT FROM OLD.tags THEN 'tags' END,
       CASE WHEN NEW.keywords IS DISTINCT FROM OLD.keywords THEN 'keywords' END,
-      CASE WHEN NEW.focus_keyword IS DISTINCT FROM OLD.focus_keyword THEN 'focus_keyword' END,
       CASE WHEN NEW.status IS DISTINCT FROM OLD.status THEN 'status' END,
       CASE WHEN NEW.published_at IS DISTINCT FROM OLD.published_at THEN 'published_at' END,
       CASE WHEN NEW.is_platform_post IS DISTINCT FROM OLD.is_platform_post THEN 'is_platform_post' END,

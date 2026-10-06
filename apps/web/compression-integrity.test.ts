@@ -96,11 +96,17 @@ describe('compression integrity (CVE-2026-87776)', () => {
     const res = createRes();
     res.setHeader('Content-Type', 'text/plain');
     compression({ threshold: 0 })(req, res, () => {});
+    // The mock is a real EventEmitter, and the middleware subscribes via
+    // the genuine mechanism (`_on.call(res, 'close', ...)` at
+    // compression/index.js:169-171), so emitting 'close' drives the
+    // actual onResponseClose handler, not a stub. 1.8.1 registers no
+    // close listener at all, so this assertion also discriminates.
+    expect(res.listenerCount('close')).toBeGreaterThan(0);
     res.emit('close');
     res.end(BODY);
-    // Fixed: the abandoned stream is destroyed and dropped, so the body
-    // passes through uncompressed with no Content-Encoding. Pre-fix the
-    // stream survived close and emitted gzip bytes instead.
+    // Fixed: the abandoned stream is destroyed and dropped (index.js:233-240),
+    // so the body passes through uncompressed with no Content-Encoding.
+    // Pre-fix the stream survived close and emitted gzip bytes instead.
     expect(res.getHeader('Content-Encoding')).toBeUndefined();
     expect(Buffer.concat(res.captured).toString()).toBe(BODY);
   });

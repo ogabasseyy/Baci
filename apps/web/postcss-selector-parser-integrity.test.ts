@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
+import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
 import { parseVersion } from './security-integrity-parse-version';
-import { resolveRoot } from './security-integrity-resolve-root';
 import { versionAt } from './security-integrity-version-at';
 import { isAtLeast } from './security-integrity-version-floor';
 
@@ -19,15 +20,17 @@ import { isAtLeast } from './security-integrity-version-floor';
 // so 6.0.10 carries a backport patch (see `pnpm-workspace.yaml`
 // patchedDependencies). The guard asserts the Set-based membership code
 // is present, plus a timeout-controlled behavioral case that fails on
-// the actual pre-fix CPU-exhaustion condition.
+// the actual pre-fix CPU-exhaustion condition. Every installed copy is
+// guarded (mirroring the graphql-tools suite): a nested pristine
+// duplicate under a dependent must not escape while the hoisted copy
+// passes.
 
 const require = createRequire(import.meta.url);
 
-function packageRoot(): string {
-  return resolveRoot(
-    'postcss-selector-parser',
-    process.env.PSP_ROOT,
-    'PSP_ROOT'
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(process.env.PSP_ROOTS, 'PSP_ROOTS') ??
+    findInstalledRoots('postcss-selector-parser')
   );
 }
 
@@ -48,8 +51,13 @@ interface Parser {
 const FLAT_CLASSES = 300_000;
 
 describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
-  it('resolves postcss-selector-parser at or above the 6.0.10 floor', () => {
-    const root = packageRoot();
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('resolves postcss-selector-parser at or above the 6.0.10 floor in %s', (root) => {
     // A floor, like the katex suite: a future patched 6.0.x bump must
     // not fail this gate. Fail-closed: an unpatched bump still fails
     // the backport markers and the linear-time behavior case.
@@ -61,8 +69,10 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     ).toBe(true);
   });
 
-  it('keeps the linear-time membership backport applied', () => {
-    const source = readFileSync(join(packageRoot(), 'dist/parser.js'), 'utf8');
+  it.each(
+    candidateRoots()
+  )('keeps the linear-time membership backport applied in %s', (root) => {
+    const source = readFileSync(join(root, 'dist/parser.js'), 'utf8');
     expect(source).toContain('var classIndexes = new Set(hasClass);');
     expect(source).toContain('var idIndexes = new Set(hasId);');
     expect(source).toContain('if (classIndexes.has(ind)) {');
@@ -78,8 +88,10 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(codeOnly).not.toContain('hasId.indexOf(ind)');
   });
 
-  it('still parses flat class/id selectors correctly', () => {
-    const parser = require(packageRoot()) as () => Parser;
+  it.each(
+    candidateRoots()
+  )('still parses flat class/id selectors correctly in %s', (root) => {
+    const parser = require(root) as () => Parser;
     const flat = `.a${'.b'.repeat(50)}#c`;
     expect(parser().processSync(flat)).toBe(flat);
     const ast = parser().astSync(flat);
@@ -90,8 +102,9 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(ast.first?.nodes?.some((node) => node.type === 'id')).toBe(true);
   });
 
-  it('parses 300k flat selectors in linear time', () => {
-    const root = packageRoot();
+  it.each(
+    candidateRoots()
+  )('parses 300k flat selectors in linear time in %s', (root) => {
     const entry = join(root, packageMain(root));
     const script = [
       `const parser = require(${JSON.stringify(entry)})`,

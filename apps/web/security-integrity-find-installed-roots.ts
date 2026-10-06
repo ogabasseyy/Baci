@@ -1,14 +1,15 @@
-import { existsSync, readdirSync, realpathSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Enumerate EVERY installed copy of a package: the hoisted layout's
-// nested duplicates AND the pnpm virtual store
-// (`node_modules/.pnpm/<pkg>@<version>/node_modules/<pkg>`), so a
-// non-hoisted or doubly-nested duplicate cannot stay vulnerable while
-// the version gate stays green. Scoped-aware, realpath-deduped, and
-// bounded at the enclosing repo root so worktree checkouts never scan a
-// parent checkout's node_modules.
+// Enumerate EVERY installed copy of a package: the ancestor chain's
+// nested duplicates, the pnpm virtual store
+// (`node_modules/.pnpm/<pkg>@<version>/node_modules/<pkg>`), AND every
+// sibling workspace's node_modules (from the `packages:` globs), so a
+// non-hoisted, doubly-nested, or sibling-app duplicate cannot stay
+// vulnerable while the version gate stays green. Scoped-aware,
+// realpath-deduped, and bounded at the enclosing repo root so worktree
+// checkouts never scan a parent checkout's node_modules.
 //
 // Soundness bound (fail-closed, not silent): recursion past depth 8
 // and an upward walk past 12 levels both throw, so a pathological
@@ -16,6 +17,93 @@ import { fileURLToPath } from 'node:url';
 // covers realistic pnpm hoisted and virtual-store layouts.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Minimal `packages:` reader for pnpm-workspace.yaml: block lists and
+// flow lists only (no YAML dependency for a test helper).
+function readPackageGlobs(workspaceRoot: string): string[] {
+  let text: string;
+  try {
+    text = readFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8');
+  } catch {
+    return [];
+  }
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) =>
+    /^packages:\s*(\[.*\])?\s*(#.*)?$/.test(line)
+  );
+  if (start === -1) {
+    return [];
+  }
+  const inline = lines[start].match(/^packages:\s*\[(.*)\]/);
+  if (inline) {
+    return inline[1]
+      .split(',')
+      .map((item) => item.trim().replace(/^['"]|['"]$/g, ''))
+      .filter((item) => item.length > 0);
+  }
+  const globs: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*#/.test(line) || line.trim() === '') {
+      continue;
+    }
+    if (/^[^\s]/.test(line)) {
+      break;
+    }
+    const item = line.match(/^\s*-\s*(.+?)\s*(#.*)?$/);
+    if (item) {
+      globs.push(item[1].replace(/^['"]|['"]$/g, ''));
+    }
+  }
+  return globs;
+}
+
+// Expand workspace globs (`apps/*`, literal paths) to directories,
+// staying inside the workspace root.
+function expandWorkspaces(workspaceRoot: string): string[] {
+  const results: string[] = [];
+  const expand = (base: string, segments: string[]): void => {
+    if (segments.length === 0) {
+      results.push(base);
+      return;
+    }
+    const [head, ...tail] = segments;
+    if (!head.includes('*')) {
+      expand(join(base, head), tail);
+      return;
+    }
+    let entries: string[];
+    try {
+      entries = readdirSync(base);
+    } catch {
+      return;
+    }
+    const pattern = new RegExp(
+      `^${head.split('*').map(escapeRegExp).join('.*')}$`
+    );
+    for (const entry of entries) {
+      if (entry === 'node_modules' || entry.startsWith('.')) {
+        continue;
+      }
+      if (pattern.test(entry)) {
+        expand(join(base, entry), tail);
+      }
+    }
+  };
+  for (const glob of readPackageGlobs(workspaceRoot)) {
+    if (glob.includes('..') || isAbsolute(glob)) {
+      continue;
+    }
+    expand(
+      workspaceRoot,
+      glob.split('/').filter((s) => s.length > 0 && s !== '.')
+    );
+  }
+  return results;
+}
 
 export function findInstalledRoots(
   packageName: string,
@@ -102,14 +190,31 @@ export function findInstalledRoots(
       }
     }
   };
+  const scanned = new Set<string>();
+  const scanModules = (modules: string): void => {
+    let real: string;
+    try {
+      real = realpathSync(modules);
+    } catch {
+      return;
+    }
+    if (scanned.has(real)) {
+      return;
+    }
+    scanned.add(real);
+    scan(real, 0, false);
+  };
+  // Ancestor chain first (covers the caller's own install), then every
+  // sibling workspace from the `packages:` globs: a nested duplicate
+  // under a sibling app must not escape the EVERY-copy claim.
   let dir = startDir;
   let capped = true;
+  let workspaceRoot: string | null = null;
+  const ancestors: string[] = [];
   for (let level = 0; level < 12; level += 1) {
-    const candidate = join(dir, 'node_modules');
-    if (existsSync(candidate)) {
-      scan(candidate, 0, false);
-    }
+    ancestors.push(join(dir, 'node_modules'));
     if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+      workspaceRoot = dir;
       capped = false;
       break;
     }
@@ -127,6 +232,19 @@ export function findInstalledRoots(
     throw new Error(
       `findInstalledRoots(${packageName}) hit the 12-level upward-walk cap; results may be incomplete`
     );
+  }
+  for (const modules of ancestors) {
+    if (existsSync(modules)) {
+      scanModules(modules);
+    }
+  }
+  if (workspaceRoot !== null) {
+    for (const workspace of expandWorkspaces(workspaceRoot)) {
+      const modules = join(workspace, 'node_modules');
+      if (existsSync(modules)) {
+        scanModules(modules);
+      }
+    }
   }
   if (truncated) {
     throw new Error(

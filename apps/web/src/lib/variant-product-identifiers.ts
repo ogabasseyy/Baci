@@ -3,6 +3,14 @@ export interface ProductManufacturerIdentifiers {
   mpn?: string | null;
 }
 
+/**
+ * Trim identifier text without validating its shape. GTIN digit/length rules
+ * are intentionally not enforced here: dropping merchant-provided values on
+ * a format mismatch risks worse data loss than passing them through, and
+ * the catalogs validate GTINs themselves with diagnostics. MPNs are
+ * free-text by nature. GTIN format validation is a catalog-data-quality
+ * follow-up, out of scope for this parity/trim fix.
+ */
 function normalizeIdentifier(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;

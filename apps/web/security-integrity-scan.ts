@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url';
 // bounded at the enclosing repo root so worktree checkouts never scan a
 // parent checkout's node_modules.
 //
-// Soundness bound (documented, not silent): recursion stops past depth
-// 8 and the upward walk stops after 12 levels, so a pathological
-// deeper-than-8 node_modules chain would be skipped. Depth 8 covers
-// realistic pnpm hoisted and virtual-store layouts.
+// Soundness bound (fail-closed, not silent): recursion past depth 8
+// and an upward walk past 12 levels both throw, so a pathological
+// layout fails the gate instead of passing on a partial list. Depth 8
+// covers realistic pnpm hoisted and virtual-store layouts.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -94,26 +94,55 @@ export function findInstalledRoots(
     }
   };
   let dir = startDir;
-  for (let depth = 0; depth < 12; depth += 1) {
+  let capped = true;
+  for (let level = 0; level < 12; level += 1) {
     const candidate = join(dir, 'node_modules');
     if (existsSync(candidate)) {
       scan(candidate, 0, false);
     }
     if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+      capped = false;
       break;
     }
     const parent = dirname(dir);
     if (parent === dir) {
+      capped = false;
       break;
     }
     dir = parent;
   }
-  // The depth bound is observable, not silent: a truncated walk warns
-  // instead of letting the EVERY-copy claim pass quietly.
+  // Fail closed, not silent: a truncated walk throws instead of letting
+  // the EVERY-copy claim pass on a partial list. A warning in CI logs
+  // would be too easy to miss for a security gate.
+  if (capped) {
+    throw new Error(
+      `findInstalledRoots(${packageName}) hit the 12-level upward-walk cap; results may be incomplete`
+    );
+  }
   if (truncated) {
-    console.warn(
-      `[integrity-test] findInstalledRoots(${packageName}) hit the depth-8 cap; results may be incomplete`
+    throw new Error(
+      `findInstalledRoots(${packageName}) hit the depth-8 recursion cap; results may be incomplete`
     );
   }
   return [...roots];
+}
+
+// Multi-root override for suites that scan every installed copy: a
+// colon-separated list of unpacked tarballs, or null when unset so the
+// caller falls back to the workspace scan. Empty string counts as
+// unset. Refused under CI like the single-root hook.
+export function overrideRoots(
+  envVar: string | undefined,
+  envName: string
+): string[] | null {
+  if (envVar === undefined || envVar === '') {
+    return null;
+  }
+  if (process.env.CI !== undefined) {
+    throw new Error(
+      `${envName} is set in CI; refusing to test non-installed copies`
+    );
+  }
+  console.warn(`[integrity-test] testing from ${envName}: ${envVar}`);
+  return envVar.split(':').filter((root) => root.length > 0);
 }

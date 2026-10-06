@@ -9,8 +9,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { findInstalledRoots } from './security-integrity-scan';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
 
 // Colocated coverage for the install scanner: every layout that can
 // hide a vulnerable duplicate — hoisted, nested, scoped, and pnpm
@@ -94,19 +94,64 @@ describe('security-integrity-scan', () => {
     expect(findInstalledRoots('@scope', fixture)).toEqual([]);
   });
 
-  it('warns when the depth cap truncates the walk', () => {
+  it('throws when the depth cap truncates the walk', () => {
     // A 12-deep chain trips the depth-8 recursion cap.
     let dir = join(fixture, 'node_modules');
     for (let level = 0; level < 12; level += 1) {
       dir = join(dir, `deep${level}`, 'node_modules');
       mkdirSync(dir, { recursive: true });
     }
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => findInstalledRoots('dup', fixture)).toThrow(
+      /depth-8 recursion cap/
+    );
+    rmSync(join(fixture, 'node_modules', 'deep0'), {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it('throws when the upward walk hits the 12-level cap', () => {
+    // A nonexistent 12-deep start dir never reaches the workspace
+    // marker, so the walk exhausts its level budget.
+    const ghost = join(
+      fixture,
+      'g0',
+      'g1',
+      'g2',
+      'g3',
+      'g4',
+      'g5',
+      'g6',
+      'g7',
+      'g8',
+      'g9',
+      'g10',
+      'g11'
+    );
+    expect(() => findInstalledRoots('dup', ghost)).toThrow(
+      /12-level upward-walk cap/
+    );
+  });
+});
+
+describe('overrideRoots', () => {
+  it('returns null when unset or empty', () => {
+    expect(overrideRoots(undefined, 'GTU_ROOTS')).toBeNull();
+    expect(overrideRoots('', 'GTU_ROOTS')).toBeNull();
+  });
+
+  it('splits a colon-separated list', () => {
+    expect(overrideRoots('/a:/b', 'GTU_ROOTS')).toEqual(['/a', '/b']);
+  });
+
+  it('refuses overrides under CI', () => {
+    process.env.CI = 'true';
     try {
-      findInstalledRoots('dup', fixture);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('depth-8 cap'));
+      expect(() => overrideRoots('/a', 'GTU_ROOTS')).toThrow(
+        /refusing to test non-installed copies/
+      );
     } finally {
-      warn.mockRestore();
+      delete process.env.CI;
     }
   });
 });

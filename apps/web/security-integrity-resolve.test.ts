@@ -56,6 +56,13 @@ describe('security-integrity-resolve', () => {
     expect(resolveRoot('foo', '/tmp/unpack', 'FOO_ROOT')).toBe('/tmp/unpack');
   });
 
+  it('treats an empty-string override as unset', () => {
+    delete process.env.CI;
+    expect(resolveRoot('vitest', '', 'VITEST_ROOT')).toBe(
+      installedRoot('vitest')
+    );
+  });
+
   it('refuses overrides under CI', () => {
     process.env.CI = 'true';
     try {

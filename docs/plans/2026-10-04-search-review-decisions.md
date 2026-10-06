@@ -147,3 +147,8 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 - Native compare navigation now omits the snapshot condition with exact ids (my earlier audit wrongly assumed fresh-only facts; refresh failure and unavailable rows fall back to the snapshot, so the pairing could go stale). Covered by a compare-screen navigation test.
 - Web tray price-basis medium adjudicated: the tray explicitly labels "Current parent starting prices" and marks matched rows "Matched option — verify on product page", satisfying the finding's own remediation (mark unverified rows); deep links already omit condition with exact ids. Assurance/budget items remain as adjudicated.
+
+## Round 24 (Muse on 033426237c — UUID filtering added, is_published adjudicated; Codex quota-blocked)
+
+- Comparison refresh now drops malformed session ids before the facts query and skips the round-trip when none valid remain (PostgREST rejects empty `in`): one poisoned sessionStorage entry can no longer fail the whole tray refresh. Existing hook tests moved to UUID ids; malformed-mix and all-invalid cases covered.
+- The is_published half adjudicated negligible: the platform products SELECT policy itself exposes active rows regardless of publish state (pre-existing, out of scope), the data is public catalog, and staleness self-corrects on navigation. Budget medium remains deferred with alerting prerequisite.

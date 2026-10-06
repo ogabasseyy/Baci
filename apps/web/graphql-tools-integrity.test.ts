@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
+import { packageModule } from './security-integrity-package-module';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
 // `@graphql-tools/utils` `mergeDeep` allowed prototype pollution via
@@ -98,10 +99,11 @@ describe('@graphql-tools/utils mergeDeep integrity (CVE-2026-104852)', () => {
   it.each(
     candidateRoots()
   )('rejects prototype-chain keys via ESM in %s', async (root) => {
-    // The backport patches esm/mergeDeep.js too; drive the exploit
-    // through it so a broken or reverted ESM build cannot pass silently.
+    // The backport patches the ESM build too; drive the exploit through
+    // the manifest-resolved ESM entry (no hardcoded dist subpath) so a
+    // broken or reverted ESM build cannot pass silently.
     const esm = (await import(
-      pathToFileURL(join(root, 'esm/mergeDeep.js')).href
+      pathToFileURL(join(root, packageModule(root))).href
     )) as { mergeDeep: MergeDeepFn };
     const merged = esm.mergeDeep([
       { a: 1 },

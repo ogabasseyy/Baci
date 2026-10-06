@@ -62,15 +62,14 @@ interface ProseMirrorView {
 
 function loadView(): {
   viewModule: ProseMirrorView;
-  override: string | undefined;
+  viewRoot: string;
 } {
-  const override = process.env.PROSEMIRROR_VIEW_ROOT;
   const root = resolveRoot(
     'prosemirror-view',
-    override,
+    process.env.PROSEMIRROR_VIEW_ROOT,
     'PROSEMIRROR_VIEW_ROOT'
   );
-  return { viewModule: loadCjs(root), override };
+  return { viewModule: loadCjs(root), viewRoot: root };
 }
 
 interface ProseMirrorModel {
@@ -87,20 +86,18 @@ interface ProseMirrorState {
   };
 }
 
-function buildHarness(
-  viewModule: ProseMirrorView,
-  override: string | undefined
-) {
-  // Model and state resolve from the SAME root as the view: under the
-  // override hook they come from the tarball's own dependency graph
-  // instead of mixing tarball view with workspace model/state (which
-  // would trip the duplicate-model guard and mask the behavioral
-  // signal).
+function buildHarness(viewModule: ProseMirrorView, viewRoot: string) {
+  // Model and state ALWAYS resolve from the view's own root — never
+  // from the ambient workspace — so the Schema and the view's internal
+  // model instance cannot diverge even if the view ever carries a
+  // nested model copy (which would trip the duplicate-model guard and
+  // fail the suite for layout reasons). Under the override hook this
+  // also keeps tarball view with tarball-graph siblings.
   const { Schema } = loadCjs<ProseMirrorModel>(
-    installedRoot('prosemirror-model', override)
+    installedRoot('prosemirror-model', viewRoot)
   );
   const { EditorState } = loadCjs<ProseMirrorState>(
-    installedRoot('prosemirror-state', override)
+    installedRoot('prosemirror-state', viewRoot)
   );
   const schema = new Schema({
     nodes: {
@@ -173,8 +170,8 @@ function sliceHtml(context: unknown): string {
 
 describe('prosemirror-view integrity (CVE-2026-104847)', () => {
   it('drops pasted slice context with invalid attributes', () => {
-    const { viewModule, override } = loadView();
-    const { view, pastedSlice } = buildHarness(viewModule, override);
+    const { viewModule, viewRoot } = loadView();
+    const { view, pastedSlice } = buildHarness(viewModule, viewRoot);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'javascript:alert(1)' }]),
@@ -191,8 +188,8 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
   });
 
   it('still pastes slice context with valid attributes', () => {
-    const { viewModule, override } = loadView();
-    const { view, pastedSlice } = buildHarness(viewModule, override);
+    const { viewModule, viewRoot } = loadView();
+    const { view, pastedSlice } = buildHarness(viewModule, viewRoot);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'https://ok.invalid/' }]),

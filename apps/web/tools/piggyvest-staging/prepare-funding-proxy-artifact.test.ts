@@ -40,7 +40,7 @@ describe('funding prebuilt proxy artifact', () => {
       await readFile(join(output, 'config.json'), 'utf8')
     );
     expect(config.routes.slice(0, 3)).toEqual(customerDraftProxyRoutes());
-    expect(config.routes.slice(3, 5)).toEqual([
+    expect(config.routes.slice(3, 6)).toEqual([
       {
         src: '^/api/storefront/customer/savings/goals$',
         dest: 'https://staging-auth.ogabassey.com/api/storefront/customer/savings/goals',
@@ -51,10 +51,15 @@ describe('funding prebuilt proxy artifact', () => {
         dest: 'https://staging-auth.ogabassey.com/api/storefront/customer/savings/funding',
         methods: ['POST'],
       },
+      {
+        src: '^/api/storefront/customer/wallet/piggyvest-plan$',
+        dest: 'https://staging-auth.ogabassey.com/api/storefront/customer/wallet/piggyvest-plan',
+        methods: ['GET'],
+      },
     ]);
     expect(
-      config.routes.slice(5, 7).map((route: { status: number }) => route.status)
-    ).toEqual([405, 405]);
+      config.routes.slice(6, 9).map((route: { status: number }) => route.status)
+    ).toEqual([405, 405, 405]);
     expect(config.routes.at(-1)).toEqual({ handle: 'filesystem' });
     expect(
       await readFile(

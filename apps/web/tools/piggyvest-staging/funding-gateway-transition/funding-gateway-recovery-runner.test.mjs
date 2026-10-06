@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, it } from 'vitest';
 import {
   gatewayAccount,
   parseState,
@@ -30,48 +29,48 @@ const binding = () => ({
   version: 1,
 });
 
-test('accepts reordered keyed systemd output', () => {
+it('accepts reordered keyed systemd output', () => {
   const state = parseState(
     'DropInPaths=\nMainPID=0\nActiveState=failed\nLoadState=loaded',
     ['LoadState', 'ActiveState', 'MainPID', 'DropInPaths'],
     ['DropInPaths']
   );
-  assert.equal(state.ActiveState, 'failed');
+  expect(state.ActiveState).toBe('failed');
 });
 
-test('rejects missing or duplicate systemd properties', () => {
-  assert.throws(() =>
+it('rejects missing or duplicate systemd properties', () => {
+  expect(() =>
     parseState('LoadState=loaded\nActiveState=failed', [
       'LoadState',
       'ActiveState',
       'MainPID',
     ])
-  );
-  assert.throws(() =>
+  ).toThrow();
+  expect(() =>
     parseState(
       'LoadState=loaded\nLoadState=loaded\nActiveState=failed\nMainPID=0',
       ['LoadState', 'ActiveState', 'MainPID']
     )
-  );
+  ).toThrow();
 });
 
-test('rejects an expired or widened binding', () => {
+it('rejects an expired or widened binding', () => {
   const expired = binding();
   expired.leaseExpiresAt = new Date(deadline - 1).toISOString();
-  assert.throws(() => validateBinding(expired, deadline - 2));
+  expect(() => validateBinding(expired, deadline - 2)).toThrow();
   const widened = binding();
   widened.identity.restRoutes.push({
     path: '/rest/v1/rpc/funding',
     methods: ['POST'],
   });
-  assert.throws(() => validateBinding(widened, deadline - 1));
+  expect(() => validateBinding(widened, deadline - 1)).toThrow();
 });
 
-test('preserves the exact fixed five-route binding until expiry', () => {
-  assert.equal(validateBinding(binding(), deadline - 1).restRoutes.length, 5);
+it('preserves the exact fixed five-route binding until expiry', () => {
+  expect(validateBinding(binding(), deadline - 1).restRoutes.length).toBe(5);
 });
 
-test('accepts the eleven-route transitioned binding and still rejects widening', () => {
+it('accepts the eleven-route transitioned binding and still rejects widening', () => {
   const transitioned = binding();
   transitioned.identity.restRoutes = [
     ...transitioned.identity.restRoutes,
@@ -88,8 +87,7 @@ test('accepts the eleven-route transitioned binding and still rejects widening',
     { path: '/rest/v1/piggyvest_plan_wallets', methods: ['GET', 'HEAD'] },
     { path: '/rest/v1/piggyvest_interest_payouts', methods: ['GET', 'HEAD'] },
   ];
-  assert.equal(
-    validateBinding(transitioned, deadline - 1).restRoutes.length,
+  expect(validateBinding(transitioned, deadline - 1).restRoutes.length).toBe(
     11
   );
   const widened = structuredClone(transitioned);
@@ -97,21 +95,21 @@ test('accepts the eleven-route transitioned binding and still rejects widening',
     path: '/rest/v1/rpc/funding',
     methods: ['POST'],
   });
-  assert.throws(() => validateBinding(widened, deadline - 1));
+  expect(() => validateBinding(widened, deadline - 1)).toThrow();
 });
 
-test('bugfix: accepts the approved millisecond lease within the fixed deadline second', () => {
+it('bugfix: accepts the approved millisecond lease within the fixed deadline second', () => {
   const actual = binding();
   actual.leaseExpiresAt = '2026-09-29T15:59:10.442Z';
   actual.leaseNotBefore = '2026-09-22T15:59:10.442Z';
   actual.reviewedAt = '2026-09-22T15:59:10.442Z';
-  assert.equal(validateBinding(actual, deadline - 1).restRoutes.length, 5);
+  expect(validateBinding(actual, deadline - 1).restRoutes.length).toBe(5);
   const wrongSecond = binding();
   wrongSecond.leaseExpiresAt = '2026-09-29T15:59:11.000Z';
-  assert.throws(() => validateBinding(wrongSecond, deadline - 1));
+  expect(() => validateBinding(wrongSecond, deadline - 1)).toThrow();
 });
 
-test('uses the unit group rather than the account primary group', async () => {
+it('uses the unit group rather than the account primary group', async () => {
   const account = await gatewayAccount(
     () => '[Service]\nUser=baci-savings-gateway\nGroup=baci-savings-ingress\n',
     (_command, argumentsList) =>
@@ -121,10 +119,10 @@ test('uses the unit group rather than the account primary group', async () => {
           : 'baci-savings-ingress:x:789:'
       )
   );
-  assert.deepEqual(account, { uid: 123, gid: 789 });
+  expect(account).toEqual({ uid: 123, gid: 789 });
 });
 
-test('recovers only the stopped gateway and waits for a delayed socket', async () => {
+it('recovers only the stopped gateway and waits for a delayed socket', async () => {
   const input = binding();
   input.identity.containers = {
     auth: { ip: '127.0.0.2' },
@@ -178,39 +176,37 @@ test('recovers only the stopped gateway and waits for a delayed socket', async (
       },
       {
         validateManagedStartup: (_binding, evidence) => {
-          assert.ok(
+          expect(
             Date.parse(evidence.inventory.observedAt) >=
               Date.parse(evidence.receipt.verifiedAt),
             'inventory must be observed after firewall/reachability verification'
-          );
+          ).toBe(true);
         },
       },
       { validateRoutingIdentity: () => undefined },
     ]
   );
-  assert.equal(result.status, 'recovered');
-  assert.deepEqual(stages.slice(0, 5), [
+  expect(result.status).toBe('recovered');
+  expect(stages.slice(0, 5)).toEqual([
     'graph-verification',
     'module-loading',
     'binding-read',
     'binding-validation',
     'service-preflight',
   ]);
-  assert.equal(socketAttempts, 2);
-  assert.equal(
+  expect(socketAttempts).toBe(2);
+  expect(
     commands.some(
       ([command, argumentsList]) =>
         command === '/usr/bin/systemctl' &&
         argumentsList.join(' ') ===
           'start --no-block baci-savings-gateway.service'
-    ),
-    true
-  );
-  assert.equal(
+    )
+  ).toBe(true);
+  expect(
     commands.some(
       ([command, argumentsList]) =>
         command === '/usr/bin/systemctl' && argumentsList.includes('stop')
-    ),
-    false
-  );
+    )
+  ).toBe(false);
 });

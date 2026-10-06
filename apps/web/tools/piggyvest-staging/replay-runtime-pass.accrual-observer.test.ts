@@ -71,6 +71,11 @@ const wrapper =
   'SELECT piggyvest_staging.record_interest_accrual_scoped($1::uuid,$2::text,$3::text,$4::uuid,$5::text,$6::json) AS result';
 
 beforeEach(() => {
+  // Observer schemas pin a fixed execution deadline with a Date.now()
+  // expiry refine: freeze before it so happy-path tests stay green
+  // regardless of wall-clock.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-06T15:59:00Z'));
   vi.clearAllMocks();
   observations.clear();
   paid.clear();
@@ -153,6 +158,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

@@ -1,9 +1,21 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createAccrualObserverTestFixture } from './replay-accrual-observer.test-support';
 import type { createAccrualObserverReplay } from './replay-accrual-observer-runtime';
 import type { checkFinancialReplayReadiness } from './replay-financial-readiness';
 import type { loadPrefundedReplay } from './replay-prefunded-loader';
 import { checkReplayReadiness } from './replay-readiness';
+
+beforeEach(() => {
+  // Observer schemas pin a fixed execution deadline with a Date.now()
+  // expiry refine: freeze before it so happy-path tests stay green
+  // regardless of wall-clock.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-06T15:59:00Z'));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function fixture() {
   const sample = createAccrualObserverTestFixture();

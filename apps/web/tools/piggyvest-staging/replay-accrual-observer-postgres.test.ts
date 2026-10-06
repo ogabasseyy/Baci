@@ -30,6 +30,11 @@ let readOnly: boolean;
 let tampered: boolean;
 
 beforeEach(() => {
+  // Observer schemas pin a fixed execution deadline with a Date.now()
+  // expiry refine: freeze before it so happy-path tests stay green
+  // regardless of wall-clock.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-06T15:59:00Z'));
   vi.clearAllMocks();
   sample = createAccrualObserverTestFixture();
   readOnly = true;

@@ -10,6 +10,7 @@ import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-funct
 import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
@@ -138,6 +139,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       ...eventPipelineCredentialPaths,
       ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
+      ...eventPipelinePiggyvestCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
@@ -173,6 +175,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      'apps/web/src/lib/piggyvest/server-intake-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ],

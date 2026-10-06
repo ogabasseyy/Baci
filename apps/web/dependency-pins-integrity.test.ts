@@ -71,7 +71,10 @@ function installedVersion(packageName: string): string {
 }
 
 function parseVersion(version: string): [number, number, number] {
-  const parts = version.split('.').map((part) => Number.parseInt(part, 10));
+  // Compare only the numeric triple; pre-release/build suffixes
+  // (e.g. 1.9.0-beta, 2.0.8+build) must not fail the floor check.
+  const core = version.split('+', 1)[0].split('-', 1)[0];
+  const parts = core.split('.').map((part) => Number.parseInt(part, 10));
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {
     throw new Error(`Unexpected version: ${version}`);
   }
@@ -170,8 +173,16 @@ describe('security override pins', () => {
       process.env.FAST_COPY_ROOT,
       'FAST_COPY_ROOT'
     );
+    // Resolve the CJS entry via the package's own main field rather
+    // than a hardcoded dist path, so a future re-packaging cannot
+    // silently break the guard.
+    const pkg = JSON.parse(
+      readFileSync(join(root, 'package.json'), 'utf8')
+    ) as { main?: string };
     const copy = (
-      require(join(root, 'dist/cjs/index.cjs')) as { default: FastCopy }
+      require(join(root, pkg.main ?? 'dist/cjs/index.cjs')) as {
+        default: FastCopy;
+      }
     ).default;
     let thrown: unknown;
     try {

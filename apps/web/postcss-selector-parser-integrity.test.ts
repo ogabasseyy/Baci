@@ -47,8 +47,15 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(source).toContain('var idIndexes = new Set(hasId);');
     expect(source).toContain('if (classIndexes.has(ind)) {');
     expect(source).toContain('} else if (idIndexes.has(ind)) {');
-    expect(source).not.toContain('hasClass.indexOf(ind)');
-    expect(source).not.toContain('hasId.indexOf(ind)');
+    // Negative markers run against comment-stripped code so a future
+    // upstream comment mentioning indexOf cannot false-fail the suite.
+    const codeOnly = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('//'))
+      .join('\n');
+    expect(codeOnly).not.toContain('hasClass.indexOf(ind)');
+    expect(codeOnly).not.toContain('hasId.indexOf(ind)');
   });
 
   it('still parses flat class/id selectors correctly', () => {

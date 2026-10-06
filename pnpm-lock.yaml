@@ -173,7 +173,7 @@ patchedDependencies:
   expo-modules-core@57.0.12: 740538822c0ffdccf2d268be220102ad3aeea10dd13cd2984a7b9a987e0c6d4a
   expo-modules-jsi@57.0.5: 0794db2805abb43f770292fea9afbd80a85726082d33709237182a8d1568f133
   image-size@1.2.1: 586784fc0457bdee85ef9f507f8a22cd38a667ad32045923b493171e98c458a3
-  katex@0.16.47: 2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef
+  katex@0.16.47: 7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039
   lottie-react-native@7.3.8: cd9d83823cc2d1edf6ca8e47fb7c6bea5dd902b0b7188b2a6fb4302920e07cd7
   metro-runtime@0.84.4: 7f83ec93fe717bebba70d6301eac128b36bbb0b46d5db476fb5c43bac9daea6a
   metro@0.84.4: 3311285d3ff06ff147ed0951f5b59171824bc81484aad50405a491dc4fd2310e
@@ -14039,7 +14039,7 @@ snapshots:
       '@tanstack/react-virtual': 3.14.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       class-variance-authority: 0.7.1
       clsx: 2.1.1
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       lucide-react: 0.525.0(react@19.2.3)
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
@@ -14446,7 +14446,7 @@ snapshots:
       bplist-parser: 0.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
-      compression: 1.8.2
+      compression: 1.8.2(supports-color@10.2.2)
       connect: 3.7.0
       debug: 4.4.3(supports-color@10.2.2)
       dnssd-advertise: 1.1.6
@@ -14524,7 +14524,7 @@ snapshots:
       bplist-parser: 0.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
-      compression: 1.8.2
+      compression: 1.8.2(supports-color@10.2.2)
       connect: 3.7.0
       debug: 4.4.3(supports-color@10.2.2)
       dnssd-advertise: 1.1.6
@@ -14602,7 +14602,7 @@ snapshots:
       bplist-parser: 0.3.2
       chalk: 4.1.2
       ci-info: 3.9.0
-      compression: 1.8.2
+      compression: 1.8.2(supports-color@10.2.2)
       connect: 3.7.0
       debug: 4.4.3(supports-color@10.2.2)
       dnssd-advertise: 1.1.6
@@ -20084,7 +20084,7 @@ snapshots:
     dependencies:
       mime-db: 1.54.0
 
-  compression@1.8.2:
+  compression@1.8.2(supports-color@10.2.2):
     dependencies:
       bytes: 3.1.2
       compressible: 2.0.18
@@ -23392,7 +23392,7 @@ snapshots:
       jwa: 2.0.1
       safe-buffer: 5.2.1
 
-  katex@0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef):
+  katex@0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039):
     dependencies:
       commander: 8.3.0
 
@@ -24112,7 +24112,7 @@ snapshots:
       dayjs: 1.11.21
       dompurify: 3.4.16
       es-toolkit: 1.47.1
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       khroma: 2.1.0
       marked: 16.4.2
       roughjs: 4.6.6
@@ -24428,7 +24428,7 @@ snapshots:
     dependencies:
       '@types/katex': 0.16.8
       devlop: 1.1.0
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       micromark-factory-space: 2.0.1
       micromark-util-character: 2.1.1
       micromark-util-symbol: 2.0.1
@@ -24893,7 +24893,7 @@ snapshots:
       '@types/node': 22.19.21
       cmdk: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       jotai: 2.20.1(@babel/core@7.29.6)(@babel/template@7.29.7)(@types/react@19.2.17)(react@19.2.3)
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       react: 19.2.3
       react-markdown: 9.1.0(@types/react@19.2.17)(react@19.2.3)
       react-moveable: 0.56.0
@@ -26452,7 +26452,7 @@ snapshots:
       '@types/katex': 0.16.8
       hast-util-from-html-isomorphic: 2.0.0
       hast-util-to-text: 4.0.2
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       unist-util-visit-parents: 6.0.2
       vfile: 6.0.3
 
@@ -27033,7 +27033,7 @@ snapshots:
       hast: 1.0.0
       hast-util-to-jsx-runtime: 2.3.6
       html-url-attributes: 3.0.1
-      katex: 0.16.47(patch_hash=2bc990e743d717e1c611294be6f11ea0a18411c0d4e5053ffc22041d443be0ef)
+      katex: 0.16.47(patch_hash=7166083cf0032283d3218aa2ca6965514bf007a34779e1bb79881140af29f039)
       lucide-react: 0.542.0(react@19.2.3)
       marked: 16.4.2
       mermaid: 11.16.1

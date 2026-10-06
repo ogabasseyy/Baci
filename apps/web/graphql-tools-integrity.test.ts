@@ -1,8 +1,9 @@
 /** @vitest-environment node */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
@@ -34,22 +35,66 @@ function candidateRoots(): string[] {
     console.warn(`[integrity-test] testing graphql-tools from: ${override}`);
     return override.split(':').filter((root) => root.length > 0);
   }
-  const roots: string[] = [];
-  const pushIfDir = (root: string) => {
-    if (existsSync(join(root, 'package.json'))) {
-      roots.push(root);
+  // Dynamically enumerate EVERY installed copy: nested duplicates under
+  // the hoisted pnpm layout must not escape the guard silently.
+  const roots = new Set<string>();
+  const scan = (dir: string, depth: number): void => {
+    if (depth > 8) {
+      return;
+    }
+    let entries: ReturnType<typeof readdirSync>;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+        continue;
+      }
+      const full = join(dir, entry.name);
+      if (entry.name === '@graphql-tools') {
+        const candidate = join(full, 'utils');
+        if (existsSync(join(candidate, 'package.json'))) {
+          roots.add(realpathSync(candidate));
+        }
+      }
+      if (entry.name.startsWith('@')) {
+        // Scope dir: children are packages, descend without consuming depth.
+        scan(full, depth);
+      } else {
+        const nested = join(full, 'node_modules');
+        if (existsSync(nested)) {
+          scan(nested, depth + 1);
+        }
+      }
     }
   };
-  pushIfDir(dirname(require.resolve('@graphql-tools/utils/package.json')));
-  const nm = join(dirname(require.resolve('graphql/package.json')), '..');
-  pushIfDir(join(nm, 'graphql-yoga/node_modules/@graphql-tools/utils'));
-  pushIfDir(
-    join(
-      nm,
-      '@graphql-yoga/plugin-defer-stream/node_modules/@graphql-tools/utils'
-    )
-  );
-  return [...new Set(roots)];
+  // Scan every node_modules from the test file up to the filesystem
+  // root (workspace + repo-root layouts).
+  let dir = dirname(fileURLToPath(import.meta.url));
+  const seenModules = new Set<string>();
+  for (let depth = 0; depth < 12; depth += 1) {
+    const candidate = join(dir, 'node_modules');
+    if (existsSync(candidate)) {
+      const real = realpathSync(candidate);
+      if (!seenModules.has(real)) {
+        seenModules.add(real);
+        scan(real, 0);
+      }
+    }
+    // Stop at the enclosing repo root so worktree checkouts never
+    // scan a parent checkout's node_modules.
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return [...roots];
 }
 
 function loadMergeDeep(root: string): {

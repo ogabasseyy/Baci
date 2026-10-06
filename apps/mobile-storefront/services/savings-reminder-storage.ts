@@ -167,15 +167,22 @@ function parseLegacyRecord(
   };
 }
 
+export type UnscopedReminderEntry = {
+  keys: string[];
+  record: ReminderRecord | null;
+};
+
 /**
- * Destructively drains pre-scope records: per-goal keys without a scope
+ * Non-destructively lists pre-scope records: per-goal keys without a scope
  * segment plus the ancient single-key format. Unscoped state is
  * untrustworthy by construction — it cannot be attributed to the current
- * account — so callers cancel any live OS notification and drop the rest
- * rather than adopt it. Returns the drained records for that cleanup.
+ * account — so callers cancel any live OS notification first and only then
+ * drop the entry with removeUnscoped, retaining it for retry when
+ * cancellation fails. Entries with a null record (malformed values, orphan
+ * keys) hold nothing live and are safe to drop immediately.
  */
-async function drainUnscoped(): Promise<ReminderRecord[]> {
-  const drained: ReminderRecord[] = [];
+async function readUnscoped(): Promise<UnscopedReminderEntry[]> {
+  const entries: UnscopedReminderEntry[] = [];
   for (const key of await asyncStorage.getAllKeys()) {
     if (!key.startsWith(RECORD_PREFIX) || parseScopedKey(key)) continue;
     const suffix = key.slice(RECORD_PREFIX.length);
@@ -183,48 +190,47 @@ async function drainUnscoped(): Promise<ReminderRecord[]> {
     try {
       goalId = decodeURIComponent(suffix);
     } catch {
-      // Fall through with the raw suffix; the record is dropped regardless.
+      // Fall through with the raw suffix; the entry is dropped regardless.
     }
-    const record = parseLegacyRecord(
-      goalId,
-      parseJson(await asyncStorage.getItem(key))
-    );
-    await asyncStorage.removeItem(key);
-    if (record) drained.push(record);
+    entries.push({
+      keys: [key],
+      record: parseLegacyRecord(
+        goalId,
+        parseJson(await asyncStorage.getItem(key))
+      ),
+    });
   }
   const [notificationId, goalId, pendingValue] = await Promise.all([
     asyncStorage.getItem(LEGACY_NOTIFICATION_KEY),
     asyncStorage.getItem(LEGACY_GOAL_KEY),
     asyncStorage.getItem(LEGACY_PENDING_KEY),
   ]);
-  await asyncStorage.removeItem(LEGACY_NOTIFICATION_KEY);
-  await asyncStorage.removeItem(LEGACY_GOAL_KEY);
-  await asyncStorage.removeItem(LEGACY_PENDING_KEY);
-  if (notificationId && goalId) {
-    drained.push({
-      goalId,
-      merchantId: '',
-      notificationId,
-      userId: '',
-    });
-  } else if (notificationId) {
-    drained.push({
-      goalId: '',
-      merchantId: '',
-      notificationId,
-      userId: '',
+  if (notificationId !== null || goalId !== null) {
+    let record: ReminderRecord | null = null;
+    if (notificationId && goalId) {
+      record = { goalId, merchantId: '', notificationId, userId: '' };
+    } else if (notificationId) {
+      record = { goalId: '', merchantId: '', notificationId, userId: '' };
+    }
+    entries.push({
+      keys: [LEGACY_NOTIFICATION_KEY, LEGACY_GOAL_KEY],
+      record,
     });
   }
-  const pending = parseRequest(parseJson(pendingValue));
-  if (pending) {
-    drained.push({
-      goalId: pending.goalId,
-      merchantId: '',
-      pending,
-      userId: '',
+  if (pendingValue !== null) {
+    const pending = parseRequest(parseJson(pendingValue));
+    entries.push({
+      keys: [LEGACY_PENDING_KEY],
+      record: pending
+        ? { goalId: pending.goalId, merchantId: '', pending, userId: '' }
+        : null,
     });
   }
-  return drained;
+  return entries;
+}
+
+async function removeUnscoped(keys: string[]) {
+  for (const key of keys) await asyncStorage.removeItem(key);
 }
 
 async function read(
@@ -251,9 +257,10 @@ async function remove(scope: SavingsReminderScope, goalId: string) {
 }
 
 export const savingsReminderStorage = {
-  drainUnscoped,
   read,
+  readUnscoped,
   remove,
+  removeUnscoped,
   runExclusive,
   write,
 };

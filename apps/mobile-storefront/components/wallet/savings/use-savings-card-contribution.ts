@@ -4,6 +4,7 @@ import {
   saveSavingsCardContributionSnapshot,
 } from '@/lib/savings-card-contribution-snapshot';
 import { submitSavingsCardContribution } from '@/lib/savings-card-contributions';
+import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { safeRemainingKobo } from './safe-remaining-kobo';
 import {
   initializeSavingsCardContribution,
@@ -43,6 +44,8 @@ export function useSavingsCardContribution({
   refreshWalletRef.current = onRefreshWallet;
   const amountChangeRef = useRef(onAmountChange);
   amountChangeRef.current = onAmountChange;
+  const remainingAmountRef = useRef(remainingAmount);
+  remainingAmountRef.current = remainingAmount;
   const controllersRef = useRef(new Set<AbortController>());
   const activationRef = useRef(0);
   const scopeKey = JSON.stringify([userId, merchantId, goalId]);
@@ -82,10 +85,12 @@ export function useSavingsCardContribution({
     setMessage('');
     setAllowRetry(false);
     void initializeSavingsCardContribution({
+      cancelSavingsReminder: cancelSavingsReminderNotification,
       goalId,
       isCurrent: current,
       onAmountChange: (value) => amountChangeRef.current(value),
       refreshWallet: () => refreshWalletRef.current?.(),
+      remainingAmountKobo: safeRemainingKobo(remainingAmountRef.current),
       scope,
       setAllowRetry,
       setCapabilityLoaded,
@@ -118,11 +123,13 @@ export function useSavingsCardContribution({
     readSavingsCardContributionStatus({
       allowBusy,
       busyRef,
+      cancelSavingsReminder: cancelSavingsReminderNotification,
       controllers: controllersRef.current,
       expectedOperationId: operation?.operationId,
       goalId,
       isCurrent: () => currentScopeRef.current(scopeKey, activation),
       refreshWallet: () => refreshWalletRef.current?.(),
+      remainingAmountKobo: safeRemainingKobo(remainingAmount),
       setAllowRetry,
       setBusy,
       setMessage,

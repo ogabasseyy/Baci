@@ -11,10 +11,12 @@ import { syncSavingsCardContributionStatus } from './savings-card-contribution-s
 type Operation = z.infer<typeof SavingsCardContributionOperationSchema>;
 
 export async function initializeSavingsCardContribution({
+  cancelSavingsReminder,
   goalId,
   isCurrent,
   onAmountChange,
   refreshWallet,
+  remainingAmountKobo,
   scope,
   setAllowRetry,
   setCapabilityLoaded,
@@ -46,6 +48,8 @@ export async function initializeSavingsCardContribution({
   setSelectedMethodId: (value: string) => void;
   setSnapshot: (value: SavingsCardContributionSnapshot | null) => void;
   signal: AbortSignal;
+  cancelSavingsReminder?: (goalId: string) => Promise<unknown>;
+  remainingAmountKobo?: number;
 }) {
   let restored: SavingsCardContributionSnapshot | null = null;
   try {
@@ -56,9 +60,11 @@ export async function initializeSavingsCardContribution({
       setSelectedMethodId(restored.savedMethodId);
       onAmountChange(String(restored.amountKobo / 100));
       await syncSavingsCardContributionStatus({
+        cancelSavingsReminder,
         goalId,
         isCurrent,
         refreshWallet,
+        remainingAmountKobo,
         setAllowRetry,
         setMessage,
         setOperation,

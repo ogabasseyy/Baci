@@ -318,6 +318,43 @@ describe('savings reminder notification capability', () => {
     ]);
   });
 
+  it('retains pre-scope records when native cancellation fails so a later run can retry', async () => {
+    await AsyncStorage.setItem(
+      'baci:savings-reminder-goal:goal-old',
+      JSON.stringify({ notificationId: 'legacy-live' })
+    );
+    mockCancelScheduledNotificationAsync.mockRejectedValueOnce(
+      new Error('notifications unavailable')
+    );
+
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'legacy-live'
+    );
+    // The cancellation ID survives the failure — the live OS notification
+    // is still reachable for the next entry-point run.
+    await expect(
+      AsyncStorage.getItem('baci:savings-reminder-goal:goal-old')
+    ).resolves.toContain('legacy-live');
+
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+
+    await expect(
+      AsyncStorage.getItem('baci:savings-reminder-goal:goal-old')
+    ).resolves.toBeNull();
+  });
+
   it('retires a prior scope’s live notifications and re-arms them for sign-back-in', async () => {
     mockScheduleNotificationAsync.mockResolvedValueOnce('prior-live');
     await scheduleSavingsReminderNotification({

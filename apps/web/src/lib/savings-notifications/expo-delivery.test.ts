@@ -124,6 +124,41 @@ describe('deliverSavingsExpoPush', () => {
     ).resolves.toEqual({ outcome: 'unregistered', ticketId: null });
   });
 
+  it('reports ticket-level MessageRateExceeded as retryable for backoff', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                status: 'error',
+                message: 'Rate exceeded for this device',
+                details: { error: 'MessageRateExceeded' },
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    await expect(
+      deliverSavingsExpoPush({
+        token: 'ExponentPushToken[hidden]',
+        title: 'Title',
+        body: 'Body',
+        data: {
+          type: 'savings',
+          goalId: 'goal-1',
+          notificationId: 'notification-1',
+          merchantId: 'merchant-1',
+        },
+        channelId: 'savings',
+      })
+    ).resolves.toEqual({ outcome: 'retryable', ticketId: null });
+  });
+
   it('keeps malformed error tickets unknown', async () => {
     vi.stubGlobal(
       'fetch',

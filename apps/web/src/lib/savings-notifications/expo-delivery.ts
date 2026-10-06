@@ -39,6 +39,12 @@ function readTicket(value: unknown): SavingsPushResult {
     if (errorTicket.details.error === 'DeviceNotRegistered') {
       return { outcome: 'unregistered', ticketId: null };
     }
+    // A ticket-level MessageRateExceeded is transient per-device throttling:
+    // retry with backoff via finish_push instead of terminalizing the
+    // delivery as rejected.
+    if (errorTicket.details.error === 'MessageRateExceeded') {
+      return { outcome: 'retryable', ticketId: null };
+    }
     return { outcome: 'rejected', ticketId: null };
   }
   const id = (ticket as { id?: unknown }).id;

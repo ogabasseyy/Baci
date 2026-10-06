@@ -199,6 +199,39 @@ describe('/api/storefront/customer/savings/funding POST', () => {
     expect(call.fetchImplementation).toBe(fetch);
   });
 
+  it('provisions with the synthetic staging identity, never customer PII', async () => {
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: {
+        id: customerId,
+        first_name: 'Adaeze',
+        last_name: 'Okonkwo',
+        email: 'adaeze.okonkwo@example.com',
+        phone: '+2348012345678',
+      },
+      merchant: { id: merchantId },
+      supabase: {
+        from: vi.fn(() =>
+          goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })
+        ),
+      },
+    });
+
+    const response = await POST(post({ goalId, bvn: '12345678901' }));
+
+    expect(response.status).toBe(200);
+    expect(mockEnsurePiggyvestPlanFunding).toHaveBeenCalledOnce();
+    const call = mockEnsurePiggyvestPlanFunding.mock.calls[0][0];
+    expect(call.customer).toMatchObject({
+      merchantId,
+      customerId,
+      goalId,
+      bvn: '00000000000',
+      name: 'Synthetic Customer',
+      email: 'synthetic@example.test',
+      phone: '+2340000000000',
+    });
+  });
+
   it('forwards the interest opt-in to provisioning when requested', async () => {
     const response = await POST(
       post({ ...fundingBody, enableInterestAccrual: true })

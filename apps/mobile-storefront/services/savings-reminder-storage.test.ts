@@ -177,7 +177,7 @@ it('rejects pending records whose goal does not match their key', async () => {
   ]);
 });
 
-it('drains pre-scope records for disposal without adopting them', async () => {
+it('lists pre-scope records without removing them until disposal confirms', async () => {
   await AsyncStorage.setItem(
     'baci:savings-reminder-goal:goal-legacy',
     JSON.stringify({ notificationId: 'legacy-live' })
@@ -195,9 +195,9 @@ it('drains pre-scope records for disposal without adopting them', async () => {
     scopedRecord(scopeA, { notificationId: 'a-1' })
   );
 
-  const drained = await savingsReminderStorage.drainUnscoped();
+  const entries = await savingsReminderStorage.readUnscoped();
 
-  expect(drained).toEqual(
+  expect(entries.map((entry) => entry.record)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         goalId: 'goal-legacy',
@@ -210,21 +210,41 @@ it('drains pre-scope records for disposal without adopting them', async () => {
       expect.objectContaining({ goalId: 'goal-1', pending }),
     ])
   );
-  // Legacy keys are gone; the scoped record is untouched and still readable
-  // only under its own scope.
+  // The read is non-destructive: keys survive until removeUnscoped drops
+  // them, and the scoped record is untouched and still readable only under
+  // its own scope.
+  expect(await AsyncStorage.getItem('baci:savings-reminder-goal-id')).toBe(
+    'goal-2'
+  );
+  for (const entry of entries) {
+    await savingsReminderStorage.removeUnscoped(entry.keys);
+  }
   expect(await AsyncStorage.getAllKeys()).toEqual([
     'baci:savings-reminder-goal:user-a:merchant-1:goal-1',
   ]);
   expect(await savingsReminderStorage.read(scopeA)).toHaveLength(1);
   expect(await savingsReminderStorage.read(scopeB)).toEqual([]);
-  expect(await savingsReminderStorage.drainUnscoped()).toEqual([]);
+  expect(await savingsReminderStorage.readUnscoped()).toEqual([]);
 });
 
-it('drains an orphaned legacy notification without assigning it to a goal', async () => {
+it('lists an orphaned legacy notification without assigning it to a goal', async () => {
   await AsyncStorage.setItem('baci:savings-reminder-notification-id', 'orphan');
 
-  expect(await savingsReminderStorage.drainUnscoped()).toEqual([
-    { goalId: '', merchantId: '', notificationId: 'orphan', userId: '' },
+  const entries = await savingsReminderStorage.readUnscoped();
+
+  expect(entries).toEqual([
+    {
+      keys: [
+        'baci:savings-reminder-notification-id',
+        'baci:savings-reminder-goal-id',
+      ],
+      record: {
+        goalId: '',
+        merchantId: '',
+        notificationId: 'orphan',
+        userId: '',
+      },
+    },
   ]);
   expect(await savingsReminderStorage.read(scopeA)).toEqual([]);
 });
@@ -237,7 +257,14 @@ it.each([
   JSON.stringify({ ...pending, frequency: 'yearly' }),
 ])('ignores malformed legacy pending data %s', async (value) => {
   await AsyncStorage.setItem('baci:savings-reminder-pending-request', value);
-  expect(await savingsReminderStorage.drainUnscoped()).toEqual([]);
+  const entries = await savingsReminderStorage.readUnscoped();
+  expect(entries).toEqual([
+    { keys: ['baci:savings-reminder-pending-request'], record: null },
+  ]);
+  // Malformed state holds nothing live, so disposal drops it immediately.
+  for (const entry of entries) {
+    await savingsReminderStorage.removeUnscoped(entry.keys);
+  }
   expect(
     await AsyncStorage.getItem('baci:savings-reminder-pending-request')
   ).toBeNull();

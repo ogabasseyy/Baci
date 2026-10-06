@@ -20,6 +20,16 @@ import {
 } from '@/schemas/piggyvest-savings-plan-funding';
 import { requireActiveSavingsGoal } from './require-active-savings-goal';
 
+// Staging contract: the provisioning provider must never receive real BVNs
+// or copied customer records, so every staging provisioning call uses this
+// operator-owned synthetic identity regardless of client input or stored PII.
+const PIGGYVEST_STAGING_SYNTHETIC_IDENTITY = {
+  bvn: '00000000000',
+  name: 'Synthetic Customer',
+  email: 'synthetic@example.test',
+  phone: '+2340000000000',
+} as const;
+
 function unavailable() {
   return NextResponse.json(
     { status: 'unavailable', code: 'NOT_CONFIGURED' },
@@ -264,10 +274,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         merchantId: resolved.merchant.id,
         customerId: resolved.customer.id,
         goalId: parsed.data.goalId,
-        bvn: parsed.data.bvn,
-        name,
-        email,
-        phone,
+        ...PIGGYVEST_STAGING_SYNTHETIC_IDENTITY,
       },
       options: {
         reserveVirtualAccount: parsed.data.reserveVirtualAccount,

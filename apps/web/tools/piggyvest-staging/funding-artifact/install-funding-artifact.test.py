@@ -18,6 +18,18 @@ SPEC = importlib.util.spec_from_file_location(
 install = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(install)
 CANDIDATE_SOURCE = BASE.parent / 'funding-service' / 'funding-service-candidate.py'
+VALIDATION_SOURCE = (
+    BASE.parent / 'funding-service' / 'funding-service-validation.py'
+)
+
+
+def real_validation_module():
+    spec = importlib.util.spec_from_file_location(
+        'real_validation', VALIDATION_SOURCE
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def sha256(path):
@@ -170,11 +182,12 @@ class InstallTests(unittest.TestCase):
                 patch.object(install.os, 'chmod', return_value=None),
             ):
                 install.install(staging)
-            module._verify_artifact_tree(target, os.getuid())
+            rules = real_validation_module()
+            rules._verify_artifact_tree(target, os.getuid())
             with patch.object(
-                module, '_service_identity', return_value=(os.getuid(), os.getgid())
+                rules, '_service_identity', return_value=(os.getuid(), os.getgid())
             ):
-                module._verify_service_artifact_access(target)
+                rules._verify_service_artifact_access(target)
             required = (
                 target / 'apps/web/server.js',
                 target / 'apps/web/public',
@@ -184,7 +197,7 @@ class InstallTests(unittest.TestCase):
             self.assertTrue(required[0].is_file())
             self.assertTrue(all(path.is_dir() for path in required[1:]))
             self.assertFalse(
-                any(module._is_environment_file(path) for path in target.rglob('*'))
+                any(rules._is_environment_file(path) for path in target.rglob('*'))
             )
 
     def test_install_removes_target_when_candidate_verification_fails(self):

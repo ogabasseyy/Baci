@@ -72,6 +72,28 @@ describe('scheduleSavingsReminderNotification triggers', () => {
     );
   });
 
+  it('clamps month-end monthly triggers to the 28th so short months still fire', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'monthly',
+      goalId: 'goal-1',
+      goalTitle: 'iPhone 15 Pro',
+      scheduledAt: new Date(2020, 0, 31, 9, 30),
+    });
+
+    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: {
+          channelId: 'savings',
+          day: 28,
+          hour: 9,
+          minute: 30,
+          type: 'monthly',
+        },
+      })
+    );
+  });
+
   it('activates a due reminder without prompting when permission was already granted', async () => {
     // Pre-scope legacy keys are disposed, never adopted: seed a scoped
     // pending record through the public API instead (frozen clock makes the

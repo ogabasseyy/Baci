@@ -39,9 +39,13 @@ export function buildSavingsReminderTrigger({
       weekday: scheduledAt.getDay() + 1,
     };
   }
+  // Expo monthly triggers fire only when the day matches, so a 29th/30th/
+  // 31st start would silently skip short months. Clamp to the 28th — every
+  // month has one — so the local fallback always fires; a slightly early
+  // reminder beats a missed one.
   return {
     ...shared,
-    day: scheduledAt.getDate(),
+    day: Math.min(scheduledAt.getDate(), 28),
     type: notifications.SchedulableTriggerInputTypes.MONTHLY,
   };
 }
@@ -82,23 +86,31 @@ export async function cancelStoredSavingsReminderNotification(
 /**
  * One-way disposal of pre-scope records. Unscoped state cannot be attributed
  * to the current account, so any live OS notification is cancelled and the
- * record dropped — never adopted. Runs at every entry point (idempotent).
+ * entry dropped — never adopted. Entries are retained until cancellation is
+ * confirmed (or there is nothing live to cancel), so a failed cancel can be
+ * retried on a later run instead of orphaning the OS notification. Runs at
+ * every entry point (idempotent).
  */
 export async function disposeUnscopedSavingsReminders(
   notifications: NotificationsModule | null
 ) {
-  for (const record of await savingsReminderStorage.drainUnscoped()) {
-    if (!record.notificationId || !notifications) continue;
+  for (const entry of await savingsReminderStorage.readUnscoped()) {
+    const notificationId = entry.record?.notificationId;
+    if (!notificationId) {
+      await savingsReminderStorage.removeUnscoped(entry.keys);
+      continue;
+    }
+    if (!notifications) continue;
     try {
-      await notifications.cancelScheduledNotificationAsync(
-        record.notificationId
-      );
+      await notifications.cancelScheduledNotificationAsync(notificationId);
     } catch (error) {
       log.debug(
         'Unable to cancel unscoped savings reminder notification',
         error
       );
+      continue;
     }
+    await savingsReminderStorage.removeUnscoped(entry.keys);
   }
 }
 

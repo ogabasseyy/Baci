@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Unit tests for the staging verification helpers (no network, no token)."""
+"""Unit tests for the staging verification orchestrator (no network, no token)."""
 
 import importlib.util
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 
@@ -20,55 +22,83 @@ def _load():
 verify = _load()
 
 
-class VerifyHelperTest(unittest.TestCase):
-    def test_goal_ids_handles_list_shapes(self):
-        self.assertEqual(
-            verify.goal_ids([{'id': 'a'}, {'id': 'b'}, {'nope': 1}]),
-            ['a', 'b'],
-        )
-        self.assertEqual(
-            verify.goal_ids({'goals': [{'id': 'a'}]}), ['a']
-        )
-        self.assertEqual(verify.goal_ids({'goals': []}), [])
-        self.assertEqual(verify.goal_ids({}), [])
+def _stub(calls, outcomes):
+    """Scenario double: records calls, replays canned (ok, *data) outcomes."""
 
-    def test_created_goal_id_prefers_rows_then_scalar_keys(self):
-        self.assertEqual(
-            verify.created_goal_id({'goals': [{'id': 'a'}]}), 'a'
-        )
-        self.assertEqual(verify.created_goal_id({'goalId': 'b'}), 'b')
-        self.assertEqual(verify.created_goal_id({'goal_id': 'c'}), 'c')
-        self.assertIsNone(verify.created_goal_id({'error': 'x'}))
+    def make(name, arity):
+        def fn(record, *args):
+            calls.append(name)
+            record(name, 'pass')
+            return outcomes[name]
 
-    def test_wallet_shape_ok(self):
-        good = {
-            'status': 'ready',
-            'balanceKobo': 100,
-            'paidInterestKobo': 0,
-        }
-        self.assertTrue(verify.wallet_shape_ok(good))
-        self.assertTrue(verify.wallet_shape_ok({**good, 'status': 'none'}))
-        self.assertFalse(verify.wallet_shape_ok({**good, 'status': 'bogus'}))
-        self.assertFalse(verify.wallet_shape_ok({**good, 'balanceKobo': 'x'}))
-        self.assertFalse(verify.wallet_shape_ok({'status': 'ready'}))
+        assert len(outcomes[name]) == arity, name
+        return fn
 
-    def test_goal_body_is_manual_and_idempotent_keyed(self):
-        body = verify.goal_body('m', 'p', 'stamp', 100, 'key-1')
-        self.assertEqual(body['sourceMode'], 'manual')
-        self.assertEqual(body['initialContributionIdempotencyKey'], 'key-1')
-        self.assertTrue(body['termsAccepted'])
-        self.assertTrue(body['nonWithdrawableAccepted'])
-        keyed = verify.goal_body('m', 'p', 'stamp', goal_key='goal-1')
-        self.assertEqual(keyed['goalIdempotencyKey'], 'goal-1')
-        plain = verify.goal_body('m', 'p', 'stamp')
-        self.assertNotIn('initialContributionIdempotencyKey', plain)
-        self.assertNotIn('goalIdempotencyKey', plain)
-        self.assertEqual(plain['initialContributionAmount'], 0)
-        self.assertNotIn('variantId', plain)
+    return SimpleNamespace(
+        discover_product=make('discover-product', 2),
+        discover_variant=make('discover-variant', 3),
+        list_baseline=make('list-baseline', 2),
+        create_goal=make('create-goal', 2),
+        check_persisted=make('goal-persisted', 1),
+        check_contribution_idempotency=make('idempotency', 2),
+        check_goal_key_idempotency=make('goal-idempotency', 1),
+        check_funding_account=make('funding-account', 1),
+    )
+
+
+PASS = {
+    'discover-product': (True, 'product-1'),
+    'discover-variant': (True, 'variant-1', 50000),
+    'list-baseline': (True, set()),
+    'create-goal': (True, 'goal-a'),
+    'goal-persisted': (True,),
+    'idempotency': (True, 2),
+    'goal-idempotency': (True,),
+    'funding-account': (True,),
+}
+
+
+class RunOrchestratorTest(unittest.TestCase):
+    def test_run_executes_every_scenario_in_order(self):
+        calls = []
+        with patch.object(verify, 'scenarios', _stub(calls, PASS)):
+            steps = verify.run('a', 'r', 't', 'm', None, 15)
+
         self.assertEqual(
-            verify.goal_body('m', 'p', 'stamp', variant_id='v')['variantId'],
-            'v',
+            calls,
+            [
+                'discover-product',
+                'discover-variant',
+                'list-baseline',
+                'create-goal',
+                'goal-persisted',
+                'idempotency',
+                'goal-idempotency',
+                'funding-account',
+            ],
         )
+        self.assertEqual([step['step'] for step in steps], calls)
+
+    def test_run_short_circuits_after_the_first_failure(self):
+        calls = []
+        outcomes = dict(PASS)
+        outcomes['discover-variant'] = (False, None, 0)
+        with patch.object(verify, 'scenarios', _stub(calls, outcomes)):
+            steps = verify.run('a', 'r', 't', 'm', None, 15)
+
+        self.assertEqual(calls, ['discover-product', 'discover-variant'])
+        self.assertEqual(len(steps), 2)
+
+    def test_run_continues_when_idempotency_skips(self):
+        calls = []
+        outcomes = dict(PASS)
+        outcomes['idempotency'] = (True, 1)
+        with patch.object(verify, 'scenarios', _stub(calls, outcomes)):
+            steps = verify.run('a', 'r', 't', 'm', None, 15)
+
+        self.assertIn('goal-idempotency', calls)
+        self.assertIn('funding-account', calls)
+        self.assertEqual(len(steps), 8)
 
 
 if __name__ == '__main__':

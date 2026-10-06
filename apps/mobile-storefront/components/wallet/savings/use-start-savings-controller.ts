@@ -1,8 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useDebounce } from '@/hooks/use-debounce';
-import { useProductSearch } from '@/hooks/use-product-search';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
@@ -26,6 +24,7 @@ import { readParam } from './start-savings-controller.utils';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
+import { useStartSavingsProductSearch } from './use-start-savings-product-search';
 import { useStartSavingsProductSelection } from './use-start-savings-product-selection';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
@@ -67,18 +66,8 @@ export function useStartSavingsController() {
   const [selectedFundingOption, setSelectedFundingOption] =
     useState<SavingsFundingOption>('wallet');
   const [sourceMode, setSourceMode] = useState<SavingsSourceMode>('manual');
-  // Debounced like storefront search: useProducts starts an uncancelled
-  // Supabase query per search string, so raw keystrokes would fan out.
-  const debouncedSearch = useDebounce(searchValue, 300);
-  const {
-    products,
-    isLoading: isProductsLoading,
-    resolveProduct,
-  } = useProductSearch({
-    enabled: Boolean(debouncedSearch.trim() || readParam(params.productId)),
-    limit: 8,
-    search: debouncedSearch.trim() ? debouncedSearch.trim() : undefined,
-  });
+  const { debouncedSearch, isProductsLoading, products, resolveProduct } =
+    useStartSavingsProductSearch({ params, searchValue });
   const {
     clearProductSelection,
     selectProduct,

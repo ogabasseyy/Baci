@@ -61,6 +61,56 @@ it('refreshes the wallet after a completed recovered contribution', async () => 
   );
 });
 
+it('cancels the local reminder when a completed charge covers the remaining amount', async () => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status: 'completed',
+  });
+  const state = setters();
+  const cancelSavingsReminder = jest.fn().mockResolvedValue(true);
+
+  await syncSavingsCardContributionStatus({
+    cancelSavingsReminder,
+    goalId: snapshot.goalId,
+    isCurrent: () => true,
+    refreshWallet: jest.fn().mockResolvedValue(undefined),
+    remainingAmountKobo: snapshot.amountKobo,
+    signal: new AbortController().signal,
+    snapshot,
+    ...state,
+  });
+
+  expect(cancelSavingsReminder).toHaveBeenCalledWith(snapshot.goalId);
+});
+
+it('keeps the local reminder when a completed charge is partial', async () => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status: 'completed',
+  });
+  const state = setters();
+  const cancelSavingsReminder = jest.fn().mockResolvedValue(true);
+
+  await syncSavingsCardContributionStatus({
+    cancelSavingsReminder,
+    goalId: snapshot.goalId,
+    isCurrent: () => true,
+    refreshWallet: jest.fn().mockResolvedValue(undefined),
+    remainingAmountKobo: snapshot.amountKobo + 1,
+    signal: new AbortController().signal,
+    snapshot,
+    ...state,
+  });
+
+  expect(cancelSavingsReminder).not.toHaveBeenCalled();
+});
+
 it('keeps the durable request retryable when refreshed status mismatches', async () => {
   jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
     goalId: snapshot.goalId,

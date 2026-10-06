@@ -44,14 +44,6 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
       },
     },
     {
-      id: 'promotions',
-      config: {
-        name: 'Deals & Promotions',
-        description: 'Special offers and discounts',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      },
-    },
-    {
       // The savings push worker addresses this channel id explicitly, and
       // Android drops pushes naming a channel that was never created. It
       // must exist from shared setup (which runs before token issue and on
@@ -64,6 +56,14 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#16A34A',
+      },
+    },
+    {
+      id: 'promotions',
+      config: {
+        name: 'Deals & Promotions',
+        description: 'Special offers and discounts',
+        importance: Notifications.AndroidImportance.DEFAULT,
       },
     },
     {

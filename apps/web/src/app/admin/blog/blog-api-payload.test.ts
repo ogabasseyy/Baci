@@ -54,3 +54,23 @@ it.each([
     intent_source: null,
   });
 });
+
+it('nulls an orphan intent_source when intent is cleared on PATCH', async () => {
+  fetchWithCsrf.mockClear();
+  const form = {
+    ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+    intent: null,
+    intent_source: 'draft_task_type',
+  };
+  expect(JSON.parse(JSON.stringify(toApiPayload(form)))).not.toHaveProperty(
+    'intent_source'
+  );
+  fetchWithCsrf.mockResolvedValue(
+    new Response(JSON.stringify({ post: { id: 'post-1' } }), { status: 200 })
+  );
+  await updatePlatformBlogPost('post-1', form);
+  expect(JSON.parse(fetchWithCsrf.mock.calls[0][1].body)).toMatchObject({
+    intent: null,
+    intent_source: null,
+  });
+});

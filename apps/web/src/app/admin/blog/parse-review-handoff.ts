@@ -116,7 +116,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     seo_description: readText(value.seo_description),
     excerpt: readText(value.excerpt),
     category: readText(value.category),
-    intent_source: readText(value.intent_source) || null,
+    intent_source: intent ? readText(value.intent_source) || null : null,
   };
   const validatedMetadata = blogPostSchema
     .pick({

@@ -136,6 +136,29 @@ describe('validateImportedContent', () => {
   });
 
   it.each([
+    'https://cdn.example.com/a.webp, http://example.com/evil.png 2x',
+    'https://cdn.example.com/a.webp,http://example.com/evil.png 2x',
+  ])('rejects an http URL glued to a descriptorless srcset candidate: %s', (srcset) => {
+    expect(() =>
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it.each([
+    'https://cdn.example.com/a.webp, https://cdn.example.com/b.webp 2x',
+    'https://cdn.example.com/a.webp,https://cdn.example.com/b.webp 2x',
+    'https://cdn.example.com/a.webp 1x, data:image/png;base64,iVBORw0KGgo=',
+  ])('accepts a split second srcset candidate: %s', (srcset) => {
+    expect(
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
+    ).toContain('srcset');
+  });
+
+  it.each([
     '![Photo](http://example.com/photo.png)',
     '![Photo](/relative/photo.png)',
     'See ![Photo][1] below.\n\n[1]: http://example.com/photo.png',

@@ -91,18 +91,26 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
   }
 }
 
+const NEW_CANDIDATE_URL_PATTERN = /^(data:|[a-z][a-z\d+.-]*:\/\/)/i;
+
 function splitSrcsetCandidates(srcset: string): string[] {
   const candidates: string[] = [];
-  // A comma ends a candidate only once the URL is followed by at least one
-  // descriptor (i.e. the accumulated text already contains whitespace); a
-  // comma inside a bare URL is a CDN transform parameter (see
-  // buildOgabasseyAvifSrcSet) and stays glued to it. This keeps bare-comma
-  // separators working without splitting transform commas, and a second URL
-  // can never hide unvalidated: every emitted candidate is URL-validated.
+  // A comma ends a candidate once the URL is followed by at least one
+  // descriptor (i.e. the accumulated text already contains whitespace), or
+  // when the next piece starts a new URL: a bare descriptorless candidate
+  // must not glue to the URL that follows it, or the second URL hides from
+  // validation behind the first token. A comma inside a bare URL is a CDN
+  // transform parameter (see buildOgabasseyAvifSrcSet) and stays glued to
+  // it, since transform segments never start with a URL scheme. Splitting
+  // is the fail-closed direction: every emitted candidate is URL-validated.
   let current = '';
   for (const piece of srcset.split(',')) {
     if (piece.trim() === '') continue;
-    if (current !== '' && /\s/.test(current.trim())) {
+    if (
+      current !== '' &&
+      (/\s/.test(current.trim()) ||
+        NEW_CANDIDATE_URL_PATTERN.test(piece.trim()))
+    ) {
       candidates.push(current);
       current = piece;
     } else if (current === '') {

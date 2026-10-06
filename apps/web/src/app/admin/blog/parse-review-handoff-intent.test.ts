@@ -44,6 +44,17 @@ describe('handoff intent provenance', () => {
   });
 
   it.each([
+    { intent_source: 'draft_task_type' },
+    { intent: null, intent_source: 'draft_task_type' },
+    { intent: '', intent_source: 'draft_task_type' },
+  ])('drops an orphan source without an intent for %j', (metadata) => {
+    const draft = parseReviewHandoff({ ...handoff, ...metadata });
+    expect(draft).toMatchObject({ intent: null, intent_source: null });
+    const payload: unknown = JSON.parse(JSON.stringify(toApiPayload(draft)));
+    expect(payload).not.toHaveProperty('intent_source');
+  });
+
+  it.each([
     { intent: 123 },
     { intent: ['news'] },
     { intent_source: 456 },

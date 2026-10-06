@@ -25,6 +25,15 @@ export function toApiPayload(
     return clearEmptyToNull ? null : undefined;
   };
 
+  const intent = input.intent || (clearEmptyToNull ? null : undefined);
+  // Provenance without an intent is an orphan: keep the pair consistent by
+  // clearing the source whenever the effective intent is nullish.
+  const intentSource = intent
+    ? toOptionalString(input.intent_source ?? '')
+    : clearEmptyToNull
+      ? null
+      : undefined;
+
   const payload = {
     author_name: input.author_name,
     category: toOptionalString(input.category),
@@ -32,8 +41,8 @@ export function toApiPayload(
     excerpt: toOptionalString(input.excerpt),
     featured_image_alt: toOptionalString(input.featured_image_alt),
     focus_keyword: toOptionalString(input.focus_keyword ?? ''),
-    intent: input.intent || (clearEmptyToNull ? null : undefined),
-    intent_source: toOptionalString(input.intent_source ?? ''),
+    intent,
+    intent_source: intentSource,
     seo_description: toOptionalString(input.seo_description),
     seo_title: toOptionalString(input.seo_title),
     slug: input.slug.trim() || undefined,

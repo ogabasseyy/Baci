@@ -58,16 +58,21 @@ const SavingsDeviceRpcVariantSchema = SavingsDeviceVariantSchema.extend({
   product_id: z.string(),
 });
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Reads one active merchant product and hydrates its variants through the
  * storefront RPC. The product_variants table is merchant/staff-only under
  * RLS, so a direct relationship projection returns no variants to
  * customers; the SECURITY DEFINER RPC is the hydration boundary (same as
- * the savings catalogue) and already excludes inventory anchors. Returns
- * null when the product is missing or fails validation — including an
- * invalid variant payload, which must never silently downgrade a
- * variant-bearing product to variantless; throws transport errors for the
- * caller to map.
+ * the savings catalogue) and already excludes inventory anchors. Variant
+ * rows validate individually: valid rows hydrate, malformed rows drop, and
+ * a payload with rows for this product but none valid returns null instead
+ * of silently downgrading a variant-bearing product to variantless.
+ * Returns null when the product is missing or fails validation; throws
+ * transport errors for the caller to map.
  */
 export async function readSavingsDeviceProduct({
   merchantId,
@@ -94,19 +99,24 @@ export async function readSavingsDeviceProduct({
   if (variantsResult.error) {
     throw variantsResult.error;
   }
-  const variants = z
-    .array(SavingsDeviceRpcVariantSchema)
-    .safeParse(variantsResult.data);
-  if (!variants.success) return null;
+  if (!Array.isArray(variantsResult.data)) return null;
+  const scoped = variantsResult.data.filter(
+    (row): row is Record<string, unknown> =>
+      isRecord(row) && row.product_id === productId
+  );
+  const variants = [];
+  for (const row of scoped) {
+    const parsed = SavingsDeviceRpcVariantSchema.safeParse(row);
+    if (parsed.success) variants.push(parsed.data);
+  }
+  if (scoped.length > 0 && variants.length === 0) return null;
   const product =
     typeof productResult.data === 'object' && productResult.data !== null
       ? productResult.data
       : null;
   const parsed = SavingsDeviceProductSchema.safeParse({
     ...(product ?? {}),
-    variants: variants.data.filter(
-      (variant) => variant.product_id === productId
-    ),
+    variants,
   });
   return parsed.success ? parsed.data : null;
 }

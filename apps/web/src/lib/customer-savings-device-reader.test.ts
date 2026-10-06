@@ -55,7 +55,7 @@ describe('readSavingsDeviceProduct', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('returns null instead of downgrading when a variant row is invalid', async () => {
+  it('drops malformed rows while hydrating valid variants', async () => {
     const { client, rpc } = fixture();
     rpc.mockResolvedValue({
       data: [
@@ -63,6 +63,35 @@ describe('readSavingsDeviceProduct', () => {
         // Invalid row shape at runtime (legacy non-string id).
         { id: 42 as unknown as string, product_id: 'product' },
       ],
+      error: null,
+    });
+    const product = await readSavingsDeviceProduct({
+      merchantId: 'merchant',
+      productId: 'product',
+      supabase: client,
+    });
+    expect(product?.variants?.map((variant) => variant.id)).toEqual(['owned']);
+  });
+
+  it('returns null when rows exist but none validate', async () => {
+    const { client, rpc } = fixture();
+    rpc.mockResolvedValue({
+      data: [{ id: 42 as unknown as string, product_id: 'product' }],
+      error: null,
+    });
+    await expect(
+      readSavingsDeviceProduct({
+        merchantId: 'merchant',
+        productId: 'product',
+        supabase: client,
+      })
+    ).resolves.toBeNull();
+  });
+
+  it('returns null for a non-array variant payload', async () => {
+    const { client, rpc } = fixture();
+    rpc.mockResolvedValue({
+      data: null as unknown as { id: string; product_id: string }[],
       error: null,
     });
     await expect(

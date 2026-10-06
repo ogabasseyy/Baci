@@ -177,18 +177,21 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          {
-            contribution_id: 'contrib-1',
-            current_amount: '20000',
-            goal_id: 'goal-1',
-            goal_status: 'active',
-            success: true,
-            wallet_balance: '180000',
-          },
-        ],
-        error: null,
+      rpc: createRoutedRpc({
+        variantRows: [],
+        create: {
+          data: [
+            {
+              contribution_id: 'contrib-1',
+              current_amount: '20000',
+              goal_id: 'goal-1',
+              goal_status: 'active',
+              success: true,
+              wallet_balance: '180000',
+            },
+          ],
+          error: null,
+        },
       }),
     };
 
@@ -249,18 +252,21 @@ describe('/api/storefront/customer/savings/goals', () => {
     });
     const mockSupabase = {
       from: vi.fn(() => productQuery),
-      rpc: vi.fn().mockResolvedValue({
-        data: [
-          {
-            contribution_id: 'contrib-1',
-            current_amount: '20000',
-            goal_id: 'goal-1',
-            goal_status: 'active',
-            success: true,
-            wallet_balance: '180000',
-          },
-        ],
-        error: null,
+      rpc: createRoutedRpc({
+        variantRows: [],
+        create: {
+          data: [
+            {
+              contribution_id: 'contrib-1',
+              current_amount: '20000',
+              goal_id: 'goal-1',
+              goal_status: 'active',
+              success: true,
+              wallet_balance: '180000',
+            },
+          ],
+          error: null,
+        },
       }),
     };
 
@@ -693,18 +699,21 @@ describe('/api/storefront/customer/savings/goals', () => {
       data: simpleProductData(),
       error: null,
     });
-    const rpc = vi.fn().mockResolvedValue({
-      data: [
-        {
-          contribution_id: 'contrib-1',
-          current_amount: '20000',
-          goal_id: 'goal-1',
-          goal_status: 'active',
-          success: true,
-          wallet_balance: '180000',
-        },
-      ],
-      error: null,
+    const rpc = createRoutedRpc({
+      variantRows: [],
+      create: {
+        data: [
+          {
+            contribution_id: 'contrib-1',
+            current_amount: '20000',
+            goal_id: 'goal-1',
+            goal_status: 'active',
+            success: true,
+            wallet_balance: '180000',
+          },
+        ],
+        error: null,
+      },
     });
     const mockSupabase = {
       from: vi.fn((table: string) => {

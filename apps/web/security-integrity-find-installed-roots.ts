@@ -1,6 +1,8 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isBenignFsError } from './security-integrity-benign-fs-error';
+import { expandWorkspaces } from './security-integrity-workspace-globs';
 
 // Enumerate EVERY installed copy of a package: the ancestor chain's
 // nested duplicates, the pnpm virtual store
@@ -12,118 +14,13 @@ import { fileURLToPath } from 'node:url';
 // checkouts never scan a parent checkout's node_modules.
 //
 // Soundness bound (fail-closed, not silent): recursion past depth 8,
-// an upward walk past 12 levels, and an unreadable or keyless
-// pnpm-workspace.yaml all throw, so a pathological layout fails the
-// gate instead of passing on a partial list. Depth 8 covers realistic
-// pnpm hoisted and virtual-store layouts.
+// an upward walk past 12 levels, an unreadable or keyless
+// pnpm-workspace.yaml, and any non-ENOENT/ENOTDIR filesystem error all
+// throw, so a pathological layout fails the gate instead of passing on
+// a partial list. Depth 8 covers realistic pnpm hoisted and
+// virtual-store layouts.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Minimal `packages:` reader for pnpm-workspace.yaml: block lists and
-// flow lists only (no YAML dependency for a test helper). Fail-closed:
-// an unreadable file or a missing `packages:` key throws instead of
-// silently narrowing the scan to the ancestor chain (an explicit empty
-// list like `packages: []` still means "no sibling workspaces").
-function readPackageGlobs(workspaceRoot: string): string[] {
-  const manifest = join(workspaceRoot, 'pnpm-workspace.yaml');
-  let text: string;
-  try {
-    text = readFileSync(manifest, 'utf8');
-  } catch {
-    throw new Error(
-      `findInstalledRoots: cannot read ${manifest}; refusing to scan a possibly partial list`
-    );
-  }
-  const lines = text.split('\n');
-  const start = lines.findIndex((line) =>
-    /^packages:\s*(\[.*\])?\s*(#.*)?$/.test(line)
-  );
-  if (start === -1) {
-    throw new Error(
-      `findInstalledRoots: ${manifest} has no packages: key; refusing to scan a possibly partial list`
-    );
-  }
-  const inline = lines[start].match(/^packages:\s*\[(.*)\]/);
-  if (inline) {
-    return inline[1]
-      .split(',')
-      .map((item) => item.trim().replace(/^['"]|['"]$/g, ''))
-      .filter((item) => item.length > 0);
-  }
-  const globs: string[] = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*#/.test(line) || line.trim() === '') {
-      continue;
-    }
-    if (/^[^\s]/.test(line)) {
-      break;
-    }
-    const item = line.match(/^\s*-\s*(.+?)\s*(#.*)?$/);
-    if (item) {
-      globs.push(item[1].replace(/^['"]|['"]$/g, ''));
-    }
-  }
-  return globs;
-}
-
-// Expand workspace globs (`apps/*`, literal paths) to directories,
-// staying inside the workspace root.
-function expandWorkspaces(workspaceRoot: string): string[] {
-  const results: string[] = [];
-  const expand = (base: string, segments: string[]): void => {
-    if (segments.length === 0) {
-      results.push(base);
-      return;
-    }
-    const [head, ...tail] = segments;
-    if (!head.includes('*')) {
-      expand(join(base, head), tail);
-      return;
-    }
-    let entries: string[];
-    try {
-      entries = readdirSync(base);
-    } catch {
-      return;
-    }
-    const pattern = new RegExp(
-      `^${head.split('*').map(escapeRegExp).join('.*')}$`
-    );
-    for (const entry of entries) {
-      if (entry === 'node_modules' || entry.startsWith('.')) {
-        continue;
-      }
-      if (pattern.test(entry)) {
-        expand(join(base, entry), tail);
-      }
-    }
-  };
-  for (const glob of readPackageGlobs(workspaceRoot)) {
-    // Fail closed on anything that would silently narrow the scan:
-    // out-of-root globs and unsupported syntax both throw instead of
-    // skipping a sibling workspace while the EVERY-copy claim reports
-    // green.
-    if (glob.includes('..') || isAbsolute(glob)) {
-      throw new Error(
-        `findInstalledRoots: workspace glob escapes the root: ${glob}`
-      );
-    }
-    if (glob.includes('**') || glob.includes('?') || glob.includes('{')) {
-      throw new Error(
-        `findInstalledRoots: unsupported workspace glob syntax: ${glob}`
-      );
-    }
-    expand(
-      workspaceRoot,
-      glob.split('/').filter((s) => s.length > 0 && s !== '.')
-    );
-  }
-  return results;
-}
 
 export function findInstalledRoots(
   packageName: string,
@@ -142,10 +39,14 @@ export function findInstalledRoots(
   const addRoot = (candidate: string): void => {
     try {
       roots.add(realpathSync(candidate));
-    } catch {
-      // Dangling symlink, permission error, or install-time race
-      // between the existsSync check and resolution: skip this
-      // candidate instead of aborting the whole scan.
+    } catch (error) {
+      // Only a dangling symlink or an install-time race between the
+      // existsSync check and resolution is safe to skip: an
+      // unresolvable candidate cannot be loaded by Node either. Any
+      // other resolution failure throws fail-closed.
+      if (!isBenignFsError(error)) {
+        throw error;
+      }
     }
   };
   const scan = (dir: string, depth: number, inScope: boolean): void => {
@@ -156,8 +57,11 @@ export function findInstalledRoots(
     let entries: ReturnType<typeof readdirSync>;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+      if (isBenignFsError(error)) {
+        return;
+      }
+      throw error;
     }
     for (const entry of entries) {
       if (!entry.isDirectory() && !entry.isSymbolicLink()) {
@@ -170,7 +74,10 @@ export function findInstalledRoots(
         let storeEntries: ReturnType<typeof readdirSync>;
         try {
           storeEntries = readdirSync(full, { withFileTypes: true });
-        } catch {
+        } catch (error) {
+          if (!isBenignFsError(error)) {
+            throw error;
+          }
           continue;
         }
         for (const storeEntry of storeEntries) {
@@ -217,7 +124,10 @@ export function findInstalledRoots(
     let real: string;
     try {
       real = realpathSync(modules);
-    } catch {
+    } catch (error) {
+      if (!isBenignFsError(error)) {
+        throw error;
+      }
       return;
     }
     if (scanned.has(real)) {

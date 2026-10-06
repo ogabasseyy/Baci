@@ -9,6 +9,7 @@ import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
 import { parseVersion } from './security-integrity-parse-version';
+import { stripComments } from './security-integrity-strip-comments';
 import { versionAt } from './security-integrity-version-at';
 import { isAtLeast } from './security-integrity-version-floor';
 
@@ -86,11 +87,9 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(compact).toContain('idIndexes.has(ind)');
     // Negative markers run against comment-stripped code so a future
     // upstream comment mentioning indexOf cannot false-fail the suite.
-    const codeOnly = source
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .split('\n')
-      .filter((line) => !line.trimStart().startsWith('//'))
-      .join('\n');
+    // The stripper is conservative (never strips inside strings, URLs,
+    // or division-adjacent tails), so real code is never hidden.
+    const codeOnly = stripComments(source);
     expect(codeOnly).not.toContain('hasClass.indexOf(ind)');
     expect(codeOnly).not.toContain('hasId.indexOf(ind)');
   });

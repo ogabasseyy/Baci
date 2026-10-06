@@ -60,6 +60,17 @@ describe('handoff content validation', () => {
     expect(content).toContain('https://cdn.example.com/a.webp');
   });
 
+  it.each([
+    '<img src="data:text/html,<p>x</p>" alt="X">',
+    '<img src="data:text/plain,hello" alt="X">',
+    '<img src="data:" alt="X">',
+    '<img src="data:image/png," alt="X">',
+  ])('rejects embedded non-image media: %s', (snippet) => {
+    expect(() =>
+      parseReviewHandoff({ ...handoff, content_html: `<p>Body</p>${snippet}` })
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('ignores src-like text inside other attributes', () => {
     expect(
       parseReviewHandoff({

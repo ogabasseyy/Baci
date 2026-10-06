@@ -46,9 +46,19 @@ function mediaTagUrls(tag: string): string[] {
   return urls;
 }
 
+const DATA_IMAGE_URL_PATTERN = /^data:image\/[^,]+,/u;
+
+function isEmbeddedImageUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  const match = DATA_IMAGE_URL_PATTERN.exec(lower);
+  // Image MIME type plus a non-empty payload; bare `data:` or non-image
+  // payloads (data:text/html, ...) cannot render in an <img>.
+  return match !== null && match[0].length < lower.length;
+}
+
 function isImportableMediaUrl(url: string): boolean {
-  // data: URIs render inline, so only network URLs must be HTTPS.
-  return url.startsWith('data:') || isHttpsUrl(url);
+  if (url.toLowerCase().startsWith('data:')) return isEmbeddedImageUrl(url);
+  return isHttpsUrl(url);
 }
 
 function hasReadableContent(content: string): boolean {

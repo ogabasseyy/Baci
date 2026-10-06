@@ -314,7 +314,7 @@
       "justification": "Reviewed quiz ad analytics platform normalization for Android, iOS, and web event metadata."
     },
     {
-      "path": "services/savings-reminder-notifications.ts",
+      "path": "services/savings-reminder-native.ts",
       "justification": "Reviewed web guard and Android notification channel setup for savings reminders."
     }
   ],

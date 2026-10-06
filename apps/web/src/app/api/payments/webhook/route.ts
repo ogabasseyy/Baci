@@ -703,6 +703,11 @@ export async function POST(request: NextRequest) {
     // handling, which is not active: ask Paystack to retry instead of
     // letting the legacy flow file the webhook as a zero-candidate review
     // (whose 200 would stop retries while the money stays unreconciled).
+    // Designed completion path while the webhook worker is absent: the
+    // client PATCHes card-checkout, which verifies with the provider and
+    // durably records via store.promoteVerifiedCollection (or raises
+    // store.flagReconciliation on mismatch). Mutations stay disabled by
+    // default and require PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED=true.
     if (gateway === 'paystack') {
       const firstCardBoundary = prefundedCardWebhookBoundary(body);
       if (firstCardBoundary) return firstCardBoundary;

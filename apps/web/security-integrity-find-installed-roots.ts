@@ -97,6 +97,13 @@ function expandWorkspaces(workspaceRoot: string): string[] {
     if (glob.includes('..') || isAbsolute(glob)) {
       continue;
     }
+    // Fail closed on unsupported glob syntax: silently skipping a
+    // sibling workspace would breach the EVERY-copy claim.
+    if (glob.includes('**') || glob.includes('?') || glob.includes('{')) {
+      throw new Error(
+        `findInstalledRoots: unsupported workspace glob syntax: ${glob}`
+      );
+    }
     expand(
       workspaceRoot,
       glob.split('/').filter((s) => s.length > 0 && s !== '.')

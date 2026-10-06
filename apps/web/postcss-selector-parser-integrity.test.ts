@@ -48,7 +48,8 @@ interface Parser {
   processSync: (selector: string) => string;
 }
 
-const FLAT_CLASSES = 300_000;
+const SMALL_FLAT_CLASSES = 100_000;
+const LARGE_FLAT_CLASSES = 200_000;
 
 describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
   it('finds at least one installed copy to guard', () => {
@@ -104,26 +105,42 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
 
   it.each(
     candidateRoots()
-  )('parses 300k flat selectors in linear time in %s', (root) => {
+  )('scales linearly on large flat selectors in %s', (root) => {
     const entry = join(root, packageMain(root));
     const script = [
       `const parser = require(${JSON.stringify(entry)})`,
-      `const flat = '.a' + '.b'.repeat(${FLAT_CLASSES}) + '#c'`,
-      'const out = parser().processSync(flat)',
-      'if (out !== flat) process.exit(2)',
+      'const times = []',
+      `for (const n of [${SMALL_FLAT_CLASSES}, ${LARGE_FLAT_CLASSES}]) {`,
+      `  const flat = '.a' + '.b'.repeat(n) + '#c'`,
+      '  let best = Infinity',
+      '  for (let i = 0; i < 3; i++) {',
+      '    const start = Date.now()',
+      '    const out = parser().processSync(flat)',
+      '    if (out !== flat) process.exit(2)',
+      '    best = Math.min(best, Date.now() - start)',
+      '  }',
+      '  times.push(best)',
+      '}',
+      'console.log(JSON.stringify(times))',
     ].join('\n');
-    // Patched 6.0.10 parses this in ~0.2s; pristine 6.0.10 needs ~25s
-    // (4x per input doubling), so an 8s ceiling separates the fixed
-    // membership path from the quadratic one with wide margin. The
-    // parse runs in a child process so a vulnerable implementation
-    // fails by timeout instead of hanging Vitest.
+    // Scaling gate, not an absolute cutoff: doubling the input must
+    // roughly double the time (linear), not quadruple it (quadratic).
+    // Best-of-3 per size shrugs off GC pauses; the ratio is
+    // runner-speed independent, so slow CI cannot flake it. Measured:
+    // patched ~2.2x, pristine ~4x at these sizes. The 60s child ceiling
+    // is an anti-hang backstop only (patched finishes in ~1s).
     const result = spawnSync(process.execPath, ['-e', script], {
-      timeout: 8000,
+      timeout: 60000,
     });
     expect({
       error: result.error?.message,
       signal: result.signal,
       status: result.status,
     }).toEqual({ error: undefined, signal: null, status: 0 });
+    const [small, large] = JSON.parse(result.stdout.toString()) as [
+      number,
+      number,
+    ];
+    expect(large / Math.max(small, 1)).toBeLessThan(3);
   });
 });

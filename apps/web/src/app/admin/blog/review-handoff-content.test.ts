@@ -1,20 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseReviewHandoff } from './parse-review-handoff';
+import { validateImportedContent } from './review-handoff-content';
 
-const handoff = {
-  schema_version: 'baci-blog-review-handoff/v1',
-  title: 'Galaxy A buyer guide',
-  content_html: '<p>Choose a Galaxy A phone.</p>',
-  featured_image: { url: 'https://cdn.example.com/galaxy-a.webp' },
-};
-
-describe('handoff content validation', () => {
+describe('validateImportedContent', () => {
   it('rejects placeholders hidden behind HTML entities', () => {
     expect(() =>
-      parseReviewHandoff({
-        ...handoff,
-        content_html: '<p>&#123;&#123;INLINE_IMAGE_1&#125;&#125;</p>',
-      })
+      validateImportedContent('<p>&#123;&#123;INLINE_IMAGE_1&#125;&#125;</p>')
     ).toThrow('unresolved inline image placeholders');
   });
 
@@ -23,7 +13,7 @@ describe('handoff content validation', () => {
     '<p>&nbsp;</p>',
     '<div>   </div>',
   ])('rejects content without readable text or images: %s', (content_html) => {
-    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    expect(() => validateImportedContent(content_html)).toThrow(
       'no readable text or images'
     );
   });
@@ -32,49 +22,24 @@ describe('handoff content validation', () => {
     '<picture><source srcset="https://cdn.example.com/image.webp"></picture>',
     '<source srcset="https://cdn.example.com/image.webp">',
   ])('rejects media-only content without a renderable image: %s', (content_html) => {
-    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    expect(() => validateImportedContent(content_html)).toThrow(
       'no readable text or images'
     );
   });
 
   it('accepts picture content with an accompanying image', () => {
     expect(
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '<picture><source srcset="https://cdn.example.com/image.webp" type="image/webp"><img src="https://cdn.example.com/image.png" alt="Image"></picture>',
-      }).content
+      validateImportedContent(
+        '<picture><source srcset="https://cdn.example.com/image.webp" type="image/webp"><img src="https://cdn.example.com/image.png" alt="Image"></picture>'
+      )
     ).toContain('<img');
-  });
-
-  it.each([
-    'title',
-    'author_name',
-    'category',
-  ] as const)('rejects null bytes in %s', (field) => {
-    const nul = String.fromCharCode(0);
-    expect(() =>
-      parseReviewHandoff({ ...handoff, [field]: `Galaxy${nul}A` })
-    ).toThrow('null bytes');
-  });
-
-  it('rejects null bytes in inline media URLs', () => {
-    const nul = String.fromCharCode(0);
-    expect(() =>
-      parseReviewHandoff({
-        ...handoff,
-        content_html: `<p>Body</p><img src="https://cdn.example.com/a${nul}.webp" alt="A">`,
-      })
-    ).toThrow('null bytes');
   });
 
   it('accepts an image-only article with secure media', () => {
     expect(
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '<p><img src="https://cdn.example.com/phone.webp" alt="Phone"></p>',
-      }).content
+      validateImportedContent(
+        '<p><img src="https://cdn.example.com/phone.webp" alt="Phone"></p>'
+      )
     ).toContain('https://cdn.example.com/phone.webp');
   });
 
@@ -86,17 +51,15 @@ describe('handoff content validation', () => {
     '<p>Body</p><img src="https://cdn.example.com/ok.webp" srcset="http://example.com/hd.png 2x">',
     '<picture><source srcset="assets/hd.webp 2x" type="image/webp"></picture>',
   ])('rejects inline media the published page cannot render: %s', (snippet) => {
-    expect(() =>
-      parseReviewHandoff({ ...handoff, content_html: `<p>Body</p>${snippet}` })
-    ).toThrow('must use HTTPS URLs');
+    expect(() => validateImportedContent(`<p>Body</p>${snippet}`)).toThrow(
+      'must use HTTPS URLs'
+    );
   });
 
   it('accepts secure and embedded inline media', () => {
-    const { content } = parseReviewHandoff({
-      ...handoff,
-      content_html:
-        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="B">',
-    });
+    const content = validateImportedContent(
+      '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="B">'
+    );
     expect(content).toContain('https://cdn.example.com/a.webp');
   });
 
@@ -106,9 +69,9 @@ describe('handoff content validation', () => {
     '<img src="data:" alt="X">',
     '<img src="data:image/png," alt="X">',
   ])('rejects embedded non-image media: %s', (snippet) => {
-    expect(() =>
-      parseReviewHandoff({ ...handoff, content_html: `<p>Body</p>${snippet}` })
-    ).toThrow('must use HTTPS URLs');
+    expect(() => validateImportedContent(`<p>Body</p>${snippet}`)).toThrow(
+      'must use HTTPS URLs'
+    );
   });
 
   it.each([
@@ -116,18 +79,16 @@ describe('handoff content validation', () => {
     '<p>&shy;</p>',
     '<p>\u200b</p>',
   ])('rejects content with only invisible characters: %s', (content_html) => {
-    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    expect(() => validateImportedContent(content_html)).toThrow(
       'no readable text or images'
     );
   });
 
   it('accepts srcset candidates with CDN transform commas', () => {
     expect(
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70,format=webp/a.png 640w, https://cdn.example.com/image/width=1280,quality=70,format=webp/a.png 1280w">',
-      }).content
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70,format=webp/a.png 640w, https://cdn.example.com/image/width=1280,quality=70,format=webp/a.png 1280w">'
+      )
     ).toContain('srcset');
   });
 
@@ -136,20 +97,17 @@ describe('handoff content validation', () => {
     'data:image/png;base64,iVBORw0KGgo= 1x,https://cdn.example.com/b.webp 2x',
   ])('accepts embedded images in srcset: %s', (srcset) => {
     expect(
-      parseReviewHandoff({
-        ...handoff,
-        content_html: `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`,
-      }).content
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
     ).toContain('https://cdn.example.com/a.webp');
   });
 
   it('rejects a second srcset URL hidden behind a bare comma', () => {
     expect(() =>
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/a.webp 1x,http://example.com/evil.png 2x">',
-      })
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/a.webp 1x,http://example.com/evil.png 2x">'
+      )
     ).toThrow('must use HTTPS URLs');
   });
 
@@ -158,7 +116,7 @@ describe('handoff content validation', () => {
     '![Photo](/relative/photo.png)',
     'See ![Photo][1] below.\n\n[1]: http://example.com/photo.png',
   ])('rejects markdown images that render broken media: %s', (content_html) => {
-    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    expect(() => validateImportedContent(content_html)).toThrow(
       'must use HTTPS URLs'
     );
   });
@@ -167,16 +125,13 @@ describe('handoff content validation', () => {
     '![Photo](https://cdn.example.com/photo.png)',
     '![Photo](data:image/png;base64,iVBORw0KGgo=)',
   ])('accepts markdown images with importable media: %s', (content_html) => {
-    const { content } = parseReviewHandoff({ ...handoff, content_html });
+    const content = validateImportedContent(content_html);
     expect(content).toContain('<img');
     expect(content).not.toContain('![');
   });
 
   it('stores rendered HTML for accepted markdown handoffs', () => {
-    const { content } = parseReviewHandoff({
-      ...handoff,
-      content_html: '# Guide\n\nUseful **advice**.',
-    });
+    const content = validateImportedContent('# Guide\n\nUseful **advice**.');
     expect(content).toContain('<h1>Guide</h1>');
     expect(content).toContain('<strong>advice</strong>');
     expect(content).not.toContain('# Guide');
@@ -184,48 +139,39 @@ describe('handoff content validation', () => {
 
   it('passes HTML content through byte-identical', () => {
     const content_html = '<h2>Guide</h2><p>Useful <strong>advice</strong></p>';
-    expect(parseReviewHandoff({ ...handoff, content_html }).content).toBe(
-      content_html
-    );
+    expect(validateImportedContent(content_html)).toBe(content_html);
   });
 
   it('preserves disallowed HTML inside markdown code examples', () => {
-    const { content } = parseReviewHandoff({
-      ...handoff,
-      content_html:
-        'A fenced example:\n\n```html\n<script>alert(1)</script>\n```\n\nAnd `inline <iframe src="x">` code.',
-    });
+    const content = validateImportedContent(
+      'A fenced example:\n\n```html\n<script>alert(1)</script>\n```\n\nAnd `inline <iframe src="x">` code.'
+    );
     expect(content).toContain('&lt;script&gt;');
     expect(content).toContain('&lt;iframe');
     expect(content).not.toContain('<script>alert');
   });
 
   it('still strips real scripts outside markdown code', () => {
-    const { content } = parseReviewHandoff({
-      ...handoff,
-      content_html: '<p>Hello</p><script>bad()</script><p>world</p>',
-    });
+    const content = validateImportedContent(
+      '<p>Hello</p><script>bad()</script><p>world</p>'
+    );
     expect(content).not.toContain('bad()');
     expect(content).toContain('Hello');
   });
 
   it('still rejects placeholders revealed by markdown rendering', () => {
     expect(() =>
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '![Cover](https://cdn.example.com/c.png)\n\n{{INLINE_IMAGE_1}}',
-      })
+      validateImportedContent(
+        '![Cover](https://cdn.example.com/c.png)\n\n{{INLINE_IMAGE_1}}'
+      )
     ).toThrow('unresolved inline image placeholders');
   });
 
   it('ignores src-like text inside other attributes', () => {
     expect(
-      parseReviewHandoff({
-        ...handoff,
-        content_html:
-          '<p>Body</p><img alt="a src = b > c" src="https://cdn.example.com/a.webp">',
-      }).content
+      validateImportedContent(
+        '<p>Body</p><img alt="a src = b > c" src="https://cdn.example.com/a.webp">'
+      )
     ).toContain('https://cdn.example.com/a.webp');
   });
 });

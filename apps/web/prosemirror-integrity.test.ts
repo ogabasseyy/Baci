@@ -86,12 +86,16 @@ interface ProseMirrorState {
 
 function buildHarness(viewRoot: string) {
   const viewModule = loadCjs<ProseMirrorView>(viewRoot);
-  // Model and state ALWAYS resolve from the view's own root — never
-  // from the ambient workspace — so the Schema and the view's internal
-  // model instance cannot diverge even if the view ever carries a
-  // nested model copy (which would trip the duplicate-model guard and
-  // fail the suite for layout reasons). Under the override hook this
-  // also keeps tarball view with tarball-graph siblings.
+  // Model and state resolve from the view's own root, so the Schema
+  // and the view's internal model instance cannot diverge when the
+  // view carries a nested model copy (which trips the duplicate-model
+  // guard and fails the suite for layout reasons). Under the local
+  // tarball-override hook the unpacked view has no node_modules, so
+  // Node walks past it to the ambient workspace siblings — documented
+  // mixing, not same-graph resolution. The local pre/post comparison
+  // stays valid because the vulnerable surface is the view module
+  // itself; model/state only supply schema mechanics. Overrides are
+  // refused under CI, where every root is a real install.
   const { Schema } = loadCjs<ProseMirrorModel>(
     installedRoot('prosemirror-model', viewRoot)
   );

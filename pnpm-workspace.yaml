@@ -334,6 +334,11 @@ overrides:
   # Pin prosemirror-view 1.42.3 for the paste-handling XSS
   # (CVE-2026-104847, @tiptap/pm transitive).
   prosemirror-view: "1.42.3"
+  # Align prosemirror-model to 1.25.11 (the version view 1.42.3 resolves):
+  # without this, state/commands/tables/etc. stay on 1.25.8 and the editor
+  # graph loads two model runtimes, tripping cross-version instanceof
+  # RangeErrors when nodes pass between packages (tiptap#577).
+  prosemirror-model: "1.25.11"
   # Pin fast-copy 3.1.0 for the deeply-nested stack-exhaustion advisory
   # (GHSA-jggr-w7fw-pc2j, pino-pretty transitive).
   fast-copy: "3.1.0"

@@ -158,14 +158,15 @@ overrides:
   '@fastify/busboy': 3.2.2
   '@a2ui/web_core': 0.10.2
   prosemirror-view: 1.42.3
+  prosemirror-model: 1.25.11
   fast-copy: 3.1.0
   compression: 1.8.2
   proxy-addr: 2.0.8
   source-map-js: 1.2.2
 
 patchedDependencies:
-  '@graphql-tools/utils@10.11.0': 3ab2198d4ead554c701fc36239ff306d092cce07dd30f023fa9d20dcfffb66f9
-  '@graphql-tools/utils@11.1.0': 6b7a8cf6d30da496050c782c918564d11951cc74c17c43ae552ee3612d5aa651
+  '@graphql-tools/utils@10.11.0': 237423f57feec1e8c01ebd544243c21bcfca2f8f5cfbeba92a3b6ab7a0923d93
+  '@graphql-tools/utils@11.1.0': e1ece4ca17d717716a7b85c576ef0062660eac4b865cb3d477d3552be2674876
   '@react-native-community/datetimepicker@9.1.0': d6eebfc80eac2c44c597c97dcf20c6dfa6c2311b8904802b6a846db637e19196
   '@react-native-google-signin/google-signin@16.1.2': 7cff21da1136367e024986a39ba517dbe07d3033fbe53b24d56ba0094505e5d3
   '@supabase/auth-js@2.108.2': 26975a81cfa7b1ae0ba82b053ebc68c6322abe4df8259c527399ba5a3250071d
@@ -10881,9 +10882,6 @@ packages:
   prosemirror-model@1.25.11:
     resolution: {integrity: sha512-QWg9RhnpLlogAmp3p96uEFrE5txQpFynd4vhBAELkwgOCWQs/X0yCzB3/hrHqiPwf91RG5KyWq6553zs9JqIOQ==}
 
-  prosemirror-model@1.25.8:
-    resolution: {integrity: sha512-BswA4BLSFEiORV6Vjj/yZBXDbos1zTEnhyeSSgT8psGFhstQS7UJ8/WOLiDos9Byaee27+tml0/DuMNxYR84zg==}
-
   prosemirror-schema-list@1.5.1:
     resolution: {integrity: sha512-927lFx/uwyQaGwJxLWCZRkjXG0p48KpMj6ueoYiu4JX05GGuGcgzAy62dfiV8eFZftgyBUvLx76RsMe20fJl+Q==}
 
@@ -15623,7 +15621,7 @@ snapshots:
 
   '@graphql-tools/executor@1.5.3(graphql@16.14.2)':
     dependencies:
-      '@graphql-tools/utils': 11.1.0(patch_hash=6b7a8cf6d30da496050c782c918564d11951cc74c17c43ae552ee3612d5aa651)(graphql@16.14.2)
+      '@graphql-tools/utils': 11.1.0(patch_hash=e1ece4ca17d717716a7b85c576ef0062660eac4b865cb3d477d3552be2674876)(graphql@16.14.2)
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.2)
       '@repeaterjs/repeater': 3.1.0
       '@whatwg-node/disposablestack': 0.0.6
@@ -15633,18 +15631,18 @@ snapshots:
 
   '@graphql-tools/merge@9.1.9(graphql@16.14.2)':
     dependencies:
-      '@graphql-tools/utils': 11.1.0(patch_hash=6b7a8cf6d30da496050c782c918564d11951cc74c17c43ae552ee3612d5aa651)(graphql@16.14.2)
+      '@graphql-tools/utils': 11.1.0(patch_hash=e1ece4ca17d717716a7b85c576ef0062660eac4b865cb3d477d3552be2674876)(graphql@16.14.2)
       graphql: 16.14.2
       tslib: 2.8.1
 
   '@graphql-tools/schema@10.0.33(graphql@16.14.2)':
     dependencies:
       '@graphql-tools/merge': 9.1.9(graphql@16.14.2)
-      '@graphql-tools/utils': 11.1.0(patch_hash=6b7a8cf6d30da496050c782c918564d11951cc74c17c43ae552ee3612d5aa651)(graphql@16.14.2)
+      '@graphql-tools/utils': 11.1.0(patch_hash=e1ece4ca17d717716a7b85c576ef0062660eac4b865cb3d477d3552be2674876)(graphql@16.14.2)
       graphql: 16.14.2
       tslib: 2.8.1
 
-  '@graphql-tools/utils@10.11.0(patch_hash=3ab2198d4ead554c701fc36239ff306d092cce07dd30f023fa9d20dcfffb66f9)(graphql@16.14.2)':
+  '@graphql-tools/utils@10.11.0(patch_hash=237423f57feec1e8c01ebd544243c21bcfca2f8f5cfbeba92a3b6ab7a0923d93)(graphql@16.14.2)':
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.2)
       '@whatwg-node/promise-helpers': 1.3.2
@@ -15652,7 +15650,7 @@ snapshots:
       graphql: 16.14.2
       tslib: 2.8.1
 
-  '@graphql-tools/utils@11.1.0(patch_hash=6b7a8cf6d30da496050c782c918564d11951cc74c17c43ae552ee3612d5aa651)(graphql@16.14.2)':
+  '@graphql-tools/utils@11.1.0(patch_hash=e1ece4ca17d717716a7b85c576ef0062660eac4b865cb3d477d3552be2674876)(graphql@16.14.2)':
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.2)
       '@whatwg-node/promise-helpers': 1.3.2
@@ -15670,7 +15668,7 @@ snapshots:
 
   '@graphql-yoga/plugin-defer-stream@3.21.2(graphql-yoga@5.21.2(graphql@16.14.2))(graphql@16.14.2)':
     dependencies:
-      '@graphql-tools/utils': 10.11.0(patch_hash=3ab2198d4ead554c701fc36239ff306d092cce07dd30f023fa9d20dcfffb66f9)(graphql@16.14.2)
+      '@graphql-tools/utils': 10.11.0(patch_hash=237423f57feec1e8c01ebd544243c21bcfca2f8f5cfbeba92a3b6ab7a0923d93)(graphql@16.14.2)
       graphql: 16.14.2
       graphql-yoga: 5.21.2(graphql@16.14.2)
 
@@ -22223,7 +22221,7 @@ snapshots:
       '@envelop/instrumentation': 1.0.0
       '@graphql-tools/executor': 1.5.3(graphql@16.14.2)
       '@graphql-tools/schema': 10.0.33(graphql@16.14.2)
-      '@graphql-tools/utils': 10.11.0(patch_hash=3ab2198d4ead554c701fc36239ff306d092cce07dd30f023fa9d20dcfffb66f9)(graphql@16.14.2)
+      '@graphql-tools/utils': 10.11.0(patch_hash=237423f57feec1e8c01ebd544243c21bcfca2f8f5cfbeba92a3b6ab7a0923d93)(graphql@16.14.2)
       '@graphql-yoga/logger': 2.0.1
       '@graphql-yoga/subscription': 5.0.5
       '@whatwg-node/fetch': 0.10.13
@@ -25448,7 +25446,7 @@ snapshots:
 
   prosemirror-commands@1.7.1:
     dependencies:
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.0
 
@@ -25461,7 +25459,7 @@ snapshots:
   prosemirror-gapcursor@1.4.1:
     dependencies:
       prosemirror-keymap: 1.2.3
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
       prosemirror-state: 1.4.4
       prosemirror-view: 1.42.3
 
@@ -25486,33 +25484,29 @@ snapshots:
     dependencies:
       orderedmap: 2.1.1
 
-  prosemirror-model@1.25.8:
-    dependencies:
-      orderedmap: 2.1.1
-
   prosemirror-schema-list@1.5.1:
     dependencies:
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.0
 
   prosemirror-state@1.4.4:
     dependencies:
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
       prosemirror-transform: 1.12.0
       prosemirror-view: 1.42.3
 
   prosemirror-tables@1.8.5:
     dependencies:
       prosemirror-keymap: 1.2.3
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
       prosemirror-state: 1.4.4
       prosemirror-transform: 1.12.0
       prosemirror-view: 1.42.3
 
   prosemirror-transform@1.12.0:
     dependencies:
-      prosemirror-model: 1.25.8
+      prosemirror-model: 1.25.11
 
   prosemirror-view@1.42.3:
     dependencies:

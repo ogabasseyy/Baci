@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 // Regression coverage for CVE-2026-103923 (GHSA-238p-pmpm-9mq7):
 // KaTeX's Settings/Namespace lookups read `options[prop]`,
@@ -39,6 +39,13 @@ interface Katex {
 }
 
 describe('katex integrity (CVE-2026-103923)', () => {
+  // The exploit shape mutates Object.prototype; each case cleans up in
+  // finally, and this double-checks no pollution leaks across cases even
+  // if a worker is reused or cleanup is ever skipped.
+  afterEach(() => {
+    expect('trust' in {}).toBe(false);
+  });
+
   it('resolves the patched 0.16.47 release', () => {
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       version?: string;

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { findInstalledRoots } from './security-integrity-scan';
+import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
 // `@graphql-tools/utils` `mergeDeep` allowed prototype pollution via
@@ -29,23 +29,12 @@ const require = createRequire(import.meta.url);
 type MergeDeepFn = (sources: unknown[]) => unknown;
 
 function candidateRoots(): string[] {
-  const override = process.env.GTU_ROOTS;
-  if (override !== undefined) {
-    // Verification hook only: colon-separated unpacked
-    // @graphql-tools/utils tarballs to confirm this test fails on
-    // pre-fix releases. Refused under CI so a green run always guards
-    // the workspace-resolved dependencies.
-    if (process.env.CI !== undefined) {
-      throw new Error(
-        'GTU_ROOTS is set in CI; refusing to test non-installed copies'
-      );
-    }
-    console.warn(`[integrity-test] testing graphql-tools from: ${override}`);
-    return override.split(':').filter((root) => root.length > 0);
-  }
   // Dynamically enumerate EVERY installed copy: nested duplicates under
   // the hoisted pnpm layout must not escape the guard silently.
-  return findInstalledRoots('@graphql-tools/utils');
+  return (
+    overrideRoots(process.env.GTU_ROOTS, 'GTU_ROOTS') ??
+    findInstalledRoots('@graphql-tools/utils')
+  );
 }
 
 function loadMergeDeep(root: string): {

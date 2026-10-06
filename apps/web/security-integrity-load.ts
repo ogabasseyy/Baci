@@ -10,8 +10,32 @@ const require = createRequire(import.meta.url);
 export function packageMain(root: string): string {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     main?: string;
+    exports?: unknown;
   };
-  return pkg.main ?? 'index.js';
+  if (typeof pkg.main === 'string') {
+    return pkg.main;
+  }
+  // Exports-aware fallback for main-less packages: resolve the '.'
+  // entry's CJS condition instead of blindly assuming index.js.
+  if (pkg.exports !== undefined) {
+    const dot =
+      typeof pkg.exports === 'string'
+        ? pkg.exports
+        : (pkg.exports as Record<string, unknown>)?.['.'];
+    if (typeof dot === 'string') {
+      return dot;
+    }
+    const conditions = dot as Record<string, unknown> | undefined;
+    for (const key of ['require', 'node', 'default']) {
+      if (typeof conditions?.[key] === 'string') {
+        return conditions[key] as string;
+      }
+    }
+    throw new Error(
+      `Cannot resolve a CJS entry for exports-only package at ${root}`
+    );
+  }
+  return 'index.js';
 }
 
 export function loadCjs<T>(root: string, subpath?: string): T {

@@ -78,22 +78,27 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
   }
 }
 
-const SRCSET_CANDIDATE_SEPARATOR = /,\s+/;
-
 function splitSrcsetCandidates(srcset: string): string[] {
   const candidates: string[] = [];
-  // Repo convention (see buildOgabasseyAvifSrcSet): CDN transform commas are
-  // never followed by whitespace, so candidates split on comma+whitespace.
-  // A descriptor bearing a comma means bare-comma separation was used; re-split
-  // strictly so a second URL cannot hide unvalidated behind the first.
-  for (const candidate of srcset.split(SRCSET_CANDIDATE_SEPARATOR)) {
-    const [, ...descriptors] = candidate.trim().split(/\s+/);
-    if (descriptors.some((descriptor) => descriptor.includes(','))) {
-      candidates.push(...candidate.split(','));
+  // A comma ends a candidate only once the URL is followed by at least one
+  // descriptor (i.e. the accumulated text already contains whitespace); a
+  // comma inside a bare URL is a CDN transform parameter (see
+  // buildOgabasseyAvifSrcSet) and stays glued to it. This keeps bare-comma
+  // separators working without splitting transform commas, and a second URL
+  // can never hide unvalidated: every emitted candidate is URL-validated.
+  let current = '';
+  for (const piece of srcset.split(',')) {
+    if (piece.trim() === '') continue;
+    if (current !== '' && /\s/.test(current.trim())) {
+      candidates.push(current);
+      current = piece;
+    } else if (current === '') {
+      current = piece;
     } else {
-      candidates.push(candidate);
+      current += `,${piece}`;
     }
   }
+  if (current !== '') candidates.push(current);
   return candidates;
 }
 

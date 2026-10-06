@@ -100,6 +100,14 @@ describe('validateImportedContent', () => {
     );
   });
 
+  it('accepts transform commas combined with a spaceless candidate separator', () => {
+    expect(
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70/a.webp 640w,https://cdn.example.com/b.webp 1280w">'
+      )
+    ).toContain('srcset');
+  });
+
   it('accepts srcset candidates with CDN transform commas', () => {
     expect(
       validateImportedContent(

@@ -134,7 +134,7 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     });
   });
 
-  it('publishes checkout-only delivery fee information with the runtime schema shape', async () => {
+  it('publishes live delivery estimates with checkout confirmation and bounded inputs', async () => {
     const { GET } = await import('./route');
     const body = await GET().json();
     const tool = body.tools.find(
@@ -145,16 +145,33 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     expect(tool).toMatchObject({
       title: 'Check Delivery Fee Information',
       description: expect.stringContaining(
-        'no fixed delivery fee is published'
+        'Get live GIG Logistics delivery estimates'
       ),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
       inputSchema: {
         required: ['state'],
         properties: {
           state: expect.objectContaining({ type: 'string' }),
           city: expect.objectContaining({ type: 'string' }),
+          items: expect.objectContaining({
+            type: 'array',
+            minItems: 1,
+            maxItems: 5,
+          }),
+          delivery_preference: expect.objectContaining({
+            enum: ['door', 'pickup_station'],
+          }),
         },
       },
     });
+    expect(tool.description).toContain('Weight is per unit');
+    expect(tool.description).toContain('Never invent rates or weights');
+    expect(tool.description).toContain('must be confirmed at checkout');
+    expect(tool.description).toContain('does not modify a cart');
     expect(tool.inputSchema.properties).not.toHaveProperty('address');
     expect(tool.inputSchema.properties).not.toHaveProperty('estimated_weight');
   });

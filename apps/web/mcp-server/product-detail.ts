@@ -1,8 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { z } from 'zod';
+import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
 import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
+import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import { getMcpVariantColorValue } from './variant-color-value';
 import { getMcpProductCatalogColors } from './product-catalog-colors';
 import { formatMcpCatalogColors } from './format-mcp-catalog-colors';
@@ -29,10 +33,9 @@ interface ProductDetailSource {
   schema_markup: { aggregateRating?: { ratingValue?: number; reviewCount?: number } } | null;
 }
 
-type ProductDetailResult = {
-  content: Array<{ type: 'text'; text: string }>;
-  structuredContent?: Record<string, unknown>;
-  _meta?: Record<string, unknown>;
+type ProductDetailResult = CallToolResult & {
+  content: TextContent[];
+  structuredContent: z.infer<typeof mcpToolOutputSchemas.get_product>;
 };
 
 export async function buildMcpProductDetail({
@@ -48,7 +51,7 @@ export async function buildMcpProductDetail({
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
-    attributes: Record<string, string>;
+    attributes: Record<string, unknown> | null;
     price_override: number | null;
     stock_quantity: number;
     condition: string;
@@ -141,8 +144,10 @@ export async function buildMcpProductDetail({
 
   // Build detailed text response
   let text = `**${product.name}**\n\n${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}\n`;
-  text += `**Price:** ${formatPrice(displayPrice)}`;
+  const displayPriceConfirmed = typeof displayPrice === 'number' && Number.isFinite(displayPrice) && displayPrice >= 0;
+  text += `**Price:** ${displayPriceConfirmed ? formatPrice(displayPrice) : 'Price unconfirmed'}`;
   if (
+    displayPriceConfirmed &&
     displayCompareAtPrice &&
     displayCompareAtPrice > displayPrice
   ) {
@@ -187,7 +192,7 @@ export async function buildMcpProductDetail({
     ];
     const storageOptions = [
       ...new Set(
-        availableVariants.map((v) => v.attributes?.storage).filter(Boolean)
+        availableVariants.map((v) => getMcpVariantAttributeTextValue(v.attributes?.storage)).filter(Boolean)
       ),
     ];
     if (colors.length > 0)
@@ -214,7 +219,7 @@ export async function buildMcpProductDetail({
   const productPageUrl = `https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`;
   text += `\n\n🔗 [View Product](${productPageUrl})`;
 
-  return {
+  const result: ProductDetailResult = {
     content: [{ type: 'text', text }],
     structuredContent: {
       products: [formatted],
@@ -239,4 +244,17 @@ export async function buildMcpProductDetail({
       'openai/widgetPrefersBorder': true,
     },
   };
+  const trackedBaseStockInvalid = product.manage_stock === true &&
+    product.has_variants !== true && product.has_condition_offers !== true &&
+    (!Number.isFinite(product.stock_quantity) || Number(product.stock_quantity) < 0);
+  const trackedStockMissing = product.manage_stock === true &&
+    [...variants, ...conditionOffers].some((option) => !Number.isFinite(option.stock_quantity));
+  if (trackedBaseStockInvalid || trackedStockMissing || !mcpToolOutputSchemas.get_product.safeParse(result.structuredContent).success) {
+    const message = 'Product details are temporarily unavailable.';
+    return {
+      content: [{ type: 'text', text: message }],
+      structuredContent: { products: [], status: 'unavailable', message },
+    };
+  }
+  return result;
 }

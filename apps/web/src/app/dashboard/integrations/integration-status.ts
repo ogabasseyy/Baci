@@ -100,6 +100,13 @@ export function getIntegrationStatus(
     return STATUS_COPY.feed_ready;
   }
 
+  // Connector status lives behind the owners-only grants API, not merchant
+  // feature settings, so the hub cannot resolve it here. The label stays
+  // honest about access instead of claiming a connection state.
+  if (integrationId === 'muse') {
+    return { actionLabel: 'Open', label: 'Owners only', state: 'partial' };
+  }
+
   const requiredSettings = REQUIRED_SETTINGS_BY_INTEGRATION[integrationId];
   if (!requiredSettings) {
     return STATUS_COPY.not_configured;

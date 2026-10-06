@@ -72,4 +72,37 @@ describe('OgabasseyStaticHomePageContent hero preload ownership', () => {
       ROTATED_SLIDE.imageUrl
     );
   });
+
+  it('emits no downstream hints when the committed slot owns the preload', async () => {
+    // Static-page composition: the upstream committed slot already emits a
+    // scanner-visible <link> for the live slide-0 URL, so the downstream
+    // link and the rotation flight hint must both stay silent.
+    mockPublishedShell(ROTATED_SLIDE.imageUrl);
+    render(
+      await OgabasseyStaticHomePageContent({
+        omitCommittedHero: true,
+        pathPrefix: '/ogabassey',
+      })
+    );
+
+    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
+  });
+
+  it('emits no downstream link when the committed slot owns an unrotated URL', async () => {
+    mockPublishedShell(OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL);
+    render(
+      await OgabasseyStaticHomePageContent({
+        omitCommittedHero: true,
+        pathPrefix: '/ogabassey',
+      })
+    );
+
+    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
+  });
 });

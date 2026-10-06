@@ -119,10 +119,10 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
       `  const flat = '.a' + '.b'.repeat(n) + '#c'`,
       '  let best = Infinity',
       '  for (let i = 0; i < 3; i++) {',
-      '    const start = Date.now()',
+      '    const start = performance.now()',
       '    const out = parser().processSync(flat)',
       '    if (out !== flat) process.exit(2)',
-      '    best = Math.min(best, Date.now() - start)',
+      '    best = Math.min(best, performance.now() - start)',
       '  }',
       '  times.push(best)',
       '}',
@@ -146,6 +146,9 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
       number,
       number,
     ];
-    expect(large / Math.max(small, 1)).toBeLessThan(3);
+    // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
+    // wall-clock adjustments); the 1µs floor is a div-by-zero guard
+    // only — real small runs are ms-scale, so it never binds.
+    expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
   });
 });

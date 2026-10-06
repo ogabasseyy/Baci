@@ -45,10 +45,10 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
       `  for (let i = 0; i < n; i++) doc += 'k' + i + ' = 1\\n'`,
       '  let best = Infinity',
       '  for (let i = 0; i < 3; i++) {',
-      '    const start = Date.now()',
+      '    const start = performance.now()',
       '    const out = parse(doc)',
       '    if (out.k0 !== 1) process.exit(2)',
-      '    best = Math.min(best, Date.now() - start)',
+      '    best = Math.min(best, performance.now() - start)',
       '  }',
       '  times.push(best)',
       '}',
@@ -72,6 +72,9 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
       number,
       number,
     ];
-    expect(large / Math.max(small, 1)).toBeLessThan(3);
+    // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
+    // wall-clock adjustments); the 1µs floor is a div-by-zero guard
+    // only — real small runs are ms-scale, so it never binds.
+    expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
   });
 });

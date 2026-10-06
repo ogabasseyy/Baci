@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
+import { packageMain } from './security-integrity-package-main';
+import { packageModule } from './security-integrity-package-module';
 import { parseVersion } from './security-integrity-parse-version';
 import { isAtLeast } from './security-integrity-version-floor';
 
@@ -94,7 +96,11 @@ describe('katex integrity (CVE-2026-103923)', () => {
   // so min.js is guarded behaviorally (polluted-trust case below) instead
   // of by exact-identifier markers.
   it.each(candidateRoots())('keeps own-property guards in %s', (root) => {
-    for (const file of ['dist/katex.js', 'dist/katex.mjs'] as const) {
+    // Entries resolve through the manifest (main + exports import
+    // condition), so a build-layout rename fails closed with a
+    // resolver error instead of silently detaching from the shipped
+    // code.
+    for (const file of [packageMain(root), packageModule(root)]) {
       const source = readFileSync(join(root, file), 'utf8');
       // Backport-specific markers (absent 0.16.47-upstream, present
       // patched), matched whitespace-normalized so a secure reformat
@@ -111,7 +117,9 @@ describe('katex integrity (CVE-2026-103923)', () => {
   });
 
   it.each(candidateRoots())('ignores polluted trust in %s', async (root) => {
-    for (const entry of ['dist/katex.js', 'dist/katex.min.js'] as const) {
+    // The minified bundle names no manifest field, so its subpath
+    // stays hardcoded; everything else resolves via the manifest.
+    for (const entry of [packageMain(root), 'dist/katex.min.js'] as const) {
       // Both CJS builds carry the backport; the minified bundle is
       // unreviewable in diff view, so its behavior is asserted here.
       const katex = require(join(root, entry)) as Katex;
@@ -124,7 +132,7 @@ describe('katex integrity (CVE-2026-103923)', () => {
     // string markers: a semantically broken but marker-preserving
     // .mjs (bad merge, minifier/packaging swap) must fail here.
     const esm = (await import(
-      pathToFileURL(join(root, 'dist/katex.mjs')).href
+      pathToFileURL(join(root, packageModule(root))).href
     )) as Katex;
     await withPollutedTrust(() => {
       const html = esm.renderToString('\\href{javascript:alert(1)}{x}');
@@ -142,7 +150,7 @@ describe('katex integrity (CVE-2026-103923)', () => {
     });
     expect(html).toContain('<a href="javascript:');
     const esm = (await import(
-      pathToFileURL(join(root, 'dist/katex.mjs')).href
+      pathToFileURL(join(root, packageModule(root))).href
     )) as Katex;
     const esmHtml = esm.renderToString('\\href{javascript:alert(1)}{x}', {
       trust: true,

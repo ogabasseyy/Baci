@@ -3,7 +3,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
@@ -142,5 +142,22 @@ describe('@graphql-tools/utils mergeDeep integrity (CVE-2026-104852)', () => {
     expect(mergeDeep([{ a: { b: 1 } }, { a: { c: 2 } }])).toEqual({
       a: { b: 1, c: 2 },
     });
+  });
+
+  it.each(
+    candidateRoots()
+  )('rejects prototype-chain keys via ESM in %s', async (root) => {
+    // The backport patches esm/mergeDeep.js too; drive the exploit
+    // through it so a broken or reverted ESM build cannot pass silently.
+    const esm = (await import(
+      pathToFileURL(join(root, 'esm/mergeDeep.js')).href
+    )) as { mergeDeep: MergeDeepFn };
+    const merged = esm.mergeDeep([
+      { a: 1 },
+      JSON.parse('{"__proto__":{"x":1},"b":2}') as unknown,
+    ]) as Record<string, unknown>;
+    expect(merged).toMatchObject({ a: 1, b: 2 });
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    expect(merged.x).toBeUndefined();
   });
 });

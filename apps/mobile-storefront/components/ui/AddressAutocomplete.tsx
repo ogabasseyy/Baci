@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -87,26 +87,31 @@ export function AddressAutocomplete({
     latestQueryRef.current = value;
   }
 
-  const handlePredictionSelect = async (prediction: PlacePrediction) => {
-    Keyboard.dismiss();
-    latestQueryRef.current = prediction.mainText;
-    setInternalValue(prediction.mainText);
-    onChangeText?.(prediction.mainText);
-    setPredictions([]);
-    if (isMountedRef.current) {
-      setIsLoading(true);
-    }
+  // Stable identity: the suggestions-portal effect depends on this
+  // handler, so an inline closure would re-run the portal on every render.
+  const handlePredictionSelect = useCallback(
+    async (prediction: PlacePrediction) => {
+      Keyboard.dismiss();
+      latestQueryRef.current = prediction.mainText;
+      setInternalValue(prediction.mainText);
+      onChangeText?.(prediction.mainText);
+      setPredictions([]);
+      if (isMountedRef.current) {
+        setIsLoading(true);
+      }
 
-    const details = await fetchPlaceDetails({ prediction, sessionToken });
-    applyPlaceSelection({
-      details,
-      isMountedRef,
-      onSelect,
-      setIsLoading,
-      setPredictions,
-      setSessionToken,
-    });
-  };
+      const details = await fetchPlaceDetails({ prediction, sessionToken });
+      applyPlaceSelection({
+        details,
+        isMountedRef,
+        onSelect,
+        setIsLoading,
+        setPredictions,
+        setSessionToken,
+      });
+    },
+    [onChangeText, onSelect, sessionToken]
+  );
 
   // Keep the screen-root dropdown attached while the form scrolls or resizes.
   const shouldShowSuggestions = isFocused && predictions.length > 0;
@@ -153,9 +158,6 @@ export function AddressAutocomplete({
       clearInterval(tracker);
       portal.hide();
     };
-    // handlePredictionSelect is recreated per render; the effect keys off the
-    // data that changes what the portal displays.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, [
     shouldShowSuggestions,
     predictions,

@@ -16,9 +16,11 @@ import {
   verifySocket,
 } from './funding-gateway-recovery-probes.mjs';
 
-export { parseState, validateBinding } from './funding-gateway-recovery-identity.mjs';
+export {
+  parseState,
+  validateBinding,
+} from './funding-gateway-recovery-identity.mjs';
 export { gatewayAccount } from './funding-gateway-recovery-probes.mjs';
-
 
 export async function recover(provided, modules) {
   const actions = {

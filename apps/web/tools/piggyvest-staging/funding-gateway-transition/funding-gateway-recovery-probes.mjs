@@ -144,4 +144,3 @@ export async function verifySocket(identity, accountInfo) {
   )
     throw new Error('Gateway socket rejected');
 }
-

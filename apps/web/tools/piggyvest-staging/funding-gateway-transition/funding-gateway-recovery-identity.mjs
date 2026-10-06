@@ -138,4 +138,3 @@ export function validateBinding(binding, now) {
     throw new Error('Pinned binding rejected');
   return binding.identity;
 }
-

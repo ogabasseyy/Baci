@@ -24,6 +24,7 @@ const scope = {
 };
 const draft = customerSavingsDraftView(fixture.record);
 beforeEach(() => {
+  // biome-ignore lint/suspicious/noDocumentCookie: test must seed/clear the CSRF cookie the browser module reads.
   document.cookie = 'csrf-token=test-csrf; path=/';
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:55431');
   mocks.getUser
@@ -34,6 +35,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  // biome-ignore lint/suspicious/noDocumentCookie: test must seed/clear the CSRF cookie the browser module reads.
   document.cookie = 'csrf-token=; max-age=0; path=/';
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -82,9 +84,11 @@ it('rejects changed sessions before dispatch', async () => {
   api.close();
 });
 it('initializes the CSRF cookie before dispatching a retained create request', async () => {
+  // biome-ignore lint/suspicious/noDocumentCookie: test must seed/clear the CSRF cookie the browser module reads.
   document.cookie = 'csrf-token=; max-age=0; path=/';
   const fetcher = vi.fn().mockImplementation(async (url: string) => {
     if (url === '/api/csrf') {
+      // biome-ignore lint/suspicious/noDocumentCookie: test must seed/clear the CSRF cookie the browser module reads.
       document.cookie = 'csrf-token=initialized-csrf; path=/';
       return new Response('{}');
     }

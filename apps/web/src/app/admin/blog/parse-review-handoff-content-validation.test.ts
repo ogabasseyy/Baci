@@ -28,6 +28,46 @@ describe('handoff content validation', () => {
     );
   });
 
+  it.each([
+    '<picture><source srcset="https://cdn.example.com/image.webp"></picture>',
+    '<source srcset="https://cdn.example.com/image.webp">',
+  ])('rejects media-only content without a renderable image: %s', (content_html) => {
+    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('accepts picture content with an accompanying image', () => {
+    expect(
+      parseReviewHandoff({
+        ...handoff,
+        content_html:
+          '<picture><source srcset="https://cdn.example.com/image.webp" type="image/webp"><img src="https://cdn.example.com/image.png" alt="Image"></picture>',
+      }).content
+    ).toContain('<img');
+  });
+
+  it.each([
+    'title',
+    'author_name',
+    'category',
+  ] as const)('rejects null bytes in %s', (field) => {
+    const nul = String.fromCharCode(0);
+    expect(() =>
+      parseReviewHandoff({ ...handoff, [field]: `Galaxy${nul}A` })
+    ).toThrow('null bytes');
+  });
+
+  it('rejects null bytes in inline media URLs', () => {
+    const nul = String.fromCharCode(0);
+    expect(() =>
+      parseReviewHandoff({
+        ...handoff,
+        content_html: `<p>Body</p><img src="https://cdn.example.com/a${nul}.webp" alt="A">`,
+      })
+    ).toThrow('null bytes');
+  });
+
   it('accepts an image-only article with secure media', () => {
     expect(
       parseReviewHandoff({

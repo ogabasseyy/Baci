@@ -49,6 +49,11 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261006123500_repair_platform_blog_audit_focus_changed_fields.sql',
+    sha256: '538a8cea5d0c01cca25eb9b7be7de4bf934558e912d9a9539f906e8ceb6b61b1',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',
     sha256: 'e8398b0b10a5e9d199707bcceb5835f865bfce85dd4732e9bc46fc4e13d16d29',
   },

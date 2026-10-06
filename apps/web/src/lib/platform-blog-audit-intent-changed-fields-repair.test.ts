@@ -24,4 +24,20 @@ describe('platform blog audit intent changed-fields repair migration', () => {
     expect(migration).toContain('BEGIN;');
     expect(migration).toContain('COMMIT;');
   });
+
+  it('records focus keyword edits in the follow-up repair', async () => {
+    const followUp = await readFile(
+      resolve(
+        process.cwd(),
+        '../../supabase/migrations/20261006123500_repair_platform_blog_audit_focus_changed_fields.sql'
+      ),
+      'utf8'
+    );
+
+    expect(followUp).toContain(
+      'CREATE OR REPLACE FUNCTION private.audit_platform_blog_post_mutation_v1()'
+    );
+    expect(followUp).toContain("THEN 'focus_keyword'");
+    expect(followUp).not.toContain("'NEW.focus_keyword'");
+  });
 });

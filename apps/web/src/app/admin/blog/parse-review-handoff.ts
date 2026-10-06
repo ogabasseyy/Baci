@@ -11,8 +11,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+const NULL_BYTE = String.fromCharCode(0);
+
 function readText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string') return '';
+  // PostgreSQL text rejects null bytes, so fail fast instead of importing a
+  // draft that can never save.
+  if (value.includes(NULL_BYTE)) {
+    throw new Error('Imported text must not contain null bytes');
+  }
+  return value.trim();
 }
 
 function isHttpsUrl(value: unknown): value is string {
@@ -26,6 +34,7 @@ function isHttpsUrl(value: unknown): value is string {
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
+const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
 const MEDIA_ATTRIBUTE_PATTERN = /([\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
 
 function mediaTagUrls(tag: string): string[] {
@@ -64,6 +73,21 @@ function isImportableMediaUrl(url: string): boolean {
 
 function stripMarkupText(value: string): string {
   return value.replace(/<[^>]*>/gu, '').trim();
+}
+
+function isJsonShapedText(value: string): boolean {
+  const trimmed = value.trimStart();
+  // The editor parses `{`-led content as structured data, so any object
+  // shape is rejected. `[` alone is ordinary prose or markdown (links,
+  // markers); only content that actually parses as a JSON array is barred.
+  if (trimmed.startsWith('{')) return true;
+  if (!trimmed.startsWith('[')) return false;
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeContent(rawContent: string, sanitizedRaw: string): string {
@@ -106,7 +130,8 @@ function splitSrcsetCandidates(srcset: string): string[] {
 const INVISIBLE_TEXT_PATTERN = /[\u200B-\u200D\u00AD]/gu;
 
 function hasReadableContent(content: string): boolean {
-  if (content.match(MEDIA_TAG_PATTERN)) return true;
+  // A bare <source> renders nothing without an accompanying <img>.
+  if (content.match(IMG_TAG_PATTERN)) return true;
   const text = content
     .replace(/<[^>]*>/gu, '')
     .replace(/&nbsp;/gi, ' ')
@@ -138,10 +163,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   // The JSON-shape guard runs pre-conversion: markdown rendering wraps text
   // in <p> tags (and escapes quotes), which would otherwise smuggle JSON past
   // the structured-content check.
-  if (
-    /^[[{]/u.test(rawContent.trimStart()) ||
-    /^[[{]/u.test(sanitizedRaw.trimStart())
-  ) {
+  if (isJsonShapedText(rawContent) || isJsonShapedText(sanitizedRaw)) {
     throw new Error(
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
@@ -189,6 +211,9 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === 'string')
     : [];
+  if (tags.some((tag) => tag.includes(NULL_BYTE))) {
+    throw new Error('Imported tags must not contain null bytes');
+  }
   if (tags.some((tag) => tag.includes(','))) {
     throw new Error(
       'Imported tag names cannot contain commas. Use separate tags or rename the tag.'

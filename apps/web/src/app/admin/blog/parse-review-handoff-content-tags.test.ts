@@ -54,6 +54,29 @@ it('accepts missing or null tags', () => {
   expect(parseReviewHandoff(handoff).tags).toBe('');
 });
 
+it('rejects tags containing null bytes', () => {
+  const nul = String.fromCharCode(0);
+  expect(() =>
+    parseReviewHandoff({ ...handoff, tags: ['Valid', `Bro${nul}ken`] })
+  ).toThrow('null bytes');
+});
+
+it.each([
+  '[Read the guide](https://example.com)',
+  '[Breaking] news today',
+])('accepts bracket-led prose that is not JSON: %s', (content_html) => {
+  expect(() => parseReviewHandoff({ ...handoff, content_html })).not.toThrow();
+});
+
+it.each([
+  '[1, 2]',
+  '[]',
+])('rejects content that parses as a JSON array: %s', (content_html) => {
+  expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+    'HTML'
+  );
+});
+
 it('round-trips representable tag names through the save sanitizer', () => {
   const form = parseReviewHandoff({
     ...handoff,

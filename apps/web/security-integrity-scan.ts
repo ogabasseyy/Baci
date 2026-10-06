@@ -22,8 +22,18 @@ export function findInstalledRoots(
   startDir: string = HERE
 ): string[] {
   const roots = new Set<string>();
+  // A bare '@scope' query (no slash) matches nothing instead of throwing
+  // on join(full, undefined): the helper stays total for any input.
+  const scopeParts = packageName.startsWith('@') ? packageName.split('/') : [];
+  const scoped =
+    scopeParts.length === 2
+      ? { scope: scopeParts[0], name: scopeParts[1] }
+      : null;
+  const matchable = scoped !== null || !packageName.startsWith('@');
+  let truncated = false;
   const scan = (dir: string, depth: number, inScope: boolean): void => {
     if (depth > 8) {
+      truncated = true;
       return;
     }
     let entries: ReturnType<typeof readdirSync>;
@@ -59,11 +69,10 @@ export function findInstalledRoots(
       }
       // Inside a scope directory only scoped queries can match: `@scope/dup`
       // is a different package from `dup`.
-      if (!inScope) {
-        if (packageName.startsWith('@')) {
-          const [scope, name] = packageName.split('/');
-          if (entry.name === scope) {
-            const candidate = join(full, name);
+      if (!inScope && matchable) {
+        if (scoped !== null) {
+          if (entry.name === scoped.scope) {
+            const candidate = join(full, scoped.name);
             if (existsSync(join(candidate, 'package.json'))) {
               roots.add(realpathSync(candidate));
             }
@@ -98,6 +107,13 @@ export function findInstalledRoots(
       break;
     }
     dir = parent;
+  }
+  // The depth bound is observable, not silent: a truncated walk warns
+  // instead of letting the EVERY-copy claim pass quietly.
+  if (truncated) {
+    console.warn(
+      `[integrity-test] findInstalledRoots(${packageName}) hit the depth-8 cap; results may be incomplete`
+    );
   }
   return [...roots];
 }

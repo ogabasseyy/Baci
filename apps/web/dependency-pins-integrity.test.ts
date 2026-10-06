@@ -113,6 +113,14 @@ describe('security override pins', () => {
         '::ffff:a00:2/122'
       )
     ).toBe('10.0.0.200');
+    // Short-prefix regression case (GHSA-jqcg-44mw-7w3h): 2.0.7 trusted
+    // ALL IPv4 under '::ffff:10.0.0.0/8'; 2.0.8 refuses prefixes below /96.
+    expect(
+      proxyaddr(
+        createReq('127.0.0.1', { 'x-forwarded-for': '9.9.9.9' }),
+        '::ffff:10.0.0.0/8'
+      )
+    ).toBe('127.0.0.1');
   });
 
   it('rejects over-deep copies with MaxDepthExceededError (fast-copy)', () => {

@@ -60,13 +60,17 @@ interface ProseMirrorView {
   ) => EditorViewInstance;
 }
 
-function loadView(): ProseMirrorView {
+function loadView(): {
+  viewModule: ProseMirrorView;
+  override: string | undefined;
+} {
+  const override = process.env.PROSEMIRROR_VIEW_ROOT;
   const root = resolveRoot(
     'prosemirror-view',
-    process.env.PROSEMIRROR_VIEW_ROOT,
+    override,
     'PROSEMIRROR_VIEW_ROOT'
   );
-  return loadCjs(root);
+  return { viewModule: loadCjs(root), override };
 }
 
 interface ProseMirrorModel {
@@ -83,12 +87,20 @@ interface ProseMirrorState {
   };
 }
 
-function buildHarness(viewModule: ProseMirrorView) {
+function buildHarness(
+  viewModule: ProseMirrorView,
+  override: string | undefined
+) {
+  // Model and state resolve from the SAME root as the view: under the
+  // override hook they come from the tarball's own dependency graph
+  // instead of mixing tarball view with workspace model/state (which
+  // would trip the duplicate-model guard and mask the behavioral
+  // signal).
   const { Schema } = loadCjs<ProseMirrorModel>(
-    installedRoot('prosemirror-model')
+    installedRoot('prosemirror-model', override)
   );
   const { EditorState } = loadCjs<ProseMirrorState>(
-    installedRoot('prosemirror-state')
+    installedRoot('prosemirror-state', override)
   );
   const schema = new Schema({
     nodes: {
@@ -161,7 +173,8 @@ function sliceHtml(context: unknown): string {
 
 describe('prosemirror-view integrity (CVE-2026-104847)', () => {
   it('drops pasted slice context with invalid attributes', () => {
-    const { view, pastedSlice } = buildHarness(loadView());
+    const { viewModule, override } = loadView();
+    const { view, pastedSlice } = buildHarness(viewModule, override);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'javascript:alert(1)' }]),
@@ -178,7 +191,8 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
   });
 
   it('still pastes slice context with valid attributes', () => {
-    const { view, pastedSlice } = buildHarness(loadView());
+    const { viewModule, override } = loadView();
+    const { view, pastedSlice } = buildHarness(viewModule, override);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'https://ok.invalid/' }]),

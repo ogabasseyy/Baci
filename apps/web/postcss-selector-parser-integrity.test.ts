@@ -108,6 +108,9 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     expect(ast.first?.nodes?.some((node) => node.type === 'id')).toBe(true);
   });
 
+  // 70s budget: the 60s child ceiling (not the 10s default vitest
+  // timeout) must be the backstop, so a vulnerable build fails via
+  // the documented ETIMEDOUT/ratio path. Patched runs finish in ~1s.
   it.each(
     candidateRoots()
   )('scales linearly on large flat selectors in %s', (root) => {
@@ -150,5 +153,5 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     // wall-clock adjustments); the 1µs floor is a div-by-zero guard
     // only — real small runs are ms-scale, so it never binds.
     expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
-  });
+  }, 70_000);
 });

@@ -42,7 +42,9 @@ export const comparisonSnapshotSchema = z.object({
       slug: z.string().optional(),
     })
     .optional(),
-  matchVariantId: z.string().optional(),
-  matchOfferId: z.string().optional(),
+  // Variant/offer ids are UUIDs; malformed persisted values drop the field
+  // (keeping the parent-basis item) instead of failing downstream readers.
+  matchVariantId: z.string().uuid().optional().catch(undefined),
+  matchOfferId: z.string().uuid().optional().catch(undefined),
   matchCondition: z.string().optional(),
 });

@@ -34,15 +34,28 @@ it('preserves the matched-option basis for off-page tray items', () => {
   expect(
     comparisonSnapshotSchema.parse({
       ...snapshot,
-      matchVariantId: 'variant-blue-128',
-      matchOfferId: 'offer-open-box',
+      matchVariantId: '11111111-1111-4111-8111-111111111111',
+      matchOfferId: '22222222-2222-4222-8222-222222222222',
       matchCondition: 'open_box',
     })
   ).toEqual({
     ...snapshot,
-    matchVariantId: 'variant-blue-128',
-    matchOfferId: 'offer-open-box',
+    matchVariantId: '11111111-1111-4111-8111-111111111111',
+    matchOfferId: '22222222-2222-4222-8222-222222222222',
     matchCondition: 'open_box',
+  });
+});
+it('drops malformed match ids but keeps the parent-basis item', () => {
+  expect(
+    comparisonSnapshotSchema.parse({
+      ...snapshot,
+      matchVariantId: 'not-a-uuid',
+      matchOfferId: '22222222-2222-4222-8222-222222222222',
+    })
+  ).toEqual({
+    ...snapshot,
+    matchVariantId: undefined,
+    matchOfferId: '22222222-2222-4222-8222-222222222222',
   });
 });
 it.each([

@@ -87,6 +87,13 @@ async function fetchSingleRefinedProductsPage(
   };
 }
 
+/**
+ * Cap sequential skip-ahead fetches: each empty page costs an RPC plus a
+ * products re-read, so unbounded skipping fans out on poisoned pages. The
+ * capped page keeps its next offset, so list pagination still advances.
+ */
+const MAX_REFINED_PAGE_SKIPS = 3;
+
 /** Advance past empty hydrated pages so list-owned pagination can mount. */
 export async function fetchRefinedProductsPage(
   merchantId: string,
@@ -97,6 +104,7 @@ export async function fetchRefinedProductsPage(
 ): Promise<ProductsPage> {
   let currentOffset = offset;
   let skipped = 0;
+  let skips = 0;
   for (;;) {
     const page = await fetchSingleRefinedProductsPage(
       merchantId,
@@ -105,10 +113,15 @@ export async function fetchRefinedProductsPage(
       limit,
       currentOffset
     );
-    if (page.products.length || page.nextOffset === null) {
+    if (
+      page.products.length ||
+      page.nextOffset === null ||
+      skips >= MAX_REFINED_PAGE_SKIPS
+    ) {
       return { ...page, total: Math.max(0, page.total - skipped) };
     }
     skipped += page.nextOffset - currentOffset;
     currentOffset = page.nextOffset;
+    skips += 1;
   }
 }

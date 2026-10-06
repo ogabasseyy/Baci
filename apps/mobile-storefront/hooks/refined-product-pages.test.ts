@@ -65,6 +65,23 @@ describe('refined native pages', () => {
       expect.objectContaining({ result_offset: 1 })
     );
   });
+  it('caps skip-ahead fetches and keeps pagination advancing', async () => {
+    mockRpc.mockResolvedValue({
+      data: [{ product_id: 'gone', total_count: 100 }],
+      error: null,
+    });
+    mockRead.mockResolvedValue({ data: [], error: null });
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      1,
+      0
+    );
+    expect(result.products).toEqual([]);
+    expect(result.nextOffset).toBe(4);
+    expect(mockRpc).toHaveBeenCalledTimes(4);
+  });
   it('stops after an empty final page', async () => {
     mockRpc.mockResolvedValue({
       data: [{ product_id: 'gone', total_count: 1 }],

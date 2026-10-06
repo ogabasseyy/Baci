@@ -42,3 +42,37 @@ describe.each([
     }
   });
 });
+
+describe('sanitizeBlogPostData intent pair-consistency', () => {
+  it.each([
+    null,
+    '',
+    '   ',
+    undefined,
+  ])('clears an orphan source for explicitly nullish intent: %j', (intent) => {
+    expect(
+      sanitizeBlogPostData({ intent, intent_source: 'draft_task_type' })
+    ).toMatchObject({ intent_source: null });
+  });
+
+  it('injects a null source clear when only the intent is nulled', () => {
+    expect(sanitizeBlogPostData({ intent: null })).toMatchObject({
+      intent: null,
+      intent_source: null,
+    });
+  });
+
+  it('preserves a classified intent pair', () => {
+    expect(
+      sanitizeBlogPostData({ intent: 'news', intent_source: 'draft_task_type' })
+    ).toMatchObject({ intent: 'news', intent_source: 'draft_task_type' });
+  });
+
+  it('leaves a source-only payload untouched for PATCH merge semantics', () => {
+    // No intent key means "leave the stored pair alone" — the PATCH handler
+    // merges supplied fields onto the existing row.
+    expect(
+      sanitizeBlogPostData({ intent_source: 'draft_task_type' })
+    ).toMatchObject({ intent_source: 'draft_task_type' });
+  });
+});

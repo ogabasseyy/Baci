@@ -231,4 +231,24 @@ describe('POST /api/admin/blog/posts', () => {
       })
     );
   });
+
+  it('drops an orphan intent_source when intent is omitted on POST', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/admin/blog/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Guide',
+          slug: 'guide',
+          content: '<p>Guide</p>',
+          author_name: 'Editorial',
+          intent_source: 'draft_task_type',
+        }),
+      })
+    );
+    expect(response.status).toBe(201);
+    const inserted = mockSupabase.insert.mock.calls[0][0];
+    expect(inserted).toMatchObject({ intent_source: null });
+    expect(inserted).not.toHaveProperty('intent');
+  });
 });

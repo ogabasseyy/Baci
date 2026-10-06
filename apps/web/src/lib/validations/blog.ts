@@ -132,6 +132,16 @@ export function sanitizeBlogPostData(
     (data.featured_image_url === null ||
       (typeof data.featured_image_url === 'string' &&
         data.featured_image_url.trim() === ''));
+  // Provenance without an intent is an orphan: the client drops intent_source
+  // whenever the effective intent is nullish, so enforce the same
+  // pair-consistency for direct API calls. Only an explicitly supplied
+  // nullish intent triggers this — a missing key means "leave the stored
+  // pair alone" on PATCH.
+  const shouldClearIntentSource =
+    Object.hasOwn(data, 'intent') &&
+    (data.intent === null ||
+      data.intent === undefined ||
+      (typeof data.intent === 'string' && data.intent.trim() === ''));
 
   for (const [key, value] of Object.entries(data)) {
     if (
@@ -202,6 +212,10 @@ export function sanitizeBlogPostData(
     sanitized.featured_image_width = null;
     sanitized.featured_image_height = null;
     sanitized.featured_image_variants = {};
+  }
+
+  if (shouldClearIntentSource) {
+    sanitized.intent_source = null;
   }
 
   return sanitized;

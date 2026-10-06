@@ -120,6 +120,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = sanitizeBlogPostData(rawBody);
+    // A create with no intent must not store orphan provenance. The sanitizer
+    // only clears explicitly supplied nullish intents (a missing key means
+    // "leave stored values alone" on PATCH), so handle the missing key here
+    // where a missing intent means the row will have NULL intent.
+    if (
+      (body.intent === null || body.intent === undefined) &&
+      body.intent_source !== undefined
+    ) {
+      body.intent_source = null;
+    }
     if (!body.slug && typeof body.title === 'string') {
       body.slug = generateSlug(body.title);
     }

@@ -125,6 +125,26 @@ describe('updatePlatformBlogPost', () => {
     expect(mocks.revalidatePlatformBlog).toHaveBeenNthCalledWith(2, 'new-slug');
   });
 
+  it.each([
+    { intent: null },
+    { intent: null, intent_source: 'draft_task_type' },
+  ])('clears orphan intent_source on direct PATCH: %j', async (body) => {
+    const supabase = createSupabase(undefined, {
+      intent: 'news',
+      intent_source: 'draft_task_type',
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(request(body), {
+      params: Promise.resolve({ id: 'post-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(supabase.updates).toEqual([
+      expect.objectContaining({ intent: null, intent_source: null }),
+    ]);
+  });
+
   it('clears stale alt text when the cover URL changes without new metadata', async () => {
     const supabase = createSupabase(undefined, {
       featured_image_alt: 'Old cover description',

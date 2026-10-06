@@ -6,11 +6,12 @@ const require = createRequire(import.meta.url);
 
 // Resolve through the exported entry point (several packages hide
 // `./package.json` behind their `exports` map), then walk up to the
-// owning package root. Resolution starts from `fromDir` when given, so
-// suites verifying an unpacked-tarball override resolve its siblings
-// from the same root instead of mixing runtimes. The result is
-// canonicalized like the scanner's, so both helpers name the same
-// logical install identically.
+// owning package root. Resolution starts from `fromDir` when given,
+// so suites testing a view root exercise its own sibling graph. An
+// unpacked-tarball override has no node_modules, so Node walks past it
+// to the ambient workspace siblings; callers document that fallback
+// where it applies. The result is canonicalized like the scanner's,
+// so both helpers name the same logical install identically.
 export function installedRoot(packageName: string, fromDir?: string): string {
   const resolver =
     fromDir === undefined

@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
@@ -33,10 +34,35 @@ interface Katex {
   renderToString: (tex: string, options?: Record<string, unknown>) => string;
 }
 
+// Runs `fn` with `Object.prototype.trust` polluted, restoring the
+// prototype afterwards. defineProperty (not assignment) keeps the
+// descriptor explicit; enumerable:true mirrors assignment semantics so
+// the exploit shape stays faithful. Fail-closed: a pre-existing `trust`
+// (worker reuse leaking pollution from another file) throws instead of
+// silently masking the trust-bypass signal.
+async function withPollutedTrust<T>(fn: () => T | Promise<T>): Promise<T> {
+  const proto = Object.prototype as Record<string, unknown>;
+  if (Object.getOwnPropertyDescriptor(proto, 'trust') !== undefined) {
+    throw new Error('Object.prototype.trust already present');
+  }
+  Object.defineProperty(proto, 'trust', {
+    value: true,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+  try {
+    return await fn();
+  } finally {
+    delete proto.trust;
+  }
+}
+
 describe('katex integrity (CVE-2026-103923)', () => {
-  // The exploit shape mutates Object.prototype; each case cleans up in
-  // finally, and this double-checks no pollution leaks across cases even
-  // if a worker is reused or cleanup is ever skipped.
+  // The exploit shape pollutes Object.prototype via withPollutedTrust
+  // (defineProperty + restore in finally); this double-checks no
+  // pollution leaks across cases even if a worker is reused or cleanup
+  // is ever skipped.
   afterEach(() => {
     expect('trust' in {}).toBe(false);
   });
@@ -84,30 +110,43 @@ describe('katex integrity (CVE-2026-103923)', () => {
     }
   });
 
-  it.each(candidateRoots())('ignores polluted trust in %s', (root) => {
+  it.each(candidateRoots())('ignores polluted trust in %s', async (root) => {
     for (const entry of ['dist/katex.js', 'dist/katex.min.js'] as const) {
       // Both CJS builds carry the backport; the minified bundle is
       // unreviewable in diff view, so its behavior is asserted here.
       const katex = require(join(root, entry)) as Katex;
-      const proto = Object.prototype as Record<string, unknown>;
-      proto.trust = true;
-      try {
+      await withPollutedTrust(() => {
         const html = katex.renderToString('\\href{javascript:alert(1)}{x}');
         expect(html).not.toContain('<a href="javascript:');
-      } finally {
-        delete proto.trust;
-      }
-      expect(proto.trust).toBeUndefined();
+      });
     }
+    // The ESM build gets the same behavioral coverage, not just
+    // string markers: a semantically broken but marker-preserving
+    // .mjs (bad merge, minifier/packaging swap) must fail here.
+    const esm = (await import(
+      pathToFileURL(join(root, 'dist/katex.mjs')).href
+    )) as Katex;
+    await withPollutedTrust(() => {
+      const html = esm.renderToString('\\href{javascript:alert(1)}{x}');
+      expect(html).not.toContain('<a href="javascript:');
+    });
+    expect('trust' in {}).toBe(false);
   });
 
   it.each(
     candidateRoots()
-  )('still honors an explicit trust option in %s', (root) => {
+  )('still honors an explicit trust option in %s', async (root) => {
     const katex = require(root) as Katex;
     const html = katex.renderToString('\\href{javascript:alert(1)}{x}', {
       trust: true,
     });
     expect(html).toContain('<a href="javascript:');
+    const esm = (await import(
+      pathToFileURL(join(root, 'dist/katex.mjs')).href
+    )) as Katex;
+    const esmHtml = esm.renderToString('\\href{javascript:alert(1)}{x}', {
+      trust: true,
+    });
+    expect(esmHtml).toContain('<a href="javascript:');
   });
 });

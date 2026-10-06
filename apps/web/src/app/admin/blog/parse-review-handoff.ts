@@ -30,8 +30,14 @@ function readText(value: unknown): string {
 // generateSlug strips every non-Latin character, so a valid non-Latin or
 // symbol-only title would yield an empty slug and reject the whole import;
 // fall back to a unique placeholder the reviewer can rename before saving.
+// getRandomValues (unlike randomUUID) is available in insecure contexts,
+// so plain-HTTP admin origins still get a working fallback.
 function fallbackSlug(): string {
-  return `untitled-${crypto.randomUUID().split('-')[0]}`;
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  const suffix = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+  return `untitled-${suffix}`;
 }
 
 export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {

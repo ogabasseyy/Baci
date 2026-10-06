@@ -145,6 +145,43 @@ describe('updatePlatformBlogPost', () => {
     ]);
   });
 
+  it('coerces a source-only update against a NULL-intent row to a clear', async () => {
+    const supabase = createSupabase(undefined, {
+      intent: null,
+      intent_source: null,
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(
+      request({ intent_source: 'sneaky_source' }),
+      { params: Promise.resolve({ id: 'post-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.updates).toEqual([
+      expect.objectContaining({ intent_source: null }),
+    ]);
+    expect(supabase.updates[0]).not.toHaveProperty('intent');
+  });
+
+  it('keeps a source-only update against a classified intent', async () => {
+    const supabase = createSupabase(undefined, {
+      intent: 'news',
+      intent_source: 'old_source',
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(
+      request({ intent_source: 'new_source' }),
+      { params: Promise.resolve({ id: 'post-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.updates).toEqual([
+      expect.objectContaining({ intent_source: 'new_source' }),
+    ]);
+  });
+
   it('clears stale alt text when the cover URL changes without new metadata', async () => {
     const supabase = createSupabase(undefined, {
       featured_image_alt: 'Old cover description',

@@ -62,7 +62,7 @@ export async function updatePlatformBlogPost(
     const { data: existingPost, error: existingError } = await supabase
       .from('blog_posts')
       .select(
-        'id, slug, status, featured_image_url, featured_image_width, featured_image_height, featured_image_variants'
+        'id, slug, status, featured_image_url, featured_image_width, featured_image_height, featured_image_variants, intent, intent_source'
       )
       .eq('id', id)
       .eq('is_platform_post', true)
@@ -97,6 +97,19 @@ export async function updatePlatformBlogPost(
         },
         { status: 400 }
       );
+    }
+    // A source-only update against a NULL-intent row would store orphan
+    // provenance (the sanitizer only sees supplied fields). Coerce it to an
+    // explicit clear; a source alongside a classified intent is a legitimate
+    // provenance update and is left alone.
+    const effectiveIntent = Object.hasOwn(updateData, 'intent')
+      ? updateData.intent
+      : existingPost.intent;
+    if (
+      (effectiveIntent === null || effectiveIntent === undefined) &&
+      Object.hasOwn(updateData, 'intent_source')
+    ) {
+      updateData.intent_source = null;
     }
     const featuredImageUrlChanged =
       Object.hasOwn(updateData, 'featured_image_url') &&

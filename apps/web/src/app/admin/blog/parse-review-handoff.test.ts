@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import { parseReviewHandoff } from './parse-review-handoff';
 
@@ -72,6 +72,22 @@ describe('parseReviewHandoff', () => {
     expect(first).toMatch(/^untitled-[0-9a-f]{8}$/);
     expect(second).toMatch(/^untitled-[0-9a-f]{8}$/);
     expect(first).not.toBe(second);
+  });
+
+  it('generates the fallback slug without crypto.randomUUID', () => {
+    // Insecure contexts (plain-HTTP admin origins) lack randomUUID; the
+    // fallback must not depend on it. Throwing here fails the test on any
+    // call, proving the insecure-context-safe path is used.
+    const randomUUID = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw new Error('secure context required');
+    });
+    try {
+      expect(
+        parseReviewHandoff({ ...validHandoff, title: '!!!' }).slug
+      ).toMatch(/^untitled-[0-9a-f]{8}$/);
+    } finally {
+      randomUUID.mockRestore();
+    }
   });
 
   it('sanitizes imported HTML before returning it to the editor', () => {

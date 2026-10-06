@@ -36,4 +36,22 @@ describe('security-integrity-strip-comments', () => {
     const line = 'const q = a / b; // hasClass.indexOf(ind)';
     expect(stripComments(line)).toBe(line);
   });
+
+  it('never strips block delimiters inside quoted strings', () => {
+    // The delimiters are data here: stripping them would remove the
+    // real call between them and false-pass the negative gate.
+    const line = 'const a = "/*"; hasClass.indexOf(ind); const b = "*/";';
+    expect(stripComments(line)).toBe(line);
+    expect(stripComments(line)).toContain('hasClass.indexOf(ind)');
+  });
+
+  it('still strips real block comments around strings', () => {
+    const source = 'const a = "x"; /* gone */ foo();\n/* multi\nline */bar();';
+    expect(stripComments(source)).toBe('const a = "x";  foo();\nbar();');
+  });
+
+  it('keeps an unterminated block comment verbatim', () => {
+    const line = 'foo(); /* hasClass.indexOf(ind)';
+    expect(stripComments(line)).toBe(line);
+  });
 });

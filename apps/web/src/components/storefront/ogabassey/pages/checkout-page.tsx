@@ -405,7 +405,7 @@ export const CheckoutPage: React.FC = () => {
     availability: redvaultAvailability,
     waitForResolvedAuthenticated: waitForResolvedStorefrontCustomerAuth,
   } = useCheckoutRedvaultAvailability({
-    cartItems: cart,
+    cartItems: checkoutCart,
     merchantId: merchant?.id,
     merchantSlug: merchant?.slug ?? undefined,
     userId: user?.id,

@@ -8,10 +8,24 @@ The pilot code remains unavailable by default, and live activation remains off. 
 2. Resolve the immutable Ogabassey merchant ID in that same database and confirm the active domain routes to it.
 3. Create a new, dedicated Ogabassey product through the reviewed merchant catalog workflow. Set its authoritative price to NGN 100, use no variants, and do not reuse or reprice an existing retail product. Record its product UUID.
 4. Confirm tax category/rate and verify the exact payable total from the normal tax calculation. The pilot discount is NGN 5; the total is not hard-coded to NGN 95.
-5. Obtain Paystack's documented confirmation for UBA bank/card filters and issuer verification. A test issuer or one successful card does not satisfy this gate. Keep PAN entry on Paystack.
+5. Retain Paystack's written bank/card filter confirmation and independently establish the exact live `authorization.bank` issuer value used by verification. The response supplied by the owner on 6 October confirms bank code `033` and the three supported brands, but does not specify the canonical issuer string. Keep PAN entry on Paystack.
 6. Verify that card checkout retains the bank and card-brand restrictions in the selected live environment. Do not send a charge until the owner approves the specific attempt.
 
-## Server configuration
+## Provider confirmation and pilot preparation — 6 October 2026
+
+The owner supplied Favour's Paystack response in this chat and clarified that eligibility covers all UBA-issued cards enabled for online payments. The supplied BINs were implementation reference inputs, not an eligibility allowlist. No additional UBA eligibility approval is required on that basis. This record is based on the owner-pasted response; its original mailbox message has not yet been retrieved through the currently connected support mailbox.
+
+Paystack confirms that `custom_filters.banks: ['033']` accepts UBA-issued Verve, Visa and Mastercard cards; only bank-level filtering is supported. Its API returns six-digit BINs, not eight-digit identifiers. Paystack provides no issuer-specific test cards and permits the proposed controlled live test and refund. Current public documentation supports combining bank and card-brand filters: https://paystack.com/docs/payments/metadata/#selected-bank-cards.
+
+Source inspection confirms the initialization metadata uses the bank code from the protected reservation with `card_brands: ['verve', 'visa', 'mastercard']`. The verification path additionally checks the configured exact issuer name, card channel, brand, customer, amount, currency, reference, domain and accepted policy hash. Do not guess the live issuer name or use a test issuer in the live runtime. The selected deployment/database configuration has not been inspected in this preparation pass.
+
+PR #3555 carries this preparation. Before deployment, hosted checks must pass and review conversations must be resolved, covering the sanitized-cart availability finding, staging/pilot mode finding, rounding-boundary coverage, expiry handling of already-started provider outcomes, and pilot order fulfillment before approval. In particular, the expiry trigger must let already-started provider outcomes persist `initialized`/`indeterminate` after expiry, and the order-field fulfillment guard must cover unpaid and initializing pilot orders too.
+
+After those fixes and review completion, prepare the selected deployment and database using the operator gates below. Test the non-UBA card first in the same hosted session and confirm rejection without capture; then test an online-enabled UBA card in that same session. The single-attempt cap is not permission to create a second reference if the first session becomes unusable. Record the reference, exact tax-inclusive payable amount, rejection result, verified capture/issuer evidence, held fulfillment state, and refund completion. Never record PAN, CVV or OTP. Retain Visa/Verve/Mastercard coverage as outstanding until each is demonstrated; one accepted UBA card does not prove all three networks.
+
+The owner enters card details directly on Paystack. A capture requires a verified refund and durable refund status, not merely a submitted refund request. Stop and reconcile if any provider outcome is ambiguous. No flags, catalog rows, production schema or live charges were changed in this preparation pass.
+
+## Server configuration values
 
 Configure server-only values only after all gates are independently reviewed:
 

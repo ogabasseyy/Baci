@@ -375,7 +375,10 @@ try {
   );
   sql(
     readFileSync(
-      resolve(migrations, '20260928105900_uba_redvault_existing_binding_five_percent.sql'),
+      resolve(
+        migrations,
+        '20260928105900_uba_redvault_existing_binding_five_percent.sql'
+      ),
       'utf8'
     )
   );
@@ -442,6 +445,32 @@ try {
         AND tgname = 'guard_uba_redvault_pilot_shipment_write'
         AND tgenabled = 'O' AND tgtype = 23
     ) THEN RAISE EXCEPTION 'pilot_shipment_guard_missing'; END IF;
+  END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006120000_uba_redvault_pilot_review_followups.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF to_regprocedure('private.block_uba_redvault_pilot_postapproval_fulfillment()') IS NOT NULL
+      OR EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.orders'::regclass
+          AND tgname = 'block_uba_redvault_pilot_postapproval_fulfillment'
+      ) THEN RAISE EXCEPTION 'pilot_postapproval_guard_not_replaced'; END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.orders'::regclass
+        AND tgname = 'guard_uba_redvault_pilot_order_fulfillment'
+        AND tgenabled = 'O' AND tgtype = 19
+    ) THEN RAISE EXCEPTION 'pilot_order_fulfillment_guard_missing'; END IF;
+    IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_expiry()'::regprocedure), 'OLD.state IS DISTINCT FROM ''initializing''') = 0
+      OR strpos(pg_get_functiondef('private.guard_uba_redvault_pilot_order_fulfillment()'::regprocedure), 'IS DISTINCT FROM ''cancelled''') = 0
+      OR strpos(pg_get_functiondef('private.guard_uba_redvault_pilot_order_fulfillment()'::regprocedure), 'IS DISTINCT FROM ''canceled''') = 0 THEN
+      RAISE EXCEPTION 'pilot_review_followups_not_applied';
+    END IF;
   END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'

@@ -1582,7 +1582,7 @@ export async function POST(request: NextRequest) {
     if (
       redvaultRequested &&
       redvaultQuote &&
-      process.env.REDVAULT_LIVE_PILOT_ENABLED === 'true'
+      getRedvaultPaymentAvailability().reason === 'private_live_pilot'
     ) {
       if (
         !validateRedvaultLivePilotOrder({

@@ -710,7 +710,12 @@ const baseOrderRow = {
 };
 
 describe('POST /api/orders REDVAULT integration', () => {
-  async function runPilotOrder(validationResult: boolean) {
+  async function runPilotOrder(
+    validationResult: boolean,
+    availabilityReason:
+      | 'private_live_pilot'
+      | 'staging_test_mode' = 'private_live_pilot'
+  ) {
     vi.clearAllMocks();
     vi.stubEnv('REDVAULT_LIVE_PILOT_ENABLED', 'true');
     vi.stubEnv('BACI_RUNTIME_ENV', 'production');
@@ -752,7 +757,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     );
     const availabilitySpy = vi
       .spyOn(availability, 'getRedvaultPaymentAvailability')
-      .mockReturnValue({ available: true, reason: 'private_live_pilot' });
+      .mockReturnValue({ available: true, reason: availabilityReason });
     const pilotQuote = {
       ...redvaultTestQuote,
       discountKobo: 500,
@@ -856,6 +861,18 @@ describe('POST /api/orders REDVAULT integration', () => {
 
   it('continues to protected REDVAULT checkout when pilot validation allows the order', async () => {
     const result = await runPilotOrder(true);
+
+    expect(result.response.status).toBe(201);
+    await expect(result.response.json()).resolves.toEqual({
+      order: { id: 'protected-pilot-order' },
+    });
+    expect(result.checkoutCalled).toBe(true);
+    expect(result.createDraftRpcCalled).toBe(false);
+    expect(result.genericOrderRpcCalled).toBe(false);
+  });
+
+  it('skips live-pilot validation for staging test mode even when the pilot flag is set', async () => {
+    const result = await runPilotOrder(false, 'staging_test_mode');
 
     expect(result.response.status).toBe(201);
     await expect(result.response.json()).resolves.toEqual({

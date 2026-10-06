@@ -87,8 +87,8 @@ describe('calculateRedvaultPricing', () => {
   });
 
   it.each([
-    [100_004, 5_000],
-    [100_005, 5_000],
+    [100_009, 5_000],
+    [100_010, 5_001],
   ])('rounds a canonical eligible group of %i kobo half-up to %i kobo', (subtotal, discount) => {
     const result = calculateRedvaultPricing([
       { ...eligible, unitPriceKobo: subtotal },

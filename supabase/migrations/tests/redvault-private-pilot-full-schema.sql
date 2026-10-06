@@ -292,6 +292,36 @@ DECLARE
   caught text;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  -- Satisfy the unscoped-write trigger so these probes isolate the pilot
+  -- guard deterministically regardless of trigger firing order. The context
+  -- row is removed at the end of this block, mirroring the protected RPCs.
+  INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current())
+  ON CONFLICT DO NOTHING;
+  BEGIN
+    UPDATE public.orders SET shipping_status = 'shipped' WHERE id = fixture.order_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_physical_fulfillment_blocked' THEN
+    RAISE EXCEPTION 'preapproval_pilot_fulfillment_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  caught := NULL;
+  BEGIN
+    UPDATE public.orders SET tracking_number = 'RV-PILOT-PROBE' WHERE id = fixture.order_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_physical_fulfillment_blocked' THEN
+    RAISE EXCEPTION 'preapproval_pilot_tracking_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  DELETE FROM private.uba_redvault_write_context WHERE transaction_id = pg_catalog.txid_current();
+END;
+$$;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
   BEGIN
     INSERT INTO public.shipments(
       order_id, merchant_id, provider, status, sender_address, receiver_address, items
@@ -476,6 +506,7 @@ DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
   caught text;
+  recorded record;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
   BEGIN
@@ -493,10 +524,69 @@ BEGIN
   IF caught IS DISTINCT FROM 'redvault_pilot_disabled_or_expired' THEN
     RAISE EXCEPTION 'expired_initialization_claim_wrong_result:%', COALESCE(caught, 'accepted');
   END IF;
+  -- An in-flight provider outcome must still land after expiry; v2 delegates
+  -- the state write to this same v1 function. Indeterminate carries no
+  -- authorization URL, preserving the no-provider-simulation invariant below.
+  SELECT * INTO STRICT recorded
+  FROM public.record_storefront_redvault_payment_attempt_initialization(
+    fixture.attempt_id, 'indeterminate', NULL
+  );
+  IF recorded.state IS DISTINCT FROM 'indeterminate'
+    OR recorded.authorization_url IS NOT NULL THEN
+    RAISE EXCEPTION 'expired_provider_outcome_wrong_result';
+  END IF;
 END;
 $$;
 
 RESET ROLE;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  BEGIN
+    UPDATE private.uba_redvault_payment_attempts SET state = 'initializing' WHERE id = fixture.attempt_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_disabled_or_expired' THEN
+    RAISE EXCEPTION 'expired_reinitialize_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  -- Wind-down probes run inside a protected write context (removed at the end
+  -- of this block) so they isolate the pilot guard from the unscoped-write
+  -- trigger. Both cancel spellings must stay allowed; fulfillment writes must
+  -- stay blocked before and after cancellation.
+  INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current())
+  ON CONFLICT DO NOTHING;
+  UPDATE public.orders SET shipping_status = 'canceled' WHERE id = fixture.order_id;
+  IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND shipping_status = 'canceled') THEN
+    RAISE EXCEPTION 'pilot_cancel_carve_out_rejected';
+  END IF;
+  caught := NULL;
+  BEGIN
+    UPDATE public.orders SET shipping_status = 'shipped' WHERE id = fixture.order_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_physical_fulfillment_blocked' THEN
+    RAISE EXCEPTION 'canceled_pilot_fulfillment_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  UPDATE public.orders SET shipping_status = 'cancelled' WHERE id = fixture.order_id;
+  IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND shipping_status = 'cancelled') THEN
+    RAISE EXCEPTION 'pilot_cancel_carve_out_rejected';
+  END IF;
+  caught := NULL;
+  BEGIN
+    UPDATE public.orders SET shipping_status = 'shipped', tracking_number = 'RV-REOPEN-PROBE'
+    WHERE id = fixture.order_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_physical_fulfillment_blocked' THEN
+    RAISE EXCEPTION 'cancelled_pilot_fulfillment_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  DELETE FROM private.uba_redvault_write_context WHERE transaction_id = pg_catalog.txid_current();
+END;
+$$;
 
 DO $$
 DECLARE
@@ -513,5 +603,5 @@ BEGIN
 END;
 $$;
 
-SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, and expiry checks passed; no provider request was made' AS result;
+SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, expiry, pre-approval fulfillment block, cancel carve-out, and post-expiry provider-outcome checks passed; no provider request was made' AS result;
 ROLLBACK;

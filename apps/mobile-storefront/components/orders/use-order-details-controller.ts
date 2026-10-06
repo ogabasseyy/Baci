@@ -62,6 +62,7 @@ export function useOrderDetailsController() {
     setIsLoading(Boolean(id) && Boolean(user?.id) && Boolean(customer?.id));
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is intentionally unread — bumping it refetches the order without changing the query.
   useEffect(() => {
     if (!id) return;
     if (!user?.id || !customer?.id) return;

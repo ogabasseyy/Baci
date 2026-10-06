@@ -181,11 +181,11 @@ export function getEffectiveInitialContribution({
 }
 
 export function getRequiredTopUp({
-  earningsBalance,
+  availableBalance,
   requiredContribution,
 }: {
-  earningsBalance: number;
+  availableBalance: number;
   requiredContribution: number;
 }) {
-  return Math.max(0, requiredContribution - Math.max(0, earningsBalance));
+  return Math.max(0, requiredContribution - Math.max(0, availableBalance));
 }

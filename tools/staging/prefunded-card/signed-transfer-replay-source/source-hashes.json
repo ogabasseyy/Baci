@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "status": "frozen-source-only-not-built-not-deployed",
+  "receiverRoot": "/Users/mac/.codex/worktrees/0d77/Baci-app",
+  "deadline": "2026-10-06T15:59:10Z",
+  "originalReceiptId": "0f9938ae-8551-4e2e-8816-853e0231b2c3",
+  "baselineProvenance": "Canonical files captured at receiver import; installed closure still requires parent verification",
+  "productionDelta": [
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-evidence-normalize.ts",
+      "sha256": "132932e58d61787d1f0d102a7590eadd0a180bb61d8af2f79fdb59995487b9fb",
+      "canonicalImportSha256": "63c73d4ccdcb6b432e9faf56f70d119ea6274c96822fc8584e187e7de17cd931"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-evidence.ts",
+      "sha256": "f680f58be77336110e8a2a6b40562204da88db3c7e7d06efa9229d4d9265708e",
+      "canonicalImportSha256": "3a1cc7c308f5ef82872673434638d9e9789b58c300836cc2738a50286c2ee19b"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-replay-enrollment.ts",
+      "sha256": "ecc4bcdd78d5f54bb393e367e014c9a54ab87d539be398ea868e4357fe4f255e",
+      "canonicalImportSha256": "40164e3101f7cafeecb58b05103332ca5aaac62cbf07398812ad6c3925097943"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-replay-enrollment.ts",
+      "sha256": "361a594babd582a85aa4ae817fbfc1cd160869e6efec7331541f0b22a91ab78a",
+      "canonicalImportSha256": "20492a863fef2b580c799eac1708601e2f7b7d42128768eea214193e65380bdb"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow.ts",
+      "sha256": "e82f3218586ba4230351a111a2e5f90c7992fc5195b7e47969c37d64e327e8c6",
+      "canonicalImportSha256": null
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-signed-outflow.ts",
+      "sha256": "21c3d37a565323ddc496085bfff1a8724ae5afe263be55620bb83b3f28c23abb",
+      "canonicalImportSha256": null
+    }
+  ],
+  "reviewFiles": [
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow.test.ts",
+      "sha256": "1cb999476bf4213f73c2cca0f576e4d10840cbfcce69328c36693a975723937f"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow-enrollment.test.ts",
+      "sha256": "3eb5c6c06e3dff93169eb1e9c314cdf44c2331e206490849a97bd38d58a7a21e"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow.test-fixture.ts",
+      "sha256": "b391d2296ba6443aef123df1c51104fe048b73db5796f852af222cfff70aff6a"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-signed-outflow.test.ts",
+      "sha256": "71c13599f23d09fc75014878eaf7963aad1507a388888a15546cfdf1f7de7ec2"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow.test-support.ts",
+      "sha256": "cd7f906aca58b2508e805d2af5822c1c643e8d91039bb6ab71575d01f5b8b378"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-signed-outflow.test-support.test.ts",
+      "sha256": "9f9abffba87a0e57dd33ed8fb231fbbaf49304740ee415aa0aebbe736d64b4aa"
+    }
+  ],
+  "unchangedImportedHarness": [
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-request.ts",
+      "sha256": "4407ea6c5618158f7f7ba1887263a5436e0338093b06f9fa2e26bd5b4a7369b6"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-receipt-replay.ts",
+      "sha256": "1c7d2177b8440fcfb02d698dc51339c3d7df80bcb0cb87142fe263e634b7d728"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-provider-evidence.ts",
+      "sha256": "db6efc9ef84cea4d8280c4fe77edd2f356738b6e6e0a3cbbc864386e03236165"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-claimed-request.ts",
+      "sha256": "7203aa9233919db3be74e755d10b324f16e5ad1df3f19eacbfa7e799b47c9283"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-evidence-normalize.test.ts",
+      "sha256": "f493d68ac15ed5f37c8c81a019432ec913f3224097f4b509438284e6ce4a45cc"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-evidence.test.ts",
+      "sha256": "61dcfcd58b7523b8ec32fca8577b22ab812ffbabb9c702219e4f38b2a7971471"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider-request.test.ts",
+      "sha256": "83f94c2a1d32ac34d44264492b1d52e28f2475cf36dfdeaf8afab09de6c3c15c"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-receipt-replay.test.ts",
+      "sha256": "23137edb8471ec469c761361a6a9e3cde59625002b9dc37b44afa4aa4300147f"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-provider.test-fixture.ts",
+      "sha256": "5861e3caa393ad0b54446c98f083a04428e3c090c597d5b74fa06596675fdcea"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-provider-evidence.test.ts",
+      "sha256": "7e6556973ac8c3e20ad3d586739b9d24f2b030abf1025f16cfc431c9b34c0207"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-claimed-request.test.ts",
+      "sha256": "f3eb5528e0a7709f77c971f3c9d15a16e02f0d38c0a14e9ec30fdbb65117207b"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-replay-enrollment.test.ts",
+      "sha256": "6d3baae78baf9a01f90eaf39512995e1741a88840e0035158155291ed9b05d9e"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-replay-enrollment.test.ts",
+      "sha256": "dd18268ad9f03f9eac2bad9dec99c5fdcd3980bb93159418d9a29c34425afed2"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-worker.ts",
+      "sha256": "3834894657a29afa00678b4eb9fe8d2bf9654307aeaa338cd0e7d403c84dc393"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-worker.test.ts",
+      "sha256": "fe77a8231df0581cc6a43cd6b2ab795047f06aaf315576cf62f2212e19a1ecc5"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-postgres-statements.ts",
+      "sha256": "9804d245f66d0e589b6200e4b192455d5fa02ce331b0213fe5330ce31d7dce0d"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/prefunded-card-postgres-statements.test.ts",
+      "sha256": "17c9a6b5925c75660ad48e7fa91c7527711901e699f5c79633e57a1023fba96b"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-postgres-executor.ts",
+      "sha256": "ed0b8c783621af66cd4c5b2ef43a399bcc8a81fdd0cb9ce01a832116ca8bcec9"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/schemas/prefunded-card-postgres-executor.test.ts",
+      "sha256": "ddc8e9093506c05d8b4c423f1a5b867bb90402e1b8cab11bd139cc9334977d04"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/contains-ascii-control.ts",
+      "sha256": "c96d96e933bc3221ff183f414df8591a4d70be08e69ac6adc9e5e2f7a1d28c3b"
+    },
+    {
+      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/contains-ascii-control.test.ts",
+      "sha256": "e44ea1ca01e002446255d993ed1a35d964fce7a982ee05baad2d3bbab5383ddf"
+    }
+  ],
+  "validation": {
+    "scopedTestSuites": 20,
+    "scopedTestsPassed": 309,
+    "focusedBiome": "passed for 12 owned files",
+    "scopedTypeScript": "33 root files; 411 resolved files; zero diagnostics; node ambient included; no emit",
+    "filesUnder300Lines": true,
+    "globalChecksRun": false
+  },
+  "handoff": {
+    "entry": "apps/web/src/lib/piggyvest/prefunded-card-replay-runtime.ts",
+    "exportName": "createPrefundedCardReplayRuntime",
+    "artifactBuilt": false,
+    "remoteActions": false,
+    "sqlChanged": false,
+    "originalSignatureChanged": false,
+    "r8SealChanged": false,
+    "canonicalWorktreeEdited": false,
+    "requiredIngestOverlay": "apps/web/src/lib/piggyvest/prefunded-card-provider-evidence.ts",
+    "recordedPredecessorFactorySha256": "de2959f583189688a1bb8cf02153325ef314e68c6dded71d7bbce3c832057500",
+    "parentGates": [
+      "Verify exact installed predecessor and source closure before overlaying these six production files",
+      "Capture full factory esbuild graph and new artifact pins in an additive chain; never rewrite original r8 seals",
+      "Preserve daemon, SQL authority, original raw bytes/HMAC/AEAD, physical database and scope pins, and Oct 6 deadline",
+      "Validate exact receipt/fingerprint and deferred-to-verified transition; stop on existing conflict or mismatching verified observation",
+      "Install factory plus digest-bound activation config transactionally with exact-predecessor rollback; parent alone handles guarded live replay"
+    ]
+  }
+}

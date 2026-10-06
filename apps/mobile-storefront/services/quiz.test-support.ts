@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 
 type MockAuthError = { message?: string; status?: number } | null;
 type MockSessionResult = {
@@ -10,7 +11,7 @@ type MockUserResult = {
   error?: MockAuthError;
 };
 
-export const mockFetch = jest.fn<typeof fetch>();
+export const mockFetch = jest.fn<FetchImplementation>();
 export const mockGetSession = jest.fn<() => Promise<MockSessionResult>>();
 export const mockGetUser = jest.fn<() => Promise<MockUserResult>>();
 export const mockLogWarn = jest.fn();

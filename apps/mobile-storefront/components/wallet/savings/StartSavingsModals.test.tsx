@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { Alert } from 'react-native';
+import { ModalSheet } from '@/components/ui/ModalSheet';
 import Colors from '@/constants/Colors';
 import { StartSavingsModals } from './StartSavingsModals';
 import type { StartSavingsController } from './start-savings-controller.types';
@@ -63,13 +64,42 @@ function createController(
 }
 
 describe('StartSavingsModals', () => {
+  it('keeps one visible sheet when moving from review to funding', () => {
+    const controller = createController();
+    const view = render(
+      <StartSavingsModals colors={Colors.light} controller={controller} />
+    );
+    expect(
+      view
+        .UNSAFE_getAllByType(ModalSheet)
+        .filter((sheet) => sheet.props.visible)
+    ).toHaveLength(1);
+
+    view.rerender(
+      <StartSavingsModals
+        colors={Colors.light}
+        controller={{
+          ...controller,
+          showPreviewModal: false,
+          showFundingModal: true,
+        }}
+      />
+    );
+    expect(
+      view
+        .UNSAFE_getAllByType(ModalSheet)
+        .filter((sheet) => sheet.props.visible)
+    ).toHaveLength(1);
+    expect(screen.getByText('Payment Methods')).toBeOnTheScreen();
+  });
+
   it('previews the plan and opens funding options', () => {
     const controller = createController();
     render(
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    expect(screen.getByText('Preview your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
     expect(screen.getByText('iPhone 13 Pro Max')).toBeOnTheScreen();
 
     fireEvent.press(
@@ -100,6 +130,22 @@ describe('StartSavingsModals', () => {
       'bank_transfer'
     );
     expect(controller.handleFundingContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed funding response visible without dismissing the sheet', () => {
+    const controller = createController({
+      formError: 'Unable to create savings plan. Please retry.',
+      showFundingModal: true,
+      showPreviewModal: false,
+    });
+    render(
+      <StartSavingsModals colors={Colors.light} controller={controller} />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Unable to create savings plan. Please retry.'
+    );
+    expect(screen.getByText('Payment Methods')).toBeOnTheScreen();
   });
 
   it('logs rejected funding continuations instead of leaving an unhandled promise', async () => {
@@ -162,9 +208,7 @@ describe('StartSavingsModals', () => {
     fireEvent.press(
       screen.getByRole('button', { name: 'Select Access Bank ending 1234' })
     );
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Authorize savings card' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Add savings card' }));
 
     expect(controller.setSelectedPaymentMethodId).toHaveBeenCalledWith(
       'card-1'
@@ -190,9 +234,7 @@ describe('StartSavingsModals', () => {
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Authorize savings card' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Add savings card' }));
 
     await waitFor(() => {
       expect(mockLogError).toHaveBeenCalledWith('Savings modal action failed', {
@@ -200,8 +242,8 @@ describe('StartSavingsModals', () => {
         operation: 'Savings card authorization',
       });
       expect(alertSpy).toHaveBeenCalledWith(
-        'Unable to authorize card',
-        'Please try card authorization again.'
+        'Unable to add card',
+        'Please try adding your card again.'
       );
     });
 
@@ -237,11 +279,9 @@ describe('StartSavingsModals', () => {
       <StartSavingsModals colors={Colors.light} controller={controller} />
     );
 
-    expect(screen.getByText('Opening authorization...')).toBeOnTheScreen();
+    expect(screen.getByText('Opening secure checkout…')).toBeOnTheScreen();
     expect(screen.getByText('Authorizing card...')).toBeOnTheScreen();
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Authorize savings card' })
-    );
+    fireEvent.press(screen.getByRole('button', { name: 'Add savings card' }));
 
     expect(controller.handleAuthorizeSavingsCard).not.toHaveBeenCalled();
   });

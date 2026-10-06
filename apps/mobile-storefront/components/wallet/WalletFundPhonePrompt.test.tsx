@@ -25,6 +25,18 @@ describe('WalletFundPhonePrompt', () => {
     jest.clearAllMocks();
   });
 
+  it('shows a clear account setup form when Add Money needs a phone number', () => {
+    renderPrompt();
+
+    expect(screen.getByText('Set up bank transfer')).toBeOnTheScreen();
+    expect(screen.getByText('PHONE NUMBER')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('button', { name: 'Save phone number' })
+    ).toHaveStyle({
+      minHeight: 56,
+    });
+  });
+
   it('submits the trimmed phone number when valid', async () => {
     const onSubmit = jest.fn<
       (phone: string) => Promise<WalletFundPhoneSubmitResult>

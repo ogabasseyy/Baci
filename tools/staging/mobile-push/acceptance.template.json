@@ -1,0 +1,60 @@
+{
+  "observedAt": null,
+  "project": {
+    "authenticated": false,
+    "ownerApproved": false,
+    "projectId": null,
+    "inventorySha256": null,
+    "signingApproved": false
+  },
+  "build": {
+    "platform": null,
+    "buildId": null,
+    "projectId": null,
+    "manifestSha256": null,
+    "artifactSha256": null,
+    "nativeGeneratedFromStaging": false,
+    "pushCredentialsMatchStaging": false
+  },
+  "device": {
+    "physical": false,
+    "platform": null,
+    "applicationId": null,
+    "installedBuildId": null,
+    "permissionGranted": false,
+    "tokenRegisteredToStaging": false,
+    "registrationEvidenceSha256": null
+  },
+  "delivery": {
+    "foreground": false,
+    "background": false,
+    "coldStartTap": false,
+    "matchingGoalOpened": false,
+    "scopedWalletQueryRefreshed": false,
+    "receiptEvidenceSha256": null
+  },
+  "interest": {
+    "providerPaidReceiptVerified": false,
+    "netAmountKobo": null,
+    "paidNetCopyVerified": false,
+    "earningsAndGoalRefreshed": false,
+    "duplicateCreditAbsent": false,
+    "receiptEvidenceSha256": null
+  },
+  "sample": {
+    "nonProviderLabelVisible": false,
+    "persistedBalancesUnchanged": false
+  },
+  "protectedState": {
+    "principalKobo": 10000,
+    "approvedPrefundingKobo": 10000,
+    "financialReplayEnabled": false,
+    "backgroundEnabled": false,
+    "snapshotEnabled": false,
+    "checkoutGetStatus": 200,
+    "checkoutEnabled": false,
+    "checkoutMaximumKobo": 0,
+    "checkoutPostStatus": 503,
+    "checkoutPatchStatus": 503
+  }
+}

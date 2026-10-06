@@ -218,6 +218,7 @@ vi.mock('../components/MobileCheckoutComponents', () => ({
 
 vi.mock('@/components/storefront/cdn-format-image', () => ({
   CdnFormatImage: ({ alt, src }: { alt: string; src: string }) => (
+    // biome-ignore lint/performance/noImgElement: test double for next/image-backed component must render a DOM image.
     <img alt={alt} src={src} />
   ),
 }));

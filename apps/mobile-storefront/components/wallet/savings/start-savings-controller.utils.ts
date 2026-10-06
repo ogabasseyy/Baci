@@ -1,13 +1,16 @@
-import type { Dispatch, SetStateAction } from 'react';
-import type { Product } from '@/types/product';
-import {
-  formatProductConditionDisplay,
-  formatVariantAxisLabel,
-} from '@/types/product';
 import type {
   SavingsProductChoice,
   SavingsSourceMode,
 } from './start-savings.types';
+
+export {
+  applyStartSavingsProductSelection,
+  getSavingsVariantOptions,
+  hasSelectableVariants,
+  isSavingsVariantSelectable,
+  toProductChoice,
+  toSelectedProductChoice,
+} from './start-savings-product-choice';
 
 type ErrorWithCode = Error & { code?: string };
 export const INSUFFICIENT_WALLET_ERROR_CODE = 'INSUFFICIENT_WALLET_BALANCE';
@@ -36,137 +39,15 @@ export function readParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function toProductChoice(product: Product): SavingsProductChoice {
-  const storageValues = getProductStorageValues(product);
-
-  return {
-    conditionLabel: formatProductConditionDisplay(product.condition) ?? null,
-    id: product.id,
-    image: product.image,
-    name: product.name,
-    price: product.price,
-    slug: product.slug,
-    variantLabel:
-      storageValues.length > 0
-        ? `Storage: ${formatCompactValues(storageValues)}`
-        : null,
-  };
-}
-
-export function applyStartSavingsProductSelection({
-  product,
-  previousSelectedProduct,
-  setFormError,
-  setSearchValue,
-  setSelectedProduct,
-  setTargetAmount,
-  variantId,
-}: {
-  product: Product;
-  previousSelectedProduct?: SavingsProductChoice | null;
-  setFormError?: (error: string | null) => void;
-  setSearchValue: (value: string) => void;
-  setSelectedProduct: (choice: SavingsProductChoice | null) => void;
-  setTargetAmount: Dispatch<SetStateAction<string>>;
-  variantId?: string | null;
-}) {
-  const choice = toSelectedProductChoice({ product, variantId });
-  const nextAutoTargetAmount = String(Math.round(choice.price));
-  const previousAutoTargetAmount = previousSelectedProduct
-    ? String(Math.round(previousSelectedProduct.price))
-    : '';
-  setFormError?.(null);
-  setSelectedProduct(choice);
-  setSearchValue(product.name);
-  setTargetAmount((currentTargetAmount) => {
-    const normalizedCurrentTargetAmount = currentTargetAmount.trim();
-    if (
-      !normalizedCurrentTargetAmount ||
-      normalizedCurrentTargetAmount === previousAutoTargetAmount
-    ) {
-      return nextAutoTargetAmount;
-    }
-    return currentTargetAmount;
-  });
-}
-
-export function toSelectedProductChoice({
-  product,
-  variantId,
-}: {
-  product: Product;
-  variantId?: string | null;
-}): SavingsProductChoice {
-  const selectedVariant = variantId
-    ? product.variants?.find((variant) => variant.id === variantId)
-    : null;
-
-  if (!selectedVariant) {
-    return toProductChoice(product);
-  }
-
-  const variantLabel = getVariantLabel(selectedVariant.attributes);
-
-  return {
-    conditionLabel:
-      formatProductConditionDisplay(selectedVariant.condition) ??
-      formatProductConditionDisplay(product.condition) ??
-      null,
-    id: product.id,
-    image:
-      selectedVariant.image ?? selectedVariant.images?.[0] ?? product.image,
-    name: product.name,
-    price: selectedVariant.price,
-    slug: product.slug,
-    variantLabel,
-  };
-}
-
-function formatCompactValues(values: string[]) {
-  if (values.length <= 2) {
-    return values.join(' / ');
-  }
-
-  return `${values.slice(0, 2).join(' / ')} +${values.length - 2} more`;
-}
-
-function getProductStorageValues(product: Product) {
-  const values = new Set<string>();
-
-  for (const value of product.variant_attributes?.storage ?? []) {
-    if (value.trim()) {
-      values.add(value.trim());
-    }
-  }
-
-  for (const variant of product.variants ?? []) {
-    const storage =
-      variant.attributes?.storage?.trim() || variant.attributes?.rom?.trim();
-    if (storage) {
-      values.add(storage);
-    }
-  }
-
-  return Array.from(values);
-}
-
-function getVariantLabel(attributes: Record<string, string> | undefined) {
-  if (!attributes) {
-    return null;
-  }
-
-  const parts = Object.entries(attributes)
-    .filter(([axis, value]) => axis !== 'color' && axis !== 'colour' && value)
-    .map(([axis, value]) => {
-      const label = formatVariantAxisLabel(axis) ?? axis;
-      return `${label}: ${value}`;
-    });
-
-  return parts.length > 0 ? parts.join(' · ') : null;
-}
-
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+const GOAL_IDEMPOTENCY_MISMATCH_PATTERN =
+  /\bmismatched_goal_idempotency_payload\b/;
+
+export function isGoalIdempotencyMismatchError(error: unknown) {
+  return GOAL_IDEMPOTENCY_MISMATCH_PATTERN.test(getErrorMessage(error, ''));
 }
 
 // Prefer backend error codes; the message fallback is intentionally narrow for
@@ -206,6 +87,14 @@ export function validateStartSavingsForm({
 }) {
   if (!selectedProduct) {
     return 'Select the product you want to save for.';
+  }
+  if (
+    selectedProduct.requiresVariantSelection !== false ||
+    (selectedProduct.variantId !== null &&
+      (typeof selectedProduct.variantId !== 'string' ||
+        !selectedProduct.variantId.trim()))
+  ) {
+    return 'Select the exact device variant you want to save for.';
   }
   if (targetValue <= 0) {
     return 'Enter a valid target amount.';

@@ -1,57 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasActivePaystackOrderDvaAlias } from '@/lib/payments/paystack-dva-order-alias';
 import type { WalletDedicatedAccount } from '@/lib/paystack';
+import { resolveStalledWalletPaymentAccount } from './customer-wallet-payment-account-reactivation';
 import {
   type CustomerWalletPaymentAccount,
   CustomerWalletPaymentAccountError,
   type CustomerWalletPaymentAccountRow,
+  normalizeWalletPaymentAccount,
   WALLET_PAYMENT_ACCOUNT_SELECT,
 } from './customer-wallet-payment-account-types';
 
+// Re-exported so existing importers are unaffected by the split.
+export { normalizeWalletPaymentAccount };
+
 const POSTGRES_UNIQUE_VIOLATION = '23505';
-
-export function normalizeWalletPaymentAccount(
-  row: CustomerWalletPaymentAccountRow
-): CustomerWalletPaymentAccount {
-  if (row.provider !== 'paystack') {
-    throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_STORAGE_ERROR',
-      'Unsupported wallet payment account provider'
-    );
-  }
-
-  if (!['active', 'disabled', 'pending_review'].includes(row.status)) {
-    throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_STORAGE_ERROR',
-      'Unsupported wallet payment account status'
-    );
-  }
-
-  if (row.currency !== 'NGN') {
-    throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_STORAGE_ERROR',
-      'Unsupported wallet payment account currency'
-    );
-  }
-
-  return {
-    accountName: row.account_name,
-    accountNumber: row.account_number,
-    bankName: row.bank_name,
-    bankSlug: row.bank_slug,
-    consentedAt: row.consented_at,
-    currency: 'NGN',
-    customerId: row.customer_id,
-    id: row.id,
-    merchantId: row.merchant_id,
-    metadata: row.metadata ?? {},
-    provider: 'paystack',
-    providerAccountId: row.provider_account_id,
-    providerCustomerCode: row.provider_customer_code,
-    providerSubaccountCode: row.provider_subaccount_code,
-    status: row.status as CustomerWalletPaymentAccount['status'],
-  };
-}
 
 async function assertNoActiveOrderPaymentAccountAlias({
   accountNumber,
@@ -214,6 +176,20 @@ export async function persistWalletPaymentAccount({
         'WALLET_DVA_RECEIVER_CONFLICT',
         'This Paystack wallet DVA is already assigned to another customer'
       );
+    }
+
+    // The unique slot covers inactive rows: a retry after a
+    // disabled/pending_review row lands here. Null means no stalled row —
+    // fall through to the default unique-violation error below.
+    const reactivatedAccount = await resolveStalledWalletPaymentAccount({
+      account,
+      consentedAt,
+      customerId,
+      merchantId,
+      supabase,
+    });
+    if (reactivatedAccount) {
+      return reactivatedAccount;
     }
   }
 

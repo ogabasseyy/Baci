@@ -1,0 +1,36 @@
+export function prefundedCardPublicRuntimeFixture() {
+  return {
+    deployment: 'staging',
+    expiresAt: '2026-09-29T15:59:10Z',
+    publicOrigin: 'https://staging.ogabassey.com',
+    authOrigin: 'https://staging-auth.ogabassey.com',
+    context: {
+      environment: 'staging',
+      transport: 'tls',
+      integrationId: '40000000-0000-4000-8000-000000000001',
+      merchantId: '10000000-0000-4000-8000-000000000001',
+      expectedBusinessId: 'synthetic-business',
+      expectedProjectId: 'synthetic-project',
+      actualProjectId: 'synthetic-project',
+      allowlistedMerchantIds: ['10000000-0000-4000-8000-000000000001'],
+      allowlistedCustomerIds: ['20000000-0000-4000-8000-000000000001'],
+    },
+    database: {
+      environment: 'staging',
+      transport: 'tls',
+      profile: 'customer',
+      host: 'database.example.test',
+      expectedHost: 'database.example.test',
+      port: 5432,
+      login: 'prefunded_treasury_operator',
+      expectedLogin: 'prefunded_treasury_operator',
+      database: 'baci_isolated_staging',
+      expectedDatabase: 'baci_isolated_staging',
+      password: 'synthetic-test-only',
+      expectedSystemId: '7685292944002592802',
+      storageApproved: true,
+      expectedProjectId: 'synthetic-project',
+      actualProjectId: 'synthetic-project',
+    },
+  };
+}

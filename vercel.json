@@ -21,6 +21,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/savings-notifications",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/provision-immediate-notification-completion-hmac",
       "schedule": "*/5 * * * *"
     }

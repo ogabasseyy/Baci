@@ -1,0 +1,18 @@
+[
+  {
+    "file": "20260727220050_shipment_tracking_realtime_broadcast.sql",
+    "sha256": "89b2dafdf9de92770d8a20151444a6c34602f78cb83bcc79cb20ed3ea9c21b65"
+  },
+  {
+    "file": "20260803000600_repair_gigl_tracking_realtime_broadcast.sql",
+    "sha256": "effcd70e2aad319665eecc17c24a08340dc55db17adfaa86169c734c05b5a3b2"
+  },
+  {
+    "file": "20260830193732_quiz_instant_results_wakeup_v2.sql",
+    "sha256": "fcb543a743d58fd80b0e576e065ce23cfa774b8cada7e8aa3b0a9a83f2bdaa44"
+  },
+  {
+    "file": "20260831120600_quiz_results_wakeup_player_access_v2.sql",
+    "sha256": "61e0d533d7b5955fb11d92ec49dc181ebeff394d7417514303ed169c9a2a409d"
+  }
+]

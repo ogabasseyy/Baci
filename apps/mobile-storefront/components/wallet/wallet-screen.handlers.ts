@@ -1,6 +1,7 @@
 import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { createLogger } from '@/lib/logger';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
@@ -151,6 +152,13 @@ export async function fundWallet({
   const amountValidationError = validateWalletTopUpAmount(amount);
   if (amountValidationError) {
     Alert.alert('Invalid Amount', amountValidationError);
+    return;
+  }
+  if (isHostedStagingWalletTopUpBlocked()) {
+    Alert.alert(
+      'Wallet top-up unavailable',
+      'Card wallet top-ups are disabled in this hosted staging preview.'
+    );
     return;
   }
   setIsFundPending(true);

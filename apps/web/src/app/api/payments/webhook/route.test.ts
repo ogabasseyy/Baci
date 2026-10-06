@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { prefundedCardWebhookCases } from './prefunded-card-webhook-cases.test-support';
 import { redvaultCaptureCases } from './redvault-capture-cases.test-support';
 import { GET, POST } from './route';
 
@@ -7030,6 +7031,8 @@ describe('POST /api/payments/webhook', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ message: 'Event ignored' });
   });
+
+  prefundedCardWebhookCases(POST);
 });
 
 describe('GET /api/payments/webhook', () => {

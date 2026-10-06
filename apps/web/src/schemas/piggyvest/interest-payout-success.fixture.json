@@ -1,0 +1,27 @@
+{
+  "eventId": "01M3TCP21C980JHQMX24RDYJ9N",
+  "customer_id": "01M3N0TE6QWPFNPRGVCQG11N1C",
+  "eventType": "interest-payout.success",
+  "eventCategory": "interest_payout",
+  "eventData": {
+    "id": "cc07a4e8-497e-4193-9d0a-23e5985303ae",
+    "amount": 733,
+    "destination_wallet": "b7ff9afd-bb88-11f1-a539-42010a9c0026",
+    "destination_wallet_balance": 1650814,
+    "destination_wallet_ledger_balance": 1650814,
+    "destination_transaction_balance": 1650814,
+    "reference": "01M3TCNYSTP8VYWMC474H4H6FD",
+    "timestamp": "2026-10-01T00:08:58.626Z",
+    "batch_id": "01M3TCNYST8NQGDXC5FREJRC49",
+    "break_down": {
+      "gross_interest_payout": 814,
+      "withholding_tax": 81,
+      "net_interest_payout": 733
+    }
+  },
+  "pvb_reference": "PVB01M3TCP3MR099C5E7QAEH1N58K",
+  "pvb_wallet": "01M3N0TE015JJR1YKBFC2JWZJ9",
+  "pvb_accrued_interest_wallet": "01M3N0TE015JJR1YKBFC2JWZJ9",
+  "pvb_destination_wallet": null,
+  "pvb_third_party_reference": null
+}

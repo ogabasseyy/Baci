@@ -1,12 +1,19 @@
 export interface WalletData {
   active_savings_goal?: WalletActiveSavingsGoal | null;
   balance: number;
-  earnings_balance?: number;
+  earnings_available?: boolean;
+  earnings_balance?: number | null;
   funding_account?: WalletFundingAccount | null;
   loyalty_points: number;
   requires_funding_account_consent?: boolean;
   savings_balance?: number;
+  savings_goals?: WalletActiveSavingsGoal[];
   total_balance?: number;
+}
+
+export interface WalletSavingsVariantResolutionOption {
+  id: string;
+  label: string;
 }
 
 export interface WalletActiveSavingsGoal {
@@ -18,10 +25,12 @@ export interface WalletActiveSavingsGoal {
   product_condition?: string | null;
   product_image?: string | null;
   product_variant_label?: string | null;
+  selection_unresolved?: boolean;
   source_mode: 'manual' | 'auto_debit';
   status: 'active' | 'paused' | 'completed';
   target_amount: number;
   title: string;
+  variant_resolution_options?: WalletSavingsVariantResolutionOption[];
 }
 
 export type WalletFundingProvider = 'paystack' | (string & {});

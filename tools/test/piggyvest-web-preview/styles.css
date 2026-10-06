@@ -1,0 +1,62 @@
+@import "tailwindcss" source(none);
+@source "./app.tsx";
+@source "../../../apps/web/src/components/storefront/piggyvest-savings";
+@source "../../../apps/web/src/components/themed";
+@source "../../../apps/web/src/components/ui/button.tsx";
+@source "../../../apps/web/src/components/ui/card.tsx";
+@theme {
+  --color-store-primary: #155e75;
+  --color-store-primary-text: #ffffff;
+  --color-store-background: #ffffff;
+  --color-store-background-text: #172d36;
+  --color-ring: #155e75;
+}
+body {
+  margin: 0;
+  background: #edf3f5;
+  color: #172d36;
+  font-family: system-ui, sans-serif;
+}
+main {
+  max-width: 1400px;
+  margin: auto;
+  padding: 24px;
+}
+header {
+  background: #143542;
+  color: white;
+  padding: 24px;
+  border-radius: 12px;
+}
+h1 {
+  font-size: 28px;
+  margin: 12px 0;
+  font-weight: 700;
+}
+.qa-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 24px 0;
+}
+.qa-controls label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+select {
+  background: white;
+  border: 1px solid #155e75;
+  padding: 8px;
+  border-radius: 6px;
+}
+.qa-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+input {
+  accent-color: #155e75;
+}

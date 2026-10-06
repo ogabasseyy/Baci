@@ -1,12 +1,16 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type Colors from '@/constants/Colors';
-import { BRAND } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
-import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
+import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { formatProductConditionDisplay } from '@/types/product';
+import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
+import { getSavingsProgress } from './get-savings-progress';
+import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
+import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 type WalletColors = (typeof Colors)['light'];
@@ -16,46 +20,31 @@ type WalletSavingsProgressModalProps = {
   colors: WalletColors;
   goal: WalletActiveSavingsGoal | null;
   isAdding: boolean;
+  isFundPending?: boolean;
   onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;
   onChangeDevice: () => void;
   onClose: () => void;
   onFundWallet: () => void;
+  onRefreshWallet?: () => Promise<unknown>;
+  onResolveVariant?: () => void;
   visible: boolean;
   walletBalance: number;
 };
-
-function getProgress(goal: WalletActiveSavingsGoal) {
-  if (goal.target_amount <= 0) {
-    return 0;
-  }
-
-  return Math.min(1, Math.max(0, goal.current_amount / goal.target_amount));
-}
-
-function getMilestoneLabel(progress: number) {
-  if (progress >= 0.75) {
-    return 'Maintain the pace';
-  }
-  if (progress >= 0.5) {
-    return "You're halfway there";
-  }
-  if (progress > 0) {
-    return 'Keep the streak alive';
-  }
-  return 'Start the streak';
-}
 
 export function WalletSavingsProgressModal({
   addAmount,
   colors,
   goal,
   isAdding,
+  isFundPending = false,
   onAddAmountChange,
   onAddSavings,
   onChangeDevice,
   onClose,
   onFundWallet,
+  onRefreshWallet,
+  onResolveVariant,
   visible,
   walletBalance,
 }: WalletSavingsProgressModalProps) {
@@ -63,11 +52,14 @@ export function WalletSavingsProgressModal({
     return null;
   }
 
-  const progress = getProgress(goal);
-  const percent = Math.round(progress * 100);
+  const { milestone, percent } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
+  const conditionLabel = formatProductConditionDisplay(goal.product_condition);
+  const productImageSource = getSavingsGoalImageSource(goal, 170);
+  const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
   const canAddToSavings =
-    goal.source_mode === 'manual' && goal.status !== 'completed';
+    (goal.source_mode === 'manual' || usesPlanFunding) &&
+    goal.status !== 'completed';
   const unavailableContributionMessage =
     goal.status === 'completed'
       ? 'This savings goal is complete.'
@@ -79,14 +71,15 @@ export function WalletSavingsProgressModal({
       animationType="slide"
       backdropStyle={styles.backdrop}
       cardStyle={[styles.card, { backgroundColor: colors.background }]}
+      keyboardAutomaticOffset
+      keyboardSurfaceColor={colors.background}
       onBackdropPress={onClose}
       onRequestClose={onClose}
     >
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Ionicons name="radio-button-on" size={16} color={BRAND.primary} />
           <Text style={[styles.title, { color: colors.text }]}>
-            Saving streak
+            {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
           </Text>
         </View>
         <Pressable
@@ -99,159 +92,195 @@ export function WalletSavingsProgressModal({
         </Pressable>
       </View>
 
-      <View style={styles.contentRow}>
-        <View style={[styles.devicePane, { backgroundColor: colors.card }]}>
-          {goal.product_image ? (
-            <Image
-              accessibilityLabel={goal.title}
-              source={createSafeBoundedImageSource({
-                height: 170,
-                uri: goal.product_image,
-                width: 100,
-              })}
-              style={styles.deviceImage}
-              contentFit="contain"
-              autoplay={false}
-            />
-          ) : (
-            <View style={styles.devicePlaceholder}>
-              <Ionicons
-                name="phone-portrait-outline"
-                size={42}
-                color={colors.textSecondary}
+      <ScrollView
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.contentRow}>
+          <View style={[styles.devicePane, { backgroundColor: colors.card }]}>
+            {productImageSource ? (
+              <Image
+                accessibilityLabel={goal.title}
+                source={productImageSource}
+                style={styles.deviceImage}
+                contentFit="contain"
+                autoplay={false}
               />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.progressPane}>
-          <View style={styles.milestoneRow}>
-            <Text style={[styles.goalTitle, { color: colors.text }]}>
-              {goal.title}
-            </Text>
-            <Text style={styles.milestoneText}>
-              {getMilestoneLabel(progress)}
-            </Text>
-          </View>
-
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings streak progress"
-            accessibilityValue={{ max: 100, min: 0, now: percent }}
-            style={styles.progressTrack}
-          >
-            <View style={[styles.progressFill, { width: `${percent}%` }]}>
-              <Text style={styles.progressPercent}>{percent}%</Text>
-            </View>
-          </View>
-
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLeft}>
-              {formatNgnCurrency(amountLeft)} left
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(walletBalance)} wallet
-            </Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            {goal.product_condition ? (
-              <Text style={[styles.metaPill, { color: colors.text }]}>
-                {goal.product_condition}
-              </Text>
-            ) : null}
-            {goal.product_variant_label ? (
-              <Text style={[styles.metaPill, { color: colors.text }]}>
-                {goal.product_variant_label}
-              </Text>
-            ) : null}
-          </View>
-
-          {canAddToSavings ? (
-            <View style={styles.addSection}>
-              <TextInput
-                accessibilityLabel="Savings top-up amount"
-                value={addAmount}
-                onChangeText={onAddAmountChange}
-                keyboardType="number-pad"
-                placeholder="Amount to add"
-                placeholderTextColor={colors.placeholder}
-                style={[
-                  styles.amountInput,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                ]}
-              />
-              <View style={styles.actionRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Fund wallet for savings"
-                  onPress={onFundWallet}
-                  style={[
-                    styles.secondaryButton,
-                    { borderColor: colors.border },
-                  ]}
-                >
-                  <Text
-                    style={[styles.secondaryButtonText, { color: colors.text }]}
-                  >
-                    Fund wallet
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Confirm savings top-up"
-                  accessibilityState={{ busy: isAdding, disabled: isAdding }}
-                  disabled={isAdding}
-                  onPress={onAddSavings}
-                  style={[
-                    styles.primaryButton,
-                    isAdding ? styles.disabledButton : null,
-                  ]}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    {isAdding ? 'Adding...' : 'Vex and Pay!'}
-                  </Text>
-                </Pressable>
+            ) : (
+              <View style={styles.devicePlaceholder}>
+                <Ionicons
+                  name="phone-portrait-outline"
+                  size={42}
+                  color={colors.textSecondary}
+                />
               </View>
+            )}
+          </View>
+
+          <View style={styles.progressPane}>
+            <View style={styles.milestoneRow}>
+              <Text style={[styles.goalTitle, { color: colors.text }]}>
+                {goal.title}
+              </Text>
+              <Text
+                style={[styles.milestoneText, { color: colors.textSecondary }]}
+              >
+                {milestone}
+              </Text>
+            </View>
+
+            <View style={styles.metaRow}>
+              {conditionLabel ? (
+                <Text
+                  style={[
+                    styles.metaPill,
+                    { backgroundColor: colors.muted, color: colors.text },
+                  ]}
+                >
+                  Condition: {conditionLabel}
+                </Text>
+              ) : null}
+              {goal.product_variant_label ? (
+                <Text
+                  style={[
+                    styles.metaPill,
+                    { backgroundColor: colors.muted, color: colors.text },
+                  ]}
+                >
+                  {goal.product_variant_label}
+                </Text>
+              ) : null}
+            </View>
+            {goal.selection_unresolved ? (
+              <Text
+                style={[styles.autoDebitHint, { color: colors.textSecondary }]}
+              >
+                Choose the exact device variant before buying. This plan does
+                not guess a model, storage or colour.
+              </Text>
+            ) : null}
+            {goal.status === 'completed' &&
+            goal.selection_unresolved &&
+            goal.variant_resolution_options?.length ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Change savings device"
-                onPress={onChangeDevice}
+                accessibilityLabel="Resolve savings device variant"
+                onPress={onResolveVariant}
                 style={[
                   styles.changeDeviceButton,
                   { borderColor: colors.border },
                 ]}
               >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={16}
-                  color={colors.text}
-                />
                 <Text
                   style={[
                     styles.changeDeviceButtonText,
                     { color: colors.text },
                   ]}
                 >
-                  Change device
+                  Choose exact variant
                 </Text>
               </Pressable>
-            </View>
-          ) : (
-            <Text
-              style={[styles.autoDebitHint, { color: colors.textSecondary }]}
-            >
-              {unavailableContributionMessage}
-            </Text>
-          )}
+            ) : null}
+          </View>
         </View>
-      </View>
+        <View
+          style={[
+            styles.progressCard,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.amountRow}>
+            <Text style={[styles.amountLeft, { color: colors.text }]}>
+              {formatNgnCurrency(goal.current_amount)} saved
+            </Text>
+            <Text
+              style={[styles.walletBalance, { color: colors.textSecondary }]}
+            >
+              {formatNgnCurrency(goal.target_amount)} target
+            </Text>
+          </View>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel="Savings plan progress details"
+            accessibilityValue={{ max: 100, min: 0, now: percent }}
+            style={[
+              styles.progressTrack,
+              { backgroundColor: colors.primaryLowOpacity },
+            ]}
+          >
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${percent}%`, backgroundColor: colors.primary },
+              ]}
+            />
+          </View>
+          <View style={styles.amountRow}>
+            <Text
+              style={[styles.walletBalance, { color: colors.textSecondary }]}
+            >
+              {formatNgnCurrency(amountLeft)} left
+            </Text>
+            <Text
+              style={[styles.walletBalance, { color: colors.textSecondary }]}
+            >
+              <Text style={{ color: colors.primary }}>{percent}%</Text> complete
+            </Text>
+          </View>
+        </View>
+        {canAddToSavings && usesPlanFunding ? (
+          visible ? (
+            <WalletSavingsPlanFunding
+              key={goal.id}
+              addAmount={addAmount}
+              colors={colors}
+              goal={goal}
+              onAddAmountChange={onAddAmountChange}
+              onRefreshWallet={onRefreshWallet}
+            />
+          ) : null
+        ) : canAddToSavings ? (
+          <WalletSavingsContributionFlow
+            addAmount={addAmount}
+            colors={colors}
+            isAdding={isAdding}
+            isFundPending={isFundPending}
+            onAddAmountChange={onAddAmountChange}
+            onAddSavings={onAddSavings}
+            onFundWallet={onFundWallet}
+            remainingAmount={amountLeft}
+            walletBalance={walletBalance}
+          />
+        ) : (
+          <Text style={[styles.autoDebitHint, { color: colors.textSecondary }]}>
+            {unavailableContributionMessage}
+          </Text>
+        )}
+        {canAddToSavings ||
+        (goal.selection_unresolved &&
+          (goal.status !== 'completed' ||
+            !goal.variant_resolution_options?.length)) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Change savings device"
+            onPress={onChangeDevice}
+            style={[styles.changeDeviceButton, { borderColor: colors.border }]}
+          >
+            <Ionicons
+              name="swap-horizontal-outline"
+              size={16}
+              color={colors.text}
+            />
+            <Text
+              style={[styles.changeDeviceButtonText, { color: colors.text }]}
+            >
+              Change device
+            </Text>
+          </Pressable>
+        ) : null}
+      </ScrollView>
     </ModalSheet>
   );
 }

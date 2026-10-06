@@ -6,10 +6,12 @@ import {
 } from '@/app/api/storefront/customer/savings/shared';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { asSavingsDeviceQueryClient } from '@/lib/customer-savings-device';
 import {
   customerSavingsCreateGoalSchema,
   customerSavingsGoalsQuerySchema,
 } from '@/schemas/customer-savings';
+import { prepareCreateSavingsGoalDevice } from './prepare-create-savings-goal-device';
 import {
   formatSavingsGoal,
   mapSavingsRpcErrorStatus,
@@ -18,6 +20,7 @@ import {
   toSavingsRouteNumber,
   toSavingsRpcError,
 } from './route-helpers';
+import { tryReplaySavingsGoalCreation } from './route-replay';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -155,6 +158,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return resolved.response;
     }
 
+    const replay = await tryReplaySavingsGoalCreation({
+      customerId: resolved.customer.id,
+      goalInput: parsed.data,
+      merchantId: resolved.merchant.id,
+      supabase: resolved.supabase,
+    });
+    if (replay.kind === 'replayed') {
+      return replay.response;
+    }
+    const requestFingerprint = replay.requestFingerprint;
+
     const featureSettings = await getCustomerSavingsFeatureSettings({
       customerId: resolved.customer.id,
       merchantId: resolved.merchant.id,
@@ -183,6 +197,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const deviceResult = await prepareCreateSavingsGoalDevice({
+      merchantId: resolved.merchant.id,
+      productId: parsed.data.productId,
+      supabase: asSavingsDeviceQueryClient(resolved.supabase),
+      targetAmount: parsed.data.targetAmount,
+      variantId: parsed.data.variantId,
+    });
+    if ('response' in deviceResult) {
+      return deviceResult.response;
+    }
+
     const nowIso = new Date().toISOString();
     const { data, error } = await resolved.supabase.rpc(
       'create_customer_savings_goal',
@@ -200,6 +225,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_early_end_fee_accepted_at: parsed.data.earlyEndFeeAccepted
           ? nowIso
           : null,
+        p_goal_idempotency_key: parsed.data.goalIdempotencyKey ?? null,
         p_initial_contribution_amount: parsed.data.initialContributionAmount,
         p_initial_contribution_idempotency_key:
           parsed.data.initialContributionIdempotencyKey ?? '',
@@ -209,14 +235,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_non_withdrawable_accepted_at: nowIso,
         p_preferred_debit_time: parsed.data.preferredDebitTime ?? null,
         p_product_id: parsed.data.productId,
-        p_product_snapshot: {},
+        p_product_snapshot: deviceResult.device.snapshot,
+        p_request_fingerprint: requestFingerprint,
         p_saved_payment_method_id: parsed.data.savedPaymentMethodId ?? null,
         p_source_mode: parsed.data.sourceMode,
         p_start_date: parsed.data.startDate,
-        p_target_amount: parsed.data.targetAmount,
+        p_target_amount: deviceResult.device.targetAmount,
         p_terms_accepted_at: nowIso,
         p_title: parsed.data.title ?? 'Device savings goal',
-        p_variant_id: parsed.data.variantId ?? null,
+        p_variant_id: deviceResult.device.variantId,
       }
     );
 
@@ -250,6 +277,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json({
+      contributionAmount: parsed.data.contributionAmount,
+      contributionFrequency: parsed.data.contributionFrequency,
       contributionId: row.contribution_id,
       currentAmount: toSavingsRouteNumber(row.current_amount),
       goalId: row.goal_id,

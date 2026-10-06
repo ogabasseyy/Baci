@@ -8,3 +8,4 @@
  * from `@baci/shared` directly.
  */
 export * from '@baci/shared/piggyvest';
+export { evaluateSavingsPolicy } from './evaluate-savings-policy';

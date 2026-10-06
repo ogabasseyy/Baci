@@ -72,6 +72,7 @@ export function CryptoPaymentModal({
           {/* Top Row: QR & Amount */}
           <div className="flex gap-4 items-center">
             <div className="bg-white p-2 rounded-xl shadow-sm border border-gray-200">
+              {/* biome-ignore lint/performance/noImgElement: generated QR payload from an external API must render raw without image optimization. */}
               <img
                 src={
                   data.qrcode ||

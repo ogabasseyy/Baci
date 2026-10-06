@@ -22,9 +22,13 @@ export async function setClipboardString(text: string): Promise<boolean> {
   } catch (error) {
     console.warn('[Clipboard] Failed to copy to clipboard:', error);
 
-    // In some development environments, we might want to alert the user
+    // In some development environments, we might want to alert the user.
+    // Never log the value itself: clipboard payloads routinely contain
+    // account numbers and other PII that must not land in Metro output.
     if (__DEV__) {
-      console.log(`[Clipboard Debug] Text to copy: ${text}`);
+      console.log(
+        `[Clipboard Debug] Copy failed for payload of length ${text.length}`
+      );
     }
 
     return false;

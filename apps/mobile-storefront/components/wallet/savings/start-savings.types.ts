@@ -11,6 +11,8 @@ export type SavingsProductChoice = Pick<
   'id' | 'image' | 'name' | 'price' | 'slug'
 > & {
   conditionLabel?: string | null;
+  requiresVariantSelection: boolean;
+  variantId: string | null;
   variantLabel?: string | null;
 };
 export type SavingsSourceMode = 'manual' | 'auto_debit';

@@ -10,7 +10,9 @@ export type CustomerWalletPaymentAccountErrorCode =
   | 'GATEWAY_NOT_CONFIGURED'
   | 'PAYSTACK_CUSTOMER_ERROR'
   | 'PAYSTACK_DVA_ERROR'
+  | 'WALLET_DVA_DISABLED_ACCOUNT'
   | 'WALLET_DVA_ORDER_ALIAS_CONFLICT'
+  | 'WALLET_DVA_PENDING_REVIEW_CONFLICT'
   | 'WALLET_DVA_RECEIVER_CONFLICT'
   | 'WALLET_DVA_SUBACCOUNT_CONFLICT'
   | 'WALLET_DVA_STORAGE_ERROR';
@@ -73,4 +75,47 @@ export interface CustomerWalletPaymentAccountRow {
   provider_customer_code: string;
   provider_subaccount_code: string;
   status: string;
+}
+
+export function normalizeWalletPaymentAccount(
+  row: CustomerWalletPaymentAccountRow
+): CustomerWalletPaymentAccount {
+  if (row.provider !== 'paystack') {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'Unsupported wallet payment account provider'
+    );
+  }
+
+  if (!['active', 'disabled', 'pending_review'].includes(row.status)) {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'Unsupported wallet payment account status'
+    );
+  }
+
+  if (row.currency !== 'NGN') {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'Unsupported wallet payment account currency'
+    );
+  }
+
+  return {
+    accountName: row.account_name,
+    accountNumber: row.account_number,
+    bankName: row.bank_name,
+    bankSlug: row.bank_slug,
+    consentedAt: row.consented_at,
+    currency: 'NGN',
+    customerId: row.customer_id,
+    id: row.id,
+    merchantId: row.merchant_id,
+    metadata: row.metadata ?? {},
+    provider: 'paystack',
+    providerAccountId: row.provider_account_id,
+    providerCustomerCode: row.provider_customer_code,
+    providerSubaccountCode: row.provider_subaccount_code,
+    status: row.status as CustomerWalletPaymentAccount['status'],
+  };
 }

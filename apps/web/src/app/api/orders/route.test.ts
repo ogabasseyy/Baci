@@ -714,7 +714,8 @@ describe('POST /api/orders REDVAULT integration', () => {
     validationResult: boolean,
     availabilityReason:
       | 'private_live_pilot'
-      | 'staging_test_mode' = 'private_live_pilot'
+      | 'staging_test_mode' = 'private_live_pilot',
+    lineVatRateBp = 0
   ) {
     vi.clearAllMocks();
     vi.stubEnv('REDVAULT_LIVE_PILOT_ENABLED', 'true');
@@ -765,6 +766,7 @@ describe('POST /api/orders REDVAULT integration', () => {
         ...line,
         discountKobo: 500,
         unitDiscountsKobo: [500],
+        vatRateBp: lineVatRateBp,
       })),
       groups: redvaultTestQuote.groups.map((group) => ({
         ...group,
@@ -879,6 +881,18 @@ describe('POST /api/orders REDVAULT integration', () => {
       order: { id: 'protected-pilot-order' },
     });
     expect(result.checkoutCalled).toBe(true);
+    expect(result.createDraftRpcCalled).toBe(false);
+    expect(result.genericOrderRpcCalled).toBe(false);
+  });
+
+  it('returns 409 when the pilot line carries VAT', async () => {
+    const result = await runPilotOrder(true, 'private_live_pilot', 750);
+
+    expect(result.response.status).toBe(409);
+    expect(await result.response.json()).toMatchObject({
+      code: 'REDVAULT_PILOT_UNAVAILABLE',
+    });
+    expect(result.checkoutCalled).toBe(false);
     expect(result.createDraftRpcCalled).toBe(false);
     expect(result.genericOrderRpcCalled).toBe(false);
   });

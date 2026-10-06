@@ -547,6 +547,30 @@ try {
       RAISE EXCEPTION 'pilot_policy_reservation_indexes_missing';
     END IF;
   END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006170000_uba_redvault_pilot_reserve_lock_order.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ DECLARE
+    reserve_def text := pg_get_functiondef('public.reserve_storefront_redvault_payment_attempt_v3(uuid)'::regprocedure);
+    attempt_def text := pg_get_functiondef('private.enforce_uba_redvault_private_pilot_attempt()'::regprocedure);
+  BEGIN
+    IF strpos(reserve_def, 'FOR UPDATE') = 0
+      OR strpos(reserve_def, 'pg_advisory_xact_lock') = 0
+      OR strpos(reserve_def, 'FOR UPDATE') > strpos(reserve_def, 'pg_advisory_xact_lock') THEN
+      RAISE EXCEPTION 'pilot_reserve_lock_order_not_applied';
+    END IF;
+    IF strpos(attempt_def, 'FOR UPDATE') = 0
+      OR strpos(attempt_def, 'pg_advisory_xact_lock') = 0
+      OR strpos(attempt_def, 'FOR UPDATE') > strpos(attempt_def, 'pg_advisory_xact_lock') THEN
+      RAISE EXCEPTION 'pilot_attempt_lock_order_not_applied';
+    END IF;
+  END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'
   );

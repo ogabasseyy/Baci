@@ -24,8 +24,11 @@ const UNAVAILABLE: RedvaultLivePilotRejection = {
 
 /**
  * Verifies that a private-live-pilot initialization matches the exact
- * controlled-test snapshot: pilot user, pilot merchant, NGN currency, and
- * the NGN 100 / NGN 5 quote with no fees, extras, or mixed basket.
+ * controlled-test snapshot: pilot user, pilot merchant, NGN currency, the
+ * NGN 100 / NGN 5 quote with no fees, extras, or mixed basket, and the
+ * pinned NGN 95.00 payable with zero tax. The summary helper already
+ * cross-checks total against payable arithmetic; pinning both here keeps a
+ * drifted persisted total (tax misconfig, tampering) out of the charge path.
  */
 export async function verifyRedvaultLivePilotSnapshot({
   client,
@@ -46,7 +49,7 @@ export async function verifyRedvaultLivePilotSnapshot({
         userId === REDVAULT_PILOT_USER_ID &&
         merchantId === pilot.merchantId &&
         summary.order.currency.toUpperCase() === 'NGN' &&
-        summary.order.total >= 0 &&
+        summary.order.total === 95 &&
         summary.quote.product_subtotal_kobo === 10_000 &&
         summary.quote.eligible_subtotal_kobo === 10_000 &&
         summary.quote.ineligible_subtotal_kobo === 0 &&
@@ -54,6 +57,8 @@ export async function verifyRedvaultLivePilotSnapshot({
         summary.quote.assurance_fee_kobo === 0 &&
         summary.quote.shipping_kobo === 0 &&
         summary.quote.gift_wrapping_kobo === 0 &&
+        summary.quote.tax_kobo === 0 &&
+        summary.quote.payable_kobo === 9500 &&
         summary.quote.mixed_basket === false
     );
     if (!exactPilotSnapshot) {

@@ -1170,6 +1170,27 @@ export async function POST(request: NextRequest) {
         409
       );
     }
+    // A cancelled order must never be payable. The reopen-backstop trigger keeps
+    // the order cancelled even if a payment later lands, but reject here so a
+    // customer cannot start a new payment for an order they cancelled. Legacy
+    // rows carry both spellings in mixed case, so match the DB guards and
+    // reject either spelling case-insensitively before any pilot verification:
+    // the snapshot read is provider-free, but failing fast here keeps the
+    // decline reason a stable ORDER_NOT_PAYABLE.
+    const snapshotShippingStatus =
+      typeof orderSnapshot.shipping_status === 'string'
+        ? orderSnapshot.shipping_status.toLowerCase()
+        : '';
+    if (
+      snapshotShippingStatus === 'cancelled' ||
+      snapshotShippingStatus === 'canceled'
+    ) {
+      return createErrorResponse(
+        'This order has been cancelled and can no longer be paid',
+        'ORDER_NOT_PAYABLE',
+        409
+      );
+    }
     if (
       redvaultRequested &&
       getRedvaultPaymentAvailability().reason === 'private_live_pilot'
@@ -1187,21 +1208,6 @@ export async function POST(request: NextRequest) {
           pilotSnapshot.rejection.status
         );
       }
-    }
-
-    // A cancelled order must never be payable. The reopen-backstop trigger keeps
-    // the order cancelled even if a payment later lands, but reject here so a
-    // customer cannot start a new payment for an order they cancelled. Legacy
-    // rows carry both spellings, so match the DB guards and reject either.
-    if (
-      orderSnapshot.shipping_status === 'cancelled' ||
-      orderSnapshot.shipping_status === 'canceled'
-    ) {
-      return createErrorResponse(
-        'This order has been cancelled and can no longer be paid',
-        'ORDER_NOT_PAYABLE',
-        409
-      );
     }
 
     // Validate order total: Number(null) => 0, Number(undefined) => NaN
@@ -1370,6 +1376,23 @@ export async function POST(request: NextRequest) {
       }
 
       const fallbackClient = await createServerSupabaseClient();
+      let redirectUrl: string;
+      try {
+        redirectUrl = getRedvaultCallbackUrl({
+          merchantSlug: merchantWithPaystack.slug,
+          protocol,
+          rootDomain,
+          runtimeEnv: process.env.BACI_RUNTIME_ENV,
+          vercelEnv: process.env.VERCEL_ENV,
+          vercelUrl: process.env.VERCEL_URL,
+        });
+      } catch {
+        return createErrorResponse(
+          'REDVAULT payment is not available',
+          'REDVAULT_UNAVAILABLE',
+          409
+        );
+      }
       const checkout = await initializeRedvaultPaystackCheckout({
         customerEmail: data.customer_email,
         fallbackClient,
@@ -1378,14 +1401,7 @@ export async function POST(request: NextRequest) {
         preserveAttempts:
           redvaultRequested &&
           getRedvaultPaymentAvailability().reason === 'private_live_pilot',
-        redirectUrl: getRedvaultCallbackUrl({
-          merchantSlug: merchantWithPaystack.slug,
-          protocol,
-          rootDomain,
-          runtimeEnv: process.env.BACI_RUNTIME_ENV,
-          vercelEnv: process.env.VERCEL_ENV,
-          vercelUrl: process.env.VERCEL_URL,
-        }),
+        redirectUrl,
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });
 

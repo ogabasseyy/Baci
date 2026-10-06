@@ -136,11 +136,23 @@ try {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }
   sql(`
+    CREATE FUNCTION public.reserve_storefront_redvault_payment_attempt_v2(p_order_id uuid)
+    RETURNS TABLE(attempt_id uuid,reference text,amount_kobo bigint,currency text,quote_payload_hash text,state text,bank_code text,authorization_url text,paystack_subaccount_code text,platform_fee_kobo bigint)
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ DECLARE r record; BEGIN
+      SELECT * INTO STRICT r FROM public.reserve_storefront_redvault_payment_attempt(p_order_id);
+      RETURN QUERY SELECT r.attempt_id,r.reference,r.amount_kobo,r.currency,r.quote_payload_hash,r.state,r.bank_code,r.authorization_url,'ACCT_fixture'::text,0::bigint;
+    END $$;
     CREATE FUNCTION public.reserve_storefront_redvault_payment_attempt_v3(p_order_id uuid)
     RETURNS TABLE(attempt_id uuid,reference text,amount_kobo bigint,currency text,quote_payload_hash text,state text,bank_code text,authorization_url text,paystack_subaccount_code text,platform_fee_kobo bigint)
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ DECLARE r record; BEGIN
       SELECT * INTO STRICT r FROM public.reserve_storefront_redvault_payment_attempt(p_order_id);
       RETURN QUERY SELECT r.attempt_id,r.reference,r.amount_kobo,r.currency,r.quote_payload_hash,r.state,r.bank_code,r.authorization_url,'ACCT_fixture'::text,0::bigint;
+    END $$;
+    CREATE FUNCTION public.claim_storefront_redvault_payment_attempt_initialization_v2(p_attempt_id uuid)
+    RETURNS TABLE(attempt_id uuid,reference text,amount_kobo bigint,currency text,quote_payload_hash text,state text,bank_code text,authorization_url text,initialization_claimed boolean,paystack_subaccount_code text,platform_fee_kobo bigint)
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$ DECLARE r record; BEGIN
+      SELECT * INTO STRICT r FROM public.claim_storefront_redvault_payment_attempt_initialization(p_attempt_id);
+      RETURN QUERY SELECT r.attempt_id,r.reference,r.amount_kobo,r.currency,r.quote_payload_hash,r.state,r.bank_code,r.authorization_url,r.initialization_claimed,'ACCT_fixture'::text,0::bigint;
     END $$;
     CREATE FUNCTION public.claim_storefront_redvault_payment_attempt_initialization_v3(p_attempt_id uuid)
     RETURNS TABLE(attempt_id uuid,reference text,amount_kobo bigint,currency text,quote_payload_hash text,state text,bank_code text,authorization_url text,initialization_claimed boolean,paystack_subaccount_code text,platform_fee_kobo bigint,split_retained_shipping_kobo bigint)
@@ -252,6 +264,47 @@ try {
       `concurrent initialization claim did not produce one winner: ${claimResults.join('|')}`
     );
   }
+  // The legacy races above must run before the legacy RPC revocation. Every
+  // pilot check below runs against the same ordered definitions as the
+  // ordered migration smoke test.
+  for (const filename of [
+    '20260929100000_uba_redvault_pilot_legacy_and_shipment_guards.sql',
+    '20261006120000_uba_redvault_pilot_review_followups.sql',
+    '20261006130000_uba_redvault_pilot_permit_payment_completion.sql',
+    '20261006140000_uba_redvault_pilot_product_boundary.sql',
+    '20261006150000_uba_redvault_pilot_binding_and_cancel_guards.sql',
+    '20261006160000_uba_redvault_pilot_activation_lock_and_policy_indexes.sql',
+    '20261006170000_uba_redvault_pilot_reserve_lock_order.sql',
+  ]) {
+    sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  }
+  sql(`
+    INSERT INTO public.products(id,merchant_id,name,price) VALUES
+      ('5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a','6b5cb8a4-5575-456c-b936-8cdfae30db74','Pilot activation race product',100);
+    INSERT INTO public.orders(id,merchant_id,customer_email,payment_method,payment_status,subtotal,discount_amount,total,currency)
+    VALUES ('5b5b5b5b-5b5b-4b5b-8b5b-5b5b5b5b5b5b','6b5cb8a4-5575-456c-b936-8cdfae30db74','race@example.test','paystack','unpaid',100,0,100,'NGN');
+  `);
+  const activationRace = await Promise.all([
+    concurrentSql(
+      `DO $$ BEGIN PERFORM private.configure_uba_redvault_live_pilot(true,'5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a',pg_catalog.now()+interval '1 hour'); PERFORM pg_sleep(0.5); RAISE NOTICE 'CONFIGURE_OK'; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'CONFIGURE_REJECTED:%',SQLERRM; END $$;`
+    ),
+    concurrentSql(
+      `DO $$ BEGIN INSERT INTO public.order_items(id,order_id,line_id,product_id,price,quantity) VALUES ('5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c','5b5b5b5b-5b5b-4b5b-8b5b-5b5b5b5b5b5b',1,'5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a',100,1); PERFORM pg_sleep(0.5); RAISE NOTICE 'INSERT_OK'; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'INSERT_REJECTED:%',SQLERRM; END $$;`
+    ),
+  ]);
+  const configureOk = activationRace[0].includes('CONFIGURE_OK');
+  const insertOk = activationRace[1].includes('INSERT_OK');
+  if (
+    configureOk === insertOk ||
+    (!configureOk &&
+      !activationRace[0].includes('redvault_pilot_product_not_dedicated')) ||
+    (!insertOk &&
+      !activationRace[1].includes('redvault_pilot_product_restricted'))
+  ) {
+    throw new Error(
+      `pilot activation did not serialize against ordinary inserts: ${activationRace.join('|')}`
+    );
+  }
   sql(`
     INSERT INTO public.products(id,merchant_id,name,price) VALUES
       ('55555555-5555-4555-8555-555555555555','6b5cb8a4-5575-456c-b936-8cdfae30db74','Dedicated pilot product',100);
@@ -261,11 +314,11 @@ try {
         INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current());
         INSERT INTO public.orders(id,merchant_id,customer_email,payment_method,payment_status,subtotal,discount_amount,total,currency)
         VALUES ('16161616-1616-4616-8616-161616161616','6b5cb8a4-5575-456c-b936-8cdfae30db74','pilot@example.test','uba_redvault','unpaid',90,5,85,'NGN');
-        DELETE FROM private.uba_redvault_write_context WHERE transaction_id=pg_catalog.txid_current();
         INSERT INTO public.order_items(id,order_id,line_id,product_id,price,quantity)
         VALUES ('17171717-1717-4717-8717-171717171717','16161616-1616-4616-8616-161616161616',1,'55555555-5555-4555-8555-555555555555',90,1);
         INSERT INTO private.uba_redvault_applications(id,order_id,discount_code_id,merchant_id,quote_version_id,quote_payload_hash,quote_payload,customer_email,user_id,checkout_key,request_hash,discount_kobo,eligible_subtotal_kobo,status)
         VALUES ('18181818-1818-4818-8818-181818181818','16161616-1616-4616-8616-161616161616','22222222-2222-4222-8222-222222222222','6b5cb8a4-5575-456c-b936-8cdfae30db74','19191919-1919-4919-8919-191919191919',repeat('3',64),'{}','pilot@example.test','70261bce-d358-45a4-9ede-8b9d71fb3bd9','invalid-price',repeat('4',64),500,10000,'pending');
+        DELETE FROM private.uba_redvault_write_context WHERE transaction_id=pg_catalog.txid_current();
         RAISE EXCEPTION 'invalid pilot draft was accepted';
       EXCEPTION WHEN OTHERS THEN
         IF SQLERRM NOT IN ('redvault_pilot_order_binding_mismatch','invalid pilot draft was accepted') THEN RAISE; END IF;
@@ -281,9 +334,13 @@ try {
       ('77777777-7777-4777-8777-777777777777','6b5cb8a4-5575-456c-b936-8cdfae30db74','pilot@example.test','uba_redvault','unpaid',100,5,95,'NGN','pilot-2');
     DELETE FROM private.uba_redvault_write_context WHERE transaction_id = pg_catalog.txid_current();
     COMMIT;
+    BEGIN;
+    INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current());
     INSERT INTO public.order_items(id,order_id,line_id,product_id,price,quantity)
     VALUES ('88888888-8888-4888-8888-888888888888','66666666-6666-4666-8666-666666666666',1,'55555555-5555-4555-8555-555555555555',100,1),
       ('99999999-9999-4999-8999-999999999999','77777777-7777-4777-8777-777777777777',1,'55555555-5555-4555-8555-555555555555',100,1);
+    DELETE FROM private.uba_redvault_write_context WHERE transaction_id = pg_catalog.txid_current();
+    COMMIT;
     INSERT INTO private.uba_redvault_applications(id,order_id,discount_code_id,merchant_id,quote_version_id,quote_payload_hash,quote_payload,customer_email,user_id,checkout_key,request_hash,discount_kobo,eligible_subtotal_kobo,status)
     VALUES
       ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','66666666-6666-4666-8666-666666666666','22222222-2222-4222-8222-222222222222','6b5cb8a4-5575-456c-b936-8cdfae30db74','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',repeat('c',64),'{}','pilot@example.test','70261bce-d358-45a4-9ede-8b9d71fb3bd9','pilot-one',repeat('d',64),500,10000,'pending'),
@@ -330,11 +387,11 @@ try {
       INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current());
       INSERT INTO public.orders(id,merchant_id,customer_email,payment_method,payment_status,subtotal,discount_amount,total,currency)
       VALUES ('20202020-2020-4020-8020-202020202020','6b5cb8a4-5575-456c-b936-8cdfae30db74','pilot@example.test','uba_redvault','unpaid',100,5,95,'NGN');
-      DELETE FROM private.uba_redvault_write_context WHERE transaction_id=pg_catalog.txid_current();
       INSERT INTO public.order_items(id,order_id,line_id,product_id,price,quantity)
       VALUES ('21212121-2121-4121-8121-212121212121','20202020-2020-4020-8020-202020202020',1,'55555555-5555-4555-8555-555555555555',100,1);
       INSERT INTO private.uba_redvault_applications(id,order_id,discount_code_id,merchant_id,quote_version_id,quote_payload_hash,quote_payload,customer_email,user_id,checkout_key,request_hash,discount_kobo,eligible_subtotal_kobo,status)
       VALUES ('22232323-2223-4223-8223-222323232323','20202020-2020-4020-8020-202020202020','22222222-2222-4222-8222-222222222222','6b5cb8a4-5575-456c-b936-8cdfae30db74','23232323-2323-4323-8323-232323232323',repeat('5',64),'{}','pilot@example.test','70261bce-d358-45a4-9ede-8b9d71fb3bd9','after-cap',repeat('6',64),500,10000,'pending');
+      DELETE FROM private.uba_redvault_write_context WHERE transaction_id=pg_catalog.txid_current();
       RAISE EXCEPTION 'after-cap pilot order was accepted';
     EXCEPTION WHEN OTHERS THEN
       IF SQLERRM NOT IN ('redvault_pilot_attempt_cap_reached','after-cap pilot order was accepted') THEN RAISE; END IF;

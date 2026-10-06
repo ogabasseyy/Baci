@@ -440,6 +440,8 @@ describe('POST /api/payments/initialize', () => {
           assurance_fee_kobo: 0,
           shipping_kobo: 0,
           gift_wrapping_kobo: 0,
+          tax_kobo: 0,
+          payable_kobo: 9500,
           mixed_basket: false,
         },
       });
@@ -518,6 +520,45 @@ describe('POST /api/payments/initialize', () => {
 
       expect(res.status).toBe(409);
       expect(json.code).toBe('REDVAULT_PAYMENT_METHOD_REQUIRED');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('maps an invalid REDVAULT callback host to 409 without touching the provider', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      merchantResult = {
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Store',
+          slug: 'evil.shop/x',
+          paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('REDVAULT_UNAVAILABLE');
       expect(mockInitializePaystack).not.toHaveBeenCalled();
     });
 
@@ -866,6 +907,8 @@ describe('POST /api/payments/initialize', () => {
     it.each([
       'cancelled',
       'canceled',
+      'Cancelled',
+      'CANCELED',
     ])('rejects starting a payment for a %s order', async (shipping_status) => {
       rpcResult = {
         data: [

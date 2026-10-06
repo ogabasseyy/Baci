@@ -7,6 +7,9 @@ type RedvaultCallbackUrlInput = {
   vercelUrl?: string;
 };
 
+const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
+const ROOT_DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i;
+
 export function getRedvaultCallbackUrl({
   merchantSlug,
   protocol,
@@ -15,6 +18,9 @@ export function getRedvaultCallbackUrl({
   vercelEnv,
   vercelUrl,
 }: RedvaultCallbackUrlInput): string {
+  if (!HOSTNAME_LABEL.test(merchantSlug) || !ROOT_DOMAIN.test(rootDomain)) {
+    throw new Error('REDVAULT callback host is unavailable');
+  }
   if (runtimeEnv === 'staging' && vercelEnv === 'preview') {
     if (
       !vercelUrl ||

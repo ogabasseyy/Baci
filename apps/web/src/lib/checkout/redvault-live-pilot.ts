@@ -11,6 +11,7 @@ type PilotLine = {
   variantId: string | null;
   unitPriceKobo: number;
   discountKobo: number;
+  vatRateBp: number;
 };
 
 export type RedvaultLivePilotPolicy = {
@@ -100,6 +101,7 @@ export function validateRedvaultLivePilotOrder(input: {
       input.items[0]?.quantity === 1 &&
       input.items[0]?.variantId === null &&
       input.items[0]?.unitPriceKobo === PILOT_PRICE_KOBO &&
+      input.items[0]?.vatRateBp === 0 &&
       input.subtotalKobo === PILOT_PRICE_KOBO &&
       input.discountKobo === PILOT_DISCOUNT_KOBO &&
       input.items[0]?.discountKobo === PILOT_DISCOUNT_KOBO &&

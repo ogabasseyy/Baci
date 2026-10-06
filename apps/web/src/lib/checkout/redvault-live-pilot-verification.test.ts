@@ -134,6 +134,9 @@ describe('verifyRedvaultLivePilotSnapshot', () => {
   it.each([
     ['non-NGN currency', { currency: 'USD' }, {}],
     ['negative total', { total: -1 }, {}],
+    ['drifted total', { total: 102.25 }, {}],
+    ['drifted payable', {}, { payable_kobo: 10225 }],
+    ['nonzero tax', {}, { tax_kobo: 725 }],
     ['wrong subtotal', {}, { product_subtotal_kobo: 9999 }],
     ['wrong eligible', {}, { eligible_subtotal_kobo: 9999 }],
     ['ineligible present', {}, { ineligible_subtotal_kobo: 1 }],

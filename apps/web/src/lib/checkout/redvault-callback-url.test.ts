@@ -44,4 +44,26 @@ describe('getRedvaultCallbackUrl', () => {
       })
     ).toThrow('REDVAULT Preview callback host is unavailable');
   });
+
+  it.each([
+    ['slash in slug', { merchantSlug: 'evil.shop/x' }],
+    ['at-sign in slug', { merchantSlug: 'evil@shop' }],
+    ['empty slug', { merchantSlug: '' }],
+    ['root domain without TLD', { rootDomain: 'usebaci' }],
+    ['path in root domain', { rootDomain: 'usebaci.com/evil' }],
+    ['empty root domain', { rootDomain: '' }],
+  ])('rejects %s in any environment', (_label, override) => {
+    for (const env of [
+      { runtimeEnv: 'production', vercelEnv: 'production' },
+      {
+        runtimeEnv: 'staging',
+        vercelEnv: 'preview',
+        vercelUrl: 'baci-example-team.vercel.app',
+      },
+    ]) {
+      expect(() =>
+        getRedvaultCallbackUrl({ ...input, ...env, ...override })
+      ).toThrow('REDVAULT callback host is unavailable');
+    }
+  });
 });

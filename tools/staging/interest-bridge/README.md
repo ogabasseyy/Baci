@@ -3,7 +3,7 @@
 ## Verified deployment, 1 October 2026
 
 The original bridge migration and append-only
-`20261001140000_piggyvest_interest_existing_authority.sql` were installed on
+`20261001140001_piggyvest_interest_existing_authority.sql` were installed on
 application database `7685292944002592802` in one guarded transaction.
 Three rollback-only rehearsals passed before the final installation.
 
@@ -57,7 +57,7 @@ interrupted invocation is unconfirmed until independently read back.
 
 ## Automatic attribution and phone preview
 
-The append-only `20261001230000_customer_savings_interest_policy.sql` adds
+The append-only `20261001230001_customer_savings_interest_policy.sql` adds
 automatic full-net allocation for an independently verified, opted-in
 customer-wallet policy. It does not seed a policy, grant worker execution, change
 provider settings, or credit money. Every new credit, including one with a legacy

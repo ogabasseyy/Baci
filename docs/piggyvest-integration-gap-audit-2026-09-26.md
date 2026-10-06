@@ -31,7 +31,7 @@ Evidence:
 There is a second missing connection: the main receiver's interest helper writes `public.piggyvest_interest_payouts`, while the phone's Earnings RPC reads eligible-paid-interest operations in `piggyvest_savings_ledger`. Simply deploying that helper does not complete Earnings.
 
 - `/Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/src/lib/piggyvest/interest-ledger.ts:43`
-- `/Users/mac/Baci-worktrees/cursor-savings-phase1/supabase/migrations/20260925130000_customer_savings_engagement_storage.sql:89`
+- `/Users/mac/Baci-worktrees/cursor-savings-phase1/supabase/migrations/20260925130050_customer_savings_engagement_storage.sql:89`
 - `/Users/mac/Baci-worktrees/cursor-savings-phase1/supabase/migrations/20260925130100_customer_savings_engagement_events.sql:59`
 
 Fresh staging reads found zero payouts for the phone wallet, zero canonical bindings/operations for the test customer, and no application trigger bridging the payout table. An eligible, reconciled payout must reach the canonical ledger once, with customer/business allocation, gross/net/tax validation, and duplicate/conflict handling. Only then can the existing interest notification trigger run. Pending accrual must remain distinct from spendable paid earnings.

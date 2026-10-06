@@ -22,7 +22,7 @@ test('includes public repairs before private drafts without duplicating a migrat
   );
 });
 test('reads the second explicitly named savings row export', async () => {
-  const secondary = '20260925130000_customer_savings_engagement_storage.sql';
+  const secondary = '20260925130050_customer_savings_engagement_storage.sql';
   const source = registry([
     `${hash} 20260926120000_piggyvest_staging_read.sql`,
   ]).replace(

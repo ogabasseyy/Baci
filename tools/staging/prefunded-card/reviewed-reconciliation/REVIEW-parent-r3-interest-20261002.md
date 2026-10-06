@@ -182,7 +182,7 @@ confirms the predicate, but those tests alone do not isolate its rejection branc
    Keep pending accrual unspendable and sample 733-kobo payouts disposable only.
    Verify actual committed Earnings/notification separately from provider delivery.
 
-SQL basis: `/Users/mac/Baci-worktrees/cursor-savings-phase1/supabase/migrations/20261001230000_customer_savings_interest_policy.sql:3`
+SQL basis: `/Users/mac/Baci-worktrees/cursor-savings-phase1/supabase/migrations/20261001230001_customer_savings_interest_policy.sql:3`
 defines the immutable per-goal policy; line 41 prepares exact approved allocations;
 line 86 applies receipts. No migration was edited or executed by this review.
 
@@ -237,7 +237,7 @@ dd76d62613c787c1ebc572cc937f7cafbb2368428a8103f7bbc38869e7de891f  tools/staging/
 f7e62fadedae16627c6bc793a7136e0b97d17cb52b194cdc73412bbfc7bf90a2  tools/staging/interest-bridge/identity-policy/collect_identity_evidence.py
 cb326c8c519cbd740df73a16d91af555355a1f31cebb06d878b569647a2289f3  tools/staging/interest-bridge/test-plan/plan_binding.sql
 33bfe16e7f97dc7e047ff5c301d4e57a91bcd1cc211cf88e74566d2fa3f8ff99  tools/staging/interest-bridge/activation/grant-bridge.sql
-22bf2761b6d3db6bf367bd867e9f00b75acfcacec22af864a73fa564a65813b8  supabase/migrations/20261001230000_customer_savings_interest_policy.sql
+22bf2761b6d3db6bf367bd867e9f00b75acfcacec22af864a73fa564a65813b8  supabase/migrations/20261001230001_customer_savings_interest_policy.sql
 370bb586681ad32db8419cbe0f48ed43817c20f3a95a8ef90899516d55e67f2e  apps/web/src/lib/piggyvest/provisioning-request.ts
 a62dd4af65aa45ae7ddd516e6302f3d66d2b6d7d853c23601bc906a1260f6176  apps/web/src/schemas/piggyvest/interest-payout-event.ts
 e5464f4e832e5a3779eb6532b0e89b64dc7bc56bd16469953afdb5199a76fa07  /Users/mac/.codex/worktrees/0d77/Baci-app/apps/web/tools/piggyvest-staging/replay-interest-runtime.ts

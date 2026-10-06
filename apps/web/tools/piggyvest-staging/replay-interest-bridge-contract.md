@@ -66,7 +66,7 @@ ownership are checked before applying. Operation, balanced postings, existing
 notification trigger effects, and receipt commit together; an acknowledgement is
 returned only after commit.
 
-The append-only `20261001140000_piggyvest_interest_existing_authority.sql`
+The append-only `20261001140001_piggyvest_interest_existing_authority.sql`
 also permits the existing `prefunded_treasury_operator` login. It preserves the
 immutable canonical binding and requires `authorized_login = session_user`;
 neither login can use the other login's binding. The treasury transport requires

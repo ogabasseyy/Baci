@@ -1,7 +1,7 @@
 export const EXPECTED_SAVINGS_ENGAGEMENT_PENDING_SOURCES = [
   {
     repositoryPath:
-      'supabase/migrations/20260925130000_customer_savings_engagement_storage.sql',
+      'supabase/migrations/20260925130050_customer_savings_engagement_storage.sql',
     sha256: 'beeba5f07442c7bc5acfd5850f628038aeae850a940eb4d23b4da8236638a600',
   },
   {

@@ -154,196 +154,18 @@ export const EXPECTED_SAVINGS_PENDING_SOURCES = [
   },
   {
     repositoryPath: 'supabase/migrations/20260912140000_goal_policy_tables.sql',
-    sha256: '63fc591f97a3231c050a4bd96fc13c77b5758c132767377ad29b6d0c6ba5305a',
-  },
-  {
-    repositoryPath: 'supabase/migrations/20260912140100_goal_policy_scope.sql',
-    sha256: 'dad8166518420742779e0a1bbca93bdaabdf127fc0bfe06bba4afabb18c27e66',
-  },
-  {
-    repositoryPath: 'supabase/migrations/20260912140200_goal_policy_api.sql',
-    sha256: 'adddc167467f9282925c381a91cd4a4884cb985349c0c1ce5e2b158399f8d9f4',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912140300_goal_policy_canonical_commands.sql',
-    sha256: '0f9536df0216ebd26a75be9c0ad1b53c8d1f9ddb0eac1d1baff6e42147c0a24c',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912150000_goal_lifecycle_activation.sql',
-    sha256: '7be6c78c9f7bca3d37fe0aa1b28bd55e9c71d112dc3afc46814ac001857a1a16',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912150100_goal_lifecycle_duration_consent.sql',
-    sha256: '85d7fc5993bbb7f982dff03f9d09fe4d7216373b4352da9869b69bc12f54cf46',
+    sha256: '0e09901da7a0b6fbf0ce1e221948f934a91354dc3626f4999790c1dd8a157ef3',
   },
   {
     repositoryPath:
       'supabase/migrations/20260912160000_cancel_plan_preparation.sql',
-    sha256: 'b1b702dc20b46cb2e4f5e9ad18debc42a4dc6d773f9587918f0664497d6a64ad',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912160100_cancel_plan_legacy_isolation.sql',
-    sha256: '470bee8c38a647a1ca09cc41badabafc10bfdd6a3f549e8bee510ccb2b6b4171',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912150200_goal_lifecycle_policy_ceremony.sql',
-    sha256: '7f9113553ae543d1c32ecbace53712939328a9e889ceec3d08257100e40230cf',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912160200_cancel_plan_preserve_goal_snapshot.sql',
-    sha256: '9922d854a2bfa7b3706b9a715d6631aa215a3296bc6b4758c225c0d19a750470',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912161000_cancellation_recovery_read.sql',
-    sha256: 'b223093e286b288ae7cfed3b76bcc45bfa79d50557301e99f6dcb1a05b882cdc',
+    sha256: '79a25e5b22dfa635d45aad0fe143d92bcd08f4010a7da734ac3814fba22219b6',
   },
   {
     repositoryPath:
       'supabase/migrations/20260912162000_purchase_preparation_tables.sql',
-    sha256: 'd7a8a3671ff3233da097c0deba8b56ca5ae908a9fed54ded510c9505cde3c0b7',
+    sha256: 'bf6d2204e53364b862c19dfc45d05b99078161b408ade9086528286abe81fc77',
   },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912162100_purchase_preparation_commands.sql',
-    sha256: 'acb035ae118356307753200c4f0dc6a678ce2b278a9778c2a7f98d0db9136da3',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912164000_purchase_pricing_sources.sql',
-    sha256: 'f1ee8116a260563fd531500019d05b2ce2f5c41b47d4a5f2f61b7ddea21aec71',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912164100_purchase_pricing_publish.sql',
-    sha256: 'eac7374fd5e3777315da2ce4928e1d13e13f8569e33f67139090923d88b6e3af',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912164200_purchase_pricing_revalidation.sql',
-    sha256: 'e66b0baff7357c39ba87c341ce59551f1fbeb4d979bd4600362c5c09d58ed997',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912165000_schedule_proposal_storage.sql',
-    sha256: 'e47b30078e23e9f0e5ce42397df16b3aef186c4c0cab2cc21b9cbe084caa56ce',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912165100_schedule_proposal_commit.sql',
-    sha256: '3149aa40018c69a888e627f80ff5d73680ff83c5c1304e8839076075eddf882f',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912170000_customer_funding_capability.sql',
-    sha256: '1146d13f3a8187007b9a542f5d9ca3b9256353f18b3886e003795782a5fa4062',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912171000_purchase_current_recovery.sql',
-    sha256: 'f5893cd714494113e66ebff4ed134870228452d08b3238faa5e77e29c4b6555d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912172000_collection_reconciliation.sql',
-    sha256: 'f3f29cfa7311498075ac16a207457a057945059d1880b41e18b0a20ac947d40c',
-  },
-  {
-    repositoryPath: 'supabase/migrations/20260912181000_draft_closure.sql',
-    sha256: '2a0976ab77b7f593452db7268ef1b35522f5fd83455b4c1d0023d24c9f72b113',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912181100_draft_closure_terminal_guards.sql',
-    sha256: 'e3ebceb5b6b5beb69bc9a6fb9a844d9aaed6701f029aa6876b2c405349f5d58d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180000_device_change_versions.sql',
-    sha256: '3b11dbf9a14815c4f916f8b3cf2ce75f4bb30bf32352cf27452b47ace933bc1e',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180100_device_change_publication.sql',
-    sha256: 'a97500ea39369ba979fe3347ef3f350a597d35f9b8d6ff3988261cfb19eab462',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180200_device_change_confirmation.sql',
-    sha256: 'b49c7d60c1912534a1ad81c69666078079b9e1c0a8b6ce2bdb2d150c0b4e5f12',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180300_device_change_canonical_read.sql',
-    sha256: 'fe2afd05709cfd6ef963c2d2cf4144c2fa3a05f5e170592d34e5503b4908a4c8',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180400_device_change_pricing.sql',
-    sha256: 'f30293f2b70a239682522ba922f90539a60a21c6e98a2170436871f634c6190d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180500_device_change_operations.sql',
-    sha256: '609179e365704569762f53d0c70d89ddaeecf94b20d2767891f042c1ca9e216a',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912180600_device_change_lifecycle_funding.sql',
-    sha256: '28ccf41a93f6fcbaf0455cf393c4992f349d8cb823cfea8e18b5b99fd9007dfc',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182000_protected_offer_publications.sql',
-    sha256: '8da9524405f3789d5bed641c6ba0c01eb0113dfb4284f8806ff4ab9498b46570',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182100_protected_offer_publish.sql',
-    sha256: '4166ce5b902e17929352e6934db28beaa59aea37f8b9ef92606a9283c6a1f89e',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182200_protected_offer_pricing.sql',
-    sha256: '0525d780cc2fb604adb164facb10e3eb811308e940c22a338d94cd0edbbccb5b',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182300_protected_offer_quote_provenance.sql',
-    sha256: 'd47cec538bd4813215d3dc2c9accd1be7c5172d223d7e56bada24eed3b98bd49',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182400_protected_offer_catalog.sql',
-    sha256: 'ee8f54c67405be717bf68d53f5c5a8927dbca5ff31267740ee5b841c419c0273',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912182500_protected_offer_schedule.sql',
-    sha256: '58d06c17e91d18ec288e517ef30d43841ca493835c2e514dd0ff3a94e635df5a',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912183000_payment_leg_recovery.sql',
-    sha256: '3f62ace9a4fd9734ae3295cca3914a0a0a944b1051938b3fed6571555814668d',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912184000_period_attribution_recovery.sql',
-    sha256: '77968a2684d13b90d0b31d888a7ec928ec7ff31a82194d1ca6fd7823fcb1dab9',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260912185000_reconciliation_cases_read.sql',
-    sha256: '5b078d9c73c9911533d7b6cbdec5eadbe7479408cb540bccbc1fdec82e847b15',
-  },
-  ...EXPECTED_CUSTOMER_SAVINGS_DRAFT_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260913130000_customer_savings_canonical_binding.sql',
@@ -354,5 +176,16 @@ export const EXPECTED_SAVINGS_PENDING_SOURCES = [
       'supabase/migrations/20260913140000_customer_savings_canonical_isolation.sql',
     sha256: '29dabfca95e321518e1e37dd5fb9028e7034a4296bd4e122e6f88aba47cb5e78',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20260926120001_piggyvest_staging_customer_mapping_read.sql',
+    sha256: 'e194c86b5d5d5a9857d188369805da56fa4526ea8fe5267cc5ce63cd8232dcd9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20260926170000_piggyvest_interest_bridge.sql',
+    sha256: '9f548fe5e3ef1bd33f654c959a4b87c40d50d37e12fb4894f59fb6b884211e76',
+  },
+  ...EXPECTED_CUSTOMER_SAVINGS_DRAFT_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_ENGAGEMENT_PENDING_SOURCES,
 ] as const;

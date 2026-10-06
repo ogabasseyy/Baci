@@ -59,7 +59,7 @@ completion claims, corrected the financial and push connections, and reran tests
   approved allocation, credentials, or worker grant. Explicit reviewed source-wallet
   payout allocations are immutable except enabling/disabling. This is not a
   pooled-business-payout distribution engine.
-- New migration `20260926120000_piggyvest_staging_customer_mapping_read.sql`
+- New migration `20260926120001_piggyvest_staging_customer_mapping_read.sql`
   checks enabled integration/business, current customer/goal scope, conflicting
   provider-customer mappings, and previous provisioning intent. Its optional role
   grant does not require creating a provisioner during schema replay.

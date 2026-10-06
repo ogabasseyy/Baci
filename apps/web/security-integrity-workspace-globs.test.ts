@@ -68,15 +68,18 @@ describe('security-integrity-workspace-globs', () => {
     '../shared',
     '/abs/path',
     'apps/../escape',
-    'apps\\..\\escape',
   ])('throws on out-of-root workspace glob %s', (glob) => {
     withWorkspace(`packages:\n  - "${glob}"\n`, (ws) => {
       expect(() => expandWorkspaces(ws)).toThrow(/escapes the root/);
     });
   });
 
-  it('throws on unsupported workspace glob syntax', () => {
-    withWorkspace('packages:\n  - "apps/**"\n', (ws) => {
+  it.each([
+    'apps/**',
+    'apps\\..\\escape',
+    'win\\dir',
+  ])('throws on unsupported workspace glob syntax %s', (glob) => {
+    withWorkspace(`packages:\n  - "${glob}"\n`, (ws) => {
       expect(() => expandWorkspaces(ws)).toThrow(
         /unsupported workspace glob syntax/
       );

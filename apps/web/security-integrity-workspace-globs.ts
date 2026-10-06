@@ -93,17 +93,24 @@ export function expandWorkspaces(workspaceRoot: string): string[] {
     // Fail closed on anything that would silently narrow the scan:
     // out-of-root globs and unsupported syntax both throw instead of
     // skipping a sibling workspace while the EVERY-copy claim reports
-    // green. The parent check is segment-based (either separator), so a
-    // directory merely named `foo..bar` still scans.
+    // green. The parent check is segment-based, so a directory merely
+    // named `foo..bar` still scans; backslashes are rejected outright
+    // (pnpm documents forward slashes only) instead of being
+    // interpreted as separators.
     if (
-      glob.split(/[\\/]/).some((segment) => segment === '..') ||
+      glob.split('/').some((segment) => segment === '..') ||
       isAbsolute(glob)
     ) {
       throw new Error(
         `findInstalledRoots: workspace glob escapes the root: ${glob}`
       );
     }
-    if (glob.includes('**') || glob.includes('?') || glob.includes('{')) {
+    if (
+      glob.includes('\\') ||
+      glob.includes('**') ||
+      glob.includes('?') ||
+      glob.includes('{')
+    ) {
       throw new Error(
         `findInstalledRoots: unsupported workspace glob syntax: ${glob}`
       );

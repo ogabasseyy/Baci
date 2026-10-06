@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createPaidInterestTestFixture } from '../replay-paid-interest.test-support';
 import { replayAccrualObserverSchemas as schemas } from './replay-accrual-observer';
 
@@ -14,6 +14,14 @@ function fixture() {
     executionDeadline: '2026-10-06T15:59:10Z',
   };
 }
+
+beforeEach(() => {
+  // Observer schemas pin a fixed execution deadline with a Date.now()
+  // expiry refine: freeze before it so happy-path tests stay green
+  // regardless of wall-clock.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-06T15:59:00Z'));
+});
 
 afterEach(() => vi.useRealTimers());
 

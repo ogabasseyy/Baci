@@ -36,8 +36,8 @@ describe('ensureAndroidNotificationChannels', () => {
     expect(channelIds).toEqual([
       'orders',
       'payments',
-      'promotions',
       'savings',
+      'promotions',
       'general',
     ]);
   });
@@ -58,7 +58,7 @@ describe('ensureAndroidNotificationChannels', () => {
 
     expect(
       mockSetNotificationChannelAsync.mock.calls.map(([id]) => id)
-    ).toEqual(['orders', 'payments', 'promotions', 'savings', 'general']);
+    ).toEqual(['orders', 'payments', 'savings', 'promotions', 'general']);
     expect(mockWarn).toHaveBeenLastCalledWith(
       'Android notification channel registration failed.',
       expect.objectContaining({ channel: 'orders' })

@@ -1,8 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Keyboard,
   Pressable,
   Text,
   TextInput,
@@ -13,7 +12,6 @@ import Colors, { BRAND } from '@/constants/Colors';
 import {
   clearPredictionCache,
   fetchAddressPredictions,
-  fetchPlaceDetails,
   generateSessionToken,
 } from './AddressAutocomplete.api';
 import { addressAutocompleteStyles as styles } from './AddressAutocomplete.styles';
@@ -22,7 +20,7 @@ import type {
   PlacePrediction,
 } from './AddressAutocomplete.types';
 import { useAddressSuggestionsPortal } from './address-suggestions-portal';
-import { applyPlaceSelection } from './apply-place-selection';
+import { usePredictionSelectHandler } from './use-address-prediction-select';
 
 export type { PlaceDetails } from './AddressAutocomplete.types';
 
@@ -87,31 +85,17 @@ export function AddressAutocomplete({
     latestQueryRef.current = value;
   }
 
-  // Stable identity: the suggestions-portal effect depends on this
-  // handler, so an inline closure would re-run the portal on every render.
-  const handlePredictionSelect = useCallback(
-    async (prediction: PlacePrediction) => {
-      Keyboard.dismiss();
-      latestQueryRef.current = prediction.mainText;
-      setInternalValue(prediction.mainText);
-      onChangeText?.(prediction.mainText);
-      setPredictions([]);
-      if (isMountedRef.current) {
-        setIsLoading(true);
-      }
-
-      const details = await fetchPlaceDetails({ prediction, sessionToken });
-      applyPlaceSelection({
-        details,
-        isMountedRef,
-        onSelect,
-        setIsLoading,
-        setPredictions,
-        setSessionToken,
-      });
-    },
-    [onChangeText, onSelect, sessionToken]
-  );
+  const handlePredictionSelect = usePredictionSelectHandler({
+    isMountedRef,
+    latestQueryRef,
+    onChangeText,
+    onSelect,
+    sessionToken,
+    setInternalValue,
+    setIsLoading,
+    setPredictions,
+    setSessionToken,
+  });
 
   // Keep the screen-root dropdown attached while the form scrolls or resizes.
   const shouldShowSuggestions = isFocused && predictions.length > 0;

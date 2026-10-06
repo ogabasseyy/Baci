@@ -11,6 +11,7 @@ import { CompareView } from '@/components/compare/CompareView';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useComparisonProducts } from '@/hooks/use-comparison-products';
+import { buildSearchMatchRouteParams } from '@/lib/product-match-route-params';
 import { useComparisonStore } from '@/stores/comparison-store';
 import type { Product } from '@/types/product';
 
@@ -28,26 +29,11 @@ export default function CompareScreen() {
   );
   const fresh = useComparisonProducts(products);
   const openProduct = (product: Product) => {
-    // An exact option id resolves its own live condition on the PDP. The
-    // forwarded condition can be stale (refresh failure and unavailable
-    // rows fall back to the snapshot), and pairing it with the id would
-    // make the resolver reject the identified option.
-    const hasExactMatchIdentity = Boolean(
-      product.searchMatch?.variantId || product.searchMatch?.offerId
-    );
     router.push({
       pathname: '/product/[slug]',
       params: {
         slug: product.slug,
-        ...(product.searchMatch?.variantId
-          ? { variant_id: product.searchMatch.variantId }
-          : {}),
-        ...(product.searchMatch?.offerId
-          ? { offer_id: product.searchMatch.offerId }
-          : {}),
-        ...(product.searchMatch?.condition && !hasExactMatchIdentity
-          ? { condition: product.searchMatch.condition }
-          : {}),
+        ...buildSearchMatchRouteParams(product.searchMatch),
       },
     });
   };

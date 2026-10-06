@@ -103,7 +103,14 @@ export function useComparisonProducts(selected: Product[]) {
               // strike-through: suppress it exactly as the search card does
               // for matched items, so the table shows no false discount.
               compare_at_price: match ? undefined : product.compare_at_price,
-              condition: option?.condition ?? product.condition,
+              // A matched base row has no option identity, but the table
+              // reads product.condition: restore the refreshed live
+              // condition, not the parent's "New & Used" aggregate label.
+              condition:
+                option?.condition ??
+                (match && !(match.variantId || match.offerId)
+                  ? liveCondition
+                  : product.condition),
               specifications: {
                 ...product.specifications,
                 ...(option && 'attributes' in option ? option.attributes : {}),

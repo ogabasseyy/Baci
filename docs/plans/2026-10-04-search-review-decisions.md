@@ -157,3 +157,17 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 - Comparison snapshots validate match ids as UUIDs at the schema, dropping malformed fields (parent-basis item kept, matching the condition precedent); hydration already drops invalid entries individually, so no whole-list wipe. Strictness note: zod `.uuid()` enforces RFC variant bits while the facts-hook regex is format-only — both correct for their purpose (PostgREST accepts any format-valid UUID; real v4 ids pass both).
 - Refined page skip-ahead capped at 3 sequential fetches; the capped page keeps its next offset so list pagination still advances instead of fanning out on poisoned pages. Budget/assurance mediums remain as adjudicated.
+
+## Round 26 (Muse on 250c7fdc7a — namespacing/image verified, no code change)
+
+- Storage-key fallback verified safe: both storefront mounts (search + category pages) pass `storageNamespace={merchant.id}`; the global key is unreachable from storefront flows, so no cross-merchant tray pollution.
+- Snapshot image verified unrendered: the tray persists `image` but renders name/price/condition/brand/category/specs only — no XSS vector through the loose string field.
+- Assurance/budget/PII/count mediums+lows all repeats of adjudicated items.
+
+## Round 27 (Codex CX-54..CX-58 on 250c7fdc7a — all five fixed)
+
+- CX-54 (P1): search/compare match-param building extracted to `lib/product-match-route-params.ts`; search.tsx 301→288 lines, compare 94→80. Helper tests + both nav call-site tests.
+- CX-55: empty first page with a next offset now renders an explicit "Load more results" continuation (hasMore threaded search→View→Body) instead of the dead-end empty state; the skip cap from Round 25 is kept, satisfying both reviewers. Body test covers press→loadMore.
+- CX-56: matched base rows restore the RPC-refreshed live condition instead of the parent's "New & Used" label (compare table reads product.condition). Base-case assertion verified red pre-fix, green post-fix.
+- CX-57: final brand-folding migration registered in both replay registries with its verified sha256; replay pin + manifest suites green (25/25). May clear the DB Replay CI red — verify on checks.
+- CX-58: ID-less base matches carry explicit `match_base=1`; the PDP suppresses condition-offer resolution while the selection still equals the entry one (resolver + effective-price flags, route-data boolean), so the advertised base price survives. A shopper-picked condition re-enables offers. Saved-screen links pass ids only and are unaffected; base matches saved without ids still open with PDP-default selection (indistinguishable, noted, out of scope).

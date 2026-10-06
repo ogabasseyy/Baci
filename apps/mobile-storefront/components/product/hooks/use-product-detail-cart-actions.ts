@@ -140,7 +140,8 @@ export function useProductDetailCartActions(
       ? findMatchingConditionOffer(
           product.offers,
           routeData.offerConditionKey,
-          routeData.routeOfferId
+          routeData.routeOfferId,
+          routeData.suppressConditionOfferMatch
         )
       : null;
     cartState.addItem({

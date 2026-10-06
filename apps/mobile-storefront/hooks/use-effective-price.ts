@@ -27,7 +27,8 @@ function calculateEffectivePrice(
     | null
     | undefined,
   selectedCondition: string | null,
-  preferredOfferId?: string | null
+  preferredOfferId?: string | null,
+  suppressOfferMatch?: boolean
 ): EffectivePrice {
   if (resolvedVariantSelection) {
     return {
@@ -42,7 +43,8 @@ function calculateEffectivePrice(
   const offer = findMatchingConditionOffer(
     product.offers,
     selectedCondition,
-    preferredOfferId
+    preferredOfferId,
+    suppressOfferMatch
   );
 
   if (offer) {
@@ -69,7 +71,8 @@ export function useEffectivePrice(
     | undefined,
   selectedCondition: string | null,
   negotiatedPrice: number | null,
-  preferredOfferId?: string | null
+  preferredOfferId?: string | null,
+  suppressOfferMatch?: boolean
 ): EffectivePrice {
   if (!product) {
     return { price: 0, comparePrice: undefined };
@@ -79,7 +82,8 @@ export function useEffectivePrice(
     product,
     resolvedVariantSelection,
     selectedCondition,
-    preferredOfferId
+    preferredOfferId,
+    suppressOfferMatch
   );
 
   // M11 FIX: Use ?? instead of || so negotiatedPrice of 0 is not treated as falsy

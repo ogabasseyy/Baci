@@ -18,14 +18,16 @@ export function useProductDetailPurchaseState(
       routeData.currentVariantDisplaySelection,
       routeData.effectiveSelectedCondition,
       negotiatedPrice,
-      routeData.routeOfferId
+      routeData.routeOfferId,
+      routeData.suppressConditionOfferMatch
     );
   const { price: calculatedPrice } = useEffectivePrice(
     routeData.product ?? null,
     routeData.currentVariantDisplaySelection,
     routeData.effectiveSelectedCondition,
     null,
-    routeData.routeOfferId
+    routeData.routeOfferId,
+    routeData.suppressConditionOfferMatch
   );
   useTrackProductRouteViewed(routeData.product, effectivePrice);
 
@@ -33,7 +35,8 @@ export function useProductDetailPurchaseState(
     ? findMatchingConditionOffer(
         routeData.product?.offers,
         routeData.offerConditionKey,
-        routeData.routeOfferId
+        routeData.routeOfferId,
+        routeData.suppressConditionOfferMatch
       )
     : null;
   const resolvedVariantPurchaseSelection =

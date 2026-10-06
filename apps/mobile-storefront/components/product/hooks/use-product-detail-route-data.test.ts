@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
 let mockParams: Record<string, string> = {};
 const mockReplace = jest.fn();
@@ -109,4 +109,37 @@ it('honors an ID-only offer through the synced selection on product load', () =>
       result.current.routeOfferId
     )?.id
   ).toBe('o1');
+});
+
+it('suppresses offer resolution for base-row entries until a PDP pick', () => {
+  const { result } = setup({
+    slug: 'phone',
+    condition: 'used',
+    match_base: '1',
+  });
+
+  expect(result.current.suppressConditionOfferMatch).toBe(true);
+
+  // A shopper-picked condition is an explicit selection again.
+  act(() => {
+    result.current.setSelectedCondition('open_box');
+  });
+  expect(result.current.suppressConditionOfferMatch).toBe(false);
+});
+
+it('does not suppress offer resolution without the base identity', () => {
+  const { result } = setup({ slug: 'phone', condition: 'used' });
+
+  expect(result.current.suppressConditionOfferMatch).toBe(false);
+});
+
+it('does not suppress base rows when an explicit offer id is present', () => {
+  const { result } = setup({
+    slug: 'phone',
+    offer_id: 'o1',
+    condition: 'used',
+    match_base: '1',
+  });
+
+  expect(result.current.suppressConditionOfferMatch).toBe(false);
 });

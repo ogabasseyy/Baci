@@ -51,7 +51,9 @@ it.each([
     id: 'p1',
     name: 'Phone',
     price: 200,
-    condition: 'Used',
+    // Mirrors the production transform's aggregate label for simple
+    // products with condition offers.
+    condition: 'New & Used',
     variants: [{ id: 'v1', condition: 'used', price: 200 }],
     offers: [{ id: 'o1', condition: 'used', price: 200 }],
   });
@@ -85,6 +87,9 @@ it.each([
     ...match,
     condition: 'used',
   });
+  // The compare table reads product.condition, so a base-row refresh must
+  // replace the aggregate label with the live condition too.
+  expect(result.current.products[0].condition).toBe('used');
   expect(result.current.unavailableIds).toEqual([]);
   expect(snapshot.searchMatch?.condition).toBe('new');
 });

@@ -108,6 +108,7 @@ function renderView(
     categoryNames: ['All', 'Phones'],
     colors: Colors.light,
     committedQuery: '',
+    hasMore: false,
     hasSearchQuery: false,
     isLoading: false,
     isLoadingMore: false,

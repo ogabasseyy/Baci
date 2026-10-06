@@ -47,6 +47,11 @@ export function useProductDetailRouteData({
   const routeSelectionAttributes = (routeSelectionInput.attributes ??
     {}) as Record<string, string>;
   const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
+  // Search/compare entry points mark ID-less base-row matches explicitly:
+  // without this identity the entry condition is indistinguishable from a
+  // condition-offer selection, and the PDP would adopt the offer's price.
+  const routeBaseMatch =
+    getFirstRouteParamValue(routeParams.match_base) === '1';
   // ID-only offer links derive the condition from this product's live
   // offer (mirrors web): the snapshot condition is deliberately omitted by
   // entry points because it can be stale, and seeding from the live option
@@ -122,6 +127,14 @@ export function useProductDetailRouteData({
         (product?.offers?.length === 1
           ? (product.offers[0]?.condition ?? null)
           : null);
+  // A base-row entry keeps the advertised base price until the shopper
+  // picks a condition on the PDP — an explicit ids-bearing link, or a
+  // selection that no longer equals the entry one, resolves offers again.
+  const suppressConditionOfferMatch =
+    routeBaseMatch &&
+    !routeOfferId &&
+    !routeVariantId &&
+    selection.effectiveSelectedCondition === routeCondition;
   const displayProduct = product
     ? {
         ...product,
@@ -190,6 +203,7 @@ export function useProductDetailRouteData({
     routeOfferId,
     routeParams,
     slug,
+    suppressConditionOfferMatch,
     ...selection,
   };
 }

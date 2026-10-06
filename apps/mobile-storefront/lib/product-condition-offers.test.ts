@@ -54,6 +54,28 @@ describe('findMatchingConditionOffer', () => {
     expect(findMatchingConditionOffer(offers, null)).toBeNull();
   });
 
+  it('suppresses the match for base-row entries', () => {
+    expect(findMatchingConditionOffer(offers, 'used', null, true)).toBeNull();
+    expect(
+      findMatchingConditionOffer(offers, 'used', 'offer-uk-used', true)
+    ).toBeNull();
+    expect(
+      findMatchingConditionOffer(
+        [
+          {
+            id: 'offer-only',
+            condition: 'used' as const,
+            price: 495000,
+            stock_quantity: 1,
+          },
+        ],
+        null,
+        null,
+        true
+      )
+    ).toBeNull();
+  });
+
   it('returns null when offers are missing or empty', () => {
     expect(findMatchingConditionOffer(null, 'open_box')).toBeNull();
     expect(findMatchingConditionOffer(undefined, 'open_box')).toBeNull();

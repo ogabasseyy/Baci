@@ -22,6 +22,7 @@ import { useSearchMinLengthHint } from '@/hooks/use-search-min-length-hint';
 import { useSearchScreenQuery } from '@/hooks/use-search-screen-query';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import { normalizeProductConditionFilterValue } from '@/lib/product-filter-options';
+import { buildSearchMatchRouteParams } from '@/lib/product-match-route-params';
 import type { Product } from '@/types/product';
 
 export default function SearchScreen() {
@@ -168,26 +169,11 @@ export default function SearchScreen() {
     if (hasSearchQuery) {
       saveToHistory(debouncedQuery);
     }
-    // An exact option id resolves its own live condition on the PDP. A
-    // snapshot condition can go stale after these results render (the
-    // merchant reconditions the option), and pairing it with the id would
-    // make the resolver reject the identified option.
-    const hasExactMatchIdentity = Boolean(
-      product.searchMatch?.variantId || product.searchMatch?.offerId
-    );
     router.push({
       pathname: '/product/[slug]',
       params: {
         slug: product.slug,
-        ...(product.searchMatch?.variantId
-          ? { variant_id: product.searchMatch.variantId }
-          : {}),
-        ...(product.searchMatch?.offerId
-          ? { offer_id: product.searchMatch.offerId }
-          : {}),
-        ...(product.searchMatch?.condition && !hasExactMatchIdentity
-          ? { condition: product.searchMatch.condition }
-          : {}),
+        ...buildSearchMatchRouteParams(product.searchMatch),
       },
     });
   };
@@ -225,6 +211,7 @@ export default function SearchScreen() {
         categoryNames={categoryNames}
         colors={colors}
         committedQuery={hasSearchQuery ? debouncedQuery : ''}
+        hasMore={hasMore}
         hasSearchQuery={hasSearchQuery}
         isLoading={isLoading}
         isLoadingMore={isLoadingMore}

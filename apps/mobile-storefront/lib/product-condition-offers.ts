@@ -4,8 +4,15 @@ import type { ProductConditionOffer } from '@/types/product';
 export function findMatchingConditionOffer(
   offers: ProductConditionOffer[] | null | undefined,
   selectedCondition: string | null,
-  preferredOfferId?: string | null
+  preferredOfferId?: string | null,
+  suppressMatch?: boolean
 ): ProductConditionOffer | null {
+  // Base-row search matches carry the advertised condition without an
+  // option id: resolving a same-condition offer here would replace the
+  // advertised base price, so entry points suppress the match instead.
+  if (suppressMatch) {
+    return null;
+  }
   if (!offers?.length) {
     return null;
   }

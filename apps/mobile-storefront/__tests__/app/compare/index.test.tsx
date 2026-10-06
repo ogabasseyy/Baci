@@ -207,4 +207,25 @@ describe('CompareScreen', () => {
       params: { slug: 'iphone-15', offer_id: 'offer-open-box' },
     });
   });
+
+  it('marks ID-less base matches so the PDP keeps the base price', () => {
+    mockComparisonState.products = [
+      {
+        id: 'product-1',
+        slug: 'iphone-15',
+        name: 'iPhone 15',
+        price: 900000,
+        searchMatch: { condition: 'used' },
+      },
+    ];
+
+    render(<CompareScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'View iPhone 15' }));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15', condition: 'used', match_base: '1' },
+    });
+  });
 });

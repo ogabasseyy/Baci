@@ -41,6 +41,8 @@ interface SearchScreenViewProps {
   colors: (typeof Colors)['light'];
   /** The committed (debounced) query behind the current result set. */
   committedQuery: string;
+  /** True when another page exists past the current (possibly empty) one. */
+  hasMore: boolean;
   hasSearchQuery: boolean;
   /** True while additional pages are being appended. */
   isLoadingMore: boolean;
@@ -101,6 +103,7 @@ export default function SearchScreenView({
   categoryNames,
   colors,
   committedQuery,
+  hasMore,
   hasSearchQuery,
   isLoading,
   isLoadingMore,
@@ -260,6 +263,7 @@ export default function SearchScreenView({
           categories={categories}
           colors={colors}
           committedQuery={committedQuery}
+          hasMore={hasMore}
           hasSearchQuery={hasSearchQuery}
           insetsBottom={insets.bottom}
           invalidFilters={invalidFilters}

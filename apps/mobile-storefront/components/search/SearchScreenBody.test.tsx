@@ -47,6 +47,7 @@ function renderBody(
     categories,
     colors: Colors.light,
     committedQuery: 'phone',
+    hasMore: false,
     hasSearchQuery: true,
     insetsBottom: 34,
     isKeyboardVisible: false,
@@ -102,6 +103,13 @@ describe('SearchScreenBody', () => {
   it('renders the results list once products load', () => {
     renderBody();
     expect(screen.getByTestId('mock-results-list')).toBeTruthy();
+  });
+  it('offers a continuation when the first page is empty but more exist', () => {
+    const onRetryNextPage = jest.fn();
+    renderBody({ products: [], hasMore: true, onRetryNextPage });
+    expect(screen.getByText('More results available')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Load more results' }));
+    expect(onRetryNextPage).toHaveBeenCalledTimes(1);
   });
   it('scrolls idle suggestions with dock clearance', () => {
     const view = renderBody({

@@ -36,6 +36,7 @@ interface SearchScreenBodyProps {
   categories: Category[];
   colors: (typeof Colors)['light'];
   committedQuery: string;
+  hasMore: boolean;
   hasSearchQuery: boolean;
   insetsBottom: number;
   invalidFilters?: boolean;
@@ -66,6 +67,7 @@ export default function SearchScreenBody({
   categories,
   colors,
   committedQuery,
+  hasMore,
   hasSearchQuery,
   insetsBottom,
   invalidFilters,
@@ -203,6 +205,42 @@ export default function SearchScreenBody({
   }
 
   if (products.length === 0) {
+    // The skip-ahead fetch can return an empty first page that still has a
+    // next offset (leading ranked rows vanished mid-read). The results list
+    // owns pagination, so rendering the dead-end empty state here would
+    // strand the continuation: offer an explicit load-more action instead.
+    if (hasMore) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons
+            name="search-outline"
+            size={64}
+            color={colors.textSecondary}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            More results available
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+            The top results could not be shown, but more are available.
+          </Text>
+          <Pressable
+            onPress={onRetryNextPage}
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Load more results"
+          >
+            <Text
+              style={[
+                styles.retryButtonText,
+                { color: colors.primaryForeground },
+              ]}
+            >
+              Load more results
+            </Text>
+          </Pressable>
+        </View>
+      );
+    }
     return (
       <SearchResultsEmptyState
         categories={categories}

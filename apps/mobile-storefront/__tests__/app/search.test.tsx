@@ -356,7 +356,7 @@ describe('SearchScreen route', () => {
 
     expect(router.push).toHaveBeenCalledWith({
       pathname: '/product/[slug]',
-      params: { slug: 'iphone-13', condition: 'used' },
+      params: { slug: 'iphone-13', condition: 'used', match_base: '1' },
     });
   });
 });

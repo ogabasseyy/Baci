@@ -14,10 +14,11 @@ import { resolveRoot } from './security-integrity-resolve-root';
 // process (mirroring the busboy 252-byte case) so a vulnerable
 // implementation fails by timeout instead of hanging Vitest.
 
-const LINES = 256_000;
+const SMALL_LINES = 128_000;
+const LARGE_LINES = 256_000;
 
 describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
-  it('parses 256k flat keys in linear time', () => {
+  it('scales linearly on large flat documents', () => {
     const root = resolveRoot(
       'smol-toml',
       process.env.SMOL_TOML_ROOT,
@@ -29,20 +30,39 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     const entry = join(root, packageMain(root));
     const script = [
       `const {parse} = require(${JSON.stringify(entry)})`,
-      `let doc = ''`,
-      `for (let i = 0; i < ${LINES}; i++) doc += 'k' + i + ' = 1\\n'`,
-      'const out = parse(doc)',
-      'if (out.k0 !== 1 || out.k255999 !== 1) process.exit(2)',
+      'const times = []',
+      `for (const n of [${SMALL_LINES}, ${LARGE_LINES}]) {`,
+      `  let doc = ''`,
+      `  for (let i = 0; i < n; i++) doc += 'k' + i + ' = 1\\n'`,
+      '  let best = Infinity',
+      '  for (let i = 0; i < 3; i++) {',
+      '    const start = Date.now()',
+      '    const out = parse(doc)',
+      '    if (out.k0 !== 1) process.exit(2)',
+      '    best = Math.min(best, Date.now() - start)',
+      '  }',
+      '  times.push(best)',
+      '}',
+      'console.log(JSON.stringify(times))',
     ].join('\n');
-    // 1.9.0 parses this in ~0.2s; the old line needs ~10s and grows
-    // quadratically, so an 8s ceiling separates them with wide margin.
+    // Scaling gate, not an absolute cutoff: doubling the input must
+    // roughly double the time (linear), not quadruple it (quadratic).
+    // Best-of-3 per size shrugs off GC pauses; the ratio is
+    // runner-speed independent, so slow CI cannot flake it. Measured:
+    // 1.9.0 ~2.0x, old line ~4.9x. The 60s child ceiling is an
+    // anti-hang backstop only (1.9.0 finishes in ~1s).
     const result = spawnSync(process.execPath, ['-e', script], {
-      timeout: 8000,
+      timeout: 60000,
     });
     expect({
       error: result.error?.message,
       signal: result.signal,
       status: result.status,
     }).toEqual({ error: undefined, signal: null, status: 0 });
+    const [small, large] = JSON.parse(result.stdout.toString()) as [
+      number,
+      number,
+    ];
+    expect(large / Math.max(small, 1)).toBeLessThan(3);
   });
 });

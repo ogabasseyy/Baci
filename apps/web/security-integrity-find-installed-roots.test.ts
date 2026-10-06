@@ -181,4 +181,20 @@ describe('security-integrity-find-installed-roots', () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  it('throws on unsupported workspace glob syntax', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'ws-glob-fixture-'));
+    try {
+      writeFileSync(
+        join(ws, 'pnpm-workspace.yaml'),
+        'packages:\n  - "apps/**"\n'
+      );
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(() => findInstalledRoots('dup', join(ws, 'apps', 'web'))).toThrow(
+        /unsupported workspace glob syntax/
+      );
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });

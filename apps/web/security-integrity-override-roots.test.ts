@@ -30,10 +30,10 @@ describe('security-integrity-override-roots', () => {
     expect(overrideRoots('', 'GTU_ROOTS')).toBeNull();
   });
 
-  it('splits on the platform path delimiter', () => {
-    // Non-empty overrides are refused under CI by design, so this
-    // split-behavior case opts out of CI (restored by afterEach).
-    delete process.env.CI;
+  // Split behavior runs only off CI (non-empty overrides are refused
+  // under CI by design); the refusal itself is covered below in both
+  // modes, so no case ever unsets CI on a CI runner.
+  it.runIf(!process.env.CI)('splits on the platform path delimiter', () => {
     const joined = ['/a', '/b'].join(delimiter);
     expect(overrideRoots(joined, 'GTU_ROOTS')).toEqual(['/a', '/b']);
   });

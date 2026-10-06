@@ -234,42 +234,40 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
   });
 
   // The override trio uses real installed roots (not tarballs): the
-  // wiring is identical, since buildHarness only sees root paths. Env
-  // is saved/restored per case and CI unset, so the override hook
-  // (refused under CI) can be exercised deterministically.
-  it.each([
-    ['refuses a lone view override without sibling overrides', false],
-    ['honors explicit sibling overrides for the harness', true],
-  ])('%s', (_label, withSiblings) => {
+  // wiring is identical, since buildHarness only sees root paths. Off
+  // CI the lone refusal and the trio wiring both run; under CI the
+  // refusal of any override is asserted instead, so no case ever
+  // unsets CI on a CI runner.
+  it('wires the override trio, refusing it under CI', () => {
     const names = [
-      'CI',
       'PROSEMIRROR_VIEW_ROOTS',
       'PROSEMIRROR_MODEL_ROOTS',
       'PROSEMIRROR_STATE_ROOTS',
     ] as const;
     const saved = names.map((name) => process.env[name]);
-    delete process.env.CI;
     try {
       const [viewRoot] = findInstalledRoots('prosemirror-view');
-      process.env.PROSEMIRROR_VIEW_ROOTS = viewRoot as string;
-      if (!withSiblings) {
-        delete process.env.PROSEMIRROR_MODEL_ROOTS;
-        delete process.env.PROSEMIRROR_STATE_ROOTS;
+      // The view's own siblings: any other copy would trip the
+      // duplicate-model guard, which is layout behavior, not wiring.
+      const modelRoot = installedRoot('prosemirror-model', viewRoot);
+      const stateRoot = installedRoot('prosemirror-state', viewRoot);
+      if (process.env.CI) {
+        process.env.PROSEMIRROR_VIEW_ROOTS = viewRoot as string;
+        process.env.PROSEMIRROR_MODEL_ROOTS = modelRoot;
+        process.env.PROSEMIRROR_STATE_ROOTS = stateRoot;
         expect(() => buildHarness(viewRoot as string)).toThrow(
-          /refusing to mix an override view with ambient siblings/
+          /refusing to test non-installed copies/
         );
         return;
       }
-      // The view's own siblings: any other copy would trip the
-      // duplicate-model guard, which is layout behavior, not wiring.
-      process.env.PROSEMIRROR_MODEL_ROOTS = installedRoot(
-        'prosemirror-model',
-        viewRoot
+      process.env.PROSEMIRROR_VIEW_ROOTS = viewRoot as string;
+      delete process.env.PROSEMIRROR_MODEL_ROOTS;
+      delete process.env.PROSEMIRROR_STATE_ROOTS;
+      expect(() => buildHarness(viewRoot as string)).toThrow(
+        /refusing to mix an override view with ambient siblings/
       );
-      process.env.PROSEMIRROR_STATE_ROOTS = installedRoot(
-        'prosemirror-state',
-        viewRoot
-      );
+      process.env.PROSEMIRROR_MODEL_ROOTS = modelRoot;
+      process.env.PROSEMIRROR_STATE_ROOTS = stateRoot;
       const { view, pastedSlice } = buildHarness(viewRoot as string);
       try {
         const pasted = view.pasteHTML(

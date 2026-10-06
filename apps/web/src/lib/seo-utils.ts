@@ -764,6 +764,9 @@ export function generateProductSchema(
     schema.sku = product.sku;
   }
 
+  // Group-level identifiers describe the parent product listing itself and are
+  // kept even when hasVariant entries carry distinct identifiers: the group
+  // node and each variant node describe different entities, so no suppression.
   if (productIdentifiers.gtin) {
     schema.gtin = productIdentifiers.gtin;
     if (productIdentifiers.gtin.length === 13) {

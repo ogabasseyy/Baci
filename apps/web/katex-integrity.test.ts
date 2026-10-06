@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveRoot as resolveSharedRoot } from './security-integrity-resolve';
-import { isAtLeast, parseVersion } from './security-integrity-version';
+import { parseVersion } from './security-integrity-parse-version';
+import { resolveRoot as resolveSharedRoot } from './security-integrity-resolve-root';
+import { isAtLeast } from './security-integrity-version-floor';
 
 // Regression coverage for CVE-2026-103923 (GHSA-238p-pmpm-9mq7):
 // KaTeX's Settings/Namespace lookups read `options[prop]`,

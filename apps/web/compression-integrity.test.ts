@@ -3,8 +3,8 @@
 import { EventEmitter } from 'node:events';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { loadCjs } from './security-integrity-load';
-import { resolveRoot } from './security-integrity-resolve';
+import { loadCjs } from './security-integrity-load-cjs';
+import { resolveRoot } from './security-integrity-resolve-root';
 
 // Behavioral coverage for CVE-2026-87776: `compression` never released
 // its zlib stream when the client disconnected early, leaking native

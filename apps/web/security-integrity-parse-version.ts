@@ -1,11 +1,4 @@
-// Version-floor comparison for the security-integrity suites: advisory
-// patched releases are minimum triples, with pre-release suffixes
-// ordering below the same triple.
-
-export interface ParsedVersion {
-  triple: [number, number, number];
-  prerelease: boolean;
-}
+import type { ParsedVersion } from './security-integrity-parsed-version';
 
 export function parseVersion(version: string): ParsedVersion {
   // Build metadata (+build) never affects precedence; a pre-release
@@ -29,17 +22,4 @@ export function parseVersion(version: string): ParsedVersion {
     triple: parts as [number, number, number],
     prerelease: dash !== -1,
   };
-}
-
-export function isAtLeast(
-  actual: ParsedVersion,
-  minimum: readonly [number, number, number]
-): boolean {
-  for (let index = 0; index < 3; index += 1) {
-    if (actual.triple[index] !== minimum[index]) {
-      return actual.triple[index] > minimum[index];
-    }
-  }
-  // Equal triple: a prerelease (1.9.0-beta) is below the floor (1.9.0).
-  return !actual.prerelease;
 }

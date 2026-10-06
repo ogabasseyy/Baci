@@ -3,8 +3,8 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { packageMain } from './security-integrity-load';
-import { resolveRoot } from './security-integrity-resolve';
+import { packageMain } from './security-integrity-package-main';
+import { resolveRoot } from './security-integrity-resolve-root';
 
 // Behavioral coverage for GHSA-r4xh-jqrq-34v2: smol-toml `parse()` spent
 // quadratic time in `parseKey`, which rescanned to the end of the

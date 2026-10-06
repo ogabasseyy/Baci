@@ -1,0 +1,56 @@
+diff --git a/dist/parser.js b/dist/parser.js
+index e0451de..2f50d23 100644
+--- a/dist/parser.js
++++ b/dist/parser.js
+@@ -122,10 +122,10 @@ function indexesOf(array, item) {
+ }
+ 
+ function uniqs() {
+-  var list = Array.prototype.concat.apply([], arguments);
+-  return list.filter(function (item, i) {
+-    return i === list.indexOf(item);
+-  });
++  // Backport of the 7.1.6 fix (GHSA-rj75-hqrm-r3gf): a Set keeps the
++  // first-occurrence order the previous filter/indexOf pass produced,
++  // without its quadratic cost on long index lists.
++  return Array.from(new Set(Array.prototype.concat.apply([], arguments)));
+ }
+ 
+ var Parser = /*#__PURE__*/function () {
+@@ -976,11 +976,18 @@ var Parser = /*#__PURE__*/function () {
+     var interpolations = indexesOf(word, '#{');
+ 
+     if (interpolations.length) {
++      var interpolationIndexes = new Set(interpolations);
+       hasId = hasId.filter(function (hashIndex) {
+-        return !~interpolations.indexOf(hashIndex);
++        return !interpolationIndexes.has(hashIndex);
+       });
+     }
+ 
++    // Backport of the 7.1.6 fix (GHSA-rj75-hqrm-r3gf): membership tests are
++    // built once. Scanning the arrays per index would make a flat selector
++    // such as `.a.a.a...` quadratic in its number of class/id indexes,
++    // which is enough to pin a CPU core on attacker-supplied input.
++    var classIndexes = new Set(hasClass);
++    var idIndexes = new Set(hasId);
+     var indices = (0, _sortAscending["default"])(uniqs([0].concat(hasClass, hasId)));
+     indices.forEach(function (ind, i) {
+       var index = indices[i + 1] || word.length;
+@@ -995,14 +1002,14 @@ var Parser = /*#__PURE__*/function () {
+       var sourceIndex = current[_tokenize.FIELDS.START_POS] + indices[i];
+       var source = getSource(current[1], current[2] + ind, current[3], current[2] + (index - 1));
+ 
+-      if (~hasClass.indexOf(ind)) {
++      if (classIndexes.has(ind)) {
+         var classNameOpts = {
+           value: value.slice(1),
+           source: source,
+           sourceIndex: sourceIndex
+         };
+         node = new _className["default"](unescapeProp(classNameOpts, "value"));
+-      } else if (~hasId.indexOf(ind)) {
++      } else if (idIndexes.has(ind)) {
+         var idOpts = {
+           value: value.slice(1),
+           source: source,

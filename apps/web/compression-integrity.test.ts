@@ -1,0 +1,178 @@
+/** @vitest-environment node */
+
+import { EventEmitter } from 'node:events';
+import zlib, { gunzipSync } from 'node:zlib';
+import { describe, expect, it, vi } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
+import { loadCjs } from './security-integrity-load-cjs';
+import { overrideRoots } from './security-integrity-override-roots';
+
+// Behavioral coverage for CVE-2026-87776: `compression` never released
+// its zlib stream when the client disconnected early, leaking native
+// handles per aborted response. Fixed in 1.8.2 with a `close` listener
+// plus a closed-before-stream-exists path that drops the reference so
+// later writes fall back to the raw response.
+
+interface MockReq {
+  method: string;
+  headers: Record<string, string>;
+}
+
+interface MockRes extends EventEmitter {
+  statusCode: number;
+  headersSent: boolean;
+  getHeader: (name: string) => string | undefined;
+  setHeader: (name: string, value: string) => void;
+  removeHeader: (name: string) => void;
+  writeHead: (status: number) => void;
+  write: (chunk: unknown, encoding?: string) => boolean;
+  end: (chunk?: unknown, encoding?: string) => boolean;
+  captured: Buffer[];
+}
+
+type Compression = (req: MockReq, res: MockRes, next: () => void) => void;
+
+function createRes(): MockRes {
+  const res = new EventEmitter() as MockRes;
+  const headers = new Map<string, string>();
+  res.statusCode = 200;
+  res.headersSent = false;
+  res.captured = [];
+  res.getHeader = (name: string) => headers.get(name.toLowerCase());
+  res.setHeader = (name: string, value: string) => {
+    headers.set(name.toLowerCase(), value);
+  };
+  res.removeHeader = (name: string) => {
+    headers.delete(name.toLowerCase());
+  };
+  res.writeHead = () => {
+    res.headersSent = true;
+  };
+  res.write = (chunk: unknown) => {
+    res.captured.push(
+      Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk ?? ''))
+    );
+    return true;
+  };
+  res.end = (chunk?: unknown) => {
+    if (chunk !== undefined) {
+      res.captured.push(
+        Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk))
+      );
+    } else {
+      // The middleware's stream 'end' handler calls the raw end with no
+      // chunk once the gzip stream has flushed: this is the deterministic
+      // completion signal (no sleeps).
+      res.emit('__flushed');
+    }
+    return true;
+  };
+  return res;
+}
+
+function flushed(res: MockRes): Promise<void> {
+  return new Promise((resolve) => {
+    res.once('__flushed', () => resolve());
+  });
+}
+
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(process.env.COMPRESSION_ROOTS, 'COMPRESSION_ROOTS') ??
+    findInstalledRoots('compression')
+  );
+}
+
+function loadCompression(
+  root: string
+): (options?: Record<string, unknown>) => Compression {
+  return loadCjs(root);
+}
+
+const BODY = 'hello compression world\n'.repeat(200);
+
+describe('compression integrity (CVE-2026-87776)', () => {
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('falls back to raw writes when closed before streaming in %s', (root) => {
+    const compression = loadCompression(root);
+    const req: MockReq = {
+      method: 'GET',
+      headers: { 'accept-encoding': 'gzip' },
+    };
+    const res = createRes();
+    res.setHeader('Content-Type', 'text/plain');
+    compression({ threshold: 0 })(req, res, () => {});
+    // The mock is a real EventEmitter, and the middleware subscribes via
+    // the genuine mechanism (`_on.call(res, 'close', ...)` at
+    // compression/index.js:169-171), so emitting 'close' drives the
+    // actual onResponseClose handler, not a stub. 1.8.1 registers no
+    // close listener at all, so this assertion also discriminates.
+    expect(res.listenerCount('close')).toBeGreaterThan(0);
+    res.emit('close');
+    res.end(BODY);
+    // Fixed: the abandoned stream is destroyed and dropped (index.js:233-240),
+    // so the body passes through uncompressed with no Content-Encoding.
+    // Pre-fix the stream survived close and emitted gzip bytes instead.
+    expect(res.getHeader('Content-Encoding')).toBeUndefined();
+    expect(Buffer.concat(res.captured).toString()).toBe(BODY);
+  });
+
+  it.each(
+    candidateRoots()
+  )('destroys the live stream when closed mid-response in %s', (root) => {
+    const compression = loadCompression(root);
+    const req: MockReq = {
+      method: 'GET',
+      headers: { 'accept-encoding': 'gzip' },
+    };
+    const res = createRes();
+    res.setHeader('Content-Type', 'text/plain');
+    // Call-through spy: the middleware requires the same `zlib`
+    // builtin, so the created stream is observable without stubs.
+    const spy = vi.spyOn(zlib, 'createGzip');
+    try {
+      compression({ threshold: 0 })(req, res, () => {});
+      // The write fires writeHead, which runs the onHeaders listener
+      // and creates the gzip stream — close now arrives with a live
+      // stream, unlike the closed-before-creation case above.
+      res.write(BODY);
+      const results = spy.mock.results;
+      expect(results.length).toBe(1);
+      const stream = results[0]?.value as zlib.Gzip | undefined;
+      expect(stream).toBeDefined();
+      expect(stream?.destroyed).toBe(false);
+      res.emit('close');
+      // Fixed: onResponseClose runs destroy(stream), freeing the
+      // native handle. Pre-fix no close listener existed, so the
+      // stream survived and this assertion fails.
+      expect(stream?.destroyed).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each(
+    candidateRoots()
+  )('still compresses when the response stays open in %s', async (root) => {
+    const compression = loadCompression(root);
+    const req: MockReq = {
+      method: 'GET',
+      headers: { 'accept-encoding': 'gzip' },
+    };
+    const res = createRes();
+    res.setHeader('Content-Type', 'text/plain');
+    compression({ threshold: 0 })(req, res, () => {});
+    const done = flushed(res);
+    res.end(BODY);
+    await done;
+    expect(res.getHeader('Content-Encoding')).toBe('gzip');
+    const raw = Buffer.concat(res.captured);
+    expect(raw.toString()).not.toBe(BODY);
+    expect(gunzipSync(raw).toString()).toBe(BODY);
+  });
+});

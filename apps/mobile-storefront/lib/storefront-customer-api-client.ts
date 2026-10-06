@@ -2,6 +2,7 @@ import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { DEFAULT_TIMEOUT, fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { supabase } from '@/lib/supabase';
+import { StorefrontCsrfTokenSchema } from '@/schemas/storefront-csrf-token';
 
 export type MerchantIdentifiersInput = {
   merchantId?: string | null;
@@ -11,8 +12,9 @@ export type MerchantIdentifiersInput = {
 type FetchStorefrontCustomerApiInput = {
   path: string;
   body?: Record<string, unknown>;
-  method?: 'GET' | 'POST';
-  query?: MerchantIdentifiersInput;
+  includeCsrf?: boolean;
+  method?: 'GET' | 'POST' | 'PATCH';
+  query?: MerchantIdentifiersInput & { goalId?: string };
   signal?: AbortSignal;
 };
 
@@ -72,7 +74,9 @@ function buildMerchantIdentifiers({
   };
 }
 
-function buildQueryString(input: MerchantIdentifiersInput) {
+function buildQueryString(
+  input: MerchantIdentifiersInput & { goalId?: string }
+) {
   const searchParams = new URLSearchParams();
   const identifiers = buildMerchantIdentifiers(input);
 
@@ -82,6 +86,8 @@ function buildQueryString(input: MerchantIdentifiersInput) {
   if (identifiers.merchantSlug) {
     searchParams.set('merchantSlug', identifiers.merchantSlug);
   }
+  const goalId = getOptionalString(input.goalId);
+  if (goalId) searchParams.set('goalId', goalId);
 
   return searchParams.toString();
 }
@@ -125,12 +131,28 @@ export function createStorefrontCustomerApiClient() {
 
   const fetchJson = async ({
     body,
+    includeCsrf = false,
     method = 'GET',
     path,
     query,
     signal,
   }: FetchStorefrontCustomerApiInput) => {
     const accessToken = await getAccessToken();
+    let csrfToken: string | undefined;
+    if (includeCsrf) {
+      const csrfResponse = await fetchWithTimeout(
+        `${EXPO_PUBLIC_API_URL}/api/csrf`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          method: 'GET',
+          signal,
+          timeout: DEFAULT_TIMEOUT,
+        }
+      );
+      csrfToken = StorefrontCsrfTokenSchema.parse(
+        await parseJsonResponse(csrfResponse)
+      ).token;
+    }
     const queryString = query ? buildQueryString(query) : '';
     const url = `${EXPO_PUBLIC_API_URL}${path}${queryString ? `?${queryString}` : ''}`;
     const response = await fetchWithTimeout(url, {
@@ -138,6 +160,7 @@ export function createStorefrontCustomerApiClient() {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
       },
       method,
       signal,

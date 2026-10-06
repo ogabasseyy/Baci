@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import {
   fetchCheckoutShippingCities,
   fetchCheckoutShippingStates,
@@ -135,7 +136,7 @@ describe('checkout-shipping-requests', () => {
 
   it('does not cache malformed warmed checkout state responses', async () => {
     const mockFetch = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce({
         json: async () => ({ states: null }),
         ok: true,

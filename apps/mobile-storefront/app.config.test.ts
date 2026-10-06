@@ -8,6 +8,8 @@ const originalEnv = process.env;
 
 function loadAppConfigWithEnv(env: {
   ANDROID_VERSION_CODE?: string;
+  EXPO_PUBLIC_HOSTED_STOREFRONT?: string;
+  EXPO_PUBLIC_LOCAL_STOREFRONT?: string;
   EXPO_PUBLIC_MERCHANT_DOMAIN?: string;
   EXPO_PUBLIC_POSTHOG_API_KEY?: string;
   EXPO_PUBLIC_POSTHOG_HOST?: string;
@@ -21,6 +23,8 @@ function loadAppConfigWithEnv(env: {
   jest.resetModules();
   process.env = { ...originalEnv };
   delete process.env.ANDROID_VERSION_CODE;
+  delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
+  delete process.env.EXPO_PUBLIC_LOCAL_STOREFRONT;
   delete process.env.EXPO_PUBLIC_MERCHANT_DOMAIN;
   delete process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
   delete process.env.EXPO_PUBLIC_POSTHOG_HOST;
@@ -284,6 +288,22 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
         SKAdNetworkIdentifier: 'n38lu8286q.skadnetwork',
       },
     ]);
+  });
+
+  it('loads the production builder through the explicit .ts require when no dev-mode flag is set', () => {
+    const appConfig = loadAppConfigWithEnv({
+      EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
+      STOREFRONT_FACEBOOK_APP_ID: '123456789',
+      STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'client-token',
+    });
+    // Same explicit `.ts` specifier app.config.ts uses: pins the
+    // production branch (not the dev closure) and fails loudly if the
+    // specifier stops resolving under a future loader. Rendered markers
+    // cannot distinguish the branches (slug/scheme/bundle id match).
+    const production = jest.requireActual<
+      typeof import('./config/development-storefront-expo-config-production')
+    >('./config/development-storefront-expo-config-production.ts');
+    expect(appConfig).toBe(production.buildStorefrontConfig);
   });
 
   it('allows Android to adapt orientation and resizability on large screens', () => {

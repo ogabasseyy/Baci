@@ -23,7 +23,9 @@ function hasVariantAttributeValues(
   );
 }
 
-function augmentProduct(item: z.infer<typeof ProductRowSchema>): Product {
+export function augmentProduct(
+  item: z.infer<typeof ProductRowSchema>
+): Product {
   const baseProduct = transformProduct(item);
   if (!baseProduct) {
     throw new Error('Product transformation failed for validated row');

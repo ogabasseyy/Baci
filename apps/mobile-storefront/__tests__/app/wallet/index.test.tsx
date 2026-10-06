@@ -1,3 +1,7 @@
+jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
+  useWalletSavedCards: () => false,
+}));
+
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   act,
@@ -70,9 +74,11 @@ type MockWalletContentProps = {
 const mockRedirect = jest.fn<({ href }: { href: string }) => ReactNode>();
 const mockRouterPush = jest.fn();
 let mockSearchParams: {
-  action?: string;
-  requiredAmount?: string;
-  returnTo?: string;
+  action?: string | string[];
+  requiredAmount?: string | string[];
+  returnTo?: string | string[];
+  savingsAmount?: string | string[];
+  savingsGoalId?: string | string[];
 } = {};
 const mockStorefrontScreenShell =
   jest.fn<({ children, edges }: MockStorefrontScreenShellProps) => void>();
@@ -145,18 +151,22 @@ type MockAuthState = {
 };
 const mockUseAuthStore = jest.fn<() => MockAuthState>();
 
-function mockWalletSavingsGoal(activeSavingsGoal: unknown | null) {
+function mockWalletSavingsGoal(
+  activeSavingsGoal: unknown | null,
+  balance = 125000
+) {
   mockUseWallet.mockReturnValue({
     data: {
       wallet: {
         active_savings_goal: activeSavingsGoal,
-        balance: 125000,
+        balance,
+        earnings_available: true,
         earnings_balance: 125000,
         funding_account: null,
         loyalty_points: 2000,
         requires_funding_account_consent: true,
         savings_balance: activeSavingsGoal ? 120000 : 0,
-        total_balance: activeSavingsGoal ? 245000 : 125000,
+        total_balance: balance + (activeSavingsGoal ? 120000 : 0),
       },
       transactions: [],
     },
@@ -420,6 +430,7 @@ describe('WalletScreen', () => {
       data: {
         wallet: {
           balance: 125000,
+          earnings_available: true,
           earnings_balance: 125000,
           funding_account: null,
           loyalty_points: 2000,
@@ -734,14 +745,14 @@ describe('WalletScreen', () => {
 
     render(<WalletScreen />);
 
-    expect(screen.getByText('earnings-balance:125000')).toBeOnTheScreen();
+    expect(screen.getByText('earnings-balance:0')).toBeOnTheScreen();
     expect(screen.getByText('savings-balance:0')).toBeOnTheScreen();
     expect(screen.getByText('total-balance:125000')).toBeOnTheScreen();
     expect(mockLogWarn).toHaveBeenCalledWith(
       expect.stringContaining('Wallet API balance contract warning'),
       expect.objectContaining({
         computedTotalBalance: 125000,
-        missingFields: ['earnings_balance', 'savings_balance', 'total_balance'],
+        missingFields: ['savings_balance', 'total_balance'],
       })
     );
   });
@@ -801,6 +812,7 @@ describe('WalletScreen', () => {
       data: {
         wallet: {
           balance: 125000,
+          earnings_available: true,
           earnings_balance: 125000,
           funding_account: null,
           loyalty_points: 2000,
@@ -952,6 +964,103 @@ describe('WalletScreen', () => {
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/wallet/savings/start');
     expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/wallet/manage-cards');
+  });
+
+  it('opens the savings progress flow without starting wallet-only funding', () => {
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 0);
+    render(<WalletScreen />);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Open Start Savings' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Set Savings Contribution' })
+    );
+    expect(mockInitializeWalletTopUp).not.toHaveBeenCalled();
+    expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+    expect(mockRouterPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/payment-gateway' })
+    );
+  });
+
+  it('restores the entered contribution when payment returns to savings', () => {
+    mockSearchParams = {
+      action: 'savings',
+      savingsAmount: '500',
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+    expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    expect(
+      screen.getByText('savings-contribution-amount:500')
+    ).toBeOnTheScreen();
+  });
+
+  it('takes the first value when savings params repeat in the URL', () => {
+    mockSearchParams = {
+      action: ['savings', 'fund'],
+      savingsAmount: ['500', '999'],
+      savingsGoalId: ['goal-1', 'goal-2'],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(
+      screen.getByText('savings-contribution-amount:500')
+    ).toBeOnTheScreen();
+  });
+
+  it('treats empty-array params as absent like the funding route', () => {
+    mockSearchParams = {
+      action: [],
+      savingsAmount: [],
+      savingsGoalId: [],
+    };
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 500);
+
+    render(<WalletScreen />);
+
+    expect(screen.getByText('savings-contribution-amount:')).toBeOnTheScreen();
+  });
+
+  it('keeps the savings plan open if its wallet payment cannot start', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    mockWalletSavingsGoal(createActiveSavingsGoal(0), 0);
+    mockInitializeWalletTopUp.mockRejectedValueOnce(
+      new Error('Payment unavailable')
+    );
+
+    try {
+      render(<WalletScreen />);
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Open Start Savings' })
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Set Savings Contribution' })
+      );
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Fund Savings Wallet' })
+      );
+
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Top-up Failed',
+          'Payment unavailable'
+        );
+      });
+      expect(screen.getByText('show-savings-progress:true')).toBeOnTheScreen();
+      expect(
+        screen.getByText('savings-contribution-amount:500')
+      ).toBeOnTheScreen();
+      expect(screen.getByText('show-fund-panel:false')).toBeOnTheScreen();
+    } finally {
+      alertSpy.mockRestore();
+    }
   });
 
   it('opens active savings progress and adds a manual contribution', async () => {

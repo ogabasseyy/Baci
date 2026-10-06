@@ -10,8 +10,15 @@ import type {
 } from './wallet-query';
 import {
   getActiveSavingsGoal,
+  getOwnedSavingsGoals,
   toActiveSavingsGoal,
 } from './wallet-savings-data';
+import {
+  fetchWalletSavingsInterest,
+  toWalletSavingsInterestEarnings,
+} from './wallet-savings-interest';
+import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
+import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
 
 const WalletFundingAccountSchema = z.object({
   account_name: z.string().min(1),
@@ -64,35 +71,19 @@ function normalizeWalletTransaction(row: unknown): Transaction | null {
   };
 }
 
-function getJoinedSavingsGoalProduct({
-  goalId,
-  rows,
-}: {
-  goalId: string;
-  rows: unknown[];
-}) {
-  const sourceRow = rows.find(
-    (row) =>
-      row && typeof row === 'object' && (row as { id?: unknown }).id === goalId
-  );
-  if (!sourceRow || typeof sourceRow !== 'object') {
-    return undefined;
-  }
-
-  return (sourceRow as { products?: unknown }).products;
-}
-
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;
   return {
     wallet: {
       active_savings_goal: null,
       balance: 0,
+      earnings_available: false,
       earnings_balance: 0,
       funding_account: null,
       loyalty_points: safeLoyaltyPoints,
       requires_funding_account_consent: true,
       savings_balance: 0,
+      savings_goals: [],
       total_balance: 0,
     },
     transactions: [],
@@ -163,19 +154,7 @@ export async function fetchWalletData(
         ? (coerceDatabaseNumber(customerValidation.data.loyalty_points) ?? 0)
         : (coerceDatabaseNumber(customerRow.loyalty_points) ?? 0);
 
-    return {
-      wallet: {
-        active_savings_goal: null,
-        balance: 0,
-        earnings_balance: 0,
-        funding_account: null,
-        loyalty_points: safeLoyaltyPoints,
-        requires_funding_account_consent: true,
-        savings_balance: 0,
-        total_balance: 0,
-      },
-      transactions: [],
-    };
+    return getEmptyWalletData(safeLoyaltyPoints);
   }
 
   const walletResult = await supabase
@@ -189,25 +168,29 @@ export async function fetchWalletData(
     throw walletResult.error;
   }
 
-  const [fundingAccountResult, savingsGoalsResult] = await Promise.all([
-    supabase
-      .from('customer_wallet_payment_accounts')
-      .select('account_name, account_number, bank_name, provider')
-      .eq('merchant_id', merchantId)
-      .eq('customer_id', resolvedCustomerId)
-      .eq('provider', 'paystack')
-      .eq('status', 'active')
-      .maybeSingle(),
-    supabase
-      .from('customer_savings_goals')
-      .select(
-        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, primary_image, images, attributes))'
-      )
-      .eq('merchant_id', merchantId)
-      .eq('customer_id', resolvedCustomerId)
-      .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
-      .order('created_at', { ascending: false }),
-  ]);
+  const [fundingAccountResult, savingsGoalsResult, savingsInterest] =
+    await Promise.all([
+      supabase
+        .from('customer_wallet_payment_accounts')
+        .select('account_name, account_number, bank_name, provider')
+        .eq('merchant_id', merchantId)
+        .eq('customer_id', resolvedCustomerId)
+        .eq('provider', 'paystack')
+        .eq('status', 'active')
+        .maybeSingle(),
+      supabase
+        .from('customer_savings_goals')
+        .select(
+          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
+        )
+        .eq('merchant_id', merchantId)
+        .eq('customer_id', resolvedCustomerId)
+        .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
+        .order('created_at', { ascending: false }),
+      // Best-effort and never throws: on any failure it resolves to an
+      // explicit unavailable marker, so the wallet still loads.
+      fetchWalletSavingsInterest(merchantId),
+    ]);
 
   if (fundingAccountResult.error) {
     throw fundingAccountResult.error;
@@ -219,24 +202,42 @@ export async function fetchWalletData(
   const savingsGoalRows = Array.isArray(savingsGoalsResult.data)
     ? savingsGoalsResult.data
     : [];
-  const safeSavingsBalance = savingsGoalRows.reduce(
-    (total, row) => total + (coerceDatabaseNumber(row.current_amount) ?? 0),
-    0
+  // Confirmed per-goal interest credits adjust each goal's progress and
+  // the savings/total balances before any selection or reduction, so plan
+  // progress agrees with the Earnings cell.
+  const {
+    goals: projectedSavingsGoalRows,
+    savingsBalance: safeSavingsBalance,
+  } = projectWalletSavingsInterest({
+    goals: savingsGoalRows,
+    goalInterestKobo: savingsInterest.goalInterestKobo,
+  });
+  const activeSavingsGoalRow = getActiveSavingsGoal(projectedSavingsGoalRows);
+  const productsByGoalId = await hydrateWalletSavingsProducts(
+    projectedSavingsGoalRows
   );
-  const activeSavingsGoalRow = getActiveSavingsGoal(savingsGoalRows);
   let activeSavingsGoal: WalletActiveSavingsGoal | null = null;
 
   if (activeSavingsGoalRow) {
     activeSavingsGoal = toActiveSavingsGoal({
       goal: activeSavingsGoalRow,
-      product: activeSavingsGoalRow.product_id
-        ? getJoinedSavingsGoalProduct({
-            goalId: activeSavingsGoalRow.id,
-            rows: savingsGoalRows,
-          })
-        : undefined,
+      product: productsByGoalId.get(activeSavingsGoalRow.id),
     });
   }
+
+  // All owned redeemable goals (same merchant/customer-scoped rows): lets
+  // the wallet open the exact goal a push notification names instead of
+  // always the first active row. Rows that fail display mapping are
+  // dropped, matching the active-goal behavior.
+  const savingsGoals = getOwnedSavingsGoals(projectedSavingsGoalRows).flatMap(
+    (row) => {
+      const mapped = toActiveSavingsGoal({
+        goal: row,
+        product: productsByGoalId.get(row.id),
+      });
+      return mapped ? [mapped] : [];
+    }
+  );
 
   const fundingAccountValidation =
     WalletFundingAccountSchema.nullable().safeParse(fundingAccountResult.data);
@@ -285,11 +286,12 @@ export async function fetchWalletData(
     wallet: {
       active_savings_goal: activeSavingsGoal,
       balance: safeBalance,
-      earnings_balance: safeBalance,
+      ...toWalletSavingsInterestEarnings(savingsInterest),
       funding_account: fundingAccountData,
       loyalty_points: safeLoyaltyPoints,
       requires_funding_account_consent: fundingAccountData === null,
       savings_balance: safeSavingsBalance,
+      savings_goals: savingsGoals,
       total_balance: safeBalance + safeSavingsBalance,
     },
     transactions: transactionRows,

@@ -1,0 +1,57 @@
+{
+  "scope": {
+    "environment": "staging",
+    "systemIdentifier": "7685292944002592802",
+    "merchantId": "10000000-0000-4000-8000-000000000001",
+    "customerId": "10000000-0000-4000-8000-000000000002",
+    "actorId": "baeb4f5a-54c7-4d46-8b07-9e69ab2907b3",
+    "integrationId": "d91d9e87-8e0d-44de-9b84-1e1d709633d2",
+    "businessId": "01M2381RG34HQJMHQKE7DWDACR",
+    "oldGoalId": "430314fd-cd8b-4579-98d4-e9f345713dd6",
+    "publicWalletId": "01M3W0Y93XHJY9RPQ2G75X81WG",
+    "faasWalletId": "01M3W0YENHMFJ8Z9FS76E3CC6T",
+    "apiCustomerId": "01M2T3PAHG3P5A32REX8MH3HD7",
+    "webhookCustomerId": "c096507d-dc32-45d2-9c01-871a27abfd10"
+  },
+  "expiresAt": "2026-10-06T15:59:10Z",
+  "identitySha256": "8d0a4f90a2f96182776baf91148b3bd3b27a3323eaff8d37362e24511b52d327",
+  "schemaMd5": null,
+  "stateMd5": null,
+  "snapshotObservedAt": null,
+  "optIn": {
+    "accepted": null,
+    "interestEnabled": null,
+    "termsAccepted": null,
+    "nonWithdrawableAccepted": null,
+    "acceptedAt": null,
+    "reference": null
+  },
+  "routing": {
+    "provenance": null,
+    "artifactSha256": null,
+    "reference": null,
+    "sourceNamespace": null,
+    "sourceWalletId": null,
+    "destinationNamespace": null,
+    "payoutWalletId": null,
+    "sourceSemantics": "interest_earning_wallet",
+    "destinationSemantics": "customer_net_payout_wallet",
+    "providerCustomerNamespace": null,
+    "providerCustomerId": null
+  },
+  "eligibility": {
+    "eligible": null,
+    "provenance": "provider_authenticated_wallet_get",
+    "artifactSha256": null,
+    "reference": null
+  },
+  "split": {
+    "scope": "business_global",
+    "customerAnnualRateBps": 900,
+    "businessAnnualRateBps": 300,
+    "customerNetTreatment": "full_customer_net_no_resplit",
+    "provenance": "user_forwarded_provider_confirmation",
+    "artifactSha256": null,
+    "reference": null
+  }
+}

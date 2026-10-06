@@ -1,107 +1,21 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import {
   getCustomerSavingsFeatureSettings,
   resolveCustomerSavingsContext,
 } from '@/app/api/storefront/customer/savings/shared';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  asSavingsDeviceQueryClient,
+  readSavingsDeviceProduct,
+  resolveSavingsDeviceSelection,
+} from '@/lib/customer-savings-device';
 import { customerSavingsGoalDeviceSwapSchema } from '@/schemas/customer-savings';
 import {
   mapSavingsRpcErrorStatus,
   toSavingsRouteNumber,
   toSavingsRpcError,
 } from '../route-helpers';
-
-const SAVINGS_DEVICE_PRODUCT_SELECT =
-  'id, name, price, images, condition, variants:product_variants!product_variants_product_id_fkey(id, condition, sku, price_override, primary_image, images, attributes)';
-
-const SavingsDeviceVariantSchema = z.object({
-  attributes: z.record(z.string(), z.string()).nullable().optional(),
-  condition: z.string().nullable().optional(),
-  id: z.string(),
-  images: z.array(z.string()).nullable().optional(),
-  price_override: z.union([z.number(), z.string()]).nullable().optional(),
-  primary_image: z.string().nullable().optional(),
-  sku: z.string().nullable().optional(),
-});
-
-const SavingsDeviceProductSchema = z.object({
-  condition: z.string().nullable().optional(),
-  id: z.string(),
-  images: z.array(z.string()).nullable().optional(),
-  name: z.string(),
-  price: z.union([z.number(), z.string()]),
-  variants: z.array(SavingsDeviceVariantSchema).nullable().optional(),
-});
-
-type SavingsDeviceProduct = z.infer<typeof SavingsDeviceProductSchema>;
-type SavingsDeviceVariant = z.infer<typeof SavingsDeviceVariantSchema>;
-
-function formatVariantAxisLabel(axis: string) {
-  const normalized = axis
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_');
-  const labels: Record<string, string> = {
-    ram: 'RAM',
-    rom: 'ROM',
-    sim_type: 'SIM Type',
-    storage: 'Storage',
-  };
-
-  return (
-    labels[normalized] ??
-    normalized
-      .split('_')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
-  );
-}
-
-function getVariantLabel(variant: SavingsDeviceVariant | null) {
-  if (!variant) {
-    return null;
-  }
-
-  const parts = Object.entries(variant.attributes ?? {})
-    .filter(([axis, value]) => axis !== 'color' && axis !== 'colour' && value)
-    .map(([axis, value]) => `${formatVariantAxisLabel(axis)}: ${value}`);
-
-  return parts.length > 0 ? parts.join(' · ') : variant.sku?.trim() || null;
-}
-
-function toPositiveAmount(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function getProductImage(
-  product: SavingsDeviceProduct,
-  variant: SavingsDeviceVariant | null
-) {
-  const variantImage =
-    variant?.primary_image?.trim() || variant?.images?.[0]?.trim();
-  return variantImage || product.images?.[0]?.trim() || null;
-}
-
-function buildProductSnapshot({
-  product,
-  targetAmount,
-  variant,
-}: {
-  product: SavingsDeviceProduct;
-  targetAmount: number;
-  variant: SavingsDeviceVariant | null;
-}) {
-  return {
-    condition: variant?.condition ?? product.condition ?? null,
-    image: getProductImage(product, variant),
-    name: product.name,
-    price: targetAmount,
-    variantLabel: getVariantLabel(variant),
-  };
-}
 
 function readDeviceSwapRpcRow(data: unknown) {
   const row = Array.isArray(data) ? data[0] : null;
@@ -178,21 +92,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const productResult = await resolved.supabase
-      .from('products')
-      .select(SAVINGS_DEVICE_PRODUCT_SELECT)
-      .eq('merchant_id', resolved.merchant.id)
-      .eq('id', parsed.data.productId)
-      .eq('status', 'active')
-      .maybeSingle();
-    if (productResult.error) {
-      throw productResult.error;
-    }
-
-    const productValidation = SavingsDeviceProductSchema.safeParse(
-      productResult.data
-    );
-    if (!productValidation.success) {
+    const product = await readSavingsDeviceProduct({
+      merchantId: resolved.merchant.id,
+      productId: parsed.data.productId,
+      supabase: asSavingsDeviceQueryClient(resolved.supabase),
+    });
+    if (!product) {
       return NextResponse.json(
         {
           code: 'SAVINGS_DEVICE_PRODUCT_NOT_FOUND',
@@ -202,32 +107,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const product = productValidation.data;
-    const variant = parsed.data.variantId
-      ? ((product.variants ?? []).find(
-          (candidate) => candidate.id === parsed.data.variantId
-        ) ?? null)
-      : null;
-    if (parsed.data.variantId && !variant) {
+    const device = resolveSavingsDeviceSelection({
+      product,
+      variantId: parsed.data.variantId,
+    });
+    if (!device.ok) {
       return NextResponse.json(
-        {
-          code: 'SAVINGS_DEVICE_VARIANT_NOT_FOUND',
-          error: 'Savings device variant is not available',
-        },
-        { status: 404 }
-      );
-    }
-
-    const targetAmount = toPositiveAmount(
-      variant?.price_override ?? product.price
-    );
-    if (targetAmount === null) {
-      return NextResponse.json(
-        {
-          code: 'SAVINGS_DEVICE_PRICE_INVALID',
-          error: 'Savings device price is not available',
-        },
-        { status: 409 }
+        { code: device.code, error: device.error },
+        { status: device.status }
       );
     }
 
@@ -239,14 +126,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         p_goal_id: parsed.data.goalId,
         p_merchant_id: resolved.merchant.id,
         p_product_id: product.id,
-        p_product_snapshot: buildProductSnapshot({
-          product,
-          targetAmount,
-          variant,
-        }),
-        p_target_amount: targetAmount,
+        p_product_snapshot: device.snapshot,
+        p_target_amount: device.targetAmount,
         p_title: product.name,
-        p_variant_id: variant?.id ?? null,
+        p_variant_id: device.variantId,
       }
     );
 

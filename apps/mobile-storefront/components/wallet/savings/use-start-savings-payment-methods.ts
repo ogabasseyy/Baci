@@ -41,10 +41,10 @@ export function useStartSavingsPaymentMethods({
   if (fetchKey !== prevFetchKey) {
     setPrevFetchKey(fetchKey);
     setPaymentMethodsError(null);
+    setSavedPaymentMethods([]);
+    setSelectedPaymentMethodId(null);
     if (fetchKey === null) {
       setIsLoadingPaymentMethods(false);
-      setSavedPaymentMethods([]);
-      setSelectedPaymentMethodId(null);
     } else {
       setIsLoadingPaymentMethods(true);
     }

@@ -7,11 +7,18 @@ type QueryResult = {
 };
 
 const mockFrom = jest.fn<(table: string) => unknown>();
+const mockRpc = jest.fn<(...args: unknown[]) => unknown>();
+const mockVariantRange = jest.fn<() => Promise<unknown>>();
 const mockTrackEvent = jest.fn();
+
+jest.mock('@/lib/api', () => ({
+  withSupabaseRetry: (operation: () => Promise<unknown>) => operation(),
+}));
 
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: (table: string) => mockFrom(table),
+    rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }));
 
@@ -40,6 +47,35 @@ function setupSupabaseTables(
   };
   const tableCalls: string[] = [];
   const selectCalls: Record<string, string[]> = {};
+
+  // Interest RPC fails by default so tests pin the explicit unavailable
+  // marker; success-path tests override per case.
+  const interestFailure = {
+    data: null,
+    error: { code: 'XX000', message: 'synthetic interest outage' },
+  };
+  mockVariantRange.mockResolvedValue({
+    count: 1,
+    error: null,
+    data: [
+      {
+        id: 'variant-1',
+        product_id: 'product-1',
+        condition: 'uk_used',
+        sku: 'IPH15P-256',
+        attributes: { color: 'Black', storage: '256GB' },
+      },
+    ],
+  });
+  mockRpc.mockImplementation((name) => {
+    if (name !== 'get_storefront_product_variants')
+      return Promise.resolve(interestFailure);
+    const query = {
+      order: jest.fn(() => query),
+      range: () => mockVariantRange(),
+    };
+    return query;
+  });
 
   mockFrom.mockImplementation((table: string) => {
     tableCalls.push(table);
@@ -72,6 +108,69 @@ describe('fetchWalletData', () => {
     jest.clearAllMocks();
   });
 
+  it('hydrates customer-hidden variants for every owned goal before mapping', async () => {
+    const goals = ['active', 'paused', 'completed'].map((status) => ({
+      id: `goal-${status}`,
+      product_id: 'product-1',
+      variant_id: null,
+      title: 'Phone',
+      contribution_amount: 10,
+      contribution_frequency: 'weekly',
+      current_amount: 100,
+      target_amount: 100,
+      status,
+      source_mode: 'manual',
+      maturity_date: '2026-10-04',
+      products: { id: 'product-1', name: 'Phone', price: 100, variants: [] },
+    }));
+    setupSupabaseTables({ customer_savings_goals: createResult(goals) });
+    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+    expect(result.wallet.active_savings_goal?.selection_unresolved).toBe(true);
+    expect(
+      result.wallet.savings_goals?.map((goal) => goal.selection_unresolved)
+    ).toEqual([true, true, true]);
+    expect(
+      result.wallet.savings_goals?.find((goal) => goal.status === 'completed')
+        ?.variant_resolution_options
+    ).toEqual([
+      { id: 'variant-1', label: 'Used · Color: Black · Storage: 256GB' },
+    ]);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_variants',
+      { p_product_ids: ['product-1'] },
+      { count: 'exact' }
+    );
+  });
+
+  it('throws variant RPC errors rather than treating the goal as resolved', async () => {
+    setupSupabaseTables({
+      customer_savings_goals: createResult([
+        {
+          id: 'goal-1',
+          product_id: 'product-1',
+          variant_id: null,
+          title: 'Phone',
+          contribution_amount: 10,
+          contribution_frequency: 'weekly',
+          current_amount: 100,
+          target_amount: 100,
+          status: 'completed',
+          source_mode: 'manual',
+          maturity_date: '2026-10-04',
+          products: { id: 'product-1', name: 'Phone', price: 100 },
+        },
+      ]),
+    });
+    mockVariantRange.mockResolvedValue({
+      count: null,
+      data: null,
+      error: { message: 'synthetic variant outage' },
+    });
+    await expect(
+      fetchWalletData('customer-1', 'merchant-1', 'user-1')
+    ).rejects.toThrow('Unable to load savings product variants');
+  });
+
   it('returns an empty wallet without querying when no owner identifier exists', async () => {
     const result = await fetchWalletData(null, 'merchant-1', null);
 
@@ -79,11 +178,13 @@ describe('fetchWalletData', () => {
       wallet: {
         active_savings_goal: null,
         balance: 0,
+        earnings_available: false,
         earnings_balance: 0,
         funding_account: null,
         loyalty_points: 0,
         requires_funding_account_consent: true,
         savings_balance: 0,
+        savings_goals: [],
         total_balance: 0,
       },
       transactions: [],
@@ -235,14 +336,16 @@ describe('fetchWalletData', () => {
         maturity_date: '2026-09-30',
         product_condition: 'Used',
         product_image: 'https://cdn.example.com/iphone.jpg',
-        product_variant_label: 'Storage: 256GB',
+        product_variant_label: 'Color: Black · Storage: 256GB',
+        selection_unresolved: false,
         source_mode: 'manual',
         status: 'active',
         target_amount: 120000,
         title: 'iPhone 15 Pro',
       },
       balance: 5000,
-      earnings_balance: 5000,
+      earnings_available: false,
+      earnings_balance: null,
       funding_account: {
         account_name: 'Ogabassey/Jane Doe',
         account_number: '1234567890',
@@ -252,11 +355,49 @@ describe('fetchWalletData', () => {
       loyalty_points: 1200,
       requires_funding_account_consent: false,
       savings_balance: 35000.5,
+      savings_goals: [
+        {
+          contribution_amount: 10000,
+          contribution_frequency: 'weekly',
+          current_amount: 20000,
+          id: 'goal-1',
+          maturity_date: '2026-09-30',
+          product_condition: 'Used',
+          product_image: 'https://cdn.example.com/iphone.jpg',
+          product_variant_label: 'Color: Black · Storage: 256GB',
+          selection_unresolved: false,
+          source_mode: 'manual',
+          status: 'active',
+          target_amount: 120000,
+          title: 'iPhone 15 Pro',
+        },
+        {
+          contribution_amount: 5000,
+          contribution_frequency: 'weekly',
+          current_amount: 15000.5,
+          id: 'goal-2',
+          maturity_date: '2026-10-30',
+          product_condition: null,
+          product_image: null,
+          product_variant_label: null,
+          selection_unresolved: false,
+          source_mode: 'manual',
+          status: 'paused',
+          target_amount: 90000,
+          title: 'Savings goal',
+        },
+      ],
       total_balance: 40000.5,
     });
     expect(tableCalls).not.toContain('products');
-    expect(selectCalls.customer_savings_goals[0]).toContain(
-      'variants:product_variants!product_variants_product_id_fkey'
+    expect(selectCalls.customer_savings_goals[0]).not.toContain(
+      'product_variants'
+    );
+    expect(selectCalls.customer_savings_goals[0]).toContain('price');
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_variants',
+      { p_product_ids: ['product-1'] },
+      { count: 'exact' }
     );
     expect(result.transactions).toEqual([
       {
@@ -267,6 +408,81 @@ describe('fetchWalletData', () => {
         type: 'credit',
       },
     ]);
+  });
+
+  it('exposes accrued interest earnings when the interest lookup succeeds', async () => {
+    setupSupabaseTables();
+    mockRpc.mockImplementation(async () => ({
+      data: { credited_interest_kobo: 125000, goal_interest_kobo: [] },
+      error: null,
+    }));
+    const merchantId = '10000000-0000-4000-8000-000000000001';
+
+    const result = await fetchWalletData('customer-1', merchantId, 'user-1');
+
+    expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
+      p_merchant_id: merchantId,
+      p_include_goals: true,
+    });
+    expect(result.wallet).toMatchObject({
+      earnings_available: true,
+      earnings_balance: 1250,
+    });
+  });
+
+  it('applies confirmed per-goal interest to goal progress and balances', async () => {
+    const goalId = '30000000-0000-4000-8000-000000000001';
+    setupSupabaseTables({
+      customer_savings_goals: createResult([
+        {
+          contribution_amount: '10000',
+          contribution_frequency: 'weekly',
+          current_amount: '20000',
+          id: goalId,
+          maturity_date: '2026-09-30',
+          product_id: null,
+          product_snapshot: {},
+          source_mode: 'manual',
+          status: 'active',
+          target_amount: '120000',
+          title: 'General savings',
+          variant_id: null,
+        },
+      ]),
+    });
+    mockRpc.mockImplementation(async () => ({
+      data: {
+        credited_interest_kobo: 50000,
+        goal_interest_kobo: [
+          { goal_id: goalId, credited_interest_kobo: 50000 },
+        ],
+      },
+      error: null,
+    }));
+
+    const result = await fetchWalletData(
+      'customer-1',
+      '10000000-0000-4000-8000-000000000001',
+      'user-1'
+    );
+
+    expect(result.wallet.active_savings_goal).toEqual(
+      expect.objectContaining({ current_amount: 20500 })
+    );
+    expect(result.wallet.savings_balance).toBe(20500);
+    expect(result.wallet.total_balance).toBe(25500);
+    expect(result.wallet.earnings_balance).toBe(500);
+  });
+
+  it('marks earnings unavailable when the interest lookup fails', async () => {
+    setupSupabaseTables();
+
+    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
+
+    expect(result.wallet).toMatchObject({
+      earnings_available: false,
+      earnings_balance: null,
+    });
   });
 
   it('skips product metadata lookup for general savings goals without product ids', async () => {

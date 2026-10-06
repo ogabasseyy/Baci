@@ -33,7 +33,9 @@ export function goalMatchesCartItem(
     return false;
   }
 
-  return !goal.variantId || goal.variantId === item.variant_id;
+  return !goal.variantId
+    ? item.variant_id == null
+    : goal.variantId === item.variant_id;
 }
 
 export function getEligibleCheckoutSavingsGoal(

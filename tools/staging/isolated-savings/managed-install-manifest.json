@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "files": {
+    "managed-gateway-cli.mjs": "314f63daa895429a5ba4134e2b748edcc5f0c41965a3b6740ce102fd69162866",
+    "managed-gateway.mjs": "23cacd98877c00a7111cae3b10b4fb78614ffb88786f7ac052ff6e0555fa90b7",
+    "managed-files.mjs": "d9d0c6cbfeddbf6ecd249dd9760d8cd09f38880fdcbefc7a0cdbd79e1553b061",
+    "managed-inventory-helper.mjs": "e78e34607bab7b5eac71878527081f808199e89f999d46c638b5ac298529a80d",
+    "private-routing.mjs": "8aa326f61e6de815a8cd6a16aca1fbae92eb8db925e0d65dc4b25a93c32a0617",
+    "private-routing-inventory.mjs": "f8feff6a3b48645f0ae44d25cf1ab18952e0c11510a2aeac2f6f6cd898c4ddbd",
+    "private-routing-supervisor-inventory.mjs": "6205de16870dfb1e5219df2cafc2fdd6252505d0f3349a1064e0ffe8b49f7781",
+    "private-routing-supervisor-child.py": "6dfdedd0d182d8b836c7a67b30d50c7049e6f7b5272ceb7ba4da507b2723b16d",
+    "compose.mjs": "7e34a257b21c9527d97aaac4ffc3957225b55d3be6e08455bd7b272eba5575dd",
+    "install-managed-gateway.py": "4898ab5eb45b6c7e64d1120c4fda11f971ebe99648eaa8bf9b5bc836959e2780",
+    "managed-install-policy.py": "b36bc6c03576a4e45bd2e874d885db24e0f83fdec169b6d606c5d3e712a976c4",
+    "managed-install-transaction.py": "3db02c46852fcb02a034b97ed03fca6eac4b28cf38102de64c207f0e1cd75aec",
+    "managed-gateway.service": "4458d76a23f530586126c1da5b0e05615deb4b0643e0fdcc0c58f9f42908a00b",
+    "managed-gateway.sudoers": "b09019b09218b966eb83f64acbc670bdf3f00ccfda3c266d46f7dac9e3be2589"
+  },
+  "versions": {
+    "/usr/bin/node": "v24.18.0",
+    "/usr/bin/python3": "Python 3.12.3",
+    "/usr/sbin/nginx": "nginx version: nginx/1.30.3",
+    "/usr/bin/docker": "Docker version 29.6.1, build 8900f1d",
+    "/usr/bin/sudo": "Sudo version 1.9.15p5",
+    "/usr/sbin/visudo": "visudo version 1.9.15p5",
+    "/usr/bin/systemctl": "systemd 255 (255.4-1ubuntu8.17)",
+    "/usr/bin/systemd-analyze": "systemd 255 (255.4-1ubuntu8.17)"
+  }
+}

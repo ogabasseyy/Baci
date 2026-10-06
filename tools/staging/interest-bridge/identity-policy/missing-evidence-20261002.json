@@ -1,0 +1,63 @@
+{
+  "status": "blocked_pending_owner_corroboration",
+  "changesMade": false,
+  "liveWritesAllowed": false,
+  "providerIdMappingApproved": false,
+  "candidate": null,
+  "deadline": "2026-10-06T15:59:10Z",
+  "principalKobo": 10000,
+  "historicalIdentityPath": {
+    "status": "exact_wallet_join_available_for_root_corroboration",
+    "sourceArtifact": "/home/bassey/baci-legacy-proof-final.4flGg4nk/legacy-proof.json",
+    "sourceSha256": "86d683c4aab907efa1040baa41cfcc5e9efe21d5e427c2bb3f8e4a250a68db9c",
+    "historicalSignatureStatus": "unavailable",
+    "originalPayloadIntegrity": "aead_authenticated",
+    "historicalProvenance": "provider_reconciliation",
+    "historicalObservedAt": "2026-09-27T11:26:02.580Z",
+    "providerResponseSha256": "67198d6703842938342a788e9a9024ad7027f9cdaa4ec727e2083d6b7e595814",
+    "providerTransactionId": "PVB01M3CR6SZGH4K3GCPEMYKXYJ04",
+    "historicalPublicWalletId": "01M3CQX27G9687EFSF1TKYMPR9",
+    "webhookCustomerId": "c096507d-dc32-45d2-9c01-871a27abfd10",
+    "observedApiCustomerAlias": "01M2T3PAHG3P5A32REX8MH3HD7",
+    "providerIdMappingApproved": false
+  },
+  "missingEvidence": [
+    {
+      "code": "historical_customer_join_owner_corroboration",
+      "required": "Parent root collector verifies the pinned reconciled original receipt, current exact business/public-wallet GET and current immutable app-goal binding; owner reviews independent pins."
+    },
+    {
+      "code": "goal_interest_wallet_eligibility",
+      "required": "An already-enabled exact goal-bound wallet with independently documented policy eligibility. The funded old wallet reports false. The empty true wallet requires a separate new goal and provisioned binding; the old funded goal and its history must not be reassigned."
+    },
+    {
+      "code": "payout_routing",
+      "required": "Provider-authenticated or documented business-scoped mapping explicitly names webhook customer, interest source wallet namespace/public-FAAS relation and destination. No guessed source=destination."
+    },
+    {
+      "code": "owner_opt_in",
+      "required": "Authenticated owner acceptance binds exact merchant/customer/goal/current wallet and policy reference."
+    },
+    {
+      "code": "global_split",
+      "required": "Owner/provider contract attestation confirms 900 customer annual basis points, 300 business annual basis points and full customer net without a second split."
+    }
+  ],
+  "observedReadOnlyArtifacts": [
+    {
+      "path": "/home/bassey/baci-interest-mappings-20261002.json",
+      "sha256": "4cde33e098482b4116b1000e7b0fc753273456f38afa97a70176a8b10435e611",
+      "finding": "The old public wallet is exactly goal-bound; create_customer intent is unknown and registration provenance is null. This absence does not invalidate a corroborated historical-wallet join."
+    },
+    {
+      "path": "/home/bassey/baci-customer-wallet-readback-20261002.json",
+      "sha256": "3a0bc2106a0fa28bbbbea5265cfebe4ebcc136aca4a7613fb35abdee128b1c6e",
+      "finding": "API customer lookup third-party identifier differs from the app customer; direct registration path remains unavailable."
+    },
+    {
+      "path": "/home/bassey/baci-provider-wallet-shape-r3-result-20261002.json",
+      "sha256": "ac0e4294bbea64809836e981e3a83c632a810ed3c816a197d6c277a5ac608023",
+      "finding": "Exact old/empty public and FAAS identifiers plus matching API aliases are observed; payout source/destination mapping is absent."
+    }
+  ]
+}

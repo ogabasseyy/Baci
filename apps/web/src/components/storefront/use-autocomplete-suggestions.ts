@@ -66,6 +66,7 @@ export function useAutocompleteSuggestions({
     setSettledQuery(null);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refetchToken is intentionally unread — the parent bumps it to force a refetch without changing the query.
   useEffect(() => {
     if (debouncedValue.length < 2) {
       return;

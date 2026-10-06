@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { createClient, type Session } from '@supabase/supabase-js';
+import type { FetchImplementation } from '@/types/fetch';
 import { createSupabaseAuthTimeoutFetch } from './supabase-auth-timeout-fetch';
 
 function accessToken(exp: number): string {
@@ -47,7 +48,7 @@ describe('Supabase Auth client refresh boundaries', () => {
   it('releases the shared refresh lock after background refresh transport failures', async () => {
     const storage = storageFor(session('refresh-token', true));
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockRejectedValueOnce(new TypeError('connection lost after commit'))
       .mockResolvedValueOnce(new Response(null, { status: 503 }));
     const client = createClient(
@@ -71,7 +72,7 @@ describe('Supabase Auth client refresh boundaries', () => {
 
   it('uses the explicitly supplied token without rotating stored auth first', async () => {
     const storage = storageFor(session('stored-refresh-token', true));
-    const fetchImpl = jest.fn<typeof fetch>(async () =>
+    const fetchImpl = jest.fn<FetchImplementation>(async () =>
       Response.json({
         access_token: accessToken(Math.floor(Date.now() / 1000) + 3_600),
         expires_in: 3_600,
@@ -97,7 +98,7 @@ describe('Supabase Auth client refresh boundaries', () => {
 
   it('discards an explicit refresh after auth storage switches accounts', async () => {
     const storage = storageFor(session('account-b-refresh-token'));
-    const fetchImpl = jest.fn<typeof fetch>();
+    const fetchImpl = jest.fn<FetchImplementation>();
     const client = createClient(
       'https://project.supabase.co',
       'publishable-key',
@@ -129,7 +130,7 @@ describe('Supabase Auth client refresh boundaries', () => {
     ],
   ])('does not internally retry an explicit checkout refresh after %s', async (_label, response) => {
     const storage = storageFor(session('stored-refresh-token'));
-    const fetchImpl = jest.fn<typeof fetch>(response);
+    const fetchImpl = jest.fn<FetchImplementation>(response);
     const client = createClient(
       'https://project.supabase.co',
       'publishable-key',
@@ -154,7 +155,7 @@ describe('Supabase Auth client refresh boundaries', () => {
   it('bypasses a transient refresh failure cache for an explicit checkout retry', async () => {
     const storage = storageFor(session('stored-refresh-token'));
     const fetchImpl = jest
-      .fn<typeof fetch>()
+      .fn<FetchImplementation>()
       .mockResolvedValueOnce(new Response(null, { status: 503 }))
       .mockResolvedValueOnce(
         Response.json({

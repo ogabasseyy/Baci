@@ -76,7 +76,8 @@ describe('wallet savings data helpers', () => {
       maturity_date: '2026-09-30',
       product_condition: 'New',
       product_image: 'https://cdn.example.com/variant.jpg',
-      product_variant_label: 'Storage: 256GB',
+      product_variant_label: 'Color: Black · Storage: 256GB',
+      selection_unresolved: false,
       source_mode: 'manual',
       status: 'active',
       target_amount: 120000,
@@ -125,7 +126,127 @@ describe('wallet savings data helpers', () => {
       expect.objectContaining({
         product_condition: 'Used',
         product_image: 'https://cdn.example.com/product.jpg',
-        product_variant_label: null,
+        product_variant_label: 'Exact variant unavailable',
+        selection_unresolved: true,
+      })
+    );
+  });
+
+  it('offers priced variants for re-selection when the selection is unresolved', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, status: 'completed', variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          price: '700000',
+          variants: [
+            {
+              attributes: { storage: '128GB' },
+              condition: 'new',
+              id: 'variant-128',
+              price_override: '15000',
+            },
+            {
+              attributes: { storage: '256GB' },
+              condition: 'new',
+              id: 'variant-256',
+              price_override: '18000',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: true,
+        variant_resolution_options: [
+          { id: 'variant-128', label: 'New · Storage: 128GB' },
+          { id: 'variant-256', label: 'New · Storage: 256GB' },
+        ],
+      })
+    );
+  });
+
+  it('does not mark a product with only an inventory anchor unresolved', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [
+            {
+              id: 'inventory-anchor',
+              is_inventory_anchor: true,
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: false,
+      })
+    );
+  });
+
+  it.each([
+    ['inactive', { is_active: false }],
+    ['deleted', { deleted_at: '2026-01-01T00:00:00.000Z' }],
+    ['archived', { archived_at: '2026-01-01T00:00:00.000Z' }],
+    ['non-active status', { status: 'draft' }],
+  ])('does not mark a product with only a %s variant unresolved', (_label, visibility) => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [{ id: 'hidden-variant', ...visibility }],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: false,
+      })
+    );
+  });
+
+  it('excludes hidden variants from re-selection options', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: { ...activeGoal, status: 'completed', variant_id: null },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          price: '700000',
+          variants: [
+            {
+              attributes: { storage: '128GB' },
+              condition: 'new',
+              id: 'variant-128',
+              is_active: false,
+              price_override: '15000',
+            },
+            {
+              attributes: { storage: '256GB' },
+              condition: 'new',
+              id: 'variant-256',
+              is_active: true,
+              price_override: '18000',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        selection_unresolved: true,
+        variant_resolution_options: [
+          { id: 'variant-256', label: 'New · Storage: 256GB' },
+        ],
       })
     );
   });
@@ -266,6 +387,37 @@ describe('wallet savings data helpers', () => {
         product_condition: 'New',
         product_image: 'https://cdn.example.com/snapshot.jpg',
         product_variant_label: 'Storage: 512GB',
+      })
+    );
+  });
+
+  it('uses the live selected variant label when a legacy snapshot omits color', () => {
+    expect(
+      toActiveSavingsGoal({
+        goal: {
+          ...activeGoal,
+          product_snapshot: {
+            condition: 'New',
+            variant_label: 'Storage: 256GB',
+          },
+        },
+        product: {
+          id: 'product-1',
+          images: ['https://cdn.example.com/product.jpg'],
+          name: 'iPhone 15 Pro',
+          variants: [
+            {
+              attributes: { color: 'Black', storage: '256GB' },
+              condition: 'new',
+              id: 'variant-1',
+            },
+          ],
+        },
+      })
+    ).toEqual(
+      expect.objectContaining({
+        product_condition: 'New',
+        product_variant_label: 'Color: Black · Storage: 256GB',
       })
     );
   });

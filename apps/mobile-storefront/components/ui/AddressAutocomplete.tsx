@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Keyboard,
   Pressable,
   Text,
   TextInput,
@@ -13,7 +12,6 @@ import Colors, { BRAND } from '@/constants/Colors';
 import {
   clearPredictionCache,
   fetchAddressPredictions,
-  fetchPlaceDetails,
   generateSessionToken,
 } from './AddressAutocomplete.api';
 import { addressAutocompleteStyles as styles } from './AddressAutocomplete.styles';
@@ -22,7 +20,7 @@ import type {
   PlacePrediction,
 } from './AddressAutocomplete.types';
 import { useAddressSuggestionsPortal } from './address-suggestions-portal';
-import { applyPlaceSelection } from './apply-place-selection';
+import { usePredictionSelectHandler } from './use-address-prediction-select';
 
 export type { PlaceDetails } from './AddressAutocomplete.types';
 
@@ -64,7 +62,7 @@ export function AddressAutocomplete({
 
   const isMountedRef = useRef(true);
   const latestQueryRef = useRef(value);
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<View>(null);
 
   useEffect(() => {
@@ -87,26 +85,17 @@ export function AddressAutocomplete({
     latestQueryRef.current = value;
   }
 
-  const handlePredictionSelect = async (prediction: PlacePrediction) => {
-    Keyboard.dismiss();
-    latestQueryRef.current = prediction.mainText;
-    setInternalValue(prediction.mainText);
-    onChangeText?.(prediction.mainText);
-    setPredictions([]);
-    if (isMountedRef.current) {
-      setIsLoading(true);
-    }
-
-    const details = await fetchPlaceDetails({ prediction, sessionToken });
-    applyPlaceSelection({
-      details,
-      isMountedRef,
-      onSelect,
-      setIsLoading,
-      setPredictions,
-      setSessionToken,
-    });
-  };
+  const handlePredictionSelect = usePredictionSelectHandler({
+    isMountedRef,
+    latestQueryRef,
+    onChangeText,
+    onSelect,
+    sessionToken,
+    setInternalValue,
+    setIsLoading,
+    setPredictions,
+    setSessionToken,
+  });
 
   // Keep the screen-root dropdown attached while the form scrolls or resizes.
   const shouldShowSuggestions = isFocused && predictions.length > 0;
@@ -153,9 +142,6 @@ export function AddressAutocomplete({
       clearInterval(tracker);
       portal.hide();
     };
-    // handlePredictionSelect is recreated per render; the effect keys off the
-    // data that changes what the portal displays.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, [
     shouldShowSuggestions,
     predictions,

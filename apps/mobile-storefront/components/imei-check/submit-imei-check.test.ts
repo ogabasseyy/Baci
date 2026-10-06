@@ -1,9 +1,10 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { submitImeiCheck } from './submit-imei-check';
 
 describe('submitImeiCheck', () => {
   it('sends async capability and selected device context', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () => Promise.resolve({ success: true }),
       ok: true,
       status: 200,

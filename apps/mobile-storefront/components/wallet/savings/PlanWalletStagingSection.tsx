@@ -7,6 +7,7 @@ import {
   purchasingPowerKobo,
 } from '@/lib/piggyvest/savings-policy';
 import { PlanWalletStagingPreviewRow } from './PlanWalletStagingPreviewRow';
+import { savingsCardAccent } from './savings-card-accent';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { StartSavingsColors } from './start-savings.types';
 
@@ -38,10 +39,7 @@ export function PlanWalletStagingSection({
     return (
       <View
         accessibilityLabel="Plan wallet staging preview"
-        style={[
-          styles.sourceModeCard,
-          { borderColor: colors.border, backgroundColor: colors.card },
-        ]}
+        style={[styles.sourceModeCard, savingsCardAccent(colors)]}
       >
         <Text style={[styles.sectionLabel, { color: colors.text }]}>
           Plan wallet (staging preview)
@@ -68,10 +66,7 @@ export function PlanWalletStagingSection({
   return (
     <View
       accessibilityLabel="Plan wallet staging preview"
-      style={[
-        styles.sourceModeCard,
-        { borderColor: colors.border, backgroundColor: colors.card },
-      ]}
+      style={[styles.sourceModeCard, savingsCardAccent(colors)]}
     >
       <Text style={[styles.sectionLabel, { color: colors.text }]}>
         Plan wallet (staging preview)

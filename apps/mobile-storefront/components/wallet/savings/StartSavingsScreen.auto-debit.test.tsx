@@ -38,8 +38,8 @@ jest.mock('@/hooks/use-debounce', () => ({
   useDebounce: (value: string) => value,
 }));
 
-jest.mock('@/hooks/use-products', () => ({
-  useProducts: () => mockUseProducts(),
+jest.mock('@/hooks/use-product-search', () => ({
+  useProductSearch: () => mockUseProducts(),
 }));
 
 jest.mock('@/hooks/use-wallet', () => ({
@@ -130,7 +130,7 @@ describe('StartSavingsScreen auto-debit authorization', () => {
     await waitFor(() =>
       expect(screen.getByText('No saved cards yet.')).toBeOnTheScreen()
     );
-    fireEvent.press(getSavingsButton('Authorize savings card'));
+    fireEvent.press(getSavingsButton('Add savings card'));
 
     await waitFor(() =>
       expect(mockInitializeSavingsAuthorization).toHaveBeenCalledTimes(1)
@@ -159,15 +159,32 @@ describe('StartSavingsScreen auto-debit authorization', () => {
     await waitFor(() =>
       expect(screen.getByText('No saved cards yet.')).toBeOnTheScreen()
     );
-    fireEvent.press(getSavingsButton('Authorize savings card'));
+    fireEvent.press(getSavingsButton('Add savings card'));
 
     await waitFor(() =>
       expect(mockInitializeSavingsAuthorization).toHaveBeenCalledTimes(1)
     );
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(Alert.alert).toHaveBeenCalledWith(
-      'Unable to authorize card',
+      'Unable to add card',
       'Authorization failed'
     );
   });
+});
+
+jest.mock('react-native-keyboard-controller', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { ScrollView, View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    KeyboardAvoidingView: View,
+    KeyboardController: { isVisible: () => false, dismiss: async () => {} },
+    KeyboardAwareScrollView: React.forwardRef(
+      (
+        props: import('react-native').ScrollViewProps,
+        ref: import('react').Ref<import('react-native').ScrollView>
+      ) => React.createElement(ScrollView, { ...props, ref })
+    ),
+  };
 });

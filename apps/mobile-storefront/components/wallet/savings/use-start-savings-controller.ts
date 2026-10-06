@@ -1,13 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useDebounce } from '@/hooks/use-debounce';
-import { useProducts } from '@/hooks/use-products';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
-import type { Product } from '@/types/product';
 import {
   calculateMaturityDate,
   formatDateInput,
@@ -20,32 +17,30 @@ import {
   type SavingsFundingOption,
 } from './start-savings.helpers';
 import type {
-  SavingsProductChoice,
   SavingsSearchParams,
   SavingsSourceMode,
 } from './start-savings.types';
-import {
-  applyStartSavingsProductSelection,
-  readParam,
-  validateStartSavingsForm,
-} from './start-savings-controller.utils';
+import { readParam } from './start-savings-controller.utils';
+import { useSavingsPlanFunding } from './use-savings-plan-funding';
+import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
 import { useStartSavingsPaymentMethods } from './use-start-savings-payment-methods';
+import { useStartSavingsProductSearch } from './use-start-savings-product-search';
+import { useStartSavingsProductSelection } from './use-start-savings-product-selection';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
+import { useStartSavingsVariantSelection } from './use-start-savings-variant-selection';
 
 const DEFAULT_PREFERRED_DEBIT_TIME = '06:20';
 
 export function useStartSavingsController() {
+  const [goalIdempotencyKey, setGoalIdempotencyKey] = useState<string | null>(
+    null
+  );
   const params = useLocalSearchParams<SavingsSearchParams>();
   const { merchantId } = useAuthStore(
     useShallow((state) => ({ merchantId: state.merchantId }))
   );
   const { data: walletData, isRefetching, refetch } = useWallet();
   const [searchValue, setSearchValue] = useState('');
-  const [selectedProduct, setSelectedProduct] =
-    useState<SavingsProductChoice | null>(null);
-  const [targetAmount, setTargetAmount] = useState(
-    readParam(params.targetAmount) ?? ''
-  );
   const [contributionAmount, setContributionAmount] = useState('');
   const [frequency, setFrequency] = useState<SavingsFrequency>('daily');
   const [preferredDebitTime, setPreferredDebitTime] = useState(
@@ -67,16 +62,26 @@ export function useStartSavingsController() {
   const [showFundingModal, setShowFundingModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdGoalId, setCreatedGoalId] = useState<string | null>(null);
   const [selectedFundingOption, setSelectedFundingOption] =
     useState<SavingsFundingOption>('wallet');
   const [sourceMode, setSourceMode] = useState<SavingsSourceMode>('manual');
-  const debouncedSearch = useDebounce(searchValue, 250);
-  const { products, isLoading: isProductsLoading } = useProducts({
-    limit: 8,
-    search: debouncedSearch.trim() ? debouncedSearch.trim() : undefined,
+  const { debouncedSearch, isProductsLoading, products, resolveProduct } =
+    useStartSavingsProductSearch({ params, searchValue });
+  const {
+    clearProductSelection,
+    selectProduct,
+    selectVariant,
+    selectedCatalogProduct,
+    selectedProduct,
+    variantOptions,
+  } = useStartSavingsProductSelection({
+    params,
+    products,
+    resolveProduct,
+    setFormError,
+    setSearchValue,
   });
-  const normalizedProductId = readParam(params.productId);
-  const normalizedVariantId = readParam(params.variantId);
   const activeMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
   const activeMerchantSlug = CONFIG.MERCHANT_SLUG?.trim() || undefined;
   const {
@@ -91,43 +96,25 @@ export function useStartSavingsController() {
     activeMerchantSlug,
     sourceMode,
   });
-  const safeWalletBalance =
-    walletData?.wallet.earnings_balance ?? walletData?.wallet.balance ?? 0;
+  const safeWalletBalance = walletData?.wallet.balance ?? 0;
   const fundingAccount = walletData?.wallet.funding_account ?? null;
 
-  const selectProduct = (product: Product) =>
-    applyStartSavingsProductSelection({
-      previousSelectedProduct: selectedProduct,
-      product,
-      setFormError,
-      setSearchValue,
-      setSelectedProduct,
-      setTargetAmount,
-      variantId: normalizedVariantId,
+  const routeVariantId = readParam(params.variantId);
+  const { selectVariantOption, variantOptionGroups } =
+    useStartSavingsVariantSelection({
+      clearProductSelection,
+      routeVariantId,
+      searchValue,
+      selectedCatalogProduct,
+      selectedProduct,
+      selectProduct,
     });
-
-  useEffect(() => {
-    if (!normalizedProductId || selectedProduct) {
-      return;
-    }
-    const preselected = products.find(
-      (product) => product.id === normalizedProductId
-    );
-    if (!preselected) {
-      return;
-    }
-    applyStartSavingsProductSelection({
-      product: preselected,
-      setFormError,
-      setSearchValue,
-      setSelectedProduct,
-      setTargetAmount,
-      variantId: normalizedVariantId,
-    });
-  }, [normalizedProductId, normalizedVariantId, products, selectedProduct]);
-
   const contributionValue = parseAmount(contributionAmount);
-  const targetValue = parseAmount(targetAmount);
+  const targetValue =
+    selectedProduct && !selectedProduct.requiresVariantSelection
+      ? selectedProduct.price
+      : 0;
+  const targetAmount = targetValue > 0 ? String(targetValue) : '';
   const initialContributionValue = parseAmount(initialContributionAmount);
   const maturityDate =
     calculateMaturityDate({
@@ -143,8 +130,20 @@ export function useStartSavingsController() {
     initialContributionEnabled,
   });
   const requiredTopUpAmount = getRequiredTopUp({
-    earningsBalance: safeWalletBalance,
+    availableBalance: safeWalletBalance,
     requiredContribution: effectiveInitialContribution,
+  });
+  const {
+    fetchExistingPlanFunding,
+    fetchPlanFunding,
+    fundingError: planFundingError,
+    planFundingAccounts,
+    planFundingPhase,
+    planFundingStatusCode,
+  } = useSavingsPlanFunding({
+    activeMerchantId: activeMerchantId ?? undefined,
+    activeMerchantSlug,
+    goalId: createdGoalId,
   });
   const {
     goToWallet,
@@ -153,17 +152,21 @@ export function useStartSavingsController() {
     isAuthorizingCard,
     isSubmitting,
     openWalletFundingScreen,
+    submitBankTransferContribution,
     submitSavingsGoal,
   } = useStartSavingsSubmit({
     activeMerchantId: activeMerchantId ?? undefined,
     activeMerchantSlug,
     contributionValue,
+    createdGoalId,
     effectiveInitialContribution,
     frequency,
     fundingAccount,
+    setCreatedGoalId,
     initialContributionIdempotencyKey,
     maturityDate,
-    normalizedVariantId,
+    goalIdempotencyKey,
+    setGoalIdempotencyKey,
     preferredDebitTime,
     refetch,
     requiredTopUpAmount,
@@ -178,62 +181,47 @@ export function useStartSavingsController() {
     sourceMode,
     startDate,
     targetValue,
+    variantId: selectedProduct?.variantId ?? null,
   });
 
-  const handleContinue = () => {
-    const error = validateStartSavingsForm({
-      acceptsNonWithdrawableTerms,
-      contributionValue,
-      initialContributionEnabled,
-      initialContributionValue,
-      paymentProvider: 'paystack',
-      selectedProduct,
-      sourceMode,
-      targetValue,
-    });
-    setFormError(error);
-    if (!error) {
-      setShowPreviewModal(true);
-    }
-  };
-
-  const handleFundingContinue = async () => {
-    if (sourceMode === 'auto_debit') {
-      if (!selectedPaymentMethodId) {
-        setPaymentMethodsError(
-          'Select a saved card or authorize a new Paystack card.'
-        );
-        return;
-      }
-      await submitSavingsGoal();
-      return;
-    }
-
-    if (selectedFundingOption === 'bank_transfer') {
-      setShowFundingModal(false);
-      setShowTransferModal(true);
-      return;
-    }
-
-    await submitSavingsGoal();
-  };
-
-  const handleSourceModeChange = (nextMode: SavingsSourceMode) => {
-    setSourceMode(nextMode);
-    setFormError(null);
-    setPaymentMethodsError(null);
-    if (nextMode === 'auto_debit') {
-      setInitialContributionEnabled(false);
-      setInitialContributionAmount('');
-    }
-  };
+  const {
+    confirmPlanTransfer,
+    handleContinue,
+    handleFundingContinue,
+    handleSourceModeChange,
+  } = useStartSavingsFormFlow({
+    acceptsNonWithdrawableTerms,
+    contributionValue,
+    initialContributionEnabled,
+    initialContributionValue,
+    refetch,
+    selectedFundingOption,
+    selectedPaymentMethodId,
+    selectedProduct,
+    setCreatedGoalId,
+    setFormError,
+    setInitialContributionAmount,
+    setInitialContributionEnabled,
+    setPaymentMethodsError,
+    setShowPreviewModal,
+    setShowSuccessModal,
+    setShowTransferModal,
+    setSourceMode,
+    sourceMode,
+    submitSavingsGoal,
+    targetValue,
+  });
 
   return {
     acceptsNonWithdrawableTerms,
+    confirmPlanTransfer,
     contributionAmount,
     contributionValue,
+    createdGoalId,
     debouncedSearch,
     effectiveInitialContribution,
+    fetchExistingPlanFunding,
+    fetchPlanFunding,
     formError,
     frequency,
     fundingAccount,
@@ -253,6 +241,10 @@ export function useStartSavingsController() {
     maturityDate,
     openWalletFundingScreen,
     paymentMethodsError,
+    planFundingAccounts,
+    planFundingError,
+    planFundingPhase,
+    planFundingStatusCode,
     preferredDebitTime,
     products,
     refetch,
@@ -261,9 +253,13 @@ export function useStartSavingsController() {
     savedPaymentMethods,
     searchValue,
     selectProduct,
+    selectedCatalogProduct,
+    selectVariant,
+    selectVariantOption,
     selectedFundingOption,
     selectedPaymentMethodId,
     selectedProduct,
+    submitBankTransferContribution,
     setAcceptsNonWithdrawableTerms,
     setContributionAmount: (value: string) => {
       setFormError(null);
@@ -281,10 +277,6 @@ export function useStartSavingsController() {
     setShowFundingModal,
     setShowPreviewModal,
     setStartDate: (value: string) => setStartDate(formatDateInput(value)),
-    setTargetAmount: (value: string) => {
-      setFormError(null);
-      setTargetAmount(normalizeAmountInput(value));
-    },
     showFundingModal,
     showPreviewModal,
     showSuccessModal,
@@ -294,5 +286,7 @@ export function useStartSavingsController() {
     submitSavingsGoal,
     targetAmount,
     targetValue,
+    variantOptionGroups,
+    variantOptions,
   };
 }

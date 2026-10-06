@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { createOrder } from '@/services/orders';
 import { getRedvaultPaymentAvailability } from '@/services/redvault';
+import type { FetchImplementation } from '@/types/fetch';
 import { RedvaultOrderReview } from './RedvaultOrderReview';
 import {
   redvaultOrderRequest as request,
@@ -75,7 +76,7 @@ jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentStarted: jest.fn(),
 }));
 
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = jest.fn<FetchImplementation>();
 let initializationStatus = 200;
 let orderBody: unknown = responseBody;
 beforeEach(() => {

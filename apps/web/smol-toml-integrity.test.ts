@@ -30,6 +30,9 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     expect(candidateRoots().length).toBeGreaterThan(0);
   });
 
+  // 70s budget: the 60s child ceiling (not the 10s default vitest
+  // timeout) must be the backstop, so a vulnerable build fails via
+  // the documented ETIMEDOUT/ratio path. Patched runs finish in ~1s.
   it.each(
     candidateRoots()
   )('scales linearly on large flat documents in %s', (root) => {
@@ -76,5 +79,5 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     // wall-clock adjustments); the 1µs floor is a div-by-zero guard
     // only — real small runs are ms-scale, so it never binds.
     expect(large / Math.max(small, 1e-3)).toBeLessThan(3);
-  });
+  }, 70_000);
 });

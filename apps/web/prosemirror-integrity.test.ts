@@ -251,7 +251,9 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
       // duplicate-model guard, which is layout behavior, not wiring.
       const modelRoot = installedRoot('prosemirror-model', viewRoot);
       const stateRoot = installedRoot('prosemirror-state', viewRoot);
-      if (process.env.CI) {
+      // Matches the overrideRoots guard exactly (CI defined, even
+      // empty, refuses): truthiness would run wiring under CI=''.
+      if (process.env.CI !== undefined) {
         process.env.PROSEMIRROR_VIEW_ROOTS = viewRoot as string;
         process.env.PROSEMIRROR_MODEL_ROOTS = modelRoot;
         process.env.PROSEMIRROR_STATE_ROOTS = stateRoot;

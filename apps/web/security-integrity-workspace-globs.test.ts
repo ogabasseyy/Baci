@@ -104,4 +104,31 @@ describe('security-integrity-workspace-globs', () => {
       expect(() => expandWorkspaces(ws)).toThrow(/no packages: key/);
     });
   });
+
+  it('applies ! exclusions to the expanded results', () => {
+    withWorkspace('packages:\n  - "apps/*"\n  - "!apps/legacy"\n', (ws) => {
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      mkdirSync(join(ws, 'apps', 'legacy'), { recursive: true });
+      expect(expandWorkspaces(ws)).toEqual([join(ws, 'apps', 'web')]);
+    });
+  });
+
+  it('excludes everything under an excluded parent', () => {
+    withWorkspace('packages:\n  - "apps/*"\n  - "!apps"\n', (ws) => {
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(expandWorkspaces(ws)).toEqual([]);
+    });
+  });
+
+  it('throws on an empty exclusion pattern', () => {
+    withWorkspace('packages:\n  - "apps/*"\n  - "!"\n', (ws) => {
+      expect(() => expandWorkspaces(ws)).toThrow(/empty workspace exclusion/);
+    });
+  });
+
+  it('validates exclusion targets like inclusions', () => {
+    withWorkspace('packages:\n  - "apps/*"\n  - "!../escape"\n', (ws) => {
+      expect(() => expandWorkspaces(ws)).toThrow(/escapes the root/);
+    });
+  });
 });

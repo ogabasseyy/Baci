@@ -54,4 +54,20 @@ describe('security-integrity-strip-comments', () => {
     const line = 'foo(); /* hasClass.indexOf(ind)';
     expect(stripComments(line)).toBe(line);
   });
+
+  it.each([
+    '\r',
+    '\u2028',
+    '\u2029',
+  ])('ends line comments at every JS terminator %s', (terminator) => {
+    // `// note<CR>code` is a comment plus live code per the spec;
+    // stopping only at LF would swallow the call and false-pass.
+    const source = `// note${terminator}hasClass.indexOf(ind);`;
+    expect(stripComments(source)).toContain('hasClass.indexOf(ind);');
+  });
+
+  it('resets slash tracking after a CR-terminated division line', () => {
+    const source = 'const q = a / b;\r// gone';
+    expect(stripComments(source)).toBe('const q = a / b;\r');
+  });
 });

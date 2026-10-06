@@ -6,6 +6,25 @@
 // strips only as the line's first slashes, so regex/division lines
 // keep their tails (fail-closed); an unterminated block comment keeps
 // the rest of the file for the same reason.
+
+// Every JavaScript line terminator ends a `//` comment: stopping only
+// at LF would swallow code after a CR (or U+2028/U+2029) and false-pass
+// the negative gate.
+function isLineTerminator(ch: string): boolean {
+  return ch === '\n' || ch === '\r' || ch === '\u2028' || ch === '\u2029';
+}
+
+function lineCommentEnd(source: string, from: number): number {
+  let end = source.length;
+  for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+    const at = source.indexOf(terminator, from);
+    if (at !== -1 && at < end) {
+      end = at;
+    }
+  }
+  return end;
+}
+
 export function stripComments(source: string): string {
   let out = '';
   let lineHasSlash = false;
@@ -34,18 +53,17 @@ export function stripComments(source: string): string {
         out += source.slice(i);
         return out;
       }
-      if (source.slice(i, end).includes('\n')) {
+      if (/[\n\r\u2028\u2029]/.test(source.slice(i, end))) {
         lineHasSlash = false;
       }
       i = end + 2;
       continue;
     }
     if (ch === '/' && source.charAt(i + 1) === '/' && !lineHasSlash) {
-      const end = source.indexOf('\n', i + 2);
-      i = end === -1 ? source.length : end;
+      i = lineCommentEnd(source, i + 2);
       continue;
     }
-    if (ch === '\n') {
+    if (isLineTerminator(ch)) {
       lineHasSlash = false;
     } else if (ch === '/') {
       lineHasSlash = true;

@@ -89,7 +89,7 @@ export function expandWorkspaces(workspaceRoot: string): string[] {
       }
     }
   };
-  for (const glob of readPackageGlobs(workspaceRoot)) {
+  const expandOne = (glob: string, excluded: boolean): void => {
     // Fail closed on anything that would silently narrow the scan:
     // out-of-root globs and unsupported syntax both throw instead of
     // skipping a sibling workspace while the EVERY-copy claim reports
@@ -115,10 +115,45 @@ export function expandWorkspaces(workspaceRoot: string): string[] {
         `findInstalledRoots: unsupported workspace glob syntax: ${glob}`
       );
     }
+    const before = results.length;
     expand(
       workspaceRoot,
       glob.split('/').filter((s) => s.length > 0 && s !== '.')
     );
+    if (excluded) {
+      // Exclusions subtract: an excluded dir (and everything under it)
+      // is not a workspace, so its node_modules must not join the scan
+      // — or an excluded copy could false-fail the gate.
+      const cuts = new Set(results.splice(before));
+      for (let index = results.length - 1; index >= 0; index -= 1) {
+        const candidate = results[index] as string;
+        for (const cut of cuts) {
+          if (candidate === cut || candidate.startsWith(`${cut}/`)) {
+            results.splice(index, 1);
+            break;
+          }
+        }
+      }
+    }
+  };
+  const globs = readPackageGlobs(workspaceRoot);
+  for (const glob of globs) {
+    if (!glob.startsWith('!')) {
+      expandOne(glob, false);
+    }
+  }
+  // Exclusions apply after all inclusions, like pnpm: order in the
+  // manifest does not matter.
+  for (const glob of globs) {
+    if (glob.startsWith('!')) {
+      const bare = glob.slice(1);
+      if (bare.length === 0) {
+        throw new Error(
+          'findInstalledRoots: empty workspace exclusion pattern'
+        );
+      }
+      expandOne(bare, true);
+    }
   }
   return results;
 }

@@ -1,10 +1,11 @@
 /** @vitest-environment node */
 
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-utils';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
 // `@graphql-tools/utils` `mergeDeep` allowed prototype pollution via
@@ -15,6 +16,13 @@ import { describe, expect, it } from 'vitest';
 // `pnpm-workspace.yaml` patchedDependencies). This suite drives the
 // behavioral exploit through EVERY installed copy, since nested copies
 // under graphql-yoga would otherwise escape the guard.
+//
+// Accepted tradeoff (matches upstream 12.0.1 exactly): source keys named
+// `__proto__`/`constructor`/`prototype` are dropped silently at every
+// recursion level, so a legitimate own data key with one of those names
+// (e.g. a GraphQL field literally called "constructor") no longer
+// merges. Dropping is the documented upstream behavior, not a local
+// deviation.
 
 const require = createRequire(import.meta.url);
 
@@ -37,64 +45,7 @@ function candidateRoots(): string[] {
   }
   // Dynamically enumerate EVERY installed copy: nested duplicates under
   // the hoisted pnpm layout must not escape the guard silently.
-  const roots = new Set<string>();
-  const scan = (dir: string, depth: number): void => {
-    if (depth > 8) {
-      return;
-    }
-    let entries: ReturnType<typeof readdirSync>;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
-        continue;
-      }
-      const full = join(dir, entry.name);
-      if (entry.name === '@graphql-tools') {
-        const candidate = join(full, 'utils');
-        if (existsSync(join(candidate, 'package.json'))) {
-          roots.add(realpathSync(candidate));
-        }
-      }
-      if (entry.name.startsWith('@')) {
-        // Scope dir: children are packages, descend without consuming depth.
-        scan(full, depth);
-      } else {
-        const nested = join(full, 'node_modules');
-        if (existsSync(nested)) {
-          scan(nested, depth + 1);
-        }
-      }
-    }
-  };
-  // Scan every node_modules from the test file up to the filesystem
-  // root (workspace + repo-root layouts).
-  let dir = dirname(fileURLToPath(import.meta.url));
-  const seenModules = new Set<string>();
-  for (let depth = 0; depth < 12; depth += 1) {
-    const candidate = join(dir, 'node_modules');
-    if (existsSync(candidate)) {
-      const real = realpathSync(candidate);
-      if (!seenModules.has(real)) {
-        seenModules.add(real);
-        scan(real, 0);
-      }
-    }
-    // Stop at the enclosing repo root so worktree checkouts never
-    // scan a parent checkout's node_modules.
-    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
-      break;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) {
-      break;
-    }
-    dir = parent;
-  }
-  return [...roots];
+  return findInstalledRoots('@graphql-tools/utils');
 }
 
 function loadMergeDeep(root: string): {
@@ -137,6 +88,15 @@ describe('@graphql-tools/utils mergeDeep integrity (CVE-2026-104852)', () => {
       ])
     ).not.toThrow();
     expect(({} as Record<string, unknown>).y).toBeUndefined();
+
+    // Silent-drop tradeoff is observable: a legitimate own key named
+    // "constructor" merges in upstream 10/11 pre-fix builds but is dropped
+    // by the backport, matching upstream 12.0.1.
+    const dropped = mergeDeep([
+      {},
+      JSON.parse('{"constructor":{"safe":true}}') as unknown,
+    ]) as Record<string, unknown>;
+    expect(Object.hasOwn(dropped, 'constructor')).toBe(false);
 
     // Sanity: ordinary deep merges still work.
     expect(mergeDeep([{ a: { b: 1 } }, { a: { c: 2 } }])).toEqual({

@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { useDebounce } from '@/hooks/use-debounce';
 import { useProductSearch } from '@/hooks/use-product-search';
 import { useWallet } from '@/hooks/use-wallet';
 import { CONFIG } from '@/lib/config';
@@ -66,7 +67,9 @@ export function useStartSavingsController() {
   const [selectedFundingOption, setSelectedFundingOption] =
     useState<SavingsFundingOption>('wallet');
   const [sourceMode, setSourceMode] = useState<SavingsSourceMode>('manual');
-  const debouncedSearch = searchValue;
+  // Debounced like storefront search: useProducts starts an uncancelled
+  // Supabase query per search string, so raw keystrokes would fan out.
+  const debouncedSearch = useDebounce(searchValue, 300);
   const {
     products,
     isLoading: isProductsLoading,
@@ -142,6 +145,7 @@ export function useStartSavingsController() {
     requiredContribution: effectiveInitialContribution,
   });
   const {
+    fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError: planFundingError,
     planFundingAccounts,
@@ -227,6 +231,7 @@ export function useStartSavingsController() {
     createdGoalId,
     debouncedSearch,
     effectiveInitialContribution,
+    fetchExistingPlanFunding,
     fetchPlanFunding,
     formError,
     frequency,

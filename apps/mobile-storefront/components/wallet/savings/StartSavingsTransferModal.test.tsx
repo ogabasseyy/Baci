@@ -11,6 +11,12 @@ import Colors from '@/constants/Colors';
 import { StartSavingsTransferModal } from './StartSavingsTransferModal';
 import type { StartSavingsController } from './start-savings-controller.types';
 
+const mockIsHostedStagingTestPaymentsEnabled = jest.fn(() => false);
+jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
+  isHostedStagingTestPaymentsEnabled: () =>
+    mockIsHostedStagingTestPaymentsEnabled(),
+}));
+
 function createController(
   overrides: Partial<StartSavingsController> = {}
 ): StartSavingsController {
@@ -191,6 +197,7 @@ describe('StartSavingsTransferModal', () => {
       return createController({
         confirmPlanTransfer: jest.fn(async () => undefined),
         createdGoalId: 'goal-1',
+        fetchExistingPlanFunding: jest.fn(async () => undefined),
         fetchPlanFunding: jest.fn(async () => undefined),
         fundingAccount: null,
         planFundingAccounts: [],
@@ -277,6 +284,40 @@ describe('StartSavingsTransferModal', () => {
           { enableInterestAccrual: true }
         )
       );
+    });
+
+    it('hides the BVN prompt in hosted staging and checks status instead', async () => {
+      mockIsHostedStagingTestPaymentsEnabled.mockReturnValueOnce(true);
+      const controller = createPlanController();
+      render(
+        <StartSavingsTransferModal
+          colors={Colors.light}
+          controller={controller}
+        />
+      );
+
+      // Staging boundary: no real-BVN collection; operators complete the
+      // identity check with synthetic identities.
+      expect(
+        screen.queryByLabelText('BVN for plan account')
+      ).not.toBeOnTheScreen();
+      expect(
+        screen.queryByRole('checkbox', { name: 'Earn interest on this plan' })
+      ).not.toBeOnTheScreen();
+      expect(
+        screen.getByText(
+          'This plan needs an identity check that approved operators complete in the test environment. Ask an operator to continue, then check the account status again.'
+        )
+      ).toBeOnTheScreen();
+
+      fireEvent.press(
+        screen.getByRole('button', { name: 'Check account status' })
+      );
+
+      await waitFor(() =>
+        expect(controller.fetchExistingPlanFunding).toHaveBeenCalledTimes(1)
+      );
+      expect(controller.fetchPlanFunding).not.toHaveBeenCalled();
     });
 
     it('shows the plan account and confirms the transfer', async () => {

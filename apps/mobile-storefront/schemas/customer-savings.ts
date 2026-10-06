@@ -30,8 +30,23 @@ const IsoDateSchema = z
   .string()
   .trim()
   .refine(isValidIsoDate, 'Date must be in YYYY-MM-DD format');
-const PositiveAmountSchema = z.number().finite().int().positive();
-const NonNegativeAmountSchema = z.number().finite().int().min(0);
+// Balances are naira with kobo precision: the ledger stores numeric(12, 2),
+// so a 101-kobo transfer lands as 1.01. Integer-only parsing would reject
+// the entire goals response for that customer.
+function hasKoboPrecision(value: number) {
+  const scaled = value * 100;
+  return Math.abs(scaled - Math.round(scaled)) < 1e-6;
+}
+const PositiveAmountSchema = z
+  .number()
+  .finite()
+  .positive()
+  .refine(hasKoboPrecision, 'Amount must have at most two decimal places');
+const NonNegativeAmountSchema = z
+  .number()
+  .finite()
+  .min(0)
+  .refine(hasKoboPrecision, 'Amount must have at most two decimal places');
 
 export const SavingsGoalSummarySchema = z.object({
   contributionAmount: PositiveAmountSchema.optional(),

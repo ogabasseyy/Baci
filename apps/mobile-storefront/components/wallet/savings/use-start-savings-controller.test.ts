@@ -39,8 +39,9 @@ jest.mock('@/hooks/use-product-search', () => ({
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({ data: null, refetch: jest.fn(), isRefetching: false }),
 }));
+const mockUseDebounce = jest.fn((value: string, _delay?: number) => value);
 jest.mock('@/hooks/use-debounce', () => ({
-  useDebounce: (value: string) => value,
+  useDebounce: (value: string, delay: number) => mockUseDebounce(value, delay),
 }));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (select: (state: { merchantId: string }) => unknown) =>
@@ -122,4 +123,20 @@ it('ignores a custom route target and uses the exact device price', () => {
   expect(result.current.targetValue).toBe(120);
   act(() => result.current.selectVariant('variant-1'));
   expect(result.current.targetValue).toBe(100);
+});
+
+it('debounces keystrokes before querying the product catalogue', () => {
+  const { result } = renderHook(() => useStartSavingsController());
+
+  act(() => result.current.setSearchValue('iph'));
+
+  // 300ms like storefront search; the debounced (not raw) value drives
+  // the uncancelled per-string catalogue query.
+  expect(mockUseDebounce).toHaveBeenLastCalledWith('iph', 300);
+  expect(mockProducts).toHaveBeenLastCalledWith({
+    enabled: true,
+    limit: 8,
+    search: 'iph',
+  });
+  expect(result.current.debouncedSearch).toBe('iph');
 });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { handleSavingsActionError } from './handle-savings-action-error';
 import { PlanFundingAccountDetails } from './PlanFundingAccountDetails';
 import { PlanFundingFallback } from './PlanFundingFallback';
@@ -19,11 +20,28 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
   const transferAmount = controller.effectiveInitialContribution;
   const phase = controller.planFundingPhase;
 
+  // Staging never collects BVN (staging boundary: synthetic identities
+  // only): the lookup below hides the prompt and checks the existing
+  // account status instead, mirroring SavingsPlanFundingDetails.
+  const isHostedStaging = isHostedStagingTestPaymentsEnabled();
+
   const handleFetchPlanAccount = async () => {
     try {
       await controller.fetchPlanFunding(bvn, {
         enableInterestAccrual: earnInterest,
       });
+    } catch (error) {
+      handleSavingsActionError(
+        error,
+        'Unable to load plan account',
+        'Failed to load the plan account. Please try again.'
+      );
+    }
+  };
+
+  const handleCheckPlanAccountStatus = async () => {
+    try {
+      await controller.fetchExistingPlanFunding();
     } catch (error) {
       handleSavingsActionError(
         error,
@@ -89,7 +107,9 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
             controller={controller}
             bvn={bvn}
             earnInterest={earnInterest}
+            isHostedStaging={isHostedStaging}
             onBvnChange={setBvn}
+            onCheckStatus={handleCheckPlanAccountStatus}
             onEarnInterestChange={setEarnInterest}
             onFetch={handleFetchPlanAccount}
           />

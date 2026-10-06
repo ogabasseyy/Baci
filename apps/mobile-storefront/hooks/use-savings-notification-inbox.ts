@@ -121,7 +121,14 @@ export function useSavingsNotificationInbox({
           if (registered) {
             await savingsNotificationCapability
               .markAvailable(capabilityScope)
-              .then(() => cancelSavingsReminderNotification())
+              .then(() => {
+                // The account may have switched during the markAvailable
+                // await: cancel resolves its scope fresh, so recheck before
+                // clearing — otherwise this continuation would wipe the new
+                // account's local reminders before it has server delivery.
+                if (!active || scopeRef.current !== scope) return;
+                return cancelSavingsReminderNotification();
+              })
               .catch(() => undefined);
           } else {
             await savingsNotificationCapability

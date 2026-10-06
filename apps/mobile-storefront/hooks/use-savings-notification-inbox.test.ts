@@ -262,4 +262,42 @@ describe('useSavingsNotificationInbox', () => {
       )
     );
   });
+
+  it('skips clearing local reminders when the account changes while markAvailable is in flight', async () => {
+    let resolveFirstMark!: () => void;
+    const firstMark = new Promise<void>((resolve) => {
+      resolveFirstMark = resolve;
+    });
+    mockMarkAvailable
+      .mockImplementationOnce(() => firstMark)
+      .mockImplementation(() => new Promise<void>(() => {}));
+    const { rerender } = renderHook(
+      ({ activeUserId }: { activeUserId: string }) =>
+        useSavingsNotificationInbox({
+          enabled: true,
+          merchantId,
+          userId: activeUserId,
+        }),
+      { initialProps: { activeUserId: 'user-a' } }
+    );
+    await waitFor(() =>
+      expect(mockMarkAvailable).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a' })
+      )
+    );
+
+    rerender({ activeUserId: 'user-b' });
+    await waitFor(() =>
+      expect(mockMarkAvailable).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-b' })
+      )
+    );
+
+    await act(async () => {
+      resolveFirstMark();
+      await firstMark;
+    });
+
+    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+  });
 });

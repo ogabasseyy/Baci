@@ -9,8 +9,23 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
+
+// Simulate the install-time race the scanner guards: resolution fails
+// after the existence check passed. Everything else passes through.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    realpathSync: ((path: string) => {
+      if (path.includes('flaky-pkg')) {
+        throw new Error('simulated dangling symlink');
+      }
+      return actual.realpathSync(path);
+    }) as typeof actual.realpathSync,
+  };
+});
 
 // Colocated coverage for the install scanner: every layout that can
 // hide a vulnerable duplicate — hoisted, nested, scoped, and pnpm
@@ -51,6 +66,8 @@ beforeAll(() => {
     join(impostor, 'node_modules', 'dup', 'package.json'),
     JSON.stringify({ name: 'not-dup', version: '0.0.0' })
   );
+  // Candidate whose resolution fails after its existence check.
+  pkg('flaky-pkg');
   // Stop the upward walk at the fixture root.
   writeFileSync(join(fixture, 'pnpm-workspace.yaml'), 'packages: []\n');
 });
@@ -92,6 +109,13 @@ describe('security-integrity-scan', () => {
   it('returns an empty list for a bare scope query', () => {
     expect(() => findInstalledRoots('@scope', fixture)).not.toThrow();
     expect(findInstalledRoots('@scope', fixture)).toEqual([]);
+  });
+
+  it('skips candidates whose resolution fails instead of aborting', () => {
+    expect(() => findInstalledRoots('flaky-pkg', fixture)).not.toThrow();
+    expect(findInstalledRoots('flaky-pkg', fixture)).toEqual([]);
+    // The scan still finds healthy candidates afterwards.
+    expect(findInstalledRoots('dup', fixture).length).toBeGreaterThan(0);
   });
 
   it('throws when the depth cap truncates the walk', () => {

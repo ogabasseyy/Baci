@@ -11,22 +11,13 @@ function options(overrides: Record<string, unknown> = {}) {
     discountSubtotal: 10_000,
     hasAuthenticatedUser: false,
     hasCheckoutCartItems: false,
-    isHydrated: true,
     isOrderInFlightRef: { current: false },
     merchantSlug: undefined,
     pendingCheckoutOrder: null,
-    walletSessionIdentity: null,
-    resumeOrder: {
-      resumeOrderId: null as string | null,
-      resumeMerchantSlug: null as string | null,
-      resumeTrackingToken: null,
-      resumeLookupEmail: null,
-      preferredGateway: null,
-      setIsLoadingResumedOrder: vi.fn(),
-      setResumedOrder: vi.fn(),
-      setCheckoutFields: vi.fn(),
-      setResumeOrderError: vi.fn(),
-    },
+    walletSessionUserId: undefined,
+    resumeOrderId: null as string | null,
+    preferredGateway: null as 'credpal' | 'credit_direct' | null,
+    resumedOrder: null as { id: string } | null,
     ...overrides,
   };
 }
@@ -34,13 +25,65 @@ function options(overrides: Record<string, unknown> = {}) {
 describe('useCheckoutPaymentSession', () => {
   beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
 
+  it('selects a resumed BNPL gateway only after order lookup succeeds', async () => {
+    const input = options({
+      resumeOrderId: 'resumed-order',
+      preferredGateway: 'credit_direct',
+    });
+    const { result, rerender } = renderHook(
+      ({ currentOptions }: { currentOptions: ReturnType<typeof options> }) =>
+        useCheckoutPaymentSession(currentOptions as never),
+      { initialProps: { currentOptions: input } }
+    );
+
+    expect(result.current.method).toBe('');
+    expect(result.current.tab).toBe('full');
+    rerender({
+      currentOptions: {
+        ...input,
+        resumedOrder: { id: 'resumed-order' },
+      },
+    });
+
+    await waitFor(() => expect(result.current.method).toBe('credit_direct'));
+    expect(result.current.tab).toBe('installments');
+    act(() => result.current.selectMethod('paystack'));
+    expect(result.current.method).toBe('paystack');
+  });
+
+  it('does not apply a resumed gateway over an active cart selection', async () => {
+    const input = options({
+      preferredGateway: 'credpal',
+      resumedOrder: { id: 'resumed-order' },
+    });
+    const { result, rerender } = renderHook(
+      ({ currentOptions }: { currentOptions: ReturnType<typeof options> }) =>
+        useCheckoutPaymentSession(currentOptions as never),
+      { initialProps: { currentOptions: input } }
+    );
+    await waitFor(() => expect(result.current.method).toBe('credpal'));
+    act(() => result.current.selectMethod('paystack'));
+
+    rerender({
+      currentOptions: {
+        ...input,
+        hasCheckoutCartItems: true,
+        preferredGateway: 'credit_direct',
+      },
+    });
+
+    expect(result.current.method).toBe('paystack');
+  });
+
   it('preserves a persisted Redvault fence when switching away from Redvault', () => {
     const clearPendingCheckoutOrder = vi.fn();
     const input = options({
       clearPendingCheckoutOrder,
       pendingCheckoutOrder: { paymentMethod: 'uba_redvault' },
     });
-    const { result } = renderHook(() => useCheckoutPaymentSession(input as never));
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
 
     act(() => {
       result.current.selectMethod('uba_redvault');
@@ -64,7 +107,9 @@ describe('useCheckoutPaymentSession', () => {
       isOrderInFlightRef: { current: true },
       pendingCheckoutOrder: { paymentMethod: 'paystack' },
     });
-    const { result } = renderHook(() => useCheckoutPaymentSession(input as never));
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
 
     act(() => result.current.selectMethod('uba_redvault'));
 
@@ -72,27 +117,25 @@ describe('useCheckoutPaymentSession', () => {
     expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
   });
 
-  it.each(['pending', 'held'] as const)(
-    'blocks payment switching while Redvault is %s',
-    (status) => {
-      const clearPendingCheckoutOrder = vi.fn();
-      const { result } = renderHook(() =>
-        useCheckoutPaymentSession(
-          options({ clearPendingCheckoutOrder }) as never
-        )
-      );
+  it.each([
+    'pending',
+    'held',
+  ] as const)('blocks payment switching while Redvault is %s', (status) => {
+    const clearPendingCheckoutOrder = vi.fn();
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(options({ clearPendingCheckoutOrder }) as never)
+    );
 
-      act(() => {
-        result.current.selectMethod('uba_redvault');
-        result.current.redvault.setStatus(status);
-      });
-      clearPendingCheckoutOrder.mockClear();
-      act(() => result.current.selectMethod('paystack'));
+    act(() => {
+      result.current.selectMethod('uba_redvault');
+      result.current.redvault.setStatus(status);
+    });
+    clearPendingCheckoutOrder.mockClear();
+    act(() => result.current.selectMethod('paystack'));
 
-      expect(result.current.method).toBe('uba_redvault');
-      expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
-    }
-  );
+    expect(result.current.method).toBe('uba_redvault');
+    expect(clearPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
 
   it('clears a non-Redvault pending fence before entering Redvault', () => {
     const clearPendingCheckoutOrder = vi.fn();
@@ -111,7 +154,7 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.method).toBe('uba_redvault');
   });
 
-  it('auto-applies a positive wallet balance and ignores an aborted stale response', async () => {
+  it('reloads wallet state when customer identity changes and ignores stale responses', async () => {
     const requests: Array<(response: Response) => void> = [];
     const signals: AbortSignal[] = [];
     vi.mocked(fetch).mockImplementation(((_url, init) => {
@@ -119,18 +162,19 @@ describe('useCheckoutPaymentSession', () => {
       return new Promise<Response>((resolve) => requests.push(resolve));
     }) as typeof fetch);
     const { result, rerender } = renderHook(
-      ({ merchantSlug }: { merchantSlug: string }) =>
+      ({ customerId }: { customerId: string }) =>
         useCheckoutPaymentSession(
           options({
             hasAuthenticatedUser: true,
-            merchantSlug,
+            walletSessionUserId: customerId,
+            merchantSlug: 'store',
           }) as never
         ),
-      { initialProps: { merchantSlug: 'old-store' } }
+      { initialProps: { customerId: 'old-customer' } }
     );
     await waitFor(() => expect(requests).toHaveLength(1));
 
-    rerender({ merchantSlug: 'new-store' });
+    rerender({ customerId: 'new-customer' });
     await waitFor(() => expect(requests).toHaveLength(2));
     expect(signals[0]?.aborted).toBe(true);
 
@@ -156,70 +200,65 @@ describe('useCheckoutPaymentSession', () => {
     expect(result.current.wallet.payWithWallet).toBe(true);
   });
 
-  it.each(['credpal', 'credit_direct'] as const)(
-    'does not apply wallet credit to an authenticated resumed %s payment',
-    async (preferredGateway) => {
-      vi.mocked(fetch).mockImplementation(async (input) => {
-        if (String(input).includes('/customer/wallet')) {
-          return {
-            ok: true,
-            json: async () => ({ balance: 2500 }),
-          } as Response;
-        }
+  it.each([
+    'credpal',
+    'credit_direct',
+  ] as const)('does not apply wallet credit to an authenticated resumed %s payment', async (preferredGateway) => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).includes('/customer/wallet')) {
         return {
           ok: true,
-          json: async () => ({
-            id: 'resumed-order',
-            total: 11_500,
-            customer_name: 'Ada Customer',
-            customer_email: 'ada@example.test',
-            customer_phone: '+2348000000000',
-            items: [],
-          }),
+          json: async () => ({ balance: 2500 }),
         } as Response;
-      });
-      const input = options({
-        baseTotal: 11_500,
-        hasAuthenticatedUser: true,
-        merchantSlug: 'store',
-        resumeOrder: {
-          ...options().resumeOrder,
-          resumeOrderId: 'resumed-order',
-          resumeMerchantSlug: 'store',
-          preferredGateway,
-        },
-      });
-      const { result } = renderHook(() =>
-        useCheckoutPaymentSession(input as never)
-      );
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'resumed-order',
+          total: 11_500,
+          customer_name: 'Ada Customer',
+          customer_email: 'ada@example.test',
+          customer_phone: '+2348000000000',
+          items: [],
+        }),
+      } as Response;
+    });
+    const input = options({
+      baseTotal: 11_500,
+      hasAuthenticatedUser: true,
+      walletSessionUserId: 'customer-1',
+      merchantSlug: 'store',
+      resumeOrderId: 'resumed-order',
+      preferredGateway,
+      resumedOrder: { id: 'resumed-order' },
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentSession(input as never)
+    );
 
-      await waitFor(() => expect(result.current.wallet.balance).toBe(2500));
-      await waitFor(() => expect(result.current.method).toBe(preferredGateway));
+    await waitFor(() => expect(result.current.wallet.balance).toBe(2500));
+    await waitFor(() => expect(result.current.method).toBe(preferredGateway));
+    expect(result.current.tab).toBe('installments');
 
-      expect(result.current.wallet.payWithWallet).toBe(false);
-      expect(result.current.wallet.amountUsed).toBe(0);
-      expect(result.current.wallet.remainingAmount).toBe(11_500);
-      expect(result.current.checkoutValues.payWithWallet).toBe(false);
+    expect(result.current.wallet.payWithWallet).toBe(false);
+    expect(result.current.wallet.amountUsed).toBe(0);
+    expect(result.current.wallet.remainingAmount).toBe(11_500);
+    expect(result.current.checkoutValues.payWithWallet).toBe(false);
 
-      act(() => {
-        result.current.selectMethod('paystack');
-        result.current.selectMethod(preferredGateway);
-      });
+    act(() => {
+      result.current.selectMethod('paystack');
+      result.current.selectMethod(preferredGateway);
+    });
 
-      expect(result.current.wallet.amountUsed).toBe(0);
-      expect(result.current.wallet.remainingAmount).toBe(11_500);
-    }
-  );
+    expect(result.current.wallet.amountUsed).toBe(0);
+    expect(result.current.wallet.remainingAmount).toBe(11_500);
+  });
 
   it('keeps wallet credit available when an active cart takes precedence over a resume ID', () => {
     const input = options({
       baseTotal: 11_500,
       hasCheckoutCartItems: true,
-      resumeOrder: {
-        ...options().resumeOrder,
-        resumeOrderId: 'resumed-order',
-        resumeMerchantSlug: 'store',
-      },
+      resumeOrderId: 'resumed-order',
     });
     const { result } = renderHook(() =>
       useCheckoutPaymentSession(input as never)
@@ -281,11 +320,7 @@ describe('useCheckoutPaymentSession', () => {
       currentOptions: {
         ...input,
         baseTotal: 10_700,
-        resumeOrder: {
-          ...input.resumeOrder,
-          resumeOrderId: 'resumed-order',
-          resumeMerchantSlug: 'store',
-        },
+        resumeOrderId: 'resumed-order',
       },
     });
 
@@ -297,11 +332,7 @@ describe('useCheckoutPaymentSession', () => {
   it('preserves active-cart discount behavior when a resume ID is also present', () => {
     const input = options({
       hasCheckoutCartItems: true,
-      resumeOrder: {
-        ...options().resumeOrder,
-        resumeOrderId: 'resumed-order',
-        resumeMerchantSlug: 'store',
-      },
+      resumeOrderId: 'resumed-order',
     });
     const { result } = renderHook(() =>
       useCheckoutPaymentSession(input as never)
@@ -321,9 +352,7 @@ describe('useCheckoutPaymentSession', () => {
 
   it('keeps wallet credit disabled for non-NGN while preserving discount math', () => {
     const { result } = renderHook(() =>
-      useCheckoutPaymentSession(
-        options({ currencyCode: 'USD' }) as never
-      )
+      useCheckoutPaymentSession(options({ currencyCode: 'USD' }) as never)
     );
     act(() => {
       result.current.discount.setApplied({

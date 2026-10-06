@@ -118,6 +118,7 @@ describe('BlogPostBody legacy rendering', () => {
     expect(mockResolveBlogPostContent).toHaveBeenCalledWith(
       '<p>Legacy HTML body</p>',
       {
+        catalogPrices: { products: [], currencySource: undefined },
         basePath: '/ogabassey',
         baseUrl: 'https://usebaci.com',
         fallbackImageAlt: 'Pixel 9 Review',

@@ -1,0 +1,12 @@
+{
+  "source": "Supported ChatGPT browser CDP window.openai.toolInput/toolOutput, 2026-10-03, before category guidance fix",
+  "prompt": "Find the Xiaomi Smart Camera C300 and show its photo and current listed price. Do not add it to cart.",
+  "traces": [
+    {
+      "result": {
+        "type": "string",
+        "value": "{\"toolInput\": {\"intent\": {\"alternatives\": [{\"product_type\": \"security_camera\", \"brands\": [\"Xiaomi\"], \"model\": \"Smart Camera C300\"}]}, \"query\": \"Xiaomi Smart Camera C300\", \"category\": \"Accessories\", \"brand\": \"Xiaomi\", \"sort\": \"relevance\", \"limit\": 5}, \"toolOutput\": {\"products\": [], \"status\": \"empty\", \"coverage\": \"complete\"}}"
+      }
+    }
+  ]
+}

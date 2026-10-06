@@ -80,13 +80,13 @@ function exactAccesses(path: string, source: string): string[] {
       privilegedClientModules.has(specifier) ||
       Boolean(resolved && privilegedClientPaths.has(resolved));
     const exactPlatformAdmin =
-      path === manifest.platformAuthority.helper &&
+      path === manifest.retiredPlatformAuthority.helper &&
       specifier === adminSpecifier;
     if (privileged && !exactPlatformAdmin) {
       accesses.push('__invalid_privileged_import__');
     }
   }
-  if (path === manifest.platformAuthority.helper) {
+  if (path === manifest.retiredPlatformAuthority.helper) {
     const adminImports = file.statements.filter(
       (statement) =>
         ts.isImportDeclaration(statement) &&
@@ -195,7 +195,7 @@ function exactAccesses(path: string, source: string): string[] {
   }
   visit(file);
   if (fromCount !== selectCount) accesses.push('__unpaired_from__');
-  if (path === manifest.platformAuthority.helper && adminCount !== 1) {
+  if (path === manifest.retiredPlatformAuthority.helper && adminCount !== 1) {
     accesses.push('__invalid_admin_count__');
   }
   return accesses.sort();
@@ -214,7 +214,7 @@ export function analyzeCredentialProjectionSets(
       ],
     ],
     [
-      manifest.platformAuthority.helper,
+      manifest.retiredPlatformAuthority.helper,
       [
         `platform_settings|${manifest.credentialProjections.platformProviderConfig}`,
       ],

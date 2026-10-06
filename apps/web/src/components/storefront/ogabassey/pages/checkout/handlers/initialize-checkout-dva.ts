@@ -2,7 +2,7 @@ import {
   type DvaBillingAddress,
   requestDvaInitialization,
 } from '../checkout-page-data-loaders';
-import type { DvaModalData } from '../hooks/use-dva-confirm-transfer';
+import type { DvaModalData } from '../hooks/use-checkout-dva-session';
 import type { CheckoutPaymentOrder } from './submit-checkout-order';
 
 export interface InitializeCheckoutDvaOptions {
@@ -17,7 +17,6 @@ export interface InitializeCheckoutDvaOptions {
   total: number;
   order: CheckoutPaymentOrder;
   setDvaData: (data: DvaModalData) => void;
-  setDvaCountdown: (seconds: number) => void;
   setIsProcessing: (value: boolean) => void;
   setIsInitializingDva: (value: boolean) => void;
   releaseSubmitLock: () => void;
@@ -46,7 +45,6 @@ export async function initializeCheckoutDva({
   total,
   order,
   setDvaData,
-  setDvaCountdown,
   setIsProcessing,
   setIsInitializingDva,
   releaseSubmitLock,
@@ -78,7 +76,6 @@ export async function initializeCheckoutDva({
         checkoutFingerprint,
         orderCurrency: stampedCurrency,
       });
-      setDvaCountdown(3600);
       onDvaReady?.(result.reference);
       releaseSubmitLock();
     })

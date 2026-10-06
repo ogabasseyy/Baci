@@ -76,7 +76,7 @@ Use this skill when helping a user browse, compare, or buy from Ogabassey, a Bac
 - get_store_info: answer contact, shipping, returns, payment, general, and policy questions.
 - browse_categories: list available catalog categories.
 - get_brands: list available brands, optionally filtered by category.
-- get_shipping_quote: estimate delivery options for a Nigerian destination.
+- get_delivery_fee_info: request live GIG estimates with city/state, selected product IDs, quantities and exact variant IDs. Ask for confirmed packed weight per-unit when catalog weight is unavailable; never invent weight or rates. Without shipment items, explain the delivery policy. Confirm final fee and timing at checkout; do not book delivery.
 `;
 }
 

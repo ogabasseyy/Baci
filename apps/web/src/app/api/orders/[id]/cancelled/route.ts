@@ -4,8 +4,10 @@ import {
   getMerchantIdForApiUser,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { isInventoryTrackedProduct } from '@/lib/is-inventory-tracked-product';
 import { logger } from '@/lib/logger';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
+import { scheduleOrderProductBlogPurgeAfterResponse } from '@/lib/schedule-order-product-blog-purge-after-response';
 import { merchantOrderCancellationSchema } from '@/schemas/orders';
 
 /**
@@ -63,6 +65,35 @@ export async function POST(
 
     const supabase = auth.supabase;
 
+    // Snapshot the item product ids BEFORE the RPC commits: order items are
+    // immutable across cancellation, so a failed post-cancel reread can
+    // still purge exact targets instead of escaping unqueued. Best-effort —
+    // a failed snapshot must not block the cancellation itself.
+    let preCancelItemIds: string[] | null = null;
+    try {
+      const { data: preCancelItems, error: preCancelItemsError } =
+        await supabase
+          .from('order_items')
+          .select('product_id')
+          .eq('order_id', id);
+      if (!preCancelItemsError) {
+        preCancelItemIds = Array.from(
+          new Set(
+            (preCancelItems ?? [])
+              .map((item) => item.product_id)
+              .filter(
+                (productId): productId is string =>
+                  typeof productId === 'string' && productId.trim().length > 0
+              )
+              .map((productId) => productId.trim())
+          )
+        );
+      }
+    } catch {
+      // Fall through without a snapshot; the post-cancel path below keeps
+      // its existing best-effort behavior.
+    }
+
     const { data: cancellationPerformed, error: cancellationError } =
       await supabase.rpc('cancel_order_as_merchant', {
         p_order_id: id,
@@ -96,11 +127,28 @@ export async function POST(
 
     productCacheRevalidation.revalidateDashboard(merchantId);
     try {
-      const { data: orderItems, error: orderItemsError } = await supabase
-        .from('order_items')
-        .select('product_id')
-        .eq('order_id', id);
-      if (orderItemsError) throw orderItemsError;
+      let orderItems: Array<{ product_id?: unknown }> | null = null;
+      try {
+        const { data, error } = await supabase
+          .from('order_items')
+          .select('product_id, variant_id')
+          .eq('order_id', id);
+        if (error) throw error;
+        orderItems = data;
+      } catch (itemsError) {
+        // The restock already committed: fall back to the pre-cancellation
+        // snapshot so the purge still runs with exact targets instead of
+        // escaping to the broad-tags-only catch below.
+        if (!preCancelItemIds) throw itemsError;
+        logger.warn({
+          message:
+            'Cancelled order items reread failed; purging from pre-cancellation snapshot',
+          orderId: id,
+          merchantId,
+          error: itemsError,
+        });
+        orderItems = preCancelItemIds.map((product_id) => ({ product_id }));
+      }
       const productIds = Array.from(
         new Set(
           (orderItems ?? [])
@@ -111,12 +159,78 @@ export async function POST(
       if (productIds.length > 0) {
         const { data: products, error: productsError } = await supabase
           .from('products')
-          .select('slug, manage_stock')
+          .select('id, slug, manage_stock, inventory_tracking_policy')
           .eq('merchant_id', merchantId)
           .in('id', productIds);
-        if (productsError) throw productsError;
-        const trackedProducts = (products ?? []).filter(
-          (product) => product.manage_stock === true
+        if (productsError) {
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds,
+            supabase,
+          });
+          throw productsError;
+        }
+        const productsNeedingVariantLookup = new Set(
+          (products ?? [])
+            .filter((product) => !isInventoryTrackedProduct(product))
+            .map((product) => product.id)
+        );
+        const serializedVariantProductIds = new Set<string>();
+        let variantPolicyLookupFailed = false;
+        // Simple products can carry serialized inventory on an internal
+        // anchor variant while their order items store variant_id: null,
+        // so resolve policies by product_id (including the anchor) instead
+        // of trusting the stored variant ids.
+        if (productsNeedingVariantLookup.size > 0) {
+          try {
+            const { data: variants, error: variantsError } = await supabase
+              .from('product_variants')
+              .select('id, product_id, inventory_tracking_policy')
+              .eq('merchant_id', merchantId)
+              .in('product_id', Array.from(productsNeedingVariantLookup));
+            if (variantsError) {
+              throw variantsError;
+            }
+            for (const variant of variants ?? []) {
+              if (
+                isInventoryTrackedProduct(
+                  { id: variant.product_id, manage_stock: false },
+                  [variant]
+                )
+              ) {
+                serializedVariantProductIds.add(variant.product_id);
+              }
+            }
+          } catch (lookupError) {
+            // A rejected variant read preserves the candidate ids exactly
+            // like an `{ error }` result: the products stay in the purge set
+            // below instead of escaping to the outer catch with no blog purge
+            // scheduled. A variant projection failure must not suppress cache
+            // invalidation for the parent product.
+            variantPolicyLookupFailed = true;
+            logger.error({
+              error: lookupError,
+              merchantId,
+              orderId: id,
+              message:
+                'Failed to resolve variant inventory policies after cancellation',
+            });
+          }
+        }
+        const trackedProducts = (products ?? []).filter((product) =>
+          variantPolicyLookupFailed &&
+          productsNeedingVariantLookup.has(product.id)
+            ? true
+            : isInventoryTrackedProduct(product, [
+                ...(serializedVariantProductIds.has(product.id)
+                  ? [
+                      {
+                        product_id: product.id,
+                        inventory_tracking_policy: 'serialized_strict',
+                      },
+                    ]
+                  : []),
+              ])
         );
         if (trackedProducts.length > 0) {
           productCacheRevalidation.revalidateProducts(merchantId, undefined, {
@@ -126,6 +240,11 @@ export async function POST(
             merchantId,
             trackedProducts.map((product) => product.slug)
           );
+          scheduleOrderProductBlogPurgeAfterResponse({
+            merchantId,
+            productIds: trackedProducts.map((product) => product.id),
+            supabase,
+          });
         }
       }
     } catch (error) {

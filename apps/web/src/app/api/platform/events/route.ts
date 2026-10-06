@@ -11,7 +11,6 @@ import { recordPlatformDomainEvent } from '@/lib/events/record-platform-domain-e
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { platformEventRequestSchema } from '@/schemas/platform-event';
 import { persistLegacyPlatformEvent } from './persist-legacy-platform-event';
-import { forwardToPlatformAnalytics } from './platform-event-forwarding';
 
 const MAX_EVENT_BYTES = 64 * 1024;
 
@@ -164,20 +163,6 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to track event' },
         { status: 500 }
       );
-    }
-
-    // Also forward to platform's external analytics if configured
-    // This runs in background, doesn't block response
-    if (!isLegacyAnalyticsFanoutDisabled('platform')) {
-      forwardToPlatformAnalytics({
-        eventData: event_data,
-        eventId,
-        eventType: event_type,
-        pageUrl: page_url,
-        request,
-      }).catch((forwardError) => {
-        console.warn('Failed to forward to platform analytics:', forwardError);
-      });
     }
 
     return NextResponse.json({ event_id: eventId, success: true });

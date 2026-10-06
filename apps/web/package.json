@@ -14,7 +14,8 @@
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers",
+    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp",
+    "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",
     "test:ci": "pnpm test && pnpm verify:quiz-assets",
@@ -46,7 +47,8 @@
     "sync:jumia-orders": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/sync-jumia-orders.ts",
     "mcp": "tsx mcp-server/server.ts",
     "test:checkout:build": "tsc --project tsconfig.checkout-browser.json && next build tests/checkout-browser/harness",
-    "test:checkout:browser": "playwright test"
+    "test:checkout:browser": "playwright test",
+    "build:connector-gateway": "esbuild tools/connector-gateway/server.ts --bundle --platform=node --target=node24 --format=cjs --outfile=tools/connector-gateway/dist/server.js"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^2.0.62",
@@ -132,7 +134,6 @@
     "expo-server-sdk": "^6.1.0",
     "fast-xml-parser": "5.9.0",
     "feed": "^5.2.1",
-    "firebase-admin": "^13.10.0",
     "framer-motion": "^12.40.0",
     "fuse.js": "^7.4.2",
     "hast-util-to-html": "^9.0.5",
@@ -145,7 +146,7 @@
     "lucide-react": "^0.561.0",
     "marked": "^18.0.5",
     "nanoid": "^5.1.11",
-    "next": "16.3.4",
+    "next": "16.3.6",
     "next-themes": "^0.4.6",
     "novel": "^1.0.2",
     "openai": "^6.42.0",
@@ -171,7 +172,10 @@
     "web-vitals": "^5.3.0",
     "whois-json": "^2.0.4",
     "zod": "^4.4.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
@@ -203,7 +207,8 @@
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "~7.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "esbuild": "0.28.1"
   },
   "browserslist": [
     "last 2 Chrome versions",

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 
 describe('inventory pending replay sources', () => {
-  it('registers the latest inventory corrective migrations', () => {
+  it('registers the latest inventory corrective and serialized migrations', () => {
     expect(INVENTORY_PENDING_REPLAY_SOURCE_ROWS.split('\n')).toEqual([
       'd38466b8daa79ac75dd96d0ee5e52039c62074cfaabf1ee326cbf3fb7f9f9a03 20260825190000_bulk_inventory_forecast_dashboard.sql',
       'be508f6123591624d3296d770a011f3ac6a4c4838ad10ad74f870a07aef2a2cd 20260827110200_restore_inventory_forecast_effective_stock_priority.sql',
@@ -10,6 +10,24 @@ describe('inventory pending replay sources', () => {
       '446ea5fe68b2d140405d810527ff8c5b8005b3ac73a607dfe85911a20c58b13b 20260826160000_prioritize_out_of_stock_inventory_forecast.sql',
       'e2812d6c8e27dca4e546453d9ae80a8096d82f2602b741fd3408d320a144ab03 20260827010001_use_effective_inventory_forecast_stock.sql',
       'f5bc90b0820af8924481b6518ee7949bedb6d73396a7522d8f8c4d24a47272db 20260827020001_prioritize_inventory_status_before_limit.sql',
+      'a24c3bdd3f5fc8c87bcb878d12463f4bcfbc64553ebcd41d104ac3c30fcf4f28 20260825111303_serialize_inventory_release_on_order.sql',
+      'c7242febac0dd3f6cdfc3842770bcb95a15421e995468746c895a7988b632223 20260825123500_fail_closed_missing_stock_rows.sql',
+      '6e1d8936c5a69ab3c98825e93914a31fa9cf3689bd3984758e956fec1c0b7b7d 20260825173500_authorize_serialized_inventory_claims.sql',
+      '0e4c28c67751b4ceb90b75d937fb6a2cc569a325380d75a660e8696622c4b533 20260825180500_authorize_inventory_confirmation.sql',
+      'ab13510a0a7c14ac2e77d82a553cd3306f2ce0a15ffd0d0cf33304ae599bd91c 20260825185000_scope_confirmation_reclaims_per_item.sql',
+      '8828e6216602d17d3d3670bbae4c78d38c37411872fb30584c27d7b970355834 20260829001000_harden_serialized_inventory_release_reconciliation.sql',
+      'cef378dbd30ab89303d04848d2ad18a76ebdf10ac8b9447ff3aa27861b4d81aa 20260828005000_preserve_order_fulfillment_on_idempotent_inventory_release.sql',
+      'ecbf92f71656a7ac03a161226f410af3f1832c15f04d41be8b6da216ccd95dfe 20260828006000_harden_serialized_inventory_confirmation_order.sql',
+      'e64993fc7f9ac8f0a5bd113059f7564b45e6820ea4ff0516d3814e4fd9696573 20260828007000_project_confirmation_item_columns.sql',
+      '7f38c505b026f6db63cb83e3d21a50f87938f1e751462afbc5d57b683f514ece 20260828008000_harden_serialized_inventory_release_authorization.sql',
+      '37d85756175faf7993b98dcf564d104b96b3fa9aaec3127bb5b7cb7598620eb7 20260828009000_harden_decrement_quantity_guards.sql',
+      '21c58d3cf52fb2a17ce62214ab45eb89bac0952716c870c379e523746990f599 20260829002000_harden_serialized_inventory_release_ordering.sql',
+      'c627503e72ea8c412f5360ad8fa348a1f6c4dbc5a1bb32d8105f48fabeac57ea 20260829003000_harden_confirmation_reservation_capture.sql',
+      '438b2e0c4bcbd8625f0924e0a55e9cc539088bd7c19572fa97a23c78f399098b 20260830001000_harden_confirmation_partial_reservation_capture.sql',
+      'f510e31d1ff6612ca953c986291c48bfc348ce7f87fec16d628a5b503f5ba5aa 20260830002000_serialize_sold_inventory_transition.sql',
+      'd4b80b2a3103e9dc47bd1e79eb0fe4d4582036d21fb21cbf63bbc9013446a404 20260830003000_capture_partial_confirmation_units.sql',
+      '55c520f2519aa6400b59e5ece4258cb18a156d134ca982721e281e6dd9956e9a 20260828102000_harden_confirmation_idempotency.sql',
+      '0020c4aa7ae3acffcc62045e87e9209a6fdb22bf31b3a8d599baf96a808e0090 20260828103000_fail_closed_null_stock_decrements.sql',
     ]);
   });
 });

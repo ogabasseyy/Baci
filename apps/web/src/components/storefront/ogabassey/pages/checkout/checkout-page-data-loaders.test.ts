@@ -30,20 +30,15 @@ describe('checkout-page data loaders', () => {
       )
     );
     const setCheckoutFields = vi.fn();
-    const setPaymentTab = vi.fn();
-    const setPaymentMethod = vi.fn();
 
     await loadResumedCheckoutOrder({
       resumeOrderId: 'order-1',
       resumeMerchantSlug: 'shop-1',
       resumeTrackingToken: 'track-1',
       resumeLookupEmail: null,
-      preferredGateway: 'credpal',
       setIsLoadingResumedOrder: vi.fn(),
       setResumedOrder: vi.fn(),
       setCheckoutFields,
-      setPaymentTab,
-      setPaymentMethod,
       setResumeOrderError: vi.fn(),
     });
 
@@ -54,8 +49,6 @@ describe('checkout-page data loaders', () => {
         currentStep: 'payment',
       })
     );
-    expect(setPaymentTab).toHaveBeenCalledWith('installments');
-    expect(setPaymentMethod).toHaveBeenCalledWith('credpal');
   });
 
   it('auto-applies wallet credit when the balance is positive', async () => {

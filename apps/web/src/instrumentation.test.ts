@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onRequestError, register } from './instrumentation';
 
 const registerOTelMock = vi.hoisted(() => vi.fn());
@@ -25,6 +25,10 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+beforeEach(() => {
+  vi.stubEnv('NEXT_OTEL_FETCH_DISABLED', '0');
+});
+
 describe('instrumentation register', () => {
   it('registers Vercel OpenTelemetry in the Node.js runtime', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
@@ -38,6 +42,7 @@ describe('instrumentation register', () => {
       },
       serviceName: 'baci-web',
     });
+    expect(process.env.NEXT_OTEL_FETCH_DISABLED).toBe('1');
     expect(setRateLimitDiagnosticHookMock).toHaveBeenCalledOnce();
   });
 

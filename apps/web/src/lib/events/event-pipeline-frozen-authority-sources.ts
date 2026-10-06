@@ -17,16 +17,19 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/tiktok/route.ts':
     '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
   'apps/web/src/app/api/platform/events/route.ts':
-    '646432088daff8e54f56fbab06453be789dc67d7b974398cc7f4b0d06842b9ca',
+    '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification
   // dispatch changed in this feature. Keep its reviewed bytes squash-safe by
   // binding the final source to a content receipt instead of a PR-only commit.
-  // Refreshed for malformed-JSON rejection before business data access, then
-  // for the plan-tier-authoritative entitlement call (slug fallback removed);
-  // the inherited notification/payment authority and database operations are
-  // unchanged.
+  // Refreshed for malformed-JSON rejection before business data access; the
+  // inherited notification/payment authority and database operations are unchanged.
+  // Re-pinned after merging main (#3525/#3504): keeps this branch's checkout
+  // blog-purge scheduling plus main's tracking-link, redvault, and
+  // plan-tier-authoritative entitlement additions.
+  // Re-pinned for the origin/main merge combining this branch's REDVAULT
+  // pilot validation gate with main's live related-product pricing (#3419).
   'apps/web/src/app/api/orders/route.ts':
-    '048fe51ab8cc156b48e51bbebabbb7d71cb834ceea35a275cc92fd3a73b9d68f',
+    'e27b66b765eac839763afbdafd89624d69813ca4bdc3a3ddd5169066f020bb40',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

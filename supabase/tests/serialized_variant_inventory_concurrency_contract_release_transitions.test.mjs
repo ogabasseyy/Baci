@@ -1,0 +1,254 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { serializedInventoryContract } from './serialized_variant_inventory_concurrency_contract.mjs';
+import { serializedInventoryReleaseLocks } from './serialized_variant_inventory_concurrency_contract_release_locks.mjs';
+import { serializedInventoryReleaseTransitions } from './serialized_variant_inventory_concurrency_contract_release_transitions.mjs';
+
+test('release transitions require a scoped lifecycle event', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.ok(
+    serializedInventoryReleaseLocks.findReleaseEvent(release, 'available')
+  );
+  assert.ok(
+    serializedInventoryReleaseLocks.findReleaseEvent(release, 'returned')
+  );
+  const withoutEvents = release.replace(
+    /PERFORM\s+private\s*\.\s*record_variant_inventory_event\s*\([\s\S]*?\);\s*/gi,
+    ''
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.findReleaseEvent(
+      withoutEvents,
+      'available'
+    ),
+    null
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.findReleaseEvent(withoutEvents, 'returned'),
+    null
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      "UPDATE variant_inventory SET status = 'available', order_id = NULL, order_item_id = NULL, reserved_at = NULL, reservation_expires_at = NULL WHERE id = v_unit.id; v_count := v_count + 1;",
+      'available'
+    ),
+    false
+  );
+});
+
+test('release transitions stay inside the reserved-unit loop', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  const branches = serializedInventoryContract.extractIfBranches(
+    release,
+    /^\s*IF\s+v_target_status\s*=\s*'available'\s+THEN\b/i
+  );
+  const update =
+    /UPDATE\s+public\.variant_inventory[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;/i.exec(
+      branches.thenBranch
+    );
+  assert.ok(update);
+  const detached = branches.thenBranch
+    .replace(update[0], '')
+    .replace(/\bFOR\s+v_unit\s+IN\b/i, `${update[0]}\nFOR v_unit IN`);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      detached,
+      'available'
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      branches.thenBranch,
+      'available'
+    ),
+    true
+  );
+  const widened = branches.thenBranch.replace(
+    /(UPDATE\s+public\.variant_inventory[\s\S]*?WHERE\s+id\s*=\s*v_unit\.id;)/i,
+    `$1\nUPDATE public.variant_inventory SET status = 'available', order_id = NULL, order_item_id = NULL WHERE TRUE;`
+  );
+  assert.notEqual(widened, branches.thenBranch);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseTransition(
+      widened,
+      'available'
+    ),
+    false
+  );
+});
+
+test('release preserves fulfillment for items without released units', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  const guard =
+    /IF\s+array_position\(\s*v_released_order_item_ids\s*,\s*v_item\.id\s*\)\s+IS\s+NULL\s+THEN\s+CONTINUE\s*;\s*END\s+IF\s*;/i.exec(
+      release
+    );
+  assert.ok(guard);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(guard[0], '')
+    ),
+    false
+  );
+  const loop = /FOR\s+v_item\s+IN[\s\S]*?LOOP\b([\s\S]*?)END\s+LOOP\s*;/i.exec(
+    release
+  );
+  assert.ok(loop);
+  const lateGuard = loop[1].replace(guard[0], '') + guard[0];
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(loop[1], lateGuard)
+    ),
+    false,
+    'the preservation guard must dominate every reconciliation operation'
+  );
+});
+
+test('zero-unit idempotent release preserves existing order fulfillment details', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.match(
+    release,
+    /UPDATE\s+public\.orders\s+SET\s+fulfillment_details\s*=\s*COALESCE\(\s*v_fulfillment_data\s*,\s*fulfillment_details\s*\)\s+WHERE\s+id\s*=\s*p_order_id\s*;/i,
+    'a zero-unit/idempotent release must not replace existing fulfillment details with NULL'
+  );
+  assert.doesNotMatch(
+    release,
+    /UPDATE\s+public\.orders\s+SET\s+fulfillment_details\s*=\s*v_fulfillment_data\s+WHERE\s+id\s*=\s*p_order_id\s*;/i
+  );
+});
+
+test('release authorization raises in the unauthorized branch', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
+    true
+  );
+  const guard =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'[\s\S]*?END\s+IF\s*;/i.exec(
+      release
+    );
+  assert.ok(guard);
+  const inverted = guard[0].replace(
+    /THEN([\s\S]*?)END\s+IF\s*;$/i,
+    'THEN\n    NULL;\n  ELSE$1END IF;'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(
+      release.replace(guard[0], inverted)
+    ),
+    false
+  );
+});
+
+test('release selects only the inventory columns used by reconciliation', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.doesNotMatch(release, /SELECT\s+vi\.\*/i);
+  assert.match(
+    release,
+    /SELECT\s+vi\.id\s*,\s*vi\.variant_id\s*,\s*vi\.order_item_id\s*,\s*vi\.branch_id\s*,\s*pv\.product_id/i
+  );
+});
+
+test('release reconciliation recomputes missing units and deduplicates stock sync', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+
+  assert.match(
+    release,
+    /'missingUnitCount'\s*,\s*GREATEST\(\s*v_item\.quantity\s*-\s*v_reserved_count\s*,\s*0\s*\)/i
+  );
+  assert.doesNotMatch(
+    release,
+    /'missingUnitCount'\s*,\s*COALESCE\(\s*\(\s*v_item\.fulfillment_data/i
+  );
+  assert.match(
+    release,
+    /array_position\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)\s+IS\s+NULL[\s\S]*?sync_serialized_stock[\s\S]*?array_append\(\s*v_synced_product_ids\s*,\s*v_item\.product_id\s*\)/i
+  );
+});
+
+test('release authorization guards the order lock and dispatch', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(release),
+    true
+  );
+
+  const guardPattern =
+    /IF\s+COALESCE\(\s*\(\s*SELECT\s+auth\.role\(\s*\)\s*\)\s*,\s*''\s*\)\s*<>\s*'service_role'\s+AND\s+NOT\s+public\.has_merchant_access\(\s*p_merchant_id\s*\)\s+THEN[\s\S]*?END\s+IF\s*;/i;
+  const guardBlock = guardPattern.exec(release)[0];
+  const earlyReturn = release.replace(
+    guardBlock,
+    `RETURN jsonb_build_object();\n${guardBlock}`
+  );
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(earlyReturn),
+    false
+  );
+
+  const lockPattern =
+    /PERFORM\s+1\s+FROM\s+public\.orders[\s\S]*?FOR\s+UPDATE\s*;/i;
+  const lockBlock = lockPattern.exec(release)[0];
+  const swapped = release
+    .replace(guardBlock, '/* guard moved below the order lock */')
+    .replace(lockBlock, `${lockBlock}\n${guardBlock}`);
+  assert.equal(
+    serializedInventoryReleaseLocks.hasMerchantAuthorizationGuard(swapped),
+    false
+  );
+});
+
+test('release reconciliation synchronizes products in a deterministic order', () => {
+  const release = serializedInventoryContract.latestFunctionBody(
+    'private.release_order_inventory_units(uuid, uuid, text)'
+  );
+  assert.match(
+    release,
+    /FROM\s+public\.order_items\s+oi[\s\S]*?WHERE\s+oi\.order_id\s*=\s*p_order_id\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+FOR\s+UPDATE/i
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(
+        /\s+ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id/i,
+        ''
+      )
+    ),
+    false
+  );
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      release.replace(
+        'ORDER BY oi.product_id, oi.variant_id, oi.id',
+        'ORDER BY oi.product_id, oi.id'
+      )
+    ),
+    false
+  );
+  const narrowed = release.replace(
+    /WHERE\s+oi\s*\.\s*order_id\s*=\s*p_order_id\s+ORDER\s+BY/i,
+    'WHERE oi.order_id = p_order_id AND oi.quantity > 1 ORDER BY'
+  );
+  assert.notEqual(narrowed, release);
+  assert.equal(
+    serializedInventoryReleaseTransitions.releaseReconciliationMatches(
+      narrowed
+    ),
+    false
+  );
+});

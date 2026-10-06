@@ -1,4 +1,6 @@
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
+import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
 import type {
   QuizDraftEvent,
@@ -125,7 +127,16 @@ export async function launchMerchantQuizDraftV2(args: {
       p_time_per_question_seconds: input.timePerQuestionSeconds,
       p_time_zone: input.timeZone,
     });
-    if (isQuizDraftEvent(data)) return { event: data, ok: true };
+    if (isQuizDraftEvent(data)) {
+      expireProductBlogCache(merchantId);
+      scheduleReservationProductPurge({
+        merchantId,
+        sourceId: input.eventId,
+        source: 'quiz',
+        supabase,
+      });
+      return { event: data, ok: true };
+    }
 
     if (error?.code === 'QZ046') {
       const alreadyLaunched = await findLaunchedMerchantQuizV2({
@@ -133,7 +144,16 @@ export async function launchMerchantQuizDraftV2(args: {
         merchantId,
         supabase,
       });
-      if (alreadyLaunched) return { event: alreadyLaunched, ok: true };
+      if (alreadyLaunched) {
+        expireProductBlogCache(merchantId);
+        scheduleReservationProductPurge({
+          merchantId,
+          sourceId: input.eventId,
+          source: 'quiz',
+          supabase,
+        });
+        return { event: alreadyLaunched, ok: true };
+      }
     }
     return getLiveLaunchFailure(error?.code);
   }

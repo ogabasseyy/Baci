@@ -4,7 +4,7 @@
   "app_info": {
     "display_name": "Ogabassey",
     "subtitle": "Shop tech products",
-    "description": "Find electronics and accessories in the Ogabassey catalog, inspect product options and listed prices, and open a cart handoff on Ogabassey. Check delivery fees and availability before completing checkout on the website.",
+    "description": "Find electronics and accessories in the Ogabassey catalog, inspect product options and listed prices, and open a cart handoff on Ogabassey. Check where to confirm delivery fees and availability before completing checkout on the website.",
     "category": "SHOPPING"
   },
   "tools": {
@@ -92,15 +92,15 @@
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
       }
     },
-    "get_shipping_quote": {
+    "get_delivery_fee_info": {
       "annotations": {
         "readOnlyHint": true,
-        "openWorldHint": false,
+        "openWorldHint": true,
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Returns policy guidance for a destination without booking delivery or charging a fee.",
-        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "read_only_justification": "Returns delivery policy or a live estimate without booking delivery, charging a fee, or changing a cart.",
+        "open_world_justification": "May call the external GIG carrier for a read-only delivery estimate.",
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
       }
     }
@@ -139,11 +139,11 @@
       "expected_output_url": null
     },
     {
-      "description": "Explain delivery fees without inventing a quote.",
+      "description": "Check where to confirm destination-specific delivery fees.",
       "user_prompt": "Using Ogabassey, how much is delivery to Ikeja, Lagos?",
       "file_attachment_urls": null,
-      "tools_triggered": "get_shipping_quote",
-      "expected_output": "Explains that the final fee and timing are confirmed at checkout and links the public shipping policy.",
+      "tools_triggered": "get_delivery_fee_info",
+      "expected_output": "Without selected shipment items, explains the delivery policy and asks for product IDs, quantities and exact variants before a live GIG estimate. Requests confirmed per-unit packed weight if needed; never invents rates or weights. With eligible items, returns available live estimates or explains why unavailable, and directs final confirmation to checkout.",
       "expected_output_url": null
     }
   ],

@@ -10902,6 +10902,7 @@ export type Database = {
           cost_price: number | null;
           created_at: string | null;
           default_variant_id: string | null;
+          discovery_metadata: Json | null;
           description: string | null;
           description_digital_source_type: string | null;
           description_provenance_sha256: string | null;
@@ -10983,6 +10984,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -11064,6 +11066,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -20757,6 +20760,114 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      search_product_discovery_facts: {
+        Args: {
+          brand_filter?: string;
+          category_filter?: string;
+          condition_filter?: string;
+          excluded_types_filter?: Json;
+          merchant_id_param: string;
+          query_text: string;
+          result_limit?: number;
+          result_offset?: number;
+        };
+        Returns: {
+          product_id: string;
+          total_count: number;
+        }[];
+      };
+      get_mcp_search_product_offers: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          compare_at_price: number;
+          condition: string;
+          id: string;
+          price: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_product_variants: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          attributes: Json;
+          condition: string;
+          created_at: string;
+          effective_policy: string;
+          id: string;
+          price_override: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_serialized_anchor_policies: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          available_units: number;
+          effective_policy: string;
+          product_id: string;
+        }[];
+      };
+      search_product_variant_recall: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_filters?: Json;
+          p_identity?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+        };
+        Returns: {
+          attributes: Json;
+          product_id: string;
+        }[];
+      };
+      search_products_browse: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+          p_sort?: string;
+        };
+        Returns: {
+          available_conditions: string[];
+          brand: string;
+          category: string;
+          compare_at_price: number;
+          condition: string;
+          condition_detail: string;
+          created_at: string;
+          description: string;
+          discovery_metadata: Json;
+          has_condition_offers: boolean;
+          has_variants: boolean;
+          id: string;
+          images: Json;
+          inventory_tracking_policy: string;
+          manage_stock: boolean;
+          name: string;
+          price: number;
+          slug: string;
+          stock_quantity: number;
+          updated_at: string;
+        }[];
       };
       search_products_v2: {
         Args: {

@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "23160269695f631165084203398353897801c7ee",
+  "originMainSha": "c7435dfa61a10843607f8de3dfd70b9b712e29b8",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "ad3b8433e4ca0a6a8a2a5ba4242156d5fc7b22b230f939cf89a9f8c44c882164",
-  "routingProxyInputSha256": "db2e6fec5d981f86e1bf106da8eea1de3a4117da548cbb859ecb05c306d30526",
+  "routeTreeSha256": "bdbf1db511c743f0a84906aa77e1606baa4edf3c010d1711d51c5d745da018fb",
+  "routingProxyInputSha256": "ac43c63ca98e9063de8f37fc9ab27c3038d28828e41041e29200367acce50655",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -696,6 +696,18 @@
       "routePattern": "/api/search/autocomplete",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/search/autocomplete/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:search/submissions/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/search/submissions",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/search/submissions/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8282,5 +8294,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "06f80e7ee2783d24299e55130f2f0deec82471752e65dd8ee1393f24fe104ac1"
+  "inventorySha256": "00c66aabbd261dbe936d6ce9db16c183cf2256143a816d2ad181f0a150b0ae7c"
 }

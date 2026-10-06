@@ -13,20 +13,24 @@ const releaseHelper = readFileSync(
 describe('deploy crontab', () => {
   it('uses the resolved Node binary for systemd services', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const servicesScript = readFileSync(
+      join(workerRoot, 'lib', 'install-worker-services.sh'),
+      'utf8'
+    );
     const releasePreparationIndex = deployScript.indexOf(
       'prepare_worker_release'
     );
     const triggerServiceIndex = deployScript.indexOf(
-      'Installing AI storefront trigger user service'
+      'install_worker_services'
     );
 
     assert.match(releaseHelper, /NODE_BIN=\$\(ssh/);
     assert.notEqual(releasePreparationIndex, -1);
     assert.notEqual(triggerServiceIndex, -1);
     assert.ok(releasePreparationIndex < triggerServiceIndex);
-    assert.doesNotMatch(deployScript, /ExecStart=\/usr\/bin\/node/);
+    assert.doesNotMatch(servicesScript, /ExecStart=\/usr\/bin\/node/);
     assert.match(
-      deployScript,
+      servicesScript,
       /ExecStart=\$NODE_BIN \$REMOTE_DIR\/jobs\/ai-storefront-trigger-server\.mjs/
     );
   });
@@ -77,56 +81,64 @@ describe('deploy crontab', () => {
 
   it('requires the remote worker checkout to match the deploying commit', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const provisioner = readFileSync(
+      join(workerRoot, 'lib', 'provision-immutable-checkout.sh'),
+      'utf8'
+    );
 
     assert.match(deployScript, /APP_SHA=\$\(git rev-parse HEAD\)/);
-    assert.match(releaseHelper, /git -C "\$repo_dir" rev-parse --verify HEAD/);
     assert.match(
       releaseHelper,
+      /lib\/provision-immutable-checkout\.sh/
+    );
+    assert.match(provisioner, /git -C "\$repo_dir" rev-parse --verify HEAD/);
+    assert.match(
+      provisioner,
       /git -C "\$repo_dir" status --porcelain=v1 --untracked-files=all/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is dirty\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /if \[ "\$actual_sha" != "\$expected_sha" \]; then[\s\S]*?echo "Direct-worker checkout does not match the deploying commit\." >&2[\s\S]*?exit 1[\s\S]*?fi/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /apps\/web\/src\/scripts\/process-petrock-reconciliation\.ts/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /apps\/web\/src\/scripts\/process-quiz-finalization\.ts/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /tsx_bin="\$repo_dir\/apps\/web\/node_modules\/\.bin\/tsx"/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /tsx_bin="\$repo_dir\/node_modules\/\.bin\/tsx"/
     );
-    assert.doesNotMatch(releaseHelper, /pnpm .*exec tsx/);
+    assert.doesNotMatch(provisioner, /pnpm .*exec tsx/);
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is missing \$script_path\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /Direct-worker checkout is missing the reviewed web toolchain\.[\s\S]*?exit 1/
     );
     assert.match(
-      releaseHelper,
-      /"\$remote_dir\/bin\/process-petrock-reconciliation\.sh"/
+      provisioner,
+      /"\$staging_dir\/bin\/process-petrock-reconciliation\.sh"/
     );
     assert.match(
-      releaseHelper,
-      /"\$remote_dir\/bin\/process-quiz-finalization\.sh"/
+      provisioner,
+      /"\$staging_dir\/bin\/process-quiz-finalization\.sh"/
     );
     assert.match(
-      releaseHelper,
+      provisioner,
       /if \[ ! -x "\$wrapper_path" \]; then[\s\S]*?Missing or non-executable direct-worker wrapper: \$wrapper_path[\s\S]*?exit 1/
     );
     assert.ok(
@@ -136,9 +148,12 @@ describe('deploy crontab', () => {
   });
 
   it('prints the required full-checkout path in the environment reminder', () => {
-    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const envReminder = readFileSync(
+      join(workerRoot, 'lib', 'print-worker-env-reminder.sh'),
+      'utf8'
+    );
 
-    assert.match(deployScript, /BACI_REPO_DIR=\/opt\/baci\/app/);
+    assert.match(envReminder, /BACI_REPO_DIR=\/opt\/baci\/app/);
   });
 
   it('schedules the iOS live-build sync daily backstop through run-web-cron', () => {
@@ -173,6 +188,10 @@ describe('deploy crontab', () => {
 
   it('refreshes the GIGL service-centre directory outside checkout', () => {
     const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const envReminder = readFileSync(
+      join(workerRoot, 'lib', 'print-worker-env-reminder.sh'),
+      'utf8'
+    );
 
     assert.match(
       deployScript,
@@ -182,9 +201,9 @@ describe('deploy crontab', () => {
       deployScript,
       /\$NODE_BIN \$REMOTE_DIR\/jobs\/sync-gigl-service-centres\.mjs/
     );
-    assert.match(deployScript, /GIGL_BASE_URL=\.\.\./);
-    assert.match(deployScript, /GIGL_EMAIL=\.\.\./);
-    assert.match(deployScript, /GIGL_PASSWORD=\.\.\./);
+    assert.match(envReminder, /GIGL_BASE_URL=\.\.\./);
+    assert.match(envReminder, /GIGL_EMAIL=\.\.\./);
+    assert.match(envReminder, /GIGL_PASSWORD=\.\.\./);
   });
 
   it('serializes the AI storefront worker behind the shared workload lock', () => {

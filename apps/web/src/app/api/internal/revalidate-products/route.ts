@@ -6,6 +6,8 @@ import {
   revalidateProducts,
 } from '@/lib/cache-revalidation';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
+import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import { collectResolvedProductSlugs } from '@/lib/internal-product-purge-entries';
 import { logger } from '@/lib/logger';
 import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
 import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
@@ -63,11 +65,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { merchantId, merchantSlug, products, purgeWholeStorefront } =
-    parsed.data;
+  const {
+    merchantId,
+    merchantSlug,
+    productSlugs,
+    products,
+    purgeWholeStorefront,
+    expireProductBlogCache: shouldExpireProductBlogCache,
+  } = parsed.data;
 
   // Runs in a route context, so revalidateTag works here (unlike the CLI worker).
-  revalidateProducts(merchantId);
+  if (shouldExpireProductBlogCache) {
+    // Standalone workers use this narrow mode to refresh the related-product
+    // enrichment without churning every product/index/feed cache for the
+    // merchant. The helper is intentionally called in this request context.
+    expireProductBlogCache(merchantId);
+  } else {
+    revalidateProducts(merchantId);
+  }
 
   // The internal Bearer secret authorizes this endpoint, but `merchantSlug` is
   // still only caller-supplied routing data. Resolve the canonical slug from
@@ -145,33 +160,88 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // When the caller supplies product entries, resolve them against the DB and
   // bust their per-slug Next caches. The per-slug bust needs only merchantId,
   // so it remains independent of the merchant-slug-gated Cloudflare purge.
+  if (productSlugs && productSlugs.length > 0) {
+    // Every slug chunk is hard-expired: this request cannot know whether a
+    // later control-metadata chunk will schedule an edge purge, and SWR
+    // would serve the pre-mutation snapshot to the first post-purge request
+    // and re-seed the edge with stale stock. Standalone import chunks are
+    // no exception — an import that updates an existing product must not
+    // repopulate the edge with the old price or stock.
+    revalidateProductSlugs(merchantId, productSlugs, {
+      expireImmediately: true,
+    });
+  }
   if (products && products.length > 0) {
     try {
-      // Enrich from the product ROWS with the SAME resolution `/api/cache/revalidate`
-      // performs, so an {id}-only import/save entry purges the real slug/category
-      // URLs (not `/products/<uuid>`). Public client: this route intentionally
-      // uses no service-role credentials, and the anon policy exposes only
-      // ACTIVE rows, which is sufficient — draft/
-      // pending PDPs are never publicly cached, so an unresolved row simply
-      // falls back to the caller's hints + the always-purged fallback URLs.
-      // Fail-open lives inside the enrichment.
-      const purgeClient =
-        supabase ??
-        createPublicClient({
-          clientInfo: 'internal-revalidate-products-purge',
-        });
-      const { entries, resolvedSlugs } = await enrichProductPurgeEntries(
-        purgeClient,
-        merchantId,
-        products
-      );
-      // Bust the per-slug Next product-detail caches for every resolved slug
-      // BEFORE scheduling the edge purge: the PDP snapshot is tagged per-slug
-      // and is NOT invalidated by the slug-less revalidateProducts above, so a
-      // Cloudflare MISS would otherwise refill from stale Next data until TTL.
-      revalidateProductSlugs(merchantId, resolvedSlugs);
-      if (authoritativeMerchantSlug && !purgeWholeStorefront) {
-        scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries);
+      if (purgeWholeStorefront) {
+        // Whole-storefront purges ignore per-product entries and blog slugs
+        // (the route hostname-purges below), so skip the paginated article
+        // lookups — on a large catalog/blog they can exceed the worker's
+        // fallback timeout before the hostname purge is scheduled. The
+        // per-slug Next bust still runs from the caller-supplied hints
+        // (explicit productSlugs were busted above). Hard-expire when the
+        // hostname purge below will fire so it cannot refill from SWR.
+        const hintSlugs = collectResolvedProductSlugs(products);
+        if (authoritativeMerchantSlug) {
+          revalidateProductSlugs(merchantId, hintSlugs, {
+            expireImmediately: true,
+          });
+        } else {
+          revalidateProductSlugs(merchantId, hintSlugs);
+        }
+      } else {
+        // Enrich from the product ROWS with the SAME resolution
+        // `/api/cache/revalidate` performs, so an {id}-only import/save entry
+        // purges the real slug/category URLs (not `/products/<uuid>`). Public
+        // client: this route intentionally uses no service-role credentials,
+        // and the anon policy exposes only ACTIVE rows, which is sufficient —
+        // draft/pending PDPs are never publicly cached, so an unresolved row
+        // simply falls back to the caller's hints + the always-purged
+        // fallback URLs. Fail-open lives inside the enrichment.
+        const purgeClient =
+          supabase ??
+          createPublicClient({
+            clientInfo: 'internal-revalidate-products-purge',
+          });
+        const {
+          entries,
+          resolvedSlugs,
+          blogPostSlugs,
+          blogPostSlugsIncomplete,
+        } = await enrichProductPurgeEntries(purgeClient, merchantId, products);
+        // Bust the per-slug Next product-detail caches for every resolved slug
+        // BEFORE scheduling the edge purge: the PDP snapshot is tagged per-slug
+        // and is NOT invalidated by the slug-less revalidateProducts above, so a
+        // Cloudflare MISS would otherwise refill from stale Next data until TTL.
+        // Hard-expire when the purge below will fire; SWR would serve the
+        // pre-mutation snapshot to the first post-purge request.
+        const bustSlugs = Array.from(
+          new Set([...(productSlugs ?? []), ...resolvedSlugs])
+        );
+        if (authoritativeMerchantSlug) {
+          revalidateProductSlugs(merchantId, bustSlugs, {
+            expireImmediately: true,
+          });
+        } else {
+          revalidateProductSlugs(merchantId, bustSlugs);
+        }
+        if (authoritativeMerchantSlug && !purgeWholeStorefront) {
+          // Related blog enrichment shares the merchant product tag. Expire it
+          // before the edge purge can cause an article MISS to refill stale data.
+          expireProductBlogCache(merchantId);
+          if (blogPostSlugsIncomplete) {
+            // The article lookup totally failed: the affected article URLs
+            // are unknown, so evict the hostname (a superset of the product
+            // purge) rather than leaving linked rails stale until TTL.
+            scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
+          } else if (blogPostSlugs.length > 0) {
+            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries, {
+              blogPostSlugs,
+            });
+          } else {
+            scheduleStorefrontProductPurge(authoritativeMerchantSlug, entries);
+          }
+        }
       }
     } catch (purgeError) {
       logger.error({
@@ -186,6 +256,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // purge rather than a partial URL list. The hostname comes only from the
   // merchant-id lookup above, never directly from the request body.
   if (purgeWholeStorefront && authoritativeMerchantSlug) {
+    // Expire the merchant-scoped article enrichment before the hostname purge
+    // can trigger a MISS and refill Cloudflare with stale product data.
+    expireProductBlogCache(merchantId);
     scheduleStorefrontHostnamePurge(authoritativeMerchantSlug);
   }
 

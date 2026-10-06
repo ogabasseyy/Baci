@@ -20,6 +20,7 @@ function normalizeStorefrontCondition(condition: string | null | undefined) {
 }
 
 interface StorefrontVariantRecord {
+  inventory_tracking_policy?: string | null;
   archived_at?: string | null;
   attributes?: Record<string, unknown> | null;
   condition?: string | null;
@@ -94,6 +95,11 @@ export function normalizeStorefrontProductVariants(
     .filter(isStorefrontProductVariantPublic)
     .map((variant) => ({
       id: variant.id,
+      ...(variant.inventory_tracking_policy === 'off' ||
+      variant.inventory_tracking_policy === 'serialized_strict' ||
+      variant.inventory_tracking_policy === 'serialized_then_unlimited'
+        ? { inventory_tracking_policy: variant.inventory_tracking_policy }
+        : {}),
       product_id: variant.product_id || options.productId,
       merchant_id: variant.merchant_id || options.merchantId,
       condition: normalizeStorefrontCondition(variant.condition),

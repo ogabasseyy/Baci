@@ -91,7 +91,6 @@ function createContext({
       setOrderCreated: vi.fn(),
       clearCheckoutSession: vi.fn(),
       setDvaData: vi.fn(),
-      setDvaCountdown: vi.fn(),
       setIsInitializingDva: vi.fn(),
       setPendingCryptoOrder: vi.fn(),
       setShowCryptoSelector: vi.fn(),

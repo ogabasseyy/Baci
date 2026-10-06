@@ -1,5 +1,5 @@
 import { mapApiOrderToResumedOrder } from './map-api-order-to-resumed-order';
-import type { PaymentMethod, PaymentTab, ResumedOrder } from './types';
+import type { ResumedOrder } from './types';
 
 interface ResumedOrderFormFields {
   firstName: string;
@@ -19,12 +19,9 @@ export interface LoadResumedCheckoutOrderParams {
   resumeTrackingToken: string | null;
   resumeLookupEmail: string | null;
   signal?: AbortSignal;
-  preferredGateway: 'credpal' | 'credit_direct' | null;
   setIsLoadingResumedOrder: (isLoading: boolean) => void;
   setResumedOrder: (order: ResumedOrder | null) => void;
   setCheckoutFields: (fields: ResumedOrderFormFields) => void;
-  setPaymentTab: (tab: PaymentTab) => void;
-  setPaymentMethod: (method: PaymentMethod) => void;
   setResumeOrderError: (error: string | null) => void;
 }
 
@@ -33,13 +30,10 @@ export async function loadResumedCheckoutOrder({
   resumeMerchantSlug,
   resumeTrackingToken,
   resumeLookupEmail,
-  preferredGateway,
   signal,
   setIsLoadingResumedOrder,
   setResumedOrder,
   setCheckoutFields,
-  setPaymentTab,
-  setPaymentMethod,
   setResumeOrderError,
 }: LoadResumedCheckoutOrderParams): Promise<void> {
   setIsLoadingResumedOrder(true);
@@ -81,19 +75,6 @@ export async function loadResumedCheckoutOrder({
         currentStep: 'payment',
         completedSteps: { contact: true, delivery: true },
       });
-
-      // 2025 FIX: Sync paymentTab with preferredGateway to prevent UI crash
-      // If a BNPL gateway is selected, we MUST switch to the 'installments' tab
-      if (
-        preferredGateway === 'credit_direct' ||
-        preferredGateway === 'credpal'
-      ) {
-        setPaymentTab('installments');
-        setPaymentMethod(preferredGateway);
-      } else if (preferredGateway) {
-        setPaymentTab('full');
-        setPaymentMethod(preferredGateway);
-      }
     } else {
       console.error('Failed to fetch resumed order');
       setResumeOrderError(

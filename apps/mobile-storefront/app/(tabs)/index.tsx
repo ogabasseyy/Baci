@@ -2,7 +2,6 @@ import * as Sentry from '@sentry/react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useIsFocused } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard } from 'react-native';
 import {
   runOnJS,
   useAnimatedScrollHandler,
@@ -18,6 +17,7 @@ import { getHomeContentBottomPadding } from '@/constants/layout';
 import { usePageConfig } from '@/hooks';
 import { CONSTANT_MERCHANT_ID } from '@/hooks/product-utils';
 import { useDeferredFocusRender } from '@/hooks/use-deferred-focus-render';
+import { useHomeSearchControls } from '@/hooks/use-home-search';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useNetworkState } from '@/hooks/use-network-state';
 import { CONFIG } from '@/lib/config';
@@ -28,10 +28,6 @@ import { getTemplateConfig } from '@/lib/templates';
 
 const HEADER_SOLID_BACKGROUND_OFFSET_PX = 10;
 const HEADER_VISIBILITY_ANIMATION_DURATION_MS = 180;
-
-const handleSearchSubmit = (): void => {
-  Keyboard.dismiss();
-};
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -69,15 +65,11 @@ export default function HomeScreen() {
   const headerVisibilityTarget = useSharedValue(1);
   const previousOffsetY = useSharedValue(0);
   const isScrolledShared = useSharedValue(false);
-  const searchVisibleShared = useSharedValue(false);
 
   // 2026 Best Practice: Network state monitoring for offline UX
   // Note: Manual onReconnect refetch removed — onlineManager.setOnline(true)
   // combined with refetchOnReconnect: true handles automatic refetching.
   const { isOnline } = useNetworkState();
-
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const setHeaderVisibilityTarget = (target: 0 | 1) => {
     'worklet';
@@ -89,17 +81,20 @@ export default function HomeScreen() {
     );
   };
 
-  const handleSearch = () => {
-    searchVisibleShared.set(true);
-    setHeaderVisibilityTarget(1);
-    setSearchVisible(true);
-  };
-
-  const handleSearchCancel = () => {
-    searchVisibleShared.set(false);
-    setSearchVisible(false);
-    setSearchQuery('');
-  };
+  const {
+    handleSearch,
+    handleSearchCancel,
+    handleSearchQueryChange,
+    handleSearchSubmit,
+    handleSeeAllResults,
+    searchQuery,
+    searchVisible,
+    searchVisibleShared,
+    showSearchMinLengthHint,
+  } = useHomeSearchControls({
+    isFocused,
+    onSearchOpen: () => setHeaderVisibilityTarget(1),
+  });
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -272,14 +267,16 @@ export default function HomeScreen() {
       onRefresh={handleRefresh}
       onSearch={handleSearch}
       onSearchCancel={handleSearchCancel}
-      onSearchQueryChange={setSearchQuery}
+      onSearchQueryChange={handleSearchQueryChange}
       onSearchSubmit={handleSearchSubmit}
+      onSeeAllResults={handleSeeAllResults}
       primaryColor={colors.primary}
       primaryProductGridIndex={primaryProductGridIndex}
       refreshing={refreshing}
       resolvedHeaderHeight={resolvedHeaderHeight}
       searchQuery={searchQuery}
       searchVisible={searchVisible}
+      showSearchMinLengthHint={showSearchMinLengthHint}
       selectedCategoryId={selectedCategoryId}
       shouldRenderDecorations={shouldRenderDecorations}
     />

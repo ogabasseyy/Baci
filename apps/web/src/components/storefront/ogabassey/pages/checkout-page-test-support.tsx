@@ -39,6 +39,8 @@ import {
   walletFundedTransferMock,
 } from './checkout-page.test-fixtures';
 
+const mockRouterPush = vi.fn();
+
 function mockCheckoutSubmissionState() {
   vi.mocked(useCart).mockReturnValue({
     cart: [
@@ -109,7 +111,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   addressAutocompleteMock.selectedPlace = null;
   vi.mocked(useRouter).mockReturnValue({
-    push: vi.fn(),
+    push: mockRouterPush,
     back: vi.fn(),
     replace: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
@@ -163,6 +165,7 @@ export {
   mockCaptureClientEvent,
   mockCheckoutSubmissionState,
   mockMobileOrderSummary,
+  mockRouterPush,
   openCreditDirectCheckout,
   openCredPalCheckout,
   readCreditDirectPopupMarker,

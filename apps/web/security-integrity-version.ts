@@ -14,10 +14,17 @@ export function parseVersion(version: string): ParsedVersion {
   const withoutBuild = version.split('+', 1)[0];
   const dash = withoutBuild.indexOf('-');
   const core = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
-  const parts = core.split('.').map((part) => Number.parseInt(part, 10));
-  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {
+  const segments = core.split('.');
+  // Strict digit check per segment: parseInt would silently accept
+  // trailing garbage ('1.9.0foo' → 0), weakening the malformed-input
+  // rejection this gate promises.
+  if (
+    segments.length !== 3 ||
+    segments.some((segment) => !/^\d+$/.test(segment))
+  ) {
     throw new Error(`Unexpected version: ${version}`);
   }
+  const parts = segments.map((segment) => Number.parseInt(segment, 10));
   return {
     triple: parts as [number, number, number],
     prerelease: dash !== -1,

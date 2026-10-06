@@ -9,6 +9,11 @@ import { fileURLToPath } from 'node:url';
 // the version gate stays green. Scoped-aware, realpath-deduped, and
 // bounded at the enclosing repo root so worktree checkouts never scan a
 // parent checkout's node_modules.
+//
+// Soundness bound (documented, not silent): recursion stops past depth
+// 8 and the upward walk stops after 12 levels, so a pathological
+// deeper-than-8 node_modules chain would be skipped. Depth 8 covers
+// realistic pnpm hoisted and virtual-store layouts.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

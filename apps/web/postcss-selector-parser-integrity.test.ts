@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { packageMain } from './security-integrity-load';
 import { resolveRoot, versionAt } from './security-integrity-resolve';
+import { isAtLeast, parseVersion } from './security-integrity-version';
 
 // Regression coverage for CVE-2026-104844 (GHSA-rj75-hqrm-r3gf):
 // `postcss-selector-parser` had quadratic complexity in flat selector
@@ -45,9 +46,17 @@ interface Parser {
 const FLAT_CLASSES = 300_000;
 
 describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
-  it('resolves the patched 6.0.10 release', () => {
+  it('resolves postcss-selector-parser at or above the 6.0.10 floor', () => {
     const root = packageRoot();
-    expect(versionAt(root, 'postcss-selector-parser')).toBe('6.0.10');
+    // A floor, like the katex suite: a future patched 6.0.x bump must
+    // not fail this gate. Fail-closed: an unpatched bump still fails
+    // the backport markers and the linear-time behavior case.
+    expect(
+      isAtLeast(
+        parseVersion(versionAt(root, 'postcss-selector-parser')),
+        [6, 0, 10]
+      )
+    ).toBe(true);
   });
 
   it('keeps the linear-time membership backport applied', () => {

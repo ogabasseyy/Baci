@@ -171,3 +171,9 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-56: matched base rows restore the RPC-refreshed live condition instead of the parent's "New & Used" label (compare table reads product.condition). Base-case assertion verified red pre-fix, green post-fix.
 - CX-57: final brand-folding migration registered in both replay registries with its verified sha256; replay pin + manifest suites green (25/25). May clear the DB Replay CI red — verify on checks.
 - CX-58: ID-less base matches carry explicit `match_base=1`; the PDP suppresses condition-offer resolution while the selection still equals the entry one (resolver + effective-price flags, route-data boolean), so the advertised base price survives. A shopper-picked condition re-enables offers. Saved-screen links pass ids only and are unaffected; base matches saved without ids still open with PDP-default selection (indistinguishable, noted, out of scope).
+
+## Round 28 (Muse on fcaa9c5b21 — 2 repeats + 1 new low adjudicated; Codex quota-blocked)
+
+- Intake contact-rotation and assurance default-on mediums are repeats of adjudicated items; no code change.
+- New assist-tenant Host-spoofing low adjudicated invalid: `resolveAgenticChatTenant` pins the tenant to the server-configured slug (`resolved.merchant.slug !== configuredSlug` → null → 503), so a spoofed Host can only deny, never borrow another merchant's 60/min budget or branding. The resolver is pre-existing shared code (#3482, untouched by this PR); the rate limit keys on the resolved pinned merchantId.
+- Codex trigger on fcaa9c5b21 returned usage-limits (single trigger, no spam); Jules fast-mode also failed to produce a body. Loop paused awaiting Codex recovery.

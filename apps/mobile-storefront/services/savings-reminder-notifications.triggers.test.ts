@@ -73,16 +73,25 @@ describe('scheduleSavingsReminderNotification triggers', () => {
   });
 
   it('activates a due reminder without prompting when permission was already granted', async () => {
-    await AsyncStorage.setItem(
-      'baci:savings-reminder-pending-request',
-      JSON.stringify({
+    // Pre-scope legacy keys are disposed, never adopted: seed a scoped
+    // pending record through the public API instead (frozen clock makes the
+    // fixed scheduledAt future at schedule time, due at activation time).
+    const scheduledAt = new Date(2020, 5, 8, 9, 30);
+    const scheduleNow = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(scheduledAt.getTime() - 1000);
+    try {
+      await scheduleSavingsReminderNotification({
         contributionAmount: 500,
         frequency: 'weekly',
         goalId: 'goal-1',
         goalTitle: 'iPhone 15 Pro',
-        scheduledAt: new Date(2020, 5, 8, 9, 30).toISOString(),
-      })
-    );
+        scheduledAt,
+      });
+    } finally {
+      scheduleNow.mockRestore();
+    }
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
 
     await expect(activateDueSavingsReminderNotification()).resolves.toBe(
       'notification-id'

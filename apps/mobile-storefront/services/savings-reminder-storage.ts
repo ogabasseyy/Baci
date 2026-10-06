@@ -13,8 +13,15 @@ export type SavingsReminderRequest = {
   scheduledAt: Date;
 };
 
-type ReminderRecord = {
+export type SavingsReminderScope = {
+  merchantId: string;
+  userId: string;
+};
+
+export type ReminderRecord = {
   goalId: string;
+  merchantId: string;
+  userId: string;
   notificationId?: string;
   pending?: SavingsReminderRequest;
 };
@@ -70,16 +77,55 @@ function parseRequest(value: unknown): SavingsReminderRequest | undefined {
   };
 }
 
-function recordKey(goalId: string) {
-  return `${RECORD_PREFIX}${encodeURIComponent(goalId)}`;
+function recordKey(scope: SavingsReminderScope, goalId: string) {
+  return `${RECORD_PREFIX}${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.merchantId)}:${encodeURIComponent(goalId)}`;
 }
 
-async function readRecord(goalId: string): Promise<ReminderRecord> {
-  const value = parseJson(await asyncStorage.getItem(recordKey(goalId)));
-  if (!value || typeof value !== 'object') return { goalId };
+function scopePrefix(scope: SavingsReminderScope) {
+  return `${RECORD_PREFIX}${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.merchantId)}:`;
+}
+
+function parseScopedKey(key: string): {
+  goalId: string;
+  merchantId: string;
+  userId: string;
+} | null {
+  if (!key.startsWith(RECORD_PREFIX)) return null;
+  const segments = key.slice(RECORD_PREFIX.length).split(':');
+  if (segments.length !== 3) return null;
+  try {
+    const [userId, merchantId, goalId] = segments.map(decodeURIComponent);
+    if (!userId || !merchantId) return null;
+    return { goalId, merchantId, userId };
+  } catch {
+    return null;
+  }
+}
+
+async function readRecord(
+  scope: SavingsReminderScope,
+  goalId: string
+): Promise<ReminderRecord> {
+  const empty: ReminderRecord = {
+    goalId,
+    merchantId: scope.merchantId,
+    userId: scope.userId,
+  };
+  const value = parseJson(await asyncStorage.getItem(recordKey(scope, goalId)));
+  if (!value || typeof value !== 'object') return empty;
+  // Belt and braces: the key already scopes the read, but a record whose
+  // value disagrees with its key is corrupt — never surface it cross-scope.
+  if (
+    ('userId' in value && value.userId !== scope.userId) ||
+    ('merchantId' in value && value.merchantId !== scope.merchantId)
+  ) {
+    return empty;
+  }
   const pending = 'pending' in value ? parseRequest(value.pending) : undefined;
   return {
     goalId,
+    merchantId: scope.merchantId,
+    userId: scope.userId,
     notificationId:
       'notificationId' in value && typeof value.notificationId === 'string'
         ? value.notificationId
@@ -89,54 +135,125 @@ async function readRecord(goalId: string): Promise<ReminderRecord> {
 }
 
 async function write(record: ReminderRecord) {
-  await asyncStorage.setItem(recordKey(record.goalId), JSON.stringify(record));
+  if (!record.userId || !record.merchantId) {
+    throw new Error('Refusing to write an unscoped savings reminder record');
+  }
+  await asyncStorage.setItem(
+    recordKey(
+      { merchantId: record.merchantId, userId: record.userId },
+      record.goalId
+    ),
+    JSON.stringify(record)
+  );
 }
 
-async function migrateLegacy() {
+function parseLegacyRecord(
+  goalId: string,
+  value: unknown
+): ReminderRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const pending = 'pending' in value ? parseRequest(value.pending) : undefined;
+  const notificationId =
+    'notificationId' in value && typeof value.notificationId === 'string'
+      ? value.notificationId
+      : undefined;
+  if (!pending && !notificationId) return null;
+  return {
+    goalId,
+    merchantId: '',
+    userId: '',
+    notificationId,
+    pending: pending?.goalId === goalId ? pending : undefined,
+  };
+}
+
+/**
+ * Destructively drains pre-scope records: per-goal keys without a scope
+ * segment plus the ancient single-key format. Unscoped state is
+ * untrustworthy by construction — it cannot be attributed to the current
+ * account — so callers cancel any live OS notification and drop the rest
+ * rather than adopt it. Returns the drained records for that cleanup.
+ */
+async function drainUnscoped(): Promise<ReminderRecord[]> {
+  const drained: ReminderRecord[] = [];
+  for (const key of await asyncStorage.getAllKeys()) {
+    if (!key.startsWith(RECORD_PREFIX) || parseScopedKey(key)) continue;
+    const suffix = key.slice(RECORD_PREFIX.length);
+    let goalId = suffix;
+    try {
+      goalId = decodeURIComponent(suffix);
+    } catch {
+      // Fall through with the raw suffix; the record is dropped regardless.
+    }
+    const record = parseLegacyRecord(
+      goalId,
+      parseJson(await asyncStorage.getItem(key))
+    );
+    await asyncStorage.removeItem(key);
+    if (record) drained.push(record);
+  }
   const [notificationId, goalId, pendingValue] = await Promise.all([
     asyncStorage.getItem(LEGACY_NOTIFICATION_KEY),
     asyncStorage.getItem(LEGACY_GOAL_KEY),
     asyncStorage.getItem(LEGACY_PENDING_KEY),
   ]);
+  await asyncStorage.removeItem(LEGACY_NOTIFICATION_KEY);
+  await asyncStorage.removeItem(LEGACY_GOAL_KEY);
+  await asyncStorage.removeItem(LEGACY_PENDING_KEY);
   if (notificationId && goalId) {
-    const record = await readRecord(goalId);
-    if (!record.notificationId) await write({ ...record, notificationId });
-    await asyncStorage.removeItem(LEGACY_NOTIFICATION_KEY);
-    await asyncStorage.removeItem(LEGACY_GOAL_KEY);
-  } else if (!notificationId) {
-    await asyncStorage.removeItem(LEGACY_GOAL_KEY);
+    drained.push({
+      goalId,
+      merchantId: '',
+      notificationId,
+      userId: '',
+    });
+  } else if (notificationId) {
+    drained.push({
+      goalId: '',
+      merchantId: '',
+      notificationId,
+      userId: '',
+    });
   }
   const pending = parseRequest(parseJson(pendingValue));
   if (pending) {
-    const record = await readRecord(pending.goalId);
-    if (!record.pending && !record.notificationId)
-      await write({ ...record, pending });
+    drained.push({
+      goalId: pending.goalId,
+      merchantId: '',
+      pending,
+      userId: '',
+    });
   }
-  await asyncStorage.removeItem(LEGACY_PENDING_KEY);
+  return drained;
 }
 
-async function read(goalId?: string): Promise<ReminderRecord[]> {
-  await migrateLegacy();
-  if (goalId !== undefined) return [await readRecord(goalId)];
+async function read(
+  scope: SavingsReminderScope,
+  goalId?: string
+): Promise<ReminderRecord[]> {
+  if (goalId !== undefined) return [await readRecord(scope, goalId)];
+  const prefix = scopePrefix(scope);
   const records: ReminderRecord[] = [];
   for (const key of await asyncStorage.getAllKeys()) {
-    if (!key.startsWith(RECORD_PREFIX)) continue;
-    try {
-      records.push(
-        await readRecord(decodeURIComponent(key.slice(RECORD_PREFIX.length)))
-      );
-    } catch {
+    if (!key.startsWith(prefix)) continue;
+    const parsed = parseScopedKey(key);
+    if (!parsed) {
       await asyncStorage.removeItem(key);
+      continue;
     }
+    records.push(await readRecord(scope, parsed.goalId));
   }
-  const orphanId = await asyncStorage.getItem(LEGACY_NOTIFICATION_KEY);
-  if (orphanId) records.push({ goalId: '', notificationId: orphanId });
   return records;
 }
 
-async function remove(goalId: string) {
-  await asyncStorage.removeItem(recordKey(goalId));
-  if (!goalId) await asyncStorage.removeItem(LEGACY_NOTIFICATION_KEY);
+async function remove(scope: SavingsReminderScope, goalId: string) {
+  await asyncStorage.removeItem(recordKey(scope, goalId));
 }
 
-export const savingsReminderStorage = { read, remove, runExclusive, write };
+export const savingsReminderStorage = {
+  drainUnscoped,
+  read,
+  remove,
+  runExclusive,
+  write,
+};

@@ -30,17 +30,21 @@ jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.baci.test' }));
 jest.mock('@/lib/config', () => ({
   CONFIG: { MERCHANT_ID: '00000000-0000-4000-8000-000000000010' },
 }));
+const mockAuthState: {
+  merchantId: string | null;
+  user: { id: string } | null;
+} = {
+  merchantId: '00000000-0000-4000-8000-000000000010',
+  user: { id: 'user-a' },
+};
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: {
-    getState: () => ({
-      merchantId: '00000000-0000-4000-8000-000000000010',
-      user: { id: 'user-a' },
-    }),
-  },
+  useAuthStore: { getState: () => mockAuthState },
 }));
 
 const {
+  buildReminderScope,
   cancelSavingsReminderNotification,
+  cancelScopeSavingsReminders,
   activateDueSavingsReminderNotification,
   scheduleSavingsReminderNotification,
 } =
@@ -52,6 +56,8 @@ describe('savings reminder notification capability', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockGetPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockAuthState.merchantId = '00000000-0000-4000-8000-000000000010';
+    mockAuthState.user = { id: 'user-a' };
     await AsyncStorage.clear();
   });
 
@@ -212,22 +218,31 @@ describe('savings reminder notification capability', () => {
   });
 
   it('does not request permission while activating a due local reminder', async () => {
-    await AsyncStorage.setItem(
-      'baci:savings-reminder-pending-request',
-      JSON.stringify({
-        contributionAmount: 500,
-        frequency: 'weekly',
-        goalId: 'goal-1',
-        goalTitle: 'Phone',
-        scheduledAt: new Date(2020, 5, 8, 9, 30).toISOString(),
-      })
-    );
+    // Pre-scope legacy keys are disposed, never adopted: seed a scoped
+    // pending record through the public API instead.
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
     mockGetPermissionsAsync.mockResolvedValue({ status: 'denied' });
-
-    await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
+    const now = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date(2100, 0, 1).getTime());
+    try {
+      await expect(
+        activateDueSavingsReminderNotification()
+      ).resolves.toBeNull();
+    } finally {
+      now.mockRestore();
+    }
 
     await expect(
-      AsyncStorage.getItem('baci:savings-reminder-goal:goal-1')
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1'
+      )
     ).resolves.toContain('goal-1');
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
     expect(mockRequestPermissionsAsync).not.toHaveBeenCalled();
@@ -252,5 +267,110 @@ describe('savings reminder notification capability', () => {
       true
     );
     expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('never activates or cancels another account’s scoped reminders', async () => {
+    mockScheduleNotificationAsync.mockResolvedValueOnce('user-a-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    mockAuthState.user = { id: 'user-b' };
+
+    await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    await cancelSavingsReminderNotification('goal-1');
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'user-a-live'
+    );
+    // user-a's record is untouched and still keyed to its own scope.
+    await expect(
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1'
+      )
+    ).resolves.toContain('user-a-live');
+  });
+
+  it('cancels pre-scope OS notifications and drops the records without adopting them', async () => {
+    await AsyncStorage.setItem(
+      'baci:savings-reminder-goal:goal-old',
+      JSON.stringify({ notificationId: 'legacy-live' })
+    );
+
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'legacy-live'
+    );
+    await expect(
+      AsyncStorage.getItem('baci:savings-reminder-goal:goal-old')
+    ).resolves.toBeNull();
+    // The legacy goal was not adopted into the current scope.
+    expect(await AsyncStorage.getAllKeys()).toEqual([
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1',
+    ]);
+  });
+
+  it('retires a prior scope’s live notifications and re-arms them for sign-back-in', async () => {
+    mockScheduleNotificationAsync.mockResolvedValueOnce('prior-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    const scope = buildReminderScope(
+      'user-a',
+      '00000000-0000-4000-8000-000000000010'
+    );
+    expect(scope).not.toBeNull();
+    if (!scope) throw new Error('expected a reminder scope');
+
+    await expect(cancelScopeSavingsReminders(scope)).resolves.toBe(true);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'prior-live'
+    );
+
+    // Re-armed: the cancelled notificationId is cleared but the retained
+    // pending request survives, so activation reschedules on return.
+    const raw = await AsyncStorage.getItem(
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1'
+    );
+    expect(raw).toContain('goal-1');
+    const rearmed = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    expect(rearmed.notificationId).toBeUndefined();
+    expect(rearmed.pending).toEqual(
+      expect.objectContaining({ goalId: 'goal-1' })
+    );
+    mockScheduleNotificationAsync.mockResolvedValueOnce('resumed-live');
+    await expect(activateDueSavingsReminderNotification()).resolves.toBe(
+      'resumed-live'
+    );
+  });
+
+  it('fails closed when no account is signed in', async () => {
+    mockAuthState.user = null;
+
+    await expect(
+      scheduleSavingsReminderNotification({
+        contributionAmount: 500,
+        frequency: 'weekly',
+        goalId: 'goal-1',
+        goalTitle: 'Phone',
+      })
+    ).resolves.toBeNull();
+    await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
+    await expect(cancelSavingsReminderNotification('goal-1')).resolves.toBe(
+      false
+    );
+    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
   });
 });

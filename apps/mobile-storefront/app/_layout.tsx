@@ -118,6 +118,7 @@ export default function RootLayout() {
 
   useSavingsReminderActivation({
     storeUser,
+    storeMerchantId,
     isInitialized,
     isStorageReady,
     isTrackingAuthorizationSettled,

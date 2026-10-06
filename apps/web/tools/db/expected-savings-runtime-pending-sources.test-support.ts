@@ -114,7 +114,7 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
       'supabase/migrations/20260926171000_piggyvest_savings_exit_execution.sql',
     sha256: '2d16f34fe9599e0deace6c5377a8639e575f94d83ca4405ac1f4e444b60fd115',
   },
-    {
+  {
     repositoryPath:
       'supabase/migrations/20260926171100_piggyvest_savings_exit_authority_storage_guards.sql',
     sha256: '1b1069913ef34f86cda14a594da33753f11d75c019d5ae18589ce9202a78437a',

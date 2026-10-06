@@ -2,7 +2,11 @@ BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '20s';
 SET LOCAL search_path = pg_catalog;
-LOCK TABLE pg_catalog.pg_proc, pg_catalog.pg_trigger IN SHARE ROW EXCLUSIVE MODE;
+-- No LOCK on pg_proc/pg_trigger: locking system catalogs requires a
+-- superuser and the history-replay applier is not one. Migrations apply
+-- single-threaded in both replay and deploy, so no concurrent DDL can
+-- interleave with the baseline check below; the ledger-table locks still
+-- serialize against concurrent DML.
 LOCK TABLE piggyvest_savings_ledger.operations, piggyvest_savings_ledger.postings
   IN SHARE ROW EXCLUSIVE MODE;
 

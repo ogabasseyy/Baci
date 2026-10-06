@@ -244,6 +244,15 @@ function main() {
   const defaultProjectRoot = path.resolve(path.dirname(scriptFile), '..');
   const projectRoot = path.resolve(options.projectRoot ?? defaultProjectRoot);
   const appConfigPath = path.join(projectRoot, 'app.config.ts');
+  // Split-config fallback: app.config.ts may be a dispatcher that selects
+  // the production builder below (which carries the ad declarations).
+  // Concatenation preserves extraction (first quoted match wins) and is a
+  // no-op on monolithic trees where the module does not exist.
+  const productionConfigPath = path.join(
+    projectRoot,
+    'config',
+    'development-storefront-expo-config-production.ts'
+  );
   const infoPlistPath = path.join(projectRoot, 'ios', 'Ogabassey', 'Info.plist');
   const xcodeProjectPath = path.join(
     projectRoot,
@@ -258,9 +267,10 @@ function main() {
   let xcodeProjectSource;
   let fastfileSource;
   try {
-    appConfigDeclarations = extractAppConfigAdDeclarations(
-      readRequiredFile(appConfigPath)
-    );
+    const appConfigSource = existsSync(productionConfigPath)
+      ? `${readRequiredFile(appConfigPath)}\n${readRequiredFile(productionConfigPath)}`
+      : readRequiredFile(appConfigPath);
+    appConfigDeclarations = extractAppConfigAdDeclarations(appConfigSource);
     infoPlist = plist.parse(readRequiredFile(infoPlistPath));
     xcodeProjectSource = readRequiredFile(xcodeProjectPath);
     fastfileSource = readRequiredFile(fastfilePath);

@@ -167,7 +167,7 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261003160000_piggyvest_ledger_deferred_balance_authority.sql',
-    sha256: '279cdb825da57d95de10bf01f3a98c6887c100d239a95760f8b8bf44619784df',
+    sha256: 'c55cafb26754b5d3030cc9e13b608c13d4be283ac0665f7eb6620f3b25737661',
   },
   {
     repositoryPath:

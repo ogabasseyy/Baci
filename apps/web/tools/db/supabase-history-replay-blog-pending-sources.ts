@@ -1,3 +1,3 @@
-/** Frozen bytes for the platform blog review handoff migration. */
+/** Frozen bytes for the platform blog review handoff migrations. */
 export const BLOG_PENDING_REPLAY_SOURCE_ROWS =
-  '0757b5d4e9aca6ea814ebc198564c59a19dc1e76dfed001d35d0344b32268fa6 20261004150000_add_blog_post_intent_metadata.sql';
+  '0757b5d4e9aca6ea814ebc198564c59a19dc1e76dfed001d35d0344b32268fa6 20261004150000_add_blog_post_intent_metadata.sql\n01f24bbe9f1dd9cc27b659565c3d5e36773bd37fdbbfcc487f01c1fe7e9bac1b 20261006123000_repair_platform_blog_audit_intent_changed_fields.sql';

@@ -26,7 +26,13 @@ export function BlogEditorialMetadataFields({
             const intent =
               BLOG_INTENTS.find((value) => value === event.target.value) ??
               null;
-            onFormChange((current) => ({ ...current, intent }));
+            // A new classification invalidates the old provenance: keep the
+            // source only when the selection did not actually change.
+            onFormChange((current) =>
+              intent === current.intent
+                ? { ...current, intent }
+                : { ...current, intent, intent_source: null }
+            );
           }}
         >
           <option value="">Not specified</option>

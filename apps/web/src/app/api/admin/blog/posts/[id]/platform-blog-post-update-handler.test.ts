@@ -21,7 +21,10 @@ function request(body: Record<string, unknown>) {
   });
 }
 
-function createSupabase(updateResult?: { data: unknown; error: unknown }) {
+function createSupabase(
+  updateResult?: { data: unknown; error: unknown },
+  existingPost: Record<string, unknown> = {}
+) {
   const updates: Record<string, unknown>[] = [];
   const query = {
     eq: vi.fn(),
@@ -38,6 +41,7 @@ function createSupabase(updateResult?: { data: unknown; error: unknown }) {
           id: 'post-1',
           slug: 'old-slug',
           status: 'draft',
+          ...existingPost,
         },
         error: null,
       })
@@ -119,6 +123,35 @@ describe('updatePlatformBlogPost', () => {
     ]);
     expect(mocks.revalidatePlatformBlog).toHaveBeenNthCalledWith(1, 'old-slug');
     expect(mocks.revalidatePlatformBlog).toHaveBeenNthCalledWith(2, 'new-slug');
+  });
+
+  it('clears stale alt text when the cover URL changes without new metadata', async () => {
+    const supabase = createSupabase(undefined, {
+      featured_image_alt: 'Old cover description',
+      featured_image_height: 675,
+      featured_image_url: 'https://cdn.example.com/old.webp',
+      featured_image_variants: {
+        landscape_16x9: 'https://cdn.example.com/old-16x9.webp',
+      },
+      featured_image_width: 1200,
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(
+      request({ featured_image_url: 'https://cdn.example.com/new.webp' }),
+      { params: Promise.resolve({ id: 'post-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.updates).toEqual([
+      expect.objectContaining({
+        featured_image_alt: null,
+        featured_image_height: null,
+        featured_image_url: 'https://cdn.example.com/new.webp',
+        featured_image_variants: {},
+        featured_image_width: null,
+      }),
+    ]);
   });
 
   it('maps duplicate slugs to a conflict response', async () => {

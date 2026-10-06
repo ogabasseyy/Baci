@@ -68,6 +68,29 @@ it('shows imported metadata and saves reviewer corrections', () => {
   });
 });
 
+it('clears provenance when the editorial intent changes', () => {
+  render(<Harness />);
+  fireEvent.change(screen.getByLabelText('Editorial intent'), {
+    target: { value: 'buying-guide' },
+  });
+  expect(screen.getByRole('textbox', { name: 'Intent source' })).toHaveValue(
+    ''
+  );
+  expect(
+    JSON.parse(screen.getByLabelText('Save payload').textContent ?? '{}')
+  ).toMatchObject({ intent: 'buying-guide', intent_source: null });
+});
+
+it('keeps provenance when the intent selection is unchanged', () => {
+  render(<Harness />);
+  fireEvent.change(screen.getByLabelText('Editorial intent'), {
+    target: { value: 'comparison' },
+  });
+  expect(screen.getByRole('textbox', { name: 'Intent source' })).toHaveValue(
+    'draft_task_type'
+  );
+});
+
 it('lets reviewers clear all imported metadata', () => {
   render(<Harness />);
   for (const label of ['Editorial intent', 'Intent source', 'Focus keyword']) {

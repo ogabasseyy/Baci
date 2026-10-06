@@ -66,17 +66,21 @@ function stripMarkupText(value: string): string {
   return value.replace(/<[^>]*>/gu, '').trim();
 }
 
-function normalizeMarkdownContent(content: string): string {
+function normalizeContent(rawContent: string, sanitizedRaw: string): string {
   try {
-    const rendered = marked.parse(content, { async: false }) as string;
+    const rendered = marked.parse(rawContent, { async: false }) as string;
     // Store what the editor displays: BlogEditor renders non-JSON content
     // through marked, so persisting raw markdown would publish literal syntax
     // the reviewer never saw. HTML and plain text render to identical text
-    // and pass through untouched.
-    if (stripMarkupText(rendered) === stripMarkupText(content)) return content;
+    // and sanitize as before. Rendering first also preserves markdown code
+    // examples: sanitizing the raw source would delete disallowed HTML inside
+    // fenced blocks before marked can escape it as code.
+    if (stripMarkupText(rendered) === stripMarkupText(rawContent)) {
+      return sanitizedRaw;
+    }
     return sanitizeHtml(rendered);
   } catch {
-    return content;
+    return sanitizedRaw;
   }
 }
 
@@ -130,16 +134,22 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(rawContent)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
-  const sanitized = sanitizeHtml(rawContent);
-  if (!sanitized.trim()) {
-    throw new Error('Article content is empty after sanitization');
-  }
-  if (/^[[{]/u.test(sanitized.trimStart())) {
+  const sanitizedRaw = sanitizeHtml(rawContent);
+  // The JSON-shape guard runs pre-conversion: markdown rendering wraps text
+  // in <p> tags (and escapes quotes), which would otherwise smuggle JSON past
+  // the structured-content check.
+  if (
+    /^[[{]/u.test(rawContent.trimStart()) ||
+    /^[[{]/u.test(sanitizedRaw.trimStart())
+  ) {
     throw new Error(
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
   }
-  const content = normalizeMarkdownContent(sanitized);
+  const content = normalizeContent(rawContent, sanitizedRaw);
+  if (!content.trim()) {
+    throw new Error('Article content is empty after sanitization');
+  }
   // Sanitization decodes HTML entities, which can reveal placeholders hidden
   // from the raw-text check above (e.g. &#123;&#123;INLINE_IMAGE_1&#125;&#125;).
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(content)) {

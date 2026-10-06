@@ -102,6 +102,9 @@ export async function updatePlatformBlogPost(
       Object.hasOwn(updateData, 'featured_image_url') &&
       updateData.featured_image_url !== existingPost.featured_image_url;
     if (featuredImageUrlChanged) {
+      if (!Object.hasOwn(updateData, 'featured_image_alt')) {
+        updateData.featured_image_alt = null;
+      }
       if (!Object.hasOwn(updateData, 'featured_image_width')) {
         updateData.featured_image_width = null;
       }

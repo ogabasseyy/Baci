@@ -5,8 +5,10 @@ import { expect, it } from 'vitest';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 
-it('registers the blog intent migration with its exact checked-in bytes', async () => {
-  const [sha256, filename] = BLOG_PENDING_REPLAY_SOURCE_ROWS.split(' ');
+it.each(
+  BLOG_PENDING_REPLAY_SOURCE_ROWS.trim().split('\n')
+)('registers the blog migration with its exact checked-in bytes: %s', async (row) => {
+  const [sha256, filename] = row.split(' ');
   const repositoryPath = `supabase/migrations/${filename}`;
   const body = await readFile(
     path.resolve(__dirname, '../../../..', repositoryPath)

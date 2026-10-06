@@ -149,6 +149,26 @@ describe('handoff content validation', () => {
     );
   });
 
+  it('preserves disallowed HTML inside markdown code examples', () => {
+    const { content } = parseReviewHandoff({
+      ...handoff,
+      content_html:
+        'A fenced example:\n\n```html\n<script>alert(1)</script>\n```\n\nAnd `inline <iframe src="x">` code.',
+    });
+    expect(content).toContain('&lt;script&gt;');
+    expect(content).toContain('&lt;iframe');
+    expect(content).not.toContain('<script>alert');
+  });
+
+  it('still strips real scripts outside markdown code', () => {
+    const { content } = parseReviewHandoff({
+      ...handoff,
+      content_html: '<p>Hello</p><script>bad()</script><p>world</p>',
+    });
+    expect(content).not.toContain('bad()');
+    expect(content).toContain('Hello');
+  });
+
   it('still rejects placeholders revealed by markdown rendering', () => {
     expect(() =>
       parseReviewHandoff({

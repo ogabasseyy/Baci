@@ -127,9 +127,36 @@ describe('handoff content validation', () => {
     '![Photo](https://cdn.example.com/photo.png)',
     '![Photo](data:image/png;base64,iVBORw0KGgo=)',
   ])('accepts markdown images with importable media: %s', (content_html) => {
-    expect(parseReviewHandoff({ ...handoff, content_html }).content).toContain(
-      '![Photo]'
+    const { content } = parseReviewHandoff({ ...handoff, content_html });
+    expect(content).toContain('<img');
+    expect(content).not.toContain('![');
+  });
+
+  it('stores rendered HTML for accepted markdown handoffs', () => {
+    const { content } = parseReviewHandoff({
+      ...handoff,
+      content_html: '# Guide\n\nUseful **advice**.',
+    });
+    expect(content).toContain('<h1>Guide</h1>');
+    expect(content).toContain('<strong>advice</strong>');
+    expect(content).not.toContain('# Guide');
+  });
+
+  it('passes HTML content through byte-identical', () => {
+    const content_html = '<h2>Guide</h2><p>Useful <strong>advice</strong></p>';
+    expect(parseReviewHandoff({ ...handoff, content_html }).content).toBe(
+      content_html
     );
+  });
+
+  it('still rejects placeholders revealed by markdown rendering', () => {
+    expect(() =>
+      parseReviewHandoff({
+        ...handoff,
+        content_html:
+          '![Cover](https://cdn.example.com/c.png)\n\n{{INLINE_IMAGE_1}}',
+      })
+    ).toThrow('unresolved inline image placeholders');
   });
 
   it('ignores src-like text inside other attributes', () => {

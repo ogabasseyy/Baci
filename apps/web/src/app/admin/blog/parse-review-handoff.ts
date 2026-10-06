@@ -62,16 +62,21 @@ function isImportableMediaUrl(url: string): boolean {
   return isHttpsUrl(url);
 }
 
-function renderedMediaTags(content: string): string[] {
-  // BlogEditor renders non-JSON content through marked, so markdown image
-  // syntax becomes <img> after import; validate what the editor will show.
-  // Only image syntax can introduce media, so skip the conversion otherwise.
-  if (!content.includes('![')) return [];
+function stripMarkupText(value: string): string {
+  return value.replace(/<[^>]*>/gu, '').trim();
+}
+
+function normalizeMarkdownContent(content: string): string {
   try {
     const rendered = marked.parse(content, { async: false }) as string;
-    return rendered.match(MEDIA_TAG_PATTERN) ?? [];
+    // Store what the editor displays: BlogEditor renders non-JSON content
+    // through marked, so persisting raw markdown would publish literal syntax
+    // the reviewer never saw. HTML and plain text render to identical text
+    // and pass through untouched.
+    if (stripMarkupText(rendered) === stripMarkupText(content)) return content;
+    return sanitizeHtml(rendered);
   } catch {
-    return [];
+    return content;
   }
 }
 
@@ -125,15 +130,16 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(rawContent)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
-  const content = sanitizeHtml(rawContent);
-  if (!content.trim()) {
+  const sanitized = sanitizeHtml(rawContent);
+  if (!sanitized.trim()) {
     throw new Error('Article content is empty after sanitization');
   }
-  if (/^[[{]/u.test(content.trimStart())) {
+  if (/^[[{]/u.test(sanitized.trimStart())) {
     throw new Error(
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
   }
+  const content = normalizeMarkdownContent(sanitized);
   // Sanitization decodes HTML entities, which can reveal placeholders hidden
   // from the raw-text check above (e.g. &#123;&#123;INLINE_IMAGE_1&#125;&#125;).
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(content)) {
@@ -142,14 +148,14 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (!hasReadableContent(content)) {
     throw new Error('Article content has no readable text or images');
   }
-  const mediaTags = [
-    ...(content.match(MEDIA_TAG_PATTERN) ?? []),
-    ...renderedMediaTags(content),
-  ];
-  const hasBrokenMedia = mediaTags.some((tag) => {
-    const urls = mediaTagUrls(tag);
-    return urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url));
-  });
+  const hasBrokenMedia = (content.match(MEDIA_TAG_PATTERN) ?? []).some(
+    (tag) => {
+      const urls = mediaTagUrls(tag);
+      return (
+        urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url))
+      );
+    }
+  );
   if (hasBrokenMedia) {
     throw new Error('Imported inline images must use HTTPS URLs');
   }
@@ -255,9 +261,13 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   };
 }
 
+const DECIMAL_DIMENSION_PATTERN = /^\d+$/u;
+
 function readDimension(value: unknown): number | null {
   const coerced =
-    typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+    typeof value === 'string' && DECIMAL_DIMENSION_PATTERN.test(value.trim())
+      ? Number(value)
+      : value;
   const result = blogPostSchema.shape.featured_image_width.safeParse(coerced);
   return result.success ? (result.data ?? null) : null;
 }

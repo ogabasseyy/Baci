@@ -103,6 +103,9 @@ describe('parseReviewHandoff', () => {
     Number.MAX_SAFE_INTEGER,
     'abc',
     '1.5',
+    '0x10',
+    '1e3',
+    '0b11',
     '',
     '  ',
     null,
@@ -128,6 +131,7 @@ describe('parseReviewHandoff', () => {
     [2_147_483_647, 2_147_483_647],
     ['1', 1],
     ['1200', 1200],
+    [' 1200 ', 1200],
   ] as const)('preserves database-safe image dimensions %s', (dimension, expected) => {
     expect(
       parseReviewHandoff({

@@ -11,17 +11,21 @@
 -- =============================================
 
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO auth.users(id) VALUES ('95000000-0000-4000-8000-000000000003');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
 
-INSERT INTO public.merchants(id) VALUES ('95000000-0000-4000-8000-000000000001');
+INSERT INTO public.merchants(id,email) VALUES ('95000000-0000-4000-8000-000000000001','restriction-probe@example.com');
+INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity) VALUES
+  ('95000000-0000-4000-8000-000000000013','95000000-0000-4000-8000-000000000001','Restriction device',100000,'active',3);
 INSERT INTO public.customers(id,merchant_id,user_id) VALUES
   ('95000000-0000-4000-8000-000000000002','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000003');
-INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,source_mode,target_amount,current_amount) VALUES
-  ('95000000-0000-4000-8000-000000000004','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','active','manual',100000,90000),
-  ('95000000-0000-4000-8000-000000000005','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','active','manual',100000,90000),
-  ('95000000-0000-4000-8000-000000000006','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','active','manual',100000,90000);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,status,source_mode,target_amount,current_amount,contribution_amount,contribution_frequency,start_date,maturity_date,terms_accepted_at,non_withdrawable_accepted_at) VALUES
+  ('95000000-0000-4000-8000-000000000004','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','95000000-0000-4000-8000-000000000013','Probe goal','active','manual',100000,90000,20000,'daily',current_date,current_date + 30,now(),now()),
+  ('95000000-0000-4000-8000-000000000005','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','95000000-0000-4000-8000-000000000013','Probe goal','active','manual',100000,90000,20000,'daily',current_date,current_date + 30,now(),now()),
+  ('95000000-0000-4000-8000-000000000006','95000000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','95000000-0000-4000-8000-000000000013','Probe goal','active','manual',100000,90000,20000,'daily',current_date,current_date + 30,now(),now());
 INSERT INTO piggyvest_staging.integrations(id,expected_provider_account_id,enabled) VALUES
   ('95000000-0000-4000-8000-000000000011','provider-acct-1',true),
   ('95000000-0000-4000-8000-000000000012','provider-acct-2',true);

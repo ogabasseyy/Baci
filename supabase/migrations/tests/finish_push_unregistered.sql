@@ -1,4 +1,6 @@
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO auth.users(id) VALUES ('91000000-0000-4000-8000-000000000003');
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
 INSERT INTO public.merchants(id,email) VALUES ('91000000-0000-4000-8000-000000000001','unregistered-probe@example.com');
@@ -6,8 +8,8 @@ INSERT INTO public.customers(id,merchant_id,user_id) VALUES
   ('91000000-0000-4000-8000-000000000002','91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000003');
 INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity) VALUES
   ('91000000-0000-4000-8000-000000000007','91000000-0000-4000-8000-000000000001','Probe device',100000,'active',3);
-INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,source_mode,target_amount) VALUES
-  ('91000000-0000-4000-8000-000000000004','91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002','91000000-0000-4000-8000-000000000007','Probe goal','manual',100000);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,source_mode,target_amount,contribution_amount,contribution_frequency,start_date,maturity_date,terms_accepted_at,non_withdrawable_accepted_at) VALUES
+  ('91000000-0000-4000-8000-000000000004','91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002','91000000-0000-4000-8000-000000000007','Probe goal','manual',100000,20000,'daily',current_date,current_date + 30,now(),now());
 INSERT INTO savings_notifications.events(id,merchant_id,customer_id,goal_id,event_key,type,title,body) VALUES
   ('91000000-0000-4000-8000-000000000005','91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002','91000000-0000-4000-8000-000000000004','unregistered-probe','interest_credited','Interest','Body'),
   ('91000000-0000-4000-8000-000000000006','91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002','91000000-0000-4000-8000-000000000004','rejected-probe','interest_credited','Interest','Body');

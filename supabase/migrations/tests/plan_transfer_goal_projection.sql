@@ -1,9 +1,9 @@
 -- =============================================
 -- REGRESSION TEST: Plan transfer goal projection
 --   Validates single-attribution projection of verified plan-account
---   bank transfers onto savings goals: projection, partial fill on
---   overpayment, idempotent replay, fingerprint mismatch rejection,
---   ambiguity raise, no-goal skip, and grants.
+--   bank transfers onto savings goals: projection, overpayment
+--   rejection for reconciliation, idempotent replay, fingerprint
+--   mismatch rejection, ambiguity raise, no-goal skip, and grants.
 --
 -- USAGE:
 --   psql $DATABASE_URL -f supabase/migrations/tests/plan_transfer_goal_projection.sql
@@ -23,6 +23,7 @@ DECLARE
   v_second_goal_id uuid := '9f1ed783-0000-4000-8000-000000000605';
   v_other_customer_id uuid := '9f1ed783-0000-4000-8000-000000000606';
   v_other_goal_id uuid := '9f1ed783-0000-4000-8000-000000000607';
+  v_small_product_id uuid := '9f1ed783-0000-4000-8000-000000000608';
   v_result record;
   v_count integer;
   v_source_type text;
@@ -75,6 +76,11 @@ BEGIN
 
   INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity)
   VALUES (v_product_id, v_merchant_id, 'Plan transfer device', 800000, 'active', 3);
+
+  -- Overpayment scenario needs a goal cheaper than the transfer: its own
+  -- catalogue entry at the capped headroom so the price floor holds.
+  INSERT INTO public.products (id, merchant_id, name, price, status, stock_quantity)
+  VALUES (v_small_product_id, v_merchant_id, 'Small goal device', 10000, 'active', 3);
 
   INSERT INTO public.customer_savings_goals (
     id, merchant_id, customer_id, product_id, title, target_amount,
@@ -215,40 +221,41 @@ BEGIN
     RAISE EXCEPTION 'goalless transfer must skip definitively: %', row_to_json(v_result);
   END IF;
 
-  -- Overpayment: partial fill completes the goal and keeps the remainder out.
+  -- Overpayment: rejected for reconciliation instead of partially
+  -- projecting (partial fills hide unallocated money). The Small goal's
+  -- own catalogue entry keeps the price floor satisfied.
   INSERT INTO public.customer_savings_goals (
     id, merchant_id, customer_id, product_id, title, target_amount,
     contribution_amount, contribution_frequency, start_date, maturity_date,
     source_mode, terms_accepted_at, non_withdrawable_accepted_at
   )
   VALUES (
-    v_other_goal_id, v_merchant_id, v_other_customer_id, v_product_id, 'Small goal', 10000,
+    v_other_goal_id, v_merchant_id, v_other_customer_id, v_small_product_id, 'Small goal', 10000,
     2000, 'daily', current_date, current_date + 30,
     'manual', now(), now()
   );
 
-  SELECT *
-  INTO v_result
-  FROM public.allocate_plan_transfer_contribution(
-    v_other_customer_id, v_merchant_id, 5000000, 'provider-txn-plan-004', 'plan-transfer:provider-txn-plan-004'
-  );
-
-  IF v_result.success IS DISTINCT FROM true OR v_result.outcome IS DISTINCT FROM 'projected' THEN
-    RAISE EXCEPTION 'overpayment transfer did not project: %', row_to_json(v_result);
-  END IF;
-  IF v_result.projected_amount IS DISTINCT FROM 10000::numeric THEN
-    RAISE EXCEPTION 'overpayment must cap at remaining headroom, got %', v_result.projected_amount;
-  END IF;
-  IF v_result.goal_status IS DISTINCT FROM 'completed' THEN
-    RAISE EXCEPTION 'filled goal must complete, got %', v_result.goal_status;
+  v_rejected := false;
+  BEGIN
+    PERFORM public.allocate_plan_transfer_contribution(
+      v_other_customer_id, v_merchant_id, 5000000, 'provider-txn-plan-004', 'plan-transfer:provider-txn-plan-004'
+    );
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'plan transfer exceeds remaining goal amount; reconciliation required' THEN
+      RAISE;
+    END IF;
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'overpayment transfer must raise for reconciliation';
   END IF;
 
   SELECT count(*)
   INTO v_count
-  FROM public.customer_savings_events
-  WHERE goal_id = v_other_goal_id AND event_type = 'goal_completed';
-  IF v_count IS DISTINCT FROM 1 THEN
-    RAISE EXCEPTION 'completed projection must emit goal_completed, got %', v_count;
+  FROM public.customer_savings_contributions
+  WHERE merchant_id = v_merchant_id AND idempotency_key = 'plan-transfer:provider-txn-plan-004';
+  IF v_count IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'rejected overpayment must not write a contribution, got %', v_count;
   END IF;
 
   -- Validation: non-positive amounts are rejected.

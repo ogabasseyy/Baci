@@ -1,4 +1,6 @@
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO auth.users(id) VALUES ('93000000-0000-4000-8000-000000000003');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
@@ -9,9 +11,9 @@ INSERT INTO public.customers(id,merchant_id,user_id) VALUES
   ('93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000001','93000000-0000-4000-8000-000000000003');
 INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity) VALUES
   ('93000000-0000-4000-8000-000000000008','93000000-0000-4000-8000-000000000001','Binding device',100000,'active',3);
-INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,status,source_mode,target_amount,current_amount) VALUES
-  ('93000000-0000-4000-8000-000000000004','93000000-0000-4000-8000-000000000001','93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000008','Bound goal','active','manual',100000,0),
-  ('93000000-0000-4000-8000-000000000005','93000000-0000-4000-8000-000000000001','93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000008','Other goal','active','manual',100000,0);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,status,source_mode,target_amount,current_amount,contribution_amount,contribution_frequency,start_date,maturity_date,terms_accepted_at,non_withdrawable_accepted_at) VALUES
+  ('93000000-0000-4000-8000-000000000004','93000000-0000-4000-8000-000000000001','93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000008','Bound goal','active','manual',100000,0,20000,'daily',current_date,current_date + 30,now(),now()),
+  ('93000000-0000-4000-8000-000000000005','93000000-0000-4000-8000-000000000001','93000000-0000-4000-8000-000000000002','93000000-0000-4000-8000-000000000008','Other goal','active','manual',100000,0,20000,'daily',current_date,current_date + 30,now(),now());
 INSERT INTO piggyvest_staging.integrations(id,expected_provider_account_id,enabled) VALUES
   ('93000000-0000-4000-8000-000000000006','provider-acct-bound-001',true),
   ('93000000-0000-4000-8000-000000000007','provider-acct-disabled-001',true);

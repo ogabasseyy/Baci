@@ -10,20 +10,24 @@
 -- =============================================
 
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO auth.users(id) VALUES ('94000000-0000-4000-8000-000000000003'), ('94000000-0000-4000-8000-000000000005'), ('94000000-0000-4000-8000-000000000007');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
 
-INSERT INTO public.merchants(id) VALUES ('94000000-0000-4000-8000-000000000001');
+INSERT INTO public.merchants(id,email) VALUES ('94000000-0000-4000-8000-000000000001','headroom-probe@example.com');
+INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity) VALUES
+  ('94000000-0000-4000-8000-000000000012','94000000-0000-4000-8000-000000000001','Headroom device',100000,'active',3);
 INSERT INTO public.customers(id,merchant_id,user_id) VALUES
   ('94000000-0000-4000-8000-000000000002','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000003'),
   ('94000000-0000-4000-8000-000000000004','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000005'),
   ('94000000-0000-4000-8000-000000000006','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000007');
-INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,source_mode,target_amount,current_amount) VALUES
-  ('94000000-0000-4000-8000-000000000008','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000002','active','manual',100000,90000),
-  ('94000000-0000-4000-8000-000000000009','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000004','active','manual',100000,95000),
-  ('94000000-0000-4000-8000-000000000010','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000006','active','manual',100000,90000);
-INSERT INTO piggyvest_staging.integrations(id,enabled) VALUES ('94000000-0000-4000-8000-000000000011',true);
+INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,product_id,title,status,source_mode,target_amount,current_amount,contribution_amount,contribution_frequency,start_date,maturity_date,terms_accepted_at,non_withdrawable_accepted_at) VALUES
+  ('94000000-0000-4000-8000-000000000008','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000002','94000000-0000-4000-8000-000000000012','Probe goal','active','manual',100000,90000,20000,'daily',current_date,current_date + 30,now(),now()),
+  ('94000000-0000-4000-8000-000000000009','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000004','94000000-0000-4000-8000-000000000012','Probe goal','active','manual',100000,95000,20000,'daily',current_date,current_date + 30,now(),now()),
+  ('94000000-0000-4000-8000-000000000010','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000006','94000000-0000-4000-8000-000000000012','Probe goal','active','manual',100000,90000,20000,'daily',current_date,current_date + 30,now(),now());
+INSERT INTO piggyvest_staging.integrations(id,expected_provider_account_id,enabled) VALUES ('94000000-0000-4000-8000-000000000011','provider-acct-headroom-001',true);
 INSERT INTO piggyvest_savings_ledger.bindings(goal_id,integration_id,merchant_id,customer_id,authorized_login,enabled) VALUES
   ('94000000-0000-4000-8000-000000000008','94000000-0000-4000-8000-000000000011','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000002','postgres',true),
   ('94000000-0000-4000-8000-000000000009','94000000-0000-4000-8000-000000000011','94000000-0000-4000-8000-000000000001','94000000-0000-4000-8000-000000000004','postgres',true),

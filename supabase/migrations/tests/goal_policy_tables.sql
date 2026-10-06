@@ -9,9 +9,17 @@
 --
 -- USAGE:
 --   psql $DATABASE_URL -f supabase/migrations/tests/goal_policy_tables.sql
+--
+-- NOTE: intentionally NOT wired into ci.yml. The policy entrypoints assert
+-- session_user, so this check needs SET SESSION AUTHORIZATION (superuser),
+-- which the history-replay applier is not. Same standing rule as the other
+-- auth-switching checks (canonical_binding*, outbox_submission*): run
+-- manually against a superuser-owned database.
 -- =============================================
 
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO auth.users(id) VALUES ('97000000-0000-4000-8000-000000000003');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
@@ -52,7 +60,7 @@ INSERT INTO public.merchants(id, email, is_published) VALUES
 INSERT INTO public.customers(id, merchant_id, user_id) VALUES
   ('97000000-0000-4000-8000-000000000002', '97000000-0000-4000-8000-000000000001', '97000000-0000-4000-8000-000000000003');
 INSERT INTO public.products(id, merchant_id, name, price, status, stock_quantity, condition, has_variants) VALUES
-  ('97000000-0000-4000-8000-000000000007', '97000000-0000-4000-8000-000000000001', 'Probe device', 250000, 'active', 3, 'New', false);
+  ('97000000-0000-4000-8000-000000000007', '97000000-0000-4000-8000-000000000001', 'Probe device', 250000, 'active', 3, 'new', false);
 INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_id, title, source_mode, target_amount,
   contribution_amount, contribution_frequency, start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at, updated_at) VALUES
   ('97000000-0000-4000-8000-000000000004', '97000000-0000-4000-8000-000000000001', '97000000-0000-4000-8000-000000000002',

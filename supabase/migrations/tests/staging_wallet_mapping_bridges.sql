@@ -10,6 +10,7 @@
 -- =============================================
 
 BEGIN;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 -- Everything runs as the session role: the record bridge revokes
 -- service_role by design, and grants are asserted explicitly below.

@@ -1056,8 +1056,8 @@ export function generateProductSchema(
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
         sku: variant.sku || variant.id,
-        ...(identifiers.gtin && { gtin: escapeHtml(identifiers.gtin) }),
-        ...(identifiers.mpn && { mpn: escapeHtml(identifiers.mpn) }),
+        ...(identifiers.gtin && { gtin: identifiers.gtin }),
+        ...(identifiers.mpn && { mpn: identifiers.mpn }),
         offers: {
           '@type': 'Offer',
           price: variantPrice,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { safeJsonLdStringify } from './json-ld-script-escape';
 import {
-  escapeHtml,
   generateCollectionPageSchema,
   generateProductSchema,
 } from './seo-utils';
@@ -134,7 +134,7 @@ describe('generateProductSchema identifiers', () => {
     expect(numericOnlyVariant).not.toHaveProperty('mpn');
   });
 
-  it('escapes markup in variant identifiers like CollectionPage entries', () => {
+  it('stores raw variant identifiers and relies on serialization for script safety', () => {
     const schema = generateProductSchema(
       makeProduct({
         variants: [
@@ -157,10 +157,18 @@ describe('generateProductSchema identifiers', () => {
     const [variant] = schema.hasVariant as Record<string, unknown>[];
 
     expect(variant).toMatchObject({
-      gtin: escapeHtml('A</script>B'),
-      mpn: escapeHtml('M&N'),
+      gtin: 'A</script>B',
+      mpn: 'M&N',
     });
-    expect(variant?.gtin).not.toContain('</script>');
+    const serialized = safeJsonLdStringify(schema);
+    expect(serialized).not.toContain('</script>');
+    const roundTripped = JSON.parse(serialized) as {
+      hasVariant: Record<string, unknown>[];
+    };
+    expect(roundTripped.hasVariant[0]).toMatchObject({
+      gtin: 'A</script>B',
+      mpn: 'M&N',
+    });
   });
 
   it('normalizes CollectionPage parent identifiers and omits blank values', () => {

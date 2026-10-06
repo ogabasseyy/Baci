@@ -127,6 +127,52 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().status).toBe('published');
   });
 
+  it('clears image metadata when the cover URL is removed', () => {
+    const ctx = renderComponent({
+      form: {
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_alt: 'Imported cover description',
+        featured_image_height: 675,
+        featured_image_url: 'https://cdn.example.com/cover.webp',
+        featured_image_variants: {
+          landscape_16x9: 'https://cdn.example.com/cover-16x9.webp',
+        },
+        featured_image_width: 1200,
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: '' },
+    });
+
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: '',
+      featured_image_height: null,
+      featured_image_url: '',
+      featured_image_variants: {},
+      featured_image_width: null,
+    });
+  });
+
+  it('keeps image metadata while a cover URL is present', () => {
+    const ctx = renderComponent({
+      form: {
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_alt: 'Cover description',
+        featured_image_url: 'https://cdn.example.com/cover.webp',
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: 'https://cdn.example.com/other.webp' },
+    });
+
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: 'Cover description',
+      featured_image_url: 'https://cdn.example.com/other.webp',
+    });
+  });
+
   it('forwards content and inline image events from BlogEditor', () => {
     const ctx = renderComponent();
 

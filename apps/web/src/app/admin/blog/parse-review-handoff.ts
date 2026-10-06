@@ -1,3 +1,4 @@
+import { marked } from 'marked';
 import { BLOG_INTENTS, type BlogIntent } from '@/config/blog-intent';
 import { MAX_REVIEW_HANDOFF_CONTENT_LENGTH } from '@/config/blog-review-handoff';
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
@@ -59,6 +60,19 @@ function isEmbeddedImageUrl(url: string): boolean {
 function isImportableMediaUrl(url: string): boolean {
   if (url.toLowerCase().startsWith('data:')) return isEmbeddedImageUrl(url);
   return isHttpsUrl(url);
+}
+
+function renderedMediaTags(content: string): string[] {
+  // BlogEditor renders non-JSON content through marked, so markdown image
+  // syntax becomes <img> after import; validate what the editor will show.
+  // Only image syntax can introduce media, so skip the conversion otherwise.
+  if (!content.includes('![')) return [];
+  try {
+    const rendered = marked.parse(content, { async: false }) as string;
+    return rendered.match(MEDIA_TAG_PATTERN) ?? [];
+  } catch {
+    return [];
+  }
 }
 
 const SRCSET_CANDIDATE_SEPARATOR = /,\s+/;
@@ -128,14 +142,14 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (!hasReadableContent(content)) {
     throw new Error('Article content has no readable text or images');
   }
-  const hasBrokenMedia = (content.match(MEDIA_TAG_PATTERN) ?? []).some(
-    (tag) => {
-      const urls = mediaTagUrls(tag);
-      return (
-        urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url))
-      );
-    }
-  );
+  const mediaTags = [
+    ...(content.match(MEDIA_TAG_PATTERN) ?? []),
+    ...renderedMediaTags(content),
+  ];
+  const hasBrokenMedia = mediaTags.some((tag) => {
+    const urls = mediaTagUrls(tag);
+    return urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url));
+  });
   if (hasBrokenMedia) {
     throw new Error('Imported inline images must use HTTPS URLs');
   }
@@ -168,6 +182,16 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
         )
       )
     : {};
+  for (const field of ['intent', 'intent_source'] as const) {
+    const fieldValue = value[field];
+    if (
+      fieldValue !== undefined &&
+      fieldValue !== null &&
+      typeof fieldValue !== 'string'
+    ) {
+      throw new Error(`The handoff contains an unsupported ${field}`);
+    }
+  }
   const intent = readText(value.intent);
   if (intent && !BLOG_INTENTS.some((allowed) => allowed === intent)) {
     throw new Error('The handoff contains an unsupported intent');
@@ -232,6 +256,8 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
 }
 
 function readDimension(value: unknown): number | null {
-  const result = blogPostSchema.shape.featured_image_width.safeParse(value);
+  const coerced =
+    typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  const result = blogPostSchema.shape.featured_image_width.safeParse(coerced);
   return result.success ? (result.data ?? null) : null;
 }

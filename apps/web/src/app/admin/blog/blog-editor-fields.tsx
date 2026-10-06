@@ -151,6 +151,17 @@ export function BlogEditorFields({
             setForm((current) => ({
               ...current,
               featured_image_url: event.target.value,
+              // Removing the cover orphans its metadata (there is no alt-text
+              // control), so clear it together; otherwise a later upload would
+              // inherit a stale description of the old image.
+              ...(event.target.value.trim() === ''
+                ? {
+                    featured_image_alt: '',
+                    featured_image_height: null,
+                    featured_image_variants: {},
+                    featured_image_width: null,
+                  }
+                : {}),
             }))
           }
         />

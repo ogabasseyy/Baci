@@ -113,6 +113,25 @@ describe('handoff content validation', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it.each([
+    '![Photo](http://example.com/photo.png)',
+    '![Photo](/relative/photo.png)',
+    'See ![Photo][1] below.\n\n[1]: http://example.com/photo.png',
+  ])('rejects markdown images that render broken media: %s', (content_html) => {
+    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+      'must use HTTPS URLs'
+    );
+  });
+
+  it.each([
+    '![Photo](https://cdn.example.com/photo.png)',
+    '![Photo](data:image/png;base64,iVBORw0KGgo=)',
+  ])('accepts markdown images with importable media: %s', (content_html) => {
+    expect(parseReviewHandoff({ ...handoff, content_html }).content).toContain(
+      '![Photo]'
+    );
+  });
+
   it('ignores src-like text inside other attributes', () => {
     expect(
       parseReviewHandoff({

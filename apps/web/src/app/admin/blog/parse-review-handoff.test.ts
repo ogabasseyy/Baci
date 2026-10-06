@@ -101,7 +101,10 @@ describe('parseReviewHandoff', () => {
     Number.POSITIVE_INFINITY,
     2_147_483_648,
     Number.MAX_SAFE_INTEGER,
-    '1200',
+    'abc',
+    '1.5',
+    '',
+    '  ',
     null,
   ])('clears invalid image dimensions %s', (dimension) => {
     expect(
@@ -120,8 +123,12 @@ describe('parseReviewHandoff', () => {
   });
 
   it.each([
-    1, 1200, 2_147_483_647,
-  ])('preserves database-safe image dimensions %s', (dimension) => {
+    [1, 1],
+    [1200, 1200],
+    [2_147_483_647, 2_147_483_647],
+    ['1', 1],
+    ['1200', 1200],
+  ] as const)('preserves database-safe image dimensions %s', (dimension, expected) => {
     expect(
       parseReviewHandoff({
         ...validHandoff,
@@ -132,8 +139,8 @@ describe('parseReviewHandoff', () => {
         },
       })
     ).toMatchObject({
-      featured_image_width: dimension,
-      featured_image_height: dimension,
+      featured_image_width: expected,
+      featured_image_height: expected,
     });
   });
 

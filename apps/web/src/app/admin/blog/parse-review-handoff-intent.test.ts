@@ -42,4 +42,15 @@ describe('handoff intent provenance', () => {
     const draft = parseReviewHandoff({ ...handoff, intent: 'news' });
     expect(draft).toMatchObject({ intent: 'news', intent_source: null });
   });
+
+  it.each([
+    { intent: 123 },
+    { intent: ['news'] },
+    { intent_source: 456 },
+    { intent_source: { source: 'draft_task_type' } },
+  ])('rejects wrong-typed intent metadata %j', (metadata) => {
+    expect(() => parseReviewHandoff({ ...handoff, ...metadata })).toThrow(
+      'unsupported'
+    );
+  });
 });

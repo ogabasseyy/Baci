@@ -536,6 +536,37 @@ describe('generateGoogleMerchantFeed — feed structure', () => {
     expect(xml).toContain('<g:identifier_exists>no</g:identifier_exists>');
   });
 
+  it('omits whitespace-only parent GTIN/MPN from simple-product rows', () => {
+    const imageManifest: Record<string, FeedImageManifestEntry[]> = {
+      'prod-1': [manifestEntry({ is_primary: true })],
+    };
+    const xml = generateGoogleMerchantFeed(
+      [product({ gtin: '   ', mpn: '\t ', brand: 'Samsung' })],
+      merchant(),
+      BASE_URL,
+      imageManifest
+    );
+    expect(xml).not.toContain('<g:gtin>');
+    expect(xml).not.toContain('<g:mpn>');
+    expect(xml).not.toContain('<g:identifier_exists>yes</g:identifier_exists>');
+    expect(xml).toContain('<g:identifier_exists>no</g:identifier_exists>');
+  });
+
+  it('trims padded parent GTIN/MPN in simple-product rows', () => {
+    const imageManifest: Record<string, FeedImageManifestEntry[]> = {
+      'prod-1': [manifestEntry({ is_primary: true })],
+    };
+    const xml = generateGoogleMerchantFeed(
+      [product({ gtin: '  0123456789012  ', mpn: '  MPN-123  ' })],
+      merchant(),
+      BASE_URL,
+      imageManifest
+    );
+    expect(xml).toContain('<g:gtin>0123456789012</g:gtin>');
+    expect(xml).toContain('<g:mpn>MPN-123</g:mpn>');
+    expect(xml).toContain('<g:identifier_exists>yes</g:identifier_exists>');
+  });
+
   it('prefers normalized category data for g:product_type', () => {
     const imageManifest: Record<string, FeedImageManifestEntry[]> = {
       'prod-1': [manifestEntry({ is_primary: true })],

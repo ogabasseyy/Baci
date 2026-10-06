@@ -28,6 +28,7 @@ const mapping = {
   merchant_id: identity.merchantId,
   customer_id: identity.customerId,
   goal_id: identity.goalId,
+  restriction_status: 'ready',
 };
 const wallet = {
   id: identity.providerWalletId,
@@ -92,7 +93,7 @@ describe('readPiggyvestCustomerFundingView', () => {
     });
     expect(options.resolveAuthenticatedGoal).toHaveBeenCalledOnce();
     expect(options.execute).toHaveBeenCalledExactlyOnceWith(
-      'SELECT merchant_id, customer_id, goal_id FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
+      'SELECT merchant_id, customer_id, goal_id, restriction_status FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
       [
         identity.integrationId,
         identity.providerWalletId,

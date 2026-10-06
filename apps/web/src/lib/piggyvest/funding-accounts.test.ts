@@ -18,6 +18,7 @@ const mapping = {
   merchant_id: identity.merchantId,
   customer_id: identity.customerId,
   goal_id: identity.goalId,
+  restriction_status: 'ready',
 };
 const wallet = {
   id: identity.providerWalletId,
@@ -58,7 +59,7 @@ describe('retrievePiggyvestStagingFundingAccounts', () => {
       retrievePiggyvestStagingFundingAccounts(options)
     ).resolves.toEqual({ status: 'ready', accounts: [account] });
     expect(options.execute).toHaveBeenCalledExactlyOnceWith(
-      'SELECT merchant_id, customer_id, goal_id FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
+      'SELECT merchant_id, customer_id, goal_id, restriction_status FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
       [
         identity.integrationId,
         identity.providerWalletId,
@@ -121,6 +122,20 @@ describe('retrievePiggyvestStagingFundingAccounts', () => {
       })
     ).rejects.toMatchObject({ code: 'INVALID_MAPPING' });
     expect(execute).toHaveBeenCalledOnce();
+    expect(options.fetchImplementation).not.toHaveBeenCalled();
+  });
+
+  it('refuses funding accounts for a restricted mapping before any provider request', async () => {
+    const options = dependencies();
+    const execute = vi.fn(async () => ({
+      rows: [{ ...mapping, restriction_status: 'restricted' }],
+    }));
+    await expect(
+      retrievePiggyvestStagingFundingAccounts({
+        ...options,
+        execute,
+      })
+    ).rejects.toMatchObject({ code: 'WALLET_RESTRICTED' });
     expect(options.fetchImplementation).not.toHaveBeenCalled();
   });
 

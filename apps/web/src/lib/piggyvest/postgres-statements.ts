@@ -62,7 +62,7 @@ export const PIGGYVEST_POSTGRES_STATEMENTS = {
     roles: ['piggyvest_staging_worker'],
   },
   resolveWalletMapping: {
-    text: 'SELECT merchant_id, customer_id, goal_id FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
+    text: 'SELECT merchant_id, customer_id, goal_id, restriction_status FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
     parameters: 3,
     roles: ['piggyvest_staging_worker', 'piggyvest_staging_provisioner'],
   },

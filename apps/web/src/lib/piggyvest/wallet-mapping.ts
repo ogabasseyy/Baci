@@ -13,7 +13,12 @@ export async function resolvePiggyvestWalletMapping({
     statement: string,
     parameters: readonly unknown[]
   ) => Promise<{ rows: unknown[] }>;
-}): Promise<{ merchantId: string; customerId: string; goalId: string } | null> {
+}): Promise<{
+  merchantId: string;
+  customerId: string;
+  goalId: string;
+  restrictionStatus: 'ready' | 'restricted';
+} | null> {
   const config =
     piggyvestWalletMappingSchemas.configuration.safeParse(configuration);
   const identity = piggyvestWalletMappingSchemas.input.safeParse(input);
@@ -37,6 +42,7 @@ export async function resolvePiggyvestWalletMapping({
       merchantId: mapping.merchant_id,
       customerId: mapping.customer_id,
       goalId: mapping.goal_id,
+      restrictionStatus: mapping.restriction_status,
     };
   } catch {
     return null;

@@ -22,6 +22,7 @@ export const piggyvestWalletMappingSchemas = {
           merchant_id: z.uuid(),
           customer_id: z.uuid(),
           goal_id: z.uuid(),
+          restriction_status: z.enum(['ready', 'restricted']),
         })
         .strict()
     )

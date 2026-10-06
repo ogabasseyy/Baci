@@ -35,6 +35,7 @@ function fixture() {
         merchant_id: identity.merchantId,
         customer_id: identity.customerId,
         goal_id: identity.goalId,
+        restriction_status: 'ready',
       },
     ],
   }));

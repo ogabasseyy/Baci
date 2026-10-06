@@ -23,6 +23,13 @@ import { retrievePiggyvestWallet } from './wallets';
  *   failure (same mapping race as the inflow ledger's unmapped path) so a
  *   restriction arriving before its mapping row commits is redelivered
  *   rather than silently dropped.
+ * - Staging goal wallets (recorded only in
+ *   piggyvest_staging.wallet_goal_mappings) flip through the service-role-only
+ *   apply_staging_wallet_restriction bridge when the legacy table misses.
+ *   The flip trusts the HMAC-verified provider event symmetrically in both
+ *   directions; only exactly-one-enabled-mapping wallets flip, so unknown or
+ *   ambiguous wallets keep the retryable unknown-wallet path instead of
+ *   flipping the wrong row.
  */
 
 export class PlanWalletRestrictionError extends Error {
@@ -74,12 +81,52 @@ async function flipStatus(
   return data !== null && data.length > 0;
 }
 
+async function hasLegacyWallet(
+  supabase: SupabaseClient,
+  walletId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('piggyvest_plan_wallets')
+    .select('wallet_id')
+    .eq('wallet_id', walletId)
+    .maybeSingle();
+  if (error) {
+    throw new PlanWalletRestrictionError(
+      'RESTRICTION_STORAGE_ERROR',
+      'Restriction lookup failed'
+    );
+  }
+  return data !== null;
+}
+
+async function flipStagingStatus(
+  supabase: SupabaseClient,
+  walletId: string,
+  status: 'ready' | 'restricted'
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc(
+    'apply_staging_wallet_restriction',
+    {
+      p_provider_wallet_id: walletId,
+      p_restriction_status: status,
+    }
+  );
+  if (error) {
+    throw new PlanWalletRestrictionError(
+      'RESTRICTION_STORAGE_ERROR',
+      'Restriction flip failed'
+    );
+  }
+  return data === true;
+}
+
 export async function applyRestrictionCreated(
   supabase: SupabaseClient,
   walletId: string
 ): Promise<'restricted' | 'unknown-wallet'> {
   const id = z.string().min(1).parse(walletId);
-  return (await flipStatus(supabase, id, 'restricted'))
+  if (await flipStatus(supabase, id, 'restricted')) return 'restricted';
+  return (await flipStagingStatus(supabase, id, 'restricted'))
     ? 'restricted'
     : 'unknown-wallet';
 }
@@ -90,6 +137,19 @@ export async function applyRestrictionLifted(
   walletId: string
 ): Promise<'ready' | 'provisioning' | 'unknown-wallet'> {
   const id = z.string().min(1).parse(walletId);
+  // Ownership first: the live retrieve below uses the production client,
+  // which 404s for staging-only wallets. Probing avoids turning every
+  // staging lift into a provider error.
+  if (!(await hasLegacyWallet(supabase, id))) {
+    // No live re-derive for staging: the webhook path carries no staging
+    // provider config, and the HMAC-verified lift event is itself the
+    // provider's signal. Funding-accounts retrieval independently verifies
+    // live wallet status on every call, so a prematurely lifted row still
+    // cannot receive accounts until the provider reports active.
+    return (await flipStagingStatus(supabase, id, 'ready'))
+      ? 'ready'
+      : 'unknown-wallet';
+  }
   let status: 'ready' | 'provisioning' = 'provisioning';
   if (config) {
     try {
@@ -104,5 +164,8 @@ export async function applyRestrictionLifted(
       );
     }
   }
-  return (await flipStatus(supabase, id, status)) ? status : 'unknown-wallet';
+  if (await flipStatus(supabase, id, status)) return status;
+  return (await flipStagingStatus(supabase, id, 'ready'))
+    ? 'ready'
+    : 'unknown-wallet';
 }

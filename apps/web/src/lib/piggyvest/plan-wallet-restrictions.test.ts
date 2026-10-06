@@ -12,18 +12,40 @@ function thenable(result: unknown) {
   return { then };
 }
 
-function mockSupabase(updateResult: { data: unknown; error: unknown }): {
+function mockSupabase(
+  updateResult: { data: unknown; error: unknown },
+  options: {
+    probe?: { data: unknown; error: unknown };
+    rpc?: { data: unknown; error: unknown };
+  } = {}
+): {
   client: SupabaseClient;
   update: ReturnType<typeof vi.fn>;
+  rpc: ReturnType<typeof vi.fn>;
 } {
   const update = vi.fn(() => ({
     eq: vi.fn(() => ({
       select: vi.fn(() => thenable(updateResult)),
     })),
   }));
+  const probe = options.probe ?? {
+    data: { wallet_id: 'wallet-a' },
+    error: null,
+  };
+  const select = vi.fn(() => ({
+    eq: vi.fn(() => ({
+      maybeSingle: vi.fn(async () => probe),
+    })),
+  }));
+  const rpcResult = options.rpc ?? { data: false, error: null };
+  const rpc = vi.fn(async () => rpcResult);
   return {
-    client: { from: vi.fn(() => ({ update })) } as unknown as SupabaseClient,
+    client: {
+      from: vi.fn(() => ({ update, select })),
+      rpc,
+    } as unknown as SupabaseClient,
     update,
+    rpc,
   };
 }
 
@@ -71,6 +93,32 @@ describe('applyRestrictionCreated', () => {
     await expect(applyRestrictionCreated(client, 'wallet-zzz')).resolves.toBe(
       'unknown-wallet'
     );
+  });
+
+  it('flips staging goal wallets through the bridge when legacy misses', async () => {
+    const { client, rpc } = mockSupabase(
+      { data: [], error: null },
+      { rpc: { data: true, error: null } }
+    );
+
+    await expect(applyRestrictionCreated(client, 'wallet-s')).resolves.toBe(
+      'restricted'
+    );
+    expect(rpc).toHaveBeenCalledWith('apply_staging_wallet_restriction', {
+      p_provider_wallet_id: 'wallet-s',
+      p_restriction_status: 'restricted',
+    });
+  });
+
+  it('throws storage errors from the staging bridge', async () => {
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { rpc: { data: null, error: new Error('boom') } }
+    );
+
+    await expect(
+      applyRestrictionCreated(client, 'wallet-s')
+    ).rejects.toMatchObject({ code: 'RESTRICTION_STORAGE_ERROR' });
   });
 });
 
@@ -137,6 +185,41 @@ describe('applyRestrictionLifted', () => {
       applyRestrictionLifted(client, null, 'wallet-a')
     ).resolves.toBe('provisioning');
     expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('lifts staging wallets without a production live check', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { client, rpc } = mockSupabase(
+      { data: [], error: null },
+      {
+        probe: { data: null, error: null },
+        rpc: { data: true, error: null },
+      }
+    );
+
+    await expect(
+      applyRestrictionLifted(client, { token: 'synthetic' }, 'wallet-s')
+    ).resolves.toBe('ready');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith('apply_staging_wallet_restriction', {
+      p_provider_wallet_id: 'wallet-s',
+      p_restriction_status: 'ready',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('reports unknown staging wallets without failing', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const { client } = mockSupabase(
+      { data: [], error: null },
+      { probe: { data: null, error: null } }
+    );
+
+    await expect(
+      applyRestrictionLifted(client, { token: 'synthetic' }, 'wallet-zzz')
+    ).resolves.toBe('unknown-wallet');
     vi.unstubAllGlobals();
   });
 });

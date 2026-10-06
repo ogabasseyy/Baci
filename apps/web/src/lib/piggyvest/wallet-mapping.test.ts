@@ -17,6 +17,7 @@ const mapping = {
   merchant_id: configuration.expectedMerchantId,
   customer_id: '00000000-0000-4000-8000-000000000003',
   goal_id: '00000000-0000-4000-8000-000000000004',
+  restriction_status: 'ready',
 };
 
 describe('resolvePiggyvestWalletMapping', () => {
@@ -28,9 +29,10 @@ describe('resolvePiggyvestWalletMapping', () => {
       merchantId: mapping.merchant_id,
       customerId: mapping.customer_id,
       goalId: mapping.goal_id,
+      restrictionStatus: mapping.restriction_status,
     });
     expect(execute).toHaveBeenCalledExactlyOnceWith(
-      'SELECT merchant_id, customer_id, goal_id FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
+      'SELECT merchant_id, customer_id, goal_id, restriction_status FROM piggyvest_staging.resolve_wallet_mapping($1::uuid, $2::text, $3::text)',
       [
         configuration.integrationId,
         input.providerWalletId,
@@ -50,6 +52,19 @@ describe('resolvePiggyvestWalletMapping', () => {
         execute: async () => response,
       })
     ).toBeNull();
+  });
+  it('surfaces a restricted mapping instead of hiding it', async () => {
+    const execute = vi.fn(async () => ({
+      rows: [{ ...mapping, restriction_status: 'restricted' }],
+    }));
+    expect(
+      await resolvePiggyvestWalletMapping({ configuration, input, execute })
+    ).toEqual({
+      merchantId: mapping.merchant_id,
+      customerId: mapping.customer_id,
+      goalId: mapping.goal_id,
+      restrictionStatus: 'restricted',
+    });
   });
   it('does not query with body-provided local authority', async () => {
     const execute = vi.fn();

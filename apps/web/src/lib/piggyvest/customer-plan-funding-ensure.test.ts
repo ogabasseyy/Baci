@@ -296,6 +296,20 @@ describe('ensurePiggyvestPlanFunding', () => {
     expect(result).toEqual({ status: 'pending', code: 'MAPPING_PENDING' });
   });
 
+  it('stays pending on a restricted wallet so retrieval resumes after the lift', async () => {
+    const { PiggyvestStagingFundingAccountsError } = await import(
+      './funding-accounts'
+    );
+    vi.mocked(retrievePiggyvestStagingFundingAccounts).mockRejectedValue(
+      new PiggyvestStagingFundingAccountsError('WALLET_RESTRICTED')
+    );
+
+    expect(await ensurePiggyvestPlanFunding(base)).toEqual({
+      status: 'pending',
+      code: 'PROVIDER_UNAVAILABLE',
+    });
+  });
+
   it.each([
     'INVALID_CONFIGURATION',
     'INVALID_IDENTITY',

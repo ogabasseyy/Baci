@@ -13,6 +13,7 @@ type FundingAccountsErrorCode =
   | 'INVALID_CONFIGURATION'
   | 'INVALID_IDENTITY'
   | 'INVALID_MAPPING'
+  | 'WALLET_RESTRICTED'
   | 'WALLET_VERIFICATION_FAILED'
   | 'ACCOUNTS_REQUEST_FAILED'
   | 'INVALID_RESPONSE';
@@ -78,6 +79,12 @@ export async function retrievePiggyvestStagingFundingAccounts({
     mapping.goalId !== identity.goalId
   ) {
     throw new PiggyvestStagingFundingAccountsError('INVALID_MAPPING');
+  }
+  // A provider-restricted goal wallet must not receive funding accounts:
+  // the caller maps this to pending so retrieval resumes after the lift
+  // event clears the restriction.
+  if (mapping.restrictionStatus === 'restricted') {
+    throw new PiggyvestStagingFundingAccountsError('WALLET_RESTRICTED');
   }
 
   try {

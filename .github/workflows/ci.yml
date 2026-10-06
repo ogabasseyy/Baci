@@ -356,9 +356,12 @@ jobs:
           --sql-check supabase/migrations/tests/staging_wallet_mapping_bridges.sql
           --sql-check supabase/migrations/tests/plan_transfer_projection_grants.sql
           --sql-check supabase/migrations/tests/finish_push_unregistered.sql
+          --sql-check supabase/migrations/tests/push_delivery_retry_backoff.sql
           --sql-check supabase/migrations/tests/plan_transfer_wallet_binding.sql
           --sql-check supabase/migrations/tests/plan_transfer_excess_projection.sql
           --sql-check supabase/migrations/tests/plan_transfer_interest_headroom.sql
+          --sql-check supabase/migrations/tests/staging_wallet_restriction_state.sql
+          --sql-check supabase/migrations/tests/goal_policy_tables.sql
           --sql-check supabase/tests/repair_booking_rpc.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql

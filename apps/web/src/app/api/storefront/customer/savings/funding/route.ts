@@ -12,6 +12,7 @@ import { retrievePiggyvestStagingFundingAccounts } from '@/lib/piggyvest/funding
 import { createPiggyvestPostgresExecutor } from '@/lib/piggyvest/postgres-executor';
 import { readScopedPiggyvestWalletMapping } from '@/lib/piggyvest/scoped-wallet-mapping-reader';
 import { projectPiggyvestStagingProviderConfiguration } from '@/lib/piggyvest/staging-provider-configuration';
+import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/staging-synthetic-identity';
 import { piggyvestProvisioningConfigurationSchema } from '@/schemas/piggyvest-provisioning-configuration';
 import {
   piggyvestSavingsPlanFundingQuerySchema,
@@ -21,14 +22,11 @@ import {
 import { requireActiveSavingsGoal } from './require-active-savings-goal';
 
 // Staging contract: the provisioning provider must never receive real BVNs
-// or copied customer records, so every staging provisioning call uses this
-// operator-owned synthetic identity regardless of client input or stored PII.
-const PIGGYVEST_STAGING_SYNTHETIC_IDENTITY = {
-  bvn: '00000000000',
-  name: 'Synthetic Customer',
-  email: 'synthetic@example.test',
-  phone: '+2340000000000',
-} as const;
+// or copied customer records, so every staging provisioning call uses a
+// deterministic per-customer synthetic identity regardless of client input
+// or stored PII. Per-customer (not one fixed fixture): once the first
+// customer owns a shared fixture, every later customer's create call
+// returns `new_customer: false` and is rejected as unowned.
 
 function unavailable() {
   return NextResponse.json(
@@ -240,8 +238,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (goalResponse) return goalResponse;
 
     // No customer-PII completeness gate: staging provisioning always uses
-    // the fixed synthetic identity above, so nullable stored name/email/phone
-    // must never block an otherwise eligible allowlisted customer.
+    // the per-customer synthetic identity, so nullable stored
+    // name/email/phone must never block an otherwise eligible allowlisted
+    // customer.
     const runtime = readPiggyvestPlanFundingRuntime();
     if (!runtime) return unavailable();
     let execute: ReturnType<typeof createPiggyvestPostgresExecutor>;
@@ -257,7 +256,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         merchantId: resolved.merchant.id,
         customerId: resolved.customer.id,
         goalId: parsed.data.goalId,
-        ...PIGGYVEST_STAGING_SYNTHETIC_IDENTITY,
+        ...resolvePiggyvestStagingSyntheticIdentity(resolved.customer.id),
       },
       options: {
         reserveVirtualAccount: parsed.data.reserveVirtualAccount,

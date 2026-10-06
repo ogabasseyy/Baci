@@ -35,6 +35,7 @@ vi.mock('@/lib/piggyvest/funding-accounts', () => ({
     mockRetrievePiggyvestStagingFundingAccounts(...args),
 }));
 
+import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/staging-synthetic-identity';
 import { POST } from './route';
 
 const merchantId = '10000000-0000-4000-8000-000000000001';
@@ -189,10 +190,7 @@ describe('/api/storefront/customer/savings/funding POST', () => {
       merchantId,
       customerId,
       goalId,
-      bvn: '00000000000',
-      name: 'Synthetic Customer',
-      email: 'synthetic@example.test',
-      phone: '+2340000000000',
+      ...resolvePiggyvestStagingSyntheticIdentity(customerId),
     });
     expect(call.options).toMatchObject({ reserveVirtualAccount: true });
     expect(typeof call.execute).toBe('function');
@@ -225,11 +223,53 @@ describe('/api/storefront/customer/savings/funding POST', () => {
       merchantId,
       customerId,
       goalId,
-      bvn: '00000000000',
-      name: 'Synthetic Customer',
-      email: 'synthetic@example.test',
-      phone: '+2340000000000',
+      ...resolvePiggyvestStagingSyntheticIdentity(customerId),
     });
+    // No stored PII reaches provisioning even though the customer record
+    // carries a real name, email, and phone.
+    expect(call.customer.bvn).not.toBe('12345678901');
+    expect(call.customer.email).not.toContain('adaeze.okonkwo');
+    expect(call.customer.phone).not.toBe('+2348012345678');
+    expect(call.customer.name).not.toContain('Adaeze');
+  });
+
+  it('allocates a distinct synthetic identity per allowlisted customer', async () => {
+    const secondCustomerId = '20000000-0000-4000-8000-000000000002';
+    mockResolveCustomerSavingsContext
+      .mockResolvedValueOnce({
+        customer: { id: customerId },
+        merchant: { id: merchantId },
+        supabase: {
+          from: vi.fn(() =>
+            goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })
+          ),
+        },
+      })
+      .mockResolvedValueOnce({
+        customer: { id: secondCustomerId },
+        merchant: { id: merchantId },
+        supabase: {
+          from: vi.fn(() =>
+            goalQuery({ id: goalId, status: 'active', source_mode: 'manual' })
+          ),
+        },
+      });
+
+    await POST(post({ goalId, bvn: '00000000000' }));
+    await POST(post({ goalId, bvn: '00000000000' }));
+
+    const [first, second] = mockEnsurePiggyvestPlanFunding.mock.calls.map(
+      (call) => call[0].customer
+    );
+    // A shared fixture would make the second customer's create call return
+    // `new_customer: false` (rejected as existing_customer_unowned), so
+    // only the first allowlisted customer could ever provision.
+    expect(second.bvn).not.toBe(first.bvn);
+    expect(second.email).not.toBe(first.email);
+    expect(second.phone).not.toBe(first.phone);
+    expect(second).toMatchObject(
+      resolvePiggyvestStagingSyntheticIdentity(secondCustomerId)
+    );
   });
 
   it('forwards the interest opt-in to provisioning when requested', async () => {
@@ -293,10 +333,9 @@ describe('/api/storefront/customer/savings/funding POST', () => {
     expect(response.status).toBe(200);
     expect(mockEnsurePiggyvestPlanFunding).toHaveBeenCalledOnce();
     const call = mockEnsurePiggyvestPlanFunding.mock.calls[0][0];
-    expect(call.customer).toMatchObject({
-      bvn: '00000000000',
-      email: 'synthetic@example.test',
-    });
+    expect(call.customer).toMatchObject(
+      resolvePiggyvestStagingSyntheticIdentity(customerId)
+    );
   });
 
   it('returns 503 when the funding display switch is off', async () => {

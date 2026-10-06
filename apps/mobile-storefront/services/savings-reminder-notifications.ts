@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
@@ -6,12 +5,17 @@ import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { savingsNotificationCapability } from '@/services/savings-notification-capability';
 import { useAuthStore } from '@/stores/auth-store';
 import {
+  ensureSavingsReminderChannel,
+  ensureSavingsReminderPermissions,
+  hasSavingsReminderPermission,
+  loadNotificationsModule,
+} from './savings-reminder-native';
+import {
   cancelStoredSavingsReminderNotification,
   disposeUnscopedSavingsReminders,
-  type NotificationsModule,
-  SAVINGS_REMINDER_CHANNEL_ID,
   type SavingsReminderFrequency,
   scheduleRecurringSavingsReminder,
+  suppressStoredSavingsReminderNotification,
 } from './savings-reminder-scheduling';
 import {
   type SavingsReminderRequest,
@@ -43,55 +47,24 @@ function resolveReminderScope(): SavingsReminderScope | null {
 
 const log = createLogger('SavingsReminderNotifications');
 
-let Notifications: NotificationsModule | null = null;
+function hasServerSavingsNotificationCapabilityFor(scope: {
+  merchantId: string;
+  userId: string;
+}) {
+  return savingsNotificationCapability.isAvailable({
+    apiOrigin: EXPO_PUBLIC_API_URL,
+    merchantId: scope.merchantId,
+    userId: scope.userId,
+  });
+}
 
 function hasServerSavingsNotificationCapability() {
   const { merchantId, user } = useAuthStore.getState();
   const resolvedMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
   if (!resolvedMerchantId || !user?.id) return Promise.resolve(false);
-  return savingsNotificationCapability.isAvailable({
-    apiOrigin: EXPO_PUBLIC_API_URL,
+  return hasServerSavingsNotificationCapabilityFor({
     merchantId: resolvedMerchantId,
     userId: user.id,
-  });
-}
-
-function loadNotificationsModule() {
-  if (Platform.OS === 'web') return null;
-  if (Notifications) return Notifications;
-  try {
-    Notifications = require('expo-notifications') as NotificationsModule;
-    return Notifications;
-  } catch (error) {
-    log.debug('Notifications module unavailable for savings reminders', error);
-    return null;
-  }
-}
-
-async function ensureSavingsReminderPermissions(
-  notifications: NotificationsModule
-) {
-  const { status: existingStatus } = await notifications.getPermissionsAsync();
-  if (existingStatus === 'granted') return true;
-  const { status } = await notifications.requestPermissionsAsync();
-  return status === 'granted';
-}
-
-async function hasSavingsReminderPermission(
-  notifications: NotificationsModule
-) {
-  const { status } = await notifications.getPermissionsAsync();
-  return status === 'granted';
-}
-
-async function ensureSavingsReminderChannel(
-  notifications: NotificationsModule
-) {
-  if (Platform.OS !== 'android') return;
-  await notifications.setNotificationChannelAsync(SAVINGS_REMINDER_CHANNEL_ID, {
-    name: 'Savings Reminders',
-    description: 'Reminders to keep your device savings goal on track',
-    importance: notifications.AndroidImportance.DEFAULT,
   });
 }
 
@@ -213,25 +186,55 @@ export function scheduleSavingsReminderNotification({
   goalTitle: string;
   scheduledAt?: Date;
 }): Promise<string | null> {
+  // Capture the scope before enqueueing: resolving inside the queued
+  // callback would read then-current auth state, so a plan submitted by
+  // customer A while another operation runs could be stored/scheduled in
+  // customer B's scope after an account switch. The captured scope is
+  // threaded through the capability check and the scheduling operation.
+  const scope = resolveReminderScope();
+  if (!scope) return Promise.resolve(null);
   return savingsReminderStorage.runExclusive(() =>
-    scheduleReminder({
-      contributionAmount,
-      frequency,
-      goalId,
-      goalTitle,
-      scheduledAt,
-    })
+    scheduleReminder(
+      {
+        contributionAmount,
+        frequency,
+        goalId,
+        goalTitle,
+        scheduledAt,
+      },
+      scope
+    )
   );
 }
 
+/**
+ * Server-delivery suppression for a scope with an observed server
+ * capability. Unlike cancelSavingsReminderNotification (which destroys the
+ * records), this keeps the retained pending requests so local reminders
+ * can be re-armed if server delivery later becomes unavailable.
+ */
+export function suppressSavingsReminderNotification(captured?: {
+  merchantId: string;
+  userId: string;
+}) {
+  return savingsReminderStorage.runExclusive(async () => {
+    const scope = captured
+      ? buildReminderScope(captured.userId, captured.merchantId)
+      : resolveReminderScope();
+    if (!scope) return false;
+    const notifications = loadNotificationsModule();
+    await disposeUnscopedSavingsReminders(notifications);
+    return suppressStoredSavingsReminderNotification(notifications, scope);
+  });
+}
+
 async function scheduleReminder(
-  request: SavingsReminderRequest
+  request: SavingsReminderRequest,
+  scope: SavingsReminderScope
 ): Promise<string | null> {
-  const scope = resolveReminderScope();
-  if (!scope) return null;
   const notifications = loadNotificationsModule();
   await disposeUnscopedSavingsReminders(notifications);
-  if (await hasServerSavingsNotificationCapability()) {
+  if (await hasServerSavingsNotificationCapabilityFor(scope)) {
     await cancelStoredSavingsReminderNotification(notifications, scope);
     return null;
   }

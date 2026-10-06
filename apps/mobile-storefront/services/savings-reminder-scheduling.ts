@@ -84,6 +84,46 @@ export async function cancelStoredSavingsReminderNotification(
 }
 
 /**
+ * Server-delivery suppression: cancels live OS notifications but retains
+ * the pending requests (re-armed records keep `pending` with a cleared
+ * `notificationId`) so local reminders resume if server delivery is later
+ * rolled back. Unlike cancelStoredSavingsReminderNotification, nothing is
+ * removed. When the OS cancel cannot be confirmed the stored ID is kept
+ * for a later retry — otherwise the live notification fires under the
+ * next account.
+ */
+export async function suppressStoredSavingsReminderNotification(
+  notifications: NotificationsModule | null,
+  scope: SavingsReminderScope,
+  goalId?: string
+) {
+  let suppressed = false;
+  for (const record of await savingsReminderStorage.read(scope, goalId)) {
+    if (record.notificationId) {
+      if (!notifications) continue;
+      try {
+        await notifications.cancelScheduledNotificationAsync(
+          record.notificationId
+        );
+      } catch (error) {
+        log.debug(
+          'Unable to suppress stored savings reminder notification',
+          error
+        );
+        continue;
+      }
+      suppressed = true;
+    }
+    suppressed ||= Boolean(record.pending);
+    await savingsReminderStorage.write({
+      ...record,
+      notificationId: undefined,
+    });
+  }
+  return suppressed;
+}
+
+/**
  * One-way disposal of pre-scope records. Unscoped state cannot be attributed
  * to the current account, so any live OS notification is cancelled and the
  * entry dropped — never adopted. Entries are retained until cancellation is
@@ -142,12 +182,28 @@ export async function scheduleRecurringSavingsReminder({
   // The pending request is retained after scheduling so auth-change cleanup
   // can re-arm the record (clear the cancelled notificationId, keep pending)
   // instead of silently destroying the reminder on sign-out.
-  await savingsReminderStorage.write({
-    goalId: request.goalId,
-    merchantId: scope.merchantId,
-    notificationId,
-    pending: request,
-    userId: scope.userId,
-  });
+  try {
+    await savingsReminderStorage.write({
+      goalId: request.goalId,
+      merchantId: scope.merchantId,
+      notificationId,
+      pending: request,
+      userId: scope.userId,
+    });
+  } catch (error) {
+    // The write holds the only copy of notificationId: without a rollback
+    // the native notification is orphaned — retries duplicate it and
+    // account cleanup can never cancel it, so it fires across sign-out.
+    // Cancel the just-created notification before rethrowing.
+    try {
+      await notifications.cancelScheduledNotificationAsync(notificationId);
+    } catch (cancelError) {
+      log.debug(
+        'Unable to roll back savings reminder after persistence failure',
+        cancelError
+      );
+    }
+    throw error;
+  }
   return notificationId;
 }

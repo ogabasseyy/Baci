@@ -1,8 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import plist from 'plist';
 import fastfileConfigValidator from './validate-fastfile-ad-tracking-config.cjs';
+import {
+  readAppConfigSourceWithSplitFallback,
+  readRequiredFile,
+} from './check-ad-tracking-config-source.mjs';
 
 const { validateFastfileAdTrackingConfig } = fastfileConfigValidator;
 
@@ -36,13 +39,6 @@ function parseArgs(argv) {
   }
 
   return options;
-}
-
-function readRequiredFile(filePath) {
-  if (!existsSync(filePath)) {
-    throw new Error(`Missing file: ${filePath}`);
-  }
-  return readFileSync(filePath, 'utf8');
 }
 
 function extractQuotedPropertyValues(source, propertyName) {
@@ -243,16 +239,6 @@ function main() {
   const scriptFile = fileURLToPath(import.meta.url);
   const defaultProjectRoot = path.resolve(path.dirname(scriptFile), '..');
   const projectRoot = path.resolve(options.projectRoot ?? defaultProjectRoot);
-  const appConfigPath = path.join(projectRoot, 'app.config.ts');
-  // Split-config fallback: app.config.ts may be a dispatcher that selects
-  // the production builder below (which carries the ad declarations).
-  // Concatenation preserves extraction (first quoted match wins) and is a
-  // no-op on monolithic trees where the module does not exist.
-  const productionConfigPath = path.join(
-    projectRoot,
-    'config',
-    'development-storefront-expo-config-production.ts'
-  );
   const infoPlistPath = path.join(projectRoot, 'ios', 'Ogabassey', 'Info.plist');
   const xcodeProjectPath = path.join(
     projectRoot,
@@ -267,10 +253,9 @@ function main() {
   let xcodeProjectSource;
   let fastfileSource;
   try {
-    const appConfigSource = existsSync(productionConfigPath)
-      ? `${readRequiredFile(appConfigPath)}\n${readRequiredFile(productionConfigPath)}`
-      : readRequiredFile(appConfigPath);
-    appConfigDeclarations = extractAppConfigAdDeclarations(appConfigSource);
+    appConfigDeclarations = extractAppConfigAdDeclarations(
+      readAppConfigSourceWithSplitFallback(projectRoot)
+    );
     infoPlist = plist.parse(readRequiredFile(infoPlistPath));
     xcodeProjectSource = readRequiredFile(xcodeProjectPath);
     fastfileSource = readRequiredFile(fastfilePath);

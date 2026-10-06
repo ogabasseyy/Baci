@@ -47,6 +47,7 @@ const {
   cancelScopeSavingsReminders,
   activateDueSavingsReminderNotification,
   scheduleSavingsReminderNotification,
+  suppressSavingsReminderNotification,
 } =
   require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
 const { savingsNotificationCapability } =
@@ -489,6 +490,101 @@ describe('savings reminder notification capability', () => {
       false
     );
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(await AsyncStorage.getAllKeys()).toEqual([]);
+  });
+
+  it('pins a queued schedule to the submitting account across a switch', async () => {
+    const { savingsReminderStorage } =
+      require('./savings-reminder-storage') as typeof import('./savings-reminder-storage');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const blocked = savingsReminderStorage.runExclusive(() => gate);
+    mockAuthState.user = { id: 'user-a' };
+    const scheduled = scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-a',
+      goalTitle: 'A phone',
+    });
+    // The account switches while the schedule waits behind the earlier op.
+    mockAuthState.user = { id: 'user-b' };
+    release();
+    await blocked;
+    await expect(scheduled).resolves.toBe('notification-id');
+
+    const merchantId = '00000000-0000-4000-8000-000000000010';
+    expect(
+      await AsyncStorage.getItem(
+        `baci:savings-reminder-goal:user-a:${merchantId}:goal-a`
+      )
+    ).not.toBeNull();
+    expect(
+      await AsyncStorage.getItem(
+        `baci:savings-reminder-goal:user-b:${merchantId}:goal-a`
+      )
+    ).toBeNull();
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          body: expect.stringContaining('A phone'),
+        }),
+      })
+    );
+  });
+
+  it('suppresses live reminders while retaining pendings for a later rollback', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+
+    await expect(suppressSavingsReminderNotification()).resolves.toBe(true);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-id'
+    );
+    const key =
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1';
+    const suppressed = JSON.parse(
+      (await AsyncStorage.getItem(key)) ?? '{}'
+    ) as Record<string, unknown>;
+    expect(suppressed.notificationId).toBeUndefined();
+    expect(suppressed.pending).toEqual(
+      expect.objectContaining({ goalId: 'goal-1' })
+    );
+
+    // Rollback path: activation re-arms the retained pending request.
+    mockScheduleNotificationAsync.mockResolvedValueOnce('rearmed-id');
+    await expect(activateDueSavingsReminderNotification()).resolves.toBe(
+      'rearmed-id'
+    );
+  });
+
+  it('cancels the native notification when persistence fails', async () => {
+    const setItem = jest
+      .spyOn(AsyncStorage, 'setItem')
+      .mockRejectedValueOnce(new Error('disk full'));
+    try {
+      await expect(
+        scheduleSavingsReminderNotification({
+          contributionAmount: 500,
+          frequency: 'weekly',
+          goalId: 'goal-1',
+          goalTitle: 'Phone',
+        })
+      ).rejects.toThrow('disk full');
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'notification-id'
+    );
     expect(await AsyncStorage.getAllKeys()).toEqual([]);
   });
 });

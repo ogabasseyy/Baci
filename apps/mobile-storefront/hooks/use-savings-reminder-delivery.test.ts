@@ -4,7 +4,8 @@ import { useSavingsReminderDelivery } from './use-savings-reminder-delivery';
 const mockFetch = jest.fn();
 const mockMark = jest.fn().mockResolvedValue(undefined);
 const mockClear = jest.fn().mockResolvedValue(undefined);
-const mockCancel = jest.fn().mockResolvedValue(undefined);
+const mockSuppress = jest.fn().mockResolvedValue(undefined);
+const mockActivate = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/env', () => ({
   EXPO_PUBLIC_API_URL: 'https://staging.example.com',
 }));
@@ -18,8 +19,10 @@ jest.mock('@/services/savings-notification-capability', () => ({
   },
 }));
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  cancelSavingsReminderNotification: (...args: unknown[]) =>
-    mockCancel(...args),
+  activateDueSavingsReminderNotification: (...args: unknown[]) =>
+    mockActivate(...args),
+  suppressSavingsReminderNotification: (...args: unknown[]) =>
+    mockSuppress(...args),
 }));
 
 beforeEach(() => jest.clearAllMocks());
@@ -27,31 +30,38 @@ beforeEach(() => jest.clearAllMocks());
 it('suppresses local reminders after registration without visiting the inbox', async () => {
   mockFetch.mockResolvedValue({ deliveryEnabled: true });
   renderHook(() => useSavingsReminderDelivery('user', 'merchant', true));
-  await waitFor(() => expect(mockCancel).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mockSuppress).toHaveBeenCalledTimes(1));
   expect(mockMark).toHaveBeenCalledWith({
     apiOrigin: 'https://staging.example.com',
     userId: 'user',
     merchantId: 'merchant',
   });
-  // The captured scope pins the delayed cancellation to this account even
-  // if the user switches before the queued operation runs.
-  expect(mockCancel).toHaveBeenCalledWith(undefined, {
+  // The captured scope pins the delayed suppression to this account even
+  // if the user switches before the queued operation runs. Suppression
+  // retains the pending requests (unlike cancellation) so a later
+  // rollback can re-arm local reminders.
+  expect(mockSuppress).toHaveBeenCalledWith({
     apiOrigin: 'https://staging.example.com',
     userId: 'user',
     merchantId: 'merchant',
   });
+  expect(mockActivate).not.toHaveBeenCalled();
 });
 
-it('keeps local reminders when server delivery is unavailable', async () => {
+it('re-arms local reminders when server delivery is rolled back', async () => {
   mockFetch.mockResolvedValue({ deliveryEnabled: false });
   renderHook(() => useSavingsReminderDelivery('user', 'merchant', true));
   await waitFor(() => expect(mockClear).toHaveBeenCalledTimes(1));
-  expect(mockCancel).not.toHaveBeenCalled();
+  await waitFor(() => expect(mockActivate).toHaveBeenCalledTimes(1));
+  expect(mockSuppress).not.toHaveBeenCalled();
 });
 
-it('does not suppress local reminders without registered push', () => {
+it('re-arms local reminders without registered push instead of only clearing', async () => {
   renderHook(() => useSavingsReminderDelivery('user', 'merchant', false));
   expect(mockFetch).not.toHaveBeenCalled();
+  await waitFor(() => expect(mockClear).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mockActivate).toHaveBeenCalledTimes(1));
+  expect(mockSuppress).not.toHaveBeenCalled();
 });
 
 it('ignores a response arriving after sign-out', async () => {
@@ -71,14 +81,14 @@ it('ignores a response arriving after sign-out', async () => {
     resolve({ deliveryEnabled: true });
   });
   expect(mockMark).not.toHaveBeenCalled();
-  expect(mockCancel).not.toHaveBeenCalled();
+  expect(mockSuppress).not.toHaveBeenCalled();
 });
 
 it('preserves local fallback when capability lookup fails', async () => {
   mockFetch.mockRejectedValue(new Error('offline'));
   renderHook(() => useSavingsReminderDelivery('user', 'merchant', true));
   await act(async () => {});
-  expect(mockCancel).not.toHaveBeenCalled();
+  expect(mockSuppress).not.toHaveBeenCalled();
 });
 
 it('clears persisted capability when registration is lost after a successful registration', async () => {
@@ -97,6 +107,9 @@ it('clears persisted capability when registration is lost after a successful reg
       userId: 'user',
     })
   );
+  // Lost registration re-arms retained local pendings — the customer must
+  // not end up with neither server nor local reminders.
+  await waitFor(() => expect(mockActivate).toHaveBeenCalledTimes(1));
 });
 
 it('clears a persisted marker on boot with failed rotation or unregistered push', async () => {
@@ -108,7 +121,8 @@ it('clears a persisted marker on boot with failed rotation or unregistered push'
       userId: 'user',
     })
   );
-  expect(mockCancel).not.toHaveBeenCalled();
+  await waitFor(() => expect(mockActivate).toHaveBeenCalledTimes(1));
+  expect(mockSuppress).not.toHaveBeenCalled();
 });
 
 it.each([
@@ -131,7 +145,7 @@ it.each([
     { initialProps: oldScope }
   );
   rerender(nextScope);
-  await waitFor(() => expect(mockCancel).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(mockSuppress).toHaveBeenCalledTimes(1));
   await act(async () => {
     resolve({ deliveryEnabled: true });
   });
@@ -176,7 +190,7 @@ it('clears a late persisted write before re-registering the same account', async
   });
   await waitFor(() => expect(mockMark).toHaveBeenCalledTimes(2));
   expect(available).toBe(true);
-  expect(mockCancel).toHaveBeenCalledTimes(1);
+  expect(mockSuppress).toHaveBeenCalledTimes(1);
   unmount();
   await act(async () => {});
   expect(available).toBe(false);

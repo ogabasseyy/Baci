@@ -66,6 +66,12 @@ interface DataContextConstructor {
 }
 
 async function loadWebCore() {
+  // NOTE: these deep imports intentionally bypass the package's `exports`
+  // map, which exposes only the v0_8/v0_9 entry points — the openUrl
+  // implementation is not reachable through the public surface. This couples
+  // the test to web_core's internal file layout: if a future release
+  // restructures these paths, the import fails loudly (fail-closed) and this
+  // test must be updated alongside the override bump.
   const moduleUrl = (relativePath: string): string =>
     pathToFileURL(join(webCoreRoot, relativePath)).href;
   const [functionsModule, dataModelModule, dataContextModule, catalogModule] =
@@ -143,11 +149,12 @@ describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
         } catch (error) {
           thrown = error;
         }
-        expect(
-          thrown instanceof Error &&
-            thrown.message.includes('Unsupported URL scheme'),
-          `Expected "${input}" to throw an Unsupported URL scheme error`
-        ).toBe(true);
+        // Security property: the URL is rejected (throws) and never
+        // opened. Deliberately not asserting the exact upstream error
+        // wording so a message reword that keeps the allowlist stays green.
+        expect(thrown instanceof Error, `Expected "${input}" to throw`).toBe(
+          true
+        );
         expect(openedUrl).toBe('');
       }
 

@@ -39,6 +39,21 @@ it.each([
   ).toThrow('commas');
 });
 
+it.each([
+  ['Valid', 123],
+  'Valid, Other',
+  42,
+])('rejects wrong-typed tags: %j', (tags) => {
+  expect(() => parseReviewHandoff({ ...handoff, tags })).toThrow(
+    'array of strings'
+  );
+});
+
+it('accepts missing or null tags', () => {
+  expect(parseReviewHandoff({ ...handoff, tags: null }).tags).toBe('');
+  expect(parseReviewHandoff(handoff).tags).toBe('');
+});
+
 it('round-trips representable tag names through the save sanitizer', () => {
   const form = parseReviewHandoff({
     ...handoff,

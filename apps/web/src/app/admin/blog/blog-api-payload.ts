@@ -50,6 +50,7 @@ export function toApiPayload(
   if (shouldResetFeaturedMetadataForChangedUrl(input, existingPost)) {
     return {
       ...payload,
+      featured_image_alt: null,
       featured_image_height: null,
       featured_image_url: featuredImageUrl,
       featured_image_variants: {},

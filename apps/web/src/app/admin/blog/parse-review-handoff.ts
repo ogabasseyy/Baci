@@ -168,6 +168,14 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     throw new Error('An HTTPS featured-image URL is required');
   }
 
+  if (
+    value.tags !== undefined &&
+    value.tags !== null &&
+    (!Array.isArray(value.tags) ||
+      value.tags.some((tag) => typeof tag !== 'string'))
+  ) {
+    throw new Error('Imported tags must be an array of strings');
+  }
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === 'string')
     : [];

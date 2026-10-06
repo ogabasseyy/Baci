@@ -154,7 +154,30 @@ describe('BlogEditorFields', () => {
     });
   });
 
-  it('keeps image metadata while a cover URL is present', () => {
+  it('clears alt text when the cover URL is swapped', () => {
+    const ctx = renderComponent({
+      form: {
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_alt: 'Cover description',
+        featured_image_height: 675,
+        featured_image_url: 'https://cdn.example.com/cover.webp',
+        featured_image_width: 1200,
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: 'https://cdn.example.com/other.webp' },
+    });
+
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: '',
+      featured_image_height: 675,
+      featured_image_url: 'https://cdn.example.com/other.webp',
+      featured_image_width: 1200,
+    });
+  });
+
+  it('keeps image metadata for whitespace-only URL edits', () => {
     const ctx = renderComponent({
       form: {
         ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
@@ -164,12 +187,11 @@ describe('BlogEditorFields', () => {
     });
 
     fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://cdn.example.com/other.webp' },
+      target: { value: 'https://cdn.example.com/cover.webp ' },
     });
 
     expect(ctx.getCurrentForm()).toMatchObject({
       featured_image_alt: 'Cover description',
-      featured_image_url: 'https://cdn.example.com/other.webp',
     });
   });
 

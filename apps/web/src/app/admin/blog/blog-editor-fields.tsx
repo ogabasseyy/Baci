@@ -148,21 +148,29 @@ export function BlogEditorFields({
           id="featured-image-url"
           value={form.featured_image_url}
           onChange={(event) =>
-            setForm((current) => ({
-              ...current,
-              featured_image_url: event.target.value,
-              // Removing the cover orphans its metadata (there is no alt-text
-              // control), so clear it together; otherwise a later upload would
-              // inherit a stale description of the old image.
-              ...(event.target.value.trim() === ''
-                ? {
-                    featured_image_alt: '',
-                    featured_image_height: null,
-                    featured_image_variants: {},
-                    featured_image_width: null,
-                  }
-                : {}),
-            }))
+            setForm((current) => {
+              const nextUrl = event.target.value;
+              // Alt text has no input control and no save-time reconciliation,
+              // so any URL change orphans it: clear it together, otherwise the
+              // new image inherits a stale description of the old one. Other
+              // metadata is preserved for the save pipeline to reconcile,
+              // except on removal where there is no image left to describe.
+              const urlChanged =
+                nextUrl.trim() !== current.featured_image_url.trim();
+              const urlRemoved = nextUrl.trim() === '';
+              return {
+                ...current,
+                featured_image_url: nextUrl,
+                ...(urlChanged || urlRemoved ? { featured_image_alt: '' } : {}),
+                ...(urlRemoved
+                  ? {
+                      featured_image_height: null,
+                      featured_image_variants: {},
+                      featured_image_width: null,
+                    }
+                  : {}),
+              };
+            })
           }
         />
         <div>

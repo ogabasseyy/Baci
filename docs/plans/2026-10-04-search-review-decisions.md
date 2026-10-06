@@ -104,3 +104,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-45: both category selectors append an "Unavailable category" fallback for a draft id missing from facets (the name is unknowable post-deactivation; ids are UUIDs), so a deactivated-but-still-applied constraint displays truthfully instead of "All categories".
 - CX-46: the new assurance disclosure line uses `text-store-background-text/55` instead of hardcoded gray; the cart suite pins the theme class. Pre-existing gray/red lines untouched (out of diff).
 - Folded in the held Round 15 inbox-rendering test.
+
+## Round 17 (Muse on 2c87319dac — sentinel removed, rest adjudicated; Codex quota-blocked)
+
+- Removed the dead `storefront-public-intake` service sentinel (brand, type, overload, key/error branches, manifest mapping, and its 2 factory tests): it was this PR's own leftover, has zero production callers (live intake uses anon key + access token), and its "service-role" branding misdescribed a restricted JWT. Verified no reference remains and the manifest verifier suites stay green.
+- Budget-exhaustion medium stays deferred per the PR description (proxy IP gate is the only rotation brake; needs the 429-spike alert before merge). Assurance-fallback medium stays a product decision (single-merchant app). Stale-row count/totalCount low re-adjudicated: the empty-page probe corrects the one-redirect overstatement by design.
+- Comparison cap 3-vs-4 documented as intentional per-form-factor divergence: web fits 1 main + 3 comparisons ("UI sanity"), native side-by-side fits 3 ("up to 3 products"); both are product-id keyed and session-scoped. Aligning would shrink one platform's UX without a product decision.
+- Codex trigger on 2c87319dac returned "usage limits for code reviews" — loop paused again after pushing the sentinel removal.

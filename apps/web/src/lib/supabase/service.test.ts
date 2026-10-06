@@ -159,24 +159,4 @@ describe('service Supabase client factory', () => {
       'SUPABASE_JUMIA_CREDENTIAL_KEY is missing'
     );
   });
-
-  it('prefers the dedicated intake key and brands that authority separately', () => {
-    process.env.SUPABASE_STOREFRONT_INTAKE_KEY = 'intake-key';
-
-    const client = createServiceClient('storefront-public-intake');
-
-    expect(Reflect.ownKeys(client)).toContainEqual(expect.any(Symbol));
-    expect(mockCreateClient).toHaveBeenCalledWith(
-      'https://example.supabase.co',
-      'intake-key',
-      expect.any(Object)
-    );
-  });
-
-  it('fails closed without falling back to the service-role key', () => {
-    expect(() => createServiceClient('storefront-public-intake')).toThrow(
-      'SUPABASE_STOREFRONT_INTAKE_KEY is missing'
-    );
-    expect(mockCreateClient).not.toHaveBeenCalled();
-  });
 });

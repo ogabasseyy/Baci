@@ -131,3 +131,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-49: new append-only migration folds brand filters case- and trim-insensitively in the single live candidates function (public was moved to the private schema; all wrappers/facets delegate there). Validated on scratch Postgres against the real migration file: old body `{apple}`→0 rows (bug), new body `{apple,Apple,APPLE,' apple '}`→1, `{Samsung}`→0, `{}`/`NULL`→fast path intact, NULL-brand rows excluded under filter but included unfiltered (9 probes).
 - CX-50: compare navigation keys on search intent (downstream intent + count>=2 gates do the rest) instead of result length, so zero-result refinements no longer strand an active comparison session.
 - CX-51: assurance toggle row extracted to `cart-assurance-row.tsx` with a colocated suite (copy states, theme class, toggle callback); cart page drops 457 → 429. The page remains over 300 on pre-existing content — a full split is out of scope; the new/touched logic now lives in a compliant module. Note: `ogabassey/**` is biome-ignored by config, so the extraction is typecheck- (not lint-) covered like its parent.
+
+## Round 21 (Muse on d90662b976 — cart merge adjudicated pre-existing, rest repeats; Codex quota-blocked)
+
+- Native cart-merge medium adjudicated out-of-diff: the `{...existingItem, ...incomingItem}` spread predates this PR (#2142 refactor); the PR touched only the `hasAssurance` line in both merges. Direction-correctness is ambiguous (incoming PDP data is live-viewed, stored may be older; id/quantity/negotiation/rate are explicitly preserved), and web-vs-native merge divergence is likewise pre-existing — a product decision for the author, flagged here.
+- Assurance/count-identity mediums+lows all repeats of adjudicated items (fallback scope, adjusted-vs-raw pagination, product-keyed comparison).
+- Codex trigger on d90662b976 returned "usage limits for code reviews" — loop paused; note held uncommitted for the next fix commit.
+
+## Round 22 (Codex on d90662b976 — CX-52..CX-53, both fixed with tests)
+
+- CX-52: search-result product links omit the snapshot condition when an exact variant/offer id is present (web card + native search navigation), extending the CX-44 saved-link rule to direct search taps. Compare/saved-storage/compare-refresh forwarders audited and left intact: snapshots refresh to live facts before navigation, and storage must retain the condition for condition-only entries.
+- CX-53: the no-results intake gate now requires the intake schema's query rule (trimmed 2–120 + letter/number) in addition to a catalog term, so 1-char and 121–200-char no-result pages no longer advertise a form prefilled with a value the API would 400.

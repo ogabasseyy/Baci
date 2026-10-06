@@ -71,4 +71,37 @@ describe('SearchPageNoResultsPanel', () => {
       screen.queryByRole('button', { name: /request this product/i })
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    'a',
+    'a'.repeat(121),
+  ])('hides intake for queries outside the intake schema bounds (%s)', (searchQuery) => {
+    render(
+      <SearchPageNoResultsPanel
+        allProductsHref="/ogabassey/products"
+        contactHref="/ogabassey/contact"
+        searchQuery={searchQuery}
+        merchantSlug="ogabassey"
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /request this product/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows intake at the 120-character schema bound', () => {
+    render(
+      <SearchPageNoResultsPanel
+        allProductsHref="/ogabassey/products"
+        contactHref="/ogabassey/contact"
+        searchQuery={'a'.repeat(120)}
+        merchantSlug="ogabassey"
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /request this product/i })
+    ).toBeInTheDocument();
+  });
 });

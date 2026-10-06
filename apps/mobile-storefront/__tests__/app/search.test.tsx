@@ -313,4 +313,44 @@ describe('SearchScreen route', () => {
       expect.objectContaining({ search: undefined, enabled: false })
     );
   });
+
+  it('navigates with exact match ids and omits the snapshot condition', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    render(<SearchScreen />);
+    const { router } = jest.requireMock('expo-router') as {
+      router: { push: jest.Mock };
+    };
+
+    act(() =>
+      mockViewProps.current?.onProductPress({
+        slug: 'iphone-13',
+        searchMatch: { offerId: 'o1', condition: 'used' },
+      })
+    );
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-13', offer_id: 'o1' },
+    });
+  });
+
+  it('forwards a condition-only match without an exact id', () => {
+    mockUseLocalSearchParams.mockReturnValue({ q: 'iphone' });
+    render(<SearchScreen />);
+    const { router } = jest.requireMock('expo-router') as {
+      router: { push: jest.Mock };
+    };
+
+    act(() =>
+      mockViewProps.current?.onProductPress({
+        slug: 'iphone-13',
+        searchMatch: { condition: 'used' },
+      })
+    );
+
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-13', condition: 'used' },
+    });
+  });
 });

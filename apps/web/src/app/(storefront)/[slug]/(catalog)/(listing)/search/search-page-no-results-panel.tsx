@@ -1,4 +1,7 @@
-import { buildProductSearchQuery } from '@baci/shared/lib';
+import {
+  buildProductSearchQuery,
+  productRequestSchema,
+} from '@baci/shared/lib';
 import Link from 'next/link';
 import { asRoute } from '@/lib/routes';
 import { ProductRequest } from './product-request';
@@ -18,12 +21,13 @@ export function SearchPageNoResultsPanel({
   hasActiveRefinements = false,
   merchantSlug,
 }: SearchPageNoResultsPanelProps) {
-  // Normalization-empty queries (e.g. "?q=!!") survive sanitization but
-  // carry no catalog term, and the intake schema rejects them for lacking
-  // a letter or number — so the request form would only ever 400. Hide it
-  // with the same normalization native search and intake use.
+  // The intake schema bounds queries at 2–120 trimmed chars plus a letter
+  // or number, while storefront queries allow 1–200 chars — so gate the
+  // form on the schema itself (plus a catalog term) instead of advertising
+  // a prefilled value the form or API would reject until edited.
   const hasSearchableQuery =
-    buildProductSearchQuery(searchQuery).normalized !== '';
+    buildProductSearchQuery(searchQuery).normalized !== '' &&
+    productRequestSchema.shape.query.safeParse(searchQuery).success;
   return (
     <div className="mt-10 rounded-3xl border border-store-background-text/10 bg-store-background px-6 py-16 text-center shadow-sm">
       <h2 className="text-xl font-semibold text-store-background-text">

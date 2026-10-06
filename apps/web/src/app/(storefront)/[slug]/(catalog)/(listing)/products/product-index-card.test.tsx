@@ -174,6 +174,53 @@ describe('ProductIndexCard', () => {
     expect(screen.queryByText('New & Used')).not.toBeInTheDocument();
   });
 
+  it('omits the snapshot condition when an exact option id is present', () => {
+    render(
+      <ProductIndexCard
+        modern
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            offerId: 'o1',
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    const href = screen
+      .getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+      .getAttribute('href');
+    expect(href).toContain('offer_id=o1');
+    expect(href).not.toContain('condition=');
+  });
+
+  it('forwards a condition-only match without an exact id', () => {
+    render(
+      <ProductIndexCard
+        modern
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+    ).toHaveAttribute('href', expect.stringContaining('condition=used'));
+  });
+
   it('shows the no-image fallback when the product image is blank', () => {
     render(
       <ProductIndexCard

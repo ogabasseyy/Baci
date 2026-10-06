@@ -168,6 +168,13 @@ export default function SearchScreen() {
     if (hasSearchQuery) {
       saveToHistory(debouncedQuery);
     }
+    // An exact option id resolves its own live condition on the PDP. A
+    // snapshot condition can go stale after these results render (the
+    // merchant reconditions the option), and pairing it with the id would
+    // make the resolver reject the identified option.
+    const hasExactMatchIdentity = Boolean(
+      product.searchMatch?.variantId || product.searchMatch?.offerId
+    );
     router.push({
       pathname: '/product/[slug]',
       params: {
@@ -178,7 +185,7 @@ export default function SearchScreen() {
         ...(product.searchMatch?.offerId
           ? { offer_id: product.searchMatch.offerId }
           : {}),
-        ...(product.searchMatch?.condition
+        ...(product.searchMatch?.condition && !hasExactMatchIdentity
           ? { condition: product.searchMatch.condition }
           : {}),
       },

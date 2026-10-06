@@ -97,7 +97,15 @@ export function ProductIndexCard({
   const matchParams = new URLSearchParams();
   if (product.searchMatch?.variantId)
     matchParams.set('variant_id', product.searchMatch.variantId);
-  if (product.searchMatch?.condition)
+  // An exact option id resolves its own live condition on the PDP. A
+  // snapshot condition can go stale after this page renders (the merchant
+  // reconditions the option), and pairing it with the id would make the
+  // resolver reject the identified option.
+  if (
+    product.searchMatch?.condition &&
+    !product.searchMatch.variantId &&
+    !product.searchMatch.offerId
+  )
     matchParams.set('condition', product.searchMatch.condition);
   if (product.searchMatch?.offerId)
     matchParams.set('offer_id', product.searchMatch.offerId);

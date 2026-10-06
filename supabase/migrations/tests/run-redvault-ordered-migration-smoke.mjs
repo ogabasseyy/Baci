@@ -472,6 +472,20 @@ try {
       RAISE EXCEPTION 'pilot_review_followups_not_applied';
     END IF;
   END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006130000_uba_redvault_pilot_permit_payment_completion.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF strpos(pg_get_functiondef('private.guard_uba_redvault_pilot_order_fulfillment()'::regprocedure), 'IS NOT DISTINCT FROM ''processing''') = 0 THEN
+      RAISE EXCEPTION 'pilot_payment_completion_carve_out_missing';
+    END IF;
+  END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'
   );

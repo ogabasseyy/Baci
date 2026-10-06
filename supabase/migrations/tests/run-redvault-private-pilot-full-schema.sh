@@ -12,6 +12,7 @@ binding_none="$root/supabase/migrations/tests/redvault-existing-binding-fixed-fi
 pilot="$root/supabase/migrations/20260928120000_uba_redvault_private_live_pilot.sql"
 legacy_and_shipment="$root/supabase/migrations/20260929100000_uba_redvault_pilot_legacy_and_shipment_guards.sql"
 review_followups="$root/supabase/migrations/20261006120000_uba_redvault_pilot_review_followups.sql"
+permit_completion="$root/supabase/migrations/20261006130000_uba_redvault_pilot_permit_payment_completion.sql"
 test_sql="$root/supabase/migrations/tests/redvault-private-pilot-full-schema.sql"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]; then
@@ -32,6 +33,6 @@ SQL
   cat "$binding_fixture" "$existing_binding_fixed_five" "$binding_converted"
   cat "$existing_binding_fixed_five" "$binding_five"
   cat "$existing_binding_fixed_five" "$binding_none"
-  cat "$fixed_five" "$pilot" "$legacy_and_shipment" "$review_followups"
+  cat "$fixed_five" "$pilot" "$legacy_and_shipment" "$review_followups" "$permit_completion"
   sed '1{/^BEGIN;$/d;}' "$test_sql"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

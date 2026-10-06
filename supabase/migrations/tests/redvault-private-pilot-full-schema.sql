@@ -559,6 +559,21 @@ BEGIN
   -- stay blocked before and after cancellation.
   INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current())
   ON CONFLICT DO NOTHING;
+  -- Verified-payment completion advances pending -> processing (paid flip in
+  -- the same statement); the pilot guard must permit exactly that transition
+  -- while failing closed on the reversal.
+  UPDATE public.orders SET shipping_status = 'processing' WHERE id = fixture.order_id;
+  IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND shipping_status = 'processing') THEN
+    RAISE EXCEPTION 'pilot_completion_transition_rejected';
+  END IF;
+  caught := NULL;
+  BEGIN
+    UPDATE public.orders SET shipping_status = 'pending' WHERE id = fixture.order_id;
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_physical_fulfillment_blocked' THEN
+    RAISE EXCEPTION 'pilot_completion_reversal_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
   UPDATE public.orders SET shipping_status = 'canceled' WHERE id = fixture.order_id;
   IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND shipping_status = 'canceled') THEN
     RAISE EXCEPTION 'pilot_cancel_carve_out_rejected';
@@ -603,5 +618,5 @@ BEGIN
 END;
 $$;
 
-SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, expiry, pre-approval fulfillment block, cancel carve-out, and post-expiry provider-outcome checks passed; no provider request was made' AS result;
+SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, expiry, pre-approval fulfillment block, completion transition, cancel carve-out, and post-expiry provider-outcome checks passed; no provider request was made' AS result;
 ROLLBACK;

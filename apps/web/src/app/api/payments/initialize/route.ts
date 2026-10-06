@@ -13,12 +13,12 @@ import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { getRedvaultCheckoutSummary } from '@/lib/checkout/get-redvault-checkout-summary';
 import { getRedvaultCallbackUrl } from '@/lib/checkout/redvault-callback-url';
+import { REDVAULT_PILOT_USER_ID } from '@/lib/checkout/redvault-live-pilot';
 import {
-  getRedvaultLivePilotPolicy,
-  REDVAULT_PILOT_USER_ID,
-} from '@/lib/checkout/redvault-live-pilot';
+  verifyRedvaultLivePilotFunding,
+  verifyRedvaultLivePilotSnapshot,
+} from '@/lib/checkout/redvault-live-pilot-verification';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
@@ -1174,39 +1174,17 @@ export async function POST(request: NextRequest) {
       redvaultRequested &&
       getRedvaultPaymentAvailability().reason === 'private_live_pilot'
     ) {
-      try {
-        const summary = await getRedvaultCheckoutSummary({
-          client: paymentDataClient,
-          orderId: data.order_id,
-        });
-        const pilot = getRedvaultLivePilotPolicy();
-        const exactPilotSnapshot = Boolean(
-          pilot &&
-            redvaultCustomerAuth?.user?.id === REDVAULT_PILOT_USER_ID &&
-            orderSnapshot.merchant_id === pilot.merchantId &&
-            summary.order.currency.toUpperCase() === 'NGN' &&
-            summary.order.total >= 0 &&
-            summary.quote.product_subtotal_kobo === 10_000 &&
-            summary.quote.eligible_subtotal_kobo === 10_000 &&
-            summary.quote.ineligible_subtotal_kobo === 0 &&
-            summary.quote.discount_kobo === 500 &&
-            summary.quote.assurance_fee_kobo === 0 &&
-            summary.quote.shipping_kobo === 0 &&
-            summary.quote.gift_wrapping_kobo === 0 &&
-            summary.quote.mixed_basket === false
-        );
-        if (!exactPilotSnapshot) {
-          return createErrorResponse(
-            'REDVAULT payment is not available',
-            'REDVAULT_UNAVAILABLE',
-            409
-          );
-        }
-      } catch {
+      const pilotSnapshot = await verifyRedvaultLivePilotSnapshot({
+        client: paymentDataClient,
+        orderId: data.order_id,
+        userId: redvaultCustomerAuth?.user?.id,
+        merchantId: orderSnapshot.merchant_id,
+      });
+      if (!pilotSnapshot.ok) {
         return createErrorResponse(
-          'Unable to verify REDVAULT order',
-          'ORDER_AMOUNT_LOOKUP_FAILED',
-          500
+          pilotSnapshot.rejection.message,
+          pilotSnapshot.rejection.code,
+          pilotSnapshot.rejection.status
         );
       }
     }
@@ -1314,14 +1292,19 @@ export async function POST(request: NextRequest) {
 
     if (
       redvaultRequested &&
-      getRedvaultPaymentAvailability().reason === 'private_live_pilot' &&
-      (walletAmountUsed !== 0 || savingsAmountUsed !== 0)
+      getRedvaultPaymentAvailability().reason === 'private_live_pilot'
     ) {
-      return createErrorResponse(
-        'REDVAULT payment is not available',
-        'REDVAULT_UNAVAILABLE',
-        409
-      );
+      const pilotFunding = verifyRedvaultLivePilotFunding({
+        walletAmountUsed,
+        savingsAmountUsed,
+      });
+      if (!pilotFunding.ok) {
+        return createErrorResponse(
+          pilotFunding.rejection.message,
+          pilotFunding.rejection.code,
+          pilotFunding.rejection.status
+        );
+      }
     }
 
     // Fetch merchant

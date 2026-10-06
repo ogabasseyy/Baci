@@ -140,23 +140,27 @@ describe('overrideRoots', () => {
     expect(overrideRoots('', 'GTU_ROOTS')).toBeNull();
   });
 
-  it('splits a colon-separated list', () => {
-    expect(overrideRoots('/a:/b', 'GTU_ROOTS')).toEqual(['/a', '/b']);
-  });
-
   it('splits on the platform path delimiter', () => {
     const joined = ['/a', '/b'].join(delimiter);
     expect(overrideRoots(joined, 'GTU_ROOTS')).toEqual(['/a', '/b']);
   });
 
   it('refuses overrides under CI', () => {
+    const savedCI = process.env.CI;
     process.env.CI = 'true';
     try {
       expect(() => overrideRoots('/a', 'GTU_ROOTS')).toThrow(
         /refusing to test non-installed copies/
       );
     } finally {
-      delete process.env.CI;
+      // Restore, never blank: the runner normally has CI set, and
+      // clearing it would weaken later CI-refusal assertions in this
+      // worker.
+      if (savedCI === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = savedCI;
+      }
     }
   });
 });

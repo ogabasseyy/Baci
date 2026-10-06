@@ -56,6 +56,24 @@ beforeAll(() => {
       exports: { '.': { import: './lib/entry.mjs' } },
     })
   );
+  const nestedConditions = join(fixture, 'nested-conditions');
+  mkdirSync(nestedConditions, { recursive: true });
+  writeFileSync(
+    join(nestedConditions, 'package.json'),
+    JSON.stringify({
+      name: 'nested-conditions',
+      exports: { '.': { node: { require: './lib/entry.cjs' } } },
+    })
+  );
+  const arrayConditions = join(fixture, 'array-conditions');
+  mkdirSync(arrayConditions, { recursive: true });
+  writeFileSync(
+    join(arrayConditions, 'package.json'),
+    JSON.stringify({
+      name: 'array-conditions',
+      exports: { '.': [{ import: './lib/e.mjs' }, './lib/entry.cjs'] },
+    })
+  );
 });
 
 afterAll(() => {
@@ -89,6 +107,18 @@ describe('security-integrity-load', () => {
   it('throws an explicit error for ESM-only exports', () => {
     expect(() => packageMain(join(fixture, 'esm-only'))).toThrow(
       /Cannot resolve a CJS entry/
+    );
+  });
+
+  it('resolves one extra nesting level', () => {
+    expect(packageMain(join(fixture, 'nested-conditions'))).toBe(
+      './lib/entry.cjs'
+    );
+  });
+
+  it('resolves array-form fallback exports', () => {
+    expect(packageMain(join(fixture, 'array-conditions'))).toBe(
+      './lib/entry.cjs'
     );
   });
 

@@ -219,6 +219,38 @@ describe('security-integrity-find-installed-roots', () => {
     }
   });
 
+  it('throws when the workspace manifest is unreadable', () => {
+    // A directory where pnpm-workspace.yaml should be: existsSync
+    // passes but readFileSync throws, so the scan must fail closed
+    // instead of silently skipping sibling workspaces.
+    const ws = mkdtempSync(join(tmpdir(), 'ws-unreadable-fixture-'));
+    try {
+      mkdirSync(join(ws, 'pnpm-workspace.yaml'));
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(() => findInstalledRoots('dup', join(ws, 'apps', 'web'))).toThrow(
+        /cannot read .*pnpm-workspace\.yaml/
+      );
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when the workspace manifest has no packages key', () => {
+    const ws = mkdtempSync(join(tmpdir(), 'ws-keyless-fixture-'));
+    try {
+      writeFileSync(
+        join(ws, 'pnpm-workspace.yaml'),
+        'allowBuilds:\n  foo: true\n'
+      );
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(() => findInstalledRoots('dup', join(ws, 'apps', 'web'))).toThrow(
+        /no packages: key/
+      );
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     '../shared',
     '/abs/path',

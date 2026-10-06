@@ -11,10 +11,11 @@ import { fileURLToPath } from 'node:url';
 // realpath-deduped, and bounded at the enclosing repo root so worktree
 // checkouts never scan a parent checkout's node_modules.
 //
-// Soundness bound (fail-closed, not silent): recursion past depth 8
-// and an upward walk past 12 levels both throw, so a pathological
-// layout fails the gate instead of passing on a partial list. Depth 8
-// covers realistic pnpm hoisted and virtual-store layouts.
+// Soundness bound (fail-closed, not silent): recursion past depth 8,
+// an upward walk past 12 levels, and an unreadable or keyless
+// pnpm-workspace.yaml all throw, so a pathological layout fails the
+// gate instead of passing on a partial list. Depth 8 covers realistic
+// pnpm hoisted and virtual-store layouts.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -23,20 +24,28 @@ function escapeRegExp(text: string): string {
 }
 
 // Minimal `packages:` reader for pnpm-workspace.yaml: block lists and
-// flow lists only (no YAML dependency for a test helper).
+// flow lists only (no YAML dependency for a test helper). Fail-closed:
+// an unreadable file or a missing `packages:` key throws instead of
+// silently narrowing the scan to the ancestor chain (an explicit empty
+// list like `packages: []` still means "no sibling workspaces").
 function readPackageGlobs(workspaceRoot: string): string[] {
+  const manifest = join(workspaceRoot, 'pnpm-workspace.yaml');
   let text: string;
   try {
-    text = readFileSync(join(workspaceRoot, 'pnpm-workspace.yaml'), 'utf8');
+    text = readFileSync(manifest, 'utf8');
   } catch {
-    return [];
+    throw new Error(
+      `findInstalledRoots: cannot read ${manifest}; refusing to scan a possibly partial list`
+    );
   }
   const lines = text.split('\n');
   const start = lines.findIndex((line) =>
     /^packages:\s*(\[.*\])?\s*(#.*)?$/.test(line)
   );
   if (start === -1) {
-    return [];
+    throw new Error(
+      `findInstalledRoots: ${manifest} has no packages: key; refusing to scan a possibly partial list`
+    );
   }
   const inline = lines[start].match(/^packages:\s*\[(.*)\]/);
   if (inline) {

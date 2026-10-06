@@ -61,13 +61,31 @@ interface ProseMirrorView {
   ) => EditorViewInstance;
 }
 
-function candidateRoots(): string[] {
-  return (
-    overrideRoots(
-      process.env.PROSEMIRROR_VIEW_ROOTS,
-      'PROSEMIRROR_VIEW_ROOTS'
-    ) ?? findInstalledRoots('prosemirror-view')
+function viewOverrideRoots(): string[] | null {
+  return overrideRoots(
+    process.env.PROSEMIRROR_VIEW_ROOTS,
+    'PROSEMIRROR_VIEW_ROOTS'
   );
+}
+
+function candidateRoots(): string[] {
+  return viewOverrideRoots() ?? findInstalledRoots('prosemirror-view');
+}
+
+// When a view override is active, model/state must come from explicit
+// sibling overrides — never from the ambient workspace. An unpacked
+// tarball has no node_modules, so resolving from the view root would
+// walk past it and silently test a mixed tarball-view/workspace-model
+// pair; failing closed keeps the local pre/post comparison honest.
+// Exactly one root each: verification unpacks one tarball per package.
+function siblingOverrideRoot(envName: string): string {
+  const roots = overrideRoots(process.env[envName], envName);
+  if (roots === null || roots.length !== 1 || roots[0] === undefined) {
+    throw new Error(
+      `PROSEMIRROR_VIEW_ROOTS is set but ${envName} does not name exactly one root; refusing to mix an override view with ambient siblings`
+    );
+  }
+  return roots[0];
 }
 
 interface ProseMirrorModel {
@@ -91,17 +109,19 @@ function buildHarness(viewRoot: string) {
   // view carries a nested model copy (which trips the duplicate-model
   // guard and fails the suite for layout reasons). Under the local
   // tarball-override hook the unpacked view has no node_modules, so
-  // Node walks past it to the ambient workspace siblings — documented
-  // mixing, not same-graph resolution. The local pre/post comparison
-  // stays valid because the vulnerable surface is the view module
-  // itself; model/state only supply schema mechanics. Overrides are
-  // refused under CI, where every root is a real install.
-  const { Schema } = loadCjs<ProseMirrorModel>(
-    installedRoot('prosemirror-model', viewRoot)
-  );
-  const { EditorState } = loadCjs<ProseMirrorState>(
-    installedRoot('prosemirror-state', viewRoot)
-  );
+  // resolving from the view root would walk past it to ambient
+  // workspace siblings; instead the harness fails closed unless
+  // explicit sibling overrides name the model/state tarballs. Overrides
+  // are refused under CI, where every root is a real install.
+  const overridden = viewOverrideRoots() !== null;
+  const modelRoot = overridden
+    ? siblingOverrideRoot('PROSEMIRROR_MODEL_ROOTS')
+    : installedRoot('prosemirror-model', viewRoot);
+  const stateRoot = overridden
+    ? siblingOverrideRoot('PROSEMIRROR_STATE_ROOTS')
+    : installedRoot('prosemirror-state', viewRoot);
+  const { Schema } = loadCjs<ProseMirrorModel>(modelRoot);
+  const { EditorState } = loadCjs<ProseMirrorState>(stateRoot);
   const schema = new Schema({
     nodes: {
       doc: { content: 'block+' },
@@ -210,6 +230,66 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
       expect(firstChild?.attrs).toMatchObject({ src: 'https://ok.invalid/' });
     } finally {
       view.destroy();
+    }
+  });
+
+  // The override trio uses real installed roots (not tarballs): the
+  // wiring is identical, since buildHarness only sees root paths. Env
+  // is saved/restored per case and CI unset, so the override hook
+  // (refused under CI) can be exercised deterministically.
+  it.each([
+    ['refuses a lone view override without sibling overrides', false],
+    ['honors explicit sibling overrides for the harness', true],
+  ])('%s', (_label, withSiblings) => {
+    const names = [
+      'CI',
+      'PROSEMIRROR_VIEW_ROOTS',
+      'PROSEMIRROR_MODEL_ROOTS',
+      'PROSEMIRROR_STATE_ROOTS',
+    ] as const;
+    const saved = names.map((name) => process.env[name]);
+    delete process.env.CI;
+    try {
+      const [viewRoot] = findInstalledRoots('prosemirror-view');
+      process.env.PROSEMIRROR_VIEW_ROOTS = viewRoot as string;
+      if (!withSiblings) {
+        delete process.env.PROSEMIRROR_MODEL_ROOTS;
+        delete process.env.PROSEMIRROR_STATE_ROOTS;
+        expect(() => buildHarness(viewRoot as string)).toThrow(
+          /refusing to mix an override view with ambient siblings/
+        );
+        return;
+      }
+      // The view's own siblings: any other copy would trip the
+      // duplicate-model guard, which is layout behavior, not wiring.
+      process.env.PROSEMIRROR_MODEL_ROOTS = installedRoot(
+        'prosemirror-model',
+        viewRoot
+      );
+      process.env.PROSEMIRROR_STATE_ROOTS = installedRoot(
+        'prosemirror-state',
+        viewRoot
+      );
+      const { view, pastedSlice } = buildHarness(viewRoot as string);
+      try {
+        const pasted = view.pasteHTML(
+          sliceHtml(['evilbox', { src: 'javascript:alert(1)' }]),
+          PASTE_EVENT
+        );
+        expect(pasted).toBe(true);
+        expect(pastedSlice().content.firstChild?.type.name).toBe('paragraph');
+      } finally {
+        view.destroy();
+      }
+    } finally {
+      names.forEach((name, index) => {
+        const value = saved[index];
+        if (value === undefined) {
+          delete process.env[name];
+        } else {
+          process.env[name] = value;
+        }
+      });
     }
   });
 });

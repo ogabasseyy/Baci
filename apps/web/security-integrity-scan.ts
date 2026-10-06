@@ -31,6 +31,15 @@ export function findInstalledRoots(
       : null;
   const matchable = scoped !== null || !packageName.startsWith('@');
   let truncated = false;
+  const addRoot = (candidate: string): void => {
+    try {
+      roots.add(realpathSync(candidate));
+    } catch {
+      // Dangling symlink, permission error, or install-time race
+      // between the existsSync check and resolution: skip this
+      // candidate instead of aborting the whole scan.
+    }
+  };
   const scan = (dir: string, depth: number, inScope: boolean): void => {
     if (depth > 8) {
       truncated = true;
@@ -74,12 +83,12 @@ export function findInstalledRoots(
           if (entry.name === scoped.scope) {
             const candidate = join(full, scoped.name);
             if (existsSync(join(candidate, 'package.json'))) {
-              roots.add(realpathSync(candidate));
+              addRoot(candidate);
             }
           }
         } else if (entry.name === packageName) {
           if (existsSync(join(full, 'package.json'))) {
-            roots.add(realpathSync(full));
+            addRoot(full);
           }
         }
       }

@@ -74,6 +74,24 @@ beforeAll(() => {
       exports: { '.': [{ import: './lib/e.mjs' }, './lib/entry.cjs'] },
     })
   );
+  const topSugar = join(fixture, 'top-sugar');
+  mkdirSync(topSugar, { recursive: true });
+  writeFileSync(
+    join(topSugar, 'package.json'),
+    JSON.stringify({
+      name: 'top-sugar',
+      exports: { import: './lib/e.mjs', require: './lib/entry.cjs' },
+    })
+  );
+  const subpathOnly = join(fixture, 'subpath-only');
+  mkdirSync(subpathOnly, { recursive: true });
+  writeFileSync(
+    join(subpathOnly, 'package.json'),
+    JSON.stringify({
+      name: 'subpath-only',
+      exports: { './feature': './lib/feature.cjs' },
+    })
+  );
 });
 
 afterAll(() => {
@@ -119,6 +137,16 @@ describe('security-integrity-load', () => {
   it('resolves array-form fallback exports', () => {
     expect(packageMain(join(fixture, 'array-conditions'))).toBe(
       './lib/entry.cjs'
+    );
+  });
+
+  it('resolves top-level conditional sugar without a dot key', () => {
+    expect(packageMain(join(fixture, 'top-sugar'))).toBe('./lib/entry.cjs');
+  });
+
+  it('throws for subpath-only exports with no root entry', () => {
+    expect(() => packageMain(join(fixture, 'subpath-only'))).toThrow(
+      /Cannot resolve a CJS entry/
     );
   });
 

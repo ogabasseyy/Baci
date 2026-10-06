@@ -3,7 +3,15 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 import {
   installedRoot,
   resolveRoot,
@@ -15,7 +23,21 @@ import {
 // reads must reject malformed manifests.
 
 let fixture: string;
-const savedCI = process.env.CI;
+let savedCI: string | undefined;
+
+beforeEach(() => {
+  savedCI = process.env.CI;
+});
+
+afterEach(() => {
+  // Restore per test, never blank: the runner normally has CI set, and
+  // leaking a cleared value would weaken later CI-refusal assertions.
+  if (savedCI === undefined) {
+    delete process.env.CI;
+  } else {
+    process.env.CI = savedCI;
+  }
+});
 
 beforeAll(() => {
   fixture = mkdtempSync(join(tmpdir(), 'resolve-fixture-'));
@@ -33,11 +55,6 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(fixture, { recursive: true, force: true });
-  if (savedCI === undefined) {
-    delete process.env.CI;
-  } else {
-    process.env.CI = savedCI;
-  }
 });
 
 describe('security-integrity-resolve', () => {
@@ -65,13 +82,9 @@ describe('security-integrity-resolve', () => {
 
   it('refuses overrides under CI', () => {
     process.env.CI = 'true';
-    try {
-      expect(() => resolveRoot('foo', '/tmp/unpack', 'FOO_ROOT')).toThrow(
-        /refusing to test a non-installed copy/
-      );
-    } finally {
-      delete process.env.CI;
-    }
+    expect(() => resolveRoot('foo', '/tmp/unpack', 'FOO_ROOT')).toThrow(
+      /refusing to test a non-installed copy/
+    );
   });
 
   it('reads the version at a root', () => {

@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { findInstalledRoots } from './security-integrity-scan';
 
 // Colocated coverage for the install scanner: every layout that can
@@ -87,5 +87,26 @@ describe('security-integrity-scan', () => {
 
   it('returns an empty list for a missing package', () => {
     expect(findInstalledRoots('no-such-package-xyz', fixture)).toEqual([]);
+  });
+
+  it('returns an empty list for a bare scope query', () => {
+    expect(() => findInstalledRoots('@scope', fixture)).not.toThrow();
+    expect(findInstalledRoots('@scope', fixture)).toEqual([]);
+  });
+
+  it('warns when the depth cap truncates the walk', () => {
+    // A 12-deep chain trips the depth-8 recursion cap.
+    let dir = join(fixture, 'node_modules');
+    for (let level = 0; level < 12; level += 1) {
+      dir = join(dir, `deep${level}`, 'node_modules');
+      mkdirSync(dir, { recursive: true });
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      findInstalledRoots('dup', fixture);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('depth-8 cap'));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

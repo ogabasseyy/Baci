@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { areBlogImageVariantsEqual } from '@/app/admin/blog/are-blog-image-variants-equal';
 import {
   createPlatformBlogPost,
   updatePlatformBlogPost,
@@ -226,15 +227,19 @@ export function BlogEditorClient({
           disabled={saving}
           onImport={(draft) => {
             if (saving) return false;
-            const changed = Object.entries(form).some(
-              ([key, value]) =>
-                JSON.stringify(value) !==
-                JSON.stringify(
-                  DEFAULT_PLATFORM_BLOG_FORM_STATE[
-                    key as keyof PlatformAdminBlogFormState
-                  ]
-                )
-            );
+            const changed = Object.entries(form).some(([key, value]) => {
+              const baseline =
+                DEFAULT_PLATFORM_BLOG_FORM_STATE[
+                  key as keyof PlatformAdminBlogFormState
+                ];
+              if (key === 'featured_image_variants') {
+                return !areBlogImageVariantsEqual(
+                  value as Record<string, unknown>,
+                  baseline as Record<string, unknown>
+                );
+              }
+              return JSON.stringify(value) !== JSON.stringify(baseline);
+            });
             if (
               (changed || pendingContentEditRef.current) &&
               !window.confirm(

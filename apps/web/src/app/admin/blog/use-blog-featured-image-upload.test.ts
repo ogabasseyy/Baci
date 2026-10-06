@@ -37,6 +37,35 @@ describe('useBlogFeaturedImageUpload', () => {
     expect(result.current.form.featured_image_alt).toBe('');
   });
 
+  it('preserves hand-typed alt text on a first upload with no prior cover', async () => {
+    const { result } = setup(vi.fn().mockResolvedValue(uploadedImage));
+    act(() =>
+      result.current.setForm({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_alt: 'Typed before uploading',
+      })
+    );
+    await act(async () => result.current.uploadFeatured(file));
+    expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
+    expect(result.current.form.featured_image_alt).toBe(
+      'Typed before uploading'
+    );
+  });
+
+  it('preserves alt text when a re-upload resolves to the same URL', async () => {
+    const { result } = setup(vi.fn().mockResolvedValue(uploadedImage));
+    act(() =>
+      result.current.setForm({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_url: uploadedImage.url,
+        featured_image_alt: 'The current cover',
+      })
+    );
+    await act(async () => result.current.uploadFeatured(file));
+    expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
+    expect(result.current.form.featured_image_alt).toBe('The current cover');
+  });
+
   it('preserves existing alt text when replacement fails', async () => {
     const { result } = setup(
       vi.fn().mockRejectedValue(new Error('Upload failed'))

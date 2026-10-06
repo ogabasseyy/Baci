@@ -486,6 +486,25 @@ try {
       RAISE EXCEPTION 'pilot_payment_completion_carve_out_missing';
     END IF;
   END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006140000_uba_redvault_pilot_product_boundary.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.order_items'::regclass
+        AND tgname = 'guard_uba_redvault_pilot_product_orders'
+        AND tgenabled = 'O' AND tgtype = 23
+    ) THEN RAISE EXCEPTION 'pilot_product_boundary_guard_missing'; END IF;
+    IF strpos(pg_get_functiondef('private.guard_uba_redvault_pilot_product_orders()'::regprocedure), 'redvault_pilot_product_restricted') = 0 THEN
+      RAISE EXCEPTION 'pilot_product_boundary_not_applied';
+    END IF;
+  END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'
   );

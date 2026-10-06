@@ -1371,6 +1371,9 @@ export async function POST(request: NextRequest) {
         fallbackClient,
         merchantId,
         orderId: data.order_id,
+        preserveAttempts:
+          redvaultRequested &&
+          getRedvaultPaymentAvailability().reason === 'private_live_pilot',
         redirectUrl: getRedvaultCallbackUrl({
           merchantSlug: merchantWithPaystack.slug,
           protocol,

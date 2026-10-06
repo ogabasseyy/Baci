@@ -580,4 +580,73 @@ describe('initializeRedvaultCheckout', () => {
     });
     expect(provider.initialize).not.toHaveBeenCalled();
   });
+
+  describe('preserveAttempts', () => {
+    it('parks an indeterminate attempt without probing, voiding, or replacing it', async () => {
+      const attemptAdapter = {
+        claimInitialization: vi.fn(),
+        markIndeterminate: vi.fn(),
+        markInitialized: vi.fn(),
+        reconcileInitialization: vi.fn(),
+        reserve: vi.fn().mockResolvedValue(indeterminateAttempt),
+      };
+      const provider = createProvider(
+        {
+          probeInitialization: vi.fn(),
+        },
+        vi.fn()
+      );
+
+      await expect(
+        initializeRedvaultCheckout({
+          attemptAdapter,
+          customerEmail: 'customer@example.test',
+          orderId: 'order-1',
+          preserveAttempts: true,
+          provider,
+          redirectUrl: 'https://shop.example.test/checkout/success',
+        })
+      ).resolves.toEqual({
+        authorizationUrl: null,
+        status: 'pending_reconciliation',
+      });
+      expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
+      expect(provider.probeInitialization).not.toHaveBeenCalled();
+      expect(attemptAdapter.reserve).toHaveBeenCalledTimes(1);
+      expect(provider.initialize).not.toHaveBeenCalled();
+    });
+
+    it('parks an initializing lease with an unrecoverable provider transaction instead of replacing it', async () => {
+      const attemptAdapter = {
+        claimInitialization: vi.fn().mockResolvedValue({
+          attempt: staleAttempt,
+          claimed: true,
+        }),
+        markIndeterminate: vi.fn(),
+        markInitialized: vi.fn(),
+        reconcileInitialization: vi.fn(),
+        reserve: vi.fn().mockResolvedValue(staleAttempt),
+      };
+      const provider = createProvider({
+        probeInitialization: vi.fn().mockResolvedValue({ status: 'unpaid' }),
+      });
+
+      await expect(
+        initializeRedvaultCheckout({
+          attemptAdapter,
+          customerEmail: 'customer@example.test',
+          orderId: 'order-1',
+          preserveAttempts: true,
+          provider,
+          redirectUrl: 'https://shop.example.test/checkout/success',
+        })
+      ).resolves.toEqual({
+        authorizationUrl: null,
+        status: 'pending_reconciliation',
+      });
+      expect(attemptAdapter.reconcileInitialization).not.toHaveBeenCalled();
+      expect(attemptAdapter.reserve).toHaveBeenCalledTimes(1);
+      expect(provider.initialize).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -6,7 +6,7 @@ The pilot code remains unavailable by default, and live activation remains off. 
 
 1. Resolve `basseybjjohn@gmail.com` through the selected deployment's authenticated user directory and confirm the immutable user ID is `70261bce-d358-45a4-9ede-8b9d71fb3bd9`. Never use a request email as authorization.
 2. Resolve the immutable Ogabassey merchant ID in that same database and confirm the active domain routes to it.
-3. Create a new, dedicated Ogabassey product through the reviewed merchant catalog workflow. Set its authoritative price to NGN 100, use no variants, and do not reuse or reprice an existing retail product. Record its product UUID.
+3. Create a new, dedicated Ogabassey product through the reviewed merchant catalog workflow. Set its authoritative price to NGN 100, use no variants, and do not reuse or reprice an existing retail product. Record its product UUID. While the product is bound, the database rejects assigning it to any order line outside the protected pilot order path.
 4. Confirm tax category/rate and verify the exact payable total from the normal tax calculation. The pilot discount is NGN 5; the total is not hard-coded to NGN 95.
 5. Retain Paystack's written bank/card filter confirmation and independently establish the exact live `authorization.bank` issuer value used by verification. The response supplied by the owner on 6 October confirms bank code `033` and the three supported brands, but does not specify the canonical issuer string. Keep PAN entry on Paystack.
 6. Verify that card checkout retains the bank and card-brand restrictions in the selected live environment. Do not send a charge until the owner approves the specific attempt.

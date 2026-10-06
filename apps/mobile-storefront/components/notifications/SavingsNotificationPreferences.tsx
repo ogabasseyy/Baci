@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 import { formatDateTimeDisplay } from '@/components/ui/format-date-time-display';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -8,6 +8,8 @@ import type {
   SavingsNotificationPreferences as SavingsNotificationPreferencesValue,
 } from '@/schemas/savings-notifications';
 import { styles } from './SavingsNotificationPreferences.styles';
+import { SavingsPreferenceSwitch } from './SavingsPreferenceSwitch';
+import { SavingsQuietHoursTimeField } from './SavingsQuietHoursTimeField';
 
 type SavingsNotificationPreferencesProps = {
   isSaving: boolean;
@@ -68,7 +70,7 @@ export function SavingsNotificationPreferences({
         ) : null}
       </View>
 
-      <PreferenceSwitch
+      <SavingsPreferenceSwitch
         colors={colors}
         description="Progress and streak motivation"
         label="Encouragement"
@@ -78,7 +80,7 @@ export function SavingsNotificationPreferences({
         }
         value={preferences.encouragementEnabled}
       />
-      <PreferenceSwitch
+      <SavingsPreferenceSwitch
         colors={colors}
         description="Only sent when you opt in"
         label="Weekly savings summary"
@@ -88,7 +90,7 @@ export function SavingsNotificationPreferences({
         }
         value={preferences.weeklySummaryEnabled}
       />
-      <PreferenceSwitch
+      <SavingsPreferenceSwitch
         colors={colors}
         description="When plan interest is credited"
         label="Interest alerts"
@@ -114,7 +116,7 @@ export function SavingsNotificationPreferences({
           {formatDateTimeDisplay(quietHoursEnd, 'time')} (use 24-hour HH:MM)
         </Text>
         <View style={styles.timeFields}>
-          <TimeField
+          <SavingsQuietHoursTimeField
             color={colors.text}
             label="From"
             isSaving={isSaving}
@@ -124,7 +126,7 @@ export function SavingsNotificationPreferences({
             }
             value={quietHoursStart}
           />
-          <TimeField
+          <SavingsQuietHoursTimeField
             color={colors.text}
             label="To"
             isSaving={isSaving}
@@ -154,81 +156,6 @@ export function SavingsNotificationPreferences({
           value={timeZone}
         />
       </View>
-    </View>
-  );
-}
-
-function PreferenceSwitch({
-  colors,
-  description,
-  label,
-  isSaving,
-  onValueChange,
-  value,
-}: {
-  colors: typeof Colors.light;
-  description: string;
-  label: string;
-  isSaving: boolean;
-  onValueChange: (value: boolean) => void;
-  value: boolean;
-}) {
-  return (
-    <View style={[styles.preferenceRow, { borderTopColor: colors.border }]}>
-      <View style={styles.preferenceCopy}>
-        <Text style={[styles.preferenceLabel, { color: colors.text }]}>
-          {label}
-        </Text>
-        <Text
-          style={[
-            styles.preferenceDescription,
-            { color: colors.textSecondary },
-          ]}
-        >
-          {description}
-        </Text>
-      </View>
-      <Switch
-        accessibilityLabel={label}
-        accessibilityState={{ disabled: isSaving }}
-        disabled={isSaving}
-        onValueChange={onValueChange}
-        trackColor={{ false: colors.border, true: colors.primary }}
-        value={value}
-      />
-    </View>
-  );
-}
-
-function TimeField({
-  color,
-  label,
-  isSaving,
-  onChangeText,
-  onEndEditing,
-  value,
-}: {
-  color: string;
-  label: string;
-  isSaving: boolean;
-  onChangeText: (value: string) => void;
-  onEndEditing: () => void;
-  value: string;
-}) {
-  return (
-    <View style={styles.timeField}>
-      <Text style={[styles.timeZoneLabel, { color }]}>{label}</Text>
-      <TextInput
-        accessibilityLabel={`Quiet hours ${label.toLowerCase()}`}
-        autoCapitalize="none"
-        editable={!isSaving}
-        keyboardType="numbers-and-punctuation"
-        maxLength={5}
-        onChangeText={onChangeText}
-        onEndEditing={onEndEditing}
-        style={[styles.timeInput, { borderColor: color, color }]}
-        value={value}
-      />
     </View>
   );
 }

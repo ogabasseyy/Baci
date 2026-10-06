@@ -61,7 +61,7 @@ class ActivatorContractTest(unittest.TestCase):
         self.assertEqual(len(candidate.ROUTES), 11)
 
     def test_graph_and_routes_match_recovery_runner(self):
-        text = (HERE / 'funding-gateway-recovery-runner.mjs').read_text()
+        text = (HERE / 'funding-gateway-recovery-identity.mjs').read_text()
         graph = {}
         for match in re.finditer(
             r'(?:\[`([^`]+)`\]|\'([^\']+)\')\s*:\s*\'([a-f0-9]{64})\'', text

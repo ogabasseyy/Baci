@@ -30,7 +30,7 @@ PINS = {
     CODE / 'private-routing-supervisor-child.py': ('6dfdedd0d182d8b836c7a67b30d50c7049e6f7b5272ceb7ba4da507b2723b16d', (0o440,)),
     CODE / 'compose.mjs': ('7e34a257b21c9527d97aaac4ffc3957225b55d3be6e08455bd7b272eba5575dd', (0o440,)),
 }
-RUNNER_SHA256 = 'e9907a6e4d9038e31e133c6a3c20be7027d4ea2c43795bd39366af1f871874b8'
+RUNNER_SHA256 = 'db7eb80856fdbc707b4ba135ea57f88dadab1f2cb79b0b81efa7da3738761502'
 
 
 class Refused(RuntimeError):

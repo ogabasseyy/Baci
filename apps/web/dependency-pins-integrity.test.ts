@@ -1,8 +1,9 @@
 /** @vitest-environment node */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // Version gates for the transitive-dependency security overrides in
@@ -59,38 +60,109 @@ function resolveRoot(
   return installedRoot(packageName);
 }
 
-function installedVersion(packageName: string): string {
-  const root = installedRoot(packageName);
+function versionAt(root: string, packageName: string): string {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
     version?: string;
   };
   if (typeof pkg.version !== 'string') {
-    throw new Error(`Cannot read version of ${packageName}`);
+    throw new Error(`Cannot read version of ${packageName} at ${root}`);
   }
   return pkg.version;
 }
 
-function parseVersion(version: string): [number, number, number] {
-  // Compare only the numeric triple; pre-release/build suffixes
-  // (e.g. 1.9.0-beta, 2.0.8+build) must not fail the floor check.
-  const core = version.split('+', 1)[0].split('-', 1)[0];
+// Enumerate EVERY installed copy of a package (nested duplicates under
+// the hoisted layout included), mirroring the graphql-tools suite.
+function findInstalledRoots(packageName: string): string[] {
+  const roots = new Set<string>();
+  const scan = (dir: string, depth: number): void => {
+    if (depth > 8) {
+      return;
+    }
+    let entries: ReturnType<typeof readdirSync>;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+        continue;
+      }
+      const full = join(dir, entry.name);
+      if (packageName.startsWith('@')) {
+        const [scope, name] = packageName.split('/');
+        if (entry.name === scope) {
+          const candidate = join(full, name);
+          if (existsSync(join(candidate, 'package.json'))) {
+            roots.add(realpathSync(candidate));
+          }
+        }
+      } else if (entry.name === packageName) {
+        if (existsSync(join(full, 'package.json'))) {
+          roots.add(realpathSync(full));
+        }
+      }
+      if (entry.name.startsWith('@')) {
+        scan(full, depth);
+      } else {
+        const nested = join(full, 'node_modules');
+        if (existsSync(nested)) {
+          scan(nested, depth + 1);
+        }
+      }
+    }
+  };
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let depth = 0; depth < 12; depth += 1) {
+    const candidate = join(dir, 'node_modules');
+    if (existsSync(candidate)) {
+      scan(realpathSync(candidate), 0);
+    }
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+      break;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return [...roots];
+}
+
+interface ParsedVersion {
+  triple: [number, number, number];
+  prerelease: boolean;
+}
+
+function parseVersion(version: string): ParsedVersion {
+  // Build metadata (+build) never affects precedence; a pre-release
+  // suffix (-beta.1) orders BELOW the same numeric triple and is not
+  // covered by the advisory's patched-version guarantee.
+  const withoutBuild = version.split('+', 1)[0];
+  const dash = withoutBuild.indexOf('-');
+  const core = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
   const parts = core.split('.').map((part) => Number.parseInt(part, 10));
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {
     throw new Error(`Unexpected version: ${version}`);
   }
-  return parts as [number, number, number];
+  return {
+    triple: parts as [number, number, number],
+    prerelease: dash !== -1,
+  };
 }
 
 function isAtLeast(
-  actual: [number, number, number],
+  actual: ParsedVersion,
   minimum: readonly [number, number, number]
 ): boolean {
   for (let index = 0; index < 3; index += 1) {
-    if (actual[index] !== minimum[index]) {
-      return actual[index] > minimum[index];
+    if (actual.triple[index] !== minimum[index]) {
+      return actual.triple[index] > minimum[index];
     }
   }
-  return true;
+  // Equal triple: a prerelease (1.9.0-beta) is below the floor (1.9.0).
+  return !actual.prerelease;
 }
 
 const PINS: [string, readonly [number, number, number]][] = [
@@ -129,7 +201,24 @@ function deepNest(depth: number): unknown {
 
 describe('security override pins', () => {
   it.each(PINS)('resolves %s at or above its first fix', (name, floor) => {
-    expect(isAtLeast(parseVersion(installedVersion(name)), floor)).toBe(true);
+    // Every installed copy (not just the hoisted top-level one) must
+    // clear the floor: a nested older duplicate would otherwise ship
+    // the vulnerability while the gate stays green.
+    const roots = findInstalledRoots(name);
+    expect(roots.length).toBeGreaterThan(0);
+    for (const root of roots) {
+      expect(
+        isAtLeast(parseVersion(versionAt(root, name)), floor),
+        `${name} at ${root} is below its security floor`
+      ).toBe(true);
+    }
+  });
+
+  it('orders prereleases below their release floor', () => {
+    expect(isAtLeast(parseVersion('1.9.0-beta.1'), [1, 9, 0])).toBe(false);
+    expect(isAtLeast(parseVersion('1.9.0'), [1, 9, 0])).toBe(true);
+    expect(isAtLeast(parseVersion('1.9.0+build.1'), [1, 9, 0])).toBe(true);
+    expect(isAtLeast(parseVersion('1.9.1-beta.1'), [1, 9, 0])).toBe(true);
   });
 
   it('canonicalizes IPv4-mapped trust (proxy-addr CVE-2026-90711)', () => {

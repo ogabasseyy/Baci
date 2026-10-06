@@ -72,8 +72,13 @@ describe('katex integrity (CVE-2026-103923)', () => {
     }
   });
 
-  it('ignores polluted trust when rendering untrusted hrefs', () => {
-    const katex = require(packageRoot) as Katex;
+  it.each([
+    'dist/katex.js',
+    'dist/katex.min.js',
+  ] as const)('ignores polluted trust in %s', (entry) => {
+    // Both CJS builds carry the backport; the minified bundle is
+    // unreviewable in diff view, so its behavior is asserted here.
+    const katex = require(join(packageRoot, entry)) as Katex;
     const proto = Object.prototype as Record<string, unknown>;
     proto.trust = true;
     try {

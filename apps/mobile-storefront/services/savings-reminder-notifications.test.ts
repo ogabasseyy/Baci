@@ -355,6 +355,51 @@ describe('savings reminder notification capability', () => {
     );
   });
 
+  it('retains the notification ID when scoped cancellation fails so a later cleanup can retry', async () => {
+    mockScheduleNotificationAsync.mockResolvedValueOnce('prior-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    const scope = buildReminderScope(
+      'user-a',
+      '00000000-0000-4000-8000-000000000010'
+    );
+    expect(scope).not.toBeNull();
+    if (!scope) throw new Error('expected a reminder scope');
+
+    mockCancelScheduledNotificationAsync.mockRejectedValueOnce(
+      new Error('bridge down')
+    );
+    await expect(cancelScopeSavingsReminders(scope)).resolves.toBe(false);
+
+    // The live recurring notification keeps its ID: it is still
+    // cancellable and sign-back-in must not re-arm a duplicate.
+    const key =
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1';
+    const retained = JSON.parse(
+      (await AsyncStorage.getItem(key)) ?? '{}'
+    ) as Record<string, unknown>;
+    expect(retained.notificationId).toBe('prior-live');
+    await expect(activateDueSavingsReminderNotification()).resolves.toBeNull();
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+
+    // A later cleanup retries the same live ID and re-arms on success.
+    await expect(cancelScopeSavingsReminders(scope)).resolves.toBe(true);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'prior-live'
+    );
+    const rearmed = JSON.parse(
+      (await AsyncStorage.getItem(key)) ?? '{}'
+    ) as Record<string, unknown>;
+    expect(rearmed.notificationId).toBeUndefined();
+    expect(rearmed.pending).toEqual(
+      expect.objectContaining({ goalId: 'goal-1' })
+    );
+  });
+
   it('fails closed when no account is signed in', async () => {
     mockAuthState.user = null;
 

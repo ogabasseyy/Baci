@@ -247,17 +247,22 @@ export function cancelScopeSavingsReminders(scope: SavingsReminderScope) {
     let cancelled = false;
     for (const record of await savingsReminderStorage.read(scope)) {
       if (!record.notificationId) continue;
-      if (notifications) {
-        try {
-          await notifications.cancelScheduledNotificationAsync(
-            record.notificationId
-          );
-        } catch (error) {
-          log.debug(
-            'Unable to cancel scoped savings reminder notification',
-            error
-          );
-        }
+      // Clear the stored ID only after the OS confirms cancellation. If
+      // the native call throws (or the module is unavailable) the
+      // recurring notification is still live, so retain the ID for a later
+      // retry — otherwise it fires under the next account and sign-back-in
+      // re-arms a duplicate from the retained pending request.
+      if (!notifications) continue;
+      try {
+        await notifications.cancelScheduledNotificationAsync(
+          record.notificationId
+        );
+      } catch (error) {
+        log.debug(
+          'Unable to cancel scoped savings reminder notification',
+          error
+        );
+        continue;
       }
       await savingsReminderStorage.write({
         ...record,

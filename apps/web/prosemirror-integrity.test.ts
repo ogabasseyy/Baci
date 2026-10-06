@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 
 import { describe, expect, it } from 'vitest';
-import { loadCjs } from './security-integrity-load';
-import { installedRoot, resolveRoot } from './security-integrity-resolve';
+import { installedRoot } from './security-integrity-installed-root';
+import { loadCjs } from './security-integrity-load-cjs';
+import { resolveRoot } from './security-integrity-resolve-root';
 
 // NOTE: model/state/view must all load through the SAME CJS module
 // instances: mixing the ESM and CJS builds trips ProseMirror's

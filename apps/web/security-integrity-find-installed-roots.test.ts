@@ -8,9 +8,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
 
 // Simulate the install-time race the scanner guards: resolution fails
 // after the existence check passed. Everything else passes through.
@@ -76,7 +76,7 @@ afterAll(() => {
   rmSync(fixture, { recursive: true, force: true });
 });
 
-describe('security-integrity-scan', () => {
+describe('security-integrity-find-installed-roots', () => {
   it('finds hoisted, nested, and virtual-store copies', () => {
     const roots = findInstalledRoots('dup', fixture).sort();
     const base = realpathSync(join(fixture, 'node_modules'));
@@ -155,36 +155,5 @@ describe('security-integrity-scan', () => {
     expect(() => findInstalledRoots('dup', ghost)).toThrow(
       /12-level upward-walk cap/
     );
-  });
-});
-
-describe('overrideRoots', () => {
-  it('returns null when unset or empty', () => {
-    expect(overrideRoots(undefined, 'GTU_ROOTS')).toBeNull();
-    expect(overrideRoots('', 'GTU_ROOTS')).toBeNull();
-  });
-
-  it('splits on the platform path delimiter', () => {
-    const joined = ['/a', '/b'].join(delimiter);
-    expect(overrideRoots(joined, 'GTU_ROOTS')).toEqual(['/a', '/b']);
-  });
-
-  it('refuses overrides under CI', () => {
-    const savedCI = process.env.CI;
-    process.env.CI = 'true';
-    try {
-      expect(() => overrideRoots('/a', 'GTU_ROOTS')).toThrow(
-        /refusing to test non-installed copies/
-      );
-    } finally {
-      // Restore, never blank: the runner normally has CI set, and
-      // clearing it would weaken later CI-refusal assertions in this
-      // worker.
-      if (savedCI === undefined) {
-        delete process.env.CI;
-      } else {
-        process.env.CI = savedCI;
-      }
-    }
   });
 });

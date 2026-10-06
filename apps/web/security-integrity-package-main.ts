@@ -1,11 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
-
-// CJS loading for the security-integrity suites: require a package from
-// an explicitly resolved root through its package.json main entry.
-
-const require = createRequire(import.meta.url);
 
 // Resolve a CJS entry from an exports node: plain strings, condition
 // maps (preferring require/node/default), and fallback arrays, with
@@ -66,8 +60,4 @@ export function packageMain(root: string): string {
     );
   }
   return 'index.js';
-}
-
-export function loadCjs<T>(root: string, subpath?: string): T {
-  return require(join(root, subpath ?? packageMain(root))) as T;
 }

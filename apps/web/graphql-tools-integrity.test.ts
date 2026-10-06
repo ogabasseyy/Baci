@@ -5,8 +5,9 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { packageMain } from './security-integrity-load';
-import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
+import { overrideRoots } from './security-integrity-override-roots';
+import { packageMain } from './security-integrity-package-main';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
 // `@graphql-tools/utils` `mergeDeep` allowed prototype pollution via

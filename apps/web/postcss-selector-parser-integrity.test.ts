@@ -5,9 +5,11 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { packageMain } from './security-integrity-load';
-import { resolveRoot, versionAt } from './security-integrity-resolve';
-import { isAtLeast, parseVersion } from './security-integrity-version';
+import { packageMain } from './security-integrity-package-main';
+import { parseVersion } from './security-integrity-parse-version';
+import { resolveRoot } from './security-integrity-resolve-root';
+import { versionAt } from './security-integrity-version-at';
+import { isAtLeast } from './security-integrity-version-floor';
 
 // Regression coverage for CVE-2026-104844 (GHSA-rj75-hqrm-r3gf):
 // `postcss-selector-parser` had quadratic complexity in flat selector

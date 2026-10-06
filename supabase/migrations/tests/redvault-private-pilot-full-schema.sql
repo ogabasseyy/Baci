@@ -346,6 +346,31 @@ $$;
 DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
+  customer_id uuid;
+  goal_id uuid;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  INSERT INTO public.customers(merchant_id, email)
+  VALUES ('6b5cb8a4-5575-456c-b936-8cdfae30db74', 'pilot-saver@example.test')
+  RETURNING id INTO customer_id;
+  INSERT INTO public.customer_savings_goals(merchant_id, customer_id, product_id, title, target_amount, contribution_amount, contribution_frequency)
+  VALUES ('6b5cb8a4-5575-456c-b936-8cdfae30db74', customer_id, fixture.product_id, 'pilot probe', 100, 10, 'weekly')
+  RETURNING id INTO goal_id;
+  BEGIN
+    INSERT INTO public.customer_savings_redemptions(goal_id, merchant_id, customer_id, order_id, amount, idempotency_key)
+    VALUES (goal_id, '6b5cb8a4-5575-456c-b936-8cdfae30db74', customer_id, fixture.order_id, 5, 'pilot-redemption-probe');
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_wallet_or_savings_credit_blocked' THEN
+    RAISE EXCEPTION 'postreserve_pilot_redemption_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
   caught text;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;

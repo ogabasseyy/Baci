@@ -571,6 +571,25 @@ try {
       RAISE EXCEPTION 'pilot_attempt_lock_order_not_applied';
     END IF;
   END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006180000_uba_redvault_pilot_savings_and_expiry_guards.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.customer_savings_redemptions'::regclass
+        AND tgname = 'guard_uba_redvault_pilot_savings_redemption'
+        AND tgenabled = 'O' AND tgtype = 23
+    ) THEN RAISE EXCEPTION 'pilot_savings_redemption_guard_missing'; END IF;
+    IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_expiry()'::regprocedure), 'uba_redvault_line_allocations') = 0 THEN
+      RAISE EXCEPTION 'pilot_expiry_predicate_not_aligned';
+    END IF;
+  END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'
   );

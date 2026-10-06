@@ -21,6 +21,7 @@ product_boundary="$root/supabase/migrations/20261006140000_uba_redvault_pilot_pr
 binding_guards="$root/supabase/migrations/20261006150000_uba_redvault_pilot_binding_and_cancel_guards.sql"
 activation_lock="$root/supabase/migrations/20261006160000_uba_redvault_pilot_activation_lock_and_policy_indexes.sql"
 reserve_lock_order="$root/supabase/migrations/20261006170000_uba_redvault_pilot_reserve_lock_order.sql"
+savings_and_expiry="$root/supabase/migrations/20261006180000_uba_redvault_pilot_savings_and_expiry_guards.sql"
 test_sql="$root/supabase/migrations/tests/redvault-private-pilot-full-schema.sql"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]; then
@@ -50,6 +51,6 @@ SQL
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey IMMEDIATE;\n'
   cat "$activation_lock"
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey DEFERRED;\n'
-  cat "$reserve_lock_order"
+  cat "$reserve_lock_order" "$savings_and_expiry"
   sed '1{/^BEGIN;$/d;}' "$test_sql"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

@@ -29,7 +29,9 @@ describe('useCheckoutRedvaultAvailability', () => {
   });
 
   it('passes the sole quantity-one nonvariant item and current auth revision', () => {
-    const cartItems = [{ id: 'pilot-product', quantity: 1 }];
+    const cartItems = [
+      { id: '11111111-1111-4111-8111-111111111111', quantity: 1 },
+    ];
     const { result } = renderHook(() =>
       useCheckoutRedvaultAvailability({
         cartItems,
@@ -42,8 +44,8 @@ describe('useCheckoutRedvaultAvailability', () => {
     expect(mockUseCustomerSession).toHaveBeenCalledWith('store');
     expect(mockUseAvailability).toHaveBeenCalledWith(
       'merchant',
-      'pilot-product',
-      'customer:authenticated:4:pilot-product:1:'
+      '11111111-1111-4111-8111-111111111111',
+      'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:'
     );
     expect(result.current.availability.available).toBe(true);
     expect(result.current.waitForResolvedAuthenticated).toBe(

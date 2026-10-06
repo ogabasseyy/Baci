@@ -401,12 +401,15 @@ try {
       RAISE EXCEPTION 'redvault_fixed_five_policy_not_applied';
     END IF;
   END $$;`);
-  sql(
-    readFileSync(
-      resolve(migrations, '20260928120000_uba_redvault_private_live_pilot.sql'),
-      'utf8'
-    )
-  );
+  for (const filename of [
+    '20260928120000_uba_redvault_private_pilot_policy.sql',
+    '20260928120500_uba_redvault_private_pilot_order_guard.sql',
+    '20260928121000_uba_redvault_private_pilot_attempt_guards.sql',
+    '20260928121500_uba_redvault_private_pilot_rpc_wrappers.sql',
+    '20260928122000_uba_redvault_private_pilot_fulfillment_guards.sql',
+  ]) {
+    sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  }
   process.stdout.write(
     sql(`DO $$ BEGIN
     IF EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE enabled) THEN
@@ -520,6 +523,28 @@ try {
     END IF;
     IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_order()'::regprocedure), 'shipment_booking_lock_token') = 0 THEN
       RAISE EXCEPTION 'pilot_prefilled_fulfillment_guard_missing';
+    END IF;
+  END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006160000_uba_redvault_pilot_activation_lock_and_policy_indexes.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF strpos(pg_get_functiondef('private.guard_uba_redvault_pilot_product_orders()'::regprocedure), 'FOR SHARE') = 0 THEN
+      RAISE EXCEPTION 'pilot_boundary_activation_lock_missing';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_indexes
+        WHERE schemaname = 'private' AND tablename = 'uba_redvault_live_pilot_policy'
+        AND indexname = 'uba_redvault_live_pilot_policy_reserved_order_id_idx')
+      OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_indexes
+        WHERE schemaname = 'private' AND tablename = 'uba_redvault_live_pilot_policy'
+        AND indexname = 'uba_redvault_live_pilot_policy_reserved_attempt_id_idx') THEN
+      RAISE EXCEPTION 'pilot_policy_reservation_indexes_missing';
     END IF;
   END $$;`);
   process.stdout.write(

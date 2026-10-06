@@ -149,12 +149,15 @@ try {
       RETURN QUERY SELECT r.attempt_id,r.reference,r.amount_kobo,r.currency,r.quote_payload_hash,r.state,r.bank_code,r.authorization_url,r.initialization_claimed,'ACCT_fixture'::text,0::bigint,0::bigint;
     END $$;
   `);
-  sql(
-    readFileSync(
-      resolve(migrations, '20260928120000_uba_redvault_private_live_pilot.sql'),
-      'utf8'
-    )
-  );
+  for (const filename of [
+    '20260928120000_uba_redvault_private_pilot_policy.sql',
+    '20260928120500_uba_redvault_private_pilot_order_guard.sql',
+    '20260928121000_uba_redvault_private_pilot_attempt_guards.sql',
+    '20260928121500_uba_redvault_private_pilot_rpc_wrappers.sql',
+    '20260928122000_uba_redvault_private_pilot_fulfillment_guards.sql',
+  ]) {
+    sql(readFileSync(resolve(migrations, filename), 'utf8'));
+  }
   sql(`DO $$ BEGIN
     IF (SELECT enabled FROM private.uba_redvault_live_pilot_policy WHERE singleton) IS NOT FALSE THEN
       RAISE EXCEPTION 'private_pilot_did_not_default_off';

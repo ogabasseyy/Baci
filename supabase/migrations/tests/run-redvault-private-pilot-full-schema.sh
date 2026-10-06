@@ -9,12 +9,17 @@ binding_fixture="$root/supabase/migrations/tests/redvault-existing-binding-fixed
 binding_converted="$root/supabase/migrations/tests/redvault-existing-binding-fixed-five-converted.sql"
 binding_five="$root/supabase/migrations/tests/redvault-existing-binding-fixed-five-bound-five.sql"
 binding_none="$root/supabase/migrations/tests/redvault-existing-binding-fixed-five-no-binding.sql"
-pilot="$root/supabase/migrations/20260928120000_uba_redvault_private_live_pilot.sql"
+pilot_policy="$root/supabase/migrations/20260928120000_uba_redvault_private_pilot_policy.sql"
+pilot_order_guard="$root/supabase/migrations/20260928120500_uba_redvault_private_pilot_order_guard.sql"
+pilot_attempt_guards="$root/supabase/migrations/20260928121000_uba_redvault_private_pilot_attempt_guards.sql"
+pilot_rpc_wrappers="$root/supabase/migrations/20260928121500_uba_redvault_private_pilot_rpc_wrappers.sql"
+pilot_fulfillment_guards="$root/supabase/migrations/20260928122000_uba_redvault_private_pilot_fulfillment_guards.sql"
 legacy_and_shipment="$root/supabase/migrations/20260929100000_uba_redvault_pilot_legacy_and_shipment_guards.sql"
 review_followups="$root/supabase/migrations/20261006120000_uba_redvault_pilot_review_followups.sql"
 permit_completion="$root/supabase/migrations/20261006130000_uba_redvault_pilot_permit_payment_completion.sql"
 product_boundary="$root/supabase/migrations/20261006140000_uba_redvault_pilot_product_boundary.sql"
 binding_guards="$root/supabase/migrations/20261006150000_uba_redvault_pilot_binding_and_cancel_guards.sql"
+activation_lock="$root/supabase/migrations/20261006160000_uba_redvault_pilot_activation_lock_and_policy_indexes.sql"
 test_sql="$root/supabase/migrations/tests/redvault-private-pilot-full-schema.sql"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]; then
@@ -35,6 +40,14 @@ SQL
   cat "$binding_fixture" "$existing_binding_fixed_five" "$binding_converted"
   cat "$existing_binding_fixed_five" "$binding_five"
   cat "$existing_binding_fixed_five" "$binding_none"
-  cat "$fixed_five" "$pilot" "$legacy_and_shipment" "$review_followups" "$permit_completion" "$product_boundary" "$binding_guards"
+  cat "$fixed_five" "$pilot_policy" "$pilot_order_guard" "$pilot_attempt_guards" "$pilot_rpc_wrappers" "$pilot_fulfillment_guards" "$legacy_and_shipment" "$review_followups" "$permit_completion" "$product_boundary" "$binding_guards"
+  # This runner concatenates every migration into one transaction, so the
+  # policy seed row's deferred reservation check is still pending when the
+  # follow-up indexes are created. Production applies each migration in its
+  # own transaction; fire just that check, create the indexes, then restore
+  # deferred mode so the reservation flow keeps working below.
+  printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey IMMEDIATE;\n'
+  cat "$activation_lock"
+  printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey DEFERRED;\n'
   sed '1{/^BEGIN;$/d;}' "$test_sql"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

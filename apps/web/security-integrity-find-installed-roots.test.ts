@@ -134,6 +134,27 @@ describe('security-integrity-find-installed-roots', () => {
     });
   });
 
+  it('throws when a scope chain exceeds the depth cap', () => {
+    // Scope descents count toward depth-8 like every other descent.
+    let dir = join(fixture, 'node_modules');
+    for (let level = 0; level < 10; level += 1) {
+      dir = join(dir, `@deep${level}`);
+      mkdirSync(dir, { recursive: true });
+    }
+    mkdirSync(join(dir, 'dup'), { recursive: true });
+    writeFileSync(
+      join(dir, 'dup', 'package.json'),
+      JSON.stringify({ name: 'dup', version: '0.0.0' })
+    );
+    expect(() => findInstalledRoots('@deep9/dup', fixture)).toThrow(
+      /depth-8 recursion cap/
+    );
+    rmSync(join(fixture, 'node_modules', '@deep0'), {
+      recursive: true,
+      force: true,
+    });
+  });
+
   it('throws when the upward walk hits the 12-level cap', () => {
     // A nonexistent 12-deep start dir never reaches the workspace
     // marker, so the walk exhausts its level budget.

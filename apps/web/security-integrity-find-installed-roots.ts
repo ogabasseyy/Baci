@@ -192,7 +192,9 @@ export function findInstalledRoots(
         }
       }
       if (entry.name.startsWith('@')) {
-        scan(full, depth, true);
+        // Depth increments here too, so the depth-8 cap bounds every
+        // descent shape, not just node_modules nesting.
+        scan(full, depth + 1, true);
       } else {
         const nested = join(full, 'node_modules');
         if (existsSync(nested)) {

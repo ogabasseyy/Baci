@@ -63,6 +63,17 @@ describe('parseReviewHandoff', () => {
     ).toBe('galaxy-a-2026');
   });
 
+  it.each([
+    'ガイドを購入する',
+    '!!!',
+  ])('falls back to a unique slug when the title yields an empty one: %s', (title) => {
+    const first = parseReviewHandoff({ ...validHandoff, title }).slug;
+    const second = parseReviewHandoff({ ...validHandoff, title }).slug;
+    expect(first).toMatch(/^untitled-[0-9a-f]{8}$/);
+    expect(second).toMatch(/^untitled-[0-9a-f]{8}$/);
+    expect(first).not.toBe(second);
+  });
+
   it('sanitizes imported HTML before returning it to the editor', () => {
     const { content } = parseReviewHandoff({
       ...validHandoff,

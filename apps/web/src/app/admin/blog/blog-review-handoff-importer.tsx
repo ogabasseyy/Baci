@@ -31,7 +31,9 @@ export function BlogReviewHandoffImporter({
     if (!file || disabled) return;
     const generation = ++importGenerationRef.current;
     if (file.size > MAX_REVIEW_HANDOFF_FILE_SIZE) {
-      setMessage('The review file is larger than 2 MB (2,000,000 bytes).');
+      setMessage(
+        `The review file is larger than ${MAX_REVIEW_HANDOFF_FILE_SIZE / 1_000_000} MB (${MAX_REVIEW_HANDOFF_FILE_SIZE.toLocaleString('en-US')} bytes).`
+      );
       return;
     }
 

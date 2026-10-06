@@ -27,6 +27,13 @@ function readText(value: unknown): string {
   return readRawText(value).trim();
 }
 
+// generateSlug strips every non-Latin character, so a valid non-Latin or
+// symbol-only title would yield an empty slug and reject the whole import;
+// fall back to a unique placeholder the reviewer can rename before saving.
+function fallbackSlug(): string {
+  return `untitled-${crypto.randomUUID().split('-')[0]}`;
+}
+
 export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (
     !isRecord(value) ||
@@ -109,7 +116,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   const metadata = {
     title,
     author_name: readText(value.author_name) || 'Baci Editorial',
-    slug: readText(value.slug) || generateSlug(title),
+    slug: readText(value.slug) || generateSlug(title) || fallbackSlug(),
     featured_image_alt: readText(featuredImage.alt),
     focus_keyword: readText(value.focus_keyword),
     seo_title: readText(value.seo_title),

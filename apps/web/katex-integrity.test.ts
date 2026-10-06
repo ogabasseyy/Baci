@@ -144,7 +144,7 @@ describe('katex integrity (CVE-2026-103923)', () => {
   it.each(
     candidateRoots()
   )('still honors an explicit trust option in %s', async (root) => {
-    const katex = require(root) as Katex;
+    const katex = require(join(root, packageMain(root))) as Katex;
     const html = katex.renderToString('\\href{javascript:alert(1)}{x}', {
       trust: true,
     });

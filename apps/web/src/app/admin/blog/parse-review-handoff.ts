@@ -72,6 +72,10 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
         Object.entries(featuredImage.variants).filter(
           (entry): entry is [string, string] =>
             isHttpsUrl(entry[1]) &&
+            // URL parsing normalizes the path independently of the query, so
+            // a null byte hiding in ?token=... would pass integrity and then
+            // fail the database write; drop such variants instead.
+            !entry[1].includes(NULL_BYTE) &&
             validateBlogImageVariantIntegrity(
               { featured_image_variants: { [entry[0]]: entry[1] } },
               { kind: 'platform' }

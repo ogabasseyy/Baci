@@ -48,9 +48,12 @@ export function toApiPayload(
 
   const featuredImageUrl = toOptionalString(input.featured_image_url) || null;
   if (shouldResetFeaturedMetadataForChangedUrl(input, existingPost)) {
+    // Stale alt text always arrives empty (the editor clears it on URL edits
+    // and uploads), so a non-empty value here is fresh for the new cover.
+    const featuredImageAlt = toOptionalString(input.featured_image_alt);
     return {
       ...payload,
-      featured_image_alt: null,
+      featured_image_alt: featuredImageAlt || null,
       featured_image_height: null,
       featured_image_url: featuredImageUrl,
       featured_image_variants: {},

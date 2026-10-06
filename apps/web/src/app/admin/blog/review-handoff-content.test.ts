@@ -84,6 +84,22 @@ describe('validateImportedContent', () => {
     );
   });
 
+  it.each([
+    '<p>&#8288;</p>',
+    '<p>&#8206;</p>',
+  ])('rejects content with only format characters: %s', (content_html) => {
+    expect(() => validateImportedContent(content_html)).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('rejects content with only control characters', () => {
+    const bell = String.fromCharCode(7);
+    expect(() => validateImportedContent(`<p>${bell}</p>`)).toThrow(
+      'no readable text or images'
+    );
+  });
+
   it('accepts srcset candidates with CDN transform commas', () => {
     expect(
       validateImportedContent(

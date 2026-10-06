@@ -97,7 +97,7 @@ function splitSrcsetCandidates(srcset: string): string[] {
   return candidates;
 }
 
-const INVISIBLE_TEXT_PATTERN = /[\u200B-\u200D\u00AD]/gu;
+const NON_RENDERING_TEXT_PATTERN = /[\p{Cf}\p{Cc}]/gu;
 
 function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>.
@@ -105,7 +105,7 @@ function hasReadableContent(content: string): boolean {
   const text = content
     .replace(/<[^>]*>/gu, '')
     .replace(/&nbsp;/gi, ' ')
-    .replace(INVISIBLE_TEXT_PATTERN, '')
+    .replace(NON_RENDERING_TEXT_PATTERN, '')
     .trim();
   return text.length > 0;
 }

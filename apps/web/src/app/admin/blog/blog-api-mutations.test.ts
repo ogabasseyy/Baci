@@ -141,7 +141,7 @@ describe('blog-api mutations', () => {
     expect(body.featured_image_variants).toEqual({});
   });
 
-  it('clears stale alt text when url changes without new metadata', async () => {
+  it('preserves fresh alt text when url changes without new dimensions', async () => {
     mockFetchWithCsrf.mockResolvedValueOnce(
       jsonResponse({ id: 'post-1', slug: 'launch-faster' })
     );
@@ -150,6 +150,7 @@ describe('blog-api mutations', () => {
       'post-1',
       {
         ...sampleForm,
+        featured_image_alt: 'New cover description',
         featured_image_url: 'https://cdn.example.com/platform/blog/new.webp',
       },
       existingPost
@@ -163,10 +164,33 @@ describe('blog-api mutations', () => {
     expect(body.featured_image_url).toBe(
       'https://cdn.example.com/platform/blog/new.webp'
     );
-    expect(body.featured_image_alt).toBeNull();
+    expect(body.featured_image_alt).toBe('New cover description');
     expect(body.featured_image_height).toBeNull();
     expect(body.featured_image_width).toBeNull();
     expect(body.featured_image_variants).toEqual({});
+  });
+
+  it('clears emptied alt text when url changes without new metadata', async () => {
+    mockFetchWithCsrf.mockResolvedValueOnce(
+      jsonResponse({ id: 'post-1', slug: 'launch-faster' })
+    );
+
+    await updatePlatformBlogPost(
+      'post-1',
+      {
+        ...sampleForm,
+        featured_image_alt: '',
+        featured_image_url: 'https://cdn.example.com/platform/blog/new.webp',
+      },
+      existingPost
+    );
+
+    const [, options] = mockFetchWithCsrf.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(options.body)) as Record<string, unknown>;
+    expect(body.featured_image_alt).toBeNull();
   });
 
   it('keeps featured metadata when url and metadata change together', async () => {

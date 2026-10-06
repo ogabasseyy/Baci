@@ -241,6 +241,24 @@ describe('parseReviewHandoff', () => {
     ).toEqual({});
   });
 
+  it('drops managed variants with null bytes hidden in the query string', () => {
+    const nul = String.fromCharCode(0);
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          variants: {
+            landscape_16x9: `${managedVariant}?token=${nul}`,
+            square_1x1: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/cover/square_1x1.webp`,
+          },
+        },
+      }).featured_image_variants
+    ).toEqual({
+      square_1x1: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/cover/square_1x1.webp`,
+    });
+  });
+
   it('validates the server alt-text limit before importing', () => {
     const handoff = (length: number) => ({
       ...validHandoff,

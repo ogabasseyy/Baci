@@ -24,7 +24,6 @@ import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delive
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
-import { useCheckoutRedvaultAvailability } from './checkout/hooks/use-checkout-redvault-availability';
 export const CheckoutPage: React.FC = () => {
   const { cart, clearCart, isHydrated, removeFromCart } = useCart();
   const merchantContext = useMerchantSafe();
@@ -73,18 +72,6 @@ export const CheckoutPage: React.FC = () => {
   const searchParams = useSearchParams();
   const auth = useAuthSafe();
   const user = auth?.user;
-
-  // Pilot-aware REDVAULT availability: keyed on the sanitized checkout cart
-  // (not the raw cart) plus merchant and session state. Only `availability`
-  // is consumed here; order-submission auth waiting lives in the payment
-  // execution hook's own customer session.
-  const { availability: redvaultAvailability } =
-    useCheckoutRedvaultAvailability({
-      cartItems: checkoutCart,
-      merchantId: merchant?.id,
-      merchantSlug: merchant?.slug ?? undefined,
-      userId: user?.id,
-    });
 
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {
@@ -205,48 +192,52 @@ export const CheckoutPage: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const { crypto, dva, handlePlaceOrder, walletFundedTransfer } =
-    useCheckoutPaymentExecution({
-      identity: {
-        merchantId: merchant?.id,
-        merchantSlug: merchant?.slug ?? undefined,
-        currencyCode,
-      },
-      form: {
-        session: checkoutFormState,
-        account,
-        user,
-      },
-      cart: {
-        cart,
-        checkoutCart,
-        checkoutCartTotal,
-        clearCart,
-        removeFromCart,
-      },
-      delivery: {
-        session: delivery,
-        merchantCountry,
-        giftWrappingCost,
-        effectiveItemSubtotal,
-        taxAmount: orderTotals?.taxAmount ?? 0,
-      },
-      merchant,
-      navigation: {
-        flow: checkoutFlow,
-        pushSuccessRoute: (url) => router.push(asRoute(url)),
-        getHref,
-      },
-      payment: {
-        session: paymentSession,
-        bankTransferAvailable: bankTransferCheckoutAvailable,
-        paystackAvailable: paystackCheckoutAvailable,
-        korapayAvailable: korapayCheckoutAvailable,
-        redvaultAvailable: redvaultAvailability.available,
-        currencyCode,
-      },
-      attempt: checkoutAttempt,
-    });
+  const {
+    crypto,
+    dva,
+    handlePlaceOrder,
+    redvaultAvailable,
+    walletFundedTransfer,
+  } = useCheckoutPaymentExecution({
+    identity: {
+      merchantId: merchant?.id,
+      merchantSlug: merchant?.slug ?? undefined,
+      currencyCode,
+    },
+    form: {
+      session: checkoutFormState,
+      account,
+      user,
+    },
+    cart: {
+      cart,
+      checkoutCart,
+      checkoutCartTotal,
+      clearCart,
+      removeFromCart,
+    },
+    delivery: {
+      session: delivery,
+      merchantCountry,
+      giftWrappingCost,
+      effectiveItemSubtotal,
+      taxAmount: orderTotals?.taxAmount ?? 0,
+    },
+    merchant,
+    navigation: {
+      flow: checkoutFlow,
+      pushSuccessRoute: (url) => router.push(asRoute(url)),
+      getHref,
+    },
+    payment: {
+      session: paymentSession,
+      bankTransferAvailable: bankTransferCheckoutAvailable,
+      paystackAvailable: paystackCheckoutAvailable,
+      korapayAvailable: korapayCheckoutAvailable,
+      currencyCode,
+    },
+    attempt: checkoutAttempt,
+  });
 
   // Loading state (Initial fetch OR waiting for auto-trigger)
   // This prevents the form from flashing briefly before the payment widget opens
@@ -301,7 +292,7 @@ export const CheckoutPage: React.FC = () => {
     actions: {
       onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
     },
-    availability: { redvaultAvailable: redvaultAvailability.available },
+    availability: { redvaultAvailable },
   });
 
   return <CheckoutScreen {...screenModel} />;

@@ -89,7 +89,6 @@ export function createOptions(
       bankTransferAvailable: true,
       paystackAvailable: true,
       korapayAvailable: false,
-      redvaultAvailable: false,
       currencyCode: 'NGN',
     },
     attempt: {

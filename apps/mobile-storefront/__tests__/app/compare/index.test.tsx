@@ -23,6 +23,11 @@ const mockComparisonState = {
     variant_model?: 'legacy' | 'sku_matrix';
     available_conditions?: string[];
     has_condition_offers?: boolean;
+    searchMatch?: {
+      variantId?: string;
+      offerId?: string;
+      condition?: string;
+    };
   }>,
   removeProduct: mockRemoveProduct,
   clearComparison: mockClearComparison,
@@ -177,6 +182,29 @@ describe('CompareScreen', () => {
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/product/[slug]',
       params: { slug: 'test-product' },
+    });
+  });
+
+  it('opens matched rows with exact ids and omits the snapshot condition', () => {
+    mockComparisonState.products = [
+      {
+        id: 'product-1',
+        slug: 'iphone-15',
+        name: 'iPhone 15',
+        price: 900000,
+        searchMatch: { offerId: 'offer-open-box', condition: 'open_box' },
+      },
+    ];
+
+    render(<CompareScreen />);
+
+    // Refresh failure and unavailable rows fall back to the snapshot, so
+    // the forwarded condition can be stale; the PDP derives the live one.
+    fireEvent.press(screen.getByRole('button', { name: 'View iPhone 15' }));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: { slug: 'iphone-15', offer_id: 'offer-open-box' },
     });
   });
 });

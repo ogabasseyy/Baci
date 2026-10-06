@@ -27,7 +27,14 @@ export default function CompareScreen() {
     }))
   );
   const fresh = useComparisonProducts(products);
-  const openProduct = (product: Product) =>
+  const openProduct = (product: Product) => {
+    // An exact option id resolves its own live condition on the PDP. The
+    // forwarded condition can be stale (refresh failure and unavailable
+    // rows fall back to the snapshot), and pairing it with the id would
+    // make the resolver reject the identified option.
+    const hasExactMatchIdentity = Boolean(
+      product.searchMatch?.variantId || product.searchMatch?.offerId
+    );
     router.push({
       pathname: '/product/[slug]',
       params: {
@@ -38,11 +45,12 @@ export default function CompareScreen() {
         ...(product.searchMatch?.offerId
           ? { offer_id: product.searchMatch.offerId }
           : {}),
-        ...(product.searchMatch?.condition
+        ...(product.searchMatch?.condition && !hasExactMatchIdentity
           ? { condition: product.searchMatch.condition }
           : {}),
       },
     });
+  };
 
   // Collect all unique spec keys across all products
   const allSpecKeys = (() => {

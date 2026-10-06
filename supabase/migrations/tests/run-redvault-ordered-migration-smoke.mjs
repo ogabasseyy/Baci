@@ -453,7 +453,7 @@ try {
     readFileSync(
       resolve(
         migrations,
-        '20261006120000_uba_redvault_pilot_review_followups.sql'
+        '20261006120100_uba_redvault_pilot_review_followups.sql'
       ),
       'utf8'
     )

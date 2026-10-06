@@ -269,7 +269,7 @@ try {
   // ordered migration smoke test.
   for (const filename of [
     '20260929100000_uba_redvault_pilot_legacy_and_shipment_guards.sql',
-    '20261006120000_uba_redvault_pilot_review_followups.sql',
+    '20261006120100_uba_redvault_pilot_review_followups.sql',
     '20261006130000_uba_redvault_pilot_permit_payment_completion.sql',
     '20261006140000_uba_redvault_pilot_product_boundary.sql',
     '20261006150000_uba_redvault_pilot_binding_and_cancel_guards.sql',

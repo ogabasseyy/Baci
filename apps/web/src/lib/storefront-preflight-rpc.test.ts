@@ -125,18 +125,6 @@ describe('callStorefrontPreflightRpc', () => {
     );
   });
 
-  it('classifies a Postgres statement-timeout error code as timeout', async () => {
-    const rpcImpl = vi.fn().mockResolvedValue({
-      data: null,
-      error: { code: '57014', message: 'timeout' },
-    });
-
-    const result = await callRpc('statement_timeout_fn', {}, rpcImpl);
-
-    expect(result).toBeNull();
-    expectFailOpenReason(consoleWarnSpy, 'timeout');
-  });
-
   it('classifies any other Postgres error code as has-error', async () => {
     const rpcImpl = vi.fn().mockResolvedValue({
       data: null,

@@ -83,6 +83,42 @@ describe('savings reminder notification capability', () => {
     expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('first');
   });
 
+  it('cancels the captured scope when auth changed before the queued cancel runs', async () => {
+    mockScheduleNotificationAsync.mockResolvedValueOnce('user-a-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    // user-b signs in and schedules before the queued cancel runs.
+    mockAuthState.user = { id: 'user-b' };
+    mockScheduleNotificationAsync.mockResolvedValueOnce('user-b-live');
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-9',
+      goalTitle: 'Tablet',
+    });
+
+    await cancelSavingsReminderNotification(undefined, {
+      merchantId: '00000000-0000-4000-8000-000000000010',
+      userId: 'user-a',
+    });
+
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith(
+      'user-a-live'
+    );
+    expect(mockCancelScheduledNotificationAsync).not.toHaveBeenCalledWith(
+      'user-b-live'
+    );
+    await expect(
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-b:00000000-0000-4000-8000-000000000010:goal-9'
+      )
+    ).resolves.toContain('user-b-live');
+  });
+
   it('activates both pending goals on boot without replacing the first', async () => {
     for (const goalId of ['goal-1', 'goal-2']) {
       await scheduleSavingsReminderNotification({

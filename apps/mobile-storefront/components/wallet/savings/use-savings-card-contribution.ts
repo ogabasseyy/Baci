@@ -3,7 +3,6 @@ import {
   type SavingsCardContributionSnapshot as Snapshot,
   saveSavingsCardContributionSnapshot,
 } from '@/lib/savings-card-contribution-snapshot';
-import { submitSavingsCardContribution } from '@/lib/savings-card-contributions';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { safeRemainingKobo } from './safe-remaining-kobo';
 import {
@@ -13,6 +12,7 @@ import {
 } from './savings-card-contribution-initialization';
 import { readSavingsCardContributionStatus } from './savings-card-contribution-status';
 import { savingsCardContributionUtils } from './savings-card-contribution-utils';
+import { sendSavingsCardContributionSnapshot } from './send-savings-card-contribution';
 import type {
   UseSavingsCardContributionInput as Input,
   SavingsCardContributionOperation as Operation,
@@ -136,59 +136,25 @@ export function useSavingsCardContribution({
       setOperation,
       snapshot: currentSnapshot,
     });
-  const sendSnapshot = async (
+  const sendSnapshot = (
     currentSnapshot: Snapshot,
     reserved = false,
     activation = activationRef.current
-  ) => {
-    if (busyRef.current && !reserved) return;
-    const requestScopeKey = scopeKey;
-    if (
-      !currentScopeRef.current(requestScopeKey, activation) ||
-      currentSnapshot.goalId !== goalId
-    )
-      return;
-    busyRef.current = true;
-    setBusy(true);
-    setAllowRetry(false);
-    setMessage('');
-    const controller = new AbortController();
-    controllersRef.current.add(controller);
-    try {
-      await submitSavingsCardContribution({
-        request: currentSnapshot,
-        signal: controller.signal,
-      });
-      if (
-        controller.signal.aborted ||
-        !currentScopeRef.current(requestScopeKey, activation)
-      )
-        return;
-      setReviewing(false);
-      busyRef.current = false;
-      setBusy(false);
-      await readStatus(currentSnapshot, true, activation);
-    } catch {
-      if (
-        !controller.signal.aborted &&
-        currentScopeRef.current(requestScopeKey, activation)
-      ) {
-        setMessage(
-          'We could not confirm the request. Your saved request is unchanged; retry uses the same key.'
-        );
-        setAllowRetry(true);
-      }
-    } finally {
-      controllersRef.current.delete(controller);
-      if (
-        !controller.signal.aborted &&
-        currentScopeRef.current(requestScopeKey, activation)
-      ) {
-        busyRef.current = false;
-        setBusy(false);
-      }
-    }
-  };
+  ) =>
+    sendSavingsCardContributionSnapshot({
+      activation,
+      busyRef,
+      controllers: controllersRef.current,
+      goalId,
+      isCurrent: () => currentScopeRef.current(scopeKey, activation),
+      readStatus,
+      reserved,
+      setAllowRetry,
+      setBusy,
+      setMessage,
+      setReviewing,
+      snapshot: currentSnapshot,
+    });
   const beginContribution = async () => {
     if (
       busyRef.current ||

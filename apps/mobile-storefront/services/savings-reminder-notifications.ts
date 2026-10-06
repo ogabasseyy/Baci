@@ -95,9 +95,17 @@ async function ensureSavingsReminderChannel(
   });
 }
 
-export function cancelSavingsReminderNotification(goalId?: string) {
+export function cancelSavingsReminderNotification(
+  goalId?: string,
+  captured?: { merchantId: string; userId: string }
+) {
   return savingsReminderStorage.runExclusive(async () => {
-    const scope = resolveReminderScope();
+    // A captured scope pins delayed/queued cancellations to the account
+    // that scheduled them; without it, resolveReminderScope() would read
+    // the then-current auth state and could target a later sign-in.
+    const scope = captured
+      ? buildReminderScope(captured.userId, captured.merchantId)
+      : resolveReminderScope();
     if (!scope) return false;
     const notifications = loadNotificationsModule();
     await disposeUnscopedSavingsReminders(notifications);

@@ -52,7 +52,10 @@ export function useSavingsReminderDelivery(
           const owners = capabilityOwners.get(scopeKey) ?? new Set<symbol>();
           owners.add(owner);
           capabilityOwners.set(scopeKey, owners);
-          await cancelSavingsReminderNotification();
+          // Pin the captured scope: this runs after a network fetch plus
+          // queue delay, so resolving auth state here could target an
+          // account the user switched to while it was pending.
+          await cancelSavingsReminderNotification(undefined, scope);
         });
       } catch {
         return;

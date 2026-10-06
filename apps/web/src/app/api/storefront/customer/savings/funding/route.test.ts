@@ -271,9 +271,15 @@ describe('/api/storefront/customer/savings/funding POST', () => {
     expect(mockEnsurePiggyvestPlanFunding).not.toHaveBeenCalled();
   });
 
-  it('returns 422 without provisioning when customer identity is incomplete', async () => {
+  it('provisions with synthetic identity when stored PII is incomplete', async () => {
     mockResolveCustomerSavingsContext.mockResolvedValue({
-      customer: { id: customerId, first_name: null, last_name: null },
+      customer: {
+        id: customerId,
+        first_name: null,
+        last_name: null,
+        email: null,
+        phone: null,
+      },
       merchant: { id: merchantId },
       supabase: {
         from: vi.fn(() =>
@@ -284,12 +290,13 @@ describe('/api/storefront/customer/savings/funding POST', () => {
 
     const response = await POST(post(fundingBody));
 
-    expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({
-      status: 'unavailable',
-      code: 'IDENTITY_INCOMPLETE',
+    expect(response.status).toBe(200);
+    expect(mockEnsurePiggyvestPlanFunding).toHaveBeenCalledOnce();
+    const call = mockEnsurePiggyvestPlanFunding.mock.calls[0][0];
+    expect(call.customer).toMatchObject({
+      bvn: '00000000000',
+      email: 'synthetic@example.test',
     });
-    expect(mockEnsurePiggyvestPlanFunding).not.toHaveBeenCalled();
   });
 
   it('returns 503 when the funding display switch is off', async () => {

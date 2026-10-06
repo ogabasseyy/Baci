@@ -54,4 +54,23 @@ describe('readSavingsDeviceProduct', () => {
     ).rejects.toBe(failure);
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it('returns null instead of downgrading when a variant row is invalid', async () => {
+    const { client, rpc } = fixture();
+    rpc.mockResolvedValue({
+      data: [
+        { id: 'owned', product_id: 'product' },
+        // Invalid row shape at runtime (legacy non-string id).
+        { id: 42 as unknown as string, product_id: 'product' },
+      ],
+      error: null,
+    });
+    await expect(
+      readSavingsDeviceProduct({
+        merchantId: 'merchant',
+        productId: 'product',
+        supabase: client,
+      })
+    ).resolves.toBeNull();
+  });
 });

@@ -47,15 +47,13 @@ export async function syncSavingsCardContributionStatus({
     }
     setOperation(status);
     if (status.status === 'completed') {
-      try {
-        await refreshWallet?.();
-      } catch {
-        if (!isCurrent()) return;
-      }
-      if (!isCurrent()) return;
       // Mirror the wallet-contribution path: when the completed charge
       // covers the plan's remaining amount, the goal is complete and its
-      // recurring local reminder must stop.
+      // recurring local reminder must stop. This runs before the refresh
+      // below and is intentionally not gated on isCurrent: completion is
+      // server truth for this goal, and the refresh can unmount this flow
+      // (completed goals stop rendering the funding panel), which would
+      // otherwise skip the cancellation and leave the reminder firing.
       if (
         remainingAmountKobo !== undefined &&
         snapshot.amountKobo >= remainingAmountKobo
@@ -66,6 +64,12 @@ export async function syncSavingsCardContributionStatus({
           // Reminder cleanup is best effort after a confirmed contribution.
         }
       }
+      try {
+        await refreshWallet?.();
+      } catch {
+        if (!isCurrent()) return;
+      }
+      if (!isCurrent()) return;
       setMessage(
         'Contribution completed. Refresh your wallet to see the latest balance.'
       );

@@ -239,26 +239,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     if (goalResponse) return goalResponse;
 
-    const customer = resolved.customer as {
-      first_name?: unknown;
-      last_name?: unknown;
-      email?: unknown;
-      phone?: unknown;
-    };
-    const name =
-      `${String(customer.first_name ?? '')} ${String(customer.last_name ?? '')}`.trim();
-    const email = String(customer.email ?? '').trim();
-    const phone = String(customer.phone ?? '').trim();
-    if (!name || !email || !phone) {
-      return NextResponse.json(
-        {
-          status: 'unavailable',
-          code: 'IDENTITY_INCOMPLETE',
-        },
-        { status: 422 }
-      );
-    }
-
+    // No customer-PII completeness gate: staging provisioning always uses
+    // the fixed synthetic identity above, so nullable stored name/email/phone
+    // must never block an otherwise eligible allowlisted customer.
     const runtime = readPiggyvestPlanFundingRuntime();
     if (!runtime) return unavailable();
     let execute: ReturnType<typeof createPiggyvestPostgresExecutor>;

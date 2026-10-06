@@ -18,7 +18,8 @@ jest.mock('@/services/savings-notification-capability', () => ({
   },
 }));
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  cancelSavingsReminderNotification: () => mockCancel(),
+  cancelSavingsReminderNotification: (...args: unknown[]) =>
+    mockCancel(...args),
 }));
 
 beforeEach(() => jest.clearAllMocks());
@@ -28,6 +29,13 @@ it('suppresses local reminders after registration without visiting the inbox', a
   renderHook(() => useSavingsReminderDelivery('user', 'merchant', true));
   await waitFor(() => expect(mockCancel).toHaveBeenCalledTimes(1));
   expect(mockMark).toHaveBeenCalledWith({
+    apiOrigin: 'https://staging.example.com',
+    userId: 'user',
+    merchantId: 'merchant',
+  });
+  // The captured scope pins the delayed cancellation to this account even
+  // if the user switches before the queued operation runs.
+  expect(mockCancel).toHaveBeenCalledWith(undefined, {
     apiOrigin: 'https://staging.example.com',
     userId: 'user',
     merchantId: 'merchant',

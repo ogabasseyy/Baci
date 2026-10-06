@@ -111,6 +111,38 @@ it('keeps the local reminder when a completed charge is partial', async () => {
   expect(cancelSavingsReminder).not.toHaveBeenCalled();
 });
 
+it('cancels the reminder even when refresh invalidates the scope', async () => {
+  jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
+    goalId: snapshot.goalId,
+    operationId: 'operation-1',
+    amountKobo: snapshot.amountKobo,
+    currency: 'NGN',
+    status: 'completed',
+  });
+  const state = setters();
+  const cancelSavingsReminder = jest.fn().mockResolvedValue(true);
+  let current = true;
+
+  await syncSavingsCardContributionStatus({
+    cancelSavingsReminder,
+    goalId: snapshot.goalId,
+    isCurrent: () => current,
+    refreshWallet: jest.fn().mockImplementation(() => {
+      // Completed goals stop rendering the funding panel, unmounting the
+      // hook mid-refresh; the cancellation must already have happened.
+      current = false;
+      return Promise.resolve(undefined);
+    }),
+    remainingAmountKobo: snapshot.amountKobo,
+    signal: new AbortController().signal,
+    snapshot,
+    ...state,
+  });
+
+  expect(cancelSavingsReminder).toHaveBeenCalledWith(snapshot.goalId);
+  expect(state.setMessage).not.toHaveBeenCalled();
+});
+
 it('keeps the durable request retryable when refreshed status mismatches', async () => {
   jest.mocked(getSavingsCardContributionStatus).mockResolvedValue({
     goalId: snapshot.goalId,

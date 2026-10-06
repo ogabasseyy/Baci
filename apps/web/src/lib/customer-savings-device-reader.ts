@@ -64,8 +64,10 @@ const SavingsDeviceRpcVariantSchema = SavingsDeviceVariantSchema.extend({
  * RLS, so a direct relationship projection returns no variants to
  * customers; the SECURITY DEFINER RPC is the hydration boundary (same as
  * the savings catalogue) and already excludes inventory anchors. Returns
- * null when the product is missing or fails validation; throws transport
- * errors for the caller to map.
+ * null when the product is missing or fails validation — including an
+ * invalid variant payload, which must never silently downgrade a
+ * variant-bearing product to variantless; throws transport errors for the
+ * caller to map.
  */
 export async function readSavingsDeviceProduct({
   merchantId,
@@ -95,15 +97,16 @@ export async function readSavingsDeviceProduct({
   const variants = z
     .array(SavingsDeviceRpcVariantSchema)
     .safeParse(variantsResult.data);
+  if (!variants.success) return null;
   const product =
     typeof productResult.data === 'object' && productResult.data !== null
       ? productResult.data
       : null;
   const parsed = SavingsDeviceProductSchema.safeParse({
     ...(product ?? {}),
-    variants: variants.success
-      ? variants.data.filter((variant) => variant.product_id === productId)
-      : [],
+    variants: variants.data.filter(
+      (variant) => variant.product_id === productId
+    ),
   });
   return parsed.success ? parsed.data : null;
 }

@@ -1,9 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import {
-  createRefinementDraft,
-  SearchRefinementFields,
-} from './search-refinement-fields';
+import { createRefinementDraft } from './search-refinement-draft';
+import { SearchRefinementFields } from './search-refinement-fields';
 
 it('keeps selected exact brands visible while searching other brands', () => {
   const onChange = vi.fn();

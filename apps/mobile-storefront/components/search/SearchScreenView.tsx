@@ -177,7 +177,10 @@ export default function SearchScreenView({
         <SearchScreenTopBar
           colors={colors}
           onBack={onBack}
-          showComparison={hasSearchQuery && products.length > 0}
+          // Intent and selection count gate the action downstream: a
+          // zero-result refinement must not strand an active comparison
+          // session by removing its only navigation.
+          showComparison={hasSearchQuery}
         />
         <SearchResultsHeader
           suggestions={

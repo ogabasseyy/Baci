@@ -22,6 +22,17 @@ function hasRenderableImage(image?: string | null) {
 }
 
 function getConditionBadgeLabel(product: NormalizedProduct) {
+  // Search cards price the matched option, so the badge names the matched
+  // condition — not the parent's full set, which would advertise a used
+  // price beneath "New & Used".
+  const matchedCondition = product.searchMatch?.condition
+    ? normalizeCanonicalProductCondition(product.searchMatch.condition)
+    : '';
+  if (matchedCondition) {
+    return matchedCondition === 'new'
+      ? null
+      : (formatCanonicalProductConditionLabel(matchedCondition) ?? null);
+  }
   if (Array.isArray(product.available_conditions)) {
     const normalizedConditions = Array.from(
       new Set(

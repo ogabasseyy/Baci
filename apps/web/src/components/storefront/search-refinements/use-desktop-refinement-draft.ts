@@ -6,7 +6,7 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { createRefinementDraft } from './search-refinement-fields';
+import { createRefinementDraft } from './search-refinement-draft';
 export function useDesktopRefinementDraft(
   criteria: SearchRefinements,
   onHistory: () => void

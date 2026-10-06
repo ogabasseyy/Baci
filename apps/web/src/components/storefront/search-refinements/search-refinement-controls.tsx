@@ -22,8 +22,8 @@ import {
   createRefinementDraft,
   parseRefinementDraft,
   type RefinementDraft,
-  SearchRefinementFields,
-} from './search-refinement-fields';
+} from './search-refinement-draft';
+import { SearchRefinementFields } from './search-refinement-fields';
 import { SearchRefinementSheet } from './search-refinement-sheet';
 import { getSearchSortLabel, SearchSortSelect } from './search-sort-select';
 import { SearchToolbarReveal } from './search-toolbar-reveal';

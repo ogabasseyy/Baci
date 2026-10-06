@@ -209,6 +209,22 @@ describe('SearchScreenView', () => {
     );
   });
 
+  it('keeps comparison navigation when a refinement returns zero rows', () => {
+    renderView({
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products: [],
+      query: 'iphone',
+      totalCount: 0,
+    });
+
+    // Selection count and session intent gate the action itself; an empty
+    // page must not remove the route to an active comparison.
+    expect(screen.getByTestId('comparison-navigation').props.children).toBe(
+      'available'
+    );
+  });
+
   it('rekeys the results list when the committed query changes', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
     const base = {

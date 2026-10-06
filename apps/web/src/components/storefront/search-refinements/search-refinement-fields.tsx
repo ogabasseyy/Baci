@@ -1,35 +1,9 @@
 'use client';
-import {
-  parseSearchRefinements,
-  type SearchRefinements,
-} from '@baci/shared/lib';
+import type { SearchRefinements } from '@baci/shared/lib';
 import { useState } from 'react';
 import { getSearchCurrencyFormatter } from './search-currency';
+import type { RefinementDraft } from './search-refinement-draft';
 import { RefinementGroup } from './search-refinement-group';
-export interface RefinementDraft
-  extends Omit<SearchRefinements, 'minPrice' | 'maxPrice'> {
-  minimum: string;
-  maximum: string;
-}
-export const createRefinementDraft = (
-  criteria: SearchRefinements
-): RefinementDraft => ({
-  ...criteria,
-  minimum: criteria.minPrice?.toString() ?? '',
-  maximum: criteria.maxPrice?.toString() ?? '',
-});
-export function parseRefinementDraft(draft: RefinementDraft) {
-  return parseSearchRefinements({
-    brand: draft.brands,
-    category: draft.categoryId,
-    condition: draft.condition,
-    processor: draft.processor,
-    minPrice: draft.minimum,
-    maxPrice: draft.maximum,
-    sort: draft.sort,
-    minRating: draft.minRating?.toString(),
-  });
-}
 export function SearchRefinementFields({
   currency = 'NGN',
   processors = [],

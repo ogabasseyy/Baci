@@ -13,8 +13,8 @@ import {
 import {
   createRefinementDraft,
   type RefinementDraft,
-  SearchRefinementFields,
-} from './search-refinement-fields';
+} from './search-refinement-draft';
+import { SearchRefinementFields } from './search-refinement-fields';
 
 interface Props {
   currency?: string;

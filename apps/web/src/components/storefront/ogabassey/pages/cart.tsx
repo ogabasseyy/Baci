@@ -30,6 +30,7 @@ import {
   NegotiationModal,
 } from '../components/NegotiationModal';
 import { runCartTotalNegotiation } from '../lib/cart-total-negotiation';
+import { CartAssuranceRow } from './cart-assurance-row';
 import { CartEmptyState } from './cart-empty-state';
 
 interface NegotiationState {
@@ -307,41 +308,12 @@ export const OgabasseyV2CartPage: React.FC<OgabasseyV2CartPageProps> = ({
                     {/* Bottom Row: Actions */}
                     <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 justify-between items-center">
                       {/* Assurance Toggle */}
-                      <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
-                        <div className="relative flex items-center mt-0.5">
-                          <input
-                            type="checkbox"
-                            checked={item.hasAssurance || false}
-                            onChange={() => toggleAssurance?.(item.cartItemId)}
-                            className="peer sr-only"
-                          />
-                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                            <ShieldCheck size={12} className="text-red-600" />
-                            Ogabassey Assurance
-                          </span>
-                          <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
-                            {item.hasAssurance ? (
-                              <>
-                                Covers{' '}
-                                <span className="font-bold text-gray-700">
-                                  Screen & Liquid Damage
-                                </span>
-                                <span className="ml-1 text-red-600 font-bold">
-                                  +₦{assuranceCost.toLocaleString()}
-                                </span>
-                              </>
-                            ) : (
-                              'Device Protection (+5%)'
-                            )}
-                          </p>
-                          <p className="text-[10px] text-store-background-text/55 leading-tight mt-0.5">
-                            {item.hasAssurance ? 'Optional. Included in total; uncheck to remove.' : 'Optional. Check to add.'}
-                          </p>
-                        </div>
-                      </label>
+                      <CartAssuranceRow
+                        hasAssurance={item.hasAssurance}
+                        assuranceCost={assuranceCost}
+                        cartItemId={item.cartItemId}
+                        onToggle={toggleAssurance}
+                      />
 
                       {/* Negotiate Button */}
                       <div className="flex items-center gap-2">

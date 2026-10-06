@@ -153,6 +153,27 @@ describe('ProductIndexCard', () => {
     expect(screen.getByText('Multiple Conditions')).toBeInTheDocument();
   });
 
+  it('labels the matched condition beside the matched price', () => {
+    render(
+      <ProductIndexCard
+        formattedPrice="₦200,000"
+        pathPrefix=""
+        product={makeProduct({
+          available_conditions: ['new', 'used'],
+          searchMatch: {
+            productId: 'product-1',
+            total: 1,
+            price: 200000,
+            condition: 'used',
+          },
+        })}
+      />
+    );
+
+    expect(screen.getByText('Used')).toBeInTheDocument();
+    expect(screen.queryByText('New & Used')).not.toBeInTheDocument();
+  });
+
   it('shows the no-image fallback when the product image is blank', () => {
     render(
       <ProductIndexCard

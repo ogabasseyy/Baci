@@ -117,3 +117,17 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - ID-only-honor medium disproven with a committed integration test: `use-product-detail-route-data.test.ts` renders the real route-data + selection hooks across a product load and asserts the honor path resolves the identified multi-offer id with the live-derived condition. No first-paint gap exists — selection seeding runs during render (render-phase setState re-renders before commit), so the committed paint already carries the synced condition. `findMatchingConditionOffer`'s null-on-mismatch is correct for genuinely stale params.
 - Facet fail-safe low invalid on both platforms: web's loader catches facet failure immediately and degrades to empty facets (`facetError: true`, documented in code); native consumes facets via `data?.x ?? []` with independent error/retry, results unaffected. The `throw` is the designed signal at both call sites.
 - Assurance/budget mediums and cap low remain as adjudicated (product decision, deferred with alerting prerequisite, documented per-form-factor divergence).
+
+## Round 19 (Muse on a6f2b89786 — all repeats, no code change)
+
+- Budget-exhaustion and assurance-default mediums: deferred / product decision as adjudicated (totals inclusion verified Round 11).
+- price-0 masking low: covered by the committed "unavailable facts never render zero price" test. PII low: inbox text-rendering test (Round 15) + merchant-owner-only RLS. isLocalhost low: private-range coverage pinned by test.
+- No new actionable items; note held uncommitted for the next fix commit.
+
+## Round 20 (Codex on a6f2b89786 — CX-47..CX-51, all fixed with tests)
+
+- CX-47: search cards badge the matched condition beside the matched price (null for matched-new, mirroring the parent single-new rule); non-search callers without `searchMatch` keep parent-derived badges.
+- CX-48: draft type/helpers extracted to `search-refinement-draft.ts` (31 lines) with a colocated round-trip suite; fields module drops 307 → 281 lines. Five consumer files re-pointed.
+- CX-49: new append-only migration folds brand filters case- and trim-insensitively in the single live candidates function (public was moved to the private schema; all wrappers/facets delegate there). Validated on scratch Postgres against the real migration file: old body `{apple}`→0 rows (bug), new body `{apple,Apple,APPLE,' apple '}`→1, `{Samsung}`→0, `{}`/`NULL`→fast path intact, NULL-brand rows excluded under filter but included unfiltered (9 probes).
+- CX-50: compare navigation keys on search intent (downstream intent + count>=2 gates do the rest) instead of result length, so zero-result refinements no longer strand an active comparison session.
+- CX-51: assurance toggle row extracted to `cart-assurance-row.tsx` with a colocated suite (copy states, theme class, toggle callback); cart page drops 457 → 429. The page remains over 300 on pre-existing content — a full split is out of scope; the new/touched logic now lives in a compliant module. Note: `ogabassey/**` is biome-ignored by config, so the extraction is typecheck- (not lint-) covered like its parent.

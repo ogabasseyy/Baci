@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { createRefinementDraft } from './search-refinement-fields';
+import { createRefinementDraft } from './search-refinement-draft';
 import { SearchRefinementSheet } from './search-refinement-sheet';
 
 it('changes sorting without losing the committed filters', () => {

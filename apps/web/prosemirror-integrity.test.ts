@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
 
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { installedRoot } from './security-integrity-installed-root';
 import { loadCjs } from './security-integrity-load-cjs';
-import { resolveRoot } from './security-integrity-resolve-root';
+import { overrideRoots } from './security-integrity-override-roots';
 
 // NOTE: model/state/view must all load through the SAME CJS module
 // instances: mixing the ESM and CJS builds trips ProseMirror's
@@ -60,16 +61,13 @@ interface ProseMirrorView {
   ) => EditorViewInstance;
 }
 
-function loadView(): {
-  viewModule: ProseMirrorView;
-  viewRoot: string;
-} {
-  const root = resolveRoot(
-    'prosemirror-view',
-    process.env.PROSEMIRROR_VIEW_ROOT,
-    'PROSEMIRROR_VIEW_ROOT'
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(
+      process.env.PROSEMIRROR_VIEW_ROOTS,
+      'PROSEMIRROR_VIEW_ROOTS'
+    ) ?? findInstalledRoots('prosemirror-view')
   );
-  return { viewModule: loadCjs(root), viewRoot: root };
 }
 
 interface ProseMirrorModel {
@@ -86,7 +84,8 @@ interface ProseMirrorState {
   };
 }
 
-function buildHarness(viewModule: ProseMirrorView, viewRoot: string) {
+function buildHarness(viewRoot: string) {
+  const viewModule = loadCjs<ProseMirrorView>(viewRoot);
   // Model and state ALWAYS resolve from the view's own root — never
   // from the ambient workspace — so the Schema and the view's internal
   // model instance cannot diverge even if the view ever carries a
@@ -169,9 +168,14 @@ function sliceHtml(context: unknown): string {
 }
 
 describe('prosemirror-view integrity (CVE-2026-104847)', () => {
-  it('drops pasted slice context with invalid attributes', () => {
-    const { viewModule, viewRoot } = loadView();
-    const { view, pastedSlice } = buildHarness(viewModule, viewRoot);
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('drops pasted slice context with invalid attributes in %s', (root) => {
+    const { view, pastedSlice } = buildHarness(root);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'javascript:alert(1)' }]),
@@ -187,9 +191,10 @@ describe('prosemirror-view integrity (CVE-2026-104847)', () => {
     }
   });
 
-  it('still pastes slice context with valid attributes', () => {
-    const { viewModule, viewRoot } = loadView();
-    const { view, pastedSlice } = buildHarness(viewModule, viewRoot);
+  it.each(
+    candidateRoots()
+  )('still pastes slice context with valid attributes in %s', (root) => {
+    const { view, pastedSlice } = buildHarness(root);
     try {
       const pasted = view.pasteHTML(
         sliceHtml(['evilbox', { src: 'https://ok.invalid/' }]),

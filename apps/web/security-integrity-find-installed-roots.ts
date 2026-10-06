@@ -94,11 +94,15 @@ function expandWorkspaces(workspaceRoot: string): string[] {
     }
   };
   for (const glob of readPackageGlobs(workspaceRoot)) {
+    // Fail closed on anything that would silently narrow the scan:
+    // out-of-root globs and unsupported syntax both throw instead of
+    // skipping a sibling workspace while the EVERY-copy claim reports
+    // green.
     if (glob.includes('..') || isAbsolute(glob)) {
-      continue;
+      throw new Error(
+        `findInstalledRoots: workspace glob escapes the root: ${glob}`
+      );
     }
-    // Fail closed on unsupported glob syntax: silently skipping a
-    // sibling workspace would breach the EVERY-copy claim.
     if (glob.includes('**') || glob.includes('?') || glob.includes('{')) {
       throw new Error(
         `findInstalledRoots: unsupported workspace glob syntax: ${glob}`

@@ -3,8 +3,9 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
+import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
-import { resolveRoot } from './security-integrity-resolve-root';
 
 // Behavioral coverage for GHSA-r4xh-jqrq-34v2: smol-toml `parse()` spent
 // quadratic time in `parseKey`, which rescanned to the end of the
@@ -17,13 +18,21 @@ import { resolveRoot } from './security-integrity-resolve-root';
 const SMALL_LINES = 128_000;
 const LARGE_LINES = 256_000;
 
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(process.env.SMOL_TOML_ROOTS, 'SMOL_TOML_ROOTS') ??
+    findInstalledRoots('smol-toml')
+  );
+}
+
 describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
-  it('scales linearly on large flat documents', () => {
-    const root = resolveRoot(
-      'smol-toml',
-      process.env.SMOL_TOML_ROOT,
-      'SMOL_TOML_ROOT'
-    );
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('scales linearly on large flat documents in %s', (root) => {
     // Resolve the entry through the manifest, not a hardcoded dist
     // subpath, so a future build-layout rename cannot silently detach
     // this suite from the code it guards.

@@ -3,8 +3,9 @@
 import { EventEmitter } from 'node:events';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { loadCjs } from './security-integrity-load-cjs';
-import { resolveRoot } from './security-integrity-resolve-root';
+import { overrideRoots } from './security-integrity-override-roots';
 
 // Behavioral coverage for CVE-2026-87776: `compression` never released
 // its zlib stream when the client disconnected early, leaking native
@@ -75,20 +76,30 @@ function flushed(res: MockRes): Promise<void> {
   });
 }
 
-function loadCompression(): (options?: Record<string, unknown>) => Compression {
-  const root = resolveRoot(
-    'compression',
-    process.env.COMPRESSION_ROOT,
-    'COMPRESSION_ROOT'
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(process.env.COMPRESSION_ROOTS, 'COMPRESSION_ROOTS') ??
+    findInstalledRoots('compression')
   );
+}
+
+function loadCompression(
+  root: string
+): (options?: Record<string, unknown>) => Compression {
   return loadCjs(root);
 }
 
 const BODY = 'hello compression world\n'.repeat(200);
 
 describe('compression integrity (CVE-2026-87776)', () => {
-  it('falls back to raw writes when closed before streaming', () => {
-    const compression = loadCompression();
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('falls back to raw writes when closed before streaming in %s', (root) => {
+    const compression = loadCompression(root);
     const req: MockReq = {
       method: 'GET',
       headers: { 'accept-encoding': 'gzip' },
@@ -111,8 +122,10 @@ describe('compression integrity (CVE-2026-87776)', () => {
     expect(Buffer.concat(res.captured).toString()).toBe(BODY);
   });
 
-  it('still compresses when the response stays open', async () => {
-    const compression = loadCompression();
+  it.each(
+    candidateRoots()
+  )('still compresses when the response stays open in %s', async (root) => {
+    const compression = loadCompression(root);
     const req: MockReq = {
       method: 'GET',
       headers: { 'accept-encoding': 'gzip' },

@@ -197,4 +197,24 @@ describe('security-integrity-find-installed-roots', () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+
+  it.each([
+    '../shared',
+    '/abs/path',
+    'apps/../escape',
+  ])('throws on out-of-root workspace glob %s', (glob) => {
+    const ws = mkdtempSync(join(tmpdir(), 'ws-escape-fixture-'));
+    try {
+      writeFileSync(
+        join(ws, 'pnpm-workspace.yaml'),
+        `packages:\n  - "${glob}"\n`
+      );
+      mkdirSync(join(ws, 'apps', 'web'), { recursive: true });
+      expect(() => findInstalledRoots('dup', join(ws, 'apps', 'web'))).toThrow(
+        /escapes the root/
+      );
+    } finally {
+      rmSync(ws, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,8 +1,9 @@
 /** @vitest-environment node */
 
 import { describe, expect, it } from 'vitest';
+import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { loadCjs } from './security-integrity-load-cjs';
-import { resolveRoot } from './security-integrity-resolve-root';
+import { overrideRoots } from './security-integrity-override-roots';
 
 // Behavioral coverage for CVE-2026-93749: `source-map-js`
 // `SourceNode.fromStringWithSourceMap` added padding lines one by one up
@@ -36,18 +37,26 @@ interface SourceNodeModule {
 // of thousands of padding chunks), small enough to run in milliseconds.
 const FAR_LINE = 200_000;
 
-function loadModule(): SourceNodeModule {
-  const root = resolveRoot(
-    'source-map-js',
-    process.env.SOURCE_MAP_ROOT,
-    'SOURCE_MAP_ROOT'
+function candidateRoots(): string[] {
+  return (
+    overrideRoots(process.env.SOURCE_MAP_ROOTS, 'SOURCE_MAP_ROOTS') ??
+    findInstalledRoots('source-map-js')
   );
+}
+
+function loadModule(root: string): SourceNodeModule {
   return loadCjs(root);
 }
 
 describe('source-map-js integrity (CVE-2026-93749)', () => {
-  it('skips mappings far past the end of the code', () => {
-    const { SourceNode, SourceMapConsumer } = loadModule();
+  it('finds at least one installed copy to guard', () => {
+    expect(candidateRoots().length).toBeGreaterThan(0);
+  });
+
+  it.each(
+    candidateRoots()
+  )('skips mappings far past the end of the code in %s', (root) => {
+    const { SourceNode, SourceMapConsumer } = loadModule(root);
     const code = 'line one\nline two\n';
     const mappings = `${';'.repeat(FAR_LINE - 1)}AAAA`;
     const consumer = new SourceMapConsumer({
@@ -63,8 +72,10 @@ describe('source-map-js integrity (CVE-2026-93749)', () => {
     expect(node.toString()).toBe(code);
   });
 
-  it('still maps nearby generated lines', () => {
-    const { SourceNode, SourceMapConsumer } = loadModule();
+  it.each(
+    candidateRoots()
+  )('still maps nearby generated lines in %s', (root) => {
+    const { SourceNode, SourceMapConsumer } = loadModule(root);
     const code = 'line one\nline two\n';
     const consumer = new SourceMapConsumer({
       version: 3,

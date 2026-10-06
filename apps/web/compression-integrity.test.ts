@@ -1,8 +1,8 @@
 /** @vitest-environment node */
 
 import { EventEmitter } from 'node:events';
-import { gunzipSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import zlib, { gunzipSync } from 'node:zlib';
+import { describe, expect, it, vi } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { loadCjs } from './security-integrity-load-cjs';
 import { overrideRoots } from './security-integrity-override-roots';
@@ -120,6 +120,40 @@ describe('compression integrity (CVE-2026-87776)', () => {
     // Pre-fix the stream survived close and emitted gzip bytes instead.
     expect(res.getHeader('Content-Encoding')).toBeUndefined();
     expect(Buffer.concat(res.captured).toString()).toBe(BODY);
+  });
+
+  it.each(
+    candidateRoots()
+  )('destroys the live stream when closed mid-response in %s', (root) => {
+    const compression = loadCompression(root);
+    const req: MockReq = {
+      method: 'GET',
+      headers: { 'accept-encoding': 'gzip' },
+    };
+    const res = createRes();
+    res.setHeader('Content-Type', 'text/plain');
+    // Call-through spy: the middleware requires the same `zlib`
+    // builtin, so the created stream is observable without stubs.
+    const spy = vi.spyOn(zlib, 'createGzip');
+    try {
+      compression({ threshold: 0 })(req, res, () => {});
+      // The write fires writeHead, which runs the onHeaders listener
+      // and creates the gzip stream — close now arrives with a live
+      // stream, unlike the closed-before-creation case above.
+      res.write(BODY);
+      const results = spy.mock.results;
+      expect(results.length).toBe(1);
+      const stream = results[0]?.value as zlib.Gzip | undefined;
+      expect(stream).toBeDefined();
+      expect(stream?.destroyed).toBe(false);
+      res.emit('close');
+      // Fixed: onResponseClose runs destroy(stream), freeing the
+      // native handle. Pre-fix no close listener existed, so the
+      // stream survived and this assertion fails.
+      expect(stream?.destroyed).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it.each(

@@ -9,7 +9,16 @@ import { describe, expect, it } from 'vitest';
 // Version gates for the transitive-dependency security overrides in
 // `pnpm-workspace.yaml` (first patched release per advisory), plus
 // behavioral mirrors of the upstream regression tests where they are
-// deterministic without timing harnesses:
+// deterministic without timing harnesses.
+//
+// Known limitation (accepted): prosemirror-view, compression,
+// source-map-js, and smol-toml are guarded by version floor only. Their
+// exploits need DOM paste harnesses (prosemirror), HTTP socket mocks
+// (compression), crafted indexed maps (source-map-js), or timing
+// assertions (smol-toml quadratic parse) that are flaky or heavyweight
+// in unit CI; the floor plus lockfile verification is the guard, and a
+// re-released patched version with a behavioral regression would still
+// clear it. Revisit if upstream ships deterministic regression tests.
 //
 // - prosemirror-view 1.42.3 (CVE-2026-104847, paste XSS)
 // - fast-copy 3.1.0 (GHSA-jggr-w7fw-pc2j, stack exhaustion)
@@ -279,10 +288,14 @@ describe('security override pins', () => {
     } catch (error) {
       thrown = error;
     }
-    // 3.1.0 throws the named, catchable error instead of an uncontrolled
-    // native stack overflow.
+    // Per the fast-copy 3.1.0 CHANGELOG (backport of the 4.1.0 fix): a
+    // `maxDepth` option defaulting to 1000 bounds traversal, and nesting
+    // past it throws the named `MaxDepthExceededError` (extending
+    // RangeError) instead of an uncontrolled native stack overflow.
+    // Verified: 3.0.2 throws RangeError 'Maximum call stack size exceeded'.
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).name).toBe('MaxDepthExceededError');
+    expect((thrown as Error).message).toMatch(/maximum copy depth/i);
     expect(copy({ a: [1, 2] })).toEqual({ a: [1, 2] });
   });
 });

@@ -45,6 +45,21 @@ describe('product manufacturer identifiers', () => {
     ).toEqual({ gtin: '00012345678901', mpn: 'SECOND' });
   });
 
+  it('resolves conflicting valid aliases to the last value in attribute order', () => {
+    expect(
+      resolveVariantProductIdentifiers({
+        mpn: ' SECOND ',
+        ' MPN ': ' FIRST ',
+      })
+    ).toEqual({ mpn: 'FIRST' });
+    expect(
+      resolveVariantProductIdentifiers({
+        ' MPN ': ' FIRST ',
+        mpn: ' SECOND ',
+      })
+    ).toEqual({ mpn: 'SECOND' });
+  });
+
   it('keeps the last usable normalized string when later values are blank or non-string', () => {
     expect(
       resolveVariantProductIdentifiers({

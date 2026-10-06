@@ -12,6 +12,7 @@ import {
 } from '@/lib/gmc-feed-images';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveOfferFeedImages } from '@/lib/resolve-offer-feed-images';
+import { productManufacturerIdentifiers } from '@/lib/variant-product-identifiers';
 import { escapeXml } from '@/lib/xml-utils';
 import { FEED_CONSTANTS } from '../google-merchant/feed-constants';
 import { getFeedStockCount } from '../google-merchant/feed-stock';
@@ -22,6 +23,8 @@ const VALID_FACEBOOK_CONDITIONS = new Set([
   'used',
   'refurbished',
 ] as const);
+
+const { normalizeParentProductIdentifiers } = productManufacturerIdentifiers;
 
 function truncate(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
@@ -170,6 +173,9 @@ export function buildConditionOfferItems(args: {
       ? `${product.id}-${parentCondition}`
       : product.id;
 
+  // Base and offer rows carry parent identifiers only when they are
+  // usable non-blank strings; whitespace must not reach the feed.
+  const productIdentifiers = normalizeParentProductIdentifiers(product);
   const baseArgs = {
     additionalImagesXml,
     availability: stockCount > 0 ? 'in stock' : 'out of stock',
@@ -179,12 +185,12 @@ export function buildConditionOfferItems(args: {
     currency,
     description: buildFeedDescription(product),
     googleProductCategory: product.google_product_category,
-    gtin: product.gtin,
+    gtin: productIdentifiers.gtin,
     id: baseItemId,
     groupId: hasConditionOffers ? product.id : undefined,
     imageUrl: primaryImageUrl || '',
     link: productUrl,
-    mpn: product.mpn,
+    mpn: productIdentifiers.mpn,
     price: product.price,
     productType: getProductType(product),
     title: product.name,

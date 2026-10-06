@@ -24,6 +24,9 @@ function normalizeParentProductIdentifiers(
 /**
  * Resolve only usable string identifiers explicitly present on a variant.
  * Numeric values are ignored so parsing cannot erase leading-zero GTIN text.
+ * When several alias spellings of one field hold distinct valid values, the
+ * last valid value in attribute order wins; blank and non-string values
+ * never overwrite a resolved identifier.
  */
 function resolveVariantProductIdentifiers(
   attributes: Readonly<Record<string, unknown>> | null | undefined

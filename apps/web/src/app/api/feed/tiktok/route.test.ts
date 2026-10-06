@@ -281,4 +281,90 @@ describe('GET /api/feed/tiktok', () => {
     );
     consoleSpy.mockRestore();
   });
+
+  it('omits whitespace-only parent GTIN/MPN from catalog rows', async () => {
+    mockGetCachedGoogleMerchantFeedData.mockResolvedValue({
+      custom_domain: 'ogabassey.com',
+      slug: 'ogabassey',
+      products: [
+        {
+          id: 'product-1',
+          name: 'Redmi A7',
+          description: '<p>Budget phone</p>',
+          slug: 'redmi-a7',
+          price: 120_540,
+          brand: 'Redmi',
+          gtin: '   ',
+          mpn: '\t ',
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          category: 'Smartphones',
+        },
+      ],
+      imageManifest: {
+        'product-1': [
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+        ],
+      },
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest('/api/feed/tiktok?merchant_slug=ogabassey')
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).not.toContain('<gtin>');
+    expect(text).not.toContain('<mpn>');
+  });
+
+  it('trims padded parent GTIN/MPN in catalog rows', async () => {
+    mockGetCachedGoogleMerchantFeedData.mockResolvedValue({
+      custom_domain: 'ogabassey.com',
+      slug: 'ogabassey',
+      products: [
+        {
+          id: 'product-1',
+          name: 'Redmi A7',
+          description: '<p>Budget phone</p>',
+          slug: 'redmi-a7',
+          price: 120_540,
+          brand: 'Redmi',
+          gtin: '  0123456789012  ',
+          mpn: '  MPN-123  ',
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          category: 'Smartphones',
+        },
+      ],
+      imageManifest: {
+        'product-1': [
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+        ],
+      },
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest('/api/feed/tiktok?merchant_slug=ogabassey')
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain('<gtin>0123456789012</gtin>');
+    expect(text).toContain('<mpn>MPN-123</mpn>');
+  });
 });

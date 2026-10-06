@@ -863,13 +863,16 @@ describe('POST /api/payments/initialize', () => {
       expect(json.code).toBe('MERCHANT_MISMATCH');
     });
 
-    it('rejects starting a payment for a cancelled order', async () => {
+    it.each([
+      'cancelled',
+      'canceled',
+    ])('rejects starting a payment for a %s order', async (shipping_status) => {
       rpcResult = {
         data: [
           {
             merchant_id: MERCHANT_ID,
             total: 5000,
-            shipping_status: 'cancelled',
+            shipping_status,
           },
         ],
         error: null,

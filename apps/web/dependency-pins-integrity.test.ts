@@ -1,14 +1,10 @@
 /** @vitest-environment node */
 
 import { describe, expect, it } from 'vitest';
-import {
-  findInstalledRoots,
-  isAtLeast,
-  loadCjs,
-  parseVersion,
-  resolveRoot,
-  versionAt,
-} from './security-integrity-utils';
+import { loadCjs } from './security-integrity-load';
+import { resolveRoot, versionAt } from './security-integrity-resolve';
+import { findInstalledRoots } from './security-integrity-scan';
+import { isAtLeast, parseVersion } from './security-integrity-version';
 
 // Version gates for the transitive-dependency security overrides in
 // `pnpm-workspace.yaml` (first patched release per advisory), plus

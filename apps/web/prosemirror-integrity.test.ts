@@ -1,11 +1,8 @@
 /** @vitest-environment jsdom */
 
 import { describe, expect, it } from 'vitest';
-import {
-  installedRoot,
-  loadCjs,
-  resolveRoot,
-} from './security-integrity-utils';
+import { loadCjs } from './security-integrity-load';
+import { installedRoot, resolveRoot } from './security-integrity-resolve';
 
 // NOTE: model/state/view must all load through the SAME CJS module
 // instances: mixing the ESM and CJS builds trips ProseMirror's
@@ -18,26 +15,48 @@ import {
 // with malicious attributes (XSS). Fixed in 1.42.3 ("Run attribute
 // validators on attributes provided via slice context in clipboard
 // content"): invalid context is now dropped instead of instantiated.
+//
+// The exploit runs through the public `EditorView.pasteHTML` entry
+// point — the same `doPaste → parseFromClipboard` path a real paste
+// event takes — never through the dunder test export.
+
+interface PastedSlice {
+  content: {
+    firstChild: {
+      type: { name: string };
+      attrs: Record<string, unknown>;
+    } | null;
+  };
+}
+
+interface EditorState {
+  apply: (tr: unknown) => EditorState;
+}
+
+interface EditorViewInstance {
+  pasteHTML: (html: string, event?: unknown) => boolean;
+  updateState: (state: unknown) => void;
+  destroy: () => void;
+}
+
+// jsdom has no ClipboardEvent constructor; pasteHTML only forwards the
+// event to the handlePaste prop (unused here), so a stub preserves the
+// pasted-content behavior exactly.
+const PASTE_EVENT = { type: 'paste' };
 
 interface ProseMirrorView {
   EditorView: new (
     mount: HTMLElement,
-    props: { state: unknown; dispatchTransaction?: () => void }
-  ) => { destroy: () => void };
-  __parseFromClipboard: (
-    view: unknown,
-    text: string,
-    html: string | null,
-    plainText: boolean,
-    context: unknown
-  ) => {
-    content: {
-      firstChild: {
-        type: { name: string };
-        attrs: Record<string, unknown>;
-      } | null;
-    };
-  };
+    props: {
+      state: unknown;
+      dispatchTransaction: (tr: unknown) => void;
+      handlePaste: (
+        view: unknown,
+        event: unknown,
+        slice: PastedSlice
+      ) => boolean;
+    }
+  ) => EditorViewInstance;
 }
 
 function loadView(): ProseMirrorView {
@@ -54,15 +73,12 @@ interface ProseMirrorModel {
     spec: unknown
   ) => {
     node: (type: string, attrs: unknown, content?: unknown) => unknown;
-    text: (text: string) => unknown;
   };
 }
 
 interface ProseMirrorState {
   EditorState: {
-    create: (config: unknown) => {
-      selection: { $from: unknown };
-    };
+    create: (config: unknown) => EditorState;
   };
 }
 
@@ -105,63 +121,72 @@ function buildHarness(viewModule: ProseMirrorView) {
     },
     marks: {},
   });
-  const state = EditorState.create({
+  let current = EditorState.create({
     schema,
     doc: schema.node('doc', null, [schema.node('paragraph')]),
   });
+  // What the paste logic produced: the public handlePaste hook
+  // receives the parsed slice before selection fitting, exactly where
+  // the CVE fix drops invalid context. Returning true marks the paste
+  // handled so nothing is dispatched.
+  const captured: PastedSlice[] = [];
   const view = new viewModule.EditorView(document.createElement('div'), {
-    state,
-    dispatchTransaction: () => {},
+    state: current,
+    dispatchTransaction: (tr: unknown) => {
+      current = current.apply(tr);
+      view.updateState(current);
+    },
+    handlePaste: (_view: unknown, _event: unknown, slice: PastedSlice) => {
+      captured.push(slice);
+      return true;
+    },
   });
-  return { view, state };
+  const pastedSlice = (): PastedSlice => {
+    const [slice] = captured.splice(0, captured.length);
+    if (slice === undefined) {
+      throw new Error('paste produced no slice');
+    }
+    return slice;
+  };
+  return { view, pastedSlice };
 }
 
-function pasteSlice(
-  viewModule: ProseMirrorView,
-  view: unknown,
-  context: unknown,
-  selection: unknown
-) {
-  const html =
+function sliceHtml(context: unknown): string {
+  return (
     `<div data-pm-slice="0 0 ${JSON.stringify(context).replace(/"/g, '&quot;')}">` +
-    '<p>hi</p></div>';
-  return viewModule.__parseFromClipboard(view, '', html, false, selection);
+    '<p>hi</p></div>'
+  );
 }
 
 describe('prosemirror-view integrity (CVE-2026-104847)', () => {
-  it('drops slice context with invalid attributes', () => {
-    const viewModule = loadView();
-    const { view, state } = buildHarness(viewModule);
+  it('drops pasted slice context with invalid attributes', () => {
+    const { view, pastedSlice } = buildHarness(loadView());
     try {
-      const slice = pasteSlice(
-        viewModule,
-        view,
-        ['evilbox', { src: 'javascript:alert(1)' }],
-        state.selection.$from
+      const pasted = view.pasteHTML(
+        sliceHtml(['evilbox', { src: 'javascript:alert(1)' }]),
+        PASTE_EVENT
       );
+      expect(pasted).toBe(true);
       // Fixed: the validator rejects the payload, so the malicious
       // wrapper is dropped and the plain paragraph survives. Pre-fix the
       // slice arrived wrapped in evilbox carrying the javascript: src.
-      expect(slice.content.firstChild?.type.name).toBe('paragraph');
+      expect(pastedSlice().content.firstChild?.type.name).toBe('paragraph');
     } finally {
       view.destroy();
     }
   });
 
-  it('still honors slice context with valid attributes', () => {
-    const viewModule = loadView();
-    const { view, state } = buildHarness(viewModule);
+  it('still pastes slice context with valid attributes', () => {
+    const { view, pastedSlice } = buildHarness(loadView());
     try {
-      const slice = pasteSlice(
-        viewModule,
-        view,
-        ['evilbox', { src: 'https://ok.invalid/' }],
-        state.selection.$from
+      const pasted = view.pasteHTML(
+        sliceHtml(['evilbox', { src: 'https://ok.invalid/' }]),
+        PASTE_EVENT
       );
-      expect(slice.content.firstChild?.type.name).toBe('evilbox');
-      expect(slice.content.firstChild?.attrs).toMatchObject({
-        src: 'https://ok.invalid/',
-      });
+      expect(pasted).toBe(true);
+      const firstChild = pastedSlice().content.firstChild;
+      expect(firstChild?.type.name).toBe('evilbox');
+      expect(firstChild?.attrs).toMatchObject({ src: 'https://ok.invalid/' });
     } finally {
       view.destroy();
     }

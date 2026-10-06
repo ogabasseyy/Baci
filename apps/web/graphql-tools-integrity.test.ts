@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { findInstalledRoots } from './security-integrity-utils';
+import { findInstalledRoots } from './security-integrity-scan';
 
 // Regression coverage for CVE-2026-104852 (GHSA-7mx3-vvmw-hjmv):
 // `@graphql-tools/utils` `mergeDeep` allowed prototype pollution via

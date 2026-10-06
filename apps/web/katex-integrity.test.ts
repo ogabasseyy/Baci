@@ -2,8 +2,10 @@
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { resolveRoot as resolveSharedRoot } from './security-integrity-resolve';
+import { isAtLeast, parseVersion } from './security-integrity-version';
 
 // Regression coverage for CVE-2026-103923 (GHSA-238p-pmpm-9mq7):
 // KaTeX's Settings/Namespace lookups read `options[prop]`,
@@ -15,24 +17,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
 
-function resolveRoot(): { root: string; packageJsonPath: string } {
-  const override = process.env.KATEX_ROOT;
-  if (override !== undefined) {
-    // Verification hook only: point at an unpacked katex tarball to
-    // confirm this test fails on pre-fix releases. Refused under CI.
-    if (process.env.CI !== undefined) {
-      throw new Error(
-        'KATEX_ROOT is set in CI; refusing to test a non-installed copy'
-      );
-    }
-    console.warn(`[integrity-test] testing katex from: ${override}`);
-    return { root: override, packageJsonPath: join(override, 'package.json') };
-  }
-  const packageJsonPath = require.resolve('katex/package.json');
-  return { root: dirname(packageJsonPath), packageJsonPath };
-}
-
-const { root: packageRoot, packageJsonPath } = resolveRoot();
+const packageRoot = resolveSharedRoot(
+  'katex',
+  process.env.KATEX_ROOT,
+  'KATEX_ROOT'
+);
+const packageJsonPath = join(packageRoot, 'package.json');
 
 interface Katex {
   renderToString: (tex: string, options?: Record<string, unknown>) => string;
@@ -46,11 +36,18 @@ describe('katex integrity (CVE-2026-103923)', () => {
     expect('trust' in {}).toBe(false);
   });
 
-  it('resolves the patched 0.16.47 release', () => {
+  it('resolves katex at or above the patched 0.16.47 floor', () => {
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('0.16.47');
+    // A floor, not an exact pin: a future patched 0.16-line bump
+    // satisfies the security requirement without a coupled test edit.
+    // Fail-closed: an unpatched bump still fails the guard markers and
+    // the polluted-trust behavior cases below.
+    expect(typeof pkg.version).toBe('string');
+    expect(isAtLeast(parseVersion(pkg.version as string), [0, 16, 47])).toBe(
+      true
+    );
   });
 
   // String markers cover the two readable builds only. The minified

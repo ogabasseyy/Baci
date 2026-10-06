@@ -1,7 +1,8 @@
 /** @vitest-environment node */
 
 import { describe, expect, it } from 'vitest';
-import { loadCjs, resolveRoot } from './security-integrity-utils';
+import { loadCjs } from './security-integrity-load';
+import { resolveRoot } from './security-integrity-resolve';
 
 // Behavioral coverage for CVE-2026-93749: `source-map-js`
 // `SourceNode.fromStringWithSourceMap` added padding lines one by one up

@@ -1,8 +1,10 @@
 /** @vitest-environment node */
 
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveRoot } from './security-integrity-utils';
+import { packageMain } from './security-integrity-load';
+import { resolveRoot } from './security-integrity-resolve';
 
 // Behavioral coverage for GHSA-r4xh-jqrq-34v2: smol-toml `parse()` spent
 // quadratic time in `parseKey`, which rescanned to the end of the
@@ -21,8 +23,12 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
       process.env.SMOL_TOML_ROOT,
       'SMOL_TOML_ROOT'
     );
+    // Resolve the entry through the manifest, not a hardcoded dist
+    // subpath, so a future build-layout rename cannot silently detach
+    // this suite from the code it guards.
+    const entry = join(root, packageMain(root));
     const script = [
-      `const {parse} = require(${JSON.stringify(`${root}/dist/index.cjs`)})`,
+      `const {parse} = require(${JSON.stringify(entry)})`,
       `let doc = ''`,
       `for (let i = 0; i < ${LINES}; i++) doc += 'k' + i + ' = 1\\n'`,
       'const out = parse(doc)',

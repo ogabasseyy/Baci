@@ -23,7 +23,16 @@ describe('security-integrity-version', () => {
   });
 
   it('rejects malformed versions', () => {
-    for (const bad of ['1.9', '1.9.x', '', 'v1.9.0', '1.9.0.4']) {
+    for (const bad of [
+      '1.9',
+      '1.9.x',
+      '',
+      'v1.9.0',
+      '1.9.0.4',
+      '1.9.0foo',
+      '1.42.3 ',
+      '1..3',
+    ]) {
       expect(() => parseVersion(bad)).toThrow(/Unexpected version/);
     }
   });

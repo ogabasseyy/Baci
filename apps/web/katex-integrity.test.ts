@@ -70,13 +70,16 @@ describe('katex integrity (CVE-2026-103923)', () => {
   it.each(candidateRoots())('keeps own-property guards in %s', (root) => {
     for (const file of ['dist/katex.js', 'dist/katex.mjs'] as const) {
       const source = readFileSync(join(root, file), 'utf8');
-      // Backport-specific markers (absent 0.16.47-upstream, present patched).
+      // Backport-specific markers (absent 0.16.47-upstream, present
+      // patched), matched whitespace-normalized so a secure reformat
+      // cannot false-fail the gate.
+      const compact = source.replace(/\s+/g, '');
       for (const marker of [
-        'hasOwnProperty.call(schema, "default")',
-        'hasOwnProperty.call(options, prop)',
-        'hasOwnProperty.call(this.builtins, name)',
+        'hasOwnProperty.call(schema,"default")',
+        'hasOwnProperty.call(options,prop)',
+        'hasOwnProperty.call(this.builtins,name)',
       ]) {
-        expect(source).toContain(marker);
+        expect(compact).toContain(marker);
       }
     }
   });

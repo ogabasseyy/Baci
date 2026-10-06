@@ -20,7 +20,11 @@ import {
   resetCrashDiagnosticsForTest,
 } from '@/lib/crash-diagnostics';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
-import { mockActivateDueSavingsReminderNotification } from '@/test-support/root-layout-reminder-mock';
+import {
+  mockActivateDueSavingsReminderNotification,
+  mockBuildReminderScope,
+  mockCancelScopeSavingsReminders,
+} from '@/test-support/root-layout-reminder-mock';
 
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
 const mockInitializeAuth = jest.fn<() => Promise<void>>();
@@ -162,14 +166,21 @@ jest.mock('@/services/orders', () => ({
 jest.mock('@/services/savings-reminder-notifications', () => ({
   activateDueSavingsReminderNotification:
     mockActivateDueSavingsReminderNotification,
+  buildReminderScope: mockBuildReminderScope,
+  cancelScopeSavingsReminders: mockCancelScopeSavingsReminders,
 }));
 
 jest.mock('@/stores/auth-store', () => ({
   // useAuthStore is a Zustand-style mock: callable as a selector over
   // mockAuthState while also exposing getState() for direct store reads.
+  // subscribe mirrors the real zustand store API used by the queued
+  // create-order handler registered during layout init.
   useAuthStore: Object.assign(
     (selector: (state: unknown) => unknown) => selector(mockAuthState),
-    { getState: () => mockAuthState }
+    {
+      getState: () => mockAuthState,
+      subscribe: () => () => undefined,
+    }
   ),
 }));
 
@@ -216,6 +227,7 @@ describe('RootLayout storage boot gate', () => {
     resetRootLayoutBootstrapStateForTest();
     jest.clearAllMocks();
     mockActivateDueSavingsReminderNotification.mockResolvedValue(null);
+    mockCancelScopeSavingsReminders.mockResolvedValue(false);
     jest.useFakeTimers();
     mockInitializeAuth.mockResolvedValue(undefined);
     mockInitializeAdTrackingForStartup.mockResolvedValue(undefined);

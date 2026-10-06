@@ -3,8 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { loadCjs } from './security-integrity-load-cjs';
+import { overrideRoots } from './security-integrity-override-roots';
 import { parseVersion } from './security-integrity-parse-version';
-import { resolveRoot } from './security-integrity-resolve-root';
 import { versionAt } from './security-integrity-version-at';
 import { isAtLeast } from './security-integrity-version-floor';
 
@@ -78,12 +78,10 @@ describe('security override pins', () => {
     expect(isAtLeast(parseVersion('1.9.1-beta.1'), [1, 9, 0])).toBe(true);
   });
 
-  it('canonicalizes IPv4-mapped trust (proxy-addr CVE-2026-90711)', () => {
-    const root = resolveRoot(
-      'proxy-addr',
-      process.env.PROXY_ADDR_ROOT,
-      'PROXY_ADDR_ROOT'
-    );
+  it.each(
+    overrideRoots(process.env.PROXY_ADDR_ROOTS, 'PROXY_ADDR_ROOTS') ??
+      findInstalledRoots('proxy-addr')
+  )('canonicalizes IPv4-mapped trust in %s (proxy-addr CVE-2026-90711)', (root) => {
     const proxyaddr = loadCjs<ProxyAddr>(root);
     // Mirrors upstream 2.0.8 IPv4-mapped cases: a mapped socket must be
     // judged by its IPv4 identity, and mapped CIDRs must match IPv4.
@@ -121,12 +119,10 @@ describe('security override pins', () => {
     ).toBe('127.0.0.1');
   });
 
-  it('rejects over-deep copies with MaxDepthExceededError (fast-copy)', () => {
-    const root = resolveRoot(
-      'fast-copy',
-      process.env.FAST_COPY_ROOT,
-      'FAST_COPY_ROOT'
-    );
+  it.each(
+    overrideRoots(process.env.FAST_COPY_ROOTS, 'FAST_COPY_ROOTS') ??
+      findInstalledRoots('fast-copy')
+  )('rejects over-deep copies with MaxDepthExceededError in %s (fast-copy)', (root) => {
     const copy = loadCjs<{ default: FastCopy }>(root).default;
     let thrown: unknown;
     try {

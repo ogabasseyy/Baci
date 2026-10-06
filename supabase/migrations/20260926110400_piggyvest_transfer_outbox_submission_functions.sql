@@ -1,3 +1,10 @@
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'piggyvest_staging_submission_writer') THEN
+    CREATE ROLE piggyvest_staging_submission_writer NOLOGIN NOINHERIT NOSUPERUSER
+      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.require_piggyvest_transfer_submission_worker(
   p_expected_system_identifier text
 )

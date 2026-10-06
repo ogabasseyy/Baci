@@ -1,3 +1,10 @@
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'piggyvest_staging_ledger_worker') THEN
+    CREATE ROLE piggyvest_staging_ledger_worker NOLOGIN NOINHERIT NOSUPERUSER
+      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   restricted_role text;

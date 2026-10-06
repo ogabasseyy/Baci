@@ -123,6 +123,7 @@ tracking:
   - 'apps/web/src/lib/shipping/matches-gigl-provider-rate.ts'
   - 'apps/web/src/lib/shipping/merchant-location.ts'
   - 'apps/web/src/lib/shipping/merchant-sender-comparison.ts'
+  - 'apps/web/src/lib/shipping/merchant-rates/subdivisions.ts'
   - 'apps/web/src/lib/shipping/order-shipment-booking-error.ts'
   - 'apps/web/src/lib/shipping/order-shipment-booking-utils.ts'
   - 'apps/web/src/lib/shipping/package-dimensions.ts'

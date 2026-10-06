@@ -57,7 +57,7 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260925140000_piggyvest_staging_scoped_wallet_mapping_read.sql',
-    sha256: 'd0ecd30a46b2056e6fdb8d2aeab376ebc6c1e69cd7dd566f6c4624f415070ac1',
+    sha256: '693ce3b50f5ca353ab3963c0af20d105759a845ab2737aad892142796ac05118',
   },
   {
     repositoryPath:
@@ -67,7 +67,7 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260926110100_piggyvest_transfer_outbox_finality_grants.sql',
-    sha256: 'bfacf6dc193fc847bb74d51256314d669d5c71d3280b6cadc3fc71f2e0624152',
+    sha256: 'd455549c8a1e51a82492dfad5c0cad5d98ec73ee49143a4c159d2eb2fa4aaac6',
   },
   {
     repositoryPath:
@@ -82,7 +82,7 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20260926110400_piggyvest_transfer_outbox_submission_functions.sql',
-    sha256: 'b8476094940f404e190257c0d8ba80739076fe6bf20ce631cc7c810a90d6c777',
+    sha256: '1ce3eb890f0dffb931842e0b5f6a6be9e1dc47d6255f177bfb80b8653de16969',
   },
   {
     repositoryPath:

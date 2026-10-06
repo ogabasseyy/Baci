@@ -1,5 +1,12 @@
 BEGIN;
 
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'piggyvest_staging_provisioner') THEN
+    CREATE ROLE piggyvest_staging_provisioner NOLOGIN NOINHERIT NOSUPERUSER
+      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END $$;
+
 CREATE FUNCTION piggyvest_staging.read_scoped_wallet_mapping(
   p_integration_id uuid,
   p_merchant_id uuid,

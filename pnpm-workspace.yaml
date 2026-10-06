@@ -323,6 +323,13 @@ overrides:
   # uncontrolled-resource-consumption advisory.
   "@ai-sdk/provider-utils@>=3 <3.0.28": "3.0.28"
   "@ai-sdk/provider-utils@>=4 <4.0.33": "4.0.33"
+  # Pin @fastify/busboy 3.2.2 for CVE-2026-19481 / CVE-2026-19484 /
+  # CVE-2026-74866 (CRLF injection via Content-Disposition filename/name).
+  # (@whatwg-node/node-fetch transitive).
+  "@fastify/busboy": "3.2.2"
+  # Pin @a2ui/web_core 0.10.2 for CVE-2026-10032
+  # (@copilotkit/a2ui-renderer transitive).
+  "@a2ui/web_core": "0.10.2"
 patchedDependencies:
   # Backport the upstream 0.5.0 linear-time fallback decoder to CJS 0.2.2: fixes the
   # exponential-decoding DoS while keeping query-string@7 (expo-router) compatible.

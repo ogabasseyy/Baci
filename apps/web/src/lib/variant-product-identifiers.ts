@@ -32,6 +32,8 @@ function normalizeParentProductIdentifiers(
 /**
  * Resolve only usable string identifiers explicitly present on a variant.
  * Numeric values are ignored so parsing cannot erase leading-zero GTIN text.
+ * Accepted keys are case/whitespace/hyphen variants of `gtin` and `mpn`
+ * only; `ean`/`upc`/`isbn` keys are not resolved (a possible follow-up).
  * When several alias spellings of one field hold distinct valid values, the
  * last valid value in attribute order wins; blank and non-string values
  * never overwrite a resolved identifier.

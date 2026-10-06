@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  escapeHtml,
   generateCollectionPageSchema,
   generateProductSchema,
 } from './seo-utils';
@@ -131,6 +132,35 @@ describe('generateProductSchema identifiers', () => {
     expect(variant).not.toHaveProperty('mpn');
     expect(numericOnlyVariant).not.toHaveProperty('gtin');
     expect(numericOnlyVariant).not.toHaveProperty('mpn');
+  });
+
+  it('escapes markup in variant identifiers like CollectionPage entries', () => {
+    const schema = generateProductSchema(
+      makeProduct({
+        variants: [
+          {
+            id: 'variant-markup',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            attributes: {
+              gtin: 'A</script>B',
+              mpn: 'M&N',
+            },
+            stock_quantity: 1,
+          },
+        ],
+      }),
+      'TestStore',
+      'NGN',
+      'NG'
+    );
+    const [variant] = schema.hasVariant as Record<string, unknown>[];
+
+    expect(variant).toMatchObject({
+      gtin: escapeHtml('A</script>B'),
+      mpn: escapeHtml('M&N'),
+    });
+    expect(variant?.gtin).not.toContain('</script>');
   });
 
   it('normalizes CollectionPage parent identifiers and omits blank values', () => {

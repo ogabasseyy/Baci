@@ -17,10 +17,31 @@ const require = createRequire(import.meta.url);
 // `./package.json`): `@a2ui/web_core/v0_9` -> `<root>/src/v0_9/index.js`.
 const webCoreEntry = require.resolve('@a2ui/web_core/v0_9');
 const resolvedRoot = dirname(dirname(dirname(webCoreEntry)));
-// Verification hook only: point at an unpacked @a2ui/web_core tarball to
-// confirm this test fails on pre-fix releases. Unset in normal runs.
-const webCoreRoot = process.env.A2UI_WEB_CORE_ROOT ?? resolvedRoot;
-const webCorePackageJsonPath = join(webCoreRoot, 'package.json');
+
+function resolveRoot(): { root: string; packageJsonPath: string } {
+  const override = process.env.A2UI_WEB_CORE_ROOT;
+  if (override !== undefined) {
+    // Verification hook only: point at an unpacked @a2ui/web_core tarball
+    // to confirm this test fails on pre-fix releases. Refused under CI so
+    // a green run always guards the workspace-resolved dependency.
+    if (process.env.CI !== undefined) {
+      throw new Error(
+        'A2UI_WEB_CORE_ROOT is set in CI; refusing to test a non-installed copy'
+      );
+    }
+    console.warn(
+      `[integrity-test] testing web_core from override: ${override}`
+    );
+    return { root: override, packageJsonPath: join(override, 'package.json') };
+  }
+  return {
+    root: resolvedRoot,
+    packageJsonPath: join(resolvedRoot, 'package.json'),
+  };
+}
+
+const { root: webCoreRoot, packageJsonPath: webCorePackageJsonPath } =
+  resolveRoot();
 
 // First release containing the openUrl protocol allowlist.
 const FIRST_FIXED = [0, 10, 2] as const;
@@ -74,19 +95,32 @@ async function loadWebCore() {
   // test must be updated alongside the override bump.
   const moduleUrl = (relativePath: string): string =>
     pathToFileURL(join(webCoreRoot, relativePath)).href;
-  const [functionsModule, dataModelModule, dataContextModule, catalogModule] =
-    (await Promise.all([
-      import(moduleUrl('src/v0_9/basic_catalog/functions/basic_functions.js')),
-      import(moduleUrl('src/v0_9/state/data-model.js')),
-      import(moduleUrl('src/v0_9/rendering/data-context.js')),
-      import(moduleUrl('src/v0_9/catalog/types.js')),
-    ])) as [
-      { BASIC_FUNCTIONS: unknown[] },
-      { DataModel: DataModelConstructor },
-      { DataContext: DataContextConstructor },
-      { Catalog: CatalogConstructor },
-    ];
-  return { functionsModule, dataModelModule, dataContextModule, catalogModule };
+  const [
+    functionsModule,
+    dataModelModule,
+    dataContextModule,
+    catalogModule,
+    errorsModule,
+  ] = (await Promise.all([
+    import(moduleUrl('src/v0_9/basic_catalog/functions/basic_functions.js')),
+    import(moduleUrl('src/v0_9/state/data-model.js')),
+    import(moduleUrl('src/v0_9/rendering/data-context.js')),
+    import(moduleUrl('src/v0_9/catalog/types.js')),
+    import(moduleUrl('src/v0_9/errors.js')),
+  ])) as [
+    { BASIC_FUNCTIONS: unknown[] },
+    { DataModel: DataModelConstructor },
+    { DataContext: DataContextConstructor },
+    { Catalog: CatalogConstructor },
+    { A2uiExpressionError: new (...args: never[]) => Error },
+  ];
+  return {
+    functionsModule,
+    dataModelModule,
+    dataContextModule,
+    catalogModule,
+    errorsModule,
+  };
 }
 
 describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
@@ -105,6 +139,7 @@ describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
       dataModelModule,
       dataContextModule,
       catalogModule,
+      errorsModule,
     } = await loadWebCore();
     const catalog = new catalogModule.Catalog(
       'integrity',
@@ -149,12 +184,14 @@ describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
         } catch (error) {
           thrown = error;
         }
-        // Security property: the URL is rejected (throws) and never
-        // opened. Deliberately not asserting the exact upstream error
-        // wording so a message reword that keeps the allowlist stays green.
-        expect(thrown instanceof Error, `Expected "${input}" to throw`).toBe(
-          true
-        );
+        // Security property: the openUrl validator itself rejects the
+        // URL (A2uiExpressionError, not an incidental TypeError from the
+        // mock) and the URL is never opened. The error type — not its
+        // exact wording — keeps this robust to upstream message rewords.
+        expect(
+          thrown instanceof errorsModule.A2uiExpressionError,
+          `Expected "${input}" to throw A2uiExpressionError`
+        ).toBe(true);
         expect(openedUrl).toBe('');
       }
 

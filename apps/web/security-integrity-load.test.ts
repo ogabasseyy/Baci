@@ -26,6 +26,36 @@ beforeAll(() => {
   const bare = join(fixture, 'bare');
   mkdirSync(bare, { recursive: true });
   writeFileSync(join(bare, 'package.json'), JSON.stringify({ name: 'bare' }));
+  const exportsString = join(fixture, 'exports-string');
+  mkdirSync(join(exportsString, 'lib'), { recursive: true });
+  writeFileSync(
+    join(exportsString, 'package.json'),
+    JSON.stringify({ name: 'exports-string', exports: './lib/entry.cjs' })
+  );
+  writeFileSync(
+    join(exportsString, 'lib', 'entry.cjs'),
+    'module.exports = { marker: 7 };'
+  );
+  const exportsConditions = join(fixture, 'exports-conditions');
+  mkdirSync(join(exportsConditions, 'lib'), { recursive: true });
+  writeFileSync(
+    join(exportsConditions, 'package.json'),
+    JSON.stringify({
+      name: 'exports-conditions',
+      exports: {
+        '.': { import: './lib/entry.mjs', require: './lib/entry.cjs' },
+      },
+    })
+  );
+  const esmOnly = join(fixture, 'esm-only');
+  mkdirSync(esmOnly, { recursive: true });
+  writeFileSync(
+    join(esmOnly, 'package.json'),
+    JSON.stringify({
+      name: 'esm-only',
+      exports: { '.': { import: './lib/entry.mjs' } },
+    })
+  );
 });
 
 afterAll(() => {
@@ -39,6 +69,27 @@ describe('security-integrity-load', () => {
 
   it('defaults to index.js without a main field', () => {
     expect(packageMain(join(fixture, 'bare'))).toBe('index.js');
+  });
+
+  it('resolves a string exports entry', () => {
+    expect(packageMain(join(fixture, 'exports-string'))).toBe(
+      './lib/entry.cjs'
+    );
+    expect(
+      loadCjs<{ marker: number }>(join(fixture, 'exports-string'))
+    ).toEqual({ marker: 7 });
+  });
+
+  it('prefers the require condition of a conditional export', () => {
+    expect(packageMain(join(fixture, 'exports-conditions'))).toBe(
+      './lib/entry.cjs'
+    );
+  });
+
+  it('throws an explicit error for ESM-only exports', () => {
+    expect(() => packageMain(join(fixture, 'esm-only'))).toThrow(
+      /Cannot resolve a CJS entry/
+    );
   });
 
   it('loads the main entry from a root', () => {

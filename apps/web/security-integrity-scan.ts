@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Enumerate EVERY installed copy of a package: the hoisted layout's
@@ -144,5 +144,8 @@ export function overrideRoots(
     );
   }
   console.warn(`[integrity-test] testing from ${envName}: ${envVar}`);
-  return envVar.split(':').filter((root) => root.length > 0);
+  // path.delimiter, not a hardcoded colon: ':' is a Windows drive-letter
+  // component, so splitting on it would corrupt absolute override lists
+  // on Windows.
+  return envVar.split(delimiter).filter((root) => root.length > 0);
 }

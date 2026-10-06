@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { findInstalledRoots, overrideRoots } from './security-integrity-scan';
 
@@ -142,6 +142,11 @@ describe('overrideRoots', () => {
 
   it('splits a colon-separated list', () => {
     expect(overrideRoots('/a:/b', 'GTU_ROOTS')).toEqual(['/a', '/b']);
+  });
+
+  it('splits on the platform path delimiter', () => {
+    const joined = ['/a', '/b'].join(delimiter);
+    expect(overrideRoots(joined, 'GTU_ROOTS')).toEqual(['/a', '/b']);
   });
 
   it('refuses overrides under CI', () => {

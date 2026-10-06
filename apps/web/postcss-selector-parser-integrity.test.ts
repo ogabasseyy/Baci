@@ -74,10 +74,16 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     candidateRoots()
   )('keeps the linear-time membership backport applied in %s', (root) => {
     const source = readFileSync(join(root, 'dist/parser.js'), 'utf8');
-    expect(source).toContain('var classIndexes = new Set(hasClass);');
-    expect(source).toContain('var idIndexes = new Set(hasId);');
-    expect(source).toContain('if (classIndexes.has(ind)) {');
-    expect(source).toContain('} else if (idIndexes.has(ind)) {');
+    // Markers match whitespace-normalized code, not exact source text,
+    // so a secure reformat (spacing, line breaks) that preserves the
+    // Set-based membership still passes. Identifier-level renames
+    // intentionally still fail: they change the backport shape the
+    // patch pins and deserve re-review.
+    const compact = source.replace(/\s+/g, '');
+    expect(compact).toContain('newSet(hasClass)');
+    expect(compact).toContain('newSet(hasId)');
+    expect(compact).toContain('classIndexes.has(ind)');
+    expect(compact).toContain('idIndexes.has(ind)');
     // Negative markers run against comment-stripped code so a future
     // upstream comment mentioning indexOf cannot false-fail the suite.
     const codeOnly = source

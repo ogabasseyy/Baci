@@ -1,15 +1,6 @@
 import z from 'zod';
+import { BLOG_INTENTS } from '@/config/blog-intent';
 import { sanitizeHtml } from '@/lib/sanitize';
-
-export const BLOG_INTENTS = [
-  'news',
-  'comparison',
-  'repair-guide',
-  'buying-guide',
-  'platform',
-  'unknown',
-] as const;
-export type BlogIntent = (typeof BLOG_INTENTS)[number];
 
 const featuredImageVariantsSchema = z
   .object({

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { BLOG_INTENTS } from './blog';
+import { BLOG_INTENTS } from '@/config/blog-intent';
 
 it('keeps the intent vocabulary aligned with the database constraint', () => {
   // When the vocabulary changes, add a follow-up migration and point this

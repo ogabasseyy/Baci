@@ -1,4 +1,4 @@
-import type { BlogIntent } from '@/lib/validations/blog';
+import type { BlogIntent } from '@/config/blog-intent';
 
 export type PlatformAdminBlogStatus = 'draft' | 'published' | 'archived';
 

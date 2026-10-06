@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BLOG_INTENTS } from '@/lib/validations/blog';
+import { BLOG_INTENTS } from '@/config/blog-intent';
 import type { PlatformAdminBlogFormState } from './blog-types';
 
 export function BlogEditorialMetadataFields({

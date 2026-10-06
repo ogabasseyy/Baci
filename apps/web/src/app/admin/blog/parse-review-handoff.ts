@@ -1,12 +1,9 @@
+import { BLOG_INTENTS, type BlogIntent } from '@/config/blog-intent';
 import { MAX_REVIEW_HANDOFF_CONTENT_LENGTH } from '@/config/blog-review-handoff';
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
 import { generateSlug } from '@/lib/blog-utils';
 import { sanitizeHtml } from '@/lib/sanitize';
-import {
-  BLOG_INTENTS,
-  type BlogIntent,
-  blogPostSchema,
-} from '@/lib/validations/blog';
+import { blogPostSchema } from '@/lib/validations/blog';
 import type { PlatformAdminBlogFormState } from './blog-types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -26,6 +23,43 @@ function isHttpsUrl(value: unknown): value is string {
   }
 }
 
+const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
+const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
+const MEDIA_ATTRIBUTE_PATTERN = /([\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
+
+function mediaTagUrls(tag: string): string[] {
+  const urls: string[] = [];
+  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
+    const name = match[1].toLowerCase();
+    const raw = match[2];
+    const value =
+      raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
+    if (name === 'src') {
+      if (value) urls.push(value);
+    } else if (name === 'srcset') {
+      for (const candidate of value.split(',')) {
+        const candidateUrl = candidate.trim().split(/\s+/, 1)[0];
+        if (candidateUrl) urls.push(candidateUrl);
+      }
+    }
+  }
+  return urls;
+}
+
+function isImportableMediaUrl(url: string): boolean {
+  // data: URIs render inline, so only network URLs must be HTTPS.
+  return url.startsWith('data:') || isHttpsUrl(url);
+}
+
+function hasReadableContent(content: string): boolean {
+  if (content.match(MEDIA_TAG_PATTERN)) return true;
+  const text = content
+    .replace(/<[^>]*>/gu, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+  return text.length > 0;
+}
+
 export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (
     !isRecord(value) ||
@@ -42,7 +76,7 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (rawContent.length > MAX_REVIEW_HANDOFF_CONTENT_LENGTH) {
     throw new Error('Article content exceeds the import limit');
   }
-  if (/\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u.test(rawContent)) {
+  if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(rawContent)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
   const content = sanitizeHtml(rawContent);
@@ -53,6 +87,25 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     throw new Error(
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
+  }
+  // Sanitization decodes HTML entities, which can reveal placeholders hidden
+  // from the raw-text check above (e.g. &#123;&#123;INLINE_IMAGE_1&#125;&#125;).
+  if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(content)) {
+    throw new Error('The article has unresolved inline image placeholders');
+  }
+  if (!hasReadableContent(content)) {
+    throw new Error('Article content has no readable text or images');
+  }
+  const hasBrokenMedia = (content.match(MEDIA_TAG_PATTERN) ?? []).some(
+    (tag) => {
+      const urls = mediaTagUrls(tag);
+      return (
+        urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url))
+      );
+    }
+  );
+  if (hasBrokenMedia) {
+    throw new Error('Imported inline images must use HTTPS URLs');
   }
 
   const featuredImage = isRecord(value.featured_image)

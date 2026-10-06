@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { MAX_REVIEW_HANDOFF_FILE_SIZE } from '@/config/blog-review-handoff';
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { parseReviewHandoff } from './parse-review-handoff';
 
-const MAX_FILE_SIZE = 2_000_000;
 const useIsomorphicLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -30,7 +30,7 @@ export function BlogReviewHandoffImporter({
   const handleFile = async (file?: File) => {
     if (!file || disabled) return;
     const generation = ++importGenerationRef.current;
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_REVIEW_HANDOFF_FILE_SIZE) {
       setMessage('The review file is larger than 2 MB (2,000,000 bytes).');
       return;
     }

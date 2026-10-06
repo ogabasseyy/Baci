@@ -977,6 +977,8 @@ export type Database = {
           featured_image_width: number | null;
           focus_keyword: string | null;
           id: string;
+          intent: string | null;
+          intent_source: string | null;
           is_ai_generated: boolean | null;
           is_platform_post: boolean | null;
           keywords: string[] | null;
@@ -1012,6 +1014,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;
@@ -1047,6 +1051,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;

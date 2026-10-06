@@ -1,37 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-
-// Resolve a CJS entry from an exports node: plain strings, condition
-// maps (preferring require/node/default), and fallback arrays, with
-// one extra nesting level for shapes like {node: {require: ...}}.
-// Returns null when no CJS condition exists so the caller fails closed.
-function resolveExportTarget(node: unknown, depth: number): string | null {
-  if (typeof node === 'string') {
-    return node;
-  }
-  if (depth > 2 || node === null || typeof node !== 'object') {
-    return null;
-  }
-  if (Array.isArray(node)) {
-    for (const element of node) {
-      const resolved = resolveExportTarget(element, depth + 1);
-      if (resolved !== null) {
-        return resolved;
-      }
-    }
-    return null;
-  }
-  const conditions = node as Record<string, unknown>;
-  for (const key of ['require', 'node', 'default']) {
-    if (key in conditions) {
-      const resolved = resolveExportTarget(conditions[key], depth + 1);
-      if (resolved !== null) {
-        return resolved;
-      }
-    }
-  }
-  return null;
-}
+import { resolveExportTarget } from './security-integrity-resolve-export-target';
 
 export function packageMain(root: string): string {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
@@ -51,7 +20,11 @@ export function packageMain(root: string): string {
       typeof pkg.exports === 'string' || Array.isArray(pkg.exports)
         ? pkg.exports
         : ((pkg.exports as Record<string, unknown>)?.['.'] ?? pkg.exports);
-    const resolved = resolveExportTarget(target, 0);
+    const resolved = resolveExportTarget(target, [
+      'require',
+      'node',
+      'default',
+    ]);
     if (resolved !== null) {
       return resolved;
     }

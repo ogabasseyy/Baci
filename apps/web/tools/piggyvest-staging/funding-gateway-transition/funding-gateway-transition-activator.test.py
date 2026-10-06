@@ -518,5 +518,29 @@ class ActivatorIoTest(unittest.TestCase):
             activator.main(['--check', '/tmp'])
 
 
+class ActivatorFragmentPinTest(unittest.TestCase):
+    def test_pinned_fragments_verify(self):
+        self.assertEqual(len(activator.ACTIVATOR_FRAGMENT_SHA256), 4)
+        for name in activator.ACTIVATOR_FRAGMENT_SHA256:
+            content, filename = activator._fragment_bytes(name)
+            self.assertTrue(content)
+            self.assertTrue(filename.endswith(name))
+
+    def test_unpinned_fragment_name_is_refused(self):
+        with self.assertRaisesRegex(activator.Refused, 'not pinned'):
+            activator._fragment_bytes(
+                'funding-gateway-transition-activator-evil.py'
+            )
+
+    def test_tampered_fragment_bytes_are_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tampered = Path(tmp) / 'fragment.py'
+            tampered.write_bytes(b'tampered')
+            with self.assertRaisesRegex(activator.Refused, 'failed verification'):
+                activator._fragment_bytes(
+                    'funding-gateway-transition-activator-shared.py', tampered
+                )
+
+
 if __name__ == '__main__':
     unittest.main()

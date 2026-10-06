@@ -76,6 +76,10 @@ def load_bundle(root: Path, manifest_digest: str) -> tuple[dict[str, str], dict[
         'server.cjs', 'config.json', 'database.sql', 'gateway.py',
         'engagement_gateway.py', 'gateway_receipt.py',
         'funding-gateway-transition-activator.py',
+        'funding-gateway-transition-activator-shared.py',
+        'funding-gateway-transition-activator-package.py',
+        'funding-gateway-transition-activator-preflight.py',
+        'funding-gateway-transition-activator-install.py',
         'wallet-gateway-transition-installer.py',
         'funding-gateway-transition-candidate.py',
     }

@@ -53,7 +53,7 @@ class PackageTests(unittest.TestCase):
             server = root / 'server.cjs'
             server.write_bytes(b'test-server')
             dependencies = root / 'apps/web/tools/piggyvest-staging'
-            for name in ('funding-gateway-transition/funding-gateway-transition-activator.py', 'funding-gateway-transition/funding-gateway-transition-candidate.py', 'wallet-route-repair/wallet-gateway-transition-installer.py'):
+            for name in ('funding-gateway-transition/funding-gateway-transition-activator.py', 'funding-gateway-transition/funding-gateway-transition-activator-shared.py', 'funding-gateway-transition/funding-gateway-transition-activator-package.py', 'funding-gateway-transition/funding-gateway-transition-activator-preflight.py', 'funding-gateway-transition/funding-gateway-transition-activator-install.py', 'funding-gateway-transition/funding-gateway-transition-candidate.py', 'wallet-route-repair/wallet-gateway-transition-installer.py'):
                 target = dependencies / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(b'test-helper')

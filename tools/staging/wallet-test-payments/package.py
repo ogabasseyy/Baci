@@ -75,6 +75,10 @@ def prepare(profile_path, server_path, legacy_root, output, recover_nginx=False)
         'engagement_gateway.py': (HERE.parent / 'savings-engagement/gateway.py').read_bytes(),
         'gateway_receipt.py': (HERE.parent / 'savings-engagement/gateway_receipt.py').read_bytes(),
         'funding-gateway-transition-activator.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-activator.py').read_bytes(),
+        'funding-gateway-transition-activator-shared.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-activator-shared.py').read_bytes(),
+        'funding-gateway-transition-activator-package.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-activator-package.py').read_bytes(),
+        'funding-gateway-transition-activator-preflight.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-activator-preflight.py').read_bytes(),
+        'funding-gateway-transition-activator-install.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-activator-install.py').read_bytes(),
         'funding-gateway-transition-candidate.py': (dependencies / 'funding-gateway-transition/funding-gateway-transition-candidate.py').read_bytes(),
         'wallet-gateway-transition-installer.py': (dependencies / 'wallet-route-repair/wallet-gateway-transition-installer.py').read_bytes(),
     }

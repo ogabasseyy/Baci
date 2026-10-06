@@ -1,5 +1,5 @@
 import { marked } from 'marked';
-import { isHttpsUrl } from '@/lib/blog-utils';
+import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
@@ -45,13 +45,20 @@ function stripMarkupText(value: string): string {
   return value.replace(/<[^>]*>/gu, '').trim();
 }
 
+// A brace followed by a quote opens a JSON object (allowing whitespace), as
+// opposed to `{`-led prose such as `{Note}: ...`.
+const LEADING_JSON_OBJECT_PATTERN = /^\{\s*"/u;
+
 function isJsonShapedText(value: string): boolean {
   const trimmed = value.trimStart();
-  // The editor parses `{`-led content as structured data, so any object
-  // shape is rejected. `[` alone is ordinary prose or markdown (links,
-  // markers); only content that actually parses as a JSON array is barred.
-  if (trimmed.startsWith('{')) return true;
-  if (!trimmed.startsWith('[')) return false;
+  // Both consumers (BlogEditor, BlogContentRenderer) attempt JSON.parse and
+  // fall back to ordinary content on failure, so full-parseable content is
+  // barred while `{`-led prose ({Note}: ...) and `[`-led markdown (links,
+  // markers) pass through. A `{"`-led prefix is still rejected even with
+  // trailing garbage: it smells like a mangled JSON document, so fail fast
+  // instead of importing it as body text.
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+  if (LEADING_JSON_OBJECT_PATTERN.test(trimmed)) return true;
   try {
     JSON.parse(trimmed);
     return true;
@@ -69,7 +76,13 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
     // and sanitize as before. Rendering first also preserves markdown code
     // examples: sanitizing the raw source would delete disallowed HTML inside
     // fenced blocks before marked can escape it as code.
-    if (stripMarkupText(rendered) === stripMarkupText(rawContent)) {
+    // Indented code blocks render to text-identical HTML (<pre> adds no text),
+    // so text comparison alone would store raw markdown that the renderer
+    // displays as plain text instead of the code block the editor shows.
+    if (
+      !/<pre[\s>]/i.test(rendered) &&
+      stripMarkupText(rendered) === stripMarkupText(rawContent)
+    ) {
       return sanitizedRaw;
     }
     return sanitizeHtml(rendered);

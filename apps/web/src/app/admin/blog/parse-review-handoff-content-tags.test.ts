@@ -69,6 +69,24 @@ it.each([
 });
 
 it.each([
+  '{Note}: review this section',
+  '{TODO} fix the intro',
+])('accepts brace-led prose that is not JSON: %s', (lead) => {
+  expect(() =>
+    parseReviewHandoff({ ...handoff, content_html: `${lead}\n\nBody text` })
+  ).not.toThrow();
+});
+
+it('preserves a leading indented code block', () => {
+  expect(
+    parseReviewHandoff({
+      ...handoff,
+      content_html: '    const x = 1;\n\nBody text here',
+    }).content
+  ).toContain('<code>');
+});
+
+it.each([
   '[1, 2]',
   '[]',
 ])('rejects content that parses as a JSON array: %s', (content_html) => {

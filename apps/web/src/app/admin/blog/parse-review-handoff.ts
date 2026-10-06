@@ -1,7 +1,8 @@
 import { BLOG_INTENTS, type BlogIntent } from '@/config/blog-intent';
 import { MAX_REVIEW_HANDOFF_CONTENT_LENGTH } from '@/config/blog-review-handoff';
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
-import { generateSlug, isHttpsUrl } from '@/lib/blog-utils';
+import { generateSlug } from '@/lib/blog-utils';
+import { isHttpsUrl } from '@/lib/is-https-url';
 import { blogPostSchema } from '@/lib/validations/blog';
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { validateImportedContent } from './review-handoff-content';
@@ -12,14 +13,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const NULL_BYTE = String.fromCharCode(0);
 
-function readText(value: unknown): string {
+function readRawText(value: unknown): string {
   if (typeof value !== 'string') return '';
   // PostgreSQL text rejects null bytes, so fail fast instead of importing a
   // draft that can never save.
   if (value.includes(NULL_BYTE)) {
     throw new Error('Imported text must not contain null bytes');
   }
-  return value.trim();
+  return value;
+}
+
+function readText(value: unknown): string {
+  return readRawText(value).trim();
 }
 
 export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
@@ -31,8 +36,11 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   }
 
   const title = readText(value.title);
-  const rawContent = readText(value.content_html);
-  if (!title || !rawContent) {
+  // Content keeps its original bytes into markdown rendering so leading
+  // indentation (indented code blocks) survives; only the required/empty
+  // check uses a trimmed copy.
+  const rawContent = readRawText(value.content_html);
+  if (!title || !rawContent.trim()) {
     throw new Error('A title and article content are required');
   }
   if (rawContent.length > MAX_REVIEW_HANDOFF_CONTENT_LENGTH) {

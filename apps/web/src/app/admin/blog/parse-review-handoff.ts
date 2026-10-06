@@ -37,7 +37,7 @@ function mediaTagUrls(tag: string): string[] {
     if (name === 'src') {
       if (value) urls.push(value);
     } else if (name === 'srcset') {
-      for (const candidate of value.split(',')) {
+      for (const candidate of splitSrcsetCandidates(value)) {
         const candidateUrl = candidate.trim().split(/\s+/, 1)[0];
         if (candidateUrl) urls.push(candidateUrl);
       }
@@ -61,11 +61,33 @@ function isImportableMediaUrl(url: string): boolean {
   return isHttpsUrl(url);
 }
 
+const SRCSET_CANDIDATE_SEPARATOR = /,\s+/;
+
+function splitSrcsetCandidates(srcset: string): string[] {
+  const candidates: string[] = [];
+  // Repo convention (see buildOgabasseyAvifSrcSet): CDN transform commas are
+  // never followed by whitespace, so candidates split on comma+whitespace.
+  // A descriptor bearing a comma means bare-comma separation was used; re-split
+  // strictly so a second URL cannot hide unvalidated behind the first.
+  for (const candidate of srcset.split(SRCSET_CANDIDATE_SEPARATOR)) {
+    const [, ...descriptors] = candidate.trim().split(/\s+/);
+    if (descriptors.some((descriptor) => descriptor.includes(','))) {
+      candidates.push(...candidate.split(','));
+    } else {
+      candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
+const INVISIBLE_TEXT_PATTERN = /[\u200B-\u200D\u00AD]/gu;
+
 function hasReadableContent(content: string): boolean {
   if (content.match(MEDIA_TAG_PATTERN)) return true;
   const text = content
     .replace(/<[^>]*>/gu, '')
     .replace(/&nbsp;/gi, ' ')
+    .replace(INVISIBLE_TEXT_PATTERN, '')
     .trim();
   return text.length > 0;
 }

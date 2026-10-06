@@ -71,6 +71,48 @@ describe('handoff content validation', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it.each([
+    '<p>&#8203;</p>',
+    '<p>&shy;</p>',
+    '<p>\u200b</p>',
+  ])('rejects content with only invisible characters: %s', (content_html) => {
+    expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('accepts srcset candidates with CDN transform commas', () => {
+    expect(
+      parseReviewHandoff({
+        ...handoff,
+        content_html:
+          '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70,format=webp/a.png 640w, https://cdn.example.com/image/width=1280,quality=70,format=webp/a.png 1280w">',
+      }).content
+    ).toContain('srcset');
+  });
+
+  it.each([
+    'data:image/png;base64,iVBORw0KGgo= 1x, https://cdn.example.com/b.webp 2x',
+    'data:image/png;base64,iVBORw0KGgo= 1x,https://cdn.example.com/b.webp 2x',
+  ])('accepts embedded images in srcset: %s', (srcset) => {
+    expect(
+      parseReviewHandoff({
+        ...handoff,
+        content_html: `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`,
+      }).content
+    ).toContain('https://cdn.example.com/a.webp');
+  });
+
+  it('rejects a second srcset URL hidden behind a bare comma', () => {
+    expect(() =>
+      parseReviewHandoff({
+        ...handoff,
+        content_html:
+          '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/a.webp 1x,http://example.com/evil.png 2x">',
+      })
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('ignores src-like text inside other attributes', () => {
     expect(
       parseReviewHandoff({

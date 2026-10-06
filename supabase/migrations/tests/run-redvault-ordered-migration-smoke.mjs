@@ -505,6 +505,23 @@ try {
       RAISE EXCEPTION 'pilot_product_boundary_not_applied';
     END IF;
   END $$;`);
+  sql(
+    readFileSync(
+      resolve(
+        migrations,
+        '20261006150000_uba_redvault_pilot_binding_and_cancel_guards.sql'
+      ),
+      'utf8'
+    )
+  );
+  sql(`DO $$ BEGIN
+    IF strpos(pg_get_functiondef('private.assert_uba_redvault_private_pilot_active(uuid)'::regprocedure), 'redvault_pilot_order_cancelled') = 0 THEN
+      RAISE EXCEPTION 'pilot_cancelled_reserve_guard_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_order()'::regprocedure), 'shipment_booking_lock_token') = 0 THEN
+      RAISE EXCEPTION 'pilot_prefilled_fulfillment_guard_missing';
+    END IF;
+  END $$;`);
   process.stdout.write(
     'Ordered REDVAULT legacy and final-schema regression smoke passed.\n'
   );

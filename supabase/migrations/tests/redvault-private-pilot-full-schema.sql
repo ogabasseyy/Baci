@@ -254,6 +254,33 @@ $$;
 DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
+  prefilled_order jsonb;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  -- A pilot-shaped order carrying fulfillment metadata must fail binding:
+  -- the fulfillment guard only fires on UPDATE, so creation is the last
+  -- chance to reject pre-populated tracking.
+  prefilled_order := jsonb_set(
+    jsonb_set(fixture.order_input, '{tracking_number}', '"RV-PREFILL-PROBE"'),
+    '{checkout_idempotency_key}', '"redvault-private-pilot-full-schema-prefilled"'
+  );
+  BEGIN
+    PERFORM * FROM public.create_storefront_redvault_order(
+      prefilled_order, fixture.quote,
+      public.redvault_private_pilot_test_route_proof(prefilled_order, fixture.quote)
+    );
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_order_binding_mismatch' THEN
+    RAISE EXCEPTION 'pilot_prefilled_fulfillment_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
   reserved record;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
@@ -578,6 +605,17 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND shipping_status = 'canceled') THEN
     RAISE EXCEPTION 'pilot_cancel_carve_out_rejected';
   END IF;
+  -- A wound-down order must never reserve again, under either spelling:
+  -- approval rejects both, so reservation must fail before provider
+  -- capture rather than stranding funds in captured-held.
+  caught := NULL;
+  BEGIN
+    PERFORM * FROM public.reserve_storefront_redvault_payment_attempt_v3(fixture.order_id);
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_order_cancelled' THEN
+    RAISE EXCEPTION 'pilot_canceled_reserve_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
   caught := NULL;
   BEGIN
     UPDATE public.orders SET shipping_status = 'shipped' WHERE id = fixture.order_id;
@@ -649,6 +687,25 @@ $$;
 DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  -- The fixture order was wound down as `cancelled` above: reservation
+  -- must reject it (same guard as the legacy spelling, both spellings
+  -- covered across the two probes).
+  BEGIN
+    PERFORM * FROM public.reserve_storefront_redvault_payment_attempt_v3(fixture.order_id);
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_order_cancelled' THEN
+    RAISE EXCEPTION 'pilot_cancelled_reserve_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
   IF EXISTS (SELECT 1 FROM public.orders WHERE id = fixture.order_id AND payment_status <> 'unpaid') THEN
@@ -661,5 +718,5 @@ BEGIN
 END;
 $$;
 
-SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, expiry, pre-approval fulfillment block, completion transition, cancel carve-out, product boundary, and post-expiry provider-outcome checks passed; no provider request was made' AS result;
+SELECT 'Full-schema REDVAULT pilot, legacy RPC revocation, non-pilot compatibility, shipment insert/update, cap, expiry, pre-approval fulfillment block, completion transition, cancel carve-out, product boundary, binding fulfillment, cancelled reserve, and post-expiry provider-outcome checks passed; no provider request was made' AS result;
 ROLLBACK;

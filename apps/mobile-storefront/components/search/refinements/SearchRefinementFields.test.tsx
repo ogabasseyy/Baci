@@ -93,3 +93,16 @@ it('keeps the draft condition selectable after it leaves the facet response', ()
   expect(retained).toBeTruthy();
   expect(retained.props.accessibilityState.selected).toBe(true);
 });
+it('surfaces a deactivated draft category instead of selecting all categories', () => {
+  const view = render(
+    <SearchRefinementFields
+      {...props}
+      focusGroup="category"
+      categories={[{ id: 'c1', name: 'Phones' }]}
+      draft={{ ...draft, categoryId: 'c2' }}
+    />
+  );
+  const retained = view.getByLabelText('Unavailable category');
+  expect(retained).toBeTruthy();
+  expect(retained.props.accessibilityState.selected).toBe(true);
+});

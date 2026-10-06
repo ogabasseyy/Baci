@@ -164,7 +164,7 @@ describe('SavedItemsScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/product/test-phone');
   });
 
-  it('forwards the saved match identity to the product page', () => {
+  it('forwards exact saved match ids without the snapshot condition', () => {
     const matchedItem = makeSavedItem({
       slug: 'iphone-15',
       match_variant_id: 'variant-blue-128',
@@ -177,13 +177,35 @@ describe('SavedItemsScreen', () => {
 
     fireEvent.press(screen.getByText('Test Phone'));
 
+    // The persisted condition can be stale (the merchant reconditioned the
+    // option after saving); the PDP derives the live condition from the
+    // exact id instead.
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/product/[slug]',
       params: {
         slug: 'iphone-15',
         variant_id: 'variant-blue-128',
         offer_id: 'offer-open-box',
-        condition: 'open_box',
+      },
+    });
+  });
+
+  it('forwards the saved condition when no exact id was persisted', () => {
+    const matchedItem = makeSavedItem({
+      slug: 'iphone-15',
+      match_condition: 'used',
+    });
+    mockItems.mockReturnValue([matchedItem]);
+
+    render(<SavedItemsScreen />);
+
+    fireEvent.press(screen.getByText('Test Phone'));
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/product/[slug]',
+      params: {
+        slug: 'iphone-15',
+        condition: 'used',
       },
     });
   });

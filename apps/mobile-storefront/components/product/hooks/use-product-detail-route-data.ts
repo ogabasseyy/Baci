@@ -46,16 +46,25 @@ export function useProductDetailRouteData({
   const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
   const routeSelectionAttributes = (routeSelectionInput.attributes ??
     {}) as Record<string, string>;
+  const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
+  // ID-only offer links derive the condition from this product's live
+  // offer (mirrors web): the snapshot condition is deliberately omitted by
+  // entry points because it can be stale, and seeding from the live option
+  // keeps the identified offer honored instead of rejected.
   const routeCondition = normalizeRouteCondition(
     routeSelectionInput.condition ??
-      (!usesVariantRouteSelection ? routeConditionParam : undefined)
+      (!usesVariantRouteSelection
+        ? (routeConditionParam ??
+          product?.offers?.find(
+            (offer) => String(offer.id) === routeOfferIdParam
+          )?.condition)
+        : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
   // Search/compare entry points forward the advertised matched offer id.
   // Accept it only when it names one of this product's own offers; the
   // condition-compatibility check happens at selection time so a later
   // condition change on the PDP is never pinned to a stale offer.
-  const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
   const routeOfferId =
     routeOfferIdParam &&
     product?.offers?.some(

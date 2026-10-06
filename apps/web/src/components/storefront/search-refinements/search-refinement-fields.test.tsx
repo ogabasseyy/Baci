@@ -90,3 +90,23 @@ it('keeps the draft condition selectable after it leaves the facet response', ()
     'used'
   );
 });
+
+it('surfaces a deactivated draft category instead of showing all categories', () => {
+  render(
+    <SearchRefinementFields
+      focusGroup="category"
+      categories={[{ id: 'c1', name: 'Phones' }]}
+      brands={[]}
+      draft={createRefinementDraft({
+        brands: [],
+        sort: 'relevance',
+        categoryId: 'c2',
+      })}
+      onChange={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('option', { name: 'Unavailable category' })
+  ).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Category' })).toHaveValue('c2');
+});

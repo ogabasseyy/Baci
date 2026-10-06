@@ -103,7 +103,18 @@ export function SearchRefinementFields({
               !draft.categoryId,
               'radio'
             )}
-            {categories.map((category) =>
+            {[
+              ...categories,
+              // A deactivated category keeps constraining the search while
+              // its id is in the draft, so surface it explicitly (its name
+              // is unknowable once it leaves the facet response) instead of
+              // falsely selecting "All categories".
+              ...(!categories.some(
+                (category) => category.id === draft.categoryId
+              ) && draft.categoryId
+                ? [{ id: draft.categoryId, name: 'Unavailable category' }]
+                : []),
+            ].map((category) =>
               action(
                 category.name,
                 () => setDraft({ ...draft, categoryId: category.id }),

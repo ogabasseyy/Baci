@@ -89,3 +89,18 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-41: PDP selection handlers extracted to `product-selection-handlers.ts` (115 lines) with a colocated factory suite; the hook drops 306 → 255 lines, back under the 300-line modularity limit.
 - CX-42: the assistance query rule (trimmed 2–120 chars + catalog term) is now a single shared `searchAssistanceQuerySchema` used by the request schema, the proposal schema, and both storefront gates — 1-char, 121–200-char, and punctuation-only queries no longer advertise an action that can only 400. Native had the same >120 hole (no input cap); fixed at the same time.
 - CX-43: both condition selectors merge the draft condition into the option list exactly like the processor selectors, so a facet value that disappears mid-session still displays instead of falsely showing "Any condition".
+
+## Round 15 (Muse on 73c44470b9 — verified/tested, no behavior change; Codex quota-blocked)
+
+- Compare-refresh low is an explicit no-action note (path verified, no stale-price add found).
+- Saved-match-identity low answered by verification: web PDP accepts a routed offer id only when it names one of the product's live offers (covered by test), and native `use-product-detail-route-data.ts` applies the same live-offer `.some()` guard with shared-resolver variant fallback — unknown/stale ids fall back, never crash or misprice.
+- Notification-PII medium answered with a new test: `notification-detail-content.test.tsx` proves an HTML payload in the persisted message renders as inert text (no `img` element); both inbox renderers use React-escaped interpolation with no `dangerouslySetInnerHTML`. (Test held uncommitted — see below.)
+- Assist-wiring low answered: proxy bucket covers `/api/search/assist` (5/min per IP) and the tenant budget runs on Upstash Redis shared across instances, failing closed on outage. Assurance-fallback medium stays a product decision (single-merchant app).
+- Codex trigger on 73c44470b9 returned "usage limits for code reviews" — loop paused. The inbox test is held uncommitted to fold into the next fix commit; re-trigger once after quota recovery.
+
+## Round 16 (Codex on 73c44470b9 — CX-44..CX-46, all fixed with tests)
+
+- CX-44: saved links omit the snapshot condition when an exact variant/offer id exists, and native route-data derives the route condition from the live offer on ID-only links (mirrors web) — a merchant recondition after saving can no longer reject the identified offer into a wrong same-condition fallthrough. Variant links were already safe (shared resolver drops conflicting conditions). The saved-navigation test contract is updated to match; web has no saved-match forwarding.
+- CX-45: both category selectors append an "Unavailable category" fallback for a draft id missing from facets (the name is unknowable post-deactivation; ids are UUIDs), so a deactivated-but-still-applied constraint displays truthfully instead of "All categories".
+- CX-46: the new assurance disclosure line uses `text-store-background-text/55` instead of hardcoded gray; the cart suite pins the theme class. Pre-existing gray/red lines untouched (out of diff).
+- Folded in the held Round 15 inbox-rendering test.

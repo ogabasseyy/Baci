@@ -21,13 +21,23 @@ const buildProductHref = (item: SavedItem) => {
   if (!item.match_variant_id && !item.match_offer_id && !item.match_condition) {
     return `/product/${item.slug}`;
   }
+  // An exact option id resolves its own live condition on the PDP. A
+  // persisted snapshot condition can be stale (the merchant reconditioned
+  // the option after saving) and would poison the match: the offer
+  // resolver would reject the identified offer and fall through to a
+  // different offer still carrying the old condition.
+  const hasExactIdentity = Boolean(
+    item.match_variant_id || item.match_offer_id
+  );
   return {
     pathname: '/product/[slug]',
     params: {
       slug: item.slug,
       ...(item.match_variant_id ? { variant_id: item.match_variant_id } : {}),
       ...(item.match_offer_id ? { offer_id: item.match_offer_id } : {}),
-      ...(item.match_condition ? { condition: item.match_condition } : {}),
+      ...(!hasExactIdentity && item.match_condition
+        ? { condition: item.match_condition }
+        : {}),
     },
   } as const;
 };

@@ -84,7 +84,18 @@ export function SearchRefinementFields({
             }
           >
             <option value="">All categories</option>
-            {categories.map((category) => (
+            {[
+              ...categories,
+              // A deactivated category keeps constraining the search while
+              // its id is in the draft, so surface it explicitly (its name
+              // is unknowable once it leaves the facet response) instead of
+              // falsely displaying "All categories".
+              ...(!categories.some(
+                (category) => category.id === draft.categoryId
+              ) && draft.categoryId
+                ? [{ id: draft.categoryId, name: 'Unavailable category' }]
+                : []),
+            ].map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
               </option>

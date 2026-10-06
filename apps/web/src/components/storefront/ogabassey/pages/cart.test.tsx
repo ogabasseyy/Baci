@@ -142,6 +142,16 @@ describe('OgabasseyV2CartPage', () => {
     expect(screen.getByText('+₦2,000')).toBeInTheDocument();
   });
 
+  it('renders the Assurance disclosure in the storefront theme, not hardcoded gray', () => {
+    mockCartItems[0].hasAssurance = true;
+    render(<OgabasseyV2CartPage storeSlug="ogabassey" />);
+    const disclosure = screen.getByText(
+      'Optional. Included in total; uncheck to remove.'
+    );
+    expect(disclosure).toHaveClass('text-store-background-text/55');
+    expect(disclosure.className).not.toContain('text-gray-');
+  });
+
   it('renders cart items', () => {
     render(<OgabasseyV2CartPage storeSlug="test-store" />);
     expect(screen.getByText('Test Product')).toBeInTheDocument();

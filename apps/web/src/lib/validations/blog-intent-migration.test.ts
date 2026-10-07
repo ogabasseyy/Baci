@@ -8,7 +8,7 @@ it('keeps the intent vocabulary aligned with the database constraint', () => {
   // contract test at it; never rewrite an applied migration.
   const migration = readFileSync(
     new URL(
-      '../../../../../supabase/migrations/20261004150000_add_blog_post_intent_metadata.sql',
+      '../../../../../supabase/migrations/20261004150001_add_blog_post_intent_metadata.sql',
       import.meta.url
     ),
     'utf8'

@@ -193,6 +193,28 @@ describe('blog-api mutations', () => {
     expect(body.featured_image_alt).toBeNull();
   });
 
+  it('preserves stored alt text when a url edit is undone', async () => {
+    mockFetchWithCsrf.mockResolvedValueOnce(
+      jsonResponse({ id: 'post-1', slug: 'launch-faster' })
+    );
+
+    await updatePlatformBlogPost(
+      'post-1',
+      {
+        ...sampleForm,
+        featured_image_alt: '',
+      },
+      existingPost
+    );
+
+    const [, options] = mockFetchWithCsrf.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(options.body)) as Record<string, unknown>;
+    expect(body.featured_image_alt).toBe('Hero image alt');
+  });
+
   it('keeps featured metadata when url and metadata change together', async () => {
     mockFetchWithCsrf.mockResolvedValueOnce(
       jsonResponse({ id: 'post-1', slug: 'launch-faster' })

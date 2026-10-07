@@ -33,19 +33,32 @@ export function toApiPayload(
     : clearEmptyToNull
       ? null
       : undefined;
+  const inputAlt = toOptionalString(input.featured_image_alt);
+  // The editor clears alt on every URL keystroke and offers no alt control,
+  // so a blank alt with an unchanged URL is always an undone edit — never
+  // an intentional clear. Preserve the stored description instead of
+  // silently deleting it with an explicit null.
+  const imageUrlUnchanged =
+    existingPost != null &&
+    normalizeTrimmedString(input.featured_image_url) ===
+      normalizeTrimmedString(existingPost.featured_image_url);
+  const preservedAlt =
+    !inputAlt && imageUrlUnchanged && existingPost?.featured_image_alt
+      ? existingPost.featured_image_alt
+      : inputAlt;
 
   const payload = {
     author_name: input.author_name,
     category: toOptionalString(input.category),
     content: input.content,
     excerpt: toOptionalString(input.excerpt),
-    featured_image_alt: toOptionalString(input.featured_image_alt),
+    featured_image_alt: preservedAlt,
     focus_keyword: toOptionalString(input.focus_keyword ?? ''),
     intent,
     intent_source: intentSource,
     seo_description: toOptionalString(input.seo_description),
     seo_title: toOptionalString(input.seo_title),
-    slug: input.slug.trim() || undefined,
+    slug: normalizeTrimmedString(input.slug) || undefined,
     status: input.status,
     tags: input.tags,
     title: input.title,

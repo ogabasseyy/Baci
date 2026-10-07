@@ -26,13 +26,17 @@ function mediaTagUrls(tag: string): string[] {
   return urls;
 }
 
-const DATA_IMAGE_URL_PATTERN = /^data:image\/[^,]+,/u;
+// Mirrors the admin upload INLINE_ALLOWED_TYPES: only formats the
+// application renders are importable as embedded images.
+const DATA_IMAGE_URL_PATTERN =
+  /^data:image\/(jpeg|png|gif|webp|avif)(;[^,]*)?,/u;
 
 function isEmbeddedImageUrl(url: string): boolean {
   const lower = url.toLowerCase();
   const match = DATA_IMAGE_URL_PATTERN.exec(lower);
-  // Image MIME type plus a non-empty payload; bare `data:` or non-image
-  // payloads (data:text/html, ...) cannot render in an <img>.
+  // Supported image MIME type plus a non-empty payload; bare `data:`,
+  // non-image payloads (data:text/html, ...), and undecodable subtypes
+  // (data:image/not-a-real-format, ...) cannot render in an <img>.
   return match !== null && match[0].length < lower.length;
 }
 
@@ -79,8 +83,14 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
     // Indented code blocks render to text-identical HTML (<pre> adds no text),
     // so text comparison alone would store raw markdown that the renderer
     // displays as plain text instead of the code block the editor shows.
+    // GFM bare-URL autolinks are the same trap: rendering adds an <a> the
+    // text comparison cannot see, so the stored copy must be the rendered
+    // output or the published page loses a link the reviewer saw.
+    const renderedIntroducesLink =
+      /<a[\s>]/i.test(rendered) && !/<a[\s>]/i.test(rawContent);
     if (
       !/<pre[\s>]/i.test(rendered) &&
+      !renderedIntroducesLink &&
       stripMarkupText(rendered) === stripMarkupText(rawContent)
     ) {
       return sanitizedRaw;
@@ -113,12 +123,14 @@ function isCandidateBoundary(current: string, piece: string): boolean {
   if (NEW_CANDIDATE_URL_PATTERN.test(next)) {
     return true;
   }
-  // Otherwise the piece starts a new relative candidate unless it continues
-  // a transform parameter list: transform segments carry key=value pairs
-  // before any / ? # (see buildOgabasseyAvifSrcSet), while relative URLs
-  // (assets/x.webp, /x.png, img.png) never do.
+  // A comma continues the current candidate only inside a CDN transform
+  // parameter list: the accumulated text ends mid-assignment (key=partial
+  // value) and the next piece continues assignments (see
+  // buildOgabasseyAvifSrcSet). Either condition alone proves nothing —
+  // relative path segments may themselves contain `=`.
+  const endsMidAssignment = /=[^/?#\s]*$/.test(accumulated);
   const segment = next.split(/\s+/, 1)[0].split(/[/?#]/, 1)[0];
-  return !segment.includes('=');
+  return !(endsMidAssignment && segment.includes('='));
 }
 
 function splitSrcsetCandidates(srcset: string): string[] {
@@ -144,7 +156,10 @@ function splitSrcsetCandidates(srcset: string): string[] {
   return candidates;
 }
 
-const NON_RENDERING_TEXT_PATTERN = /[\p{Cf}\p{Cc}]/gu;
+// Default-ignorable marks (U+034F, variation selectors, ...) render nothing
+// but are category Mn rather than Cf/Cc, so the general Unicode property
+// carries them while Cc stays explicit.
+const NON_RENDERING_TEXT_PATTERN = /[\p{Cc}\p{Default_Ignorable_Code_Point}]/gu;
 
 function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>.

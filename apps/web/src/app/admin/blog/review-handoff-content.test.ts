@@ -93,6 +93,15 @@ describe('validateImportedContent', () => {
     );
   });
 
+  it.each([
+    '<p>&#847;</p>',
+    '<p>&#65039;</p>',
+  ])('rejects content with only default-ignorable marks: %s', (content_html) => {
+    expect(() => validateImportedContent(content_html)).toThrow(
+      'no readable text or images'
+    );
+  });
+
   it('rejects content with only control characters', () => {
     const bell = String.fromCharCode(7);
     expect(() => validateImportedContent(`<p>${bell}</p>`)).toThrow(
@@ -104,6 +113,14 @@ describe('validateImportedContent', () => {
     expect(
       validateImportedContent(
         '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70/a.webp 640w,https://cdn.example.com/b.webp 1280w">'
+      )
+    ).toContain('srcset');
+  });
+
+  it('accepts query-style transform commas glued mid-assignment', () => {
+    expect(
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/img?width=384,quality=70/a.webp 640w, https://cdn.example.com/b.webp 1280w">'
       )
     ).toContain('srcset');
   });
@@ -152,6 +169,8 @@ describe('validateImportedContent', () => {
     'https://cdn.example.com/a.webp,/b.webp 2x',
     'https://cdn.example.com/a.webp,b.webp 2x',
     'https://cdn.example.com/a.webp,assets/b.webp',
+    'https://cdn.example.com/a.webp,asset=broken.webp 2x',
+    'https://cdn.example.com/a.webp,format=webp/b.png 640w',
     'data:image/png;base64,iVBORw0KGgo, http://example.com/evil.png 2x',
   ])('rejects a non-https URL hidden behind a descriptorless srcset candidate: %s', (srcset) => {
     expect(() =>
@@ -172,6 +191,16 @@ describe('validateImportedContent', () => {
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
     ).toContain('srcset');
+  });
+
+  it.each([
+    'data:image/not-a-real-format,payload',
+    'data:image/svg+xml,<svg></svg>',
+    'data:text/html,<p>x</p>',
+  ])('rejects embedded images outside the renderable MIME allowlist: %s', (url) => {
+    expect(() =>
+      validateImportedContent(`<p>Body</p><img src="${url}" alt="Embedded">`)
+    ).toThrow('must use HTTPS URLs');
   });
 
   it('accepts a descriptorless data: URL as the only srcset candidate', () => {
@@ -213,6 +242,11 @@ describe('validateImportedContent', () => {
   it('passes HTML content through byte-identical', () => {
     const content_html = '<h2>Guide</h2><p>Useful <strong>advice</strong></p>';
     expect(validateImportedContent(content_html)).toBe(content_html);
+  });
+
+  it('stores the rendered link for bare-URL autolinks', () => {
+    const content = validateImportedContent('Visit https://example.com');
+    expect(content).toContain('<a href="https://example.com"');
   });
 
   it('preserves disallowed HTML inside markdown code examples', () => {

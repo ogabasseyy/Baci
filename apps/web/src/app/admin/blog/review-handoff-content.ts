@@ -150,12 +150,18 @@ function isCandidateBoundary(current: string, piece: string): boolean {
   if (NEW_CANDIDATE_URL_PATTERN.test(next)) {
     return true;
   }
+  // Inside a query string commas separate values, never candidates (RFC
+  // 3986 sub-delims): a comma here glues no matter what the value looks
+  // like, so the next piece is never classified.
+  if (/\?[^#]*$/.test(accumulated)) {
+    return false;
+  }
   // A comma continues the current candidate only inside a CDN transform
   // parameter list: the accumulated text ends mid-assignment (key=partial
   // value) and the next piece continues assignments — another key=value
-  // segment (see buildOgabasseyAvifSrcSet) or a bare numeric value such as
-  // the `2` in `?crop=1,2`. Either side alone proves nothing: relative
-  // path segments may themselves contain `=`.
+  // segment (see buildOgabasseyAvifSrcSet) or a bare numeric value.
+  // Either side alone proves nothing: relative path segments may
+  // themselves contain `=`.
   const endsMidAssignment = /=[^/?#\s]*$/.test(accumulated);
   const firstToken = next.split(/\s+/, 1)[0];
   const segment = firstToken.split(/[/?#]/, 1)[0];

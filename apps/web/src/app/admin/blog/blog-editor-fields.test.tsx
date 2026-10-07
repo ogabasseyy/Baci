@@ -101,6 +101,9 @@ describe('BlogEditorFields', () => {
     expect(screen.getByLabelText('Category')).toBeInTheDocument();
     expect(screen.getByLabelText('Excerpt')).toBeInTheDocument();
     expect(screen.getByLabelText('Featured Image URL')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Featured image alt text')
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Tags (comma-separated)')).toBeInTheDocument();
     expect(screen.getByLabelText('SEO Title')).toBeInTheDocument();
     expect(screen.getByLabelText('SEO Description')).toBeInTheDocument();
@@ -171,9 +174,35 @@ describe('BlogEditorFields', () => {
 
     expect(ctx.getCurrentForm()).toMatchObject({
       featured_image_alt: '',
+      featured_image_alt_edited: false,
       featured_image_height: 675,
       featured_image_url: 'https://cdn.example.com/other.webp',
       featured_image_width: 1200,
+    });
+  });
+
+  it('marks hand-typed alt text as edited until the cover URL changes', () => {
+    const ctx = renderComponent({
+      form: {
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_url: 'https://cdn.example.com/cover.webp',
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured image alt text'), {
+      target: { value: 'Fresh cover' },
+    });
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: 'Fresh cover',
+      featured_image_alt_edited: true,
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: 'https://cdn.example.com/other.webp' },
+    });
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: '',
+      featured_image_alt_edited: false,
     });
   });
 

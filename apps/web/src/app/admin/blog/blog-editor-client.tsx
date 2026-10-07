@@ -124,6 +124,13 @@ async function submitBlogPost({
   }
 }
 
+// Absent optional fields (undefined) and cleared inputs ('') both mean "no
+// value": normalize them so selecting "Not specified" or clearing an
+// optional field back to empty does not flag the pristine form as dirty.
+function normalizeDirtyCheckValue(value: unknown): unknown {
+  return value === undefined || value === '' ? null : value;
+}
+
 function toFormState(
   post?: PlatformAdminBlogPostDetail | null
 ): PlatformAdminBlogFormState {
@@ -137,6 +144,7 @@ function toFormState(
     content: post.content || '',
     excerpt: post.excerpt || '',
     featured_image_alt: post.featured_image_alt || '',
+    featured_image_alt_edited: false,
     featured_image_height: post.featured_image_height ?? null,
     featured_image_url: post.featured_image_url || '',
     featured_image_variants: post.featured_image_variants ?? {},
@@ -238,7 +246,10 @@ export function BlogEditorClient({
                   baseline as Record<string, unknown>
                 );
               }
-              return JSON.stringify(value) !== JSON.stringify(baseline);
+              return (
+                JSON.stringify(normalizeDirtyCheckValue(value)) !==
+                JSON.stringify(normalizeDirtyCheckValue(baseline))
+              );
             });
             if (
               (changed || pendingContentEditRef.current) &&

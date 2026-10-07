@@ -47,6 +47,7 @@ export function BlogEditorialMetadataFields({
         <Label htmlFor="intent-source">Intent source</Label>
         <Input
           id="intent-source"
+          disabled={!form.intent}
           maxLength={100}
           value={form.intent_source ?? ''}
           onChange={(event) =>

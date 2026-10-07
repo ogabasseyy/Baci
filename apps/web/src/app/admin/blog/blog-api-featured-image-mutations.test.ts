@@ -103,6 +103,7 @@ describe('blog-api featured image mutations', () => {
       {
         ...sampleForm,
         featured_image_alt: 'New cover description',
+        featured_image_alt_edited: true,
         featured_image_url: 'https://cdn.example.com/platform/blog/new.webp',
       },
       existingPost
@@ -193,6 +194,7 @@ describe('blog-api featured image mutations', () => {
     ];
     const body = JSON.parse(String(options.body)) as Record<string, unknown>;
 
+    expect(body.featured_image_alt).toBeNull();
     expect(body.featured_image_height).toBe(900);
     expect(body.featured_image_width).toBe(1600);
     expect(body.featured_image_variants).toEqual({

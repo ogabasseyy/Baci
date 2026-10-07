@@ -34,20 +34,27 @@ export function toApiPayload(
       ? null
       : undefined;
   const inputAlt = toOptionalString(input.featured_image_alt);
-  // The editor clears alt on every URL keystroke and offers no alt control,
-  // so a blank alt with an unchanged URL is always an undone edit — never
-  // an intentional clear. Preserve the stored description instead of
-  // silently deleting it with an explicit null. Intentional clearing from
-  // the editor is unsupported by design; deliberate removal uses direct
-  // API PATCH, which bypasses this client-side helper.
+  // Freshness is tracked explicitly: the editor sets this flag when the alt
+  // field is hand-edited and resets it on every URL change, so "non-empty"
+  // never stands in for "written for the current cover".
+  const altEdited = input.featured_image_alt_edited === true;
   const imageUrlUnchanged =
     existingPost != null &&
     normalizeTrimmedString(input.featured_image_url) ===
       normalizeTrimmedString(existingPost.featured_image_url);
+  // A blank alt with an unchanged URL is an undone URL edit — unless the
+  // alt field itself was touched, in which case the blank is intentional.
+  // A changed URL with unedited alt is a stale description: drop it rather
+  // than attach the old cover's text to the new image.
+  const storedAlt = existingPost?.featured_image_alt ?? null;
   const preservedAlt =
-    !inputAlt && imageUrlUnchanged && existingPost?.featured_image_alt
-      ? existingPost.featured_image_alt
-      : inputAlt;
+    !inputAlt && !altEdited && imageUrlUnchanged && storedAlt
+      ? storedAlt
+      : existingPost && !imageUrlUnchanged && !altEdited
+        ? clearEmptyToNull
+          ? null
+          : undefined
+        : inputAlt;
 
   const payload = {
     author_name: input.author_name,
@@ -72,9 +79,11 @@ export function toApiPayload(
 
   const featuredImageUrl = toOptionalString(input.featured_image_url) || null;
   if (shouldResetFeaturedMetadataForChangedUrl(input, existingPost)) {
-    // Stale alt text always arrives empty (the editor clears it on URL edits
-    // and uploads), so a non-empty value here is fresh for the new cover.
-    const featuredImageAlt = toOptionalString(input.featured_image_alt);
+    // Only hand-edited alt text is fresh for the new cover; anything else
+    // riding along with the changed URL is stale and resets to null.
+    const featuredImageAlt = altEdited
+      ? toOptionalString(input.featured_image_alt)
+      : null;
     return {
       ...payload,
       featured_image_alt: featuredImageAlt || null,

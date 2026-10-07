@@ -35,6 +35,10 @@ export type PlatformAdminBlogFormState = {
   content: string;
   excerpt: string;
   featured_image_alt: string;
+  // True once the alt field is hand-edited after the current URL was set.
+  // The save pipeline uses this — never the text being non-empty — to tell
+  // fresh alt text from a stale description the URL change orphaned.
+  featured_image_alt_edited?: boolean;
   featured_image_height: number | null;
   featured_image_url: string;
   featured_image_variants: Record<string, unknown>;
@@ -56,6 +60,7 @@ export const DEFAULT_PLATFORM_BLOG_FORM_STATE: PlatformAdminBlogFormState = {
   content: '',
   excerpt: '',
   featured_image_alt: '',
+  featured_image_alt_edited: false,
   featured_image_height: null,
   featured_image_url: '',
   featured_image_variants: {},

@@ -91,6 +91,15 @@ it('keeps provenance when the intent selection is unchanged', () => {
   );
 });
 
+it('disables the provenance input without an editorial intent', () => {
+  render(<Harness />);
+  expect(screen.getByRole('textbox', { name: 'Intent source' })).toBeEnabled();
+  fireEvent.change(screen.getByLabelText('Editorial intent'), {
+    target: { value: '' },
+  });
+  expect(screen.getByRole('textbox', { name: 'Intent source' })).toBeDisabled();
+});
+
 it('lets reviewers clear all imported metadata', () => {
   render(<Harness />);
   for (const label of ['Editorial intent', 'Intent source', 'Focus keyword']) {

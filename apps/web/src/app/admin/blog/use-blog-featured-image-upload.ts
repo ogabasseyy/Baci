@@ -32,18 +32,24 @@ export function useBlogFeaturedImageUpload({
     try {
       const result = await upload(file);
       if (generation !== generationRef.current) return;
-      setForm((current) => ({
-        ...current,
-        featured_image_url: result.url,
-        featured_image_alt:
-          current.featured_image_url &&
-          current.featured_image_url !== result.url
-            ? ''
-            : current.featured_image_alt,
-        featured_image_width: result.width ?? null,
-        featured_image_height: result.height ?? null,
-        featured_image_variants: result.variants ?? {},
-      }));
+      setForm((current) => {
+        // Replacing the cover orphans the alt text just like a URL edit;
+        // a first upload or same-URL re-upload keeps both text and flag.
+        const urlChanged =
+          current.featured_image_url !== '' &&
+          current.featured_image_url !== result.url;
+        return {
+          ...current,
+          featured_image_url: result.url,
+          featured_image_alt: urlChanged ? '' : current.featured_image_alt,
+          featured_image_alt_edited: urlChanged
+            ? false
+            : current.featured_image_alt_edited,
+          featured_image_width: result.width ?? null,
+          featured_image_height: result.height ?? null,
+          featured_image_variants: result.variants ?? {},
+        };
+      });
       toast({ title: 'Featured image uploaded' });
     } catch (error) {
       if (generation !== generationRef.current) return;

@@ -150,18 +150,23 @@ export function BlogEditorFields({
           onChange={(event) =>
             setForm((current) => {
               const nextUrl = event.target.value;
-              // Alt text has no input control and no save-time reconciliation,
-              // so any URL change orphans it: clear it together, otherwise the
-              // new image inherits a stale description of the old one. Other
-              // metadata is preserved for the save pipeline to reconcile,
-              // except on removal where there is no image left to describe.
+              // Any URL change orphans the alt text: clear it together and
+              // reset the edited flag, otherwise the new image inherits a
+              // stale description of the old one. Other metadata is
+              // preserved for the save pipeline to reconcile, except on
+              // removal where there is no image left to describe.
               const urlChanged =
                 nextUrl.trim() !== current.featured_image_url.trim();
               const urlRemoved = nextUrl.trim() === '';
               return {
                 ...current,
                 featured_image_url: nextUrl,
-                ...(urlChanged || urlRemoved ? { featured_image_alt: '' } : {}),
+                ...(urlChanged || urlRemoved
+                  ? {
+                      featured_image_alt: '',
+                      featured_image_alt_edited: false,
+                    }
+                  : {}),
                 ...(urlRemoved
                   ? {
                       featured_image_height: null,
@@ -171,6 +176,18 @@ export function BlogEditorFields({
                   : {}),
               };
             })
+          }
+        />
+        <Label htmlFor="featured-image-alt">Featured image alt text</Label>
+        <Input
+          id="featured-image-alt"
+          value={form.featured_image_alt}
+          onChange={(event) =>
+            setForm((current) => ({
+              ...current,
+              featured_image_alt: event.target.value,
+              featured_image_alt_edited: true,
+            }))
           }
         />
         <div>

@@ -28,6 +28,13 @@ const validHandoff = {
 };
 
 describe('parseReviewHandoff featured image', () => {
+  it('marks imported alt text as not hand-edited', () => {
+    expect(parseReviewHandoff(validHandoff)).toMatchObject({
+      featured_image_alt: 'Galaxy A phones',
+      featured_image_alt_edited: false,
+    });
+  });
+
   it.each([
     0,
     -1,

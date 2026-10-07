@@ -33,10 +33,12 @@ function readRawText(value: unknown): string {
 }
 
 function readText(value: unknown): string {
-  // Strip non-rendering characters (same normalization as the readability
-  // check) so invisible-only metadata reads as empty instead of passing
-  // required-field and schema validation with a visually blank value.
-  return stripNonRenderingText(readRawText(value)).trim();
+  const text = readRawText(value).trim();
+  // Invisible-only metadata reads as empty so it fails required-field and
+  // schema validation instead of saving a visually blank value. Anything
+  // else keeps its original bytes: stripping here would corrupt emoji
+  // sequences and scripts that rely on default-ignorable characters.
+  return stripNonRenderingText(text) === '' ? '' : text;
 }
 
 // generateSlug strips every non-Latin character, so a valid non-Latin or
@@ -176,6 +178,9 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     category: validatedMetadata.data.category ?? '',
     excerpt: validatedMetadata.data.excerpt ?? '',
     featured_image_alt: validatedMetadata.data.featured_image_alt ?? '',
+    // Imported alt text arrives with its image, so it is fresh by
+    // construction; the flag only tracks hand edits made after import.
+    featured_image_alt_edited: false,
     focus_keyword: validatedMetadata.data.focus_keyword ?? '',
     seo_description: validatedMetadata.data.seo_description ?? '',
     seo_title: validatedMetadata.data.seo_title ?? '',

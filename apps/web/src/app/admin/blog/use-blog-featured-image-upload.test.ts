@@ -35,6 +35,7 @@ describe('useBlogFeaturedImageUpload', () => {
     await act(async () => result.current.uploadFeatured(file));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('');
+    expect(result.current.form.featured_image_alt_edited).toBe(false);
   });
 
   it('preserves hand-typed alt text on a first upload with no prior cover', async () => {
@@ -43,6 +44,7 @@ describe('useBlogFeaturedImageUpload', () => {
       result.current.setForm({
         ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
         featured_image_alt: 'Typed before uploading',
+        featured_image_alt_edited: true,
       })
     );
     await act(async () => result.current.uploadFeatured(file));
@@ -50,6 +52,7 @@ describe('useBlogFeaturedImageUpload', () => {
     expect(result.current.form.featured_image_alt).toBe(
       'Typed before uploading'
     );
+    expect(result.current.form.featured_image_alt_edited).toBe(true);
   });
 
   it('preserves alt text when a re-upload resolves to the same URL', async () => {
@@ -59,11 +62,13 @@ describe('useBlogFeaturedImageUpload', () => {
         ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
         featured_image_url: uploadedImage.url,
         featured_image_alt: 'The current cover',
+        featured_image_alt_edited: true,
       })
     );
     await act(async () => result.current.uploadFeatured(file));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('The current cover');
+    expect(result.current.form.featured_image_alt_edited).toBe(true);
   });
 
   it('preserves existing alt text when replacement fails', async () => {

@@ -21,7 +21,8 @@ describe('validateImportedContent media', () => {
   it.each([
     'https://cdn.example.com/a.webp?crop=1,2 1x',
     'https://cdn.example.com/a.webp?scale=1,1.5 2x',
-  ])('accepts numeric value lists inside one srcset URL: %s', (srcset) => {
+    'https://cdn.example.com/a.webp?palette=red,blue 1x',
+  ])('glues commas inside one srcset query string: %s', (srcset) => {
     expect(
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`

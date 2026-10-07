@@ -29,6 +29,11 @@ services:
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
     volumes:
       - mcp-guest-carts:/var/lib/baci/guest-carts
+    # Single writer only: guest-cart capacity/expiry admission is enforced
+    # in-process, so a second replica could over-admit. Do not scale past 1
+    # without a shared transactional store (see README "Guest cart").
+    deploy:
+      replicas: 1
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
       interval: 30s

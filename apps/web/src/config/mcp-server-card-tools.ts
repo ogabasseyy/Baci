@@ -93,7 +93,8 @@ export const PUBLIC_MCP_TOOLS = [
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: false,
-      idempotentHint: false,
+      // Mirrors update_ogabassey_guest_cart: absolute quantities make retries safe.
+      idempotentHint: true,
     },
   },
   {

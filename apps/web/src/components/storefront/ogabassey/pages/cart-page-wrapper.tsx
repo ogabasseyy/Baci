@@ -2,7 +2,11 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { parseGuestCartHandoff } from '@/lib/guest-cart-handoff';
+import {
+  resolveGuestCartTransfer,
+  resolveGuestQuantityToAdd,
+  rewriteCartLinkUrl,
+} from '@/lib/guest-cart-handoff';
 import { useCart } from '@/hooks/cart';
 import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import { useToast } from '@/hooks/use-toast';
@@ -139,8 +143,7 @@ async function fetchAndAddCartItems({
         };
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity = existingIndex >= 0 ? cart[existingIndex].quantity : 0;
-        const targetQuantity = guestQuantities?.get(product.id);
-        const quantityToAdd = targetQuantity === undefined ? quantity : Math.max(0, targetQuantity - existingQuantity);
+        const quantityToAdd = resolveGuestQuantityToAdd(guestQuantities?.get(product.id), existingQuantity, quantity);
         if (quantityToAdd === 0) continue;
         if (!hasQuizPrizeVoucher && product.manage_stock && existingQuantity + quantityToAdd > effectiveStock) {
           rejectedIds.push(product.id);
@@ -179,26 +182,10 @@ async function fetchAndAddCartItems({
     }
 
     // Keep only retryable stock failures in the handoff URL.
-    const url = new URL(window.location.href);
-    if (guestQuantities && rejectedIds.length > 0) {
-      url.searchParams.set('guest_cart', JSON.stringify(rejectedIds.map(product_id => ({ product_id, quantity: guestQuantities.get(product_id) }))));
-      url.searchParams.delete('item_id');
-      url.searchParams.delete('qty');
-    } else if (rejectedIds.length > 0) {
-      url.searchParams.set('item_id', rejectedIds.join(','));
-    } else {
-      url.searchParams.delete('item_id');
-      url.searchParams.delete('qty');
-    }
-    if (guestQuantities && rejectedIds.length === 0) url.searchParams.delete('guest_cart');
-    url.searchParams.delete('quiz_award_id');
-    url.searchParams.delete('quiz_voucher_token');
-    url.searchParams.delete('variant_id');
-    url.searchParams.delete('condition');
     window.history.replaceState(
       {},
       '',
-      `${url.pathname}${url.search}${url.hash}`
+      rewriteCartLinkUrl(window.location.href, guestQuantities, rejectedIds)
     );
   } catch (err) {
     console.error('Error adding products to cart:', err);
@@ -226,8 +213,8 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   const blockedNoticeRef = useRef(false);
 
   useEffect(() => {
-    const guestItems = parseGuestCartHandoff(searchParams.get('guest_cart'));
-    const itemIds = guestItems ? guestItems.map(item => item.product_id).join(',') : searchParams.get('item_id');
+    const guestTransfer = resolveGuestCartTransfer(searchParams.get('guest_cart'));
+    const itemIds = guestTransfer ? guestTransfer.itemIds : searchParams.get('item_id');
     const rawQuantity = searchParams.get('qty');
     const parsedQuantity = rawQuantity && /^\d+$/.test(rawQuantity) ? Number(rawQuantity) : 1;
     const quantity = Number.isSafeInteger(parsedQuantity) && parsedQuantity >= 1 && parsedQuantity <= 10
@@ -255,10 +242,10 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     // effect reruns (cart is a dep) and the prize can still be claimed, instead
     // of being permanently stuck behind `processedRef`. Re-claiming the SAME
     // award is fine (deduped in fetchAndAddCartItems).
-    const hasQuizPrizeVoucher = Boolean(!guestItems && quizAwardId && quizVoucherToken);
+    const hasQuizPrizeVoucher = Boolean(!guestTransfer && quizAwardId && quizVoucherToken);
     if (
       (hasQuizPrizeVoucher && cart.some((item) => item.quizAwardId !== quizAwardId)) ||
-      (guestItems && cart.some((item) => item.quizAwardId))
+      (guestTransfer && cart.some((item) => item.quizAwardId))
     ) {
       if (!blockedNoticeRef.current) {
         blockedNoticeRef.current = true;
@@ -277,7 +264,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     void fetchAndAddCartItems({
       itemIds,
       quantity,
-      guestQuantities: guestItems ? new Map(guestItems.map(item => [item.product_id, item.quantity])) : undefined,
+      guestQuantities: guestTransfer?.quantities,
       quizAwardId,
       quizVoucherToken,
       variantId,

@@ -321,6 +321,9 @@ require a shared transactional store before horizontal scaling.
 The website handoff contains only product IDs and quantities. The website reloads
 public merchant-scoped products and current availability, preserving existing cart
 lines and avoiding duplicate additions when the same snapshot is opened again.
+The transfer is additive-only: it raises website lines up to the handoff
+quantities but never shrinks or deletes them, so chat-side removals or quantity
+decreases do not propagate to an already-transferred website cart.
 Products with variants or condition offers continue through explicit website option
 selection. Checkout remains on Ogabassey; its existing save-information checkbox
 is optional and defaults to off. This feature does not place orders or charge buyers.

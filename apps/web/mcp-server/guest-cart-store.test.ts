@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -117,6 +117,58 @@ it('rejects invalid capabilities and expired carts', async () => {
       async () => {}
     )
   ).rejects.toThrow('expired');
+});
+
+it('sweeps stale crash temp files while preserving fresh ones', async () => {
+  const { directory, instance } = await store();
+  const staleTemp = path.join(
+    directory,
+    `${'a'.repeat(64)}.json.00000000-0000-4000-8000-000000000000.tmp`
+  );
+  const freshTemp = path.join(
+    directory,
+    `${'b'.repeat(64)}.json.00000000-0000-4000-8000-000000000001.tmp`
+  );
+  await writeFile(staleTemp, '{}');
+  await writeFile(freshTemp, '{}');
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  await utimes(staleTemp, old, old);
+  const cart = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
+  await expect(readFile(staleTemp, 'utf8')).rejects.toThrow();
+  await expect(readFile(freshTemp, 'utf8')).resolves.toBe('{}');
+});
+
+it('runs the expiry sweep at most once per minute', async () => {
+  const { directory, instance } = await store();
+  // Advance past the throttle window so the first creation sweeps no matter
+  // which earlier tests already ran a sweep in this module.
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.now() + 61 * 1000);
+  try {
+    const swept = path.join(directory, `${'c'.repeat(64)}.json`);
+    await writeFile(swept, JSON.stringify({ expires_at: 1, items: [] }));
+    await instance.update(
+      undefined,
+      { product_id: id, quantity: 1 },
+      async () => {}
+    );
+    await expect(readFile(swept, 'utf8')).rejects.toThrow();
+    const deferred = path.join(directory, `${'d'.repeat(64)}.json`);
+    await writeFile(deferred, JSON.stringify({ expires_at: 1, items: [] }));
+    await instance.update(
+      undefined,
+      { product_id: other, quantity: 1 },
+      async () => {}
+    );
+    await expect(readFile(deferred, 'utf8')).resolves.toContain('expires_at');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('does not count unrelated files against guest cart capacity', async () => {

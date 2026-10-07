@@ -28,7 +28,9 @@ export function registerGuestCartTool(
         readOnlyHint: false,
         destructiveHint: false,
         openWorldHint: false,
-        idempotentHint: false,
+        // Absolute quantities replace the line instead of incrementing, so a
+        // lost-response retry with the same cart token has no cumulative effect.
+        idempotentHint: true,
       },
       _meta: {
         'openai/widgetAccessible': true,

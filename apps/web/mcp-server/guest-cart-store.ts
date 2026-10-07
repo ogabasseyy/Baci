@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   rename,
+  stat,
   unlink,
   writeFile,
 } from 'node:fs/promises';
@@ -19,6 +20,16 @@ const storedCartSchema = z.object({
 export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
 const queues = new Map<string, Promise<unknown>>();
 const TTL = 7 * 24 * 60 * 60 * 1000;
+// Crash temporaries (`<cart>.json.<uuid>.tmp`) share no pattern with cart
+// files and no queue key with live writers, so only sweep ones old enough
+// that no in-flight write can still own them.
+const STALE_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
+const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
+// The new-cart expiry sweep reads and parses every cart file, so run it at
+// most once per interval; expiry is still enforced per cart on every read,
+// and crash-temp cleanup below always runs.
+const SWEEP_INTERVAL_MS = 60 * 1000;
+let lastExpirySweepMs = 0;
 
 /** Opaque guest capability, never an account identity. One writer process owns this directory. */
 export class GuestCartStore {
@@ -42,8 +53,25 @@ export class GuestCartStore {
       .then(async () => {
         await mkdir(this.directory, { recursive: true, mode: 0o700 });
         if (!token) {
+          const sweepDue =
+            Date.now() - lastExpirySweepMs >= SWEEP_INTERVAL_MS;
           const entries = await readdir(this.directory);
           for (const entry of entries) {
+            if (CRASH_TEMP_PATTERN.test(entry)) {
+              // A crash between writeFile and rename orphans the temp file
+              // and the cart-file janitor below never matches it. Sweep only
+              // stale files so a concurrent writer's in-flight temp survives.
+              try {
+                const orphan = path.join(this.directory, entry);
+                const info = await stat(orphan);
+                if (Date.now() - info.mtimeMs > STALE_TEMP_MAX_AGE_MS)
+                  await unlink(orphan);
+              } catch {
+                /* Best effort: janitor work never fails cart creation. */
+              }
+              continue;
+            }
+            if (!sweepDue) continue;
             if (!/^[a-f0-9]{64}\.json$/.test(entry)) continue;
             const candidate = path.join(this.directory, entry);
             if (queues.has(candidate)) continue;
@@ -56,6 +84,7 @@ export class GuestCartStore {
               /* Do not delete corrupt or externally owned files. */
             }
           }
+          if (sweepDue) lastExpirySweepMs = Date.now();
           if (
             (await readdir(this.directory)).filter((entry) =>
               /^[a-f0-9]{64}\.json$/.test(entry)

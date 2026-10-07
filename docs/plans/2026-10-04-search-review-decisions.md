@@ -185,3 +185,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Inbox XSS: merchant card renders `{title}`/`{message}` as JSX text (no dangerouslySetInnerHTML); no merchant-inbox renderer is added by this PR (only the admin text test + RLS tests). Added the missing merchant-card text-rendering test (script/img/b payloads inert).
 - Assurance fallback-identity medium adjudicated repeat: build-default Ogabassey identity is documented product behavior shared with requests/repairs; runtime merchant plumbing into the sync cart store is author scope.
 - count/totalCount low adjudicated: contract intentional and documented — count (adjusted) is the truthful display total, totalCount (raw) drives paging so stranded rows stay reachable; the summary formatter and empty-state branches verified consistent. Displaying totalCount would overcount rendered items.
+
+## Round 30 (Codex clean on ad352df4cc; Muse rounds on 647d0856a3/ad352df4cc — bare-flag fix + docs, rest adjudicated)
+
+- Codex reviewed ad352df4cc with no major issues and zero inline comments. Loop continues for a same-head double-clean.
+- Bare match_base low FIXED with a real bug: suppression keyed on selection===route, but a condition-less entry defaults the selection away from null, so bare flags never suppressed. Predicate now keys on !hasCustomizedSelection (chips are state-only and always set it) plus entry-equality-or-bare. Tests: bare suppresses at mount, any explicit pick re-enables.
+- Zero-price invariant low: documented MUST-honor-unavailableIds on the hook (verified CompareScreen→View→Table thread it); no behavior change.
+- Unclamped single-page total low adjudicated: single caller (wrapper line 109, grep-verified), wrapper clamps before return — the raw value never escapes, so Math.max would be dead hardening.
+- Contact-PII medium adjudicated: intake forms on both platforms disclose inbox storage ("store's inbox so the merchant can follow up"), erasure trigger deletes the inbox copy with the request, RLS tests pin owner scoping, merchant card renders text (Round 29 test).
+- AI tenant-cap medium adjudicated product decision: public route is 404 unless STOREFRONT_SEARCH_ASSIST_ENABLED=true (dev-only today), plus 5/min IP and 60/min tenant caps with 12s timeout; tightening/alerting belongs to the production enablement plan.
+- Planning-docs local-paths low: scrubbed /Users/mac paths and LAN IPs to ~/... and placeholders in ledger/phone-test/activation; verify-sql.mjs keeps its generic env-overridable /tmp default (functional, not identity leakage).
+- Merge-gate high is process (PR stays draft): native typecheck is green in the 10/10 monorepo gate on this base (no slide-fixture errors observed); changed-area suites re-run on the rebased head (mobile 84, web 46, shared 12, manifests/service/inventory 27+1).

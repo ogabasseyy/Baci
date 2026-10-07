@@ -5,9 +5,10 @@ This is the first release prototype, not a production deployment.
 ## Connect
 
 Use the existing Ogabassey development app on the same Wi-Fi as this Mac.
-Scan `/Users/mac/.codex/backups/ogabassey-search-20261002-104340/phone-test-qr.png`.
-Metro is at `http://10.221.33.91:8082`; the assistance backend is at
-`http://10.221.33.91:3001`. These addresses are valid while this Mac stays on
+Scan the phone-test QR artifact from the run's backup directory
+(`~/.codex/backups/<run-id>/phone-test-qr.png`).
+Metro is at `http://<lan-ip>:8082`; the assistance backend is at
+`http://<lan-ip>:3001`. These addresses are valid while this Mac stays on
 the current network and the local processes are running.
 
 ## Try the experience
@@ -52,4 +53,4 @@ additional failures and are not a clean release gate.
 - Success confirms the request. Check the merchant inbox after the next minute.
 - App and web zero-match states both have this flow; search errors do not show it.
 - Database intake is active. OS push delivery is not part of this change.
-- Metro currently uses LAN 192.168.100.84:8082. The older QR may contain a stale IP.
+- Metro currently uses the Mac LAN IP on port 8082. The older QR may contain a stale IP.

@@ -7,7 +7,13 @@ import { supabase } from '@/lib/supabase';
 import type { Product } from '@/types/product';
 import { resolveProductRow, transformProduct } from './product-utils';
 import { useMerchant } from './use-merchant';
-/** Refresh saved identities; missing products never masquerade as current facts. */
+/**
+ * Refresh saved identities; missing products never masquerade as current facts.
+ *
+ * Invariant: loading and refresh-failure fallbacks synthesize `price: 0`
+ * products, so every consumer MUST honor `unavailableIds` and never render
+ * a listed id's price as current — an ignored id displays a false zero.
+ */
 export function useComparisonProducts(selected: Product[]) {
   const { data: merchant } = useMerchant();
   const query = useQuery({

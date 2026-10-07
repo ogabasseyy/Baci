@@ -1,6 +1,6 @@
 # Generative search execution
 
-Backup: /Users/mac/.codex/backups/ogabassey-search-20261002-104340/source.tar.gz
+Backup: ~/.codex/backups/ogabassey-search-20261002-104340/source.tar.gz
 Snapshot: 834ad6fec04dfb2439449926b7c007f42964b1e1
 Plan: docs/superpowers/plans/2026-10-02-ogabassey-generative-search.md
 
@@ -29,9 +29,9 @@ Verification:
 - Browser UI bridge timed out on CDP navigation and focus. Web visual browser verification is incomplete. Actual phone keyboard/landscape/accessibility and Android device QA remain unverified, for testing rather than a release claim.
 
 Local test processes:
-- Metro: http://10.221.33.91:8082 (composer flag enabled)
-- Backend: http://10.221.33.91:3001; optional assistance enabled locally, no deployment.
-- Phone QR artifact: /Users/mac/.codex/backups/ogabassey-search-20261002-104340/phone-test-qr.png
+- Metro: http://<lan-ip>:8082 (composer flag enabled)
+- Backend: http://<lan-ip>:3001; optional assistance enabled locally, no deployment.
+- Phone QR artifact: ~/.codex/backups/ogabassey-search-20261002-104340/phone-test-qr.png
 - Test instructions: .planning/generative-search/phone-test.md
 
 Phone feedback follow-up:
@@ -40,7 +40,7 @@ Phone feedback follow-up:
 - Selected cards now offer View comparison as soon as two products are chosen. Native action navigates existing compare screen; web links to its automatically expanded comparison tray.
 - Focused native UI: 24 tests passed, plus final dock and header rechecks. Web UI: 12 tests passed. Platform drift and diff whitespace checks pass. Actual phone layout remains unverified. Web typecheck follow-up launched; status pending at handoff.
 
-Keyboard positioning correction: absolute dock uses full viewport coordinates; removed the former header safe-area subtraction, which raised the bar by the top inset. Regression with a 59px top inset verifies the composer bottom equals the keyboard top. Nine relevant tests passed. Mac LAN changed to 192.168.100.84; Metro assistance URL refreshed in the temporary launch script only.
+Keyboard positioning correction: absolute dock uses full viewport coordinates; removed the former header safe-area subtraction, which raised the bar by the top inset. Regression with a 59px top inset verifies the composer bottom equals the keyboard top. Nine relevant tests passed. Mac LAN IP changed; Metro assistance URL refreshed in the temporary launch script only.
 
 Comparison scrolling and navigation feedback:
 - Native comparison now has a vertical scroll container around horizontal columns, so the specs and View options actions are reachable. Clear all is centered in a dedicated row; native back arrow hides the previous Search title.
@@ -51,7 +51,7 @@ Comparison scrolling and navigation feedback:
 Suggestion interaction implementation:
 - Removed visible Find for me / proposal / Apply flow from native and web search. Shared deterministic catalog suggestions use observed condition/price rows and suppress different-query snapshots. This adds no AI calls while typing.
 - Native chips are inside the same keyboard dock, directly above the input; they hide with the keyboard. Tapping applies the existing refinement route in one action. Web chips sit beneath the focused results search field and link to the refined results URL; they disappear on blur.
-- Fresh continuation verification: 19 native, 6 web, 3 shared tests pass. Nine changed runtime files pass Biome. Metro restarted on 192.168.100.84:8082 with local composer flag. Previous temporary logs/processes were lost; full repository result remains unverified. Web typecheck is running at handoff.
+- Fresh continuation verification: 19 native, 6 web, 3 shared tests pass. Nine changed runtime files pass Biome. Metro restarted on the Mac LAN IP with local composer flag. Previous temporary logs/processes were lost; full repository result remains unverified. Web typecheck is running at handoff.
 
 
 Product request and header follow-up:
@@ -90,7 +90,7 @@ Top layout balance follow-up (2026-10-03):
 
 
 Card preview and available filters (2026-10-03):
-- Backup before this preview: /Users/mac/.codex/backups/search-card-20261003-183547/source.tar.gz. Restore task-owned files selectively; preserve other active work.
+- Backup before this preview: ~/.codex/backups/search-card-20261003-183547/source.tar.gz. Restore task-owned files selectively; preserve other active work.
 - Native/web search cards use contained images, restrained condition tags, clearer names/prices and a compact compare/purchase footer. Removed redundant Details/View and empty ratings. Text remains independent of image completion. Existing PDP variant/offer routing and cart flow remain; web purchase opens the PDP, not a new direct-cart path.
 - Native/mobile-web filters show one expanded group at a time; quick pills open their own group. Full-width native group/choice rows are at least 48 high. Apply/reset stay below the scrolling choices. Brand search appears only with more than six available brands. Removed the hardcoded rating group.
 - New SECURITY INVOKER get_storefront_search_available_facets RPC reuses existing ranking and stock-aware public option projection. Brands/categories/conditions span the complete current query, not only loaded cards; aliases uk_used/refurbished normalize to used/open_box. Facets intentionally cover the base query, not every combination of selected filters. Selected brands remain removable.

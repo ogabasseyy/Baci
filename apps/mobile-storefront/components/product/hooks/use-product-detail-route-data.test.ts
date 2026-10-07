@@ -143,3 +143,18 @@ it('does not suppress base rows when an explicit offer id is present', () => {
 
   expect(result.current.suppressConditionOfferMatch).toBe(false);
 });
+
+it('treats a bare match_base flag as keep-base-price', () => {
+  // A match object with neither ids nor condition still carries the base
+  // identity: the PDP must not resolve a same-condition offer for it.
+  const { result } = setup({ slug: 'phone', match_base: '1' });
+
+  expect(result.current.suppressConditionOfferMatch).toBe(true);
+
+  // Any explicit PDP pick re-enables offer resolution, even from bare.
+  act(() => {
+    result.current.setHasCustomizedSelection(true);
+    result.current.setSelectedCondition('used');
+  });
+  expect(result.current.suppressConditionOfferMatch).toBe(false);
+});

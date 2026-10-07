@@ -128,13 +128,16 @@ export function useProductDetailRouteData({
           ? (product.offers[0]?.condition ?? null)
           : null);
   // A base-row entry keeps the advertised base price until the shopper
-  // picks a condition on the PDP — an explicit ids-bearing link, or a
-  // selection that no longer equals the entry one, resolves offers again.
+  // picks a condition on the PDP (any explicit pick re-enables offers).
+  // The entry selection equals the route one, or the entry carries no
+  // condition at all (bare flag); ids-bearing links never suppress.
   const suppressConditionOfferMatch =
     routeBaseMatch &&
     !routeOfferId &&
     !routeVariantId &&
-    selection.effectiveSelectedCondition === routeCondition;
+    !selection.hasCustomizedSelection &&
+    (selection.effectiveSelectedCondition === routeCondition ||
+      routeCondition == null);
   const displayProduct = product
     ? {
         ...product,

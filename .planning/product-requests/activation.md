@@ -42,8 +42,8 @@ permissions were verified, and the scheduled job is active. The first real sched
 API also resolves the RPC and rejects invalid input with SQLSTATE 22023.
 
 Reproduce that isolated check with `node .planning/product-requests/verify-sql.mjs`.
-Set `PGLITE_MODULE` to the installed PGlite module path if the temporary package
-at `/tmp/baci-product-request-db` is unavailable.
+Set `PGLITE_MODULE` to the installed PGlite module path if the default
+temporary package directory is unavailable.
 
 ## Review and broader checks
 

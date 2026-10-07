@@ -186,6 +186,22 @@ describe('BlogReviewHandoffImporter', () => {
     );
   });
 
+  it('invalidates a pending read when the importer unmounts', async () => {
+    const onImport = vi.fn();
+    const { unmount } = render(
+      <BlogReviewHandoffImporter onImport={onImport} />
+    );
+    const pending = Promise.withResolvers<string>();
+    const file = new File([], 'pending.json');
+    vi.spyOn(file, 'text').mockReturnValue(pending.promise);
+    fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+      target: { files: [file] },
+    });
+    unmount();
+    await act(async () => pending.resolve(JSON.stringify(handoff)));
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
   it('shows validation failures without loading unready content', async () => {
     const onImport = vi.fn();
     render(<BlogReviewHandoffImporter onImport={onImport} />);

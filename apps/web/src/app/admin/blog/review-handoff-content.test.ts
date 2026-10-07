@@ -214,6 +214,29 @@ describe('validateImportedContent', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it.each([
+    'data:image/png,not-an-image',
+    'data:image/png;base64,aGVsbG8=',
+    'data:image/png;base64,!!!',
+    'data:image/jpeg;base64,iVBORw0KGgo=',
+  ])('rejects embedded images with undecodable payloads: %s', (url) => {
+    expect(() =>
+      validateImportedContent(`<p>Body</p><img src="${url}" alt="Embedded">`)
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it.each([
+    ['png', 'data:image/png;base64,iVBORw0KGgo='],
+    ['jpeg', 'data:image/jpeg;base64,/9j/'],
+    ['gif', 'data:image/gif;base64,R0lGODlh'],
+    ['webp', 'data:image/webp;base64,UklGRgAAAABXRUJQ'],
+    ['avif', 'data:image/avif;base64,AAAAGGZ0eXBhdmlm'],
+  ])('accepts embedded %s images with valid signatures', (_subtype, url) => {
+    expect(
+      validateImportedContent(`<p>Body</p><img src="${url}" alt="Embedded">`)
+    ).toContain(url);
+  });
+
   it('accepts a descriptorless data: URL as the only srcset candidate', () => {
     // The sanitizer drops a data-only srcset from the stored markup, so
     // assert acceptance (no throw) plus the surviving img src.

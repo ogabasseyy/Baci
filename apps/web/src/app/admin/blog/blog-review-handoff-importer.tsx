@@ -26,6 +26,14 @@ export function BlogReviewHandoffImporter({
   useIsomorphicLayoutEffect(() => {
     if (disabled) importGenerationRef.current += 1;
   }, [disabled]);
+  useIsomorphicLayoutEffect(() => {
+    // A pending file.text() continuation must not apply after unmount:
+    // without this the stale read still invokes onImport and setMessage,
+    // possibly showing the replacement confirmation over the next page.
+    return () => {
+      importGenerationRef.current += 1;
+    };
+  }, []);
 
   const handleFile = async (file?: File) => {
     if (!file || disabled) return;

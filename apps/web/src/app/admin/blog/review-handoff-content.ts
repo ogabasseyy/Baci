@@ -26,18 +26,78 @@ function mediaTagUrls(tag: string): string[] {
   return urls;
 }
 
-// Mirrors the admin upload INLINE_ALLOWED_TYPES: only formats the
+// Subtypes mirror the admin upload INLINE_ALLOWED_TYPES: only formats the
 // application renders are importable as embedded images.
-const DATA_IMAGE_URL_PATTERN =
-  /^data:image\/(jpeg|png|gif|webp|avif)(;[^,]*)?,/u;
+const EMBEDDED_IMAGE_DATA_URL_PATTERN =
+  /^data:image\/(jpeg|png|gif|webp|avif)((?:;[^;,]+)*);base64,/i;
+const BASE64_PAYLOAD_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+
+function decodeEmbeddedImageBytes(payload: string): readonly number[] | null {
+  // Forgiving whitespace like browsers, then strict alphabet: anything
+  // outside base64 is not decodable image bytes.
+  const compact = payload.replace(/\s+/g, '');
+  if (compact.length === 0) return null;
+  const padded = compact + '='.repeat((4 - (compact.length % 4)) % 4);
+  if (!BASE64_PAYLOAD_PATTERN.test(padded)) return null;
+  try {
+    const binary = atob(padded);
+    return Array.from(binary, (char) => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+function hasExpectedImageSignature(
+  subtype: string,
+  bytes: readonly number[]
+): boolean {
+  const ascii = (start: number, text: string) =>
+    text
+      .split('')
+      .every((char, index) => bytes[start + index] === char.charCodeAt(0));
+  switch (subtype) {
+    case 'png':
+      return (
+        bytes.length >= 8 &&
+        bytes[0] === 0x89 &&
+        ascii(1, 'PNG') &&
+        bytes[4] === 0x0d &&
+        bytes[5] === 0x0a &&
+        bytes[6] === 0x1a &&
+        bytes[7] === 0x0a
+      );
+    case 'jpeg':
+      return (
+        bytes.length >= 3 &&
+        bytes[0] === 0xff &&
+        bytes[1] === 0xd8 &&
+        bytes[2] === 0xff
+      );
+    case 'gif':
+      return bytes.length >= 6 && ascii(0, 'GIF8');
+    case 'webp':
+      return bytes.length >= 12 && ascii(0, 'RIFF') && ascii(8, 'WEBP');
+    case 'avif':
+      return (
+        bytes.length >= 12 &&
+        ascii(4, 'ftyp') &&
+        (ascii(8, 'avif') || ascii(8, 'avis'))
+      );
+    default:
+      return false;
+  }
+}
 
 function isEmbeddedImageUrl(url: string): boolean {
-  const lower = url.toLowerCase();
-  const match = DATA_IMAGE_URL_PATTERN.exec(lower);
-  // Supported image MIME type plus a non-empty payload; bare `data:`,
-  // non-image payloads (data:text/html, ...), and undecodable subtypes
-  // (data:image/not-a-real-format, ...) cannot render in an <img>.
-  return match !== null && match[0].length < lower.length;
+  // A supported subtype plus an opaque payload is not proof the browser
+  // can decode the image, so decode the base64 payload and check the
+  // format signature. Non-base64 payloads cannot be decoded reliably and
+  // are rejected.
+  const header = EMBEDDED_IMAGE_DATA_URL_PATTERN.exec(url);
+  const subtype = header?.[1]?.toLowerCase();
+  if (!header || !subtype) return false;
+  const bytes = decodeEmbeddedImageBytes(url.slice(header[0].length));
+  return bytes !== null && hasExpectedImageSignature(subtype, bytes);
 }
 
 function isImportableMediaUrl(url: string): boolean {

@@ -97,4 +97,41 @@ describe('buildConditionOfferItems', () => {
     });
     expect(xml).toBe('');
   });
+
+  it('omits whitespace-only parent GTIN/MPN from base and offer rows', () => {
+    const xml = build({
+      ...baseProduct,
+      gtin: '   ',
+      mpn: '\t ',
+      offers: [
+        {
+          id: 'offer-used',
+          condition: 'used',
+          price: 1_000_000,
+          stock_quantity: 2,
+        },
+      ],
+    });
+    expect(xml).not.toContain('<g:gtin>');
+    expect(xml).not.toContain('<g:mpn>');
+  });
+
+  it('trims padded parent GTIN/MPN in base and offer rows', () => {
+    const xml = build({
+      ...baseProduct,
+      gtin: '  0123456789012  ',
+      mpn: '  MPN-123  ',
+      offers: [
+        {
+          id: 'offer-used',
+          condition: 'used',
+          price: 1_000_000,
+          stock_quantity: 2,
+        },
+      ],
+    });
+    expect(xml).toContain('<g:gtin>0123456789012</g:gtin>');
+    expect(xml).toContain('<g:mpn>MPN-123</g:mpn>');
+    expect(xml).not.toContain('  0123456789012  ');
+  });
 });

@@ -208,6 +208,72 @@ describe('buildVariantFeedItems', () => {
     expect(xml).not.toContain('mpn=');
     expect(xml).toContain('<g:sale_price>20.00 NGN</g:sale_price>');
   });
+  it.each([
+    'google',
+    'facebook',
+  ] as const)('keeps a usable variant GTIN after a numeric duplicate in the %s feed', (platform) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      platform,
+      variants: [
+        {
+          ...input.variants[0],
+          attributes: {
+            color: 'White',
+            GTIN: ' 0001234567890 ',
+            gtin: 123,
+            MPN: ' SKU-005 ',
+            mpn: 123,
+          },
+        },
+      ],
+    });
+
+    expect(xml).toContain('<g:gtin>0001234567890</g:gtin>');
+    expect(xml).toContain('<g:mpn>SKU-005</g:mpn>');
+  });
+  it.each([
+    'google',
+    'facebook',
+  ] as const)('keeps a usable variant GTIN when a later alias is blank in the %s feed', (platform) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      platform,
+      variants: [
+        {
+          ...input.variants[0],
+          attributes: {
+            color: 'White',
+            GTIN: ' 0001234567890 ',
+            gtin: '  ',
+            MPN: ' SKU-005 ',
+            mpn: '  ',
+          },
+        },
+      ],
+    });
+
+    expect(xml).toContain('<g:gtin>0001234567890</g:gtin>');
+    expect(xml).toContain('<g:mpn>SKU-005</g:mpn>');
+  });
+  it.each([
+    'google',
+    'facebook',
+  ] as const)('omits numeric-only identifiers from the %s feed', (platform) => {
+    const xml = buildVariantFeedItems({
+      ...input,
+      platform,
+      variants: [
+        {
+          ...input.variants[0],
+          attributes: { color: 'White', gtin: 123, mpn: 456 },
+        },
+      ],
+    });
+
+    expect(xml).not.toContain('<g:gtin>');
+    expect(xml).not.toContain('<g:mpn>');
+  });
   it('preserves finite numeric attributes for product details', () => {
     const xml = buildVariantFeedItems({
       ...input,

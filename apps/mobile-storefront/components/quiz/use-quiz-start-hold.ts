@@ -30,6 +30,7 @@ export function useQuizStartHold({
   startedRef: MutableRefObject<boolean>;
   stoppedRef: MutableRefObject<boolean>;
 }): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refs are stable by design — listing them would not change re-run behavior, and the effect intentionally keys off isStartBlocked transitions only.
   useEffect(() => {
     const wasBlocked = isStartBlockedRef.current;
     isStartBlockedRef.current = isStartBlocked;

@@ -19,6 +19,8 @@ import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.t
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
 import { EXPECTED_REPAIR_PICKUP_PENDING_SOURCES } from './expected-repair-pickup-pending-sources.test-support';
+import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sources.test-support';
+import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
@@ -288,6 +290,8 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',
   },
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_PENDING_SOURCES,
+  ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

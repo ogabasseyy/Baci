@@ -4,14 +4,41 @@
  * in `./wallet-data-helpers`; row/response types in `./wallet-data-types`.
  */
 
+import {
+  type CustomerSavingsEarningsRpcClient,
+  fetchCustomerSavingsEarningsKobo,
+} from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import { formatFundingAccount, toNumber } from './wallet-data-helpers';
 import type {
+  CustomerSavingsEarnings,
   CustomerWalletFetch,
   CustomerWalletTransactionRow,
   WalletFundingAccountRow,
 } from './wallet-data-types';
+
+export async function getCustomerSavingsEarnings({
+  merchantId,
+  supabase,
+}: {
+  merchantId: string;
+  supabase: SupabaseClient<Database>;
+}): Promise<CustomerSavingsEarnings> {
+  const earningsClient =
+    supabase as unknown as CustomerSavingsEarningsRpcClient;
+  const creditedInterestKobo = await fetchCustomerSavingsEarningsKobo({
+    client: earningsClient,
+    merchantId,
+  });
+
+  return creditedInterestKobo === null
+    ? { earningsAvailable: false, earningsBalance: null }
+    : {
+        earningsAvailable: true,
+        earningsBalance: creditedInterestKobo / 100,
+      };
+}
 
 export async function getSavingsBalance({
   customerId,

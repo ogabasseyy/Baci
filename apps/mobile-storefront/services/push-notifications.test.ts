@@ -11,6 +11,11 @@ const mockLogger = {
   warn: jest.fn(),
 };
 let mockPlatformOS: 'android' | 'ios' = 'ios';
+let mockApplicationId = 'com.ogabassey.staging';
+let mockTelemetryExcluded = false;
+let mockExpoConfig: Record<string, unknown> = {
+  extra: { eas: { projectId: 'project-id' } },
+};
 const mockCallOrder: string[] = [];
 const mockSetNotificationChannelAsync = jest.fn(async (channelId: string) => {
   mockCallOrder.push(`setNotificationChannelAsync:${channelId}`);
@@ -21,11 +26,16 @@ jest.mock('@baci/shared/lib', () => ({
 }));
 
 jest.mock('expo-application', () => ({
+  get applicationId() {
+    return mockApplicationId;
+  },
   nativeBuildVersion: '646',
 }));
 
 jest.mock('expo-constants', () => ({
-  expoConfig: { extra: { eas: { projectId: 'project-id' } } },
+  get expoConfig() {
+    return mockExpoConfig;
+  },
 }));
 
 jest.mock('expo-device', () => ({
@@ -62,6 +72,10 @@ jest.mock('@/lib/logger', () => ({
   createLogger: () => mockLogger,
 }));
 
+jest.mock('@/lib/storefront-telemetry-excluded', () => ({
+  isStorefrontTelemetryExcluded: () => mockTelemetryExcluded,
+}));
+
 jest.mock('@/lib/supabase', () => ({
   supabase: { rpc: mockRpc },
 }));
@@ -83,6 +97,7 @@ describe('savePushTokenToServer', () => {
     jest.clearAllMocks();
     mockCallOrder.length = 0;
     mockPlatformOS = 'ios';
+    mockApplicationId = 'com.ogabassey.staging';
     mockRpc.mockResolvedValue({ error: null });
   });
 
@@ -172,6 +187,9 @@ describe('handleNotificationResponse', () => {
     jest.clearAllMocks();
     mockCallOrder.length = 0;
     mockPlatformOS = 'ios';
+    mockApplicationId = 'com.ogabassey.staging';
+    mockTelemetryExcluded = false;
+    mockExpoConfig = { extra: { eas: { projectId: 'project-id' } } };
   });
 
   it('navigates token-ready notifications to utility history', () => {
@@ -205,6 +223,103 @@ describe('handleNotificationResponse', () => {
     expect(getStorefrontNotificationNavigationTarget).toHaveBeenCalledWith(
       data
     );
+  });
+
+  it('opens a validated savings push in the savings wallet panel before shared payload routing', () => {
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
+    const data = {
+      goalId: '00000000-0000-4000-8000-000000000002',
+      merchantId: '00000000-0000-4000-8000-000000000010',
+      notificationId: '00000000-0000-4000-8000-000000000001',
+      type: 'savings',
+    };
+
+    handleNotificationResponse(
+      {
+        notification: {
+          request: {
+            content: { data },
+          },
+        },
+      } as unknown as Parameters<typeof handleNotificationResponse>[0],
+      navigate,
+      undefined,
+      '00000000-0000-4000-8000-000000000010'
+    );
+
+    expect(navigate).toHaveBeenCalledWith('wallet', {
+      action: 'savings',
+      savingsGoalId: '00000000-0000-4000-8000-000000000002',
+    });
+    expect(getStorefrontNotificationNavigationTarget).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the scoped wallet only for a validated same-merchant savings push', async () => {
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
+    const invalidateSavingsWallet = jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue();
+    const response = {
+      notification: {
+        request: {
+          content: {
+            data: {
+              goalId: '00000000-0000-4000-8000-000000000002',
+              merchantId: '00000000-0000-4000-8000-000000000010',
+              notificationId: '00000000-0000-4000-8000-000000000001',
+              type: 'savings',
+            },
+          },
+        },
+      },
+    } as unknown as Parameters<typeof handleNotificationResponse>[0];
+
+    await handleNotificationResponse(
+      response,
+      navigate,
+      undefined,
+      '00000000-0000-4000-8000-000000000010',
+      invalidateSavingsWallet
+    );
+
+    expect(invalidateSavingsWallet).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('wallet', {
+      action: 'savings',
+      savingsGoalId: '00000000-0000-4000-8000-000000000002',
+    });
+  });
+
+  it('does not navigate a savings payload from another merchant', () => {
+    const navigate =
+      jest.fn<Parameters<typeof handleNotificationResponse>[1]>();
+    getStorefrontNotificationNavigationTarget.mockReturnValue(null);
+
+    const invalidateSavingsWallet = jest.fn<() => Promise<void>>();
+    handleNotificationResponse(
+      {
+        notification: {
+          request: {
+            content: {
+              data: {
+                goalId: '00000000-0000-4000-8000-000000000002',
+                merchantId: '00000000-0000-4000-8000-000000000011',
+                notificationId: '00000000-0000-4000-8000-000000000001',
+                type: 'savings',
+              },
+            },
+          },
+        },
+      } as unknown as Parameters<typeof handleNotificationResponse>[0],
+      navigate,
+      undefined,
+      '00000000-0000-4000-8000-000000000010',
+      invalidateSavingsWallet
+    );
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(invalidateSavingsWallet).not.toHaveBeenCalled();
   });
 
   it('does not navigate when notification payload has no target', () => {
@@ -258,6 +373,88 @@ describe('registerForPushNotifications', () => {
     jest.clearAllMocks();
     mockCallOrder.length = 0;
     mockPlatformOS = 'ios';
+    mockTelemetryExcluded = false;
+    mockExpoConfig = { extra: { eas: { projectId: 'project-id' } } };
+  });
+
+  it('acquires a token through the verified staging capability while analytics remains excluded', async () => {
+    const previous = {
+      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      hosted: process.env.EXPO_PUBLIC_HOSTED_STOREFRONT,
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+    };
+    Object.assign(process.env, {
+      EXPO_PUBLIC_API_URL: 'https://staging.ogabassey.com',
+      EXPO_PUBLIC_HOSTED_STOREFRONT: '1',
+      EXPO_PUBLIC_SUPABASE_URL: 'https://staging-auth.ogabassey.com',
+    });
+    mockTelemetryExcluded = true;
+    mockExpoConfig = {
+      android: { package: 'com.ogabassey.staging' },
+      ios: { bundleIdentifier: 'com.ogabassey.staging' },
+      extra: {
+        eas: { projectId: '22222222-2222-4222-8222-222222222222' },
+        hostedStagingPush: {
+          allowedOrigins: [
+            'https://staging.ogabassey.com',
+            'https://staging-auth.ogabassey.com',
+            'https://exp.host',
+          ],
+          androidPackage: 'com.ogabassey.staging',
+          iosBundleIdentifier: 'com.ogabassey.staging',
+          projectId: '22222222-2222-4222-8222-222222222222',
+        },
+        hostedStorefront: true,
+      },
+    };
+    try {
+      await expect(registerForPushNotifications()).resolves.toBe(
+        'ExponentPushToken[fresh]'
+      );
+      const notifications = jest.requireMock('expo-notifications') as {
+        getExpoPushTokenAsync: jest.Mock;
+      };
+      expect(notifications.getExpoPushTokenAsync).toHaveBeenCalledWith({
+        projectId: '22222222-2222-4222-8222-222222222222',
+      });
+    } finally {
+      if (previous.apiUrl === undefined) delete process.env.EXPO_PUBLIC_API_URL;
+      else process.env.EXPO_PUBLIC_API_URL = previous.apiUrl;
+      if (previous.hosted === undefined)
+        delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
+      else process.env.EXPO_PUBLIC_HOSTED_STOREFRONT = previous.hosted;
+      if (previous.supabaseUrl === undefined)
+        delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+      else process.env.EXPO_PUBLIC_SUPABASE_URL = previous.supabaseUrl;
+    }
+  });
+
+  it('refuses excluded hosted registration with an unverified project', async () => {
+    mockTelemetryExcluded = true;
+    mockExpoConfig = {
+      android: { package: 'com.ogabassey.staging' },
+      ios: { bundleIdentifier: 'com.ogabassey.staging' },
+      extra: {
+        eas: { projectId: 'c6c1897b-cac8-49b0-85f9-3d277aecc379' },
+        hostedStagingPush: {
+          allowedOrigins: [
+            'https://staging.ogabassey.com',
+            'https://staging-auth.ogabassey.com',
+            'https://exp.host',
+          ],
+          androidPackage: 'com.ogabassey.staging',
+          iosBundleIdentifier: 'com.ogabassey.staging',
+          projectId: 'c6c1897b-cac8-49b0-85f9-3d277aecc379',
+        },
+        hostedStorefront: true,
+      },
+    };
+
+    await expect(registerForPushNotifications()).resolves.toBeNull();
+    const notifications = jest.requireMock('expo-notifications') as {
+      getExpoPushTokenAsync: jest.Mock;
+    };
+    expect(notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
   });
 
   it('creates Android notification channels before requesting an Expo push token', async () => {
@@ -273,7 +470,7 @@ describe('registerForPushNotifications', () => {
     const registration = registerForPushNotifications();
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(mockSetNotificationChannelAsync).toHaveBeenCalledTimes(4);
+    expect(mockSetNotificationChannelAsync).toHaveBeenCalledTimes(5);
     expect(mockCallOrder).not.toContain('getExpoPushTokenAsync');
 
     settleChannels.forEach((resolve) => {
@@ -281,11 +478,10 @@ describe('registerForPushNotifications', () => {
     });
     await registration;
 
-    // orders, payments, promotions, general — the payments channel must exist
-    // before a wallet-credited push targets it on Android 8+.
     expect(mockCallOrder).toEqual([
       'setNotificationChannelAsync:orders',
       'setNotificationChannelAsync:payments',
+      'setNotificationChannelAsync:savings',
       'setNotificationChannelAsync:promotions',
       'setNotificationChannelAsync:general',
       'getExpoPushTokenAsync',
@@ -293,6 +489,15 @@ describe('registerForPushNotifications', () => {
     expect(mockSetNotificationChannelAsync).toHaveBeenCalledWith(
       'payments',
       expect.objectContaining({ name: 'Payments' })
+    );
+  });
+
+  it('does not log the Expo push token', async () => {
+    const token = await registerForPushNotifications();
+
+    expect(token).toBe('ExponentPushToken[fresh]');
+    expect(mockLogger.debug.mock.calls.flat()).not.toContain(
+      'ExponentPushToken[fresh]'
     );
   });
 });

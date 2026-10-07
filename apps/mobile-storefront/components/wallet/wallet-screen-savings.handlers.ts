@@ -1,6 +1,9 @@
 import { Alert } from 'react-native';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { swapSavingsGoalDevice } from '@/lib/customer-savings';
+import {
+  resolveSavingsGoalVariant,
+  swapSavingsGoalDevice,
+} from '@/lib/customer-savings';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
@@ -23,6 +26,7 @@ interface AddSavingsContributionParams {
   rawAmount: string;
   refetchWallet: () => Promise<unknown>;
   setIsAddingSavingsContribution: (isPending: boolean) => void;
+  walletBalance: number;
 }
 
 interface ChangeSavingsGoalDeviceParams {
@@ -32,6 +36,30 @@ interface ChangeSavingsGoalDeviceParams {
   product: Product;
   refetchWallet: () => Promise<unknown>;
   variantId?: string | null;
+}
+
+interface ResolveSavingsGoalVariantParams {
+  activeMerchantId?: string;
+  activeMerchantSlug?: string;
+  goal: WalletActiveSavingsGoal | null;
+  refetchWallet: () => Promise<unknown>;
+  variantId: string;
+}
+
+export function createSavingsVariantResolutionHandler({
+  activeMerchantId,
+  activeMerchantSlug,
+  goal,
+  refetchWallet,
+}: Omit<ResolveSavingsGoalVariantParams, 'variantId'>) {
+  return async (variantId: string) =>
+    await resolveCompletedSavingsGoalVariant({
+      activeMerchantId,
+      activeMerchantSlug,
+      goal,
+      refetchWallet,
+      variantId,
+    });
 }
 
 function isCompletedSavingsContributionResult(result: unknown) {
@@ -55,6 +83,7 @@ export async function addSavingsContributionToGoal({
   rawAmount,
   refetchWallet,
   setIsAddingSavingsContribution,
+  walletBalance,
 }: AddSavingsContributionParams): Promise<void> {
   if (!goal) {
     Alert.alert('No active savings goal', 'Start a savings goal first.');
@@ -72,6 +101,14 @@ export async function addSavingsContributionToGoal({
     Alert.alert(
       'Amount too high',
       `You only have ${formatNgnCurrency(remainingAmount)} left on this goal.`
+    );
+    return;
+  }
+
+  if (amount > walletBalance) {
+    Alert.alert(
+      'Fund wallet first',
+      `Your wallet has ${formatNgnCurrency(walletBalance)} available. Fund it before adding ${formatNgnCurrency(amount)} to savings.`
     );
     return;
   }
@@ -168,6 +205,61 @@ export async function changeSavingsGoalDevice({
     Alert.alert(
       'Unable to change device',
       error instanceof Error ? error.message : 'Please try again in a moment.'
+    );
+    return false;
+  }
+}
+
+export async function resolveCompletedSavingsGoalVariant({
+  activeMerchantId,
+  activeMerchantSlug,
+  goal,
+  refetchWallet,
+  variantId,
+}: ResolveSavingsGoalVariantParams): Promise<boolean> {
+  const eligibleVariant = goal?.variant_resolution_options?.find(
+    (option) => option.id === variantId
+  );
+  if (
+    goal?.status !== 'completed' ||
+    !goal.selection_unresolved ||
+    !eligibleVariant
+  ) {
+    Alert.alert(
+      'Variant unavailable',
+      'Refresh your savings goal and try again.'
+    );
+    return false;
+  }
+
+  try {
+    await resolveSavingsGoalVariant({
+      goalId: goal.id,
+      merchantId: activeMerchantId,
+      merchantSlug: activeMerchantSlug,
+      variantId,
+    });
+    try {
+      await refetchWallet();
+    } catch {
+      Alert.alert(
+        'Variant resolved',
+        'Your device variant was saved, but the wallet could not refresh. Pull to refresh before buying.'
+      );
+      return true;
+    }
+    Alert.alert(
+      'Variant resolved',
+      `Your savings goal is now linked to ${eligibleVariant.label}.`
+    );
+    return true;
+  } catch (error) {
+    await refetchWallet().catch(() => undefined);
+    Alert.alert(
+      'Review savings goal',
+      error instanceof Error
+        ? error.message
+        : 'This savings goal changed. Refresh to review its current status.'
     );
     return false;
   }

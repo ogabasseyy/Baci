@@ -14,6 +14,7 @@ import { ErrorFallback } from '@/components/ErrorBoundary';
 import { RootLayoutNav } from '@/components/navigation/RootLayoutNav';
 import { useAppTrackingTransparency } from '@/hooks/use-app-tracking-transparency';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { useSavingsReminderActivation } from '@/hooks/use-savings-reminder-activation';
 import { useStartupAdTrackingInitialization } from '@/hooks/use-startup-ad-tracking-initialization';
 import {
   installCrashDiagnostics,
@@ -24,7 +25,6 @@ import { registerQueuedCreateOrderHandler } from '@/lib/register-queued-create-o
 import { prefetchStartupStorefrontData } from '@/lib/startup-storefront-prefetch';
 import { DEFAULT_SYNC_STORAGE_KEYS, initializeStorage } from '@/lib/storage';
 import { initAnalytics } from '@/services/analytics';
-import { activateDueSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { useAuthStore } from '@/stores/auth-store';
 
 type ErrorBoundaryProps = { error: Error; retry: () => void };
@@ -116,11 +116,13 @@ export default function RootLayout() {
     }
   }, [isInitialized]);
 
-  useEffect(() => {
-    if (isInitialized && isStorageReady && isTrackingAuthorizationSettled) {
-      void activateDueSavingsReminderNotification();
-    }
-  }, [isInitialized, isStorageReady, isTrackingAuthorizationSettled]);
+  useSavingsReminderActivation({
+    storeUser,
+    storeMerchantId,
+    isInitialized,
+    isStorageReady,
+    isTrackingAuthorizationSettled,
+  });
 
   const { isStartupAdTrackingReady } = useStartupAdTrackingInitialization({
     isInitialized,

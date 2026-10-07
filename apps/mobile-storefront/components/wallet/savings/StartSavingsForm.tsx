@@ -1,146 +1,150 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { BRAND, palette } from '@/constants/Colors';
-import { PlanWalletStagingSection } from './PlanWalletStagingSection';
+import { SavingsContributionSection } from './SavingsContributionSection';
+import { SavingsSetupHero } from './SavingsSetupHero';
 import { StartSavingsProductFields } from './StartSavingsProductFields';
-import { themedInputStyle } from './start-savings.helpers';
+import { savingsCardAccent } from './savings-card-accent';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type {
   SavingsSourceMode,
   StartSavingsColors,
 } from './start-savings.types';
-import type { StartSavingsController } from './start-savings-controller.types';
+import type {
+  LocalSavingsFormController,
+  StartSavingsController,
+} from './start-savings-controller.types';
 
 type StartSavingsFormProps = {
+  onSearchFocusChange?: (focused: boolean) => void;
   colors: StartSavingsColors;
   controller: StartSavingsController;
 };
 
-export function StartSavingsForm({
-  colors,
-  controller,
-}: StartSavingsFormProps) {
+export function StartSavingsForm(
+  props:
+    | (StartSavingsFormProps & { mode?: 'plan' })
+    | {
+        mode: 'draft';
+        onSearchFocusChange?: (focused: boolean) => void;
+        colors: StartSavingsColors;
+        controller: LocalSavingsFormController;
+      }
+) {
+  const [pressed, setPressed] = useState(false);
+  const { colors, controller } = props;
+  const deviceReady =
+    !!controller.selectedProduct &&
+    controller.selectedProduct.requiresVariantSelection === false &&
+    Number.isFinite(controller.selectedProduct.price) &&
+    controller.selectedProduct.price > 0 &&
+    !controller.selectedCatalogProduct?.searchPreview;
+  const scheduleReady =
+    props.mode !== 'draft' &&
+    deviceReady &&
+    Number.isFinite(props.controller.contributionValue) &&
+    props.controller.contributionValue > 0 &&
+    (!props.controller.initialContributionEnabled ||
+      (Number.isFinite(props.controller.effectiveInitialContribution) &&
+        props.controller.effectiveInitialContribution > 0));
+  const disabled =
+    controller.isSubmitting ||
+    (props.mode === 'draft' && !props.controller.canContinue);
   return (
     <>
-      <Text style={[styles.heading, { color: colors.text }]}>
-        Start Savings
-      </Text>
-      <Text style={[styles.subheading, { color: colors.textSecondary }]}>
-        Set up a device savings plan for your next purchase.
-      </Text>
-      <StartSavingsProductFields colors={colors} controller={controller} />
-      <ContributionSection colors={colors} controller={controller} />
-      <SourceModeSection colors={colors} controller={controller} />
-      <PlanWalletStagingSection
-        colors={colors}
-        targetKobo={Math.round((controller.targetValue || 0) * 100)}
-      />
-      <SavingsTermsSection colors={colors} controller={controller} />
+      <SavingsSetupHero />
+      {props.mode === 'draft' ? (
+        <Text style={[styles.subheading, { color: colors.textSecondary }]}>
+          Only your device choice is saved. Schedule, funding and interest are
+          not available in this test.
+        </Text>
+      ) : null}
+      {props.mode === 'draft' ? (
+        <>
+          <Text style={[styles.sectionLabel, { color: colors.primary }]}>
+            Local test · Draft only
+          </Text>
+          <StartSavingsProductFields
+            onSearchFocusChange={props.onSearchFocusChange}
+            mode="draft"
+            colors={colors}
+            controller={props.controller}
+          />
+        </>
+      ) : (
+        <>
+          <StartSavingsProductFields
+            onSearchFocusChange={props.onSearchFocusChange}
+            colors={colors}
+            controller={props.controller}
+          />
+          {deviceReady ? (
+            <SavingsContributionSection
+              colors={colors}
+              controller={props.controller}
+            />
+          ) : null}
+          {scheduleReady ? (
+            <>
+              <SourceModeSection
+                colors={colors}
+                controller={props.controller}
+              />
+
+              <SavingsTermsSection
+                colors={colors}
+                controller={props.controller}
+              />
+            </>
+          ) : null}
+        </>
+      )}
       {controller.formError ? (
         <Text style={[styles.errorText, { color: colors.error }]}>
           {controller.formError}
         </Text>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Continue savings setup"
-        accessibilityState={{
-          disabled: controller.isSubmitting,
-          busy: controller.isSubmitting,
-        }}
-        onPress={controller.handleContinue}
-        disabled={controller.isSubmitting}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          controller.isSubmitting ? styles.buttonDisabled : null,
-          pressed && !controller.isSubmitting && { opacity: 0.7 },
-        ]}
-      >
-        <Text style={styles.primaryButtonText}>Continue</Text>
-      </Pressable>
-    </>
-  );
-}
-
-function ContributionSection({ colors, controller }: StartSavingsFormProps) {
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Contribution amount
-      </Text>
-      <TextInput
-        accessibilityLabel="Savings contribution amount"
-        value={controller.contributionAmount}
-        onChangeText={controller.setContributionAmount}
-        keyboardType="number-pad"
-        placeholder="Enter amount"
-        placeholderTextColor={colors.placeholder}
-        style={[styles.input, themedInputStyle(colors)]}
-      />
-      <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Are you making an initial contribution?
-      </Text>
-      <View style={styles.radioRow}>
-        {[
-          { label: 'Yes', value: true },
-          { label: 'No', value: false },
-        ].map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="radio"
-            accessibilityLabel={`Initial contribution ${option.label}`}
-            accessibilityState={{
-              selected: option.value === controller.initialContributionEnabled,
-            }}
-            onPress={() =>
-              controller.setInitialContributionEnabled(option.value)
-            }
-            style={styles.radioOption}
-          >
-            <View
-              style={[
-                styles.radioDot,
-                {
-                  borderColor:
-                    option.value === controller.initialContributionEnabled
-                      ? BRAND.primary
-                      : colors.border,
-                  backgroundColor:
-                    option.value === controller.initialContributionEnabled
-                      ? BRAND.primary
-                      : colors.card,
-                },
-              ]}
-            />
-            <Text style={{ color: colors.text }}>{option.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {controller.initialContributionEnabled ? (
-        <TextInput
-          accessibilityLabel="Initial contribution amount"
-          value={controller.initialContributionAmount}
-          onChangeText={controller.setInitialContributionAmount}
-          keyboardType="number-pad"
-          placeholder="Enter initial contribution"
-          placeholderTextColor={colors.placeholder}
-          style={[styles.input, themedInputStyle(colors)]}
-        />
+      {(props.mode === 'draft' ? deviceReady : scheduleReady) ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            props.mode === 'draft'
+              ? 'Review savings draft'
+              : 'Continue savings setup'
+          }
+          accessibilityState={{
+            disabled,
+            busy: controller.isSubmitting,
+          }}
+          onPress={controller.handleContinue}
+          onPressIn={() => setPressed(true)}
+          onPressOut={() => setPressed(false)}
+          disabled={disabled}
+          style={[
+            styles.primaryButton,
+            disabled ? styles.buttonDisabled : null,
+            pressed && !disabled && { opacity: 0.7 },
+          ]}
+        >
+          <Text style={styles.primaryButtonText}>
+            {controller.isSubmitting
+              ? 'Getting things ready…'
+              : props.mode === 'draft'
+                ? 'Review savings draft'
+                : 'Let’s make it happen'}
+          </Text>
+        </Pressable>
       ) : null}
-    </View>
+    </>
   );
 }
 
 function SourceModeSection({ colors, controller }: StartSavingsFormProps) {
   return (
-    <View
-      style={[
-        styles.sourceModeCard,
-        { borderColor: colors.border, backgroundColor: colors.card },
-      ]}
-    >
+    <View style={[styles.sourceModeCard, savingsCardAccent(colors)]}>
       <Text style={[styles.sectionLabel, { color: colors.text }]}>
-        Set primary source of funds
+        03 · Choose how you fund it
       </Text>
       <View
         accessibilityRole="radiogroup"
@@ -153,17 +157,21 @@ function SourceModeSection({ colors, controller }: StartSavingsFormProps) {
           label="Manual debit"
           mode="manual"
         />
-        <SourceModeButton
-          colors={colors}
-          controller={controller}
-          label="Auto debit"
-          mode="auto_debit"
-        />
+        {process.env.EXPO_PUBLIC_HOSTED_STOREFRONT !== '1' ? (
+          <SourceModeButton
+            colors={colors}
+            controller={controller}
+            label="Auto debit"
+            mode="auto_debit"
+          />
+        ) : null}
       </View>
       <Text style={[styles.sourceModeHint, { color: colors.textSecondary }]}>
-        {controller.sourceMode === 'auto_debit'
-          ? 'Charges will use a saved Paystack card for scheduled contributions.'
-          : 'Manual debit uses wallet balance or wallet funding before the plan starts.'}
+        {process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1'
+          ? 'Auto debit is not available in this staging build. Use manual contributions while we finish card testing.'
+          : controller.sourceMode === 'auto_debit'
+            ? 'Charges will use a saved Paystack card for scheduled contributions.'
+            : 'Manual debit uses wallet balance or wallet funding before the plan starts.'}
       </Text>
     </View>
   );

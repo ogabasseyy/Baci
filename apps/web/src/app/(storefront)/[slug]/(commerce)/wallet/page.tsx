@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import { isUsdtWalletEnabled } from '@/env';
 
 import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { isLocalStorefrontTest } from '@/lib/local-storefront-test';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -31,7 +33,11 @@ interface WalletPageProps {
 }
 
 export default function WalletPage({ params, searchParams }: WalletPageProps) {
-  return <WalletContent params={params} searchParams={searchParams} />;
+  return (
+    <Suspense fallback={<p role="status">Preparing your wallet…</p>}>
+      <WalletContent params={params} searchParams={searchParams} />
+    </Suspense>
+  );
 }
 
 async function WalletContent({ params, searchParams }: WalletPageProps) {
@@ -62,6 +68,12 @@ async function WalletContent({ params, searchParams }: WalletPageProps) {
 
   return (
     <WalletContentSection
+      localSavings={
+        isLocalStorefrontTest() &&
+        merchant.id === '10000000-0000-4000-8000-000000000001'
+          ? { merchantId: merchant.id, merchantSlug: merchant.slug }
+          : undefined
+      }
       initialShowFunding={isWalletFundingDeepLink(resolvedSearchParams.fund)}
       initialShowUsdtFunding={isWalletFundingDeepLink(
         resolvedSearchParams['fund-usdt']

@@ -3,9 +3,28 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { WalletActionsRow } from './WalletActionsRow';
-import { WALLET_COLORS } from './wallet.colors';
 
 describe('WalletActionsRow', () => {
+  it('keeps card management without duplicating the active plan action', () => {
+    render(
+      <WalletActionsRow
+        hasSavedCards
+        colors={Colors.dark}
+        hasActiveSavingsGoal
+        onManageCards={jest.fn()}
+        onQuickSave={jest.fn()}
+        onStartSavings={jest.fn()}
+        showPrimaryAction={false}
+        showQuickSave={false}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Manage Cards' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Add to Savings' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
+  });
   it('wires primary wallet actions', () => {
     const onManageCards = jest.fn();
     const onQuickSave = jest.fn();
@@ -13,6 +32,7 @@ describe('WalletActionsRow', () => {
 
     render(
       <WalletActionsRow
+        hasSavedCards
         colors={Colors.light}
         hasActiveSavingsGoal={false}
         onManageCards={onManageCards}
@@ -36,6 +56,7 @@ describe('WalletActionsRow', () => {
 
     render(
       <WalletActionsRow
+        hasSavedCards
         colors={Colors.light}
         hasActiveSavingsGoal={false}
         onManageCards={noop}
@@ -48,12 +69,16 @@ describe('WalletActionsRow', () => {
     expect(screen.queryByRole('button', { name: 'Quick Save' })).toBeNull();
   });
 
-  it('keeps manage cards visible on a white button in dark mode', () => {
+  it.each([
+    'light',
+    'dark',
+  ] as const)('keeps manage cards readable in %s mode', (theme) => {
     const noop = jest.fn();
 
     render(
       <WalletActionsRow
-        colors={Colors.dark}
+        hasSavedCards
+        colors={Colors[theme]}
         hasActiveSavingsGoal={false}
         onManageCards={noop}
         onQuickSave={noop}
@@ -64,7 +89,12 @@ describe('WalletActionsRow', () => {
 
     expect(
       StyleSheet.flatten(screen.getByText('Manage Cards').props.style)
-    ).toEqual(expect.objectContaining({ color: WALLET_COLORS.darkText }));
+    ).toEqual(expect.objectContaining({ color: Colors[theme].text }));
+    expect(
+      StyleSheet.flatten(
+        screen.getByRole('button', { name: 'Manage Cards' }).props.style
+      )
+    ).toEqual(expect.objectContaining({ backgroundColor: Colors[theme].card }));
   });
 
   it('uses the savings top-up label when a savings goal is active', () => {
@@ -72,6 +102,7 @@ describe('WalletActionsRow', () => {
 
     render(
       <WalletActionsRow
+        hasSavedCards
         colors={Colors.light}
         hasActiveSavingsGoal
         onManageCards={jest.fn()}
@@ -87,4 +118,22 @@ describe('WalletActionsRow', () => {
     expect(screen.getByText('Add to Savings')).toBeOnTheScreen();
     expect(onStartSavings).toHaveBeenCalledTimes(1);
   });
+});
+
+it('hides card management when the customer has no saved cards', () => {
+  render(
+    <WalletActionsRow
+      colors={Colors.light}
+      hasSavedCards={false}
+      hasActiveSavingsGoal={false}
+      onManageCards={jest.fn()}
+      onQuickSave={jest.fn()}
+      onStartSavings={jest.fn()}
+      showQuickSave={false}
+    />
+  );
+  expect(screen.queryByRole('button', { name: 'Manage Cards' })).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Start Savings' })
+  ).toBeOnTheScreen();
 });

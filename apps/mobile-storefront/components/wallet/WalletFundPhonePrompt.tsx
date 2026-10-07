@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -5,10 +6,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { WalletFundPhoneSchema } from '@/schemas/wallet-fund-phone';
-import { styles as walletStyles } from './wallet.styles';
 
 type WalletColors = (typeof Colors)['light'];
 
@@ -59,23 +60,28 @@ export function WalletFundPhonePrompt({
   };
 
   return (
-    <>
-      <Text
-        style={[
-          walletStyles.redeemPanelSubtitle,
-          { color: colors.textSecondary },
-        ]}
-      >
+    <View style={[styles.section, { borderColor: colors.border }]}>
+      <View style={styles.headingRow}>
+        <View style={[styles.icon, { backgroundColor: colors.muted }]}>
+          <Ionicons name="business-outline" size={22} color={colors.primary} />
+        </View>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Set up bank transfer
+        </Text>
+      </View>
+      <Text style={[styles.description, { color: colors.textSecondary }]}>
         {PROMPT_COPY}
+      </Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>
+        PHONE NUMBER
       </Text>
       <TextInput
         accessibilityLabel="Phone number"
         style={[
-          walletStyles.redeemInput,
+          styles.input,
           {
             backgroundColor: colors.muted,
-            borderColor: colors.primary,
-            borderWidth: 2,
+            borderColor: colors.border,
             color: colors.text,
           },
         ]}
@@ -109,27 +115,59 @@ export function WalletFundPhonePrompt({
         disabled={isSaving}
       >
         {isSaving ? (
-          <ActivityIndicator color={colors.background} size="small" />
+          <ActivityIndicator color={colors.primaryForeground} size="small" />
         ) : (
-          <Text style={[styles.submitText, { color: colors.background }]}>
+          <Text
+            style={[styles.submitText, { color: colors.primaryForeground }]}
+          >
             Save and continue
           </Text>
         )}
       </Pressable>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  section: { borderTopWidth: 1, marginTop: 20, paddingTop: 20 },
+  headingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  icon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+  title: { fontSize: 17, fontWeight: '700' },
+  description: { fontSize: 14, lineHeight: 21, marginBottom: 24 },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    fontSize: 18,
+    minHeight: 64,
+    paddingHorizontal: 18,
+  },
   error: {
     fontSize: 12,
-    marginBottom: 12,
-    marginTop: -4,
+    marginTop: 8,
   },
   submit: {
     alignItems: 'center',
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 16,
+    justifyContent: 'center',
+    marginTop: 24,
+    minHeight: 56,
   },
   submitText: {
     fontSize: 15,

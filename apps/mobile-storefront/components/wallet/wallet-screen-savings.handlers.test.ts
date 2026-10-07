@@ -44,6 +44,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution,
+      walletBalance: 5000,
     });
 
     expect(setIsAddingSavingsContribution).toHaveBeenNthCalledWith(1, true);
@@ -82,6 +83,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).toHaveBeenCalledTimes(1);
@@ -112,6 +114,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(cancelSavingsReminder).toHaveBeenCalledWith('goal-1');
@@ -128,6 +131,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '1000',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -154,6 +158,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount,
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -174,6 +179,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet: jest.fn(async () => undefined),
       setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
     });
 
     expect(addSavingsContribution).not.toHaveBeenCalled();
@@ -201,6 +207,7 @@ describe('wallet-screen-savings.handlers', () => {
       rawAmount: '500',
       refetchWallet,
       setIsAddingSavingsContribution,
+      walletBalance: 5000,
     });
 
     expect(setIsAddingSavingsContribution).toHaveBeenNthCalledWith(1, true);
@@ -212,5 +219,28 @@ describe('wallet-screen-savings.handlers', () => {
       'Contribution failed'
     );
     expect(setIsAddingSavingsContribution).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not submit a contribution when the spendable wallet balance is too low', async () => {
+    const addSavingsContribution = jest.fn(async () => ({}));
+    const setIsAddingSavingsContribution = jest.fn();
+
+    await addSavingsContributionToGoal({
+      addSavingsContribution,
+      clearSavingsContributionAmount: jest.fn(),
+      createIdempotencyKey: () => 'savings-key-1',
+      goal,
+      rawAmount: '500',
+      refetchWallet: jest.fn(async () => undefined),
+      setIsAddingSavingsContribution,
+      walletBalance: 100,
+    });
+
+    expect(addSavingsContribution).not.toHaveBeenCalled();
+    expect(setIsAddingSavingsContribution).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Fund wallet first',
+      'Your wallet has ₦100 available. Fund it before adding ₦500 to savings.'
+    );
   });
 });

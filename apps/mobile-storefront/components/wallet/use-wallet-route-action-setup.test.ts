@@ -72,6 +72,25 @@ function buildParams(
 }
 
 describe('useWalletRouteActionSetup', () => {
+  it('reopens a closed savings modal when a named-goal deep link changes goals', () => {
+    const { rerender } = renderHook(
+      ({ goalId }: { goalId: string }) =>
+        useWalletRouteActionSetup({
+          ...buildParams({ routeAction: 'savings' }),
+          routeSavingsGoalId: goalId,
+        }),
+      { initialProps: { goalId: 'goal-a' } }
+    );
+    noopSetters.setShowSavingsProgressModal.mockClear();
+
+    rerender({ goalId: 'goal-b' });
+
+    expect(noopSetters.setShowSavingsProgressModal).toHaveBeenCalledWith(true);
+    noopSetters.setShowSavingsProgressModal.mockClear();
+    rerender({ goalId: 'goal-b' });
+    expect(noopSetters.setShowSavingsProgressModal).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     storeIntent.mockResolvedValue(undefined);

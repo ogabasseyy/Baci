@@ -134,20 +134,34 @@ describe('Expo compliance', () => {
       path.join(ROOT, 'app.config.ts'),
       'utf-8'
     );
+    // Split-config indirection: app.config.ts now delegates to the
+    // production builder, which imports the nested helpers relatively.
+    // Follow the delegation so the no-type-stripping pin still covers
+    // the helpers actually loaded in production.
+    const builderMatch = configSource.match(/require\('(\.\/config\/[^']+)'\)/);
+    const builderSource = builderMatch
+      ? readFileSync(path.join(ROOT, builderMatch[1]), 'utf-8')
+      : '';
     const helperPaths = [
       ...configSource.matchAll(
         /require\('(\.\/config\/(?:expo-plugins|resolve-update-channel)[^']*)'\)/g
       ),
     ].map((match) => match[1]);
+    const builderHelperPaths = [
+      ...builderSource.matchAll(
+        /from\s+'(\.\/(?:expo-plugins|resolve-update-channel)[^']*)'/g
+      ),
+    ].map((match) => `./config/${match[1].slice(2)}`);
+    const allHelperPaths = [...helperPaths, ...builderHelperPaths];
 
-    expect(helperPaths).toHaveLength(2);
+    expect(allHelperPaths).toHaveLength(2);
 
     const result = spawnSync(
       process.execPath,
       [
         '--no-experimental-strip-types',
         '-e',
-        `for (const helperPath of ${JSON.stringify(helperPaths)}) require(helperPath);`,
+        `for (const helperPath of ${JSON.stringify(allHelperPaths)}) require(helperPath);`,
       ],
       {
         cwd: ROOT,

@@ -31,7 +31,7 @@ const interestPayoutSuccessDataSchema = z.object({
 export const interestPayoutSuccessEventSchema = z.object({
   eventId: z.string().min(1),
   eventType: z.literal('interest-payout.success'),
-  eventCategory: z.literal('interest-payout'),
+  eventCategory: z.enum(['interest-payout', 'interest_payout']),
   customer_id: z.string().min(1),
   eventData: interestPayoutSuccessDataSchema,
   pvb_reference: z.string().min(1),

@@ -16,24 +16,32 @@ describe('normalizeRequiredFundingAccountValue', () => {
 });
 
 describe('deriveWalletDisplayData', () => {
-  it('prefers earnings balance and derives total when absent', () => {
+  it('keeps settled interest separate from spendable and savings balances', () => {
     const result = deriveWalletDisplayData({
-      earnings_balance: 1500,
+      balance: 5000,
+      earnings_available: true,
+      earnings_balance: 125.5,
       savings_balance: 500,
-    });
+    } as never);
 
-    expect(result.earningsBalance).toBe(1500);
+    expect(result.earningsBalance).toBe(125.5);
+    expect(result.earningsAvailable).toBe(true);
     expect(result.savingsBalance).toBe(500);
-    expect(result.totalBalance).toBe(2000);
+    expect(result.spendableBalance).toBe(5000);
+    expect(result.totalBalance).toBe(5500);
   });
 
-  it('falls back to balance when earnings_balance is missing', () => {
+  it('marks earnings unavailable instead of falling back to wallet deposits', () => {
     const result = deriveWalletDisplayData({
       balance: 800,
+      earnings_available: false,
+      earnings_balance: null,
       total_balance: 800,
-    });
+    } as never);
 
-    expect(result.earningsBalance).toBe(800);
+    expect(result.earningsBalance).toBeNull();
+    expect(result.earningsAvailable).toBe(false);
+    expect(result.spendableBalance).toBe(800);
     expect(result.totalBalance).toBe(800);
   });
 
@@ -69,5 +77,38 @@ describe('deriveWalletDisplayData', () => {
         active_savings_goal: { id: 'goal-1' } as never,
       }).showQuickSave
     ).toBe(true);
+  });
+
+  it('opens the requested owned goal instead of the first active row', () => {
+    const result = deriveWalletDisplayData(
+      {
+        active_savings_goal: { id: 'goal-1' } as never,
+        savings_goals: [{ id: 'goal-1' } as never, { id: 'goal-2' } as never],
+      },
+      'goal-2'
+    );
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-2' });
+  });
+
+  it('falls back to the active goal for an unknown requested id', () => {
+    const result = deriveWalletDisplayData(
+      {
+        active_savings_goal: { id: 'goal-1' } as never,
+        savings_goals: [{ id: 'goal-1' } as never],
+      },
+      'goal-unknown'
+    );
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-1' });
+  });
+
+  it('keeps the active goal when no goal is requested', () => {
+    const result = deriveWalletDisplayData({
+      active_savings_goal: { id: 'goal-1' } as never,
+      savings_goals: [{ id: 'goal-1' } as never, { id: 'goal-2' } as never],
+    });
+
+    expect(result.activeSavingsGoal).toEqual({ id: 'goal-1' });
   });
 });

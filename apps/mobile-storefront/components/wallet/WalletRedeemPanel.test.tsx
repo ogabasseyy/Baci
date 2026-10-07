@@ -43,6 +43,15 @@ describe('WalletRedeemPanel', () => {
     expect(screen.getByPlaceholderText('Enter points to redeem (min 100)'));
   });
 
+  it('lists Silver, Gold, and Platinum without advertising Bronze', () => {
+    render(<WalletRedeemPanel {...props} />);
+
+    expect(screen.queryByText('BRONZE')).toBeNull();
+    expect(screen.getByText('SILVER')).toBeOnTheScreen();
+    expect(screen.getByText('GOLD')).toBeOnTheScreen();
+    expect(screen.getByText('PLATINUM')).toBeOnTheScreen();
+  });
+
   it('wires redeem input and action callbacks', () => {
     render(<WalletRedeemPanel {...props} />);
 

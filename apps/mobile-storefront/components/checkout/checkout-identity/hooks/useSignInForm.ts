@@ -129,6 +129,7 @@ export function useSignInForm({
   // Finalize a pending social sign-in when the auth store reports a user.
   // Subscribing to the external store (instead of mirroring `user` through an
   // effect dependency) keeps setState inside a subscription callback.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setPendingSocialSignInBoth only writes a ref and state; resubscribing on its per-render identity would churn the auth subscription.
   useEffect(() => {
     const unsubscribe = useAuthStore.subscribe((state) => {
       if (!state.user || !pendingSocialSignInRef.current) {

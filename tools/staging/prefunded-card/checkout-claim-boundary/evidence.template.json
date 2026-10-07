@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "capturedAt": null,
+  "sourceClosureSha256": null,
+  "identity": {
+    "systemIdentifier": "7685292944002592802",
+    "database": null,
+    "databaseOid": null,
+    "sessionUser": "postgres",
+    "currentUser": "postgres",
+    "roleOid": null,
+    "superuser": true,
+    "localSocket": true,
+    "sessionReplicationRole": "origin"
+  },
+  "functions": {
+    "prefunded_card.claim_due(uuid,text,text,integer,uuid,uuid)": {
+      "oid": null,
+      "ownerOid": null,
+      "owner": "postgres",
+      "acl": null,
+      "configuration": ["search_path=pg_catalog"],
+      "language": "plpgsql",
+      "securityDefiner": true,
+      "catalogSha256": null,
+      "body": null,
+      "bodySha256": null
+    },
+    "prefunded_card.claim_reconciliation(uuid,integer)": {
+      "oid": null,
+      "ownerOid": null,
+      "owner": "postgres",
+      "acl": null,
+      "configuration": ["search_path=pg_catalog"],
+      "language": "plpgsql",
+      "securityDefiner": true,
+      "catalogSha256": null,
+      "body": null,
+      "bodySha256": null
+    }
+  },
+  "tableRows": {},
+  "permanentMetadataSha256": null,
+  "unsupportedRelations": []
+}

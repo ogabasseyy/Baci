@@ -11,10 +11,12 @@ import { startSavingsModalStyles } from './start-savings-modal.styles';
 export const startSavingsStyles = StyleSheet.create({
   ...startSavingsModalStyles,
   container: { flex: 1 },
+  setupCard: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 20 },
+  amountInput: { fontSize: 30, fontWeight: '700', minHeight: 72 },
   scrollContent: {
     paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING['3xl'],
+    paddingTop: SPACING.sm,
+    paddingBottom: 120,
     gap: SPACING.md,
   },
   heading: {
@@ -34,16 +36,18 @@ export const startSavingsStyles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: RADIUS.lg,
+    borderRadius: 16,
+    minHeight: 52,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 14,
     fontSize: TYPOGRAPHY.size.base,
   },
   pickerField: {
     borderWidth: 1,
-    borderRadius: RADIUS.lg,
+    borderRadius: 16,
+    minHeight: 52,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 14,
     justifyContent: 'center',
   },
   pickerFieldText: {
@@ -66,10 +70,39 @@ export const startSavingsStyles = StyleSheet.create({
     fontSize: TYPOGRAPHY.size.xs,
     marginTop: 2,
   },
+  emptyText: {
+    fontSize: TYPOGRAPHY.size.sm,
+  },
   productMetaText: {
     fontSize: TYPOGRAPHY.size.xs,
     lineHeight: 16,
     marginTop: 2,
+  },
+  variantGroups: {
+    gap: SPACING.sm,
+  },
+  variantGroup: {
+    gap: SPACING.sm,
+  },
+  variantGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  variantOption: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  variantOptionPressable: {
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  variantOptionText: {
+    fontSize: TYPOGRAPHY.size.sm,
+    fontWeight: TYPOGRAPHY.weight.bold,
   },
   selectedProductCard: {
     borderRadius: RADIUS.xl,
@@ -95,9 +128,10 @@ export const startSavingsStyles = StyleSheet.create({
   },
   frequencyOption: {
     flex: 1,
-    borderRadius: RADIUS.full,
+    borderRadius: 16,
+    minHeight: 48,
     borderWidth: 1,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -119,6 +153,8 @@ export const startSavingsStyles = StyleSheet.create({
     gap: SPACING.md,
   },
   radioOption: {
+    minHeight: 44,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
@@ -130,7 +166,7 @@ export const startSavingsStyles = StyleSheet.create({
     borderWidth: 1,
   },
   sourceModeCard: {
-    borderRadius: RADIUS.xl,
+    borderRadius: 24,
     borderWidth: 1,
     padding: SPACING.md,
     gap: SPACING.xs,
@@ -157,6 +193,7 @@ export const startSavingsStyles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   checkbox: {
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: SPACING.xs,
@@ -180,6 +217,7 @@ export const startSavingsStyles = StyleSheet.create({
     marginTop: -SPACING.xs,
   },
   primaryButton: {
+    minHeight: 56,
     backgroundColor: BRAND.primary,
     borderRadius: RADIUS.full,
     alignItems: 'center',

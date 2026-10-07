@@ -1,9 +1,10 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { createUsdtWalletFundingClient } from './usdt-wallet-funding-client';
 
 describe('createUsdtWalletFundingClient', () => {
   it('reads the isolated USDT balance from the storefront wallet contract', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () => Promise.resolve({ balances: { NGN: 1000, USDT: 12.5 } }),
       ok: true,
       status: 200,
@@ -24,7 +25,7 @@ describe('createUsdtWalletFundingClient', () => {
   });
 
   it('initializes a USDT address with billing context', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({
           amount: 25.5,
@@ -60,7 +61,7 @@ describe('createUsdtWalletFundingClient', () => {
   });
 
   it('returns a deposit address discovered by status polling', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({
           depositAddress: 'TLateAddress',

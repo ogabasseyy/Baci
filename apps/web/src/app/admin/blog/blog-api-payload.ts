@@ -37,7 +37,9 @@ export function toApiPayload(
   // The editor clears alt on every URL keystroke and offers no alt control,
   // so a blank alt with an unchanged URL is always an undone edit — never
   // an intentional clear. Preserve the stored description instead of
-  // silently deleting it with an explicit null.
+  // silently deleting it with an explicit null. Intentional clearing from
+  // the editor is unsupported by design; deliberate removal uses direct
+  // API PATCH, which bypasses this client-side helper.
   const imageUrlUnchanged =
     existingPost != null &&
     normalizeTrimmedString(input.featured_image_url) ===

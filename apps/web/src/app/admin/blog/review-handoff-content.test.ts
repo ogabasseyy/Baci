@@ -125,6 +125,17 @@ describe('validateImportedContent', () => {
     ).toContain('srcset');
   });
 
+  it.each([
+    'https://cdn.example.com/a.webp?crop=1,2 1x',
+    'https://cdn.example.com/a.webp?scale=1,1.5 2x',
+  ])('accepts numeric value lists inside one srcset URL: %s', (srcset) => {
+    expect(
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
+    ).toContain('srcset');
+  });
+
   it('accepts srcset candidates with CDN transform commas', () => {
     expect(
       validateImportedContent(

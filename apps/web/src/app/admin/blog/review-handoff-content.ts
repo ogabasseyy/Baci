@@ -125,12 +125,16 @@ function isCandidateBoundary(current: string, piece: string): boolean {
   }
   // A comma continues the current candidate only inside a CDN transform
   // parameter list: the accumulated text ends mid-assignment (key=partial
-  // value) and the next piece continues assignments (see
-  // buildOgabasseyAvifSrcSet). Either condition alone proves nothing —
-  // relative path segments may themselves contain `=`.
+  // value) and the next piece continues assignments — another key=value
+  // segment (see buildOgabasseyAvifSrcSet) or a bare numeric value such as
+  // the `2` in `?crop=1,2`. Either side alone proves nothing: relative
+  // path segments may themselves contain `=`.
   const endsMidAssignment = /=[^/?#\s]*$/.test(accumulated);
-  const segment = next.split(/\s+/, 1)[0].split(/[/?#]/, 1)[0];
-  return !(endsMidAssignment && segment.includes('='));
+  const firstToken = next.split(/\s+/, 1)[0];
+  const segment = firstToken.split(/[/?#]/, 1)[0];
+  const continuesAssignments =
+    segment.includes('=') || /^\d+(\.\d+)?$/.test(firstToken);
+  return !(endsMidAssignment && continuesAssignments);
 }
 
 function splitSrcsetCandidates(srcset: string): string[] {

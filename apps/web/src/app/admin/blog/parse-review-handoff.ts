@@ -12,6 +12,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const NULL_BYTE = String.fromCharCode(0);
+const LONE_SURROGATE_PATTERN =
+  /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
 function readRawText(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -19,6 +21,12 @@ function readRawText(value: unknown): string {
   // draft that can never save.
   if (value.includes(NULL_BYTE)) {
     throw new Error('Imported text must not contain null bytes');
+  }
+  // Unpaired surrogates survive JSON.parse and Zod strings but PostgreSQL
+  // rejects them on save; fail fast for the same reason. Paired surrogates
+  // (emoji and other astral characters) pass through untouched.
+  if (LONE_SURROGATE_PATTERN.test(value)) {
+    throw new Error('Imported text must not contain unpaired surrogates');
   }
   return value;
 }

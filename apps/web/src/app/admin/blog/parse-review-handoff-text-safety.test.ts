@@ -20,6 +20,32 @@ describe('handoff text safety', () => {
     ).toThrow('null bytes');
   });
 
+  it.each([
+    'title',
+    'author_name',
+    'category',
+  ] as const)('rejects unpaired surrogates in %s', (field) => {
+    const high = String.fromCharCode(0xd800);
+    expect(() =>
+      parseReviewHandoff({ ...handoff, [field]: `Galaxy${high}A` })
+    ).toThrow('unpaired surrogates');
+  });
+
+  it('rejects a lone low surrogate in the title', () => {
+    const low = String.fromCharCode(0xdc00);
+    expect(() =>
+      parseReviewHandoff({ ...handoff, title: `Galaxy${low}A` })
+    ).toThrow('unpaired surrogates');
+  });
+
+  it('accepts paired surrogates as ordinary characters', () => {
+    const draft = parseReviewHandoff({
+      ...handoff,
+      title: 'Galaxy 😀 guide',
+    });
+    expect(draft.title).toBe('Galaxy 😀 guide');
+  });
+
   it('rejects null bytes in inline media URLs', () => {
     const nul = String.fromCharCode(0);
     expect(() =>

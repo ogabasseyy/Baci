@@ -40,6 +40,14 @@ const mockAuthState: {
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: { getState: () => mockAuthState },
 }));
+// Goal reconciliation is covered in the retention suite; here it resolves no
+// goals so every record is kept (and the API-client graph stays unloaded).
+jest.mock('@/lib/customer-savings', () => ({
+  listSavingsGoals: jest.fn(async () => ({
+    goals: [],
+    summary: { activeGoalCount: 0, savingsBalance: 0 },
+  })),
+}));
 
 const {
   buildReminderScope,
@@ -142,10 +150,7 @@ describe('savings reminder notification capability', () => {
     }
   });
 
-  it.each([
-    'cancel-all',
-    'server-push',
-  ])('clears scheduled and pending goals for %s', async (reason) => {
+  it('clears scheduled and pending goals for cancel-all', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
@@ -159,20 +164,52 @@ describe('savings reminder notification capability', () => {
       goalTitle: 'Phone',
       scheduledAt: new Date(2099, 0, 1),
     });
-    if (reason === 'server-push') {
-      await savingsNotificationCapability.markAvailable({
-        apiOrigin: 'https://api.baci.test',
-        merchantId: '00000000-0000-4000-8000-000000000010',
-        userId: 'user-a',
-      });
-      await activateDueSavingsReminderNotification();
-    } else await cancelSavingsReminderNotification();
+    await cancelSavingsReminderNotification();
     expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
     expect(
       (await AsyncStorage.getAllKeys()).filter((key) =>
         key.startsWith('baci:savings-reminder-')
       )
     ).toEqual([]);
+  });
+
+  it('retains pendings while cancelling live notifications for server-push', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-2',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2099, 0, 1),
+    });
+    await savingsNotificationCapability.markAvailable({
+      apiOrigin: 'https://api.baci.test',
+      merchantId: '00000000-0000-4000-8000-000000000010',
+      userId: 'user-a',
+    });
+    await activateDueSavingsReminderNotification();
+    // The live OS notification is cancelled, but both pendings survive so
+    // local reminders re-arm if server delivery is later lost.
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(
+      (await AsyncStorage.getAllKeys())
+        .filter((key) => key.startsWith('baci:savings-reminder-goal:'))
+        .sort()
+    ).toEqual([
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1',
+      'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-2',
+    ]);
+    await expect(
+      AsyncStorage.getItem(
+        'baci:savings-reminder-goal:user-a:00000000-0000-4000-8000-000000000010:goal-1'
+      )
+    ).resolves.toContain('Phone');
   });
 
   it('serializes overlapping activations so each due goal is scheduled once', async () => {

@@ -1,5 +1,6 @@
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
+import { listSavingsGoals } from '@/lib/customer-savings';
 import { createLogger } from '@/lib/logger';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { savingsNotificationCapability } from '@/services/savings-notification-capability';
@@ -18,6 +19,7 @@ import {
   suppressStoredSavingsReminderNotification,
 } from './savings-reminder-scheduling';
 import {
+  type ReminderRecord,
   type SavingsReminderRequest,
   type SavingsReminderScope,
   savingsReminderStorage,
@@ -135,13 +137,56 @@ export function activateDueSavingsReminderNotification() {
   return savingsReminderStorage.runExclusive(activateDueReminders);
 }
 
+/**
+ * Reconciles due records with current goal state before re-arming. A goal
+ * completed server-side (e.g. auto-debit) bypasses the mobile contribution
+ * handlers, so its retained pending would otherwise re-arm and remind for a
+ * finished goal. Terminal-goal records are destroyed; anything unlisted (or
+ * unreachable on lookup failure) is kept — a failed lookup must never nuke
+ * reminders.
+ */
+async function retireTerminalGoalReminders(
+  notifications: ReturnType<typeof loadNotificationsModule>,
+  scope: SavingsReminderScope,
+  due: ReminderRecord[]
+): Promise<ReminderRecord[]> {
+  let goals: Awaited<ReturnType<typeof listSavingsGoals>>['goals'];
+  try {
+    goals = (await listSavingsGoals({ merchantId: scope.merchantId })).goals;
+  } catch (error) {
+    log.debug('Unable to reconcile savings reminders with goal state', error);
+    return due;
+  }
+  const statusByGoalId = new Map(goals.map((goal) => [goal.id, goal.status]));
+  const armed: ReminderRecord[] = [];
+  for (const record of due) {
+    const status = statusByGoalId.get(record.goalId);
+    if (
+      status === 'completed' ||
+      status === 'cancelled' ||
+      status === 'spent'
+    ) {
+      await cancelStoredSavingsReminderNotification(
+        notifications,
+        scope,
+        record.goalId
+      );
+      continue;
+    }
+    armed.push(record);
+  }
+  return armed;
+}
+
 async function activateDueReminders() {
   const scope = resolveReminderScope();
   if (!scope) return null;
   const notifications = loadNotificationsModule();
   await disposeUnscopedSavingsReminders(notifications);
   if (await hasServerSavingsNotificationCapability()) {
-    await cancelStoredSavingsReminderNotification(notifications, scope);
+    // Suppress, not cancel: the pending requests must survive so local
+    // reminders re-arm if server delivery is later lost.
+    await suppressStoredSavingsReminderNotification(notifications, scope);
     return null;
   }
   const records = await savingsReminderStorage.read(scope);
@@ -152,12 +197,13 @@ async function activateDueReminders() {
       !notificationId && pending && pending.scheduledAt.getTime() <= Date.now()
   );
   if (!due.length) return null;
+  const armed = await retireTerminalGoalReminders(notifications, scope, due);
   if (!notifications || !(await hasSavingsReminderPermission(notifications)))
     return null;
   await ensureSavingsReminderChannel(notifications);
   let notificationId: string | null = null;
   let failure: unknown;
-  for (const { pending } of due) {
+  for (const { pending } of armed) {
     if (!pending) continue;
     try {
       notificationId = await scheduleRecurringSavingsReminder({
@@ -235,7 +281,9 @@ async function scheduleReminder(
   const notifications = loadNotificationsModule();
   await disposeUnscopedSavingsReminders(notifications);
   if (await hasServerSavingsNotificationCapabilityFor(scope)) {
-    await cancelStoredSavingsReminderNotification(notifications, scope);
+    // Suppress, not cancel: pre-existing pendings must survive so local
+    // reminders re-arm if server delivery is later lost.
+    await suppressStoredSavingsReminderNotification(notifications, scope);
     return null;
   }
   if (

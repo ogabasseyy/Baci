@@ -46,6 +46,16 @@ describe('handoff text safety', () => {
     expect(draft.title).toBe('Galaxy 😀 guide');
   });
 
+  it.each([
+    ['U+200B', String.fromCharCode(0x200b)],
+    ['U+034F', String.fromCharCode(0x034f)],
+    ['U+FEFF', String.fromCharCode(0xfeff)],
+  ])('rejects invisible-only titles (%s)', (_label, invisible) => {
+    expect(() => parseReviewHandoff({ ...handoff, title: invisible })).toThrow(
+      'title and article content are required'
+    );
+  });
+
   it('rejects null bytes in inline media URLs', () => {
     const nul = String.fromCharCode(0);
     expect(() =>

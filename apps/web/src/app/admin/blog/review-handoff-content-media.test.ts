@@ -90,15 +90,14 @@ describe('validateImportedContent media', () => {
     'https://cdn.example.com/a.webp 1x, data:image/png;base64,iVBORw0KGgo=',
     'data:image/png;base64,iVBORw0KGgo, https://cdn.example.com/b.webp 2x',
     'data:image/png;base64,iVBORw0KGgo',
-  ])('strips embedded data: candidates from srcset instead of storing them: %s', (srcset) => {
-    // The sanitizer removes data: candidates (or the whole attribute when
-    // nothing valid remains), so no embedded bytes can persist; the
-    // validator then accepts the sanitized remainder.
-    const content = validateImportedContent(
-      `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
-    );
-    expect(content).toContain('https://cdn.example.com/a.webp');
-    expect(content).not.toContain('data:');
+  ])('rejects embedded data: URLs in srcset: %s', (srcset) => {
+    // The pre-sanitization media check rejects loudly; the sanitizer would
+    // otherwise strip these candidates and silently persist a crippled image.
+    expect(() =>
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
+    ).toThrow('must use HTTPS URLs');
   });
 
   it.each([
@@ -125,6 +124,30 @@ describe('validateImportedContent media', () => {
     expect(() => validateImportedContent(content_html)).toThrow(
       'must use HTTPS URLs'
     );
+  });
+
+  it.each([
+    'https://cdn.example.com/a.webp 0w',
+    'https://cdn.example.com/a.webp 0x',
+    'https://cdn.example.com/a.webp 1.5w',
+    'https://cdn.example.com/a.webp 1x 2x',
+    'https://cdn.example.com/a.webp 100h',
+    'https://cdn.example.com/a.webp two-x',
+    'https://cdn.example.com/a.webp 2X',
+  ])('rejects srcset candidates with invalid descriptors: %s', (srcset) => {
+    expect(() =>
+      validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it.each([
+    'https://cdn.example.com/a.webp 1.5x',
+    'https://cdn.example.com/a.webp 1e3x',
+    'https://cdn.example.com/a.webp 100w',
+  ])('accepts srcset candidates with valid descriptors: %s', (srcset) => {
+    expect(
+      validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)
+    ).toContain('srcset');
   });
 
   it('accepts markdown images with importable media', () => {

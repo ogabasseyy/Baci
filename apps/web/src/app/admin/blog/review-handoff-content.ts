@@ -1,29 +1,54 @@
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { stripNonRenderingText } from './strip-non-rendering-text';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
 const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
 const MEDIA_ATTRIBUTE_PATTERN = /([\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
 
-function mediaTagUrls(tag: string): string[] {
-  const urls: string[] = [];
+// Lowercase only: like the sanitizer (and browsers), uppercase descriptors
+// do not parse as width/density values.
+const SRCSET_DESCRIPTOR_PATTERN = /^(\d+w|\d+(\.\d+)?([eE][+-]?\d+)?x)$/;
+
+function isValidSrcsetDescriptor(candidate: string): boolean {
+  const parts = candidate.trim().split(/\s+/);
+  // Descriptorless candidates default to 1x; more than one descriptor is
+  // never valid, and a zero value selects no resource.
+  if (parts.length <= 1) return true;
+  if (parts.length > 2) return false;
+  const descriptor = parts[1];
+  return (
+    SRCSET_DESCRIPTOR_PATTERN.test(descriptor) &&
+    Number.parseFloat(descriptor) > 0
+  );
+}
+
+type MediaCandidate = { url: string; valid: boolean };
+
+function mediaTagCandidates(tag: string): MediaCandidate[] {
+  const candidates: MediaCandidate[] = [];
   for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
     const name = match[1].toLowerCase();
     const raw = match[2];
     const value =
       raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
     if (name === 'src') {
-      if (value) urls.push(value);
+      if (value) candidates.push({ url: value, valid: true });
     } else if (name === 'srcset') {
       for (const candidate of splitSrcsetCandidates(value)) {
         const candidateUrl = candidate.trim().split(/\s+/, 1)[0];
-        if (candidateUrl) urls.push(candidateUrl);
+        if (candidateUrl) {
+          candidates.push({
+            url: candidateUrl,
+            valid: isValidSrcsetDescriptor(candidate),
+          });
+        }
       }
     }
   }
-  return urls;
+  return candidates;
 }
 
 function isImportableMediaUrl(url: string): boolean {
@@ -60,7 +85,10 @@ function isJsonShapedText(value: string): boolean {
   }
 }
 
-function normalizeContent(rawContent: string, sanitizedRaw: string): string {
+function normalizeContent(
+  rawContent: string,
+  sanitizedRaw: string
+): { content: string; rendered: string } {
   try {
     const rendered = marked.parse(rawContent, { async: false }) as string;
     // Store what the editor displays: BlogEditor renders non-JSON content
@@ -82,12 +110,22 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
       !renderedIntroducesLink &&
       stripMarkupText(rendered) === stripMarkupText(rawContent)
     ) {
-      return sanitizedRaw;
+      return { content: sanitizedRaw, rendered };
     }
-    return sanitizeHtml(rendered);
+    return { content: sanitizeHtml(rendered), rendered };
   } catch {
-    return sanitizedRaw;
+    return { content: sanitizedRaw, rendered: sanitizedRaw };
   }
+}
+
+function hasBrokenMediaTag(html: string): boolean {
+  return (html.match(MEDIA_TAG_PATTERN) ?? []).some((tag) => {
+    const candidates = mediaTagCandidates(tag);
+    return (
+      candidates.length === 0 ||
+      candidates.some(({ url, valid }) => !valid || !isImportableMediaUrl(url))
+    );
+  });
 }
 
 const NEW_CANDIDATE_URL_PATTERN = /^(data:|[a-z][a-z\d+.-]*:\/\/)/i;
@@ -149,19 +187,12 @@ function splitSrcsetCandidates(srcset: string): string[] {
   return candidates;
 }
 
-// Default-ignorable marks (U+034F, variation selectors, ...) render nothing
-// but are category Mn rather than Cf/Cc, so the general Unicode property
-// carries them while Cc stays explicit.
-const NON_RENDERING_TEXT_PATTERN = /[\p{Cc}\p{Default_Ignorable_Code_Point}]/gu;
-
 function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>.
   if (content.match(IMG_TAG_PATTERN)) return true;
-  const text = content
-    .replace(/<[^>]*>/gu, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(NON_RENDERING_TEXT_PATTERN, '')
-    .trim();
+  const text = stripNonRenderingText(
+    content.replace(/<[^>]*>/gu, '').replace(/&nbsp;/gi, ' ')
+  ).trim();
   return text.length > 0;
 }
 
@@ -183,7 +214,7 @@ export function validateImportedContent(rawContent: string): string {
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
   }
-  const content = normalizeContent(rawContent, sanitizedRaw);
+  const { content, rendered } = normalizeContent(rawContent, sanitizedRaw);
   if (!content.trim()) {
     throw new Error('Article content is empty after sanitization');
   }
@@ -195,15 +226,11 @@ export function validateImportedContent(rawContent: string): string {
   if (!hasReadableContent(content)) {
     throw new Error('Article content has no readable text or images');
   }
-  const hasBrokenMedia = (content.match(MEDIA_TAG_PATTERN) ?? []).some(
-    (tag) => {
-      const urls = mediaTagUrls(tag);
-      return (
-        urls.length === 0 || urls.some((url) => !isImportableMediaUrl(url))
-      );
-    }
-  );
-  if (hasBrokenMedia) {
+  // Validate the rendered markup as well as the stored markup: the
+  // sanitizer strips invalid descriptors and data: candidates, which would
+  // otherwise hide broken media from a stored-only check. Either layer
+  // rejects loudly instead of silently persisting a crippled image.
+  if (hasBrokenMediaTag(rendered) || hasBrokenMediaTag(content)) {
     throw new Error('Imported inline images must use HTTPS URLs');
   }
   return content;

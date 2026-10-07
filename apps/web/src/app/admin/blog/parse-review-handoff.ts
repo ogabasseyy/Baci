@@ -6,6 +6,7 @@ import { isHttpsUrl } from '@/lib/is-https-url';
 import { blogPostSchema } from '@/lib/validations/blog';
 import type { PlatformAdminBlogFormState } from './blog-types';
 import { validateImportedContent } from './review-handoff-content';
+import { stripNonRenderingText } from './strip-non-rendering-text';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -32,7 +33,10 @@ function readRawText(value: unknown): string {
 }
 
 function readText(value: unknown): string {
-  return readRawText(value).trim();
+  // Strip non-rendering characters (same normalization as the readability
+  // check) so invisible-only metadata reads as empty instead of passing
+  // required-field and schema validation with a visually blank value.
+  return stripNonRenderingText(readRawText(value)).trim();
 }
 
 // generateSlug strips every non-Latin character, so a valid non-Latin or

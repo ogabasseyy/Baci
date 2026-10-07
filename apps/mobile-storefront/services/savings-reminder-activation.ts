@@ -23,14 +23,14 @@ import {
 
 const log = createLogger('SavingsReminderActivation');
 
-// Local copy of the notifications module's scope resolution (kept separate
-// to avoid a module cycle; must resolve identically to buildReminderScope
-// in savings-reminder-notifications.ts).
 function resolveReminderScope(): SavingsReminderScope | null {
   const { merchantId, user } = useAuthStore.getState();
-  const resolvedMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
-  if (!user?.id || !resolvedMerchantId) return null;
-  return { merchantId: resolvedMerchantId, userId: user.id };
+  // Lazy require: a static import would cycle (the notifications module
+  // re-exports activation), so resolve through the single canonical helper
+  // at call time instead of duplicating its fallback logic.
+  const { buildReminderScope } =
+    require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
+  return buildReminderScope(user?.id, merchantId);
 }
 
 function hasServerSavingsNotificationCapability() {
@@ -76,15 +76,20 @@ export function activateDueSavingsReminderNotification() {
   const scope = resolveReminderScope();
   if (!scope) return Promise.resolve(null);
   return (async () => {
-    // Gate the fetch on local arming: when arming is already impossible
-    // there is no reason to pay for goal reconciliation. The gates run
-    // again inside the mutex; this outer check only skips the network.
+    // Gate the fetch on local arming and on stored records: users with no
+    // local reminders (or no notification path) skip the goals request
+    // entirely. The gates run again inside the mutex; these outer checks
+    // only skip the network.
     const arming = loadNotificationsModule();
     const canArm =
       arming && (await hasSavingsReminderPermission(arming).catch(() => false));
-    const terminalGoalIds = canArm
-      ? await fetchTerminalGoalIds(scope)
-      : new Set<string>();
+    const probe = canArm
+      ? await savingsReminderStorage.read(scope).catch(() => null)
+      : null;
+    const terminalGoalIds =
+      canArm && probe?.length
+        ? await fetchTerminalGoalIds(scope)
+        : new Set<string>();
     return savingsReminderStorage.runExclusive(() =>
       activateDueReminders(scope, terminalGoalIds)
     );
@@ -97,38 +102,39 @@ async function activateDueReminders(
 ) {
   const notifications = loadNotificationsModule();
   await disposeUnscopedSavingsReminders(notifications);
-  // Re-resolve after the network: operate on the current account, and only
-  // apply the retirement snapshot when the account didn't change mid-fetch.
+  // Abort on mid-fetch account change: the snapshot belongs to the old
+  // account, and the auth-change effect refires activation with a fresh
+  // snapshot for the new one. Continuing would arm unreconciled records.
   const current = resolveReminderScope();
-  if (!current) return null;
-  const retiring =
-    current.userId === scope.userId && current.merchantId === scope.merchantId
-      ? terminalGoalIds
-      : new Set<string>();
-  if (await hasServerSavingsNotificationCapability()) {
-    // Suppress, not cancel: the pending requests must survive so local
-    // reminders re-arm if server delivery is later lost. Terminal-goal
-    // retirement is intentionally deferred until a rollback activation;
-    // retained storage stays bounded to one record per goal.
-    await suppressStoredSavingsReminderNotification(notifications, current);
+  if (
+    !current ||
+    current.userId !== scope.userId ||
+    current.merchantId !== scope.merchantId
+  )
     return null;
-  }
   const records = await savingsReminderStorage.read(current);
-  if (!records.length) return null;
-  // Local gates before arming. Retirement still runs before arming (never
-  // backgrounded): arming first would briefly give completed goals live
-  // notifications that an app kill could leave behind.
-  if (!notifications || !(await hasSavingsReminderPermission(notifications)))
-    return null;
-  await ensureSavingsReminderChannel(notifications);
-  // Reconcile every record, not just due ones: a goal completed while its
-  // recurring local notification is live must still be retired.
+  // Retire on every path (server-owned included): terminal goals must not
+  // accumulate, and this runs before the permission gates so revoked
+  // permission cannot strand a live notification for a finished goal.
   const live = await retireTerminalGoalReminders(
     notifications,
     current,
     records,
-    retiring
+    terminalGoalIds
   );
+  if (await hasServerSavingsNotificationCapability()) {
+    // Suppress, not cancel: the pending requests must survive so local
+    // reminders re-arm if server delivery is later lost.
+    await suppressStoredSavingsReminderNotification(notifications, current);
+    return null;
+  }
+  if (!live.length) return null;
+  // Retirement still runs before arming (never backgrounded): arming first
+  // would briefly give completed goals live notifications that an app kill
+  // could leave behind.
+  if (!notifications || !(await hasSavingsReminderPermission(notifications)))
+    return null;
+  await ensureSavingsReminderChannel(notifications);
   // Records already converted to a live OS notification keep their retained
   // pending request — only due requests without a live notification arm now.
   const due = live.filter(

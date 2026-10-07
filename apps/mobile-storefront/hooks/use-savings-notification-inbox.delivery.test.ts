@@ -46,6 +46,16 @@ jest.mock('@/services/savings-reminder-notifications', () => ({
 jest.mock('@/lib/push-token-storage', () => ({
   getRegisteredPushToken: mockGetRegisteredPushToken,
 }));
+const mockAuthState: {
+  merchantId: string | null;
+  user: { id: string } | null;
+} = {
+  merchantId: '00000000-0000-4000-8000-000000000010',
+  user: { id: 'user-a' },
+};
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => mockAuthState },
+}));
 
 const { useSavingsNotificationInbox } =
   require('./use-savings-notification-inbox') as typeof import('./use-savings-notification-inbox');
@@ -81,6 +91,8 @@ const inbox = {
 describe('useSavingsNotificationInbox server-delivery suppression', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthState.merchantId = '00000000-0000-4000-8000-000000000010';
+    mockAuthState.user = { id: 'user-a' };
     mockFetchInbox.mockResolvedValue(inbox);
     mockMarkAvailable.mockResolvedValue();
     mockClearAvailable.mockResolvedValue();
@@ -196,5 +208,34 @@ describe('useSavingsNotificationInbox server-delivery suppression', () => {
       merchantId,
       userId: 'user-a',
     });
+  });
+
+  it('skips suppression when inbox props disagree with the auth store', async () => {
+    // Stale props during an account switch: the hook still renders user-a
+    // while the store already moved to user-b.
+    mockAuthState.user = { id: 'user-b' };
+    const { result } = renderHook(() =>
+      useSavingsNotificationInbox({
+        enabled: true,
+        merchantId,
+        userId: 'user-a',
+      })
+    );
+
+    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
+    await waitFor(() =>
+      expect(mockMarkAvailable).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-a' })
+      )
+    );
+    // Flush the markAvailable continuation, then assert it skipped the
+    // mistargeted suppression (clearAvailable also untouched: the registered
+    // device path was taken, not the fallback branch).
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(mockClearAvailable).not.toHaveBeenCalled();
   });
 });

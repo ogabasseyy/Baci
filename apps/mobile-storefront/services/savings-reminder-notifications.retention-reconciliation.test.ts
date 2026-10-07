@@ -49,6 +49,7 @@ jest.mock('@/lib/customer-savings', () => ({
 const {
   activateDueSavingsReminderNotification,
   scheduleSavingsReminderNotification,
+  suppressSavingsReminderNotification,
 } =
   require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
 const { savingsNotificationCapability } =
@@ -64,6 +65,24 @@ const capabilityScope = {
   userId: 'user-a',
 };
 
+function goalFixture(id: string, status: SavingsGoal['status']): SavingsGoal {
+  return {
+    breakFeePercent: 0,
+    contributionAmount: 500,
+    contributionFrequency: 'weekly',
+    currentAmount: 100,
+    id,
+    maturityDate: '2026-12-31',
+    productId: 'product-1',
+    sourceMode: 'manual',
+    startDate: '2026-01-01',
+    status,
+    targetAmount: 1000,
+    title: 'Phone',
+    variantId: null,
+  };
+}
+
 function scheduledGoalIds(): Array<string | undefined> {
   return mockNotifications.scheduleNotificationAsync.mock.calls.map(
     (call) =>
@@ -72,7 +91,7 @@ function scheduledGoalIds(): Array<string | undefined> {
   );
 }
 
-describe('savings reminder retention across server-delivery transitions', () => {
+describe('savings reminder terminal-goal reconciliation', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
@@ -82,7 +101,7 @@ describe('savings reminder retention across server-delivery transitions', () => 
     });
   });
 
-  it('re-arms retained pendings after server delivery is enabled and then lost', async () => {
+  it('retires reminders for goals completed by server auto-debit before re-arming', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
@@ -90,25 +109,48 @@ describe('savings reminder retention across server-delivery transitions', () => 
       goalTitle: 'Phone',
       scheduledAt: new Date(2020, 5, 8, 9, 30),
     });
-    expect(scheduledGoalIds()).toEqual(['goal-1']);
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 700,
+      frequency: 'weekly',
+      goalId: 'goal-2',
+      goalTitle: 'Laptop',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    await suppressSavingsReminderNotification();
+    mockListSavingsGoals.mockResolvedValue({
+      goals: [
+        goalFixture('goal-1', 'completed'),
+        goalFixture('goal-2', 'active'),
+      ],
+      summary: { activeGoalCount: 1, savingsBalance: 100 },
+    });
 
-    await savingsNotificationCapability.markAvailable(capabilityScope);
     await activateDueSavingsReminderNotification();
 
-    // Live OS notification cancelled, but nothing re-scheduled while the
-    // server owns delivery — and the pending request must survive.
-    expect(
-      mockNotifications.cancelScheduledNotificationAsync
-    ).toHaveBeenCalledWith('notification-id');
-    expect(scheduledGoalIds()).toEqual(['goal-1']);
+    expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-2', 'goal-2']);
 
-    await savingsNotificationCapability.clearAvailable(capabilityScope);
+    // The completed goal stays retired on later activations.
+    await activateDueSavingsReminderNotification();
+    expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-2', 'goal-2']);
+  });
+
+  it('keeps all reminders when goal reconciliation fails', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    await suppressSavingsReminderNotification();
+    mockListSavingsGoals.mockRejectedValue(new Error('offline'));
+
     await activateDueSavingsReminderNotification();
 
     expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-1']);
   });
 
-  it('persists new requests scheduled while capability is available', async () => {
+  it('retires terminal goals on the server-owned path instead of retaining them', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
@@ -116,57 +158,61 @@ describe('savings reminder retention across server-delivery transitions', () => 
       goalTitle: 'Phone',
       scheduledAt: new Date(2020, 5, 8, 9, 30),
     });
-
-    await savingsNotificationCapability.markAvailable(capabilityScope);
-    // No live schedule while the server owns delivery — but the request is
-    // persisted as a pending so a later rollback can re-arm it.
-    await expect(
-      scheduleSavingsReminderNotification({
-        contributionAmount: 700,
-        frequency: 'weekly',
-        goalId: 'goal-2',
-        goalTitle: 'Laptop',
-      })
-    ).resolves.toBeNull();
-
-    await savingsNotificationCapability.clearAvailable(capabilityScope);
-    await activateDueSavingsReminderNotification();
-
-    expect(scheduledGoalIds()).toHaveLength(3);
-    expect(scheduledGoalIds().filter((id) => id === 'goal-1')).toHaveLength(2);
-    expect(scheduledGoalIds()).toContain('goal-2');
-  });
-
-  it('preserves the live notification ID when suppression fails during a server-owned update', async () => {
-    await scheduleSavingsReminderNotification({
-      contributionAmount: 500,
-      frequency: 'weekly',
-      goalId: 'goal-1',
-      goalTitle: 'Phone',
-      scheduledAt: new Date(2020, 5, 8, 9, 30),
-    });
-    await savingsNotificationCapability.markAvailable(capabilityScope);
-    mockNotifications.cancelScheduledNotificationAsync.mockRejectedValueOnce(
-      new Error('os busy')
-    );
-
     await scheduleSavingsReminderNotification({
       contributionAmount: 700,
       frequency: 'weekly',
-      goalId: 'goal-1',
-      goalTitle: 'Phone',
+      goalId: 'goal-2',
+      goalTitle: 'Laptop',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    await savingsNotificationCapability.markAvailable(capabilityScope);
+    mockListSavingsGoals.mockResolvedValue({
+      goals: [
+        goalFixture('goal-1', 'completed'),
+        goalFixture('goal-2', 'active'),
+      ],
+      summary: { activeGoalCount: 1, savingsBalance: 100 },
     });
 
-    const { savingsReminderStorage } =
-      require('./savings-reminder-storage') as typeof import('./savings-reminder-storage');
-    const { buildReminderScope } =
-      require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
-    const scope = buildReminderScope('user-a', merchantId);
-    if (!scope) throw new Error('test scope must resolve');
-    const [record] = await savingsReminderStorage.read(scope, 'goal-1');
-    // The live ID survives (the OS notification is still real) while the
-    // pending carries the updated request.
-    expect(record.notificationId).toBe('notification-id');
-    expect(record.pending?.contributionAmount).toBe(700);
+    await activateDueSavingsReminderNotification();
+
+    // goal-1 destroyed (live cancelled); goal-2 suppressed (live cancelled,
+    // pending kept) with nothing scheduled while the server owns delivery.
+    expect(
+      mockNotifications.cancelScheduledNotificationAsync
+    ).toHaveBeenCalledTimes(2);
+    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledTimes(
+      2
+    );
+    const keys = (await AsyncStorage.getAllKeys()).filter((key) =>
+      key.startsWith('baci:savings-reminder-goal:')
+    );
+    expect(keys.filter((key) => key.includes('goal-1'))).toEqual([]);
+    expect(keys.filter((key) => key.includes('goal-2'))).toHaveLength(1);
+  });
+
+  it('retires live notifications for goals completed while locally active', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    mockListSavingsGoals.mockResolvedValue({
+      goals: [goalFixture('goal-1', 'completed')],
+      summary: { activeGoalCount: 0, savingsBalance: 100 },
+    });
+
+    await activateDueSavingsReminderNotification();
+
+    expect(
+      mockNotifications.cancelScheduledNotificationAsync
+    ).toHaveBeenCalledWith('notification-id');
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
+
+    // The record is destroyed, so later activations stay silent.
+    await activateDueSavingsReminderNotification();
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
   });
 });

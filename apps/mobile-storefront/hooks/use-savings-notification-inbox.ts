@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
+import { CONFIG } from '@/lib/config';
+import { createLogger } from '@/lib/logger';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { getRegisteredPushToken } from '@/lib/push-token-storage';
 import type {
   SavingsNotification,
@@ -14,6 +17,9 @@ import {
   updateSavingsNotificationPreferences,
 } from '@/services/savings-notification-inbox';
 import { suppressSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { useAuthStore } from '@/stores/auth-store';
+
+const log = createLogger('SavingsNotificationInbox');
 
 type InboxState = {
   error: string | null;
@@ -129,6 +135,23 @@ export function useSavingsNotificationInbox({
                 // the captured scope: the retained pending requests let
                 // local reminders re-arm if server delivery is later lost.
                 if (!active || scopeRef.current !== scope) return;
+                // Props/store agreement: suppression targets the captured
+                // props scope, but schedule/activate resolve from the auth
+                // store. On divergence (stale props mid-switch) skip rather
+                // than mistarget — a no-op suppression would leave duplicate
+                // local plus server reminders.
+                const { merchantId: storeMerchantId, user: storeUser } =
+                  useAuthStore.getState();
+                if (
+                  storeUser?.id !== activeUserId ||
+                  pickMerchantId(storeMerchantId, CONFIG.MERCHANT_ID) !==
+                    activeMerchantId
+                ) {
+                  log.debug(
+                    'Skipping savings reminder suppression: inbox props disagree with auth store'
+                  );
+                  return;
+                }
                 return suppressSavingsReminderNotification({
                   merchantId: activeMerchantId,
                   userId: activeUserId,

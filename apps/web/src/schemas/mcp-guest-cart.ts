@@ -35,13 +35,29 @@ export const mcpGuestCartInputSchema = z.object({
       'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
     ),
 });
-export const mcpGuestCartOutputSchema = z.object({
-  success: z.boolean(),
-  cart_token: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  items: z.array(guestCartLineSchema).max(20).optional(),
-  expires_at: z.string().datetime().optional(),
-  cart_url: z.string().url().optional(),
-});
+export const mcpGuestCartOutputSchema = z
+  .object({
+    success: z.boolean(),
+    cart_token: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    items: z.array(guestCartLineSchema).max(20).optional(),
+    expires_at: z.string().datetime().optional(),
+    cart_url: z.string().url().optional(),
+    requires_variant_selection: z.literal(true).optional(),
+    product_id: z.string().uuid().optional(),
+    product_url: z.string().url().optional(),
+  })
+  .refine(
+    (value) =>
+      value.success === false ||
+      (value.cart_token !== undefined &&
+        value.items !== undefined &&
+        value.expires_at !== undefined &&
+        value.cart_url !== undefined),
+    {
+      message:
+        'Successful guest-cart output must include the cart handoff fields',
+    }
+  );

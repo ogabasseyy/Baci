@@ -44,7 +44,7 @@
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
       }
     },
-    "add_to_cart": {
+    "prepare_storefront_cart_link": {
       "annotations": {
         "readOnlyHint": true,
         "openWorldHint": false,
@@ -54,6 +54,18 @@
         "read_only_justification": "Returns a product handoff URL; the item is added only if the shopper opens that URL on Ogabassey.",
         "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
         "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "update_ogabassey_guest_cart": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Saves guest cart lines keyed by an opaque cart token; quantity 0 removes a line.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Removals and quantity decreases delete persisted guest-cart lines; catalog records, charges, and orders are unaffected."
       }
     },
     "get_store_info": {
@@ -131,11 +143,19 @@
       "expected_output_url": null
     },
     {
-      "description": "Prepare a cart handoff for a simple physical product.",
+      "description": "Save a guest cart and review it on the website.",
       "user_prompt": "Using Ogabassey, add one Apple 20W fast charger to my cart and let me review it on the website.",
       "file_attachment_urls": null,
-      "tools_triggered": "add_to_cart",
-      "expected_output": "Opens an Ogabassey handoff URL for one item; the shopper can review the cart on Ogabassey before checkout.",
+      "tools_triggered": "update_ogabassey_guest_cart",
+      "expected_output": "Saves one item to the guest cart and opens an Ogabassey review URL; the shopper can review the cart on Ogabassey before checkout.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Prepare a cart handoff link for a simple physical product.",
+      "user_prompt": "Using Ogabassey, give me a link that adds one Apple 20W fast charger to my cart on the website.",
+      "file_attachment_urls": null,
+      "tools_triggered": "prepare_storefront_cart_link",
+      "expected_output": "Returns an Ogabassey handoff URL for one item; the item is added only if the shopper opens that URL and reviews the cart before checkout.",
       "expected_output_url": null
     },
     {

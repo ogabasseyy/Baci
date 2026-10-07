@@ -91,10 +91,12 @@ export const PUBLIC_MCP_TOOLS = [
     inputSchema: z.toJSONSchema(mcpGuestCartInputSchema, { target: 'draft-7' }),
     annotations: {
       readOnlyHint: false,
-      destructiveHint: false,
+      // Mirrors update_ogabassey_guest_cart: removals delete persisted lines.
+      destructiveHint: true,
       openWorldHint: false,
-      // Mirrors update_ogabassey_guest_cart: absolute quantities make retries safe.
-      idempotentHint: true,
+      // Mirrors update_ogabassey_guest_cart: tokenless calls mint a new cart,
+      // so retries without the token are not idempotent.
+      idempotentHint: false,
     },
   },
   {

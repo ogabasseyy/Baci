@@ -281,6 +281,20 @@ describe('CartPageWrapper', () => {
     expect(JSON.parse(new URLSearchParams(window.location.search).get('guest_cart') || 'null')).toEqual([{ product_id: id, quantity: 3 }]);
   });
 
+  it('retains guest lines missing from the catalog and notifies the shopper', async () => {
+    const added = '55555555-5555-4555-8555-555555555555';
+    const missing = '66666666-6666-4666-8666-666666666666';
+    const params = new URLSearchParams({ guest_cart: JSON.stringify([{ product_id: added, quantity: 1 }, { product_id: missing, quantity: 2 }]) });
+    vi.mocked(useSearchParams).mockReturnValue(params as ReturnType<typeof useSearchParams>);
+    window.history.pushState({}, '', `/cart?${params}`);
+    const addToCart = mockUseCart();
+    setupProductsQuery({ data: [{ id: added, name: 'Phone', status: 'active', images: [] }], error: null });
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    await waitFor(() => expect(addToCart).toHaveBeenCalledOnce());
+    expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Some items unavailable', variant: 'destructive' }));
+    expect(JSON.parse(new URLSearchParams(window.location.search).get('guest_cart') || 'null')).toEqual([{ product_id: missing, quantity: 2 }]);
+  });
+
   it('keeps a guest snapshot separate from an existing quiz prize cart', async () => {
     const params = new URLSearchParams({ guest_cart: JSON.stringify([{ product_id: '55555555-5555-4555-8555-555555555555', quantity: 1 }]) });
     vi.mocked(useSearchParams).mockReturnValue(params as ReturnType<typeof useSearchParams>);

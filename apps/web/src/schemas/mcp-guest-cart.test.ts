@@ -121,6 +121,29 @@ describe('mcpGuestCartOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects a success payload missing handoff fields', () => {
+    expect(mcpGuestCartOutputSchema.safeParse({ success: true }).success).toBe(
+      false
+    );
+    expect(
+      mcpGuestCartOutputSchema.safeParse({
+        success: true,
+        cart_token: token,
+        items: [{ product_id: id, quantity: 2 }],
+      }).success
+    ).toBe(false);
+  });
+
+  it('parses a variant-selection payload', () => {
+    const result = mcpGuestCartOutputSchema.safeParse({
+      success: false,
+      requires_variant_selection: true,
+      product_id: id,
+      product_url: 'https://ogabassey.com/products/slug',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects invalid token, oversized items, datetime, and url fields', () => {
     const base = {
       success: true,

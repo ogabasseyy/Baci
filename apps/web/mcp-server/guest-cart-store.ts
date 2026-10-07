@@ -23,7 +23,7 @@ const TTL = 7 * 24 * 60 * 60 * 1000;
 // Crash temporaries (`<cart>.json.<uuid>.tmp`) share no pattern with cart
 // files and no queue key with live writers, so only sweep ones old enough
 // that no in-flight write can still own them.
-const STALE_TEMP_MAX_AGE_MS = 60 * 60 * 1000;
+const STALE_FILE_MAX_AGE_MS = 60 * 60 * 1000;
 const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
 // The new-cart expiry sweep reads and parses every cart file, so run it at
 // most once per interval; expiry is still enforced per cart on every read,
@@ -64,7 +64,7 @@ export class GuestCartStore {
               try {
                 const orphan = path.join(this.directory, entry);
                 const info = await stat(orphan);
-                if (Date.now() - info.mtimeMs > STALE_TEMP_MAX_AGE_MS)
+                if (Date.now() - info.mtimeMs > STALE_FILE_MAX_AGE_MS)
                   await unlink(orphan);
               } catch {
                 /* Best effort: janitor work never fails cart creation. */
@@ -81,7 +81,17 @@ export class GuestCartStore {
               );
               if (existing.expires_at <= Date.now()) await unlink(candidate);
             } catch {
-              /* Do not delete corrupt or externally owned files. */
+              // Reads parse cart files too, so a corrupt file is already
+              // unusable dead weight that would pin capacity forever. Reclaim
+              // it once old enough that no external writer can still be
+              // producing it; fresh files are left for a later sweep.
+              try {
+                const info = await stat(candidate);
+                if (Date.now() - info.mtimeMs > STALE_FILE_MAX_AGE_MS)
+                  await unlink(candidate);
+              } catch {
+                /* Best effort: janitor work never fails cart creation. */
+              }
             }
           }
           if (sweepDue) lastExpirySweepMs = Date.now();

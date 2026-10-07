@@ -30,3 +30,16 @@ it('saves only validated public products and returns a handoff without exposing 
     expect(retry).toMatchObject({ structuredContent: { items: [{ product_id: id, quantity: 2 }] } });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+it('passes variant selection through instead of returning a generic failure', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-selection-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: false, requires_variant_selection: true, product_id: id, product_url: 'https://ogabassey.com/products/slug' } });
+    const result = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ success: false, requires_variant_selection: true, product_id: id, product_url: 'https://ogabassey.com/products/slug' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

@@ -171,6 +171,32 @@ it('runs the expiry sweep at most once per minute', async () => {
   }
 });
 
+it('reclaims stale corrupt cart files while preserving fresh ones', async () => {
+  const { directory, instance } = await store();
+  // Jump past the throttle window plus any earlier fake-timer advancement in
+  // this module so the sweep is guaranteed to run; pin the fresh file's mtime
+  // to mocked now so the jump cannot age it into the reclaim window.
+  vi.useFakeTimers();
+  vi.setSystemTime(Date.now() + 10 * 60 * 1000);
+  try {
+    const stale = path.join(directory, `${'e'.repeat(64)}.json`);
+    const fresh = path.join(directory, `${'f'.repeat(64)}.json`);
+    await writeFile(stale, 'not-json');
+    await writeFile(fresh, 'not-json');
+    await utimes(stale, new Date(Date.now() - 2 * 60 * 60 * 1000), new Date(Date.now() - 2 * 60 * 60 * 1000));
+    await utimes(fresh, new Date(Date.now()), new Date(Date.now()));
+    await instance.update(
+      undefined,
+      { product_id: id, quantity: 1 },
+      async () => {}
+    );
+    await expect(readFile(stale, 'utf8')).rejects.toThrow();
+    await expect(readFile(fresh, 'utf8')).resolves.toBe('not-json');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('does not count unrelated files against guest cart capacity', async () => {
   const { directory, instance } = await store();
   await Promise.all(

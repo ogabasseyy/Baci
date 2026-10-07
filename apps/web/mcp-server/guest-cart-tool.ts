@@ -8,6 +8,16 @@ import {
 import { prepareCartHandoff } from './cart-handoff';
 import { GuestCartStore } from './guest-cart-store';
 
+class VariantSelectionRequired extends Error {
+  constructor(
+    readonly productId: string,
+    readonly productUrl: string
+  ) {
+    super('Variant selection required');
+    this.name = 'VariantSelectionRequired';
+  }
+}
+
 export function registerGuestCartTool(
   server: McpServer,
   options: {
@@ -20,17 +30,20 @@ export function registerGuestCartTool(
   server.registerTool(
     'update_ogabassey_guest_cart',
     {
-      outputSchema: mcpGuestCartOutputSchema.shape,
+      outputSchema: mcpGuestCartOutputSchema,
       title: 'Update Ogabassey Guest Cart',
       description: MCP_GUEST_CART_DESCRIPTION,
       inputSchema: mcpGuestCartInputSchema.shape,
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        // Quantity 0 removes a line and a lowered absolute quantity shrinks
+        // persisted state, so this tool is not additive-only.
+        destructiveHint: true,
         openWorldHint: false,
-        // Absolute quantities replace the line instead of incrementing, so a
-        // lost-response retry with the same cart token has no cumulative effect.
-        idempotentHint: true,
+        // Token-bound updates are idempotent (absolute quantities replace the
+        // line), but a tokenless call mints a fresh cart every time, so a
+        // lost-response retry without the token is not idempotent.
+        idempotentHint: false,
       },
       _meta: {
         'openai/widgetAccessible': true,
@@ -46,6 +59,11 @@ export function registerGuestCartTool(
           args.cart_token,
           args,
           async (items) => {
+            // Full-cart validation is intentional: the handoff must never
+            // carry stale lines. A stale survivor therefore blocks unrelated
+            // adds until removed, and removals skip validation as the escape
+            // hatch so a frozen cart can always be drained. The website
+            // re-checks stock at transfer, so this cannot oversell.
             if (args.quantity === 0) return;
             for (const item of items) {
               const result = await prepareCartHandoff({
@@ -55,10 +73,21 @@ export function registerGuestCartTool(
                 quantity: item.quantity,
                 formatPrice: options.formatPrice,
               });
-              if (result.structuredContent?.success !== true)
+              const handoff = result.structuredContent;
+              if (handoff?.success !== true) {
+                if (
+                  handoff?.requires_variant_selection === true &&
+                  typeof handoff?.product_url === 'string'
+                ) {
+                  throw new VariantSelectionRequired(
+                    item.product_id,
+                    handoff.product_url
+                  );
+                }
                 throw new Error(
                   'A product is unavailable or requires option selection'
                 );
+              }
             }
           }
         );
@@ -77,7 +106,23 @@ export function registerGuestCartTool(
             cart_url: url.toString(),
           },
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof VariantSelectionRequired) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Choose the available options for this product on Ogabassey before adding it to your guest cart.\n\n[Select product options](${error.productUrl})`,
+              },
+            ],
+            structuredContent: {
+              success: false,
+              requires_variant_selection: true,
+              product_id: error.productId,
+              product_url: error.productUrl,
+            },
+          };
+        }
         return {
           isError: true,
           content: [

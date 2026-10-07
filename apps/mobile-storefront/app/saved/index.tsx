@@ -29,15 +29,19 @@ const buildProductHref = (item: SavedItem) => {
   const hasExactIdentity = Boolean(
     item.match_variant_id || item.match_offer_id
   );
+  // Match fields persist only from searchMatch, so a condition without
+  // ids is a base-row match: carry the base identity (mirroring search
+  // nav) so the PDP keeps the saved base price instead of resolving a
+  // same-condition offer.
+  const isBaseRowMatch = !hasExactIdentity && item.match_condition;
   return {
     pathname: '/product/[slug]',
     params: {
       slug: item.slug,
       ...(item.match_variant_id ? { variant_id: item.match_variant_id } : {}),
       ...(item.match_offer_id ? { offer_id: item.match_offer_id } : {}),
-      ...(!hasExactIdentity && item.match_condition
-        ? { condition: item.match_condition }
-        : {}),
+      ...(isBaseRowMatch ? { condition: item.match_condition } : {}),
+      ...(isBaseRowMatch ? { match_base: '1' } : {}),
     },
   } as const;
 };

@@ -201,11 +201,15 @@ describe('SavedItemsScreen', () => {
 
     fireEvent.press(screen.getByText('Test Phone'));
 
+    // A condition without ids is a base-row match (match fields persist
+    // only from searchMatch): the base marker keeps the PDP on the saved
+    // base price instead of a same-condition offer.
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/product/[slug]',
       params: {
         slug: 'iphone-15',
         condition: 'used',
+        match_base: '1',
       },
     });
   });

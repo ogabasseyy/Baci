@@ -59,3 +59,42 @@ it('labels option selection honestly for matched search prices', () => {
   expect(screen.getByLabelText('Choose options for iPhone 13')).toBeTruthy();
   expect(screen.queryByLabelText('Add iPhone 13 to cart')).toBeNull();
 });
+it('hides parent specs for variant matches but keeps them for base matches', () => {
+  const parentSpecs = { storage: '256 GB' };
+  const variantMatched = render(
+    <SearchGridProductCard
+      {...props}
+      product={{
+        ...product,
+        specifications: parentSpecs,
+        searchMatch: {
+          productId: 'p1',
+          total: 1,
+          price: 300000,
+          variantId: 'v128',
+        },
+      }}
+    />
+  );
+  // The matched 128 GB variant's price must not sit beside the parent's
+  // 256 GB subtitle; variant specs are unavailable, so show none.
+  expect(variantMatched.queryByText('256 GB')).toBeNull();
+  variantMatched.unmount();
+
+  render(
+    <SearchGridProductCard
+      {...props}
+      product={{
+        ...product,
+        specifications: parentSpecs,
+        searchMatch: {
+          productId: 'p1',
+          total: 1,
+          price: 300000,
+          condition: 'used',
+        },
+      }}
+    />
+  );
+  expect(screen.getByText('256 GB')).toBeTruthy();
+});

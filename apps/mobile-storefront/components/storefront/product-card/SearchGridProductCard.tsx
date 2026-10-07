@@ -14,7 +14,13 @@ export default function SearchGridProductCard(props: GridProductCardProps) {
     product.searchMatch?.condition ?? product.condition
   );
   const specs = product.specifications;
-  const detail = [specs?.storage, specs?.ram].filter(Boolean).join(' · ');
+  // A variant match prices and links the matched option, but refined
+  // hydration omits variants — so parent storage/RAM would misdescribe
+  // the advertised option (128 GB price beside a 256 GB subtitle).
+  // Suppress the parent specs until variant detail is available.
+  const detail = product.searchMatch?.variantId
+    ? ''
+    : [specs?.storage, specs?.ram].filter(Boolean).join(' · ');
   const needsOptions =
     requiresProductSelection(product) || !!product.searchMatch;
   return (

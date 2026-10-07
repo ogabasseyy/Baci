@@ -196,3 +196,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - AI tenant-cap medium adjudicated product decision: public route is 404 unless STOREFRONT_SEARCH_ASSIST_ENABLED=true (dev-only today), plus 5/min IP and 60/min tenant caps with 12s timeout; tightening/alerting belongs to the production enablement plan.
 - Planning-docs local-paths low: scrubbed /Users/mac paths and LAN IPs to ~/... and placeholders in ledger/phone-test/activation; verify-sql.mjs keeps its generic env-overridable /tmp default (functional, not identity leakage).
 - Merge-gate high is process (PR stays draft): native typecheck is green in the 10/10 monorepo gate on this base (no slide-fixture errors observed); changed-area suites re-run on the rebased head (mobile 84, web 46, shared 12, manifests/service/inventory 27+1).
+
+## Round 31 (Muse on dcf082bd30 — 3 repeats adjudicated, no code change; Codex pending)
+
+- Assurance fallback medium: repeat of Rounds 23-30 (documented build-default product behavior; web/native parity difference already disclosed).
+- PII retention/TTL medium: retention-via-inbox-row + erasure-on-delete + owner RLS + form disclosure + text-safe render all verified; a TTL/cron purge policy is a new ops feature, author scope.
+- Zero-price low: explicitly "no live bug"; acknowledges the Round 30 invariant JSDoc. A non-numeric sentinel/type change would ripple through Product consumers for zero live benefit — disproportionate, declined.
+
+## Round 32 (Codex CX-59..CX-60 on dcf082bd30 — both fixed)
+
+- CX-59: saved ID-less matches now forward match_base=1 with the condition. Reverses the Round 27 "indistinguishable" note: match_* fields persist ONLY from searchMatch (saved-store grep-verified), so condition-without-ids necessarily denotes a base-row match. Saved nav test updated.
+- CX-60: variant-matched search cards suppress the parent storage/RAM subtitle (empty detail hides the element); base/condition matches keep parent specs. Single render site (grep-verified); card test encodes the 128GB-price-vs-256GB-subtitle scenario both ways.

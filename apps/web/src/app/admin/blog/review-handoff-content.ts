@@ -5,6 +5,7 @@ import { sanitizeHtml } from '@/lib/sanitize';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
+import { stripHtmlComments } from './strip-html-comments';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
@@ -130,7 +131,11 @@ function normalizeContent(
 }
 
 function hasBrokenMediaTag(html: string): boolean {
-  return (html.match(MEDIA_TAG_PATTERN) ?? []).some((tag) => {
+  // Markdown rendering preserves editorial comments while the sanitizer
+  // discards them, so strip first: a commented-out draft URL is not a
+  // rendered image and must not reject the handoff.
+  const withoutComments = stripHtmlComments(html);
+  return (withoutComments.match(MEDIA_TAG_PATTERN) ?? []).some((tag) => {
     const candidates = mediaTagCandidates(tag);
     return (
       candidates.length === 0 ||

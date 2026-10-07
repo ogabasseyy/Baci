@@ -201,7 +201,10 @@ export function BlogEditorClient({
       const file = input.files?.[0];
       if (!file) return;
 
-      void uploadFeatured(file);
+      void uploadFeatured(file, {
+        alt: form.featured_image_alt,
+        altEdited: form.featured_image_alt_edited ?? false,
+      });
     };
     input.click();
   };

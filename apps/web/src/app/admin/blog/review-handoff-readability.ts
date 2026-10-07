@@ -1,4 +1,5 @@
 import { tagAttributes } from './review-handoff-tag-attributes';
+import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
 
 const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
@@ -14,7 +15,12 @@ function isZeroSizedImage(tag: string): boolean {
   return false;
 }
 
-const IMAGE_HIDING_CLASS_TOKENS = new Set(['hidden', 'invisible', 'opacity-0']);
+const IMAGE_HIDING_CLASS_TOKENS = new Set([
+  'hidden',
+  'invisible',
+  'opacity-0',
+  'sr-only',
+]);
 // text-transparent sets only `color: transparent`: it hides glyphs but not
 // decoded image pixels, so it joins the text set alone.
 const TEXT_HIDING_CLASS_TOKENS = new Set([
@@ -110,16 +116,20 @@ export function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>, and a
   // zero-sized or CSS-hidden <img> renders no pixels either — whether the
   // hiding class sits on the image itself or on an ancestor. Text gets
-  // the same ancestry handling through visibleText.
-  for (const match of content.matchAll(IMG_TAG_PATTERN)) {
+  // the same ancestry handling through visibleText. Comments render
+  // nothing, so strip them before matching: a commented-out <img> must
+  // neither satisfy readability itself nor donate a hidden ancestor.
+  const withoutComments = stripHtmlComments(content);
+  for (const match of withoutComments.matchAll(IMG_TAG_PATTERN)) {
     const tag = match[0];
     if (isZeroSizedImage(tag) || hasVisibilityHidingClass(tag)) continue;
-    if (!hasHiddenAncestor(content, match.index ?? content.length)) {
+    const index = match.index ?? withoutComments.length;
+    if (!hasHiddenAncestor(withoutComments, index)) {
       return true;
     }
   }
   const text = stripNonRenderingText(
-    visibleText(content).replace(/&nbsp;/gi, ' ')
+    visibleText(withoutComments).replace(/&nbsp;/gi, ' ')
   ).trim();
   return text.length > 0;
 }

@@ -35,6 +35,14 @@ function setup(
   return { ...hook, coverStashRef, toast };
 }
 
+// Mirrors the editor client: the snapshot is the live form alt at click time.
+function startUpload(hook: ReturnType<typeof setup>['result'], file: File) {
+  return hook.current.uploadFeatured(file, {
+    alt: hook.current.form.featured_image_alt,
+    altEdited: hook.current.form.featured_image_alt_edited ?? false,
+  });
+}
+
 describe('useBlogFeaturedImageUpload', () => {
   it('clears imported alt text when a replacement cover succeeds', async () => {
     const { result } = setup(vi.fn().mockResolvedValue(uploadedImage));
@@ -45,7 +53,7 @@ describe('useBlogFeaturedImageUpload', () => {
         featured_image_alt: 'The previous cover',
       })
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('');
     expect(result.current.form.featured_image_alt_edited).toBe(false);
@@ -66,7 +74,7 @@ describe('useBlogFeaturedImageUpload', () => {
       vi.fn().mockResolvedValue(uploadedImage),
       coverStashRef
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(coverStashRef.current).toBeNull();
   });
 
@@ -79,7 +87,7 @@ describe('useBlogFeaturedImageUpload', () => {
         featured_image_alt_edited: true,
       })
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe(
       'Typed before uploading'
@@ -97,7 +105,7 @@ describe('useBlogFeaturedImageUpload', () => {
         featured_image_alt_edited: true,
       })
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('The current cover');
     expect(result.current.form.featured_image_alt_edited).toBe(true);
@@ -113,13 +121,13 @@ describe('useBlogFeaturedImageUpload', () => {
         featured_image_alt: 'The current cover',
       })
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form.featured_image_alt).toBe('The current cover');
   });
 
   it('applies a completed upload with all image metadata', async () => {
     const { result, toast } = setup(vi.fn().mockResolvedValue(uploadedImage));
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form).toMatchObject({
       featured_image_url: uploadedImage.url,
       featured_image_width: 1200,
@@ -137,7 +145,7 @@ describe('useBlogFeaturedImageUpload', () => {
     const pending = Promise.withResolvers<typeof uploadedImage>();
     const { result, toast } = setup(() => pending.promise);
     act(() => {
-      void result.current.uploadFeatured(file);
+      void startUpload(result, file);
     });
     expect(result.current.uploadingFeatured).toBe(true);
     act(() => {
@@ -171,11 +179,11 @@ describe('useBlogFeaturedImageUpload', () => {
       .mockReturnValueOnce(newer.promise);
     const { result } = setup(upload);
     act(() => {
-      void result.current.uploadFeatured(file);
+      void startUpload(result, file);
     });
     act(() => {
       result.current.invalidateFeaturedUploads();
-      void result.current.uploadFeatured(file);
+      void startUpload(result, file);
     });
     await act(async () => old.resolve(uploadedImage));
     expect(result.current.uploadingFeatured).toBe(true);
@@ -195,7 +203,7 @@ describe('useBlogFeaturedImageUpload', () => {
     const { result, toast } = setup(
       vi.fn().mockRejectedValue(new Error('Upload failed'))
     );
-    await act(async () => result.current.uploadFeatured(file));
+    await act(async () => startUpload(result, file));
     expect(result.current.form).toEqual(DEFAULT_PLATFORM_BLOG_FORM_STATE);
     expect(result.current.uploadingFeatured).toBe(false);
     expect(toast).toHaveBeenCalledWith(

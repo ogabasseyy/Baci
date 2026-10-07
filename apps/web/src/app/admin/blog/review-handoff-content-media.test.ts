@@ -38,10 +38,32 @@ describe('validateImportedContent media', () => {
     '<div class="invisible"><p>Only <strong>body</strong></p></div>',
     '<div class="opacity-0">Only body</div>',
     '<p class="text-transparent">Only body</p>',
+    '<div class="sr-only">Only body</div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
     );
+  });
+
+  it('ignores media-like markup inside HTML comments', () => {
+    // The comment is editorial, not rendered: its non-HTTPS draft URL
+    // must not reject the handoff.
+    expect(
+      validateImportedContent(
+        '<p>Visible body</p><!-- <img src="http://example.com/draft.png"> -->'
+      )
+    ).toContain('Visible body');
+  });
+
+  it('does not count a commented-out image as readable content', () => {
+    // The sanitizer discards the comment, so a comment-only body is
+    // empty after sanitization; the readability half is pinned at the
+    // hasReadableContent level in review-handoff-readability.test.ts.
+    expect(() =>
+      validateImportedContent(
+        '<!-- <img src="https://cdn.example.com/a.png"> -->'
+      )
+    ).toThrow('Article content is empty after sanitization');
   });
 
   it('counts visible text alongside hidden text as readable', () => {

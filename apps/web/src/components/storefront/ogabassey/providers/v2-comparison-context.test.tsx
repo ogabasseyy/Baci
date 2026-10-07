@@ -335,26 +335,44 @@ describe('V2ComparisonProvider', () => {
     expect(screen.getByTestId('replaced-name')).toHaveTextContent('Product 1');
   });
 
-  it('reports stored selections from isInCompare before hydration fires', () => {
+  it('adds no duplicate when the first tap targets a stored id before hydration', () => {
     sessionStorage.setItem(
       'ogabassey_v2_compare',
       JSON.stringify([baseProduct])
     );
-    function SelectedProbe() {
-      const { isInCompare } = useV2Comparison();
+    function AddProbe() {
+      const { addToCompare, compareItems } = useV2Comparison();
+      const [replacedName, setReplacedName] = useState<string | null>(null);
       return (
-        <span data-testid="selected-state">
-          {isInCompare(baseProduct.id) ? 'selected' : 'unselected'}
-        </span>
+        <div>
+          <span data-testid="compare-count">{compareItems.length}</span>
+          <span data-testid="replaced-name">{replacedName ?? 'none'}</span>
+          <button
+            onClick={() =>
+              setReplacedName(addToCompare(baseProduct)?.name ?? null)
+            }
+            type="button"
+          >
+            Add to compare
+          </button>
+        </div>
       );
     }
     render(
       <V2ComparisonProvider>
-        <SelectedProbe />
+        <AddProbe />
       </V2ComparisonProvider>
     );
-    // No timer advance and no interaction: the scheduled hydration has not
-    // fired, yet the stored selection must already read as selected.
-    expect(screen.getByTestId('selected-state')).toHaveTextContent('selected');
+
+    // No timer advance and no interaction: isInCompare still reads the
+    // empty pre-hydration state (matching the server snapshot), so the
+    // card takes the add branch for this stored id.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Add to compare' }));
+
+    // The mutation hydrates on demand and dedups: exactly one row and no
+    // reported replacement.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('replaced-name')).toHaveTextContent('none');
   });
 });

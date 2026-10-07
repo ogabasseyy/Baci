@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { PermissionStatus } from 'expo-notifications';
 import type { SavingsGoal } from '@/schemas/customer-savings';
 
 type GoalsResponse = {
@@ -127,7 +128,7 @@ describe('savings reminder retention across server-delivery transitions', () => 
     expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-1']);
   });
 
-  it('retains existing pendings when a schedule attempt lands while capability is available', async () => {
+  it('persists new requests scheduled while capability is available', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
@@ -137,6 +138,8 @@ describe('savings reminder retention across server-delivery transitions', () => 
     });
 
     await savingsNotificationCapability.markAvailable(capabilityScope);
+    // No live schedule while the server owns delivery — but the request is
+    // persisted as a pending so a later rollback can re-arm it.
     await expect(
       scheduleSavingsReminderNotification({
         contributionAmount: 700,
@@ -149,9 +152,9 @@ describe('savings reminder retention across server-delivery transitions', () => 
     await savingsNotificationCapability.clearAvailable(capabilityScope);
     await activateDueSavingsReminderNotification();
 
-    // goal-1's retained pending re-arms; goal-2 was never stored because the
-    // server owned delivery at schedule time.
-    expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-1']);
+    expect(scheduledGoalIds()).toHaveLength(3);
+    expect(scheduledGoalIds().filter((id) => id === 'goal-1')).toHaveLength(2);
+    expect(scheduledGoalIds()).toContain('goal-2');
   });
 
   it('retires reminders for goals completed by server auto-debit before re-arming', async () => {
@@ -201,5 +204,52 @@ describe('savings reminder retention across server-delivery transitions', () => 
     await activateDueSavingsReminderNotification();
 
     expect(scheduledGoalIds()).toEqual(['goal-1', 'goal-1']);
+  });
+
+  it('retires live notifications for goals completed while locally active', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    mockListSavingsGoals.mockResolvedValue({
+      goals: [goalFixture('goal-1', 'completed')],
+      summary: { activeGoalCount: 0, savingsBalance: 100 },
+    });
+
+    await activateDueSavingsReminderNotification();
+
+    expect(
+      mockNotifications.cancelScheduledNotificationAsync
+    ).toHaveBeenCalledWith('notification-id');
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
+
+    // The record is destroyed, so later activations stay silent.
+    await activateDueSavingsReminderNotification();
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
+  });
+
+  it('skips goal reconciliation when local arming is impossible', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    await suppressSavingsReminderNotification();
+    mockNotifications.getPermissionsAsync.mockResolvedValue({
+      canAskAgain: true,
+      expires: 'never',
+      granted: false,
+      status: 'denied' as PermissionStatus,
+    });
+
+    await activateDueSavingsReminderNotification();
+
+    expect(mockListSavingsGoals).not.toHaveBeenCalled();
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
   });
 });

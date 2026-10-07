@@ -138,28 +138,29 @@ export function activateDueSavingsReminderNotification() {
 }
 
 /**
- * Reconciles due records with current goal state before re-arming. A goal
+ * Reconciles stored records with current goal state before re-arming. A goal
  * completed server-side (e.g. auto-debit) bypasses the mobile contribution
- * handlers, so its retained pending would otherwise re-arm and remind for a
- * finished goal. Terminal-goal records are destroyed; anything unlisted (or
+ * handlers, so its record — live notification or retained pending — would
+ * otherwise keep reminding for a finished goal. Terminal-goal records are
+ * destroyed (live notifications cancelled); anything unlisted (or
  * unreachable on lookup failure) is kept — a failed lookup must never nuke
  * reminders.
  */
 async function retireTerminalGoalReminders(
   notifications: ReturnType<typeof loadNotificationsModule>,
   scope: SavingsReminderScope,
-  due: ReminderRecord[]
+  records: ReminderRecord[]
 ): Promise<ReminderRecord[]> {
   let goals: Awaited<ReturnType<typeof listSavingsGoals>>['goals'];
   try {
     goals = (await listSavingsGoals({ merchantId: scope.merchantId })).goals;
   } catch (error) {
     log.debug('Unable to reconcile savings reminders with goal state', error);
-    return due;
+    return records;
   }
   const statusByGoalId = new Map(goals.map((goal) => [goal.id, goal.status]));
-  const armed: ReminderRecord[] = [];
-  for (const record of due) {
+  const live: ReminderRecord[] = [];
+  for (const record of records) {
     const status = statusByGoalId.get(record.goalId);
     if (
       status === 'completed' ||
@@ -173,9 +174,9 @@ async function retireTerminalGoalReminders(
       );
       continue;
     }
-    armed.push(record);
+    live.push(record);
   }
-  return armed;
+  return live;
 }
 
 async function activateDueReminders() {
@@ -185,25 +186,34 @@ async function activateDueReminders() {
   await disposeUnscopedSavingsReminders(notifications);
   if (await hasServerSavingsNotificationCapability()) {
     // Suppress, not cancel: the pending requests must survive so local
-    // reminders re-arm if server delivery is later lost.
+    // reminders re-arm if server delivery is later lost. Terminal-goal
+    // retirement is intentionally deferred until a rollback activation;
+    // retained storage stays bounded to one record per goal.
     await suppressStoredSavingsReminderNotification(notifications, scope);
     return null;
   }
   const records = await savingsReminderStorage.read(scope);
+  if (!records.length) return null;
+  // Local gates before the network: when arming is impossible there is no
+  // reason to pay for goal reconciliation. Retirement still runs before
+  // arming (never backgrounded): arming first would briefly give completed
+  // goals live notifications that an app kill could leave behind.
+  if (!notifications || !(await hasSavingsReminderPermission(notifications)))
+    return null;
+  await ensureSavingsReminderChannel(notifications);
+  // Reconcile every record, not just due ones: a goal completed while its
+  // recurring local notification is live must still be retired.
+  const live = await retireTerminalGoalReminders(notifications, scope, records);
   // Records already converted to a live OS notification keep their retained
   // pending request — only due requests without a live notification arm now.
-  const due = records.filter(
+  const due = live.filter(
     ({ notificationId, pending }) =>
       !notificationId && pending && pending.scheduledAt.getTime() <= Date.now()
   );
   if (!due.length) return null;
-  const armed = await retireTerminalGoalReminders(notifications, scope, due);
-  if (!notifications || !(await hasSavingsReminderPermission(notifications)))
-    return null;
-  await ensureSavingsReminderChannel(notifications);
   let notificationId: string | null = null;
   let failure: unknown;
-  for (const { pending } of armed) {
+  for (const { pending } of due) {
     if (!pending) continue;
     try {
       notificationId = await scheduleRecurringSavingsReminder({
@@ -284,6 +294,15 @@ async function scheduleReminder(
     // Suppress, not cancel: pre-existing pendings must survive so local
     // reminders re-arm if server delivery is later lost.
     await suppressStoredSavingsReminderNotification(notifications, scope);
+    // Persist the incoming request as a pending (no live schedule) so a
+    // later loss of server delivery can still re-arm this goal; an update
+    // overwrites the previous pending for the goal.
+    await savingsReminderStorage.write({
+      goalId: request.goalId,
+      merchantId: scope.merchantId,
+      pending: request,
+      userId: scope.userId,
+    });
     return null;
   }
   if (

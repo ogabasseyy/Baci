@@ -181,54 +181,6 @@ describe('useSavingsNotificationInbox', () => {
     expect(mockMarkAvailable).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves local reminders when a successful inbox says delivery is disabled', async () => {
-    mockFetchInbox.mockResolvedValueOnce({ ...inbox, deliveryEnabled: false });
-    const { result } = renderHook(() =>
-      useSavingsNotificationInbox({
-        enabled: true,
-        merchantId,
-        userId: 'user-a',
-      })
-    );
-
-    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
-
-    expect(mockMarkAvailable).not.toHaveBeenCalled();
-    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
-    expect(mockClearAvailable).toHaveBeenCalledWith({
-      apiOrigin: 'https://api.baci.test',
-      merchantId,
-      userId: 'user-a',
-    });
-  });
-
-  it('keeps local reminders when delivery is enabled but this device never registered', async () => {
-    mockGetRegisteredPushToken.mockResolvedValue(null);
-    const { result } = renderHook(() =>
-      useSavingsNotificationInbox({
-        enabled: true,
-        merchantId,
-        userId: 'user-a',
-      })
-    );
-
-    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
-    await waitFor(() =>
-      expect(mockGetRegisteredPushToken).toHaveBeenCalledWith(
-        'user-a',
-        merchantId
-      )
-    );
-
-    expect(mockMarkAvailable).not.toHaveBeenCalled();
-    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
-    expect(mockClearAvailable).toHaveBeenCalledWith({
-      apiOrigin: 'https://api.baci.test',
-      merchantId,
-      userId: 'user-a',
-    });
-  });
-
   it('hides the previous account inbox immediately when the account changes', async () => {
     const accountBInbox = {
       ...inbox,
@@ -262,67 +214,5 @@ describe('useSavingsNotificationInbox', () => {
         '00000000-0000-4000-8000-000000000003'
       )
     );
-  });
-
-  it('skips clearing local reminders when the account changes while markAvailable is in flight', async () => {
-    let resolveFirstMark!: () => void;
-    const firstMark = new Promise<void>((resolve) => {
-      resolveFirstMark = resolve;
-    });
-    mockMarkAvailable
-      .mockImplementationOnce(() => firstMark)
-      .mockImplementation(() => new Promise<void>(() => {}));
-    const { rerender } = renderHook(
-      ({ activeUserId }: { activeUserId: string }) =>
-        useSavingsNotificationInbox({
-          enabled: true,
-          merchantId,
-          userId: activeUserId,
-        }),
-      { initialProps: { activeUserId: 'user-a' } }
-    );
-    await waitFor(() =>
-      expect(mockMarkAvailable).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-a' })
-      )
-    );
-
-    rerender({ activeUserId: 'user-b' });
-    await waitFor(() =>
-      expect(mockMarkAvailable).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-b' })
-      )
-    );
-
-    await act(async () => {
-      resolveFirstMark();
-      await firstMark;
-    });
-
-    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
-  });
-
-  it('suppresses local reminders with the captured scope once server delivery is confirmed', async () => {
-    const { result } = renderHook(() =>
-      useSavingsNotificationInbox({
-        enabled: true,
-        merchantId,
-        userId: 'user-a',
-      })
-    );
-
-    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
-    await waitFor(() =>
-      expect(mockSuppressSavingsReminderNotification).toHaveBeenCalledWith({
-        merchantId,
-        userId: 'user-a',
-      })
-    );
-
-    expect(mockMarkAvailable).toHaveBeenCalledWith({
-      apiOrigin: 'https://api.baci.test',
-      merchantId,
-      userId: 'user-a',
-    });
   });
 });

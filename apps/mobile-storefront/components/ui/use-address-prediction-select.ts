@@ -1,4 +1,4 @@
-import type { MutableRefObject } from 'react';
+import { type MutableRefObject, useRef } from 'react';
 import { Keyboard } from 'react-native';
 import { fetchPlaceDetails } from './AddressAutocomplete.api';
 import type {
@@ -21,8 +21,11 @@ type PredictionSelectDeps = {
 
 /**
  * Prediction-select handler: the suggestions-portal effect depends on its
- * identity. No manual useCallback — React Compiler memoizes this closure
- * (manual memoization hooks are prohibited in this repo).
+ * identity. Stable by construction through a latest-values ref (same
+ * pattern as use-savings-first-card-checkout): no manual useCallback
+ * (prohibited in this repo) and no dependence on React Compiler
+ * memoization, which is a performance optimization rather than a
+ * semantic guarantee for this effect dependency.
  */
 export function usePredictionSelectHandler({
   isMountedRef,
@@ -35,24 +38,56 @@ export function usePredictionSelectHandler({
   setPredictions,
   setSessionToken,
 }: PredictionSelectDeps) {
-  return async (prediction: PlacePrediction) => {
-    Keyboard.dismiss();
-    latestQueryRef.current = prediction.mainText;
-    setInternalValue(prediction.mainText);
-    onChangeText?.(prediction.mainText);
-    setPredictions([]);
-    if (isMountedRef.current) {
-      setIsLoading(true);
-    }
-
-    const details = await fetchPlaceDetails({ prediction, sessionToken });
-    applyPlaceSelection({
-      details,
-      isMountedRef,
-      onSelect,
-      setIsLoading,
-      setPredictions,
-      setSessionToken,
-    });
+  const latestRef = useRef({
+    isMountedRef,
+    latestQueryRef,
+    onChangeText,
+    onSelect,
+    sessionToken,
+    setInternalValue,
+    setIsLoading,
+    setPredictions,
+    setSessionToken,
+  });
+  latestRef.current = {
+    isMountedRef,
+    latestQueryRef,
+    onChangeText,
+    onSelect,
+    sessionToken,
+    setInternalValue,
+    setIsLoading,
+    setPredictions,
+    setSessionToken,
   };
+  const stableRef = useRef<
+    ((prediction: PlacePrediction) => Promise<void>) | null
+  >(null);
+  if (stableRef.current === null) {
+    stableRef.current = async (prediction: PlacePrediction) => {
+      const latest = latestRef.current;
+      Keyboard.dismiss();
+      latest.latestQueryRef.current = prediction.mainText;
+      latest.setInternalValue(prediction.mainText);
+      latest.onChangeText?.(prediction.mainText);
+      latest.setPredictions([]);
+      if (latest.isMountedRef.current) {
+        latest.setIsLoading(true);
+      }
+
+      const details = await fetchPlaceDetails({
+        prediction,
+        sessionToken: latest.sessionToken,
+      });
+      applyPlaceSelection({
+        details,
+        isMountedRef: latest.isMountedRef,
+        onSelect: latest.onSelect,
+        setIsLoading: latest.setIsLoading,
+        setPredictions: latest.setPredictions,
+        setSessionToken: latest.setSessionToken,
+      });
+    };
+  }
+  return stableRef.current;
 }

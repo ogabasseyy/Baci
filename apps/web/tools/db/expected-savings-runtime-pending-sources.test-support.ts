@@ -247,6 +247,6 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261007120000_piggyvest_transfer_outbox_claims_authorization_idx.sql',
-    sha256: 'fa78478d48203484e464fd3d849311e57839a3f214a907608451bfd2100eb945',
+    sha256: '71b15d50589d66f8dbdaa38ad9b5844a3fe110422e41b48b8ce3a5393a2b8391',
   },
 ] as const;

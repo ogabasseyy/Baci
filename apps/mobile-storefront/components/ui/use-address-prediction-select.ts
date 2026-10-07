@@ -1,4 +1,4 @@
-import { type MutableRefObject, useRef } from 'react';
+import { type MutableRefObject, useLayoutEffect, useRef } from 'react';
 import { Keyboard } from 'react-native';
 import { fetchPlaceDetails } from './AddressAutocomplete.api';
 import type {
@@ -49,17 +49,23 @@ export function usePredictionSelectHandler({
     setPredictions,
     setSessionToken,
   });
-  latestRef.current = {
-    isMountedRef,
-    latestQueryRef,
-    onChangeText,
-    onSelect,
-    sessionToken,
-    setInternalValue,
-    setIsLoading,
-    setPredictions,
-    setSessionToken,
-  };
+  // Post-commit sync only: writing ref.current during render risks an
+  // abandoned concurrent render leaving uncommitted values behind for the
+  // stable handler to read at tap time. Layout effects flush before paint,
+  // so no user event can observe a stale snapshot.
+  useLayoutEffect(() => {
+    latestRef.current = {
+      isMountedRef,
+      latestQueryRef,
+      onChangeText,
+      onSelect,
+      sessionToken,
+      setInternalValue,
+      setIsLoading,
+      setPredictions,
+      setSessionToken,
+    };
+  });
   const stableRef = useRef<
     ((prediction: PlacePrediction) => Promise<void>) | null
   >(null);

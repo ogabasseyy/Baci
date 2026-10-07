@@ -9,7 +9,9 @@
 -- inside a DO/transaction block, and normal DROP INDEX takes an ACCESS
 -- EXCLUSIVE table lock. The drop also clears a leftover INVALID index from
 -- an interrupted concurrent build so the CREATE below rebuilds instead of
--- skipping on the name.
+-- skipping on the name. Rebuild-on-rerun is intentional: the DROP cannot be
+-- conditioned on validity in top-level SQL, and the plain CREATE (no IF NOT
+-- EXISTS) fails loudly rather than silently skipping if two deploys race.
 DROP INDEX CONCURRENTLY IF EXISTS public.piggyvest_transfer_outbox_claims_authorization_idx;
 
 CREATE INDEX CONCURRENTLY piggyvest_transfer_outbox_claims_authorization_idx

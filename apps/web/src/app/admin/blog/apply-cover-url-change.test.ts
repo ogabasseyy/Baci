@@ -154,6 +154,44 @@ describe('applyCoverUrlChange', () => {
     });
   });
 
+  it('ignores partially typed URLs when stashing the origin', () => {
+    const coverStashRef = { current: null };
+    const args = { coverStashRef };
+    let current = formAt('');
+    // Type the URL one character at a time, as the input delivers it.
+    for (const end of Array.from({ length: COVER_X.length }, (_, i) => i + 1)) {
+      current = applyCoverUrlChange({
+        ...args,
+        current,
+        nextUrl: COVER_X.slice(0, end),
+      });
+    }
+    expect(coverStashRef.current).toBeNull();
+    const typedX = {
+      ...current,
+      featured_image_alt: 'X alt',
+      featured_image_alt_edited: true,
+    };
+    const atY = applyCoverUrlChange({
+      ...args,
+      current: typedX,
+      nextUrl: 'https://cdn.example.com/cover-y.webp',
+    });
+    expect(coverStashRef.current).toMatchObject({
+      alt: 'X alt',
+      url: COVER_X,
+    });
+    const restored = applyCoverUrlChange({
+      ...args,
+      current: atY,
+      nextUrl: COVER_X,
+    });
+    expect(restored).toMatchObject({
+      featured_image_alt: 'X alt',
+      featured_image_url: COVER_X,
+    });
+  });
+
   it('restores the pristine cover when no diversion was stashed', () => {
     const restored = applyCoverUrlChange({
       coverStashRef: { current: null },

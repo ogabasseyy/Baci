@@ -60,6 +60,23 @@ describe('validateImportedContent media', () => {
     ).toContain('b.png');
   });
 
+  it.each([
+    '<img class="text-transparent" src="https://cdn.example.com/a.png">',
+    '<div class="text-transparent"><img src="https://cdn.example.com/a.png"></div>',
+  ])('counts images under text-color-only hiding as readable: %s', (body) => {
+    // text-transparent sets color: transparent, which hides glyphs but
+    // not decoded image pixels.
+    expect(validateImportedContent(body)).toContain('<img');
+  });
+
+  it('accepts media URLs with encoded character references', () => {
+    expect(
+      validateImportedContent(
+        '<p>Body</p><img src="https&#58;//cdn.example.com/a.png" alt="A">'
+      )
+    ).toContain('cdn.example.com/a.png');
+  });
+
   it('counts an image with a merely similar class name as readable', () => {
     expect(
       validateImportedContent(
@@ -224,6 +241,7 @@ describe('validateImportedContent media', () => {
     'https://cdn.example.com/a.webp 1.5x',
     'https://cdn.example.com/a.webp 1e3x',
     'https://cdn.example.com/a.webp 100w',
+    'https://cdn.example.com/a.webp .5x',
   ])('accepts srcset candidates with valid descriptors: %s', (srcset) => {
     expect(
       validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)

@@ -1,17 +1,20 @@
+import { decodeHTMLAttribute } from 'entities';
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
-import { stripNonRenderingText } from './strip-non-rendering-text';
+import { tagAttributes } from './review-handoff-tag-attributes';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
-const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
-const MEDIA_ATTRIBUTE_PATTERN = /([\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
 
 // Lowercase only: like the sanitizer (and browsers), uppercase descriptors
-// do not parse as width/density values.
-const SRCSET_DESCRIPTOR_PATTERN = /^(\d+w|\d+(\.\d+)?([eE][+-]?\d+)?x)$/;
+// do not parse as width/density values. Density fractions accept a
+// leading dot per the HTML floating-point grammar; a trailing dot stays
+// invalid because the sanitizer strips it as an invalid descriptor.
+const SRCSET_DESCRIPTOR_PATTERN =
+  /^(\d+w|(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?x)$/;
 
 function isValidSrcsetDescriptor(candidate: string): boolean {
   const parts = candidate.trim().split(/\s+/);
@@ -35,13 +38,17 @@ type MediaCandidate = { url: string; valid: boolean };
 
 function mediaTagCandidates(tag: string): MediaCandidate[] {
   const candidates: MediaCandidate[] = [];
-  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
-    const name = match[1].toLowerCase();
-    const value = unquoteAttributeValue(match[2]);
+  for (const { name, value } of tagAttributes(tag)) {
+    // The HTML tokenizer resolves character references before URL
+    // parsing, so decode first: an encoded `https&#58;//...` is a valid
+    // absolute URL to the browser.
     if (name === 'src') {
-      if (value) candidates.push({ url: value, valid: true });
+      if (value)
+        candidates.push({ url: decodeHTMLAttribute(value), valid: true });
     } else if (name === 'srcset') {
-      for (const candidate of splitSrcsetCandidates(value)) {
+      for (const candidate of splitSrcsetCandidates(
+        decodeHTMLAttribute(value)
+      )) {
         const candidateUrl = candidate.trim().split(/\s+/, 1)[0];
         if (candidateUrl) {
           candidates.push({
@@ -130,123 +137,6 @@ function hasBrokenMediaTag(html: string): boolean {
       candidates.some(({ url, valid }) => !valid || !isImportableMediaUrl(url))
     );
   });
-}
-
-function unquoteAttributeValue(raw: string): string {
-  return raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
-}
-
-function isZeroSizedImage(tag: string): boolean {
-  // A zero width or height renders no pixels. Only bare zeros count: the
-  // width/height attributes take plain pixel counts, so `0px` is invalid
-  // and ignored by browsers (natural size, still visible).
-  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
-    const name = match[1].toLowerCase();
-    if (name !== 'width' && name !== 'height') continue;
-    if (/^0+$/.test(unquoteAttributeValue(match[2]).trim())) return true;
-  }
-  return false;
-}
-
-const VISIBILITY_HIDING_CLASS_TOKENS = new Set([
-  'hidden',
-  'invisible',
-  'opacity-0',
-  'text-transparent',
-]);
-
-function hasVisibilityHidingClass(tag: string): boolean {
-  // The sanitizer preserves class but strips style, so display:none,
-  // visibility:hidden, and full transparency arrive only as Tailwind
-  // tokens. Match exact tokens: `hidden` must not match `unhidden`.
-  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
-    if (match[1].toLowerCase() !== 'class') continue;
-    const tokens = unquoteAttributeValue(match[2]).split(/\s+/);
-    if (tokens.some((token) => VISIBILITY_HIDING_CLASS_TOKENS.has(token))) {
-      return true;
-    }
-  }
-  return false;
-}
-
-const HTML_TAG_PATTERN =
-  /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
-const VOID_HTML_ELEMENTS = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'param',
-  'source',
-  'track',
-  'wbr',
-]);
-
-function hasHiddenAncestor(content: string, imgIndex: number): boolean {
-  // The sanitizer re-serializes balanced markup, so a stack over the tags
-  // preceding the image mirrors its live DOM ancestry.
-  const hiddenStack: boolean[] = [];
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if ((match.index ?? content.length) >= imgIndex) break;
-    if (match[1] === '/') {
-      hiddenStack.pop();
-      continue;
-    }
-    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
-    hiddenStack.push(hasVisibilityHidingClass(match[0]));
-  }
-  return hiddenStack.some(Boolean);
-}
-
-function visibleText(content: string): string {
-  // Collect text nodes outside hidden subtrees with the same ancestry
-  // stack as images. Comments are stripped first: the tag pattern does
-  // not match them, so their text must not leak in as visible segments.
-  const hiddenStack: boolean[] = [];
-  const segments: string[] = [];
-  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '');
-  let position = 0;
-  for (const match of withoutComments.matchAll(HTML_TAG_PATTERN)) {
-    const index = match.index ?? withoutComments.length;
-    if (!hiddenStack.some(Boolean)) {
-      segments.push(withoutComments.slice(position, index));
-    }
-    position = index + match[0].length;
-    if (match[1] === '/') {
-      hiddenStack.pop();
-      continue;
-    }
-    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
-    hiddenStack.push(hasVisibilityHidingClass(match[0]));
-  }
-  if (!hiddenStack.some(Boolean)) {
-    segments.push(withoutComments.slice(position));
-  }
-  return segments.join('');
-}
-
-function hasReadableContent(content: string): boolean {
-  // A bare <source> renders nothing without an accompanying <img>, and a
-  // zero-sized or CSS-hidden <img> renders no pixels either — whether the
-  // hiding class sits on the image itself or on an ancestor. Text gets
-  // the same ancestry handling through visibleText.
-  for (const match of content.matchAll(IMG_TAG_PATTERN)) {
-    const tag = match[0];
-    if (isZeroSizedImage(tag) || hasVisibilityHidingClass(tag)) continue;
-    if (!hasHiddenAncestor(content, match.index ?? content.length)) {
-      return true;
-    }
-  }
-  const text = stripNonRenderingText(
-    visibleText(content).replace(/&nbsp;/gi, ' ')
-  ).trim();
-  return text.length > 0;
 }
 
 /**

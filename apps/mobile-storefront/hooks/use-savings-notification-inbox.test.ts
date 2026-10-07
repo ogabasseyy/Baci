@@ -25,7 +25,8 @@ const mockClearAvailable =
       userId: string;
     }) => Promise<void>
   >();
-const mockCancelSavingsReminderNotification = jest.fn<() => Promise<boolean>>();
+const mockSuppressSavingsReminderNotification =
+  jest.fn<() => Promise<boolean>>();
 const mockGetRegisteredPushToken =
   jest.fn<(userId: string, merchantId: string) => Promise<string | null>>();
 
@@ -42,7 +43,7 @@ jest.mock('@/services/savings-notification-capability', () => ({
 }));
 jest.mock('@/env', () => ({ EXPO_PUBLIC_API_URL: 'https://api.baci.test' }));
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  cancelSavingsReminderNotification: mockCancelSavingsReminderNotification,
+  suppressSavingsReminderNotification: mockSuppressSavingsReminderNotification,
 }));
 jest.mock('@/lib/push-token-storage', () => ({
   getRegisteredPushToken: mockGetRegisteredPushToken,
@@ -87,7 +88,7 @@ describe('useSavingsNotificationInbox', () => {
     mockUpdatePreferences.mockResolvedValue({ success: true });
     mockMarkAvailable.mockResolvedValue();
     mockClearAvailable.mockResolvedValue();
-    mockCancelSavingsReminderNotification.mockResolvedValue(false);
+    mockSuppressSavingsReminderNotification.mockResolvedValue(false);
     mockGetRegisteredPushToken.mockResolvedValue('ExponentPushToken[ok]');
   });
 
@@ -193,7 +194,7 @@ describe('useSavingsNotificationInbox', () => {
     await waitFor(() => expect(result.current.notifications).toHaveLength(1));
 
     expect(mockMarkAvailable).not.toHaveBeenCalled();
-    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
     expect(mockClearAvailable).toHaveBeenCalledWith({
       apiOrigin: 'https://api.baci.test',
       merchantId,
@@ -220,7 +221,7 @@ describe('useSavingsNotificationInbox', () => {
     );
 
     expect(mockMarkAvailable).not.toHaveBeenCalled();
-    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
     expect(mockClearAvailable).toHaveBeenCalledWith({
       apiOrigin: 'https://api.baci.test',
       merchantId,
@@ -298,6 +299,30 @@ describe('useSavingsNotificationInbox', () => {
       await firstMark;
     });
 
-    expect(mockCancelSavingsReminderNotification).not.toHaveBeenCalled();
+    expect(mockSuppressSavingsReminderNotification).not.toHaveBeenCalled();
+  });
+
+  it('suppresses local reminders with the captured scope once server delivery is confirmed', async () => {
+    const { result } = renderHook(() =>
+      useSavingsNotificationInbox({
+        enabled: true,
+        merchantId,
+        userId: 'user-a',
+      })
+    );
+
+    await waitFor(() => expect(result.current.notifications).toHaveLength(1));
+    await waitFor(() =>
+      expect(mockSuppressSavingsReminderNotification).toHaveBeenCalledWith({
+        merchantId,
+        userId: 'user-a',
+      })
+    );
+
+    expect(mockMarkAvailable).toHaveBeenCalledWith({
+      apiOrigin: 'https://api.baci.test',
+      merchantId,
+      userId: 'user-a',
+    });
   });
 });

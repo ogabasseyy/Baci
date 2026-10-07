@@ -13,7 +13,7 @@ import {
   markSavingsNotificationRead,
   updateSavingsNotificationPreferences,
 } from '@/services/savings-notification-inbox';
-import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
+import { suppressSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 
 type InboxState = {
   error: string | null;
@@ -108,7 +108,7 @@ export function useSavingsNotificationInbox({
         };
         // deliveryEnabled is server-global; this device may still have no
         // confirmed token (e.g. the token RPC failed). Only switch to
-        // server delivery — and cancel the local reminder — after this
+        // server delivery — and suppress the local reminder — after this
         // user/device registration is confirmed, else the customer gets
         // neither local nor remote reminders.
         void (async () => {
@@ -123,11 +123,16 @@ export function useSavingsNotificationInbox({
               .markAvailable(capabilityScope)
               .then(() => {
                 // The account may have switched during the markAvailable
-                // await: cancel resolves its scope fresh, so recheck before
-                // clearing — otherwise this continuation would wipe the new
-                // account's local reminders before it has server delivery.
+                // await, so recheck before clearing — otherwise this
+                // continuation would wipe the new account's local reminders
+                // before it has server delivery. Suppress (not cancel) with
+                // the captured scope: the retained pending requests let
+                // local reminders re-arm if server delivery is later lost.
                 if (!active || scopeRef.current !== scope) return;
-                return cancelSavingsReminderNotification();
+                return suppressSavingsReminderNotification({
+                  merchantId: activeMerchantId,
+                  userId: activeUserId,
+                });
               })
               .catch(() => undefined);
           } else {

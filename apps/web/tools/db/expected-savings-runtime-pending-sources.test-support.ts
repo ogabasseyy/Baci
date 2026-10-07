@@ -244,4 +244,9 @@ export const EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES = [
       'supabase/migrations/20261006120000_cancel_plan_intent_fk_indexes.sql',
     sha256: 'c3c73608d4fa2d8faf30e84ecfc3173663d1996ed8038ed848985303e492ad43',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261007120000_piggyvest_transfer_outbox_claims_authorization_idx.sql',
+    sha256: 'd8525b1860981cca73959a8ccd912cab51ec1e112c25e2298a13bbbe3dffde85',
+  },
 ] as const;

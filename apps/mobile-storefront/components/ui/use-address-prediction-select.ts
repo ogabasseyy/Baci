@@ -1,4 +1,4 @@
-import { type MutableRefObject, useCallback } from 'react';
+import type { MutableRefObject } from 'react';
 import { Keyboard } from 'react-native';
 import { fetchPlaceDetails } from './AddressAutocomplete.api';
 import type {
@@ -20,9 +20,9 @@ type PredictionSelectDeps = {
 };
 
 /**
- * Stable prediction-select handler: the suggestions-portal effect depends
- * on its identity, so an inline closure would re-run the portal on every
- * render.
+ * Prediction-select handler: the suggestions-portal effect depends on its
+ * identity. No manual useCallback — React Compiler memoizes this closure
+ * (manual memoization hooks are prohibited in this repo).
  */
 export function usePredictionSelectHandler({
   isMountedRef,
@@ -35,39 +35,24 @@ export function usePredictionSelectHandler({
   setPredictions,
   setSessionToken,
 }: PredictionSelectDeps) {
-  return useCallback(
-    async (prediction: PlacePrediction) => {
-      Keyboard.dismiss();
-      latestQueryRef.current = prediction.mainText;
-      setInternalValue(prediction.mainText);
-      onChangeText?.(prediction.mainText);
-      setPredictions([]);
-      if (isMountedRef.current) {
-        setIsLoading(true);
-      }
+  return async (prediction: PlacePrediction) => {
+    Keyboard.dismiss();
+    latestQueryRef.current = prediction.mainText;
+    setInternalValue(prediction.mainText);
+    onChangeText?.(prediction.mainText);
+    setPredictions([]);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+    }
 
-      const details = await fetchPlaceDetails({ prediction, sessionToken });
-      applyPlaceSelection({
-        details,
-        isMountedRef,
-        onSelect,
-        setIsLoading,
-        setPredictions,
-        setSessionToken,
-      });
-    },
-    // Refs and state setters are stable at the call site, so only the
-    // callbacks and session token can retrigger this handler.
-    [
+    const details = await fetchPlaceDetails({ prediction, sessionToken });
+    applyPlaceSelection({
+      details,
       isMountedRef,
-      latestQueryRef,
-      onChangeText,
       onSelect,
-      sessionToken,
-      setInternalValue,
       setIsLoading,
       setPredictions,
       setSessionToken,
-    ]
-  );
+    });
+  };
 }

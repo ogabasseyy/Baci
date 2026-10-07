@@ -54,6 +54,15 @@ export type PlatformAdminBlogFormState = {
   focus_keyword?: string | null;
 };
 
+export type PlatformAdminBlogCoverState = {
+  alt: string;
+  altEdited: boolean;
+  height: number | null;
+  url: string;
+  variants: Record<string, unknown>;
+  width: number | null;
+};
+
 export const DEFAULT_PLATFORM_BLOG_FORM_STATE: PlatformAdminBlogFormState = {
   author_name: 'Baci Editorial',
   category: '',

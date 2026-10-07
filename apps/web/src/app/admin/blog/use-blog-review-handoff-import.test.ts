@@ -14,6 +14,7 @@ function setup(
 ) {
   const args = {
     contentGenerationRef: { current: 0 },
+    coverStashRef: { current: null },
     form: { ...DEFAULT_PLATFORM_BLOG_FORM_STATE },
     invalidateFeaturedUploads: vi.fn(),
     pendingContentEditRef: { current: false },
@@ -42,6 +43,25 @@ describe('useBlogReviewHandoffImport', () => {
     expect(args.setContentResetKey).toHaveBeenCalled();
     expect(args.invalidateFeaturedUploads).toHaveBeenCalled();
     expect(args.contentGenerationRef.current).toBe(1);
+  });
+
+  it('clears a stashed pre-diversion cover when the draft applies', () => {
+    const { args, result } = setup({
+      coverStashRef: {
+        current: {
+          alt: 'Stale',
+          altEdited: true,
+          height: 675,
+          url: 'https://cdn.example.com/stale.webp',
+          variants: {},
+          width: 1200,
+        },
+      },
+    });
+    act(() => {
+      result.current(draft);
+    });
+    expect(args.coverStashRef.current).toBeNull();
   });
 
   it('refuses to import while saving', () => {

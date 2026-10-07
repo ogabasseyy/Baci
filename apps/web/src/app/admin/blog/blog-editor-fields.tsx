@@ -15,8 +15,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { applyCoverUrlChange } from './apply-cover-url-change';
 import { BlogEditorialMetadataFields } from './blog-editorial-metadata-fields';
 import type {
+  PlatformAdminBlogCoverState,
   PlatformAdminBlogFormState,
   PlatformAdminBlogStatus,
 } from './blog-types';
@@ -24,13 +26,8 @@ import type {
 type BlogEditorFieldsProps = {
   contentResetKey?: number;
   contentGenerationRef?: RefObject<number>;
-  initialCover?: {
-    alt: string | null;
-    height: number | null;
-    url: string | null;
-    variants: Record<string, unknown> | null;
-    width: number | null;
-  };
+  coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
+  initialCover?: PlatformAdminBlogCoverState;
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
   onContentChange: (value: string) => void;
@@ -50,6 +47,7 @@ type BlogEditorFieldsProps = {
 export function BlogEditorFields({
   contentResetKey,
   contentGenerationRef,
+  coverStashRef,
   initialCover,
   form,
   isEditMode,
@@ -159,50 +157,14 @@ export function BlogEditorFields({
           id="featured-image-url"
           value={form.featured_image_url}
           onChange={(event) =>
-            setForm((current) => {
-              const nextUrl = event.target.value;
-              const nextTrimmed = nextUrl.trim();
-              const initialUrl = (initialCover?.url ?? '').trim();
-              // The edit was undone: restore the pristine cover record
-              // instead of sending cleared metadata for an unchanged URL.
-              if (
-                initialCover != null &&
-                initialUrl !== '' &&
-                nextTrimmed === initialUrl
-              ) {
-                return {
-                  ...current,
-                  featured_image_alt: initialCover.alt ?? '',
-                  featured_image_alt_edited: false,
-                  featured_image_height: initialCover.height,
-                  featured_image_url: nextUrl,
-                  featured_image_variants: initialCover.variants ?? {},
-                  featured_image_width: initialCover.width,
-                };
-              }
-              // Any URL change orphans the whole cover record: clear the
-              // alt text, dimensions, and variants together, otherwise the
-              // new image inherits the old one's metadata. The create
-              // payload has no existing post to reconcile against, so
-              // preserving here would publish stale dimensions; uploads
-              // bypass this handler and set fresh metadata directly.
-              const urlChanged =
-                nextTrimmed !== current.featured_image_url.trim();
-              const urlRemoved = nextTrimmed === '';
-              return {
-                ...current,
-                featured_image_url: nextUrl,
-                ...(urlChanged || urlRemoved
-                  ? {
-                      featured_image_alt: '',
-                      featured_image_alt_edited: false,
-                      featured_image_height: null,
-                      featured_image_variants: {},
-                      featured_image_width: null,
-                    }
-                  : {}),
-              };
-            })
+            setForm((current) =>
+              applyCoverUrlChange({
+                coverStashRef,
+                current,
+                initialCover,
+                nextUrl: event.target.value,
+              })
+            )
           }
         />
         <Label htmlFor="featured-image-alt">Featured image alt text</Label>

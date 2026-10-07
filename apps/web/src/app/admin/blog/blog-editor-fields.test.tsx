@@ -60,6 +60,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 
   render(
     <BlogEditorFields
+      coverStashRef={{ current: null }}
       form={currentForm}
       isEditMode={false}
       onContentChange={onContentChange}

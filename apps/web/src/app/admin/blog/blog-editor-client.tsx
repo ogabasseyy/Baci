@@ -13,6 +13,7 @@ import { BlogEditorFields } from '@/app/admin/blog/blog-editor-fields';
 import { BlogReviewHandoffImporter } from '@/app/admin/blog/blog-review-handoff-importer';
 import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
+  type PlatformAdminBlogCoverState,
   type PlatformAdminBlogFormState,
   type PlatformAdminBlogPostDetail,
 } from '@/app/admin/blog/blog-types';
@@ -165,6 +166,7 @@ export function BlogEditorClient({
   const [saving, setSaving] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
   const contentGenerationRef = useRef(0);
+  const coverStashRef = useRef<PlatformAdminBlogCoverState | null>(null);
   const pendingContentEditRef = useRef(false);
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
@@ -177,6 +179,7 @@ export function BlogEditorClient({
     });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({
     contentGenerationRef,
+    coverStashRef,
     form,
     invalidateFeaturedUploads,
     pendingContentEditRef,
@@ -243,13 +246,15 @@ export function BlogEditorClient({
       <BlogEditorFields
         contentResetKey={contentResetKey}
         contentGenerationRef={contentGenerationRef}
+        coverStashRef={coverStashRef}
         initialCover={
           initialPost
             ? {
-                alt: initialPost.featured_image_alt,
+                alt: initialPost.featured_image_alt ?? '',
+                altEdited: false,
                 height: initialPost.featured_image_height,
-                url: initialPost.featured_image_url,
-                variants: initialPost.featured_image_variants,
+                url: initialPost.featured_image_url ?? '',
+                variants: initialPost.featured_image_variants ?? {},
                 width: initialPost.featured_image_width,
               }
             : undefined

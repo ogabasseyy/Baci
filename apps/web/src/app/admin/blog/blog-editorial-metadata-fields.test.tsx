@@ -22,6 +22,7 @@ function Harness() {
   return (
     <>
       <BlogEditorFields
+        coverStashRef={{ current: null }}
         form={form}
         isEditMode={false}
         onFormChange={setForm}

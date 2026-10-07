@@ -20,9 +20,14 @@ function isValidSrcsetDescriptor(candidate: string): boolean {
   if (parts.length <= 1) return true;
   if (parts.length > 2) return false;
   const descriptor = parts[1];
+  // The HTML Standard excludes infinity from valid floating-point numbers,
+  // so an overflowing density (parseFloat -> Infinity) is invalid even
+  // though it matches the pattern and compares greater than zero.
+  const density = Number.parseFloat(descriptor);
   return (
     SRCSET_DESCRIPTOR_PATTERN.test(descriptor) &&
-    Number.parseFloat(descriptor) > 0
+    Number.isFinite(density) &&
+    density > 0
   );
 }
 

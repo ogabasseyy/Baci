@@ -210,6 +210,7 @@ describe('validateImportedContent media', () => {
     'https://cdn.example.com/a.webp 100h',
     'https://cdn.example.com/a.webp two-x',
     'https://cdn.example.com/a.webp 2X',
+    'https://cdn.example.com/a.webp 1e999x',
   ])('rejects srcset candidates with invalid descriptors: %s', (srcset) => {
     expect(() =>
       validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)

@@ -60,6 +60,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 
   render(
     <BlogEditorFields
+      coverStashRef={{ current: null }}
       form={currentForm}
       isEditMode={false}
       onContentChange={onContentChange}
@@ -128,6 +129,7 @@ describe('BlogEditorFields cover record', () => {
       },
       initialCover: {
         alt: 'Cover description',
+        altEdited: false,
         height: 675,
         url: coverUrl,
         variants,
@@ -145,6 +147,56 @@ describe('BlogEditorFields cover record', () => {
       featured_image_variants: variants,
       featured_image_width: 1200,
     });
+  });
+
+  it('restores the stashed alt edit when a URL diversion is undone', () => {
+    const coverUrl = 'https://cdn.example.com/cover.webp';
+    const variants = {
+      landscape_16x9: 'https://cdn.example.com/cover-16x9.webp',
+    };
+    // The stash holds the pre-diversion record: alt B was typed over the
+    // pristine alt A before the URL moved away. (The full keystroke
+    // sequence is covered in apply-cover-url-change.test.ts; the harness
+    // never re-renders, so consecutive changes on one input are
+    // unreliable here.)
+    const coverStashRef = {
+      current: {
+        alt: 'Edited alt',
+        altEdited: true,
+        height: 675,
+        url: coverUrl,
+        variants,
+        width: 1200,
+      },
+    };
+    const ctx = renderComponent({
+      coverStashRef,
+      form: {
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_url: 'https://cdn.example.com/other.webp',
+      },
+      initialCover: {
+        alt: 'Cover description',
+        altEdited: false,
+        height: 675,
+        url: coverUrl,
+        variants,
+        width: 1200,
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: coverUrl },
+    });
+    expect(ctx.getCurrentForm()).toMatchObject({
+      featured_image_alt: 'Edited alt',
+      featured_image_alt_edited: true,
+      featured_image_height: 675,
+      featured_image_url: coverUrl,
+      featured_image_variants: variants,
+      featured_image_width: 1200,
+    });
+    expect(coverStashRef.current).toBeNull();
   });
 
   it('marks hand-typed alt text as edited until the cover URL changes', () => {

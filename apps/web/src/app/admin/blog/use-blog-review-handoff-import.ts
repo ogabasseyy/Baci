@@ -2,6 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { areBlogImageVariantsEqual } from './are-blog-image-variants-equal';
 import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
+  type PlatformAdminBlogCoverState,
   type PlatformAdminBlogFormState,
 } from './blog-types';
 
@@ -31,6 +32,7 @@ function isFormDirty(form: PlatformAdminBlogFormState): boolean {
 
 type UseBlogReviewHandoffImportArgs = {
   contentGenerationRef: RefObject<number>;
+  coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
   form: PlatformAdminBlogFormState;
   invalidateFeaturedUploads: () => void;
   pendingContentEditRef: RefObject<boolean>;
@@ -41,6 +43,7 @@ type UseBlogReviewHandoffImportArgs = {
 
 export function useBlogReviewHandoffImport({
   contentGenerationRef,
+  coverStashRef,
   form,
   invalidateFeaturedUploads,
   pendingContentEditRef,
@@ -60,6 +63,9 @@ export function useBlogReviewHandoffImport({
     }
     invalidateFeaturedUploads();
     pendingContentEditRef.current = false;
+    // The draft is a new baseline: a stashed pre-diversion cover belongs
+    // to the replaced form and must not resurrect over the import.
+    coverStashRef.current = null;
     // Synchronously invalidate any debounced body edit queued
     // before this import: its timer may already be due, and the
     // remount's passive-effect cleanup can lose that race and

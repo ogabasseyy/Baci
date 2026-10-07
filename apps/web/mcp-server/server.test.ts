@@ -206,14 +206,15 @@ describe('MCP streamable HTTP probe compatibility', () => {
       .sort();
 
     expect(toolNames).toEqual([
-      'add_to_cart',
       'browse_categories',
       'get_brands',
       'get_delivery_fee_info',
       'get_product',
       'get_product_variants',
       'get_store_info',
+      'prepare_storefront_cart_link',
       'search_products',
+      'update_ogabassey_guest_cart',
     ]);
     expect(toolNames).not.toContain('check_order');
     expect(toolNames).not.toContain('check_payment_status');

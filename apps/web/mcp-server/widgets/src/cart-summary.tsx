@@ -6,8 +6,10 @@ export function CartSummary({
   cart,
   onViewCart,
   onRemoveItem,
+  isSavingCart = false,
 }: {
   cart: CartItem[];
+  isSavingCart?: boolean;
   onViewCart: () => void;
   onRemoveItem: (productId: string) => void;
 }) {
@@ -46,6 +48,7 @@ export function CartSummary({
             <span className="cart-item-qty">×{item.quantity}</span>
             <button type="button"
               className="cart-item-remove"
+              disabled={isSavingCart}
               onClick={() => onRemoveItem(item.product.id)}
               aria-label={`Remove ${item.product.name}`}
             >
@@ -54,7 +57,7 @@ export function CartSummary({
           </div>
         ))}
       </div>
-      <button type="button" className="btn-checkout" onClick={onViewCart}>
+      <button type="button" disabled={isSavingCart} className="btn-checkout" onClick={onViewCart}>
         Review Cart on Ogabassey →
       </button>
     </div>

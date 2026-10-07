@@ -9,7 +9,8 @@ import {
 
 test('defines the current required public MCP inventory', () => {
   assert.deepEqual(DEFAULT_REQUIRED_TOOLS, [
-    'add_to_cart',
+    'prepare_storefront_cart_link',
+  'update_ogabassey_guest_cart',
     'browse_categories',
     'get_brands',
     'get_product',

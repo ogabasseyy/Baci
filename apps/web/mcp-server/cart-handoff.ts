@@ -8,7 +8,7 @@ type CartHandoffResult = {
 
 /** Downgrades corrupt handoff payloads to a schema-valid error instead of letting SDK output validation throw. */
 function guardCartHandoffResult(result: CartHandoffResult): CartHandoffResult {
-  if (mcpToolOutputSchemas.add_to_cart.safeParse(result.structuredContent).success) return result;
+  if (mcpToolOutputSchemas.prepare_storefront_cart_link.safeParse(result.structuredContent).success) return result;
   return {
     content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],
     structuredContent: { success: false, message: 'Unable to prepare cart link.' },

@@ -27,6 +27,8 @@ services:
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}
       - OPENAI_AGENTIC_SIGNING_KEY=${OPENAI_AGENTIC_SIGNING_KEY}
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
+    volumes:
+      - mcp-guest-carts:/var/lib/baci/guest-carts
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8787/health"]
       interval: 30s
@@ -56,3 +58,7 @@ services:
       - mcp-server
     profiles:
       - dev
+
+volumes:
+  mcp-guest-carts:
+    name: ogabassey-mcp-guest-carts

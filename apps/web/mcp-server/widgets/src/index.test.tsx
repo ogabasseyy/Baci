@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
 
 const products = [
-  { id: 'phone-1', name: 'Phone One', slug: 'phone-one', price: 100000 },
-  { id: 'phone-2', name: 'Phone Two', slug: 'phone-two', price: 120000 },
+  { id: '11111111-1111-4111-8111-111111111111', name: 'Phone One', slug: 'phone-one', price: 100000 },
+  { id: '22222222-2222-4222-8222-222222222222', name: 'Phone Two', slug: 'phone-two', price: 120000 },
 ];
 
 afterEach(() => {
@@ -73,43 +73,20 @@ describe('Ogabassey cart handoff widget', () => {
     expect(fullscreen.style.paddingBottom).toBe('28px');
   });
 
-  it('keeps the latest item when an older handoff finishes late', async () => {
-    const pending = new Map<string, (value: unknown) => void>();
+  it('serializes cart saves so a late response cannot fork the guest cart', async () => {
+    let finish: ((value: unknown) => void) | undefined;
+    const callTool = vi.fn(() => new Promise(resolve => { finish = resolve; }));
     const openExternal = vi.fn();
-    window.openai = {
-      toolOutput: { products },
-      openExternal,
-      callTool: (_name, args) => new Promise((resolve) => {
-        pending.set(String(args.product_id), resolve);
-      }),
-    };
+    window.openai = { toolOutput: { products }, callTool, openExternal };
     render(<App />);
-
     const buttons = screen.getAllByRole('button', { name: 'Add to cart' });
-    fireEvent.click(buttons[0]);
-    fireEvent.click(buttons[1]);
-
-    await act(async () => {
-      pending.get('phone-2')?.({
-        structuredContent: {
-          success: true,
-          cart_url: 'https://ogabassey.com/cart?item_id=phone-2',
-        },
-      });
-    });
-    await act(async () => {
-      pending.get('phone-1')?.({
-        structuredContent: {
-          success: true,
-          cart_url: 'https://ogabassey.com/cart?item_id=phone-1',
-        },
-      });
-    });
-
-    expect(screen.getByText('Phone Two', { selector: '.cart-item-name' })).toBeTruthy();
-    expect(screen.queryByText('Phone One', { selector: '.cart-item-name' })).toBeNull();
-    expect(openExternal).toHaveBeenCalledTimes(1);
-    expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/cart?item_id=phone-2' });
+    fireEvent.click(buttons[0]); fireEvent.click(buttons[1]);
+    expect(callTool).toHaveBeenCalledTimes(1);
+    const url = new URL('https://ogabassey.com/cart');
+    url.searchParams.set('guest_cart', JSON.stringify([{ product_id: products[0].id, quantity: 1 }]));
+    await act(async () => { finish?.({ structuredContent: { success: true, cart_url: url.toString(), cart_token: 'a'.repeat(64) } }); });
+    expect(screen.getByText('Phone One', { selector: '.cart-item-name' })).toBeTruthy();
+    expect(openExternal).not.toHaveBeenCalled();
   });
 
   it('lets a shopper replace a legacy selection with no handoff URL', () => {
@@ -144,7 +121,7 @@ describe('Ogabassey cart handoff widget', () => {
         structuredContent: {
           success: false,
           requires_variant_selection: true,
-          product_id: 'phone-1',
+          product_id: '11111111-1111-4111-8111-111111111111',
           product_url: 'https://ogabassey.com/products/phone-one',
         },
       }),
@@ -159,7 +136,7 @@ describe('Ogabassey cart handoff widget', () => {
     expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
   });
 
-  it('clears an older cart handoff when a variant needs selection', async () => {
+  it('preserves an existing guest cart while a variant needs selection', async () => {
     const openExternal = vi.fn();
     window.openai = {
       toolOutput: { products },
@@ -172,7 +149,7 @@ describe('Ogabassey cart handoff widget', () => {
         structuredContent: {
           success: false,
           requires_variant_selection: true,
-          product_id: 'phone-1',
+          product_id: '11111111-1111-4111-8111-111111111111',
           product_url: 'https://ogabassey.com/products/phone-one',
         },
       }),
@@ -184,6 +161,6 @@ describe('Ogabassey cart handoff widget', () => {
     });
 
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
-    expect(screen.queryByRole('button', { name: 'Review Cart on Ogabassey →' })).toBeNull();
+    expect(screen.getByText('Phone Two', { selector: '.cart-item-name' })).toBeTruthy();
   });
 });

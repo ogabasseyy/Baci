@@ -55,7 +55,7 @@ ngrok http 8787
 
 ### Public tool output contracts
 
-All eight public tools declare Zod object output schemas from
+All nine public tools declare Zod object output schemas from
 `../src/schemas/mcp-tool-output.ts`. The installed MCP SDK converts these to
 JSON Schema in `tools/list` and validates non-error `structuredContent` before
 returning a tool result. Keep schemas aligned with the actual response branches,
@@ -154,7 +154,8 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 
 | Tool | Description |
 |------|-------------|
-| `add_to_cart` | Prepare a storefront cart URL without saving a server-side cart |
+| `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
+| `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
@@ -300,3 +301,26 @@ Expected healthy response:
 Configure the existing production GIG account using `GIGL_ENABLED=true`, `GIGL_BASE_URL`, `GIGL_EMAIL` and `GIGL_PASSWORD` in the server environment. Keep credentials server-side. The tool uses the anonymous-safe published merchant origin and active catalog items under RLS. It never books shipping or changes carts, orders or payments. City-only requests ask for products and quantities; missing catalog weights require a buyer-confirmed packed weight in kilograms of one unit of each product. GIG multiplies that per-unit weight by quantity: two units at 0.4kg each mean 0.8kg total. If the buyer only knows the combined package weight, ask for the per-unit packed weight or confirm at checkout; do not pass that combined total as a unit weight. Select an exact variant when applicable; condition offers currently require checkout. Quotes include expiry and door/station-pickup type and must be reconfirmed at checkout. The tool does not invent fixed rates or a default weight.
 
 MCP delivery estimates enforce a 100 kg per-unit input bound for both converted catalog weight and buyer-confirmed weight. This is an MCP input limit, not a documented GIG freight limit; larger stored values require a confirmed packed weight within the bound or checkout confirmation. No catalog value is clamped. The existing anonymous public PDP snapshot resolves anchor and variant policies and serialized inventory: strict available-unit counts must cover the aggregate selected quantity, including on untracked parents; serialized-then-unlimited remains purchasable. Other tracked parents, including legacy null stock policies, enforce hydrated catalog stock; only explicitly untracked parents leave legacy variant counts unconfirmed. Snapshot lookup errors, mismatched tenant/product identity, and truncated variant projections fail closed. No direct anonymous variant-table read is used. Sender and receiver station matching both reject contradictory exact city/state pairs without coordinates; exact city matches remain usable when the carrier omits state metadata.
+
+## Guest cart
+
+`update_ogabassey_guest_cart` saves simple products without shopper login. Quantity
+is an absolute total (0 removes a line), so retrying with the returned cart token
+does not add duplicates. Keep that opaque token with this conversation. It grants
+access only to this guest cart; it is not a customer login. Do not put it in logs
+or website URLs. Cart files contain product IDs and quantities, with no buyer details.
+
+The single MCP writer persists carts under `~/.local/share/baci/mcp-guest-carts`
+(or `MCP_GUEST_CART_DIRECTORY`). Keep that directory on durable private storage
+across releases. The production Compose file mounts the stable named volume
+`ogabassey-mcp-guest-carts` at `/var/lib/baci/guest-carts`, owned by the container
+node user; do not remove this volume during normal promotion or rollback.
+Guest carts expire after seven days. Multiple MCP writer processes
+require a shared transactional store before horizontal scaling.
+
+The website handoff contains only product IDs and quantities. The website reloads
+public merchant-scoped products and current availability, preserving existing cart
+lines and avoiding duplicate additions when the same snapshot is opened again.
+Products with variants or condition offers continue through explicit website option
+selection. Checkout remains on Ogabassey; its existing save-information checkbox
+is optional and defaults to off. This feature does not place orders or charge buyers.

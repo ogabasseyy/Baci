@@ -6,6 +6,10 @@ import {
   MCP_DELIVERY_FEE_INFO_DESCRIPTION,
   mcpDeliveryFeeInfoInputSchema,
 } from '../schemas/mcp-delivery-fee-info';
+import {
+  MCP_GUEST_CART_DESCRIPTION,
+  mcpGuestCartInputSchema,
+} from '../schemas/mcp-guest-cart';
 import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
@@ -81,7 +85,19 @@ export const PUBLIC_MCP_TOOLS = [
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
-    name: 'add_to_cart',
+    name: 'update_ogabassey_guest_cart',
+    title: 'Update Ogabassey Guest Cart',
+    description: MCP_GUEST_CART_DESCRIPTION,
+    inputSchema: z.toJSONSchema(mcpGuestCartInputSchema, { target: 'draft-7' }),
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+      idempotentHint: false,
+    },
+  },
+  {
+    name: 'prepare_storefront_cart_link',
     title: 'Prepare Ogabassey Cart Link',
     description:
       'Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',

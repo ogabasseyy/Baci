@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { getCartHandoffUrl } from '../cart-handoff-result';
+import { mcpGuestCartOutputSchema } from '../../../../src/schemas/mcp-guest-cart';
+import { parseGuestCartHandoff } from '../../../../src/lib/guest-cart-handoff';
 import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
 import type { Product, WidgetState } from '../widget-types';
@@ -17,12 +18,16 @@ function openOgabasseyUrl(url: string, pendingTab?: Window | null): void {
 }
 
 export function useCartHandoff() {
-  const [widgetState, setWidgetState] = useWidgetState<WidgetState>(createDefaultState);
+  const [widgetState, setWidgetState] =
+    useWidgetState<WidgetState>(createDefaultState);
   const [cartError, setCartError] = useState<string | null>(null);
   const handoffRequestId = useRef(0);
+  const busy = useRef(false);
+  const [isSavingCart, setIsSavingCart] = useState(false);
   const cart = widgetState?.cartUrl ? widgetState.cart : [];
 
   const handleAddToCart = async (product: Product) => {
+    if (busy.current) return;
     const requestId = ++handoffRequestId.current;
     setCartError(null);
     // Option-bearing results open the PDP directly: the cart handoff rejects
@@ -39,68 +44,165 @@ export function useCartHandoff() {
       return;
     }
     if (!window.openai?.callTool) {
-      setCartError('ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.');
+      setCartError(
+        'ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.'
+      );
       return;
     }
-    // Reserve the fallback tab while the click still has a user gesture.
-    const pendingTab = window.openai.openExternal ? null : window.open('about:blank', '_blank');
-    if (!window.openai.openExternal && !pendingTab) {
-      setCartError('Your browser blocked the cart tab. Allow popups or use Review on Ogabassey.');
-      return;
-    }
+    busy.current = true;
+    setIsSavingCart(true);
     try {
-      const result = await window.openai.callTool('add_to_cart', {
-        product_id: product.id,
-      });
+      const result = await window.openai.callTool(
+        'update_ogabassey_guest_cart',
+        {
+          product_id: product.id,
+          quantity: 1,
+          cart_token: widgetState?.cartToken,
+        }
+      );
       if (requestId !== handoffRequestId.current) {
-        pendingTab?.close();
         return;
       }
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id);
       if (variantSelectionUrl) {
-        openOgabasseyUrl(variantSelectionUrl, pendingTab);
-        setWidgetState((previous) => ({ ...previous!, cart: [], cartUrl: undefined }));
+        openOgabasseyUrl(variantSelectionUrl);
+        // Option selection preserves the shopper's existing guest cart.
         return;
       }
 
-      const cartUrl = getCartHandoffUrl(result, product.id);
-      if (!cartUrl) {
-        pendingTab?.close();
-        setCartError('This item cannot be added right now. Please choose another product.');
+      const parsed = mcpGuestCartOutputSchema.safeParse(
+        typeof result === 'object' && result !== null
+          ? Reflect.get(result, 'structuredContent')
+          : undefined
+      );
+      const content = parsed.success ? parsed.data : undefined;
+      const cartUrl = content?.success === true ? content.cart_url : undefined;
+      let validatedUrl: URL | undefined;
+      try {
+        validatedUrl = cartUrl ? new URL(cartUrl) : undefined;
+      } catch {
+        /* Invalid tool response. */
+      }
+      const lines = parseGuestCartHandoff(
+        validatedUrl?.searchParams.get('guest_cart') ?? null
+      );
+      if (
+        !cartUrl ||
+        validatedUrl?.origin !== 'https://ogabassey.com' ||
+        validatedUrl.pathname !== '/cart' ||
+        validatedUrl.username ||
+        validatedUrl.password ||
+        !lines?.some((line) => line.product_id === product.id) ||
+        !content?.cart_token ||
+        !/^[a-f0-9]{64}$/.test(content.cart_token)
+      ) {
+        setCartError(
+          'This item cannot be added right now. Please choose another product.'
+        );
         return;
       }
-      openOgabasseyUrl(cartUrl, pendingTab);
-      // The MCP handoff supports one product at a time.
+
+      const quantities = new Map(
+        lines.map((line) => [line.product_id, line.quantity])
+      );
       setWidgetState((previous) => ({
         ...previous!,
-        cart: [{ product, quantity: 1 }],
-        cartUrl: 'https://ogabassey.com/cart',
+        cart: [
+          ...(previous?.cart
+            .filter(
+              (item) =>
+                item.product.id !== product.id &&
+                quantities.has(item.product.id)
+            )
+            .map((item) => ({
+              ...item,
+              quantity: quantities.get(item.product.id) ?? item.quantity,
+            })) || []),
+          { product, quantity: quantities.get(product.id) ?? 1 },
+        ],
+        cartUrl,
+        cartToken: content.cart_token,
       }));
     } catch {
-      pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;
-      setCartError('Could not open the cart. Please try again.');
+      setCartError('Could not save the guest cart. Please try again.');
+    } finally {
+      busy.current = false;
+      setIsSavingCart(false);
     }
   };
 
-  const handleRemoveItem = (productId: string) => {
-    handoffRequestId.current += 1;
-    setWidgetState((previous) => ({
-      ...previous!,
-      cart: previous?.cart.filter((item) => item.product.id !== productId) || [],
-      cartUrl: undefined,
-    }));
+  const handleRemoveItem = async (productId: string) => {
+    if (busy.current || !widgetState?.cartToken || !window.openai?.callTool)
+      return;
+    busy.current = true;
+    setIsSavingCart(true);
+    setCartError(null);
+    try {
+      const response = await window.openai.callTool(
+        'update_ogabassey_guest_cart',
+        {
+          product_id: productId,
+          quantity: 0,
+          cart_token: widgetState.cartToken,
+        }
+      );
+      const parsed = mcpGuestCartOutputSchema.safeParse(
+        typeof response === 'object' && response !== null
+          ? Reflect.get(response, 'structuredContent')
+          : undefined
+      );
+      const content = parsed.success ? parsed.data : undefined;
+      const url = content?.cart_url ? new URL(content.cart_url) : null;
+      const raw = url?.searchParams.get('guest_cart') ?? null;
+      const remaining = raw === '[]' ? [] : parseGuestCartHandoff(raw);
+      if (
+        !content?.success ||
+        content.cart_token !== widgetState.cartToken ||
+        url?.origin !== 'https://ogabassey.com' ||
+        url.pathname !== '/cart' ||
+        url.username ||
+        url.password ||
+        !remaining ||
+        remaining.some((line) => line.product_id === productId)
+      )
+        throw new Error('Cart update failed');
+      setWidgetState((previous) => ({
+        ...previous!,
+        cart:
+          previous?.cart.filter((item) => item.product.id !== productId) || [],
+        cartUrl: content.cart_url,
+      }));
+    } catch {
+      setCartError('Could not remove this item. Please try again.');
+    } finally {
+      busy.current = false;
+      setIsSavingCart(false);
+    }
   };
 
   const handleViewCart = () => {
-    if (cart.length === 0 || !widgetState?.cartUrl) return;
-    openOgabasseyUrl('https://ogabassey.com/cart');
+    if (busy.current || cart.length === 0 || !widgetState?.cartUrl) return;
+    try {
+      const url = new URL(widgetState.cartUrl);
+      if (
+        url.origin !== 'https://ogabassey.com' ||
+        url.pathname !== '/cart' ||
+        url.username ||
+        url.password
+      )
+        return;
+      openOgabasseyUrl(url.toString());
+    } catch {
+      setCartError('Could not open your guest cart. Please try again.');
+    }
   };
 
   return {
     cart,
     cartError,
+    isSavingCart,
     handleAddToCart,
     handleRemoveItem,
     handleViewCart,

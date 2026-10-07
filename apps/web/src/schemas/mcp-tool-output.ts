@@ -78,7 +78,7 @@ export const mcpToolOutputSchemas = {
       })
       .optional(),
   }),
-  add_to_cart: z.object({
+  prepare_storefront_cart_link: z.object({
     success: z
       .boolean()
       .describe(

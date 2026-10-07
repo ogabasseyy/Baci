@@ -211,3 +211,6 @@ orphaned_images_sample/
 
 # Local native gtest bootstrap/build artifacts (never commit)
 tools/**/.work/
+
+# Private guest cart capability storage
+.mcp-guest-carts/

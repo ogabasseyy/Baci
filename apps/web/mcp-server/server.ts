@@ -14,8 +14,11 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
  * Run with: npx tsx mcp-server/server.ts
  */
 
+import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { prepareCartHandoff } from './cart-handoff';
+import { GuestCartStore } from './guest-cart-store';
+import { registerGuestCartTool } from './guest-cart-tool';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
@@ -75,6 +78,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
+const guestCartStore = new GuestCartStore(path.resolve(process.env.MCP_GUEST_CART_DIRECTORY || path.join(homedir(), '.local/share/baci/mcp-guest-carts')));
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;
@@ -1299,12 +1303,14 @@ function createOgabasseyServer() {
     }
   );
 
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice });
+
   // Tool: Add to Cart (Widget-accessible)
   // This tool can be called from the widget iframe using window.openai.callTool
   server.registerTool(
-    'add_to_cart',
+    'prepare_storefront_cart_link',
     {
-      outputSchema: mcpToolOutputSchemas.add_to_cart,
+      outputSchema: mcpToolOutputSchemas.prepare_storefront_cart_link,
       title: 'Prepare Ogabassey Cart Link',
 
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },

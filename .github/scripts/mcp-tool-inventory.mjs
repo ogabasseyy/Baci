@@ -1,5 +1,6 @@
 export const DEFAULT_REQUIRED_TOOLS = [
-  'add_to_cart',
+  'prepare_storefront_cart_link',
+  'update_ogabassey_guest_cart',
   'browse_categories',
   'get_brands',
   'get_product',

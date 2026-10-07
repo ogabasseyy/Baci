@@ -31,7 +31,7 @@ export function App() {
             ? 'No verified match was found among the checked products. Other products may match.'
             : 'No verified products match this search.'
           : toolOutput.message || 'View the tool response in the conversation.';
-  const { cart, cartError, handleAddToCart, handleRemoveItem, handleViewCart } =
+  const { cart, cartError, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
     useCartHandoff();
 
   useEffect(() => {
@@ -102,6 +102,7 @@ export function App() {
             <button
               type="button"
               className="cart-badge"
+              disabled={isSavingCart}
               onClick={handleViewCart}
             >
               <svg
@@ -122,6 +123,7 @@ export function App() {
         </div>
       </header>
 
+      {isSavingCart && <p role="status">Saving your guest cart…</p>}
       {cartError && (
         <p role="alert" className="cart-error">
           {cartError}
@@ -142,6 +144,7 @@ export function App() {
             <ProductCard
               key={product.id}
               product={product}
+              isSavingCart={isSavingCart}
               isInCart={cart.some((item) => item.product.id === product.id)}
               onAddToCart={handleAddToCart}
               onViewCart={handleViewCart}
@@ -171,6 +174,7 @@ export function App() {
         cart={cart}
         onViewCart={handleViewCart}
         onRemoveItem={handleRemoveItem}
+        isSavingCart={isSavingCart}
       />
 
       {/* Mobile Sticky Footer */}
@@ -205,6 +209,7 @@ export function App() {
           <button
             type="button"
             className="btn-checkout-sticky"
+            disabled={isSavingCart}
             onClick={handleViewCart}
           >
             Review Cart on Ogabassey →

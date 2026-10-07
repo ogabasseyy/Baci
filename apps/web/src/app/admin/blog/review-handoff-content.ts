@@ -126,63 +126,38 @@ function hasBrokenMediaTag(html: string): boolean {
   });
 }
 
-const NEW_CANDIDATE_URL_PATTERN = /^(data:|[a-z][a-z\d+.-]*:\/\/)/i;
-const DATA_URL_PREFIX_PATTERN = /^\s*data:/i;
-
 function isCandidateBoundary(current: string, piece: string): boolean {
-  const accumulated = current.trim();
-  // A URL followed by a descriptor is a complete candidate.
-  if (/\s/.test(accumulated)) {
+  // Mirror the WHATWG "parse a srcset attribute" splitting loop: a comma
+  // ends a candidate only when the accumulated text already holds a
+  // complete `url [descriptors]` run (it contains whitespace) or the comma
+  // itself is followed by whitespace (a trailing-comma separator). A bare
+  // comma inside a whitespace-free run is part of the URL token — path
+  // segments, query values, and data: payloads may all legally contain
+  // commas (RFC 3986 sub-delims) — so it glues and the joined token is
+  // validated as one candidate. The next piece is never classified: the
+  // browser does not split `a,b 2x` into a relative second candidate, it
+  // requests the comma-bearing URL as one resource.
+  if (/\s/.test(current)) {
     return true;
   }
-  const next = piece.trim();
-  // Inside a data: URL commas are payload (base64 padding, SVG markup),
-  // never separators: gluing keeps the data: URL whole so it is rejected
-  // as one non-HTTPS candidate. The one exception is an unambiguous new
-  // candidate: a scheme-absolute URL carrying a descriptor cannot be
-  // data: payload, which holds no raw whitespace before its own descriptor.
-  if (DATA_URL_PREFIX_PATTERN.test(accumulated)) {
-    return NEW_CANDIDATE_URL_PATTERN.test(next) && /\s/.test(next);
-  }
-  // An absolute URL or embedded image always starts a new candidate.
-  if (NEW_CANDIDATE_URL_PATTERN.test(next)) {
-    return true;
-  }
-  // Inside a query string commas separate values, never candidates (RFC
-  // 3986 sub-delims): a comma here glues no matter what the value looks
-  // like, so the next piece is never classified.
-  if (/\?[^#]*$/.test(accumulated)) {
-    return false;
-  }
-  // A comma continues the current candidate only inside a CDN transform
-  // parameter list: the accumulated text ends mid-assignment (key=partial
-  // value) and the next piece continues assignments — another key=value
-  // segment (see buildOgabasseyAvifSrcSet) or a bare numeric value.
-  // Either side alone proves nothing: relative path segments may
-  // themselves contain `=`.
-  const endsMidAssignment = /=[^/?#\s]*$/.test(accumulated);
-  const firstToken = next.split(/\s+/, 1)[0];
-  const segment = firstToken.split(/[/?#]/, 1)[0];
-  const continuesAssignments =
-    segment.includes('=') || /^\d+(\.\d+)?$/.test(firstToken);
-  return !(endsMidAssignment && continuesAssignments);
+  return /^\s/.test(piece);
 }
 
 function splitSrcsetCandidates(srcset: string): string[] {
   const candidates: string[] = [];
-  // A comma ends a candidate at a candidate boundary (see above). Gluing
-  // is only safe for CDN transform parameters and data: payloads: any
-  // other glued piece hides its URL from validation behind the first
-  // token while the browser still selects it. Splitting is the fail-closed
-  // direction: every emitted candidate is URL-validated.
+  // A comma ends a candidate at a candidate boundary (see above). Every
+  // emitted candidate — glued or split — is URL-validated, so a glued
+  // token still fails closed whenever it is not an absolute HTTPS URL.
   let current = '';
   for (const piece of srcset.split(',')) {
     if (piece.trim() === '') continue;
     if (current !== '' && isCandidateBoundary(current, piece)) {
       candidates.push(current);
-      current = piece;
+      // A new candidate starts trimmed: like the WHATWG splitting loop,
+      // separator whitespace is skipped rather than accumulated.
+      current = piece.trim();
     } else if (current === '') {
-      current = piece;
+      current = piece.trim();
     } else {
       current += `,${piece}`;
     }
@@ -221,12 +196,51 @@ function hasVisibilityHidingClass(tag: string): boolean {
   return false;
 }
 
+const HTML_TAG_PATTERN =
+  /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+const VOID_HTML_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
+function hasHiddenAncestor(content: string, imgIndex: number): boolean {
+  // The sanitizer re-serializes balanced markup, so a stack over the tags
+  // preceding the image mirrors its live DOM ancestry.
+  const hiddenStack: boolean[] = [];
+  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
+    if ((match.index ?? content.length) >= imgIndex) break;
+    if (match[1] === '/') {
+      hiddenStack.pop();
+      continue;
+    }
+    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
+    hiddenStack.push(hasVisibilityHidingClass(match[0]));
+  }
+  return hiddenStack.some(Boolean);
+}
+
 function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>, and a
-  // zero-sized or CSS-hidden <img> renders no pixels either.
+  // zero-sized or CSS-hidden <img> renders no pixels either — whether the
+  // hiding class sits on the image itself or on an ancestor.
   for (const match of content.matchAll(IMG_TAG_PATTERN)) {
     const tag = match[0];
-    if (!isZeroSizedImage(tag) && !hasVisibilityHidingClass(tag)) return true;
+    if (isZeroSizedImage(tag) || hasVisibilityHidingClass(tag)) continue;
+    if (!hasHiddenAncestor(content, match.index ?? content.length)) {
+      return true;
+    }
   }
   const text = stripNonRenderingText(
     content.replace(/<[^>]*>/gu, '').replace(/&nbsp;/gi, ' ')

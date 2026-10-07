@@ -23,6 +23,23 @@ describe('validateImportedContent media', () => {
     );
   });
 
+  it.each([
+    '<div class="hidden"><img src="https://cdn.example.com/a.png"></div>',
+    '<span class="invisible"><p><img src="https://cdn.example.com/a.png"></p></span>',
+  ])('disregards images inside hidden ancestors: %s', (body) => {
+    expect(() => validateImportedContent(body)).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('counts an image outside a closed hidden element as readable', () => {
+    expect(
+      validateImportedContent(
+        '<div class="hidden"><img src="https://cdn.example.com/a.png"></div><img src="https://cdn.example.com/b.png">'
+      )
+    ).toContain('b.png');
+  });
+
   it('counts an image with a merely similar class name as readable', () => {
     expect(
       validateImportedContent(
@@ -75,7 +92,7 @@ describe('validateImportedContent media', () => {
     ).toContain('srcset');
   });
 
-  it('rejects a second srcset URL hidden behind a bare comma', () => {
+  it('rejects a second srcset URL after a complete candidate', () => {
     expect(() =>
       validateImportedContent(
         '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/a.webp 1x,http://example.com/evil.png 2x">'
@@ -85,8 +102,9 @@ describe('validateImportedContent media', () => {
 
   it.each([
     'https://cdn.example.com/a.webp, http://example.com/evil.png 2x',
-    'https://cdn.example.com/a.webp,http://example.com/evil.png 2x',
-  ])('rejects an http URL glued to a descriptorless srcset candidate: %s', (srcset) => {
+    'https://cdn.example.com/a.webp, assets/b.webp 2x',
+    'data:image/png;base64,iVBORw0KGgo, http://example.com/evil.png 2x',
+  ])('rejects a non-https URL after a comma separator: %s', (srcset) => {
     expect(() =>
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
@@ -95,20 +113,23 @@ describe('validateImportedContent media', () => {
   });
 
   it.each([
+    'https://cdn.example.com/path/red,blue.webp 1x',
     'https://cdn.example.com/a.webp,assets/b.webp 2x',
-    'https://cdn.example.com/a.webp, assets/b.webp 2x',
     'https://cdn.example.com/a.webp,/b.webp 2x',
     'https://cdn.example.com/a.webp,b.webp 2x',
     'https://cdn.example.com/a.webp,assets/b.webp',
     'https://cdn.example.com/a.webp,asset=broken.webp 2x',
     'https://cdn.example.com/a.webp,format=webp/b.png 640w',
-    'data:image/png;base64,iVBORw0KGgo, http://example.com/evil.png 2x',
-  ])('rejects a non-https URL hidden behind a descriptorless srcset candidate: %s', (srcset) => {
-    expect(() =>
+    'https://cdn.example.com/a.webp,http://example.com/evil.png 2x',
+  ])('treats a bare comma as part of one srcset URL token: %s', (srcset) => {
+    // WHATWG splits candidates only at whitespace-adjacent commas; a bare
+    // comma belongs to the URL token, so the joined absolute URL validates
+    // as one candidate instead of a relative second one.
+    expect(
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
-    ).toThrow('must use HTTPS URLs');
+    ).toContain('srcset');
   });
 
   it.each([

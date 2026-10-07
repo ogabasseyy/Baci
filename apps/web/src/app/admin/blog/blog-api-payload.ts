@@ -55,13 +55,21 @@ export function toApiPayload(
           ? null
           : undefined
         : inputAlt;
+  // Alt text without an image is orphaned: force the clear even for
+  // hand-edited text, on both create and PATCH.
+  const hasImageUrl = normalizeTrimmedString(input.featured_image_url) !== '';
+  const effectiveAlt = hasImageUrl
+    ? preservedAlt
+    : clearEmptyToNull
+      ? null
+      : undefined;
 
   const payload = {
     author_name: input.author_name,
     category: toOptionalString(input.category),
     content: input.content,
     excerpt: toOptionalString(input.excerpt),
-    featured_image_alt: preservedAlt,
+    featured_image_alt: effectiveAlt,
     focus_keyword: toOptionalString(input.focus_keyword ?? ''),
     intent,
     intent_source: intentSource,
@@ -80,10 +88,12 @@ export function toApiPayload(
   const featuredImageUrl = toOptionalString(input.featured_image_url) || null;
   if (shouldResetFeaturedMetadataForChangedUrl(input, existingPost)) {
     // Only hand-edited alt text is fresh for the new cover; anything else
-    // riding along with the changed URL is stale and resets to null.
-    const featuredImageAlt = altEdited
-      ? toOptionalString(input.featured_image_alt)
-      : null;
+    // riding along with the changed URL is stale and resets to null, as
+    // does any alt when the URL itself was removed.
+    const featuredImageAlt =
+      hasImageUrl && altEdited
+        ? toOptionalString(input.featured_image_alt)
+        : null;
     return {
       ...payload,
       featured_image_alt: featuredImageAlt || null,

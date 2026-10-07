@@ -138,6 +138,28 @@ it('clears alt text the reviewer deliberately emptied', () => {
   ).toBeNull();
 });
 
+it('clears hand-edited alt text when the image URL is removed on PATCH', () => {
+  const form = {
+    ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+    featured_image_alt: 'Typed after removal',
+    featured_image_alt_edited: true,
+    featured_image_url: '',
+  };
+  expect(
+    toApiPayload(form, { clearEmptyToNull: true, existingPost: storedPost })
+      .featured_image_alt
+  ).toBeNull();
+});
+
+it('omits alt text without an image URL on create', () => {
+  const form = {
+    ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+    featured_image_alt: 'No image to describe',
+    featured_image_alt_edited: true,
+  };
+  expect(toApiPayload(form).featured_image_alt).toBeUndefined();
+});
+
 it('nulls an orphan intent_source when intent is cleared on PATCH', async () => {
   fetchWithCsrf.mockClear();
   const form = {

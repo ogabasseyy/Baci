@@ -5,7 +5,6 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
-import { areBlogImageVariantsEqual } from '@/app/admin/blog/are-blog-image-variants-equal';
 import {
   createPlatformBlogPost,
   updatePlatformBlogPost,
@@ -22,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { generateSlug } from '@/lib/blog-utils';
 import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
+import { useBlogReviewHandoffImport } from './use-blog-review-handoff-import';
 
 type BlogEditorClientProps = {
   initialPost?: PlatformAdminBlogPostDetail | null;
@@ -124,13 +124,6 @@ async function submitBlogPost({
   }
 }
 
-// Absent optional fields (undefined) and cleared inputs ('') both mean "no
-// value": normalize them so selecting "Not specified" or clearing an
-// optional field back to empty does not flag the pristine form as dirty.
-function normalizeDirtyCheckValue(value: unknown): unknown {
-  return value === undefined || value === '' ? null : value;
-}
-
 function toFormState(
   post?: PlatformAdminBlogPostDetail | null
 ): PlatformAdminBlogFormState {
@@ -182,6 +175,15 @@ export function BlogEditorClient({
       setForm,
       toast,
     });
+  const handleReviewHandoffImport = useBlogReviewHandoffImport({
+    contentGenerationRef,
+    form,
+    invalidateFeaturedUploads,
+    pendingContentEditRef,
+    saving,
+    setContentResetKey,
+    setForm,
+  });
 
   const pageTitle = isEditMode
     ? 'Edit Platform Blog Post'
@@ -234,43 +236,7 @@ export function BlogEditorClient({
       {!isEditMode && (
         <BlogReviewHandoffImporter
           disabled={saving}
-          onImport={(draft) => {
-            if (saving) return false;
-            const changed = Object.entries(form).some(([key, value]) => {
-              const baseline =
-                DEFAULT_PLATFORM_BLOG_FORM_STATE[
-                  key as keyof PlatformAdminBlogFormState
-                ];
-              if (key === 'featured_image_variants') {
-                return !areBlogImageVariantsEqual(
-                  value as Record<string, unknown>,
-                  baseline as Record<string, unknown>
-                );
-              }
-              return (
-                JSON.stringify(normalizeDirtyCheckValue(value)) !==
-                JSON.stringify(normalizeDirtyCheckValue(baseline))
-              );
-            });
-            if (
-              (changed || pendingContentEditRef.current) &&
-              !window.confirm(
-                'Replace your unsaved article with this review handoff?'
-              )
-            ) {
-              return false;
-            }
-            invalidateFeaturedUploads();
-            pendingContentEditRef.current = false;
-            // Synchronously invalidate any debounced body edit queued
-            // before this import: its timer may already be due, and the
-            // remount's passive-effect cleanup can lose that race and
-            // overwrite the imported body with abandoned editor HTML.
-            contentGenerationRef.current += 1;
-            setForm(draft);
-            setContentResetKey((current) => current + 1);
-            return true;
-          }}
+          onImport={handleReviewHandoffImport}
         />
       )}
 

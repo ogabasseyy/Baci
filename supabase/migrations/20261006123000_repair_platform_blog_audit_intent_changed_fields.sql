@@ -1,4 +1,5 @@
 -- Record intent classification and provenance edits in the platform blog audit ledger.
+-- Also record featured_image_alt edits, which the trigger never compared.
 -- The intent columns were added after the trigger; without this repair an intent-only
 -- update emits an empty changed_fields array.
 
@@ -65,6 +66,7 @@ BEGIN
       CASE WHEN NEW.featured_image_width IS DISTINCT FROM OLD.featured_image_width THEN 'featured_image_width' END,
       CASE WHEN NEW.featured_image_height IS DISTINCT FROM OLD.featured_image_height THEN 'featured_image_height' END,
       CASE WHEN NEW.featured_image_variants IS DISTINCT FROM OLD.featured_image_variants THEN 'featured_image_variants' END,
+      CASE WHEN NEW.featured_image_alt IS DISTINCT FROM OLD.featured_image_alt THEN 'featured_image_alt' END,
       CASE WHEN NEW.slug IS DISTINCT FROM OLD.slug THEN 'slug' END,
       CASE WHEN NEW.category IS DISTINCT FROM OLD.category THEN 'category' END,
       CASE WHEN NEW.tags IS DISTINCT FROM OLD.tags THEN 'tags' END,

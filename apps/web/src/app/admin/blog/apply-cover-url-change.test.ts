@@ -119,6 +119,41 @@ describe('applyCoverUrlChange', () => {
     });
   });
 
+  it('restores create-mode alt typed before the second diversion', () => {
+    const coverStashRef = { current: null };
+    const args = { coverStashRef };
+    const atX = applyCoverUrlChange({
+      ...args,
+      current: formAt(''),
+      nextUrl: COVER_X,
+    });
+    expect(coverStashRef.current).toBeNull();
+    const typedX = {
+      ...atX,
+      featured_image_alt: 'X alt',
+      featured_image_alt_edited: true,
+    };
+    const atY = applyCoverUrlChange({
+      ...args,
+      current: typedX,
+      nextUrl: 'https://cdn.example.com/cover-y.webp',
+    });
+    expect(coverStashRef.current).toMatchObject({
+      alt: 'X alt',
+      url: COVER_X,
+    });
+    const restored = applyCoverUrlChange({
+      ...args,
+      current: atY,
+      nextUrl: COVER_X,
+    });
+    expect(restored).toMatchObject({
+      featured_image_alt: 'X alt',
+      featured_image_alt_edited: true,
+      featured_image_url: COVER_X,
+    });
+  });
+
   it('restores the pristine cover when no diversion was stashed', () => {
     const restored = applyCoverUrlChange({
       coverStashRef: { current: null },

@@ -43,7 +43,10 @@ export function applyCoverUrlChange({
   // dimensions; uploads bypass this transition and set fresh metadata.
   const urlChanged = nextTrimmed !== current.featured_image_url.trim();
   const urlRemoved = nextTrimmed === '';
-  if ((urlChanged || urlRemoved) && stashed == null) {
+  // An empty origin has no record worth returning to: stashing it would
+  // pin a blank stash that blocks stashing the first real cover.
+  const hasStashableOrigin = current.featured_image_url.trim() !== '';
+  if ((urlChanged || urlRemoved) && stashed == null && hasStashableOrigin) {
     // First diversion away: preserve the pre-diversion record so that
     // returning restores it. Later hops in the same chain keep the
     // original stash; their own records were already cleared.

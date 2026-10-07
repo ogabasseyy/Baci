@@ -37,6 +37,7 @@ describe('validateImportedContent media', () => {
     '<div class="hidden">Only body</div>',
     '<div class="invisible"><p>Only <strong>body</strong></p></div>',
     '<div class="opacity-0">Only body</div>',
+    '<p class="text-transparent">Only body</p>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'

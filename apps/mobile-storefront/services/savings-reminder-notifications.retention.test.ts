@@ -231,6 +231,39 @@ describe('savings reminder retention across server-delivery transitions', () => 
     expect(scheduledGoalIds()).toEqual(['goal-1']);
   });
 
+  it('preserves the live notification ID when suppression fails during a server-owned update', async () => {
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 500,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+      scheduledAt: new Date(2020, 5, 8, 9, 30),
+    });
+    await savingsNotificationCapability.markAvailable(capabilityScope);
+    mockNotifications.cancelScheduledNotificationAsync.mockRejectedValueOnce(
+      new Error('os busy')
+    );
+
+    await scheduleSavingsReminderNotification({
+      contributionAmount: 700,
+      frequency: 'weekly',
+      goalId: 'goal-1',
+      goalTitle: 'Phone',
+    });
+
+    const { savingsReminderStorage } =
+      require('./savings-reminder-storage') as typeof import('./savings-reminder-storage');
+    const { buildReminderScope } =
+      require('./savings-reminder-notifications') as typeof import('./savings-reminder-notifications');
+    const scope = buildReminderScope('user-a', merchantId);
+    if (!scope) throw new Error('test scope must resolve');
+    const [record] = await savingsReminderStorage.read(scope, 'goal-1');
+    // The live ID survives (the OS notification is still real) while the
+    // pending carries the updated request.
+    expect(record.notificationId).toBe('notification-id');
+    expect(record.pending?.contributionAmount).toBe(700);
+  });
+
   it('skips goal reconciliation when local arming is impossible', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,

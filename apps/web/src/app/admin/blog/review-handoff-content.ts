@@ -193,9 +193,27 @@ function splitSrcsetCandidates(srcset: string): string[] {
   return candidates;
 }
 
+function isZeroSizedImage(tag: string): boolean {
+  // A zero width or height renders no pixels. Only bare zeros count: the
+  // width/height attributes take plain pixel counts, so `0px` is invalid
+  // and ignored by browsers (natural size, still visible).
+  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
+    const name = match[1].toLowerCase();
+    if (name !== 'width' && name !== 'height') continue;
+    const raw = match[2];
+    const value =
+      raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
+    if (/^0+$/.test(value.trim())) return true;
+  }
+  return false;
+}
+
 function hasReadableContent(content: string): boolean {
-  // A bare <source> renders nothing without an accompanying <img>.
-  if (content.match(IMG_TAG_PATTERN)) return true;
+  // A bare <source> renders nothing without an accompanying <img>, and a
+  // zero-sized <img> renders no pixels either.
+  for (const match of content.matchAll(IMG_TAG_PATTERN)) {
+    if (!isZeroSizedImage(match[0])) return true;
+  }
   const text = stripNonRenderingText(
     content.replace(/<[^>]*>/gu, '').replace(/&nbsp;/gi, ' ')
   ).trim();

@@ -36,6 +36,59 @@ describe('PATCH /api/admin/blog/posts/[id]', () => {
     );
   });
 
+  it('clears stale provenance when PATCH changes the intent without a source', async () => {
+    blogPostSupabaseMock.single.mockResolvedValueOnce({
+      data: {
+        id: 'post-1',
+        intent: 'comparison',
+        intent_source: 'draft_task_type',
+        slug: 'launch-faster',
+        status: 'draft',
+        title: 'Launch Faster',
+      },
+      error: null,
+    });
+    const response = await PATCH(
+      patchRequest({ intent: 'buying-guide' }),
+      blogPostRouteContext()
+    );
+    expect(response.status).toBe(200);
+    expect(blogPostSupabaseMock.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: 'buying-guide',
+        intent_source: null,
+      })
+    );
+  });
+
+  it('keeps a replacement provenance source supplied with a new intent', async () => {
+    blogPostSupabaseMock.single.mockResolvedValueOnce({
+      data: {
+        id: 'post-1',
+        intent: 'comparison',
+        intent_source: 'draft_task_type',
+        slug: 'launch-faster',
+        status: 'draft',
+        title: 'Launch Faster',
+      },
+      error: null,
+    });
+    const response = await PATCH(
+      patchRequest({
+        intent: 'buying-guide',
+        intent_source: 'editorial_review',
+      }),
+      blogPostRouteContext()
+    );
+    expect(response.status).toBe(200);
+    expect(blogPostSupabaseMock.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: 'buying-guide',
+        intent_source: 'editorial_review',
+      })
+    );
+  });
+
   it('checks auth before csrf on write requests', async () => {
     blogPostRouteMocks.getPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',

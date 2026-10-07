@@ -2,6 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { validateImportedContent } from './review-handoff-content';
 
 describe('validateImportedContent media', () => {
+  it.each([
+    '<img src="https://cdn.example.com/a.png" width="0" height="0">',
+    '<img src="https://cdn.example.com/a.png" width="0">',
+    '<img src="https://cdn.example.com/a.png" height="0">',
+    '<img src="https://cdn.example.com/a.png" width=0 height=0>',
+  ])('disregards zero-sized images as readable content: %s', (img) => {
+    expect(() => validateImportedContent(img)).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('counts a sized image as readable content', () => {
+    expect(
+      validateImportedContent(
+        '<img src="https://cdn.example.com/a.png" width="100" height="100">'
+      )
+    ).toContain('<img');
+  });
+
   it('accepts transform commas combined with a spaceless candidate separator', () => {
     expect(
       validateImportedContent(

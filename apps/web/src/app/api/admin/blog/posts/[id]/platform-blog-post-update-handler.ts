@@ -111,6 +111,17 @@ export async function updatePlatformBlogPost(
     ) {
       updateData.intent_source = null;
     }
+    // A reclassification orphans the old provenance the same way the
+    // editor's intent select clears it: when the request supplies a
+    // different intent without a replacement source, clear the stored one
+    // instead of persisting a label describing the previous classification.
+    if (
+      Object.hasOwn(updateData, 'intent') &&
+      updateData.intent !== existingPost.intent &&
+      !Object.hasOwn(updateData, 'intent_source')
+    ) {
+      updateData.intent_source = null;
+    }
     const featuredImageUrlChanged =
       Object.hasOwn(updateData, 'featured_image_url') &&
       updateData.featured_image_url !== existingPost.featured_image_url;

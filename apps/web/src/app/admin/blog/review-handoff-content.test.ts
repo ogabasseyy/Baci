@@ -147,15 +147,41 @@ describe('validateImportedContent', () => {
   });
 
   it.each([
+    'https://cdn.example.com/a.webp,assets/b.webp 2x',
+    'https://cdn.example.com/a.webp, assets/b.webp 2x',
+    'https://cdn.example.com/a.webp,/b.webp 2x',
+    'https://cdn.example.com/a.webp,b.webp 2x',
+    'https://cdn.example.com/a.webp,assets/b.webp',
+    'data:image/png;base64,iVBORw0KGgo, http://example.com/evil.png 2x',
+  ])('rejects a non-https URL hidden behind a descriptorless srcset candidate: %s', (srcset) => {
+    expect(() =>
+      validateImportedContent(
+        `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it.each([
     'https://cdn.example.com/a.webp, https://cdn.example.com/b.webp 2x',
     'https://cdn.example.com/a.webp,https://cdn.example.com/b.webp 2x',
     'https://cdn.example.com/a.webp 1x, data:image/png;base64,iVBORw0KGgo=',
+    'data:image/png;base64,iVBORw0KGgo, https://cdn.example.com/b.webp 2x',
   ])('accepts a split second srcset candidate: %s', (srcset) => {
     expect(
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
     ).toContain('srcset');
+  });
+
+  it('accepts a descriptorless data: URL as the only srcset candidate', () => {
+    // The sanitizer drops a data-only srcset from the stored markup, so
+    // assert acceptance (no throw) plus the surviving img src.
+    expect(
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="data:image/png;base64,iVBORw0KGgo">'
+      )
+    ).toContain('https://cdn.example.com/a.webp');
   });
 
   it.each([

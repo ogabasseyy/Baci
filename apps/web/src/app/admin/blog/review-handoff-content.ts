@@ -92,25 +92,46 @@ function normalizeContent(rawContent: string, sanitizedRaw: string): string {
 }
 
 const NEW_CANDIDATE_URL_PATTERN = /^(data:|[a-z][a-z\d+.-]*:\/\/)/i;
+const DATA_URL_PREFIX_PATTERN = /^\s*data:/i;
+
+function isCandidateBoundary(current: string, piece: string): boolean {
+  const accumulated = current.trim();
+  // A URL followed by a descriptor is a complete candidate.
+  if (/\s/.test(accumulated)) {
+    return true;
+  }
+  const next = piece.trim();
+  // Inside a data: URL commas are payload (base64 padding, SVG markup),
+  // never separators: splitting would shred embedded images the import
+  // schema explicitly allows. The one exception is an unambiguous new
+  // candidate: a scheme-absolute URL carrying a descriptor cannot be
+  // data: payload, which holds no raw whitespace before its own descriptor.
+  if (DATA_URL_PREFIX_PATTERN.test(accumulated)) {
+    return NEW_CANDIDATE_URL_PATTERN.test(next) && /\s/.test(next);
+  }
+  // An absolute URL or embedded image always starts a new candidate.
+  if (NEW_CANDIDATE_URL_PATTERN.test(next)) {
+    return true;
+  }
+  // Otherwise the piece starts a new relative candidate unless it continues
+  // a transform parameter list: transform segments carry key=value pairs
+  // before any / ? # (see buildOgabasseyAvifSrcSet), while relative URLs
+  // (assets/x.webp, /x.png, img.png) never do.
+  const segment = next.split(/\s+/, 1)[0].split(/[/?#]/, 1)[0];
+  return !segment.includes('=');
+}
 
 function splitSrcsetCandidates(srcset: string): string[] {
   const candidates: string[] = [];
-  // A comma ends a candidate once the URL is followed by at least one
-  // descriptor (i.e. the accumulated text already contains whitespace), or
-  // when the next piece starts a new URL: a bare descriptorless candidate
-  // must not glue to the URL that follows it, or the second URL hides from
-  // validation behind the first token. A comma inside a bare URL is a CDN
-  // transform parameter (see buildOgabasseyAvifSrcSet) and stays glued to
-  // it, since transform segments never start with a URL scheme. Splitting
-  // is the fail-closed direction: every emitted candidate is URL-validated.
+  // A comma ends a candidate at a candidate boundary (see above). Gluing
+  // is only safe for CDN transform parameters and data: payloads: any
+  // other glued piece hides its URL from validation behind the first
+  // token while the browser still selects it. Splitting is the fail-closed
+  // direction: every emitted candidate is URL-validated.
   let current = '';
   for (const piece of srcset.split(',')) {
     if (piece.trim() === '') continue;
-    if (
-      current !== '' &&
-      (/\s/.test(current.trim()) ||
-        NEW_CANDIDATE_URL_PATTERN.test(piece.trim()))
-    ) {
+    if (current !== '' && isCandidateBoundary(current, piece)) {
       candidates.push(current);
       current = piece;
     } else if (current === '') {

@@ -105,7 +105,7 @@ describe('savings reminder fetch gating', () => {
     });
   });
 
-  it('skips goal reconciliation when local arming is impossible', async () => {
+  it('retires terminal goals even when local arming is impossible', async () => {
     await scheduleSavingsReminderNotification({
       contributionAmount: 500,
       frequency: 'weekly',
@@ -113,17 +113,28 @@ describe('savings reminder fetch gating', () => {
       goalTitle: 'Phone',
       scheduledAt: new Date(2020, 5, 8, 9, 30),
     });
-    await suppressSavingsReminderNotification();
     mockNotifications.getPermissionsAsync.mockResolvedValue({
       canAskAgain: true,
       expires: 'never',
       granted: false,
       status: 'denied' as PermissionStatus,
     });
+    mockListSavingsGoals.mockResolvedValue({
+      goals: [goalFixture('goal-1', 'completed')],
+      summary: { activeGoalCount: 0, savingsBalance: 100 },
+    });
 
     await activateDueSavingsReminderNotification();
 
-    expect(mockListSavingsGoals).not.toHaveBeenCalled();
+    // The fetch runs for retirement (not arming): the finished goal's live
+    // notification is cancelled and its record destroyed, with nothing
+    // (re)scheduled while permission is revoked.
+    expect(mockListSavingsGoals).toHaveBeenCalledTimes(1);
+    expect(
+      mockNotifications.cancelScheduledNotificationAsync
+    ).toHaveBeenCalledWith('notification-id');
+    expect(scheduledGoalIds()).toEqual(['goal-1']);
+    await activateDueSavingsReminderNotification();
     expect(scheduledGoalIds()).toEqual(['goal-1']);
   });
 

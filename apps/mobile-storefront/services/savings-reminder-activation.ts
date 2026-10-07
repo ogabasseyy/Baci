@@ -76,18 +76,14 @@ export function activateDueSavingsReminderNotification() {
   const scope = resolveReminderScope();
   if (!scope) return Promise.resolve(null);
   return (async () => {
-    // Gate the fetch on local arming and on stored records: users with no
-    // local reminders (or no notification path) skip the goals request
-    // entirely. The gates run again inside the mutex; these outer checks
-    // only skip the network.
-    const arming = loadNotificationsModule();
-    const canArm =
-      arming && (await hasSavingsReminderPermission(arming).catch(() => false));
-    const probe = canArm
-      ? await savingsReminderStorage.read(scope).catch(() => null)
-      : null;
+    // Gate the fetch on stored records only: users with no local reminders
+    // skip the goals request entirely, but retirement must still run when
+    // arming is impossible (a revoked permission must not strand a live
+    // notification for a finished goal). Probe failure falls back to
+    // fetching; the activation fails downstream as before.
+    const probe = await savingsReminderStorage.read(scope).catch(() => null);
     const terminalGoalIds =
-      canArm && probe?.length
+      probe === null || probe.length
         ? await fetchTerminalGoalIds(scope)
         : new Set<string>();
     return savingsReminderStorage.runExclusive(() =>

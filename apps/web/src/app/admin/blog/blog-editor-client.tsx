@@ -173,6 +173,7 @@ export function BlogEditorClient({
   );
   const { uploadingFeatured, uploadFeatured, invalidateFeaturedUploads } =
     useBlogFeaturedImageUpload({
+      coverStashRef,
       upload: (file) => uploadBlogMedia(file, 'featured'),
       setForm,
       toast,

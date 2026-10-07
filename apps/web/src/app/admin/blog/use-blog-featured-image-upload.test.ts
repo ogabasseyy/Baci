@@ -1,7 +1,10 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_PLATFORM_BLOG_FORM_STATE } from './blog-types';
+import {
+  DEFAULT_PLATFORM_BLOG_FORM_STATE,
+  type PlatformAdminBlogCoverState,
+} from './blog-types';
 import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
 
 const uploadedImage = {
@@ -12,14 +15,24 @@ const uploadedImage = {
 };
 const file = new File(['image'], 'cover.png');
 
-function setup(upload: (file: File) => Promise<typeof uploadedImage>) {
+function setup(
+  upload: (file: File) => Promise<typeof uploadedImage>,
+  coverStashRef: { current: PlatformAdminBlogCoverState | null } = {
+    current: null,
+  }
+) {
   const toast = vi.fn();
   const hook = renderHook(() => {
     const [form, setForm] = useState(DEFAULT_PLATFORM_BLOG_FORM_STATE);
-    const uploader = useBlogFeaturedImageUpload({ upload, setForm, toast });
+    const uploader = useBlogFeaturedImageUpload({
+      coverStashRef,
+      setForm,
+      toast,
+      upload,
+    });
     return { ...uploader, form, setForm };
   });
-  return { ...hook, toast };
+  return { ...hook, coverStashRef, toast };
 }
 
 describe('useBlogFeaturedImageUpload', () => {
@@ -36,6 +49,25 @@ describe('useBlogFeaturedImageUpload', () => {
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('');
     expect(result.current.form.featured_image_alt_edited).toBe(false);
+  });
+
+  it('clears a stashed pre-diversion cover when the upload succeeds', async () => {
+    const coverStashRef = {
+      current: {
+        alt: 'Stale',
+        altEdited: false,
+        height: 675,
+        url: 'https://cdn.example.com/stale.webp',
+        variants: {},
+        width: 1200,
+      },
+    };
+    const { result } = setup(
+      vi.fn().mockResolvedValue(uploadedImage),
+      coverStashRef
+    );
+    await act(async () => result.current.uploadFeatured(file));
+    expect(coverStashRef.current).toBeNull();
   });
 
   it('preserves hand-typed alt text on a first upload with no prior cover', async () => {

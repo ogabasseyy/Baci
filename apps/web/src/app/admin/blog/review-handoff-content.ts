@@ -149,13 +149,18 @@ function isZeroSizedImage(tag: string): boolean {
 }
 
 function hasVisibilityHidingClass(tag: string): boolean {
-  // The sanitizer preserves class but strips style, so display:none and
-  // visibility:hidden arrive only as Tailwind tokens. Match exact tokens:
-  // `hidden` must not match `unhidden`.
+  // The sanitizer preserves class but strips style, so display:none,
+  // visibility:hidden, and full transparency arrive only as Tailwind
+  // tokens. Match exact tokens: `hidden` must not match `unhidden`.
   for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
     if (match[1].toLowerCase() !== 'class') continue;
     const tokens = unquoteAttributeValue(match[2]).split(/\s+/);
-    if (tokens.some((token) => token === 'hidden' || token === 'invisible')) {
+    if (
+      tokens.some(
+        (token) =>
+          token === 'hidden' || token === 'invisible' || token === 'opacity-0'
+      )
+    ) {
       return true;
     }
   }

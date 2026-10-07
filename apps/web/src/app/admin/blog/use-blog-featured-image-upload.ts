@@ -1,6 +1,15 @@
-import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useRef,
+  useState,
+} from 'react';
 import type { useToast } from '@/hooks/use-toast';
-import type { PlatformAdminBlogFormState } from './blog-types';
+import type {
+  PlatformAdminBlogCoverState,
+  PlatformAdminBlogFormState,
+} from './blog-types';
 
 type UploadResult = {
   url: string;
@@ -13,10 +22,12 @@ export function useBlogFeaturedImageUpload({
   upload,
   setForm,
   toast,
+  coverStashRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
+  coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);
@@ -50,6 +61,9 @@ export function useBlogFeaturedImageUpload({
           featured_image_variants: result.variants ?? {},
         };
       });
+      // The upload is a new baseline: a stashed pre-diversion cover belongs
+      // to the replaced URL and must not block stashing the new one.
+      coverStashRef.current = null;
       toast({ title: 'Featured image uploaded' });
     } catch (error) {
       if (generation !== generationRef.current) return;

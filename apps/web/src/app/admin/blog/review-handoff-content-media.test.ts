@@ -17,6 +17,7 @@ describe('validateImportedContent media', () => {
     '<img class="hidden" src="https://cdn.example.com/a.png">',
     '<img class="mb-4 hidden rounded" src="https://cdn.example.com/a.png">',
     '<img class="invisible" src="https://cdn.example.com/a.png">',
+    '<img class="opacity-0" src="https://cdn.example.com/a.png">',
   ])('disregards CSS-hidden images as readable content: %s', (img) => {
     expect(() => validateImportedContent(img)).toThrow(
       'no readable text or images'
@@ -35,6 +36,7 @@ describe('validateImportedContent media', () => {
   it.each([
     '<div class="hidden">Only body</div>',
     '<div class="invisible"><p>Only <strong>body</strong></p></div>',
+    '<div class="opacity-0">Only body</div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'

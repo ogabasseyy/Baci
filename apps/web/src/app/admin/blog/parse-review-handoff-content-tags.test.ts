@@ -61,6 +61,13 @@ it('rejects tags containing null bytes', () => {
   ).toThrow('null bytes');
 });
 
+it('rejects tags containing unpaired surrogates', () => {
+  const high = String.fromCharCode(0xd800);
+  expect(() =>
+    parseReviewHandoff({ ...handoff, tags: ['Valid', `Bro${high}ken`] })
+  ).toThrow('unpaired surrogates');
+});
+
 it.each([
   '[Read the guide](https://example.com)',
   '[Breaking] news today',

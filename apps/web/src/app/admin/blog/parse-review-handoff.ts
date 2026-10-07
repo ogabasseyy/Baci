@@ -91,6 +91,9 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
   if (tags.some((tag) => tag.includes(NULL_BYTE))) {
     throw new Error('Imported tags must not contain null bytes');
   }
+  if (tags.some((tag) => LONE_SURROGATE_PATTERN.test(tag))) {
+    throw new Error('Imported tags must not contain unpaired surrogates');
+  }
   if (tags.some((tag) => tag.includes(','))) {
     throw new Error(
       'Imported tag names cannot contain commas. Use separate tags or rename the tag.'
@@ -105,6 +108,9 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
             // a null byte hiding in ?token=... would pass integrity and then
             // fail the database write; drop such variants instead.
             !entry[1].includes(NULL_BYTE) &&
+            // Lone surrogates would likewise fail the database write;
+            // drop such variants instead.
+            !LONE_SURROGATE_PATTERN.test(entry[1]) &&
             validateBlogImageVariantIntegrity(
               { featured_image_variants: { [entry[0]]: entry[1] } },
               { kind: 'platform' }

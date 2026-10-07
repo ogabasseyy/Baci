@@ -195,7 +195,10 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
     status: 'draft',
     tags: tags
       .map((tag) => tag.trim())
-      .filter(Boolean)
+      // Drop invisible-only tags the same way readText rejects
+      // invisible-only metadata: the tags schema permits any string, so
+      // keeping them would persist visually blank tags.
+      .filter((tag) => stripNonRenderingText(tag) !== '')
       .join(', '),
   };
 }

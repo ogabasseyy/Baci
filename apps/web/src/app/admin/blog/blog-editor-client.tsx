@@ -243,6 +243,17 @@ export function BlogEditorClient({
       <BlogEditorFields
         contentResetKey={contentResetKey}
         contentGenerationRef={contentGenerationRef}
+        initialCover={
+          initialPost
+            ? {
+                alt: initialPost.featured_image_alt,
+                height: initialPost.featured_image_height,
+                url: initialPost.featured_image_url,
+                variants: initialPost.featured_image_variants,
+                width: initialPost.featured_image_width,
+              }
+            : undefined
+        }
         form={form}
         isEditMode={isEditMode}
         onContentChange={(content) => {

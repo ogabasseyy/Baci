@@ -30,6 +30,20 @@ it('accepts JSON examples inside HTML paragraphs', () => {
   ).toBe('<p>{"foo":"bar"}</p>');
 });
 
+const zeroWidthSpace = String.fromCharCode(0x200b);
+
+it('drops tags with no rendering characters', () => {
+  expect(
+    parseReviewHandoff({ ...handoff, tags: ['Valid', zeroWidthSpace, '  '] })
+      .tags
+  ).toBe('Valid');
+});
+
+it('keeps visible tags containing zero-width characters', () => {
+  const tag = `Vi${zeroWidthSpace}sid`;
+  expect(parseReviewHandoff({ ...handoff, tags: [tag] }).tags).toBe(tag);
+});
+
 it.each([
   'Research, Development',
   'One,Two',

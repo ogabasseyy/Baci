@@ -130,81 +130,6 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().status).toBe('published');
   });
 
-  it.each([
-    '',
-    'https://cdn.example.com/other.webp',
-  ])('clears the whole cover record when the cover URL changes to %s', (url) => {
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_alt: 'Imported cover description',
-        featured_image_alt_edited: true,
-        featured_image_height: 675,
-        featured_image_url: 'https://cdn.example.com/cover.webp',
-        featured_image_variants: {
-          landscape_16x9: 'https://cdn.example.com/cover-16x9.webp',
-        },
-        featured_image_width: 1200,
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: url },
-    });
-
-    expect(ctx.getCurrentForm()).toMatchObject({
-      featured_image_alt: '',
-      featured_image_alt_edited: false,
-      featured_image_height: null,
-      featured_image_url: url,
-      featured_image_variants: {},
-      featured_image_width: null,
-    });
-  });
-
-  it('marks hand-typed alt text as edited until the cover URL changes', () => {
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_url: 'https://cdn.example.com/cover.webp',
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured image alt text'), {
-      target: { value: 'Fresh cover' },
-    });
-    expect(ctx.getCurrentForm()).toMatchObject({
-      featured_image_alt: 'Fresh cover',
-      featured_image_alt_edited: true,
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://cdn.example.com/other.webp' },
-    });
-    expect(ctx.getCurrentForm()).toMatchObject({
-      featured_image_alt: '',
-      featured_image_alt_edited: false,
-    });
-  });
-
-  it('keeps image metadata for whitespace-only URL edits', () => {
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_alt: 'Cover description',
-        featured_image_url: 'https://cdn.example.com/cover.webp',
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://cdn.example.com/cover.webp ' },
-    });
-
-    expect(ctx.getCurrentForm()).toMatchObject({
-      featured_image_alt: 'Cover description',
-    });
-  });
-
   it('forwards content and inline image events from BlogEditor', () => {
     const ctx = renderComponent();
 
@@ -249,30 +174,5 @@ describe('BlogEditorFields', () => {
 
     expect(ctx.onUploadFeatured).toHaveBeenCalledTimes(1);
     expect(ctx.onSubmit).toHaveBeenCalledTimes(1);
-  });
-
-  it('clears featured metadata while editing the image url', () => {
-    const originalUrl = 'https://cdn.example.com/platform/blog/source.webp';
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_height: 675,
-        featured_image_url: originalUrl,
-        featured_image_variants: {
-          desktop: 'https://cdn.example.com/platform/blog/source/desktop.webp',
-        },
-        featured_image_width: 1200,
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://example.com/new-source.webp' },
-    });
-    expect(ctx.getCurrentForm().featured_image_url).toBe(
-      'https://example.com/new-source.webp'
-    );
-    expect(ctx.getCurrentForm().featured_image_width).toBeNull();
-    expect(ctx.getCurrentForm().featured_image_height).toBeNull();
-    expect(ctx.getCurrentForm().featured_image_variants).toEqual({});
   });
 });

@@ -2,6 +2,7 @@
 // Client component: renders interactive editor controls and rich-text input.
 
 import { Loader2, Upload } from 'lucide-react';
+import type { RefObject } from 'react';
 import { BlogEditor } from '@/components/blog/blog-editor';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +23,7 @@ import type {
 
 type BlogEditorFieldsProps = {
   contentResetKey?: number;
+  contentGenerationRef?: RefObject<number>;
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
   onContentChange: (value: string) => void;
@@ -40,6 +42,7 @@ type BlogEditorFieldsProps = {
 
 export function BlogEditorFields({
   contentResetKey,
+  contentGenerationRef,
   form,
   isEditMode,
   onContentChange,
@@ -244,6 +247,7 @@ export function BlogEditorFields({
         <BlogEditor
           contentResetKey={contentResetKey}
           content={form.content}
+          contentGenerationRef={contentGenerationRef}
           onChange={onContentChange}
           onContentDirty={onContentDirty}
           onImageUpload={onInlineImageUpload}

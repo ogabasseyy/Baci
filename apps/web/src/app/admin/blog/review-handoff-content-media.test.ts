@@ -13,6 +13,24 @@ describe('validateImportedContent media', () => {
     );
   });
 
+  it.each([
+    '<img class="hidden" src="https://cdn.example.com/a.png">',
+    '<img class="mb-4 hidden rounded" src="https://cdn.example.com/a.png">',
+    '<img class="invisible" src="https://cdn.example.com/a.png">',
+  ])('disregards CSS-hidden images as readable content: %s', (img) => {
+    expect(() => validateImportedContent(img)).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('counts an image with a merely similar class name as readable', () => {
+    expect(
+      validateImportedContent(
+        '<img class="unhidden" src="https://cdn.example.com/a.png">'
+      )
+    ).toContain('<img');
+  });
+
   it('counts a sized image as readable content', () => {
     expect(
       validateImportedContent(

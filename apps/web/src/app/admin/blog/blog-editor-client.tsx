@@ -171,6 +171,7 @@ export function BlogEditorClient({
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [contentResetKey, setContentResetKey] = useState(0);
+  const contentGenerationRef = useRef(0);
   const pendingContentEditRef = useRef(false);
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
@@ -261,6 +262,11 @@ export function BlogEditorClient({
             }
             invalidateFeaturedUploads();
             pendingContentEditRef.current = false;
+            // Synchronously invalidate any debounced body edit queued
+            // before this import: its timer may already be due, and the
+            // remount's passive-effect cleanup can lose that race and
+            // overwrite the imported body with abandoned editor HTML.
+            contentGenerationRef.current += 1;
             setForm(draft);
             setContentResetKey((current) => current + 1);
             return true;
@@ -270,6 +276,7 @@ export function BlogEditorClient({
 
       <BlogEditorFields
         contentResetKey={contentResetKey}
+        contentGenerationRef={contentGenerationRef}
         form={form}
         isEditMode={isEditMode}
         onContentChange={(content) => {

@@ -31,9 +31,7 @@ function mediaTagCandidates(tag: string): MediaCandidate[] {
   const candidates: MediaCandidate[] = [];
   for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
     const name = match[1].toLowerCase();
-    const raw = match[2];
-    const value =
-      raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
+    const value = unquoteAttributeValue(match[2]);
     if (name === 'src') {
       if (value) candidates.push({ url: value, valid: true });
     } else if (name === 'srcset') {
@@ -193,6 +191,10 @@ function splitSrcsetCandidates(srcset: string): string[] {
   return candidates;
 }
 
+function unquoteAttributeValue(raw: string): string {
+  return raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
+}
+
 function isZeroSizedImage(tag: string): boolean {
   // A zero width or height renders no pixels. Only bare zeros count: the
   // width/height attributes take plain pixel counts, so `0px` is invalid
@@ -200,19 +202,31 @@ function isZeroSizedImage(tag: string): boolean {
   for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
     const name = match[1].toLowerCase();
     if (name !== 'width' && name !== 'height') continue;
-    const raw = match[2];
-    const value =
-      raw.startsWith('"') || raw.startsWith("'") ? raw.slice(1, -1) : raw;
-    if (/^0+$/.test(value.trim())) return true;
+    if (/^0+$/.test(unquoteAttributeValue(match[2]).trim())) return true;
+  }
+  return false;
+}
+
+function hasVisibilityHidingClass(tag: string): boolean {
+  // The sanitizer preserves class but strips style, so display:none and
+  // visibility:hidden arrive only as Tailwind tokens. Match exact tokens:
+  // `hidden` must not match `unhidden`.
+  for (const match of tag.matchAll(MEDIA_ATTRIBUTE_PATTERN)) {
+    if (match[1].toLowerCase() !== 'class') continue;
+    const tokens = unquoteAttributeValue(match[2]).split(/\s+/);
+    if (tokens.some((token) => token === 'hidden' || token === 'invisible')) {
+      return true;
+    }
   }
   return false;
 }
 
 function hasReadableContent(content: string): boolean {
   // A bare <source> renders nothing without an accompanying <img>, and a
-  // zero-sized <img> renders no pixels either.
+  // zero-sized or CSS-hidden <img> renders no pixels either.
   for (const match of content.matchAll(IMG_TAG_PATTERN)) {
-    if (!isZeroSizedImage(match[0])) return true;
+    const tag = match[0];
+    if (!isZeroSizedImage(tag) && !hasVisibilityHidingClass(tag)) return true;
   }
   const text = stripNonRenderingText(
     content.replace(/<[^>]*>/gu, '').replace(/&nbsp;/gi, ' ')

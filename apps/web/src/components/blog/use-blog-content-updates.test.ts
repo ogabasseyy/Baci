@@ -31,4 +31,22 @@ describe('useBlogContentUpdates', () => {
     act(() => vi.advanceTimersByTime(500));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('drops a scheduled update invalidated by a newer content generation', () => {
+    const onChange = vi.fn();
+    const contentGenerationRef = { current: 0 };
+    const { result } = renderHook(() =>
+      useBlogContentUpdates(onChange, undefined, contentGenerationRef)
+    );
+    act(() => result.current({ getHTML: () => '<p>Stale edit</p>' }));
+    // An import applied while the timer is pending bumps the generation,
+    // so the due callback must not overwrite the imported body.
+    contentGenerationRef.current += 1;
+    act(() => vi.advanceTimersByTime(500));
+    expect(onChange).not.toHaveBeenCalled();
+    // Edits scheduled after the import still publish.
+    act(() => result.current({ getHTML: () => '<p>Fresh edit</p>' }));
+    act(() => vi.advanceTimersByTime(500));
+    expect(onChange).toHaveBeenCalledWith('<p>Fresh edit</p>');
+  });
 });

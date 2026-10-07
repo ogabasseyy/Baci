@@ -14,7 +14,7 @@ import {
   type JSONContent,
 } from 'novel';
 
-import { useState } from 'react';
+import { type RefObject, useState } from 'react';
 import {
   createImageUploader,
   createMerchantImageUploader,
@@ -41,6 +41,7 @@ interface NovelEditorProps {
   initialValue?: JSONContent | string;
   onChange: (value: string) => void;
   onContentDirty?: () => void;
+  contentGenerationRef?: RefObject<number>;
   onImageUpload?: (file: File) => Promise<string>;
   onProductsChange?: (products: Product[]) => void;
   embeddedProducts?: Product[];
@@ -61,6 +62,7 @@ export default function NovelEditor({
   initialValue,
   onChange,
   onContentDirty,
+  contentGenerationRef,
   onImageUpload,
   onProductsChange,
   embeddedProducts = [],
@@ -70,7 +72,11 @@ export default function NovelEditor({
   const [openLink, setOpenLink] = useState(false);
   const [openProducts, setOpenProducts] = useState(false);
 
-  const updateContent = useBlogContentUpdates(onChange, onContentDirty);
+  const updateContent = useBlogContentUpdates(
+    onChange,
+    onContentDirty,
+    contentGenerationRef
+  );
 
   const imageUploader = onImageUpload
     ? createImageUploader(onImageUpload)

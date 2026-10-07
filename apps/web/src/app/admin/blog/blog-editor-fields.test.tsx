@@ -130,11 +130,15 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().status).toBe('published');
   });
 
-  it('clears image metadata when the cover URL is removed', () => {
+  it.each([
+    '',
+    'https://cdn.example.com/other.webp',
+  ])('clears the whole cover record when the cover URL changes to %s', (url) => {
     const ctx = renderComponent({
       form: {
         ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
         featured_image_alt: 'Imported cover description',
+        featured_image_alt_edited: true,
         featured_image_height: 675,
         featured_image_url: 'https://cdn.example.com/cover.webp',
         featured_image_variants: {
@@ -145,39 +149,16 @@ describe('BlogEditorFields', () => {
     });
 
     fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: '' },
-    });
-
-    expect(ctx.getCurrentForm()).toMatchObject({
-      featured_image_alt: '',
-      featured_image_height: null,
-      featured_image_url: '',
-      featured_image_variants: {},
-      featured_image_width: null,
-    });
-  });
-
-  it('clears alt text when the cover URL is swapped', () => {
-    const ctx = renderComponent({
-      form: {
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        featured_image_alt: 'Cover description',
-        featured_image_height: 675,
-        featured_image_url: 'https://cdn.example.com/cover.webp',
-        featured_image_width: 1200,
-      },
-    });
-
-    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
-      target: { value: 'https://cdn.example.com/other.webp' },
+      target: { value: url },
     });
 
     expect(ctx.getCurrentForm()).toMatchObject({
       featured_image_alt: '',
       featured_image_alt_edited: false,
-      featured_image_height: 675,
-      featured_image_url: 'https://cdn.example.com/other.webp',
-      featured_image_width: 1200,
+      featured_image_height: null,
+      featured_image_url: url,
+      featured_image_variants: {},
+      featured_image_width: null,
     });
   });
 
@@ -270,7 +251,7 @@ describe('BlogEditorFields', () => {
     expect(ctx.onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves featured metadata while editing the image url', () => {
+  it('clears featured metadata while editing the image url', () => {
     const originalUrl = 'https://cdn.example.com/platform/blog/source.webp';
     const ctx = renderComponent({
       form: {
@@ -290,10 +271,8 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().featured_image_url).toBe(
       'https://example.com/new-source.webp'
     );
-    expect(ctx.getCurrentForm().featured_image_width).toBe(1200);
-    expect(ctx.getCurrentForm().featured_image_height).toBe(675);
-    expect(ctx.getCurrentForm().featured_image_variants).toEqual({
-      desktop: 'https://cdn.example.com/platform/blog/source/desktop.webp',
-    });
+    expect(ctx.getCurrentForm().featured_image_width).toBeNull();
+    expect(ctx.getCurrentForm().featured_image_height).toBeNull();
+    expect(ctx.getCurrentForm().featured_image_variants).toEqual({});
   });
 });

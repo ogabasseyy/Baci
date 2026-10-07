@@ -1,6 +1,6 @@
--- Record focus keyword edits in the platform blog audit ledger.
--- The review handoff importer and editorial UI newly surface focus_keyword;
--- without this repair a focus-only update emits an empty changed_fields array.
+-- Record featured-image alt-text edits in the platform blog audit ledger.
+-- The editor newly exposes the alt-text input; without this repair an
+-- alt-only update emits an empty changed_fields array.
 
 BEGIN;
 
@@ -65,6 +65,7 @@ BEGIN
       CASE WHEN NEW.featured_image_width IS DISTINCT FROM OLD.featured_image_width THEN 'featured_image_width' END,
       CASE WHEN NEW.featured_image_height IS DISTINCT FROM OLD.featured_image_height THEN 'featured_image_height' END,
       CASE WHEN NEW.featured_image_variants IS DISTINCT FROM OLD.featured_image_variants THEN 'featured_image_variants' END,
+      CASE WHEN NEW.featured_image_alt IS DISTINCT FROM OLD.featured_image_alt THEN 'featured_image_alt' END,
       CASE WHEN NEW.slug IS DISTINCT FROM OLD.slug THEN 'slug' END,
       CASE WHEN NEW.category IS DISTINCT FROM OLD.category THEN 'category' END,
       CASE WHEN NEW.tags IS DISTINCT FROM OLD.tags THEN 'tags' END,

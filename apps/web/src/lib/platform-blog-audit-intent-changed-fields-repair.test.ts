@@ -40,4 +40,20 @@ describe('platform blog audit intent changed-fields repair migration', () => {
     expect(followUp).toContain("THEN 'focus_keyword'");
     expect(followUp).not.toContain("'NEW.focus_keyword'");
   });
+
+  it('records alt-text edits in the alt repair', async () => {
+    const altRepair = await readFile(
+      resolve(
+        process.cwd(),
+        '../../supabase/migrations/20261007220000_repair_platform_blog_audit_alt_changed_fields.sql'
+      ),
+      'utf8'
+    );
+
+    expect(altRepair).toContain(
+      'CREATE OR REPLACE FUNCTION private.audit_platform_blog_post_mutation_v1()'
+    );
+    expect(altRepair).toContain("THEN 'featured_image_alt'");
+    expect(altRepair).not.toContain("'NEW.featured_image_alt'");
+  });
 });

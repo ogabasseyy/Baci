@@ -32,6 +32,23 @@ describe('validateImportedContent media', () => {
     );
   });
 
+  it.each([
+    '<div class="hidden">Only body</div>',
+    '<div class="invisible"><p>Only <strong>body</strong></p></div>',
+  ])('disregards text inside hidden ancestors: %s', (body) => {
+    expect(() => validateImportedContent(body)).toThrow(
+      'no readable text or images'
+    );
+  });
+
+  it('counts visible text alongside hidden text as readable', () => {
+    expect(
+      validateImportedContent(
+        '<div class="hidden">Hidden</div><p>Visible body</p>'
+      )
+    ).toContain('Visible body');
+  });
+
   it('counts an image outside a closed hidden element as readable', () => {
     expect(
       validateImportedContent(

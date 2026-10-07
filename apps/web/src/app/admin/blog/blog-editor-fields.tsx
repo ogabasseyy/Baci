@@ -153,11 +153,12 @@ export function BlogEditorFields({
           onChange={(event) =>
             setForm((current) => {
               const nextUrl = event.target.value;
-              // Any URL change orphans the alt text: clear it together and
-              // reset the edited flag, otherwise the new image inherits a
-              // stale description of the old one. Other metadata is
-              // preserved for the save pipeline to reconcile, except on
-              // removal where there is no image left to describe.
+              // Any URL change orphans the whole cover record: clear the
+              // alt text, dimensions, and variants together, otherwise the
+              // new image inherits the old one's metadata. The create
+              // payload has no existing post to reconcile against, so
+              // preserving here would publish stale dimensions; uploads
+              // bypass this handler and set fresh metadata directly.
               const urlChanged =
                 nextUrl.trim() !== current.featured_image_url.trim();
               const urlRemoved = nextUrl.trim() === '';
@@ -168,10 +169,6 @@ export function BlogEditorFields({
                   ? {
                       featured_image_alt: '',
                       featured_image_alt_edited: false,
-                    }
-                  : {}),
-                ...(urlRemoved
-                  ? {
                       featured_image_height: null,
                       featured_image_variants: {},
                       featured_image_width: null,

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -58,6 +58,8 @@ it('releases and exits when another writer takes over', async () => {
   await vi.advanceTimersByTimeAsync(6000);
   expect(release).toHaveBeenCalledTimes(1);
   expect(exit).toHaveBeenCalledWith(1);
+  // The takeover path must not remove the replacement's claim file.
+  await expect(readFile(lockPath, 'utf8')).resolves.toContain('424242');
   expect(release.mock.invocationCallOrder[0]).toBeLessThan(
     exit.mock.invocationCallOrder[0]
   );

@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -54,6 +54,11 @@ it('exits instead of serving when the heartbeat cannot refresh', async () => {
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining('single-writer guarantee')
     );
+    // The still-owned claim is removed so the replacement starts
+    // immediately instead of refusing until the stale window elapses.
+    await expect(
+      readFile(path.join(root, '.writer.lock'), 'utf8')
+    ).rejects.toThrow(/ENOENT/);
   } finally {
     exit.mockRestore();
     error.mockRestore();

@@ -141,6 +141,37 @@ export async function prepareCartHandoff({
       const effectiveStock = Number(stockQuantity ?? 0);
       unavailable ||= !Number.isFinite(effectiveStock) || effectiveStock < quantity;
     }
+  } else if (
+    product?.has_variants === true &&
+    product?.has_condition_offers !== true
+  ) {
+    // Unmanaged parents fail open to option selection — except a
+    // strict-only variant set with insufficient units: no option is
+    // purchasable (mirrors isPublicVariantPurchasable, which gates
+    // strict variants regardless of the parent policy), so report
+    // unavailable instead of sending the shopper to select options
+    // that cannot be fulfilled. Products with condition offers keep
+    // failing open: offers are not evaluated for unmanaged parents.
+    const { data: variants, error: variantsError } = await supabase.rpc(
+      'get_mcp_search_product_variants',
+      { p_product_ids: [productId], p_merchant_id: merchantId }
+    );
+    if (variantsError) transient = true;
+    if (!variantsError && Array.isArray(variants)) {
+      const own = variants.filter(
+        (variant) => variant.product_id === productId
+      );
+      if (
+        own.length > 0 &&
+        own.every(
+          (variant) =>
+            variant.effective_policy === 'serialized_strict' &&
+            Number(variant.stock_quantity ?? 0) < quantity
+        )
+      ) {
+        unavailable = true;
+      }
+    }
   }
 
   if (unavailable || !product) {

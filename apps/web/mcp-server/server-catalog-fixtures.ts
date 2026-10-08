@@ -123,6 +123,8 @@ export function serveCatalogFixture(request: IncomingMessage, response: ServerRe
     if (url.pathname.endsWith('/rest/v1/rpc/get_mcp_search_product_variants')) {
       const rows = [
         { id: 'variant-available-1', product_id: 'variant-available-product', attributes: { storage: '256GB' }, price_override: 100000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-slugless-1', product_id: 'slugless-variant-product', attributes: { storage: '256GB' }, price_override: 100000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
+        { id: 'variant-combined-1', product_id: 'combined-options-product', attributes: { storage: '256GB' }, price_override: 100000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
         { id: 'variant-cheaper-1', product_id: 'variant-cheaper-than-parent', attributes: { storage: '128GB' }, price_override: 90000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
         { id: 'variant-pricier-1', product_id: 'variant-pricier-than-parent', attributes: { storage: '128GB' }, price_override: 120000, stock_quantity: 2, condition: 'new', created_at: '2026-01-01T00:00:00Z' },
         { id: 'variant-sold-out-1', product_id: 'variant-sold-out-product', attributes: { storage: '128GB' }, price_override: 100000, stock_quantity: 0, condition: 'new', created_at: '2026-01-01T00:00:00Z' },

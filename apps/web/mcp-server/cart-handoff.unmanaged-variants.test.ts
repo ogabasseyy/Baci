@@ -1,0 +1,104 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { expect, it } from 'vitest';
+import { prepareCartHandoff } from './cart-handoff';
+
+type QueryResult = { data: unknown; error: unknown };
+
+function chainable(result: QueryResult) {
+  const chain: Record<string, (...args: unknown[]) => unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.single = async () => result;
+  chain.then = (resolve: (value: unknown) => unknown) =>
+    Promise.resolve(result).then(resolve);
+  return chain;
+}
+
+const lower = '11111111-1111-4111-8111-111111111111';
+
+function unmanagedVariantProduct(
+  variants: Record<string, unknown>[]
+): SupabaseClient {
+  return {
+    from: (table: string) =>
+      chainable(
+        table === 'products'
+          ? {
+              data: {
+                name: 'Phone',
+                slug: 'phone',
+                price: 100,
+                manage_stock: false,
+                has_variants: true,
+                has_condition_offers: false,
+              },
+              error: null,
+            }
+          : { data: null, error: null }
+      ),
+    rpc: async () => ({
+      data: variants.map((variant) => ({ ...variant, product_id: lower })),
+      error: null,
+    }),
+  } as unknown as SupabaseClient;
+}
+
+function check(supabase: SupabaseClient) {
+  return prepareCartHandoff({
+    supabase,
+    merchantId: 'merchant',
+    productId: lower,
+    quantity: 1,
+    formatPrice: String,
+  });
+}
+
+it('reports unavailable for strict-only variants with no units', async () => {
+  const result = await check(
+    unmanagedVariantProduct([
+      { stock_quantity: 0, effective_policy: 'serialized_strict' },
+    ])
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
+it('selects options when a strict variant has units', async () => {
+  const result = await check(
+    unmanagedVariantProduct([
+      { stock_quantity: 2, effective_policy: 'serialized_strict' },
+    ])
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('fails open for ordinary variants at zero stock', async () => {
+  const result = await check(
+    unmanagedVariantProduct([{ stock_quantity: 0 }])
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
+it('fails open when strict and ordinary variants mix', async () => {
+  const result = await check(
+    unmanagedVariantProduct([
+      { stock_quantity: 0, effective_policy: 'serialized_strict' },
+      { stock_quantity: 0 },
+    ])
+  );
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});

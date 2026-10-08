@@ -187,6 +187,30 @@ describe('useEditOrderController submit date', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('alerts instead of silently omitting an unreadable date', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    useNewOrderControllerMock.mockReturnValue(
+      createBaseController({ date: new Date('not-a-date') })
+    );
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: {
+        id: 'order-1',
+        transaction_date: new Date(2024, 0, 2, 10, 0).toISOString(),
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useEditOrderController());
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(alertMock).toHaveBeenCalledWith(
+      'Invalid date',
+      'The selected date is invalid. Please pick the date again.'
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
   it('omits a manual day matching the stored explicit day', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     useNewOrderControllerMock.mockReturnValue(

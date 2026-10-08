@@ -149,6 +149,17 @@ export function useEditOrderController() {
       return;
     }
 
+    if (
+      order &&
+      (!baseController.date || Number.isNaN(baseController.date.getTime()))
+    ) {
+      Alert.alert(
+        'Invalid date',
+        'The selected date is invalid. Please pick the date again.'
+      );
+      return;
+    }
+
     const orderDate = resolveEditOrderDate({
       currentDate: baseController.date,
       hasSavedOrder: Boolean(order),

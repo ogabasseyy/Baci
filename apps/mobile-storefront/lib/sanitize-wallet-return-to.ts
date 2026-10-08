@@ -89,6 +89,29 @@ function isSafeQuery(query: string): boolean {
  * Fragments are rejected outright — nothing in this app produces one, and one
  * would otherwise carry unchecked path-ish text past the path rules.
  */
+/**
+ * True when a saved handoff resumes the savings flow: the href must first
+ * pass the same sanitization as navigation, then carry action=savings
+ * (extra parameters such as savingsGoalId are expected on primary flows).
+ */
+export function isWalletSavingsReturnHref(value: unknown): boolean {
+  const href = sanitizeWalletReturnTo(value);
+  if (!href) return false;
+  const queryIndex = href.indexOf('?');
+  if (queryIndex === -1) return false;
+  return href
+    .slice(queryIndex + 1)
+    .split('&')
+    .some((pair) => {
+      const separatorIndex = pair.indexOf('=');
+      if (separatorIndex <= 0) return false;
+      return (
+        decode(pair.slice(0, separatorIndex)) === 'action' &&
+        decode(pair.slice(separatorIndex + 1)) === 'savings'
+      );
+    });
+}
+
 export function sanitizeWalletReturnTo(
   value: unknown
 ): WalletReturnHref | undefined {

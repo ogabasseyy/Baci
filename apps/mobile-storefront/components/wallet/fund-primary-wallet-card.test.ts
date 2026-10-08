@@ -182,3 +182,12 @@ it('resumes the stored real savings handoff only after completed restart recover
   expect(router.push).not.toHaveBeenCalled();
   expect(router.replace).toHaveBeenCalledWith(returnTo);
 });
+it('re-sanitizes a tampered handoff before navigating on completed recovery', async () => {
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockResolvedValue({
+    status: 'completed',
+    returnTo: 'https://evil.test/phish',
+  });
+  await fundPrimaryWalletCard(input);
+  expect(router.replace).toHaveBeenCalledWith('/wallet');
+});

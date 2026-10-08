@@ -29,6 +29,7 @@ describe('search pending replay sources', () => {
       '20261008110000_search_processor_refined_drop_redundant_exists.sql',
       '20261008120000_search_processor_filter_case_insensitive.sql',
       '20261008130000_search_price_options_null_stock_managed.sql',
+      '20261008140000_search_price_options_sku_matrix_drift.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

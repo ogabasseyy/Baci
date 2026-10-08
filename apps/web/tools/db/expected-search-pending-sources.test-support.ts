@@ -94,4 +94,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008130000_search_price_options_null_stock_managed.sql',
     sha256: '57e332b8262d5d0fdb97bf2c1cc8c57c4c211d4aa84abba24b9257c6b6b2f333',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008140000_search_price_options_sku_matrix_drift.sql',
+    sha256: 'c76327447c423ffe28e38bd09276ac4446717e20428d361958aa0b51d8d62cec',
+  },
 ] as const;

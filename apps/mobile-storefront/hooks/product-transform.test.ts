@@ -120,6 +120,35 @@ describe('product-transform', () => {
     });
   });
 
+  it('treats null manage_stock as managed inventory', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      manage_stock: null,
+      stock: 0,
+      stock_quantity: 0,
+    });
+
+    expect(product).toMatchObject({
+      manage_stock: true,
+      in_stock: false,
+      variants: [expect.objectContaining({ in_stock: false })],
+    });
+  });
+
+  it('keeps null manage_stock purchasable when stock exists', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      manage_stock: null,
+      stock: 3,
+      stock_quantity: 3,
+    });
+
+    expect(product).toMatchObject({
+      manage_stock: true,
+      in_stock: true,
+    });
+  });
+
   it('treats sku_matrix products as variant-bearing when has_variants has drifted false', () => {
     const product = transformProduct({
       ...variantProductRow,

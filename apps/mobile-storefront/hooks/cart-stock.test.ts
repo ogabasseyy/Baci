@@ -92,4 +92,36 @@ describe('cart-stock helpers', () => {
       'Cannot verify stock while offline.'
     );
   });
+
+  it('treats null manage_stock as managed inventory at checkout', async () => {
+    const single = jest.fn().mockResolvedValue({
+      data: { stock_quantity: 0, manage_stock: null },
+      error: null,
+    });
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single }) }),
+    });
+
+    await expect(checkStock('product-1', 1)).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('bypasses stock checks only for explicitly unmanaged products', async () => {
+    const single = jest.fn().mockResolvedValue({
+      data: { stock_quantity: 0, manage_stock: false },
+      error: null,
+    });
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single }) }),
+    });
+
+    await expect(checkStock('product-1', 1)).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 1,
+    });
+  });
 });

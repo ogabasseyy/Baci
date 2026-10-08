@@ -5,7 +5,7 @@ CREATE SCHEMA extensions;
 CREATE EXTENSION pg_trgm WITH SCHEMA extensions;
 CREATE TABLE public.merchants(id uuid PRIMARY KEY,is_published boolean);
 CREATE TABLE public.categories(id uuid PRIMARY KEY,merchant_id uuid,name text,is_active boolean);
-CREATE TABLE public.products(id uuid PRIMARY KEY,merchant_id uuid,price numeric,condition text,manage_stock boolean,stock integer,stock_quantity integer,inventory_tracking_policy text,has_condition_offers boolean,has_variants boolean,status text,brand text,category text,category_id uuid,view_count bigint,created_at timestamptz,search_name_norm text,search_name_compact text,search_doc_vector tsvector,search_identify_vector tsvector,sku text,average_rating double precision,specifications jsonb);
+CREATE TABLE public.products(id uuid PRIMARY KEY,merchant_id uuid,price numeric,condition text,manage_stock boolean,stock integer,stock_quantity integer,inventory_tracking_policy text,has_condition_offers boolean,has_variants boolean,status text,brand text,category text,category_id uuid,view_count bigint,created_at timestamptz,search_name_norm text,search_name_compact text,search_doc_vector tsvector,search_identify_vector tsvector,sku text,average_rating double precision,specifications jsonb,variant_model text);
 CREATE TABLE public.product_variants(id uuid PRIMARY KEY,product_id uuid,merchant_id uuid,condition text,price_override numeric,stock_quantity integer,is_inventory_anchor boolean,inventory_tracking_policy text);
 CREATE TABLE public.product_offers(id uuid PRIMARY KEY,product_id uuid,merchant_id uuid,status text,condition text,price numeric,stock_quantity integer);
 CREATE FUNCTION public.normalize_product_search_text(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT lower(btrim($1)) $$;
@@ -35,6 +35,11 @@ VALUES ('77777777-7777-4777-8777-777777777771','11111111-1111-4111-8111-11111111
 ('77777777-7777-4777-8777-777777777772','11111111-1111-4111-8111-111111111111',100,'active',true,1,false,true),
 ('77777777-7777-4777-8777-777777777773','11111111-1111-4111-8111-111111111111',100,'active',true,1,true,true),
 ('77777777-7777-4777-8777-777777777774','11111111-1111-4111-8111-111111111111',100,'active',NULL,5,false,false);
+-- Sku-matrix drift: stale has_variants=false with a real child variant.
+INSERT INTO products(id,merchant_id,price,status,manage_stock,has_variants,has_condition_offers,variant_model)
+VALUES ('77777777-7777-4777-8777-777777777775','11111111-1111-4111-8111-111111111111',100,'active',false,false,false,'sku_matrix');
+INSERT INTO product_variants(id,product_id,merchant_id,condition,price_override,stock_quantity,is_inventory_anchor,inventory_tracking_policy)
+VALUES ('88888888-8888-4888-8888-888888888885','77777777-7777-4777-8777-777777777775','11111111-1111-4111-8111-111111111111','new',250,3,false,'legacy');
 INSERT INTO product_offers(id,product_id,merchant_id,status,condition,price,stock_quantity)
 VALUES ('88888888-8888-4888-8888-888888888882','77777777-7777-4777-8777-777777777772','11111111-1111-4111-8111-111111111111','active','used',50,1),
 ('88888888-8888-4888-8888-888888888883','77777777-7777-4777-8777-777777777773','11111111-1111-4111-8111-111111111111','active','used',50,1);

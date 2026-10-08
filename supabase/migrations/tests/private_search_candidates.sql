@@ -4,6 +4,7 @@
 \ir ../20261003230000_storefront_search_refinement_fixes.sql
 \ir ../20261004151000_search_price_options_offer_scope_null_stock.sql
 \ir ../20261008130000_search_price_options_null_stock_managed.sql
+\ir ../20261008140000_search_price_options_sku_matrix_drift.sql
 \ir ../20261003193000_storefront_processor_filters.sql
 \ir ../20261003194500_storefront_category_facets.sql
 \ir ../20261004193000_private_purchasable_search_candidates.sql
@@ -21,6 +22,10 @@ BEGIN
   IF n<>0 THEN RAISE EXCEPTION 'NULL manage_stock must be managed (category-PDP policy)'; END IF;
   SELECT count(*) INTO n FROM public.get_storefront_search_price_options(merchant,'77777777-7777-4777-8777-777777777774');
   IF n<>1 THEN RAISE EXCEPTION 'NULL manage_stock with stock must stay purchasable'; END IF;
+  SELECT count(*) INTO n FROM public.get_storefront_search_price_options(merchant,'77777777-7777-4777-8777-777777777775');
+  IF n<>1 OR NOT EXISTS (SELECT 1 FROM public.get_storefront_search_price_options(merchant,'77777777-7777-4777-8777-777777777775') WHERE variant_id IS NOT NULL AND effective_price=250) THEN
+    RAISE EXCEPTION 'Sku-matrix drift must emit the child variant, not the parent base row';
+  END IF;
   SELECT count(*) INTO n FROM public.get_storefront_search_price_options(merchant,'77777777-7777-4777-8777-777777777772');
   IF n<>2 THEN RAISE EXCEPTION 'Independent base disappeared when condition offer exists'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.get_storefront_search_price_options(merchant,'77777777-7777-4777-8777-777777777772') WHERE variant_id IS NULL AND offer_id IS NULL AND effective_price=100) THEN

@@ -164,7 +164,10 @@ export function transformProduct(item: unknown): Product | null {
   const variants = normalizeProductVariants(product.variants, {
     basePrice: Number(product.price ?? 0),
     compareAtPrice: product.compare_at_price ?? undefined,
-    manageStock: (product.manage_stock as boolean | undefined) ?? false,
+    // Legacy NULL manage_stock is managed inventory (platform policy shared
+    // with the categorized web PDP and the search price projection): only an
+    // explicit false bypasses stock checks.
+    manageStock: (product.manage_stock as boolean | undefined) ?? true,
   });
   const legacyScalarColor =
     typeof product.color === 'string' ? product.color.trim() : '';
@@ -185,7 +188,7 @@ export function transformProduct(item: unknown): Product | null {
   const inventory = normalizeProductInventory({
     stock: product.stock,
     stock_quantity: product.stock_quantity,
-    manage_stock: product.manage_stock ?? false,
+    manage_stock: product.manage_stock ?? true,
   });
   const galleryImages =
     variantMetadata.galleryImages && variantMetadata.galleryImages.length > 0
@@ -220,7 +223,7 @@ export function transformProduct(item: unknown): Product | null {
           : formatProductConditionDisplay(product.condition),
     rating,
     review_count: reviewCount,
-    manage_stock: (product.manage_stock as boolean) ?? false,
+    manage_stock: (product.manage_stock as boolean) ?? true,
     stock_quantity: inventory.stock_quantity,
     colors: variantMetadata.colors,
     color_images: variantMetadata.colorImages,

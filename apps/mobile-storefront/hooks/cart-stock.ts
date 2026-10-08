@@ -94,7 +94,9 @@ export async function checkStock(
     };
   }
 
-  if (!data?.manage_stock) {
+  // Only an explicit false bypasses stock checks: legacy NULL rows are
+  // managed inventory (platform policy shared with search and the PDPs).
+  if (data?.manage_stock === false) {
     return {
       available: true,
       currentStock: Number.MAX_SAFE_INTEGER,

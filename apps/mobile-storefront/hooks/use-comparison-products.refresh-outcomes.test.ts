@@ -130,6 +130,41 @@ it('allows an unmanaged offer even when scalar stock is zero', async () => {
   expect(result.current.unavailableIds).toEqual([]);
 });
 
+it('verifies exact variant matches against the projection when hydration degrades', async () => {
+  // Degraded hydration returns the row without variants; the variant may
+  // still be purchasable, so the refresh must ask the projection instead
+  // of reporting unavailable from the missing local option.
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 100,
+    manage_stock: true,
+  });
+  mockRpc.mockResolvedValue({
+    data: [{ variant_id: 'v1', offer_id: null, condition: 'new' }],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { variantId: 'v1' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(mockRpc).toHaveBeenCalled());
+  expect(result.current.unavailableIds).toEqual([]);
+});
 it('refreshes merchant-scoped snapshots and keeps matched identities without mutating selection', async () => {
   const snapshot = {
     id: 'p1',

@@ -58,11 +58,16 @@ export function useComparisonProducts(selected: Product[]) {
           // search uses: the hydrated row maps serialized options to
           // available=0, so raw stock math here would mark purchasable
           // serialized options unavailable on refresh.
+          // Consult the projection for every match — even exact ids missing
+          // from the hydrated row, whose absence may be a degraded hydration
+          // outage rather than a genuine removal. The projection needs no
+          // local variant data; skipping it would turn a transient outage
+          // into a false permanent-unavailable verdict.
           let optionAvailable = false;
           let liveCondition = normalizeProductConditionFilterValue(
             option?.condition ?? product.condition
           );
-          if (match && (!(match.variantId || match.offerId) || option)) {
+          if (match) {
             const { data, error } = await withSupabaseRetry(async () =>
               supabase.rpc('get_storefront_search_price_options', {
                 p_merchant_id: merchant.id,

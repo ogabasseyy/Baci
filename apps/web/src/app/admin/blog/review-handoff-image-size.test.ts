@@ -16,6 +16,9 @@ describe('imageSizeZeroAt', () => {
     ['responsive restore', ['md:w-auto'], true, false, 'TTFFFF'],
     ['max caps class', ['max-h-0', 'h-screen'], false, false, 'TTTTTT'],
     ['sized image', ['h-64', 'w-64'], false, false, 'FFFFFF'],
+    ['important restore', ['h-0', 'h-64!'], false, false, 'FFFFFF'],
+    ['important zero', ['h-64', 'h-0!'], false, false, 'TTTTTT'],
+    ['scoped important restore', ['h-0', 'md:h-64!'], false, false, 'TTFFFF'],
   ])('%s: %s', (_name, classes, widthAttrZero, heightAttrZero, expected) => {
     expect(
       flags(

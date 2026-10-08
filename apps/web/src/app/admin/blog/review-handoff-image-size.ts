@@ -7,7 +7,6 @@ import {
   BREAKPOINT_POINT_COUNT,
   type ColorScheme,
 } from './review-handoff-breakpoints';
-import { stripImportantModifier } from './review-handoff-important';
 import {
   type AxisSizeVerdict,
   sizeLayerVerdicts,
@@ -28,10 +27,7 @@ export function imageSizeZeroAt(
   heightAttrZero: boolean,
   scheme: ColorScheme = 'light'
 ): boolean[] {
-  const verdicts = sizeLayerVerdicts(
-    classes.map(stripImportantModifier),
-    scheme
-  );
+  const verdicts = sizeLayerVerdicts(classes, scheme);
   const zeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
     const heightCapped = axisCappedAt(verdicts.height, heightAttrZero, point);

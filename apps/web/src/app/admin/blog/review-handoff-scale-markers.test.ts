@@ -42,6 +42,32 @@ describe('scaleMarkers', () => {
       'TTFFFF',
     ],
     ['narrow restore', ['scale-x-0', 'max-md:scale-x-100'], 'FFTTTT', 'FFFFFF'],
+    ['important restore', ['scale-x-0', 'scale-x-100!'], 'FFFFFF', 'FFFFFF'],
+    ['important zero', ['scale-x-100', 'scale-x-0!'], 'TTTTTT', 'FFFFFF'],
+    [
+      'scoped important restore',
+      ['scale-x-0', 'md:scale-x-100!'],
+      'TTFFFF',
+      'FFFFFF',
+    ],
+    [
+      'cross-tier axis fallthrough',
+      ['scale-x-0', 'scale-y-100!'],
+      'TTTTTT',
+      'FFFFFF',
+    ],
+    [
+      'important static beats ordinary axis',
+      ['scale-x-100', 'scale-[0]!'],
+      'TTTTTT',
+      'TTTTTT',
+    ],
+    [
+      'important none beats zero',
+      ['scale-0', 'scale-none!'],
+      'FFFFFF',
+      'FFFFFF',
+    ],
   ])('%s: %s', (_name, classes, expectedX, expectedY) => {
     const markers = scaleMarkers(classes as string[]);
     expect(

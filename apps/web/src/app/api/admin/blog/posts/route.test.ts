@@ -34,6 +34,12 @@ const mockSupabase = {
   not: vi.fn(),
   order: vi.fn(),
   range: vi.fn(),
+  rpc: vi.fn((_name: string, args: { p_paths: string[] }) =>
+    Promise.resolve({
+      data: args.p_paths.map((path) => ({ path })),
+      error: null,
+    })
+  ),
   select: vi.fn(),
   single: vi.fn(),
 };

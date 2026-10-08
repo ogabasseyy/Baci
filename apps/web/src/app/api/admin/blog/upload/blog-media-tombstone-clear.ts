@@ -7,7 +7,7 @@ type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
 
-function rowMediaPaths(row: BlogPostMediaRow): string[] {
+export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
   const texts: unknown[] = [
     row.content,
     row.excerpt,
@@ -40,7 +40,7 @@ export async function clearBlogMediaTombstonesForRow(
   supabase: ServerSupabaseClient,
   row: BlogPostMediaRow
 ): Promise<void> {
-  const paths = rowMediaPaths(row);
+  const paths = blogPostMediaPaths(row);
   if (paths.length === 0) return;
   try {
     const { error } = await supabase

@@ -24,6 +24,8 @@ describe('textColorMarkers', () => {
     [['text-white', 'text-transparent'], ALL],
     [['text-black', 'md:text-transparent'], BELOW_MD],
     [['md:text-transparent', 'lg:text-black'], LG_UP],
+    [['text-transparent', 'text-black!'], ALL],
+    [['md:text-transparent', 'text-black!'], ALL],
   ])('reports an opaque winner: %s', (classes, expected) => {
     expect(textColorMarkers(classes).opaqueAt).toEqual(expected);
   });
@@ -38,10 +40,17 @@ describe('textColorMarkers', () => {
     [['text-white/0', 'text-black'], ALL],
     [['text-transparent', 'md:text-transparent'], ALL],
     [['md:text-transparent'], MD_UP],
+    [['text-black', 'text-transparent!'], ALL],
   ])('reports transparency without an opaque winner: %s', (classes, expected) => {
     const markers = textColorMarkers(classes);
     expect(markers.opaqueAt).toEqual(NONE);
     expect(markers.transparentAt).toEqual(expected);
+  });
+
+  it('resolves scoped important transparency against an ordinary base', () => {
+    const markers = textColorMarkers(['text-black', 'md:text-transparent!']);
+    expect(markers.opaqueAt).toEqual(BELOW_MD);
+    expect(markers.transparentAt).toEqual(MD_UP);
   });
 
   it.each([

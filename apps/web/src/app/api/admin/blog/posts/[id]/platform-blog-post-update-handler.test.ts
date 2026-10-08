@@ -66,7 +66,13 @@ function createSupabase(
   query.is.mockReturnValue(query);
   query.select.mockReturnValue(query);
   query.delete.mockReturnValue(query);
-  return { cleared, from: vi.fn(() => query), updates };
+  const rpc = vi.fn((_name: string, args: { p_paths: string[] }) =>
+    Promise.resolve({
+      data: args.p_paths.map((path) => ({ path })),
+      error: null,
+    })
+  );
+  return { cleared, from: vi.fn(() => query), rpc, updates };
 }
 
 describe('updatePlatformBlogPost', () => {

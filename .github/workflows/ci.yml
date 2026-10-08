@@ -374,6 +374,7 @@ jobs:
           --sql-check supabase/tests/mcp_search_option_windows.sql
           --sql-check supabase/tests/mcp_search_option_windows_guard.sql --sql-check supabase/migrations/tests/connector_owner_creation_limit.sql
           --sql-check supabase/migrations/tests/piggyvest_transfer_outbox_claims_authorization_index.sql
+          --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

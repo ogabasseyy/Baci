@@ -16137,6 +16137,19 @@ export type Database = {
       };
     };
     Functions: {
+      blog_media_objects_present_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+        }[];
+      };
+      claim_sweepable_blog_media_tombstones: {
+        Args: { p_cutoff: string; p_limit: number };
+        Returns: {
+          tombstone_claimed: boolean;
+          tombstone_path: string;
+        }[];
+      };
       accept_staff_invite: {
         Args: { p_email: string; p_token: string };
         Returns: {

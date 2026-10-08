@@ -21,6 +21,9 @@ describe('backgroundPaintAt', () => {
     [['bg-linear-to-r', 'from-blue-500', 'from-75%'], ALL],
     [['bg-red-500', 'bg-none'], ALL],
     [['bg-[url(/a.png)]', 'md:bg-none'], BELOW_MD],
+    [['bg-transparent', 'bg-red-500!'], ALL],
+    [['md:bg-transparent', 'bg-red-500!'], ALL],
+    [['bg-red-500', 'md:bg-transparent!'], BELOW_MD],
   ])('reports a painted background: %s', (classes, expected) => {
     expect(backgroundPaintAt(classes)).toEqual(expected);
   });
@@ -41,6 +44,7 @@ describe('backgroundPaintAt', () => {
     [['bg-linear-to-r', 'md:from-red-500', 'md:from-transparent']],
     [['bg-[length:100px]']],
     [['bg-clip-text']],
+    [['bg-red-500', 'bg-transparent!']],
   ])('reports no paint without an effective background: %s', (classes) => {
     expect(backgroundPaintAt(classes)).toEqual(NONE);
   });

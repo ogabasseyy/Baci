@@ -68,6 +68,34 @@ describe('convertHiddenInlineStyles', () => {
       '<p style="font-size: 0.0em">Note</p>',
       '<p style="font-size: 0.0em" class="text-transparent">Note</p>',
     ],
+    [
+      '<p style="transform:scale(0)">Draft note</p><p>Visible article</p>',
+      '<p style="transform:scale(0)" class="hidden">Draft note</p><p>Visible article</p>',
+    ],
+    [
+      '<p style="transform: translateX(5px) scale(1, 0)">Note</p>',
+      '<p style="transform: translateX(5px) scale(1, 0)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="transform:scaleX(0)">Note</p>',
+      '<p style="transform:scaleX(0)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="transform:scale3d(0, 1, 1)">Note</p>',
+      '<p style="transform:scale3d(0, 1, 1)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="transform:matrix(0, 0, 0, 1, 0, 0)">Note</p>',
+      '<p style="transform:matrix(0, 0, 0, 1, 0, 0)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="transform:matrix3d(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)">Note</p>',
+      '<p style="transform:matrix3d(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="scale:0">Note</p>',
+      '<p style="scale:0" class="hidden">Note</p>',
+    ],
   ])('converts hiding inline styles to hiding classes: %s', (html, expected) => {
     expect(convertHiddenInlineStyles(html)).toBe(expected);
   });
@@ -91,6 +119,14 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="font-size:0abc">Shown</p>',
     '<p style="font-size:-1px">Shown</p>',
     '<p style="font-size:0;font-size:16px">Shown</p>',
+    '<p style="transform:translateX(5px)">Shown</p>',
+    '<p style="transform:scale(1)">Shown</p>',
+    '<p style="transform:scaleZ(0)">Shown</p>',
+    '<p style="transform:scale3d(1, 1, 0)">Shown</p>',
+    '<p style="transform:matrix(1, 0, 0, 1, 0, 0)">Shown</p>',
+    '<p style="transform:scale(0, foo)">Shown</p>',
+    '<p style="scale:1">Shown</p>',
+    '<p style="transform:scale(0);transform:none">Shown</p>',
     '<p>No style</p>',
   ])('leaves non-hiding styles alone: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
@@ -110,6 +146,14 @@ describe('convertHiddenInlineStyles', () => {
     expect(
       validateImportedContent(
         '<p style="font-size:0">Draft note</p><p>Visible article</p>'
+      )
+    ).toBe('<p>Visible article</p>');
+  });
+
+  it('strips zero-scale inline content at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="transform:scale(0)">Draft note</p><p>Visible article</p>'
       )
     ).toBe('<p>Visible article</p>');
   });

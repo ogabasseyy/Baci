@@ -17,6 +17,8 @@ describe('opacityMarkers', () => {
     [['opacity-0', 'md:opacity-100'], BELOW_MD],
     [['opacity-0', 'md:opacity-0', 'md:opacity-100'], BELOW_MD],
     [['opacity-[0]', 'md:opacity-100'], BELOW_MD],
+    [['opacity-100', 'opacity-0!'], ALL],
+    [['opacity-0', 'md:opacity-100!'], BELOW_MD],
   ])('reports zero opacity per point: %s', (classes, expected) => {
     expect(opacityMarkers(classes).zeroAt).toEqual(expected);
   });
@@ -28,6 +30,8 @@ describe('opacityMarkers', () => {
     [['opacity-0', 'opacity-50']],
     [['opacity-[var(--alpha)]']],
     [['md:opacity-100']],
+    [['opacity-0', 'opacity-100!']],
+    [['md:opacity-0', 'opacity-100!']],
     [['hover:opacity-0']],
   ])('reports no zero without a zero winner: %s', (classes) => {
     expect(opacityMarkers(classes).zeroAt).toEqual(NONE);

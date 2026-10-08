@@ -14,6 +14,7 @@ import {
   breakpointWinnerAtPoint,
   type ColorScheme,
 } from './review-handoff-breakpoints';
+import { splitImportantClasses } from './review-handoff-important';
 import { THEME_COLOR_NAMES } from './review-handoff-theme-colors';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
@@ -142,13 +143,16 @@ function gradientStop(
 
 type LayerWinner<Kind> = { token: string; kind: Kind };
 
-export function backgroundPaintAt(
-  classes: readonly string[],
-  scheme: ColorScheme = 'light'
-): boolean[] {
-  const colorWinners = new Map<string, LayerWinner<'solid' | 'blank'>>();
-  const imageWinners = new Map<string, BackgroundImage>();
-  const stopWinners = new Map<
+type BackgroundTiers = {
+  color: Map<string, LayerWinner<'solid' | 'blank'>>;
+  image: Map<string, BackgroundImage>;
+  stops: Map<string, Map<string, LayerWinner<'painted' | 'blank'>>>;
+};
+
+function collectBackgroundWinners(classes: readonly string[]): BackgroundTiers {
+  const color = new Map<string, LayerWinner<'solid' | 'blank'>>();
+  const image = new Map<string, BackgroundImage>();
+  const stops = new Map<
     string,
     Map<string, LayerWinner<'painted' | 'blank'>>
   >();
@@ -158,37 +162,59 @@ export function backgroundPaintAt(
     const layer = token.slice(0, token.length - bare.length);
     const backgroundColor = backgroundColorKind(bare);
     if (backgroundColor !== null) {
-      const winner = colorWinners.get(layer);
+      const winner = color.get(layer);
       if (!winner || compareNaturalOrder(bare, winner.token) > 0)
-        colorWinners.set(layer, { token: bare, kind: backgroundColor });
+        color.set(layer, { token: bare, kind: backgroundColor });
     }
     const backgroundImage = backgroundImageKind(bare);
     if (backgroundImage !== null) {
-      const winner = imageWinners.get(layer);
+      const winner = image.get(layer);
       if (
         !winner ||
         backgroundImage.rank > winner.rank ||
         (backgroundImage.rank === winner.rank &&
           compareNaturalOrder(bare, winner.token) > 0)
       )
-        imageWinners.set(layer, { token: bare, ...backgroundImage });
+        image.set(layer, { token: bare, ...backgroundImage });
     }
     const stop = gradientStop(bare);
     if (stop !== null) {
-      let channelWinners = stopWinners.get(stop.channel);
+      let channelWinners = stops.get(stop.channel);
       if (!channelWinners) {
         channelWinners = new Map();
-        stopWinners.set(stop.channel, channelWinners);
+        stops.set(stop.channel, channelWinners);
       }
       const winner = channelWinners.get(layer);
       if (!winner || compareNaturalOrder(bare, winner.token) > 0)
         channelWinners.set(layer, { token: bare, kind: stop.kind });
     }
   }
+  return { color, image, stops };
+}
+
+function tierWinnerAt<T>(
+  important: ReadonlyMap<string, T>,
+  ordinary: ReadonlyMap<string, T>,
+  point: number,
+  scheme: ColorScheme
+): T | undefined {
+  return (
+    breakpointWinnerAtPoint(important, point, scheme) ??
+    breakpointWinnerAtPoint(ordinary, point, scheme)
+  );
+}
+
+export function backgroundPaintAt(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): boolean[] {
+  const tiers = splitImportantClasses(classes);
+  const important = collectBackgroundWinners(tiers.important);
+  const ordinary = collectBackgroundWinners(tiers.ordinary);
   const paintAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const color = breakpointWinnerAtPoint(colorWinners, point, scheme);
-    const image = breakpointWinnerAtPoint(imageWinners, point, scheme);
+    const color = tierWinnerAt(important.color, ordinary.color, point, scheme);
+    const image = tierWinnerAt(important.image, ordinary.image, point, scheme);
     if (image === undefined || !image.paints) {
       paintAt.push(color?.kind === 'solid');
     } else if (!image.gradient) {
@@ -197,8 +223,9 @@ export function backgroundPaintAt(
       paintAt.push(
         (['from', 'via', 'to'] as const).some(
           (channel) =>
-            breakpointWinnerAtPoint(
-              stopWinners.get(channel) ?? new Map(),
+            tierWinnerAt(
+              important.stops.get(channel) ?? new Map(),
+              ordinary.stops.get(channel) ?? new Map(),
               point,
               scheme
             )?.kind === 'painted'

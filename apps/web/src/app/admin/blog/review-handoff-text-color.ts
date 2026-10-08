@@ -14,6 +14,7 @@ import {
   breakpointWinnerAtPoint,
   type ColorScheme,
 } from './review-handoff-breakpoints';
+import { splitImportantClasses } from './review-handoff-important';
 import { THEME_COLOR_NAMES } from './review-handoff-theme-colors';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
@@ -140,6 +141,34 @@ function textColorKind(utility: string): TextColorKind | null {
  * an effectively painted background, which renders transparent
  * glyphs without an opaque color utility.
  */
+type TextColorTiers = {
+  color: Map<string, LayerWinner<TextColorKind>>;
+  clip: Map<string, string>;
+};
+
+function collectTextColorWinners(classes: readonly string[]): TextColorTiers {
+  const color = new Map<string, LayerWinner<TextColorKind>>();
+  const clip = new Map<string, string>();
+  for (const token of classes) {
+    const utility = responsiveUtility(token);
+    const bare = utility === null ? token : utility;
+    const layer = token.slice(0, token.length - bare.length);
+    const colorKind = textColorKind(bare);
+    if (colorKind !== null) {
+      const winner = color.get(layer);
+      if (!winner || compareNaturalOrder(bare, winner.token) > 0)
+        color.set(layer, { token: bare, kind: colorKind });
+    }
+    const clipUtility = BACKGROUND_CLIP_PATTERN.exec(bare)?.[1];
+    if (clipUtility !== undefined) {
+      const winner = clip.get(layer);
+      if (!winner || compareNaturalOrder(bare, winner) > 0)
+        clip.set(layer, bare);
+    }
+  }
+  return { color, clip };
+}
+
 export function textColorMarkers(
   classes: readonly string[],
   scheme: ColorScheme = 'light'
@@ -148,37 +177,23 @@ export function textColorMarkers(
   transparentAt: boolean[];
   clippedAt: boolean[];
 } {
-  const colorWinners = new Map<string, LayerWinner<TextColorKind>>();
-  const clipWinners = new Map<string, string>();
-  for (const token of classes) {
-    const utility = responsiveUtility(token);
-    const bare = utility === null ? token : utility;
-    const layer = token.slice(0, token.length - bare.length);
-    const colorKind = textColorKind(bare);
-    if (colorKind !== null) {
-      const winner = colorWinners.get(layer);
-      if (!winner || compareNaturalOrder(bare, winner.token) > 0)
-        colorWinners.set(layer, { token: bare, kind: colorKind });
-    }
-    const clip = BACKGROUND_CLIP_PATTERN.exec(bare)?.[1];
-    if (clip !== undefined) {
-      const winner = clipWinners.get(layer);
-      if (!winner || compareNaturalOrder(bare, winner) > 0)
-        clipWinners.set(layer, bare);
-    }
-  }
+  const tiers = splitImportantClasses(classes);
+  const important = collectTextColorWinners(tiers.important);
+  const ordinary = collectTextColorWinners(tiers.ordinary);
   const paintAt = backgroundPaintAt(classes, scheme);
   const opaqueAt: boolean[] = [];
   const transparentAt: boolean[] = [];
   const clippedAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const color = breakpointWinnerAtPoint(colorWinners, point, scheme);
+    const color =
+      breakpointWinnerAtPoint(important.color, point, scheme) ??
+      breakpointWinnerAtPoint(ordinary.color, point, scheme);
     opaqueAt.push(color?.kind === 'opaque');
     transparentAt.push(color?.kind === 'transparent');
-    clippedAt.push(
-      breakpointWinnerAtPoint(clipWinners, point, scheme) === 'bg-clip-text' &&
-        paintAt[point]
-    );
+    const clip =
+      breakpointWinnerAtPoint(important.clip, point, scheme) ??
+      breakpointWinnerAtPoint(ordinary.clip, point, scheme);
+    clippedAt.push(clip === 'bg-clip-text' && paintAt[point]);
   }
   return { opaqueAt, transparentAt, clippedAt };
 }

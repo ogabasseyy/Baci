@@ -8,6 +8,7 @@ import {
   breakpointWinnerAtPoint,
   type ColorScheme,
 } from './review-handoff-breakpoints';
+import { splitImportantClasses } from './review-handoff-important';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
 const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
@@ -28,12 +29,9 @@ function isNonZeroOpacityUtility(utility: string): boolean {
   return Number.isNaN(numeric) ? true : numeric !== 0;
 }
 
-export function opacityMarkers(
-  classes: readonly string[],
-  scheme: ColorScheme = 'light'
-): {
-  zeroAt: boolean[];
-} {
+function collectOpacityWinners(
+  classes: readonly string[]
+): Map<string, string> {
   const winners = new Map<string, string>();
   for (const token of classes) {
     const utility = responsiveUtility(token);
@@ -45,9 +43,23 @@ export function opacityMarkers(
       winners.set(layer, bare);
     }
   }
+  return winners;
+}
+
+export function opacityMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
+  zeroAt: boolean[];
+} {
+  const tiers = splitImportantClasses(classes);
+  const important = collectOpacityWinners(tiers.important);
+  const ordinary = collectOpacityWinners(tiers.ordinary);
   const zeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const winner = breakpointWinnerAtPoint(winners, point, scheme);
+    const winner =
+      breakpointWinnerAtPoint(important, point, scheme) ??
+      breakpointWinnerAtPoint(ordinary, point, scheme);
     zeroAt.push(winner !== undefined && !isNonZeroOpacityUtility(winner));
   }
   return { zeroAt };

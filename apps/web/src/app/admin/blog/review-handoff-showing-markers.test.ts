@@ -35,6 +35,12 @@ describe('showingMarkers', () => {
     [['max-h-0', 'overflow-hidden', 'md:h-auto'], ALL],
     [['w-0', 'overflow-x-clip'], ALL],
     [['h-0', 'overflow-x-hidden'], NONE],
+    [['hidden', 'block!'], NONE],
+    [['block', 'hidden!'], ALL],
+    [['hidden', 'md:block!'], BELOW_MD],
+    [['opacity-0', 'opacity-100!'], NONE],
+    [['scale-0', 'scale-100!'], NONE],
+    [['h-0', 'overflow-hidden', 'h-64!'], NONE],
   ])('unions hiding channels per point: %s', (classes, expected) => {
     expect(showingMarkers(classes).terminalAt).toEqual(expected);
   });

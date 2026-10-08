@@ -12,6 +12,7 @@ import {
   breakpointWinnerAtPoint,
   type ColorScheme,
 } from './review-handoff-breakpoints';
+import { splitImportantClasses } from './review-handoff-important';
 
 const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 const SCALE_UTILITY_PATTERN = /^(scale-x|scale-y|scale)-(.+)$/;
@@ -160,13 +161,37 @@ function axisZeroAt(
   return writer.value === 0;
 }
 
-export function scaleMarkers(
-  classes: readonly string[],
-  scheme: ColorScheme = 'light'
-): {
-  scaleXZeroAt: boolean[];
-  scaleYZeroAt: boolean[];
-} {
+function importantAxisZeroAt(
+  important: ReadonlyMap<string, ScaleLayer>,
+  ordinary: ReadonlyMap<string, ScaleLayer>,
+  point: number,
+  axis: 'x' | 'y',
+  scheme: ColorScheme
+): boolean {
+  // An important rule's scale declaration beats every ordinary one,
+  // so an applicable important declaration sets the property form;
+  // each axis variable then resolves important-first, since an
+  // important rule still reads ordinary variables it does not write.
+  const declared = new Map<string, ScaleLayer>();
+  for (const [layer, winner] of important) {
+    if (winner.declares) declared.set(layer, winner);
+  }
+  const property = breakpointWinnerAtPoint(declared, point, scheme);
+  if (property === undefined) return axisZeroAt(ordinary, point, axis, scheme);
+  if (property.none || property.staticUnknown) return false;
+  if (property.statics.length > 0) {
+    return Math.max(...property.statics) === 0;
+  }
+  const writer =
+    axisWriterAt(important, point, axis, scheme) ??
+    axisWriterAt(ordinary, point, axis, scheme);
+  if (writer === undefined || 'unknown' in writer) return false;
+  return writer.value === 0;
+}
+
+function collectScaleLayers(
+  classes: readonly string[]
+): Map<string, ScaleLayer> {
   const winners = new Map<string, ScaleLayer>();
   for (const token of classes) {
     const utility = responsiveUtility(token);
@@ -179,11 +204,28 @@ export function scaleMarkers(
     }
     noteScaleToken(winner, bare);
   }
+  return winners;
+}
+
+export function scaleMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
+  scaleXZeroAt: boolean[];
+  scaleYZeroAt: boolean[];
+} {
+  const tiers = splitImportantClasses(classes);
+  const important = collectScaleLayers(tiers.important);
+  const ordinary = collectScaleLayers(tiers.ordinary);
   const scaleXZeroAt: boolean[] = [];
   const scaleYZeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    scaleXZeroAt.push(axisZeroAt(winners, point, 'x', scheme));
-    scaleYZeroAt.push(axisZeroAt(winners, point, 'y', scheme));
+    scaleXZeroAt.push(
+      importantAxisZeroAt(important, ordinary, point, 'x', scheme)
+    );
+    scaleYZeroAt.push(
+      importantAxisZeroAt(important, ordinary, point, 'y', scheme)
+    );
   }
   return { scaleXZeroAt, scaleYZeroAt };
 }

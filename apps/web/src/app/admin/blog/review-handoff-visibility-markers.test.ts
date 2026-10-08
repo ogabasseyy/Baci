@@ -29,6 +29,27 @@ describe('visibilityMarkers', () => {
       '------',
       'TTFFFF',
     ],
+    ['important escape', ['invisible', 'visible!'], 'VVVVVV', 'FFFFFF'],
+    ['important hide', ['visible', 'invisible!'], 'IIIIII', 'FFFFFF'],
+    [
+      'scoped important escape',
+      ['invisible', 'md:visible!'],
+      'IIVVVV',
+      'FFFFFF',
+    ],
+    [
+      'important base beats scoped',
+      ['md:invisible', 'visible!'],
+      'VVVVVV',
+      'FFFFFF',
+    ],
+    [
+      'important screen restore',
+      ['sr-only', 'not-sr-only!'],
+      '------',
+      'FFFFFF',
+    ],
+    ['important screen hide', ['not-sr-only', 'sr-only!'], '------', 'TTTTTT'],
   ])('%s: %s', (_name, classes, visible, screenReader) => {
     const markers = visibilityMarkers(classes as string[]);
     expect(visibilityFlags(markers.visibleAt)).toBe(visible);

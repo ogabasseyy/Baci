@@ -10,6 +10,7 @@ import { revalidatePlatformBlog } from '@/lib/cache-revalidation';
 import { createClient } from '@/lib/supabase/server';
 import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
 import { platformBlogRouteParamsSchema } from '@/schemas/platform-blog-route-params';
+import { verifyPatchedBlogPostMediaOrRestore } from './platform-blog-post-media-verify';
 import {
   PLATFORM_BLOG_DETAIL_SELECT,
   type PlatformBlogRouteParams,
@@ -62,9 +63,7 @@ export async function updatePlatformBlogPost(
     const supabase = await createClient();
     const { data: existingPost, error: existingError } = await supabase
       .from('blog_posts')
-      .select(
-        'id, slug, status, featured_image_url, featured_image_width, featured_image_height, featured_image_variants, intent, intent_source'
-      )
+      .select(PLATFORM_BLOG_DETAIL_SELECT)
       .eq('id', id)
       .eq('is_platform_post', true)
       .is('merchant_id', null)
@@ -252,6 +251,29 @@ export async function updatePlatformBlogPost(
       );
     }
 
+    // A concurrent tab may have tombstoned an upload this payload
+    // reuses; resurrect its references before the sweep can remove them.
+    const mediaRow = {
+      author_image_url: data.author_image_url,
+      content: data.content,
+      excerpt: data.excerpt,
+      featured_image_url: data.featured_image_url,
+      featured_image_variants: data.featured_image_variants,
+    };
+    await clearBlogMediaTombstonesForRow(supabase, mediaRow);
+    const mediaCheck = await verifyPatchedBlogPostMediaOrRestore(supabase, {
+      existingPost,
+      finalUpdateData,
+      mediaRow,
+      postId: id,
+    });
+    if (!mediaCheck.ok) {
+      return NextResponse.json(
+        { error: 'Referenced media was removed during save' },
+        { status: 500 }
+      );
+    }
+
     const previousSlug =
       typeof existingPost.slug === 'string'
         ? existingPost.slug.trim().toLowerCase()
@@ -262,16 +284,6 @@ export async function updatePlatformBlogPost(
     if (previousSlug && previousSlug !== nextSlug) {
       revalidatePlatformBlog(previousSlug);
     }
-
-    // A concurrent tab may have tombstoned an upload this payload
-    // reuses; resurrect its references before the sweep can remove them.
-    await clearBlogMediaTombstonesForRow(supabase, {
-      author_image_url: data.author_image_url,
-      content: data.content,
-      excerpt: data.excerpt,
-      featured_image_url: data.featured_image_url,
-      featured_image_variants: data.featured_image_variants,
-    });
 
     revalidatePlatformBlog(data.slug);
     return NextResponse.json(data);

@@ -1,5 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { clearBlogMediaTombstonesForRow } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
+import {
+  blogPostMediaPaths,
+  clearBlogMediaTombstonesForRow,
+} from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
+import { verifyBlogMediaObjectsPresent } from '@/app/api/admin/blog/upload/blog-media-verify';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -216,13 +220,43 @@ export async function POST(request: NextRequest) {
 
     // A concurrent tab may have tombstoned an upload this payload
     // reuses; resurrect its references before the sweep can remove them.
-    await clearBlogMediaTombstonesForRow(supabase, {
+    const mediaRow = {
       author_image_url: postData.author_image_url ?? null,
       content: postData.content,
       excerpt: postData.excerpt ?? null,
       featured_image_url: postData.featured_image_url ?? null,
       featured_image_variants: postData.featured_image_variants ?? null,
-    });
+    };
+    await clearBlogMediaTombstonesForRow(supabase, mediaRow);
+    // Clearing blocks on the sweep's row locks while a claim is in
+    // flight, so verifying after the clear sees post-sweep truth: a
+    // sweep that claimed between the insert and this probe leaves its
+    // paths missing, and the save rolls back loudly instead of
+    // persisting broken media.
+    const presence = await verifyBlogMediaObjectsPresent(
+      supabase,
+      blogPostMediaPaths(mediaRow)
+    );
+    if (presence === null || presence.missing.length > 0) {
+      if (presence !== null) {
+        console.error('Saved platform blog post references swept media', {
+          missing: presence.missing,
+          postId: data.id,
+        });
+      }
+      try {
+        await supabase.from('blog_posts').delete().eq('id', data.id);
+      } catch (rollbackError) {
+        console.error('Failed to roll back platform blog post save', {
+          error: rollbackError,
+          postId: data.id,
+        });
+      }
+      return NextResponse.json(
+        { error: 'Referenced media was removed during save' },
+        { status: 500 }
+      );
+    }
 
     revalidatePlatformBlog(data.slug);
     return NextResponse.json(data, { status: 201 });

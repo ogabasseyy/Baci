@@ -3,6 +3,7 @@ import {
   breakpointWinnerAtPoint,
   type ColorScheme,
 } from './review-handoff-breakpoints';
+import { splitImportantClasses } from './review-handoff-important';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
 const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
@@ -126,35 +127,56 @@ function mergedAxis(
   return merged;
 }
 
+function tierWinnerAt(
+  important: ReadonlyMap<string, string>,
+  ordinary: ReadonlyMap<string, string>,
+  point: number,
+  scheme: ColorScheme
+): string | undefined {
+  return (
+    breakpointWinnerAtPoint(important, point, scheme) ??
+    breakpointWinnerAtPoint(ordinary, point, scheme)
+  );
+}
+
 function winnerIsZero(
-  winners: ReadonlyMap<string, string>,
+  important: ReadonlyMap<string, string>,
+  ordinary: ReadonlyMap<string, string>,
   point: number,
   scheme: ColorScheme
 ): boolean {
-  const winner = breakpointWinnerAtPoint(winners, point, scheme);
+  const winner = tierWinnerAt(important, ordinary, point, scheme);
   return winner !== undefined && !isNonZeroUtilityValue(sizeValue(winner));
 }
 
 function axisVerdict(
-  layers: SizeLayers,
+  important: SizeLayers,
+  ordinary: SizeLayers,
   axis: 'height' | 'width',
   scheme: ColorScheme
 ): AxisSizeVerdict {
-  const minLayers = axis === 'height' ? layers.minHeight : layers.minWidth;
-  const maxLayers = axis === 'height' ? layers.maxHeight : layers.maxWidth;
-  const merged = mergedAxis(layers, axis);
+  const minImportant =
+    axis === 'height' ? important.minHeight : important.minWidth;
+  const minOrdinary =
+    axis === 'height' ? ordinary.minHeight : ordinary.minWidth;
+  const maxImportant =
+    axis === 'height' ? important.maxHeight : important.maxWidth;
+  const maxOrdinary =
+    axis === 'height' ? ordinary.maxHeight : ordinary.maxWidth;
+  const mergedImportant = mergedAxis(important, axis);
+  const mergedOrdinary = mergedAxis(ordinary, axis);
   const coveredAt: boolean[] = [];
   const zeroAt: boolean[] = [];
   const maxZeroAt: boolean[] = [];
   const minRescuesAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const winner = breakpointWinnerAtPoint(merged, point, scheme);
+    const winner = tierWinnerAt(mergedImportant, mergedOrdinary, point, scheme);
     coveredAt.push(winner !== undefined);
     zeroAt.push(
       winner !== undefined && !isNonZeroUtilityValue(sizeValue(winner))
     );
-    maxZeroAt.push(winnerIsZero(maxLayers, point, scheme));
-    const minWinner = breakpointWinnerAtPoint(minLayers, point, scheme);
+    maxZeroAt.push(winnerIsZero(maxImportant, maxOrdinary, point, scheme));
+    const minWinner = tierWinnerAt(minImportant, minOrdinary, point, scheme);
     minRescuesAt.push(
       minWinner !== undefined && isNonZeroUtilityValue(sizeValue(minWinner))
     );
@@ -163,13 +185,15 @@ function axisVerdict(
 }
 
 function clipsAt(
-  layers: SizeLayers,
+  important: SizeLayers,
+  ordinary: SizeLayers,
   point: number,
   axis: 'x' | 'y',
   scheme: ColorScheme
 ): boolean {
-  const clipLayers = axis === 'x' ? layers.clipX : layers.clipY;
-  const winner = breakpointWinnerAtPoint(clipLayers, point, scheme);
+  const clipImportant = axis === 'x' ? important.clipX : important.clipY;
+  const clipOrdinary = axis === 'x' ? ordinary.clipX : ordinary.clipY;
+  const winner = tierWinnerAt(clipImportant, clipOrdinary, point, scheme);
   if (winner === undefined) return false;
   const value = OVERFLOW_PATTERN.exec(winner)?.[2] ?? '';
   return CLIP_OVERFLOW_VALUES.has(value);
@@ -189,16 +213,18 @@ export function sizeLayerVerdicts(
   classes: readonly string[],
   scheme: ColorScheme = 'light'
 ): SizeLayerVerdicts {
-  const layers = collectSizeLayers(classes);
+  const tiers = splitImportantClasses(classes);
+  const important = collectSizeLayers(tiers.important);
+  const ordinary = collectSizeLayers(tiers.ordinary);
   const clipsXAt: boolean[] = [];
   const clipsYAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    clipsXAt.push(clipsAt(layers, point, 'x', scheme));
-    clipsYAt.push(clipsAt(layers, point, 'y', scheme));
+    clipsXAt.push(clipsAt(important, ordinary, point, 'x', scheme));
+    clipsYAt.push(clipsAt(important, ordinary, point, 'y', scheme));
   }
   return {
-    height: axisVerdict(layers, 'height', scheme),
-    width: axisVerdict(layers, 'width', scheme),
+    height: axisVerdict(important, ordinary, 'height', scheme),
+    width: axisVerdict(important, ordinary, 'width', scheme),
     clipsXAt,
     clipsYAt,
   };

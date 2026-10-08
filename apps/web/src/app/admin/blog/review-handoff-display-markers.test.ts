@@ -22,6 +22,13 @@ describe('displayMarkers', () => {
       [false, false, true, false, false, false],
     ],
     [['max-md:hidden'], [true, true, false, false, false, false]],
+    [['block', 'hidden!'], ALL],
+    [['hidden!', 'block!'], ALL],
+    [
+      ['block', 'md:!hidden'],
+      [false, false, true, true, true, true],
+    ],
+    [['hidden', 'md:block!'], BELOW_MD],
   ])('reports display hiding per point: %s', (classes, expected) => {
     expect(displayMarkers(classes).hiddenAt).toEqual(expected);
   });
@@ -32,6 +39,9 @@ describe('displayMarkers', () => {
     [['md:block']],
     [['hover:block']],
     [['unhidden']],
+    [['hidden', 'block!']],
+    [['hidden', '!block']],
+    [['md:hidden', 'block!']],
   ])('reports no hiding without a hidden winner: %s', (classes) => {
     expect(displayMarkers(classes).hiddenAt).toEqual(NONE);
   });

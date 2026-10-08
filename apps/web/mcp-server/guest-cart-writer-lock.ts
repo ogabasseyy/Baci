@@ -16,9 +16,9 @@ import path from 'node:path';
 // Cross-process single-writer guard: the in-memory queues only serialize
 // operations within one process, so the cart directory itself carries an
 // exclusive lock. Claims are atomic (`wx`); heartbeats keep a live
-// holder's claim fresh, and takeovers additionally require the recorded
-// holder pid to be dead, so a stale timestamp alone can never elect two
-// owners when a fresh claim lands mid-takeover.
+// holder's claim fresh, and takeovers move aside only the exact stale
+// generation verified by a content sandwich, so a fresh claim landing
+// mid-takeover fails closed instead of electing two owners.
 const WRITER_LOCK_FILE = '.writer.lock';
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
@@ -34,29 +34,6 @@ function readLockContent(lockPath: string): string | null {
     return readFileSync(lockPath, 'utf8');
   } catch {
     return null;
-  }
-}
-
-function readHolderPid(lockPath: string): number | null {
-  try {
-    const pid = (JSON.parse(readFileSync(lockPath, 'utf8')) as { pid?: unknown })
-      ?.pid;
-    return typeof pid === 'number' && Number.isInteger(pid) && pid > 0
-      ? pid
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM means a live process we may not signal; any other failure
-    // (ESRCH, out-of-range pid) means no such process exists.
-    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
   }
 }
 
@@ -156,39 +133,63 @@ export function acquireWriterLock(directory: string): void {
     claim();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    let stale = true;
+    // Identity sandwich: read the claim around its mtime so a file
+    // replaced mid-read is detected. Only the exact stale generation we
+    // verified may be moved aside; anything else fails closed instead of
+    // risking a fresh claim being renamed away and electing two owners.
+    // (Pids are deliberately not consulted: they are meaningless across
+    // container restarts sharing this volume, which is exactly when
+    // crash recovery must work.)
+    let before: string | null = null;
+    let mtimeMs: number | null = null;
+    let after: string | null = null;
     try {
-      stale = Date.now() - statSync(lockPath).mtimeMs > WRITER_LOCK_STALE_MS;
-    } catch {
-      stale = true;
-    }
-    if (!stale) refuseSecondWriter(lockPath, directory);
-    // Liveness gate: only a dead holder's lock may be taken over. Moving
-    // the lock aside on staleness alone could steal a fresh claim written
-    // after our check and elect two owners; a live (possibly suspended)
-    // holder keeps its lock, and an unreadable holder fails closed.
-    const holderPid = readHolderPid(lockPath);
-    if (holderPid === null || isPidAlive(holderPid))
-      refuseSecondWriter(lockPath, directory);
-    // Dead holder: rename moves the stale lock aside in one step, and the
-    // exclusive re-claim below still decides between simultaneous
-    // takeovers, so exactly one process wins.
-    const staleSidePath = `${lockPath}.stale-${process.pid}`;
-    let renamed = false;
-    try {
-      renameSync(lockPath, staleSidePath);
-      renamed = true;
-    } catch {
-      // Lost the race (taken over or freshly claimed); the fresh claim
-      // below decides.
-    }
-    if (renamed) {
-      try {
-        unlinkSync(staleSidePath);
-      } catch {
-        /* A leftover side file is inert; the claim below decides. */
+      before = readLockContent(lockPath);
+      mtimeMs = before === null ? null : statSync(lockPath).mtimeMs;
+      after = readLockContent(lockPath);
+    } catch (readError) {
+      const code = (readError as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT') {
+        after = null;
+      } else if (isPermissionError(readError)) {
+        throw directoryNotWritableError(lockPath, readError);
+      } else {
+        throw readError;
       }
     }
+    if (after !== null) {
+      if (
+        before === null ||
+        before !== after ||
+        mtimeMs === null ||
+        Date.now() - mtimeMs <= WRITER_LOCK_STALE_MS
+      )
+        refuseSecondWriter(lockPath, directory);
+      // The verified stale claim: rename moves it aside in one step, and
+      // the exclusive re-claim below still decides between simultaneous
+      // takeovers, so exactly one process wins. A holder suspended past
+      // the stale window can briefly overlap a takeover; its heartbeat
+      // exits on wake instead of writing without the guarantee.
+      const staleSidePath = `${lockPath}.stale-${process.pid}`;
+      let renamed = false;
+      try {
+        renameSync(lockPath, staleSidePath);
+        renamed = true;
+      } catch {
+        // Lost the race (taken over or freshly claimed); the claim
+        // below decides.
+      }
+      if (renamed) {
+        try {
+          unlinkSync(staleSidePath);
+        } catch {
+          /* A leftover side file is inert; the claim below decides. */
+        }
+      }
+    }
+    // When the lock vanished mid-flight the owner released gracefully,
+    // so claim directly; the exclusive create still arbitrates racers
+    // and maps permission failures.
     try {
       claim();
     } catch (claimError) {

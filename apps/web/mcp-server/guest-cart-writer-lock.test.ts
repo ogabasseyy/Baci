@@ -68,18 +68,6 @@ it('takes over a stale writer lock', async () => {
   );
 });
 
-it('refuses a stale lock whose holder is still alive', async () => {
-  const root = await directory('guest-lock-suspended-');
-  const lock = path.join(root, '.writer.lock');
-  await writeFile(lock, JSON.stringify({ pid: process.pid }));
-  const old = new Date(Date.now() - 60_000);
-  await utimes(lock, old, old);
-  expect(() => acquireWriterLock(root)).toThrow(/Another MCP writer owns/);
-  await expect(readFile(lock, 'utf8')).resolves.toContain(
-    `"pid":${process.pid}`
-  );
-});
-
 it('allows reentrant acquisition in the same process', async () => {
   const root = await directory('guest-lock-reentrant-');
   acquireWriterLock(root);

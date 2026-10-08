@@ -20,6 +20,7 @@ import { prepareCartHandoff } from './cart-handoff';
 import { GuestCartStore } from './guest-cart-store';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
+import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
@@ -2657,33 +2658,17 @@ const httpServer = createServer(
   }
 );
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  // Free the guest-cart lock before draining: the replacement container
-  // starts without waiting out the stale-takeover window. In-flight cart
-  // writes during the drain are absolute-quantity last-wins either way.
-  releaseWriterLocks();
-  httpServer.close(() => process.exit(0));
-});
+// Graceful shutdown (see server-shutdown.ts): drain first, release the
+// guest-cart lock only once in-flight requests have finished.
+const gracefulShutdown = () =>
+  createGracefulShutdown({
+    closeServer: (done) => httpServer.close(done),
+    releaseLocks: releaseWriterLocks,
+    exit: (code) => process.exit(code),
+  })();
 
-process.on('SIGINT', () => {
-  console.log(
-    JSON.stringify({
-      type: 'lifecycle',
-      event: 'shutdown',
-      timestamp: new Date().toISOString(),
-    })
-  );
-  releaseWriterLocks();
-  httpServer.close(() => process.exit(0));
-});
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
 
 // Unhandled rejection handler (fail closed - log and continue)
 process.on('unhandledRejection', (reason) => {

@@ -208,7 +208,7 @@ until customer authorization and production readiness are verified.
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public Supabase key used under RLS for shopping tools |
 | `MCP_PUBLIC_ORIGIN` | No | Public HTTPS origin for proxied product images (default: `https://mcp.ogabassey.com`; set to the temporary tunnel origin for local ChatGPT QA) |
-| `MCP_TRUST_PROXY_REAL_IP` | Production Compose: yes | The server defaults to `false`. Set `true` only when the reverse proxy overwrites `X-Real-IP` on every request and the MCP port is reachable only through that proxy; otherwise set `false`. |
+| `MCP_TRUST_PROXY_REAL_IP` | Production Compose: yes | The server defaults to `false`. Set `true` only when the reverse proxy overwrites `X-Real-IP` on every request and the MCP port is reachable only through that proxy; otherwise set `false`. When `false` behind a proxy, rate limiting and the guest-cart creation quota key on the proxy socket address, so all callers share one bucket. |
 | `MCP_SEMANTIC_SEARCH_ENABLED` | No | Defaults to `false`. Enable only after applying the discovery migration, generating current vectors, and checking search evaluation results. |
 | `GEMINI_API_KEY` | For semantic search and catalog backfills | Private Gemini API key for `gemini-embedding-2`; never send it to ChatGPT or a browser. |
 | `MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS` | No | Explicitly forwarded by Compose; defaults to `false`. Set `true` only when checkout credentials and APIs are ready. |

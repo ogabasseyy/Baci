@@ -287,4 +287,34 @@ describe('preflight served gate', () => {
       await new Promise((resolve) => server.close(resolve));
     }
   });
+
+  it('requires declared uncovered markers on store pages', async () => {
+    const fixture = await setupOffline();
+    const marker = `<section data-pilot-lab-slot="hero-banner" data-pilot-lab-status="uncovered-consumer"><h2>hero-banner — uncovered consumer</h2></section>`;
+    const page = () => ({
+      bindings: [],
+      mounts: [],
+      path: '/pilot-lab/store/labstore',
+      surface: 'store',
+      uncovered: [{ slotId: 'hero-banner' }],
+    });
+    const check = (html) =>
+      fetchServedAgreement('http://127.0.0.1:1', {
+        arms: ['pilot'],
+        expectedBindings: [],
+        fetchImpl: async () =>
+          `<main data-pilot-lab-arm="pilot">${html}</main>`,
+        pages: [page()],
+        publicDir: fixture.publicDir,
+      });
+    const present = await check(marker);
+    expect(present.failures).toEqual([]);
+    expect(present.ok).toBe(true);
+    expect(present.coverage[0].uncovered).toEqual(['hero-banner']);
+    const dropped = await check('');
+    expect(dropped.ok).toBe(false);
+    expect(dropped.failures.join('\n')).toMatch(
+      /uncovered-consumer marker for slot "hero-banner" is absent/
+    );
+  });
 });

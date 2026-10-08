@@ -169,4 +169,26 @@ describe('preflight served agreement', () => {
       assertServedAgreement(unlinked, { arm: 'pilot' }).join('\n')
     ).toMatch(/has no preload link/);
   });
+
+  it('rejects a marked preload no mounted hero consumes', () => {
+    const html = labHtml({
+      arm: 'pilot',
+      generationId: 'e'.repeat(64),
+      tiers: unitTiers,
+    });
+    // Extra matching-media pilot preload for a stale binding: no section
+    // claims it, so it would pass byte verification unexamined.
+    const orphan = `<link rel="preload" as="image" href="/__pilot/stale.avif" imageSrcSet="/__pilot/stale.avif 48w" imageSizes="40px" media="(max-width: 768px)" fetchPriority="high" type="image/avif" data-pilot-lab-preload="pilot" data-pilot-lab-binding="${MERCHANT}/stale-s0"/>`;
+    const contaminated = String(html).replace('</main>', `${orphan}</main>`);
+    expect(
+      assertServedAgreement(contaminated, { arm: 'pilot' }).join('\n')
+    ).toMatch(/pairs with no mounted hero section/);
+    // Arm scoping: the same extra link marked for the control arm is
+    // invisible to the pilot verdict.
+    const foreign = contaminated.replace(
+      `data-pilot-lab-preload="pilot" data-pilot-lab-binding="${MERCHANT}/stale-s0"`,
+      `data-pilot-lab-preload="control" data-pilot-lab-binding="${MERCHANT}/stale-s0"`
+    );
+    expect(assertServedAgreement(foreign, { arm: 'pilot' })).toEqual([]);
+  });
 });

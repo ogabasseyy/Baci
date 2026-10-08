@@ -25,6 +25,27 @@ export function assertServedAgreement(html, { arm }) {
     (section) => section.binding != null && !section.status
   );
   const docLinks = extractLabPreloads(html).filter((link) => link.arm === arm);
+  // Orphan rejection: every marked preload (data-pilot-lab-binding set)
+  // must be consumed by exactly one mounted hero section. The loop below
+  // only validates links selected by existing sections, so without this
+  // an extra preload for a stale or foreign binding would pass byte
+  // verification unexamined and contaminate the comparison with an
+  // unnecessary download. Unmarked links (fonts, third-party hints)
+  // are out of scope: only lab-marked links carry the pairing identity.
+  // A marked link counts as consumed when a hero section claims its
+  // binding even before picture pairing — a picture-less section already
+  // fails at mount-coverage, so the orphan verdict stays single-sourced.
+  const claimedBindings = new Set(
+    heroSections.map((section) => section.binding)
+  );
+  for (const link of docLinks) {
+    if (link.binding == null || claimedBindings.has(link.binding)) {
+      continue;
+    }
+    failures.push(
+      `${name}: marked preload for ${link.binding} pairs with no mounted hero section`
+    );
+  }
   for (const section of heroSections) {
     const pictures = sectionPictures(section.html).filter((picture) =>
       ['hero-slide', 'gallery-hero', 'original-hero'].includes(

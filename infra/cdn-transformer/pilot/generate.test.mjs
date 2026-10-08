@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MIN_FREE_BYTES } from './constants.mjs';
 import { removeOwnedStaging as realRemoveOwnedStaging } from './disk-guards.mjs';
+import { acquireEncoderLock } from './encoder-lock.mjs';
 import { runJob } from './generate-job.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { loadGeneration } from './manifest-store.mjs';
@@ -111,6 +112,27 @@ test('reruns reuse validated generations', async () => {
   const second = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
   assert.equal(second.ok, 1);
   assert.equal(second.reused, 1);
+});
+
+test('a run on a lock-held root fails fast instead of overlapping', async () => {
+  const { inputRoot, outputRoot } = await setup();
+  const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+  const inventoryPath = await writeInventory(inputRoot, records);
+  // Pre-create the confined output layout the run expects, then hold the
+  // root lock the way an overlapping generate.mjs invocation would.
+  await mkdir(outputRoot, { recursive: true });
+  const held = await acquireEncoderLock(outputRoot);
+  try {
+    await assert.rejects(
+      runPilotGeneration({ inputRoot, inventoryPath, outputRoot }),
+      /encoder lock/
+    );
+  } finally {
+    await held.release();
+  }
+  // The failed contender leaves the root usable: the next run proceeds.
+  const summary = await runPilotGeneration({ inputRoot, inventoryPath, outputRoot });
+  assert.equal(summary.ok, 1);
 });
 
 test('a failing job does not block the batch', async () => {

@@ -3,18 +3,16 @@ import {
   MOBILE_HERO_IMAGE_SIZES,
   MOBILE_HERO_SOURCE_MEDIA,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
+import type { PilotLabArm } from '@/lib/merchant-image-variant-pilot/lab-arm';
 import {
   isPilotLabEnabled,
   type PilotLabConfig,
 } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { labImageGeometry } from '@/lib/merchant-image-variant-pilot/lab-image-geometry';
 import type { PilotBindingStatus } from '@/lib/merchant-image-variant-pilot/lab-index';
-import {
-  labImageGeometry,
-  type PilotLabArm,
-  PilotLabMobileMount,
-  PilotLabNotOptimized,
-  PilotLabPictureMount,
-} from '@/lib/merchant-image-variant-pilot/lab-mount';
+import { PilotLabMobileMount } from '@/lib/merchant-image-variant-pilot/lab-mobile-mount';
+import { PilotLabNotOptimized } from '@/lib/merchant-image-variant-pilot/lab-not-optimized';
+import { PilotLabPictureMount } from '@/lib/merchant-image-variant-pilot/lab-picture-mount';
 import {
   projectControlNextImage,
   projectPilotNextImage,

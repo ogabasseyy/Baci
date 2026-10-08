@@ -262,7 +262,7 @@ describe('getLabConfig', () => {
     await expect(getLabConfig()).rejects.toThrow(/operator JSON budget/);
   });
 
-  it('reloads on frozen-input edits and pins the mtime residual', async () => {
+  it('reloads on frozen-input edits, even same-size same-mtime rewrites', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
@@ -281,12 +281,13 @@ describe('getLabConfig', () => {
     await utimes(inventoryPath, pinned, pinned);
     const second = await getLabConfig();
     expect(second).not.toBe(first);
-    // Same-size rewrite with a pinned mtime keeps serving the cached
-    // config until restart (accepted lab residual, same class as the
-    // staged-verify fingerprint skip).
+    // Same-size rewrite with a pinned mtime still reloads: the write
+    // itself bumps ctime, which the fingerprint binds, so utimens
+    // cannot hide an operator edit behind a frozen mtime.
     await writeFile(inventoryPath, ` ${text}`);
     await utimes(inventoryPath, pinned, pinned);
-    await expect(getLabConfig()).resolves.toBe(second);
+    const third = await getLabConfig();
+    expect(third).not.toBe(second);
   });
 
   it('dedupes concurrent loads per frozen input without cross-key mixups', async () => {

@@ -192,6 +192,17 @@ async function setupOfflineAssets(assets) {
       }))
     )
   );
+  // The sample pin is mandatory: every fixture freezes its own matrix so
+  // green-path runs always exercise the pinned mode.
+  const samplePath = join(base, 'sample.json');
+  await writeFile(
+    samplePath,
+    JSON.stringify(
+      staged.map(
+        (entry) => `${entry.merchantId}/${entry.assetId}/${entry.slot}`
+      )
+    )
+  );
   return {
     acceptancesPath,
     assets: staged,
@@ -200,6 +211,7 @@ async function setupOfflineAssets(assets) {
     inventoryPath,
     outputRoot,
     publicDir,
+    samplePath,
   };
 }
 
@@ -220,6 +232,7 @@ async function setupOffline() {
 function offlineOptions(fixture, overrides = {}) {
   return {
     acceptances: fixture.acceptancesPath,
+    expectSample: fixture.samplePath,
     inputRoot: fixture.inputRoot,
     inventory: fixture.inventoryPath,
     outputRoot: fixture.outputRoot,
@@ -265,7 +278,7 @@ describe('preflight offline gate', () => {
     ).toBe(true);
   });
 
-  it('pins the inventory to the frozen sample matrix when provided', async () => {
+  it('pins the inventory to the frozen sample matrix', async () => {
     const fixture = await setupOffline();
     const frozen = [`${MERCHANT}/logo-a/header-logo`];
     const samplePath = join(fixture.base, 'sample.json');
@@ -320,6 +333,20 @@ describe('preflight offline gate', () => {
       offlineOptions(fixture, { expectSample: samplePath })
     );
     expect(empty.ok).toBe(false);
+  });
+
+  it('refuses an unpinned run: no sample pin, no green preflight', async () => {
+    const fixture = await setupOffline();
+    const unpinned = await runOfflinePreflight(
+      offlineOptions(fixture, { expectSample: null })
+    );
+    expect(unpinned.ok).toBe(false);
+    expect(unpinned.failures.join('\n')).toMatch(/sample pin is required/);
+    const missing = await runOfflinePreflight({
+      ...offlineOptions(fixture),
+      expectSample: undefined,
+    });
+    expect(missing.ok).toBe(false);
   });
 
   it('rejects orphan acceptances for bindings outside the inventory', async () => {
@@ -454,6 +481,12 @@ describe('preflight offline gate', () => {
     const assetRecords = await readInventory(badAsset);
     assetRecords[0].assetId = 'has space!';
     await writeInventory(badAsset, assetRecords);
+    // Re-freeze the pin around the malformed key so this case exercises
+    // inventory validation, not the sample-pin guard.
+    await writeFile(
+      badAsset.samplePath,
+      JSON.stringify([`${MERCHANT}/has space!/header-logo`])
+    );
     const badAssetReport = await runOfflinePreflight(offlineOptions(badAsset));
     expect(badAssetReport.ok).toBe(false);
     expect(badAssetReport.failures.join('\n')).toMatch(/malformed/);

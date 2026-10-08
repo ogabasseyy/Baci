@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,7 @@ import {
   verifyCacheProvenance,
   verifyHarConnectivity,
   verifyHarIterations,
+  verifyScreenshotProvenance,
 } from './merchant-image-pilot-settings-helpers.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -254,5 +256,99 @@ describe('merchant-image-pilot-settings helpers', () => {
       ]).error
     ).toMatch(/does not match the measured navigation/);
     expect(verifyCacheProvenance(valid, [{}]).error).toMatch(/no _meta\.runId/);
+  });
+
+  it('binds screenshot bytes to the measured HAR navigation', async () => {
+    const pages = [
+      {
+        _meta: { runId: 'run-navigation-1' },
+        startedDateTime: '2026-10-04T00:10:00.000Z',
+      },
+    ];
+    const shot = await fixturePng();
+    const sha = createHash('sha256').update(shot).digest('hex');
+    const valid = JSON.stringify({
+      capturedAt: '2026-10-04T00:10:30.000Z',
+      event: 'screenshot-capture',
+      runId: 'run-navigation-1',
+      screenshotSha256: sha,
+      tool: 'browsertime',
+    });
+    expect(verifyScreenshotProvenance(valid, pages, shot, 'shot.json')).toEqual(
+      {
+        ok: true,
+        summary: 'browsertime@2026-10-04T00:10:30.000Z',
+      }
+    );
+    expect(
+      verifyScreenshotProvenance(valid, [...pages, ...pages], shot, 'shot.json')
+        .error
+    ).toMatch(/exactly one HAR iteration/);
+    // Unreadable, malformed, and misshapen artifacts fail closed.
+    expect(
+      verifyScreenshotProvenance(null, pages, shot, 'missing.json').error
+    ).toMatch(/cannot read/);
+    expect(
+      verifyScreenshotProvenance('{nope', pages, shot, 'shot.json').error
+    ).toMatch(/not valid JSON/);
+    for (const [label, patch] of [
+      ['event', { event: 'profile-reset' }],
+      ['tool', { tool: '' }],
+      ['run', { runId: '' }],
+      ['run-long', { runId: 'r'.repeat(129) }],
+      ['sha', { screenshotSha256: 'zz' }],
+      ['time', { capturedAt: 'yesterday' }],
+    ]) {
+      const broken = JSON.stringify({ ...JSON.parse(valid), ...patch });
+      expect(
+        verifyScreenshotProvenance(broken, pages, shot, 'shot.json').ok,
+        label
+      ).toBe(false);
+    }
+    // A stale screenshot from another iteration cannot certify this HAR:
+    // different bytes fail the hash, a foreign runId fails the binding.
+    const other = Buffer.from('not the measured screenshot');
+    expect(
+      verifyScreenshotProvenance(valid, pages, other, 'shot.json').error
+    ).toMatch(/does not match the supplied screenshot bytes/);
+    expect(
+      verifyScreenshotProvenance(
+        valid,
+        [
+          {
+            _meta: { runId: 'run-navigation-2' },
+            startedDateTime: '2026-10-04T00:10:00.000Z',
+          },
+        ],
+        shot,
+        'shot.json'
+      ).error
+    ).toMatch(/does not match the measured navigation/);
+    expect(
+      verifyScreenshotProvenance(valid, [{}], shot, 'shot.json').error
+    ).toMatch(/no _meta\.runId/);
+    // Captures outside the navigation window prove nothing about it.
+    const predated = JSON.stringify({
+      ...JSON.parse(valid),
+      capturedAt: '2026-10-04T00:09:00.000Z',
+    });
+    expect(
+      verifyScreenshotProvenance(predated, pages, shot, 'shot.json').error
+    ).toMatch(/predates/);
+    const stale = JSON.stringify({
+      ...JSON.parse(valid),
+      capturedAt: '2026-10-04T02:30:00.000Z',
+    });
+    expect(
+      verifyScreenshotProvenance(stale, pages, shot, 'shot.json').error
+    ).toMatch(/stale/);
+    expect(
+      verifyScreenshotProvenance(
+        valid,
+        [{ _meta: { runId: 'run-navigation-1' } }],
+        shot,
+        'shot.json'
+      ).error
+    ).toMatch(/no startedDateTime/);
   });
 });

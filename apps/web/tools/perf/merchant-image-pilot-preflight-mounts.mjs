@@ -24,11 +24,12 @@ function checkMountKind(section, mount, { arm, origin, surface }) {
 
 export function assertServedMountCoverage(
   html,
-  { arm, expectedMounts, origin, surface }
+  { arm, expectedMounts, expectedUncovered = [], origin, surface }
 ) {
   const failures = [];
   const mounted = [];
   const reported = [];
+  const uncovered = [];
   const sections = extractLabSections(html);
   const byBinding = new Map(
     sections
@@ -88,5 +89,26 @@ export function assertServedMountCoverage(
     }
     mounted.push(mount.binding);
   }
-  return { failures, mounted, reported };
+  // Declared uncovered consumers: the registry names committed-plan slots
+  // the sample does not exercise, and the store page renders an explicit
+  // uncovered-consumer marker for each. A silently dropped marker would
+  // exclude the consumer from every denominator without a trace, so each
+  // expected marker must render (status + slot identity; markers carry
+  // no binding by design).
+  for (const entry of expectedUncovered ?? []) {
+    const name = `mount-coverage:${entry.slotId}`;
+    const marker = sections.find(
+      (section) =>
+        section.status === 'uncovered-consumer' &&
+        section.slotId === entry.slotId
+    );
+    if (!marker) {
+      failures.push(
+        `${name}: expected uncovered-consumer marker for slot "${entry.slotId}" is absent from the served ${surface} ${arm} page`
+      );
+      continue;
+    }
+    uncovered.push(entry.slotId);
+  }
+  return { failures, mounted, reported, uncovered };
 }

@@ -61,15 +61,15 @@ export function labRequestOrigin(headers: { host: string | null }): string {
     }
     // Never reflect a request-supplied subdomain: on a shared deployment
     // with the lab flag on, Host evil-sub.localhost would otherwise be
-    // embedded in rendered absolute image URLs. Loopback IPs have no
-    // subdomains and echo unchanged; *.localhost collapses to bare
-    // localhost with the request's port (lab routes are path-based,
-    // so no legitimate flow needs the subdomain; scheme stays pinned).
+    // embedded in rendered absolute image URLs. A collapsed subdomain is
+    // a synthesized host, so it gets the synthesized canonical origin —
+    // never the request's port (Host x.localhost:6666 must not mint
+    // image URLs for an attacker-chosen localhost port). Bare loopback
+    // names and IPs echo unchanged: the client literally addressed that
+    // host:port, which is what makes local runs on any port work.
     const hostname = url.hostname.toLowerCase();
     if (hostname !== 'localhost' && hostname.endsWith('.localhost')) {
-      return new URL(
-        `${url.protocol}//localhost${url.port ? `:${url.port}` : ''}`
-      ).origin;
+      return LAB_LOOPBACK_ORIGIN;
     }
     return url.origin;
   } catch {

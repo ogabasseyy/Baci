@@ -12,6 +12,22 @@ describe('preflight args', () => {
     expect(() => parsePreflightArgs(['--inventory', 'inv.json'])).toThrow(
       /acceptances.*required|missing required/i
     );
+    // The sample pin is mandatory: omitting --expect-sample aborts the
+    // parse instead of running an unpinned gate.
+    expect(() =>
+      parsePreflightArgs([
+        '--inventory',
+        'inv.json',
+        '--acceptances',
+        'acc.json',
+        '--input-root',
+        'in',
+        '--output-root',
+        'out',
+        '--public-dir',
+        'pub',
+      ])
+    ).toThrow(/missing required flag --expect-sample/);
     const parsed = parsePreflightArgs([
       '--inventory',
       'inv.json',
@@ -23,12 +39,14 @@ describe('preflight args', () => {
       'out',
       '--public-dir',
       'pub',
+      '--expect-sample',
+      'sample.json',
       '--origin',
       'http://localhost:3000',
     ]);
     expect(parsed).toMatchObject({
       acceptances: 'acc.json',
-      expectSample: null,
+      expectSample: 'sample.json',
       inventory: 'inv.json',
       origin: 'http://localhost:3000',
       recipe: RECIPE_ID,
@@ -92,6 +110,8 @@ describe('preflight args', () => {
       'out',
       '--public-dir',
       'pub',
+      '--expect-sample',
+      'sample.json',
     ];
     expect(parsePreflightArgs(base).timeoutMs).toBe(10_000);
     expect(

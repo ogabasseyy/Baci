@@ -1,14 +1,12 @@
 import { HeroMobileCarousel } from '@/components/storefront/ogabassey/components/hero-mobile-carousel';
+import type { PilotLabArm } from './lab-arm';
 import type { PilotLabConfig } from './lab-config';
 import { labHeroSlides, labHeroSlot } from './lab-fixtures';
+import { PilotLabFlightPreload } from './lab-flight-preload';
 import { LabHeroMobileCarousel } from './lab-hero-clone';
 import type { PilotBindingStatus } from './lab-index';
-import {
-  type PilotLabArm,
-  PilotLabFlightPreload,
-  PilotLabNotOptimized,
-  PilotLabScannerLink,
-} from './lab-mount';
+import { PilotLabNotOptimized } from './lab-not-optimized';
+import { PilotLabScannerLink } from './lab-scanner-link';
 import { deriveControlHeroHint } from './lab-store-hero-hint';
 import type { PilotLabStore } from './lab-store-registry';
 import { resolveBinding } from './lab-store-resolve';

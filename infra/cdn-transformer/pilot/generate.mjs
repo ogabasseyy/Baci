@@ -11,6 +11,7 @@ import {
 } from './constants.mjs';
 import { createRunToken } from './claims.mjs';
 import { parseCliArgs } from './cli-args.mjs';
+import { acquireEncoderLock } from './encoder-lock.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { PilotGenerateError, runJob } from './generate-job.mjs';
 
@@ -66,9 +67,18 @@ export async function runPilotGeneration({
       throw new PilotGenerateError('unsafe-output-directory', `${child} must be a confined directory, not a symlink`);
     }
   }
+  // Cross-process encode serialization: the worker pool only serializes
+  // within this process, so the run holds the output-root-wide encoder
+  // lock for its whole duration. A contender on the same root fails
+  // fast instead of encoding concurrently.
+  const encoderLock = await acquireEncoderLock(outputRoot);
   const results = [];
-  for (const job of jobs) {
-    results.push(await runJob({ inputRoot, job, minFreeBytes: floor, outputRoot }));
+  try {
+    for (const job of jobs) {
+      results.push(await runJob({ inputRoot, job, minFreeBytes: floor, outputRoot }));
+    }
+  } finally {
+    await encoderLock.release();
   }
   const ok = results.filter((result) => result.status === 'ok').length;
   const reused = results.filter((result) => result.reused).length;

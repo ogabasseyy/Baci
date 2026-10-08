@@ -13,14 +13,21 @@
 // Usage:
 //   node merchant-image-pilot-preflight.mjs --inventory <path> \
 //     --acceptances <path> --input-root <dir> --output-root <dir> \
-//     --public-dir <dir> [--recipe <recipe-id>] [--origin <url> \
+//     --public-dir <dir> --expect-sample <frozen-keys.json> \
+//     [--recipe <recipe-id>] [--origin <url> \
 //     --store-map <merchantId=slug,...>] [--write-mounts <path>]
-//     [--expect-sample <frozen-keys.json>]
 //
-// --expect-sample pins the planned merchant/asset/slot matrix (a JSON
-// array of "merchantId/assetId/slotId" keys): expectations derive from
-// the supplied inventory, so without the pin a silently reduced sample
-// would report ok:true on weaker evidence. Evidence runs must pass it.
+// --expect-sample is REQUIRED: it pins the planned merchant/asset/slot
+// matrix (a JSON array of "merchantId/assetId/slotId" keys). Expectations
+// derive from the supplied inventory, so without the pin a silently
+// reduced sample would report ok:true on weaker evidence. Pass
+// merchant-image-pilot-frozen-sample.json for the handoff sample; a
+// deliberate resample re-freezes that file, never omits the flag.
+//
+// --lab-stores overrides the committed lab store mirror
+// (merchant-image-pilot-lab-stores.json, pinned by test to
+// lab-store-registry.ts): per-merchant declared uncovered slots the
+// served gate requires as explicit markers on each store page.
 //
 // --write-mounts persists the offline accepted list for downstream gates
 // (the browser readiness gate consumes it as --mounts): written only when
@@ -53,7 +60,8 @@
 //   preflight-served-checks.mjs descriptors, purity, response bytes
 //   preflight-served.mjs        served gate orchestration
 import { rm, writeFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   parsePreflightArgs,
   parseStoreMap,
@@ -76,6 +84,37 @@ export { assertManifestContract } from './merchant-image-pilot-preflight-manifes
 export { assertServedMountCoverage } from './merchant-image-pilot-preflight-mounts.mjs';
 export { runOfflinePreflight } from './merchant-image-pilot-preflight-offline.mjs';
 export { fetchServedAgreement } from './merchant-image-pilot-preflight-served.mjs';
+
+// Committed mirror of the lab store registry (lab-store-registry.ts):
+// per-merchant declared uncovered slots the served gate requires as
+// explicit markers. Pinned by test to the TS source of truth.
+const DEFAULT_LAB_STORES = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'merchant-image-pilot-lab-stores.json'
+);
+
+async function readLabStores(path) {
+  const parsed = await readJson(path);
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.merchantId === 'string' &&
+        Array.isArray(entry.uncoveredSlots) &&
+        entry.uncoveredSlots.every(
+          (slot) =>
+            slot && typeof slot === 'object' && typeof slot.slotId === 'string'
+        )
+    )
+  ) {
+    throw new Error(
+      `lab stores mirror ${path} must be an array of {merchantId, uncoveredSlots:[{slotId}]}`
+    );
+  }
+  return new Map(parsed.map((entry) => [entry.merchantId, entry]));
+}
 
 export async function runPreflight(options) {
   const offline = await runOfflinePreflight(options);
@@ -163,6 +202,21 @@ export async function runPreflight(options) {
       served: null,
     };
   }
+  let labStores;
+  try {
+    labStores = await readLabStores(options.labStores ?? DEFAULT_LAB_STORES);
+  } catch (error) {
+    return {
+      accepted: offline.accepted,
+      checks: offline.checks,
+      failures: [
+        ...offline.failures,
+        `served:lab-stores: ${error instanceof Error ? error.message : String(error)}`,
+      ],
+      ok: false,
+      served: null,
+    };
+  }
   const bindingsFor = (merchantId) =>
     inventory
       .filter((record) => record.merchantId === merchantId)
@@ -181,6 +235,7 @@ export async function runPreflight(options) {
       ),
       path: `/pilot-lab/store/${storeMap[merchantId]}`,
       surface: 'store',
+      uncovered: labStores.get(merchantId)?.uncoveredSlots ?? [],
     })),
   ];
   const served = await fetchServedAgreement(options.origin, {

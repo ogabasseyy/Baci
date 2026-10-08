@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +38,22 @@ const DATED_PAGE = {
   title: 'u run 1',
 };
 
+async function screenshotProvenanceArg(dir, pngBytes, overrides = {}) {
+  const path = join(dir, `shot-${Math.random().toString(36).slice(2)}.json`);
+  await writeFile(
+    path,
+    JSON.stringify({
+      capturedAt: '2026-10-04T00:10:30.000Z',
+      event: 'screenshot-capture',
+      runId: 'run-navigation-1',
+      screenshotSha256: createHash('sha256').update(pngBytes).digest('hex'),
+      tool: 'browsertime',
+      ...overrides,
+    })
+  );
+  return `--screenshot-provenance=${path}`;
+}
+
 describe('merchant-image-pilot-settings gate', () => {
   it('fails closed on mismatched effective settings', async () => {
     // End-to-end through the CLI: a natively-shaped HAR must fail a 4G
@@ -64,7 +81,9 @@ describe('merchant-image-pilot-settings gate', () => {
         },
       })
     );
-    await writeFile(pngPath, await pngBuffer(750, 1334));
+    const pngBytes = await pngBuffer(750, 1334);
+    await writeFile(pngPath, pngBytes);
+    const shot = await screenshotProvenanceArg(dir, pngBytes);
     await writeFile(
       lhPath,
       JSON.stringify({
@@ -124,6 +143,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-viewport=375x667',
       '--expect-dpr=2',
       provenance,
+      shot,
     ]);
     expect(harOnly.error).toBe(null);
     expect(harOnly.stdout).toMatch(/lighthouse\.skipped/);
@@ -136,6 +156,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-viewport=375x668',
       '--expect-dpr=2',
       provenance,
+      shot,
     ]);
     expect(rounded.error).toBe(null);
     const wrongDpr = await run([
@@ -166,6 +187,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-viewport=375x667',
       '--expect-dpr=2',
       provenance,
+      shot,
       '--expect-form-factor=mobile',
       '--expect-throttling-method=simulate',
       '--expect-lh-viewport=412x823',
@@ -184,6 +206,7 @@ describe('merchant-image-pilot-settings gate', () => {
       '--expect-viewport=375x667',
       '--expect-dpr=2',
       provenance,
+      shot,
       '--expect-form-factor=mobile',
       '--expect-throttling-method=simulate',
       '--expect-lh-viewport=412x823',
@@ -238,7 +261,7 @@ describe('merchant-image-pilot-settings gate', () => {
   describe('merchant-image-pilot-settings cache evidence', () => {
     async function runWithEntries(
       entries,
-      { extra = [], pages, provenance, provenanceRaw } = {}
+      { extra = [], pages, provenance, provenanceRaw, shot = {}, shotRaw } = {}
     ) {
       const dir = await mkdtemp(join(tmpdir(), 'pilot-settings-cache-'));
       const harPath = join(dir, 'browsertime.har');
@@ -271,10 +294,13 @@ describe('merchant-image-pilot-settings gate', () => {
           },
         })
       );
-      await writeFile(pngPath, await pngBuffer(750, 1334));
+      const shotBytes = await pngBuffer(750, 1334);
+      await writeFile(pngPath, shotBytes);
       // Provenance is a runner artifact file: {} writes a valid one bound
       // to the dated pages, a string passes through literally (bogus
-      // paths), and provenanceRaw writes non-JSON bytes.
+      // paths), and provenanceRaw writes non-JSON bytes. Screenshots bind
+      // by default (the geometry gate requires it); shot:false omits the
+      // binding for the missing-provenance case.
       const provenanceArgs = [];
       if (typeof provenance === 'string') {
         provenanceArgs.push(`--cache-provenance=${provenance}`);
@@ -285,6 +311,18 @@ describe('merchant-image-pilot-settings gate', () => {
         const rawPath = join(dir, 'reset-raw.json');
         await writeFile(rawPath, provenanceRaw);
         provenanceArgs.push(`--cache-provenance=${rawPath}`);
+      }
+      if (typeof shot === 'string') {
+        provenanceArgs.push(`--screenshot-provenance=${shot}`);
+      } else if (shot !== false) {
+        provenanceArgs.push(
+          await screenshotProvenanceArg(dir, shotBytes, shot ?? {})
+        );
+      }
+      if (shotRaw !== undefined) {
+        const rawPath = join(dir, 'shot-raw.json');
+        await writeFile(rawPath, shotRaw);
+        provenanceArgs.push(`--screenshot-provenance=${rawPath}`);
       }
       const { execFile } = await import('node:child_process');
       const report = await new Promise((resolve) => {
@@ -419,6 +457,57 @@ describe('merchant-image-pilot-settings gate', () => {
       });
       expect(undated.error).not.toBe(null);
       expect(undated.report.failures.join('\n')).toMatch(/no startedDateTime/);
+    });
+
+    it('requires the screenshot to bind to the measured HAR navigation', async () => {
+      // A stale DPR-2 screenshot from another iteration must not certify
+      // this HAR: unbound, foreign-run, byte-mismatched, and stale
+      // captures all fail the geometry gate.
+      const missing = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+        shot: false,
+      });
+      expect(missing.error).not.toBe(null);
+      expect(missing.report.failures.join('\n')).toMatch(/har\.geometry/);
+      expect(missing.report.failures.join('\n')).toMatch(
+        /no screenshot provenance/
+      );
+      const foreign = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+        shot: { runId: 'run-navigation-2' },
+      });
+      expect(foreign.error).not.toBe(null);
+      expect(foreign.report.failures.join('\n')).toMatch(
+        /does not match the measured navigation/
+      );
+      const swapped = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+        shot: { screenshotSha256: '0'.repeat(64) },
+      });
+      expect(swapped.error).not.toBe(null);
+      expect(swapped.report.failures.join('\n')).toMatch(
+        /does not match the supplied screenshot bytes/
+      );
+      const stale = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+        shot: { capturedAt: '2026-10-04T02:30:00.000Z' },
+      });
+      expect(stale.error).not.toBe(null);
+      expect(stale.report.failures.join('\n')).toMatch(/stale/);
+      const bogus = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+        shot: 'browsertime-screenshot-default',
+      });
+      expect(bogus.error).not.toBe(null);
+      expect(bogus.report.failures.join('\n')).toMatch(/cannot read/);
+      const bound = await runWithEntries([{ status: 200 }], {
+        provenance: {},
+      });
+      expect(bound.error).toBe(null);
+      expect(bound.report.ok).toBe(true);
+      expect(bound.report.recorded.screenshotProvenance).toBe(
+        'browsertime@2026-10-04T00:10:30.000Z'
+      );
     });
 
     it('records the attested browser executable separately from the emulated UA', async () => {

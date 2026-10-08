@@ -72,6 +72,34 @@ describe('preflight served mount coverage', () => {
     ]);
   });
 
+  it('requires declared uncovered-consumer markers on store pages', () => {
+    const marker = `<section data-pilot-lab-slot="hero-banner" data-pilot-lab-status="uncovered-consumer"><h2>hero-banner — uncovered consumer</h2></section>`;
+    const html = `<main data-pilot-lab-arm="pilot">${marker}</main>`;
+    const check = (page) =>
+      assertServedMountCoverage(page, {
+        arm: 'pilot',
+        expectedMounts: [],
+        expectedUncovered: [{ slotId: 'hero-banner' }],
+        origin: 'http://localhost:3129',
+        surface: 'store',
+      });
+    const present = check(html);
+    expect(present.failures).toEqual([]);
+    expect(present.uncovered).toEqual(['hero-banner']);
+    // A silently dropped marker hides the consumer from every
+    // denominator: the gate fails instead of certifying the gap away.
+    const dropped = check(`<main data-pilot-lab-arm="pilot"></main>`);
+    expect(dropped.failures.join('\n')).toMatch(
+      /uncovered-consumer marker for slot "hero-banner" is absent/
+    );
+    expect(dropped.uncovered).toEqual([]);
+    // A marker for the wrong slot does not satisfy the declaration.
+    const wrong = check(
+      `<main data-pilot-lab-arm="pilot">${marker.replaceAll('hero-banner', 'product-card')}</main>`
+    );
+    expect(wrong.failures.join('\n')).toMatch(/is absent/);
+  });
+
   it('binds store card coverage to the selected card, never a filler', () => {
     const origin = 'http://localhost:3129';
     const mount = {

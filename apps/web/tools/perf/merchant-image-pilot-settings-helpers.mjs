@@ -1,5 +1,6 @@
 // Pure parse/extract helpers for the pilot effective-settings gate.
 // Shared by the HAR and Lighthouse checks; no I/O, no subprocesses.
+import { createHash } from 'node:crypto';
 import {
   parseArgs as parseStrictArgs,
   SETTINGS_CLI_OPTIONS,
@@ -241,6 +242,110 @@ export function verifyCacheProvenance(text, pages, sourceLabel) {
     };
   }
   return { ok: true, summary: `${artifact.tool}@${artifact.resetAt}` };
+}
+
+// Screenshot/HAR navigation binding: the geometry gate compares PNG
+// dimensions against the HAR's expected viewport/DPR, so without a
+// same-navigation binding a stale screenshot from another iteration
+// (e.g. DPR-2) can certify the wrong HAR (e.g. DPR-1). The runner
+// artifact binds the exact screenshot bytes (sha256) to the HAR page's
+// single-use _meta.runId within the capture window.
+export function verifyScreenshotProvenance(
+  text,
+  pages,
+  screenshotBytes,
+  sourceLabel
+) {
+  if (text === null || text === undefined) {
+    return {
+      error: `cannot read screenshot-provenance artifact ${sourceLabel}`,
+      ok: false,
+    };
+  }
+  let artifact;
+  try {
+    artifact = JSON.parse(String(text));
+  } catch {
+    return {
+      error: 'screenshot-provenance artifact is not valid JSON',
+      ok: false,
+    };
+  }
+  if (
+    !artifact ||
+    typeof artifact !== 'object' ||
+    artifact.event !== 'screenshot-capture' ||
+    typeof artifact.tool !== 'string' ||
+    artifact.tool.length === 0 ||
+    typeof artifact.runId !== 'string' ||
+    artifact.runId.length === 0 ||
+    artifact.runId.length > 128 ||
+    typeof artifact.screenshotSha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/.test(artifact.screenshotSha256) ||
+    typeof artifact.capturedAt !== 'string' ||
+    !Number.isFinite(Date.parse(artifact.capturedAt))
+  ) {
+    return {
+      error:
+        'screenshot-provenance artifact must be a runner screenshot-capture record {event, tool, runId, screenshotSha256, capturedAt}',
+      ok: false,
+    };
+  }
+  if (pages?.length > 1) {
+    return {
+      error: 'one screenshot can certify exactly one HAR iteration',
+      ok: false,
+    };
+  }
+  const pageRunId = pages?.[0]?._meta?.runId;
+  if (typeof pageRunId !== 'string' || pageRunId.length === 0) {
+    return {
+      error:
+        'screenshot-provenance cannot bind: HAR page carries no _meta.runId',
+      ok: false,
+    };
+  }
+  if (pageRunId !== artifact.runId) {
+    return {
+      error:
+        'screenshot-provenance runId does not match the measured navigation: one screenshot certifies exactly one navigation',
+      ok: false,
+    };
+  }
+  const actual = createHash('sha256').update(screenshotBytes).digest('hex');
+  if (actual !== artifact.screenshotSha256) {
+    return {
+      error:
+        'screenshot-provenance sha256 does not match the supplied screenshot bytes',
+      ok: false,
+    };
+  }
+  const starts = (pages ?? [])
+    .map((page) => Date.parse(page?.startedDateTime))
+    .filter(Number.isFinite);
+  if (starts.length === 0) {
+    return {
+      error:
+        'screenshot-provenance cannot bind: HAR pages carry no startedDateTime',
+      ok: false,
+    };
+  }
+  const earliest = Math.min(...starts);
+  const capturedAt = Date.parse(artifact.capturedAt);
+  if (capturedAt < earliest) {
+    return {
+      error: 'screenshot-provenance capture predates the measured navigation',
+      ok: false,
+    };
+  }
+  if (capturedAt - earliest > 3_600_000) {
+    return {
+      error:
+        'screenshot-provenance capture is stale (>1h after the measured run)',
+      ok: false,
+    };
+  }
+  return { ok: true, summary: `${artifact.tool}@${artifact.capturedAt}` };
 }
 
 export function verifyHarIterations(pages, expectIterations) {

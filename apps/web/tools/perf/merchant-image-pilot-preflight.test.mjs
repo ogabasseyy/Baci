@@ -189,6 +189,17 @@ async function setupOfflineAssets(assets) {
       }))
     )
   );
+  // The sample pin is mandatory: every fixture freezes its own matrix so
+  // green-path runs always exercise the pinned mode.
+  const samplePath = join(base, 'sample.json');
+  await writeFile(
+    samplePath,
+    JSON.stringify(
+      staged.map(
+        (entry) => `${entry.merchantId}/${entry.assetId}/${entry.slot}`
+      )
+    )
+  );
   return {
     acceptancesPath,
     assets: staged,
@@ -197,6 +208,7 @@ async function setupOfflineAssets(assets) {
     inventoryPath,
     outputRoot,
     publicDir,
+    samplePath,
   };
 }
 
@@ -217,6 +229,7 @@ async function setupOffline() {
 function offlineOptions(fixture, overrides = {}) {
   return {
     acceptances: fixture.acceptancesPath,
+    expectSample: fixture.samplePath,
     inputRoot: fixture.inputRoot,
     inventory: fixture.inventoryPath,
     outputRoot: fixture.outputRoot,

@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import type { PilotLabArm } from '@/lib/merchant-image-variant-pilot/lab-arm';
 import { isPilotLabEnabled } from '@/lib/merchant-image-variant-pilot/lab-config';
-import type { PilotLabArm } from '@/lib/merchant-image-variant-pilot/lab-mount';
 import {
   PilotLabStorePage,
   pilotLabStoreBySlug,

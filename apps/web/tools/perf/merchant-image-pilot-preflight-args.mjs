@@ -11,6 +11,7 @@ const PREFLIGHT_FLAGS = new Set([
   'expect-sample',
   'input-root',
   'inventory',
+  'lab-stores',
   'origin',
   'output-root',
   'public-dir',
@@ -47,6 +48,10 @@ export function parsePreflightArgs(argv) {
     'input-root',
     'output-root',
     'public-dir',
+    // Mandatory sample pin: no unpinned evidence mode (see the offline
+    // sample-pin guard). The handoff sample lives in
+    // merchant-image-pilot-frozen-sample.json next to this parser.
+    'expect-sample',
   ];
   for (const key of required) {
     if (!options[key]) {
@@ -66,6 +71,7 @@ export function parsePreflightArgs(argv) {
     expectSample: options['expect-sample'] ?? null,
     inputRoot: options['input-root'],
     inventory: options.inventory,
+    labStores: options['lab-stores'] ?? null,
     origin: options.origin ?? null,
     outputRoot: options['output-root'],
     publicDir: options['public-dir'],

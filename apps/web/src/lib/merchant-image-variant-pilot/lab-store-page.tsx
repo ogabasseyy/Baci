@@ -1,7 +1,8 @@
 import 'server-only';
+import type { PilotLabArm } from './lab-arm';
 import type { PilotLabConfig } from './lab-config';
 import type { PilotBindingStatus } from './lab-index';
-import { type PilotLabArm, PilotLabNotOptimized } from './lab-mount';
+import { PilotLabNotOptimized } from './lab-not-optimized';
 import { LabStoreGridSection } from './lab-store-grid-section';
 import { LabStoreHeroSection } from './lab-store-hero-section';
 import {

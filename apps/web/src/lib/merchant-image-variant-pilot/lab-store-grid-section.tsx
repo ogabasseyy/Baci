@@ -1,3 +1,5 @@
+import type { PilotLabArm } from './lab-arm';
+import { PilotLabCardPreload } from './lab-card-preload';
 import type { PilotLabConfig } from './lab-config';
 import {
   labCardSlot,
@@ -5,11 +7,7 @@ import {
   pilotLabFillerImageUrl,
 } from './lab-fixtures';
 import type { PilotBindingStatus } from './lab-index';
-import {
-  type PilotLabArm,
-  PilotLabCardPreload,
-  PilotLabNotOptimized,
-} from './lab-mount';
+import { PilotLabNotOptimized } from './lab-not-optimized';
 import type { PilotLabStore } from './lab-store-registry';
 import { resolveBinding } from './lab-store-resolve';
 import { type LabGridFiller, LabStoreGrid } from './lab-store-shells';

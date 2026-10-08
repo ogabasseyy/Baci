@@ -116,6 +116,7 @@ export async function fetchServedAgreement(
       const mountCoverage = assertServedMountCoverage(html, {
         arm,
         expectedMounts: pageMounts,
+        expectedUncovered: page.uncovered ?? [],
         origin,
         surface: page.surface,
       });
@@ -137,9 +138,11 @@ export async function fetchServedAgreement(
       coverage.push({
         arm,
         expected: pageMounts.map((mount) => mount.binding),
+        expectedUncovered: (page.uncovered ?? []).map((entry) => entry.slotId),
         mounted: mountCoverage.mounted,
         page: page.path,
         reported: mountCoverage.reported,
+        uncovered: mountCoverage.uncovered,
       });
       for (const failure of assertServedAgreement(html, { arm })) {
         fail(

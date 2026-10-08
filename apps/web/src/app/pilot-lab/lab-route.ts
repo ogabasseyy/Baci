@@ -163,7 +163,10 @@ async function statFingerprint(path: string): Promise<string> {
       `merchant image pilot: cannot stat ${basename(path)}; re-run pnpm pilot:stage and restart the origin`
     );
   }
-  return `${info.size}:${info.mtimeMs}`;
+  // ctime closes the same-size same-mtime hole: utimens can pin mtime
+  // but every content write bumps ctime, so an in-place operator edit
+  // always invalidates the key. Same stat call, no added I/O.
+  return `${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
 }
 
 export function getLabConfig(): PilotLabConfig {
@@ -201,11 +204,11 @@ export async function loadLabConfigAtStartup(): Promise<PilotLabConfig> {
   // and re-hashing both operator files on every request would put
   // frozen-config I/O on the render path and contaminate arm timing
   // comparisons. Content is fully read, parsed, and validated on every
-  // fingerprint change. Residual (accepted lab posture, same class as
-  // the staged-verify skip): a same-size same-mtime rewrite keeps
-  // serving the cached config until restart. Concurrent first requests
-  // share one in-flight load per key; a failed load clears so the next
-  // request retries.
+  // fingerprint change. The fingerprint binds size, mtime, AND ctime:
+  // utimens can pin mtime after an edit, but the write itself bumps
+  // ctime, so even a same-size same-mtime rewrite reloads. Concurrent
+  // first requests share one in-flight load per key; a failed load
+  // clears so the next request retries.
   const inventoryFingerprint = await statFingerprint(inventoryPath);
   const acceptancesFingerprint = await statFingerprint(acceptancesPath);
   const key = createHash('sha256')

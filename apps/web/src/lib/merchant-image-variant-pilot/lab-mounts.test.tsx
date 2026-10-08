@@ -2,16 +2,14 @@ import { preload } from 'react-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectControlCssHero, projectPilotCssHero } from './css-hero-adapter';
+import { PilotLabCardPreload } from './lab-card-preload';
+import { PilotLabCssHeroMount } from './lab-css-hero-mount';
+import { PilotLabFlightPreload } from './lab-flight-preload';
 import type { ApprovedPilotTier } from './lab-index';
-import {
-  PilotLabCardPreload,
-  PilotLabCssHeroMount,
-  PilotLabFlightPreload,
-  PilotLabMobileMount,
-  PilotLabNotOptimized,
-  PilotLabPictureMount,
-  PilotLabScannerLink,
-} from './lab-mount';
+import { PilotLabMobileMount } from './lab-mobile-mount';
+import { PilotLabNotOptimized } from './lab-not-optimized';
+import { PilotLabPictureMount } from './lab-picture-mount';
+import { PilotLabScannerLink } from './lab-scanner-link';
 import {
   projectControlNextImage,
   projectPilotNextImage,

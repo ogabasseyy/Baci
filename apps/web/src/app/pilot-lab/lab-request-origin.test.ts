@@ -17,17 +17,21 @@ describe('labRequestOrigin', () => {
     expect(labRequestOrigin({ host: 'LOCALHOST' })).toBe('http://localhost');
   });
 
-  it('collapses localhost subdomains to bare localhost', () => {
+  it('collapses localhost subdomains to the canonical origin', () => {
     // A request-supplied subdomain must never reach rendered URLs, even
-    // inside the loopback namespace: keep the scheme and port, pin the
-    // host (lab routes are path-based, so nothing needs the subdomain).
+    // inside the loopback namespace — and neither must its port: the
+    // collapsed host is synthesized, so the whole origin is synthesized
+    // (Host evil-sub.localhost:6666 cannot mint image URLs for port
+    // 6666). Lab routes are path-based, so nothing needs the subdomain.
     expect(labRequestOrigin({ host: 'evil-sub.localhost:4000' })).toBe(
-      'http://localhost:4000'
+      'http://localhost:3000'
     );
     expect(labRequestOrigin({ host: 'store.localhost' })).toBe(
-      'http://localhost'
+      'http://localhost:3000'
     );
-    // Bare loopback names and IPs echo unchanged.
+    // Bare loopback names and IPs echo unchanged: the client literally
+    // addressed that host:port, which is what makes local runs on any
+    // port render working absolute URLs.
     expect(labRequestOrigin({ host: 'localhost:4000' })).toBe(
       'http://localhost:4000'
     );

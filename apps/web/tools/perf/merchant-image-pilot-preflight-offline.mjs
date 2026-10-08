@@ -129,12 +129,24 @@ export async function runOfflinePreflight(options) {
   }
   pass(checks, 'inventory-parse');
 
-  // Frozen-sample pin: expectations derive from the supplied inventory,
-  // so a silently reduced sample (deleted record or merchant) would
-  // otherwise report ok:true on weaker evidence. When the operator pins
-  // the planned merchant/asset/slot matrix, any shrinkage or growth
-  // fails before expectations derive. Evidence runs must pass this flag.
-  if (options.expectSample !== undefined && options.expectSample !== null) {
+  // Frozen-sample pin (mandatory): expectations derive from the supplied
+  // inventory, so a silently reduced sample (deleted record or merchant)
+  // would otherwise report ok:true on weaker evidence. The operator
+  // always pins the planned merchant/asset/slot matrix
+  // (merchant-image-pilot-frozen-sample.json for the handoff sample);
+  // any shrinkage or growth fails before expectations derive. There is
+  // no unpinned mode: an omitted pin fails instead of certifying an
+  // unknown sample.
+  if (options.expectSample === undefined || options.expectSample === null) {
+    fail(
+      checks,
+      failures,
+      'sample-pin',
+      'sample pin is required: pass --expect-sample <frozen-keys.json> so a reduced inventory cannot report ok'
+    );
+    return { accepted, checks, failures, ok: false };
+  }
+  {
     let expected;
     try {
       expected = await readJson(options.expectSample);

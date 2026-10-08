@@ -10,6 +10,7 @@
 //     --screenshot=afterPageCompleteCheck.png [--lighthouse=report.json ...] \
 //     --expect-iterations=1 --expect-connectivity=native \
 //     --expect-chrome-major=154 --expect-viewport=375x667 --expect-dpr=3 \
+//     --screenshot-provenance=<runner-capture-artifact.json> \
 //     [--cache-provenance=<runner-reset-artifact.json>] \
 //     [--browser-version=<dotted-executable-build>]
 // Add --lighthouse plus --expect-form-factor, --expect-throttling-method,
@@ -33,6 +34,7 @@ import {
   verifyCacheProvenance,
   verifyHarConnectivity,
   verifyHarIterations,
+  verifyScreenshotProvenance,
 } from './merchant-image-pilot-settings-helpers.mjs';
 import { checkLighthouse } from './merchant-image-pilot-settings-lighthouse.mjs';
 
@@ -80,18 +82,45 @@ async function checkHar(args, pass, fail, warn, recorded) {
   const viewport = parseDimensions(args['expect-viewport'], 'expect-viewport');
   const dpr = parsePositiveNumber(args['expect-dpr'], 'expect-dpr');
   try {
-    const png = pngDimensions(await readFile(args.screenshot));
+    const screenshotBytes = await readFile(args.screenshot);
+    const png = pngDimensions(screenshotBytes);
     recorded.screenshot = `${png.width}x${png.height}`;
+    const geometryProblems = [];
     // ±2px absorbs DPR rounding (667@3 → 2000); a wrong DPR or viewport
     // still misses by hundreds.
     if (
       Math.abs(png.width - viewport.width * dpr) > 2 ||
       Math.abs(png.height - viewport.height * dpr) > 2
     ) {
-      fail(
-        'har.geometry',
+      geometryProblems.push(
         `screenshot ${png.width}x${png.height} is not ${viewport.width}x${viewport.height}@${dpr}`
       );
+    }
+    // Same-navigation binding (REQUIRED): dimensions alone cannot prove
+    // the PNG came from the measured HAR page — a stale DPR-2
+    // screenshot would otherwise certify a DPR-1 HAR. The runner
+    // artifact binds the exact screenshot bytes to the page's runId.
+    const shotProvenancePath = args['screenshot-provenance'];
+    if (shotProvenancePath === undefined) {
+      geometryProblems.push(
+        'no screenshot provenance: an unbound PNG cannot certify the HAR navigation (pass --screenshot-provenance=<runner-capture-artifact.json>)'
+      );
+    } else {
+      const text = await readFile(shotProvenancePath, 'utf8').catch(() => null);
+      const shot = verifyScreenshotProvenance(
+        text,
+        pages,
+        screenshotBytes,
+        shotProvenancePath
+      );
+      if (!shot.ok) {
+        geometryProblems.push(shot.error);
+      } else {
+        recorded.screenshotProvenance = shot.summary;
+      }
+    }
+    if (geometryProblems.length > 0) {
+      fail('har.geometry', geometryProblems.join('; '));
     } else {
       pass('har.geometry');
     }

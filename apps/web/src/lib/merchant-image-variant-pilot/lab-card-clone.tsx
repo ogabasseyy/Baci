@@ -10,7 +10,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
-import type { PilotLabArm } from './lab-mount';
+import type { PilotLabArm } from './lab-arm';
 import { LabProductCardImage } from './lab-product-card-image';
 import type { ProjectedPilotImage } from './next-image-adapter';
 

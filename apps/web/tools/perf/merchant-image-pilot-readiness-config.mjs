@@ -33,6 +33,7 @@ export const SETTINGS_CLI_OPTIONS = [
   'har',
   'lighthouse',
   'screenshot',
+  'screenshot-provenance',
 ];
 
 export function parseArgs(argv, allowed) {

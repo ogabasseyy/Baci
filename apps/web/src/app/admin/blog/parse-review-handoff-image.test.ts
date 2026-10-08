@@ -124,6 +124,38 @@ describe('parseReviewHandoff featured image', () => {
     ).toEqual({});
   });
 
+  it('drops a managed variant from a different upload than the source', () => {
+    // The variant is validly managed but belongs to another upload
+    // token; keeping it would display an unrelated image in responsive
+    // layouts.
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa.jpg`,
+          variants: {
+            landscape_16x9: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/bbbb/landscape_16x9.webp`,
+          },
+        },
+      }).featured_image_variants
+    ).toEqual({});
+  });
+
+  it('keeps a managed variant sharing the source upload token', () => {
+    const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa/landscape_16x9.webp`;
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa.jpg`,
+          variants: { landscape_16x9: variant },
+        },
+      }).featured_image_variants
+    ).toEqual({ landscape_16x9: variant });
+  });
+
   it('drops managed variants with null bytes hidden in the query string', () => {
     const nul = String.fromCharCode(0);
     expect(

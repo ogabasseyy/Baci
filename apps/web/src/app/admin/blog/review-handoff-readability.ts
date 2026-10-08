@@ -41,12 +41,32 @@ function tagHasHidingClass(tag: string, tokens: ReadonlySet<string>): boolean {
   return false;
 }
 
+function hasClippedZeroHeightClass(tag: string): boolean {
+  // max-h-0 caps the box at zero height but content still overflows
+  // visibly; overflow-hidden clips but sizes normally. Only the pair
+  // hides, so each utility alone must keep matching as visible.
+  for (const { name, value } of tagAttributes(tag)) {
+    if (name !== 'class') continue;
+    const classes = value.split(/\s+/);
+    if (classes.includes('max-h-0') && classes.includes('overflow-hidden')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasVisibilityHidingClass(tag: string): boolean {
-  return tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS);
+  return (
+    tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS) ||
+    hasClippedZeroHeightClass(tag)
+  );
 }
 
 function hasTextHidingClass(tag: string): boolean {
-  return tagHasHidingClass(tag, TEXT_HIDING_CLASS_TOKENS);
+  return (
+    tagHasHidingClass(tag, TEXT_HIDING_CLASS_TOKENS) ||
+    hasClippedZeroHeightClass(tag)
+  );
 }
 
 const HTML_TAG_PATTERN =

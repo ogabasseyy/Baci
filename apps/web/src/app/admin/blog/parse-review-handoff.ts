@@ -1,6 +1,7 @@
 import { BLOG_INTENTS, type BlogIntent } from '@/config/blog-intent';
 import { MAX_REVIEW_HANDOFF_CONTENT_LENGTH } from '@/config/blog-review-handoff';
 import { validateBlogImageVariantIntegrity } from '@/lib/blog-discover-readiness';
+import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import { generateSlug } from '@/lib/blog-utils';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { blogPostSchema } from '@/lib/validations/blog';
@@ -46,6 +47,36 @@ function readText(value: unknown): string {
 // fall back to a unique placeholder the reviewer can rename before saving.
 // getRandomValues (unlike randomUUID) is available in insecure contexts,
 // so plain-HTTP admin origins still get a working fallback.
+// The upload route names the source platform/blog/<token>.<ext> and its
+// variants platform/blog/<token>/<key>.webp: the token binds a variant
+// to the upload that generated it.
+function managedUploadToken(storagePath: string): string | null {
+  const segments = storagePath.split('/');
+  if (segments.length === 4) return segments[2];
+  if (segments.length !== 3) return null;
+  const dot = segments[2].lastIndexOf('.');
+  return dot > 0 ? segments[2].slice(0, dot) : null;
+}
+
+function variantBindsToSource(
+  variantUrl: string,
+  sourceManaged: boolean,
+  sourceToken: string | null
+): boolean {
+  // A foreign source has no token to bind to, and codex-exempt
+  // (non-managed) variants keep their exemption. A managed source with
+  // an unparseable token fails closed: its variants cannot prove they
+  // belong to it.
+  if (!sourceManaged) return true;
+  const variantPath = extractManagedBlogStoragePath(variantUrl, {
+    kind: 'platform',
+  });
+  if (!variantPath) return true;
+  return (
+    sourceToken !== null && managedUploadToken(variantPath) === sourceToken
+  );
+}
+
 function fallbackSlug(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(4));
   const suffix = Array.from(bytes, (byte) =>
@@ -105,6 +136,12 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
       'Imported tag names cannot contain commas. Use separate tags or rename the tag.'
     );
   }
+  const featuredSourcePath = extractManagedBlogStoragePath(featuredImageUrl, {
+    kind: 'platform',
+  });
+  const featuredSourceToken = featuredSourcePath
+    ? managedUploadToken(featuredSourcePath)
+    : null;
   const imageVariants = isRecord(featuredImage.variants)
     ? Object.fromEntries(
         Object.entries(featuredImage.variants).filter(
@@ -120,7 +157,14 @@ export function parseReviewHandoff(value: unknown): PlatformAdminBlogFormState {
             validateBlogImageVariantIntegrity(
               { featured_image_variants: { [entry[0]]: entry[1] } },
               { kind: 'platform' }
-            ).ready
+            ).ready &&
+            // A managed variant from another upload token would display
+            // an unrelated image; drop it instead of importing it.
+            variantBindsToSource(
+              entry[1],
+              featuredSourcePath !== null,
+              featuredSourceToken
+            )
         )
       )
     : {};

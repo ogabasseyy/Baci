@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   state: 'ready',
   failRecord: false,
   invalid: false,
+  stuckSibling: false,
 }));
 vi.mock('pg', () => ({
   Client: class {
@@ -17,7 +18,12 @@ vi.mock('pg', () => ({
 }));
 beforeEach(() => {
   vi.resetAllMocks();
-  Object.assign(mocks, { state: 'ready', failRecord: false, invalid: false });
+  Object.assign(mocks, {
+    state: 'ready',
+    failRecord: false,
+    invalid: false,
+    stuckSibling: false,
+  });
   mocks.query.mockImplementation(async (sql: string, parameters: unknown[]) => {
     if (sql.includes('SESSION_USER AS'))
       return {
@@ -36,10 +42,12 @@ beforeEach(() => {
       result = {
         operationIds: mocks.invalid
           ? ['invalid']
-          : parameters.at(-1) === '1' && mocks.state === 'ready'
+          : parameters.at(-1) === '1' &&
+              (mocks.state === 'ready' || mocks.stuckSibling)
             ? [fixture.context.operationId]
             : [],
-        unknownCount: mocks.state === 'unknown' ? 1 : 0,
+        unknownCount:
+          mocks.state === 'unknown' || mocks.stuckSibling ? 1 : 0,
         dispatchingCount: mocks.state === 'dispatching' ? 1 : 0,
       };
     if (sql.includes('dispatch_context')) result = fixture.context;
@@ -89,6 +97,18 @@ it('selects durable ready work and runs the actual dispatcher once, without clai
   expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain(
     'staging.piggyvest.business'
   );
+});
+it('drains a ready transfer while an unrelated operation awaits reconciliation', async () => {
+  mocks.stuckSibling = true;
+  const fetchImplementation = http();
+  expect(await run(fetchImplementation)).toMatchObject({
+    status: 'reconciliation_required',
+    selectedCount: 1,
+    submittedCount: 1,
+    unknownCount: 1,
+    fundingComplete: false,
+  });
+  expect(fetchImplementation).toHaveBeenCalledTimes(1);
 });
 it('concurrent stale selections still commit only one financial attempt', async () => {
   const fetchImplementation = http();

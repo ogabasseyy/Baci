@@ -21,6 +21,8 @@ authorize deployment, database changes, provider funding, or payment execution.
 - Mobile typecheck passed after using an existing dependency installation with
   the repository's approved Supabase Auth patch. The nine earlier errors came
   from an unpatched borrowed installation; no auth source or tests were weakened.
+- Full monorepo typecheck passed after two primary-card test environment fixtures
+  retained the required `NODE_ENV` field. Their 11 focused regression tests passed.
 - The provider-directory CodeRabbit review refused 208 files against its 150-file
   limit. A complete scoped review remains required; do not treat refusal as approval.
 - Mobile review findings were fixed with regression tests. Current-head CI and review

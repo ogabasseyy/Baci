@@ -218,7 +218,7 @@ it('missing approved policy, abort, malformed selection and selector storage fai
   await expect(
     runPrimaryCardTransferOutbox({
       mode: 'once',
-      environment: {},
+      environment: { NODE_ENV: 'test' },
       fetchImplementation,
     })
   ).rejects.toThrow();

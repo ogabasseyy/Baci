@@ -75,6 +75,9 @@ it('propagates refreshed session cookies without serializing tokens in the respo
     'sb-127-auth-token='
   );
   expect(response.headers.getSetCookie().join(';')).toContain('HttpOnly');
+  expect(response.headers.getSetCookie().join(';')).toContain(
+    'SameSite=strict'
+  );
   expect(await response.text()).toBe('{"status":"ok"}');
 });
 

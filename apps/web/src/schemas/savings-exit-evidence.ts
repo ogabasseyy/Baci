@@ -86,6 +86,9 @@ const localStoreConfiguration = z
         /^\/(?:private\/)?tmp\/baci-(?:savings-exit-accounting|piggyvest-runtime)\.[A-Za-z0-9]+\/socket$/
       ),
     port: z.number().int().min(1).max(65535),
+    // Local-test credential lives in validated configuration (same pattern as
+    // piggyvest-postgres-configuration), never inline in the pg client.
+    password: z.literal('synthetic-local-only'),
   })
   .strict();
 

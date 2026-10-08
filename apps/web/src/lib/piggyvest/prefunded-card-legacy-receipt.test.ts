@@ -26,6 +26,7 @@ describe('stored original receipt decryption for owner reconciliation', () => {
   it.each([
     { payloadSha256: '0'.repeat(64) },
     { authTag: Buffer.alloc(16).toString('base64') },
+    { authTag: Buffer.alloc(12).toString('base64') },
     { nonce: Buffer.alloc(12).toString('base64') },
     { keyVersion: 'staging-v2' },
     { ciphertext: 'not-base64' },

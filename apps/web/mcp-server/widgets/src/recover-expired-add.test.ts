@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { recoverExpiredAdd } from './recover-expired-add';
+import { recoverCartAdd, recoverExpiredAdd } from './recover-expired-add';
 
 const fresh = 'b'.repeat(64);
 const product = {
@@ -146,4 +146,62 @@ it('rejects on transport failure instead of merging a partial cart', async () =>
     ])
   ).rejects.toThrow(/did not complete/);
   expect(callTool).toHaveBeenCalledTimes(2);
+});
+
+it('replays local survivors into a tokenless mint', async () => {
+  const minted = success(fresh, [product.id]);
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(success(fresh, [product.id, second.id]));
+  const result = await recoverCartAdd(
+    callTool,
+    minted,
+    product.id,
+    1,
+    undefined,
+    [{ product, quantity: 1 }, { product: second, quantity: 2 }]
+  );
+  expect(result).toEqual(success(fresh, [product.id, second.id]));
+  expect(callTool).toHaveBeenCalledTimes(1);
+  expect(callTool).toHaveBeenCalledWith({
+    product_id: second.id,
+    quantity: 2,
+    cart_token: fresh,
+  });
+});
+
+it('passes tokenless quota and failure responses through untouched', async () => {
+  const denied = {
+    structuredContent: {
+      success: false,
+      quota_exceeded: true,
+      retry_after_seconds: 60,
+    },
+  };
+  const failed = { structuredContent: { success: false } };
+  const callTool = vi.fn();
+  await expect(
+    recoverCartAdd(callTool, denied, product.id, 1, undefined, [
+      { product: second, quantity: 1 },
+    ])
+  ).resolves.toBe(denied);
+  await expect(
+    recoverCartAdd(callTool, failed, product.id, 1, undefined, [
+      { product: second, quantity: 1 },
+    ])
+  ).resolves.toBe(failed);
+  expect(callTool).not.toHaveBeenCalled();
+});
+
+it('passes a live token result through without replaying', async () => {
+  const token = 'a'.repeat(64);
+  const current = success(token, [product.id]);
+  const callTool = vi.fn();
+  await expect(
+    recoverCartAdd(callTool, current, product.id, 1, token, [
+      { product, quantity: 1 },
+      { product: second, quantity: 1 },
+    ])
+  ).resolves.toBe(current);
+  expect(callTool).not.toHaveBeenCalled();
 });

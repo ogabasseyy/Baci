@@ -38,6 +38,52 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it('replays local survivors when adding after an expired-cart removal', async () => {
+  const fresh = 'b'.repeat(64);
+  const third = {
+    ...product,
+    id: '33333333-3333-4333-8333-333333333333',
+    name: 'Watch',
+  };
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce(response([product, second]))
+    .mockResolvedValueOnce(expiredResponse())
+    .mockResolvedValueOnce(response([third], fresh))
+    .mockResolvedValueOnce(response([third, second], fresh));
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(second);
+  });
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  expect(result.current.cart).toEqual([{ product: second, quantity: 1 }]);
+  await act(async () => {
+    await result.current.handleAddToCart(third);
+  });
+  expect(callTool).toHaveBeenCalledTimes(5);
+  expect(callTool).toHaveBeenNthCalledWith(4, 'update_ogabassey_guest_cart', {
+    product_id: third.id,
+    quantity: 1,
+    cart_token: undefined,
+  });
+  expect(callTool).toHaveBeenNthCalledWith(5, 'update_ogabassey_guest_cart', {
+    product_id: second.id,
+    quantity: 1,
+    cart_token: fresh,
+  });
+  expect(result.current.cartError).toBeNull();
+  expect(result.current.cart).toEqual([
+    { product: second, quantity: 1 },
+    { product: third, quantity: 1 },
+  ]);
+});
 it('retries a stale token once and replays survivors into the fresh cart', async () => {
   const fresh = 'b'.repeat(64);
   const callTool = vi

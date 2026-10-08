@@ -8,7 +8,7 @@ import {
   readStructuredContent,
 } from '../parse-cart-tool-output';
 import { parseHandoffLines } from '../parse-handoff-lines';
-import { recoverExpiredAdd } from '../recover-expired-add';
+import { recoverCartAdd } from '../recover-expired-add';
 import { buildReviewCartUrl } from '../review-cart-url';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
@@ -78,28 +78,21 @@ export function useCartHandoff() {
         pendingTab?.close();
         return;
       }
-      // A stale token (expired or evicted cart) retries once without the
-      // token so the server mints a fresh cart, replaying the surviving
-      // lines so recovery preserves the shopper's cart. The final response
-      // replaces prior state through the same merge below.
-      if (
-        widgetState?.cartToken &&
-        parseCartToolOutput(readStructuredContent(result))?.cart_expired ===
-          true
-      ) {
-        const callTool = window.openai.callTool.bind(window.openai);
-        result = await recoverExpiredAdd(
-          (args) => callTool('update_ogabassey_guest_cart', args),
-          product.id,
-          quantity,
-          (widgetState?.cart ?? []).filter(
-            (item) => item.product.id !== product.id
-          )
-        );
-        if (requestId !== handoffRequestId.current) {
-          pendingTab?.close();
-          return;
-        }
+      // Recovery keeps the shopper's cart whole before the authoritative
+      // merge: a stale token retries once without it, and a tokenless mint
+      // replays pre-existing local lines into the fresh cart.
+      const callTool = window.openai.callTool.bind(window.openai);
+      result = await recoverCartAdd(
+        (args) => callTool('update_ogabassey_guest_cart', args),
+        result,
+        product.id,
+        quantity,
+        widgetState?.cartToken,
+        widgetState?.cart ?? []
+      );
+      if (requestId !== handoffRequestId.current) {
+        pendingTab?.close();
+        return;
       }
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id);

@@ -39,7 +39,56 @@ export async function recoverExpiredAdd(
   const freshToken =
     retryContent?.success === true ? retryContent.cart_token : undefined;
   if (!freshToken || survivors.length === 0) return retry;
-  let result: unknown = retry;
+  const replayed = await replaySurvivorsIntoCart(
+    callCartTool,
+    freshToken,
+    survivors
+  );
+  return replayed ?? retry;
+}
+
+/**
+ * Recovers an add result before the authoritative merge: a stale token
+ * retries once without it, and a tokenless mint (expired-cart removal,
+ * legacy restore) replays pre-existing local lines into the fresh cart,
+ * which otherwise would hold only the new line and drop every survivor
+ * from the widget and review URL. Quota, variant-selection, and failure
+ * responses carry no token, so they pass through for normal handling.
+ */
+export async function recoverCartAdd(
+  callCartTool: CartUpdateCall,
+  result: unknown,
+  productId: string,
+  quantity: number,
+  cartToken: string | undefined,
+  cart: CartItem[]
+): Promise<unknown> {
+  const survivors = cart.filter((item) => item.product.id !== productId);
+  if (cartToken) {
+    if (
+      parseCartToolOutput(readStructuredContent(result))?.cart_expired !== true
+    )
+      return result;
+    return recoverExpiredAdd(callCartTool, productId, quantity, survivors);
+  }
+  const minted = parseCartToolOutput(readStructuredContent(result));
+  const freshToken =
+    minted?.success === true ? minted.cart_token : undefined;
+  if (!freshToken || survivors.length === 0) return result;
+  const replayed = await replaySurvivorsIntoCart(
+    callCartTool,
+    freshToken,
+    survivors
+  );
+  return replayed ?? result;
+}
+
+async function replaySurvivorsIntoCart(
+  callCartTool: CartUpdateCall,
+  freshToken: string,
+  survivors: CartItem[]
+): Promise<unknown | null> {
+  let result: unknown | null = null;
   for (const survivor of survivors) {
     let response: unknown;
     try {

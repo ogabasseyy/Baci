@@ -89,7 +89,17 @@ it('evicts the least-recently-written cart when admitting at capacity', async ()
     await writeFile(path.join(root, `${token}.json`), payload);
   const old = new Date(Date.now() - 2 * 3_600_000);
   await utimes(path.join(root, `${tokens[0]}.json`), old, old);
-  await admitGuestCartWrite(root, true);
+  const logged: string[] = [];
+  const originalLog = console.log;
+  console.log = (...args: unknown[]) => {
+    logged.push(args.map(String).join(' '));
+  };
+  try {
+    await admitGuestCartWrite(root, true);
+  } finally {
+    console.log = originalLog;
+  }
+  expect(logged.join('\n')).toContain('evicted_at_capacity');
   await expect(
     readFile(path.join(root, `${tokens[0]}.json`), 'utf8')
   ).rejects.toThrow();

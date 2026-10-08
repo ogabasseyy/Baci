@@ -196,6 +196,11 @@ export async function admitGuestCartWrite(
       });
       if (done) {
         evicted = true;
+        // Capacity churn is otherwise silent: log the eviction (never the
+        // token filename) so flood-driven displacement is visible to ops.
+        console.log(
+          JSON.stringify({ type: 'guest-cart', event: 'evicted_at_capacity' })
+        );
         break;
       }
     }

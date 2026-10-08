@@ -13,6 +13,9 @@ vi.mock('@/env', () => ({
   getPiggyvestWebhookSecret: () => 'fixture-secret',
   getPiggyvestApiConfig: () => undefined,
 }));
+vi.mock('@/lib/piggyvest/webhook-secret-union', () => ({
+  collectPiggyvestWebhookSecrets: () => ['fixture-secret', 'retained-secret'],
+}));
 vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-dispatch', () => ({
   dispatchPrimaryWalletPaidInterest: mocks.dispatch,
 }));
@@ -26,8 +29,8 @@ vi.mock('@/lib/piggyvest/server-intake-client', () => ({
 import { POST } from './route';
 
 const rawBody = JSON.stringify(paidInterestFixture.event);
-function request(valid = true) {
-  const signature = createHmac('sha512', 'fixture-secret')
+function request(valid = true, secret = 'fixture-secret') {
+  const signature = createHmac('sha512', secret)
     .update(rawBody)
     .digest('hex');
   return new NextRequest('https://example.test/api/webhooks/piggyvest', {
@@ -107,6 +110,18 @@ it.each([
 it('does not dispatch forged interest', async () => {
   expect((await POST(request(false))).status).toBe(200);
   expect(mocks.dispatch).not.toHaveBeenCalled();
+  expect(mocks.legacy).not.toHaveBeenCalled();
+});
+it('accepts a delivery signed with a retained rotation key', async () => {
+  mocks.intake.mockResolvedValue('accepted');
+  const response = await POST(request(true, 'retained-secret'));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    received: true,
+    interestQueued: true,
+    duplicate: false,
+  });
+  expect(mocks.intake).toHaveBeenCalledTimes(1);
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
 it('redacts primary interest storage failures and requests redelivery', async () => {

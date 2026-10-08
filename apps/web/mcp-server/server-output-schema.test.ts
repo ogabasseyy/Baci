@@ -111,7 +111,7 @@ describe('public MCP output contracts', () => {
       const definitions = getResultTools(await postMcpJsonRpc(server.baseUrl, {
         id: 1, method: 'tools/list', params: {},
       }));
-      expect(definitions).toHaveLength(9);
+      expect(definitions).toHaveLength(10);
       for (const definition of definitions) {
         expect(definition, definition.name).toHaveProperty('outputSchema');
         const schema = Reflect.get(definition, 'outputSchema');

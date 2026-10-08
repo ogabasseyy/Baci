@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 const PUBLIC_TOOL_NAMES = [
+  'add_to_cart',
   'browse_categories',
   'get_brands',
   'get_delivery_fee_info',

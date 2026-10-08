@@ -236,4 +236,27 @@ describe('MCP cart handoff', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  it('serves the pre-rename add_to_cart name from the same handler', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const result = getResultRecord(
+        await postMcpJsonRpc(server.baseUrl, {
+          id: 90,
+          method: 'tools/call',
+          params: {
+            name: 'add_to_cart',
+            arguments: { product_id: 'available-product', quantity: 1 },
+          },
+        })
+      );
+      expect(result.structuredContent).toMatchObject({
+        success: true,
+        cart_url: 'https://ogabassey.com/cart?item_id=available-product&qty=1',
+      });
+      expect(mcpToolOutputSchemas.prepare_storefront_cart_link.safeParse(result.structuredContent).success).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
 });

@@ -64,7 +64,15 @@ async function readStoredCart(file: string) {
       throw new GuestCartExpiredError();
     throw error;
   }
-  return storedCartSchema.parse(JSON.parse(raw));
+  try {
+    return storedCartSchema.parse(JSON.parse(raw));
+  } catch {
+    // Bytes were read but are unusable, and atomic renames mean a corrupt
+    // cart file can never become valid on its own: report it as expired so
+    // the caller recovers, and reclaim the capacity slot it would pin.
+    await unlink(file).catch(() => undefined);
+    throw new GuestCartExpiredError();
+  }
 }
 
 /** Opaque guest capability, never an account identity. One writer process owns this directory. */

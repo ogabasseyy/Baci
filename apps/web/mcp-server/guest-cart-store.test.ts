@@ -272,13 +272,13 @@ it('reports expired or missing tokens distinctly so the caller can recover', asy
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
 });
 
-it('keeps corrupt carts on the generic failure path', async () => {
+it('reports corrupt carts as expired and reclaims them', async () => {
   const { directory, instance } = await store();
   const corruptToken = 'f'.repeat(64);
-  await writeFile(path.join(directory, `${corruptToken}.json`), 'not-json');
-  const failure = await instance
-    .update(corruptToken, { product_id: id, quantity: 1 }, async () => {})
-    .catch((error: unknown) => error);
-  expect(failure).toBeInstanceOf(Error);
-  expect(failure).not.toBeInstanceOf(GuestCartExpiredError);
+  const corruptFile = path.join(directory, `${corruptToken}.json`);
+  await writeFile(corruptFile, 'not-json');
+  await expect(
+    instance.update(corruptToken, { product_id: id, quantity: 1 }, async () => {})
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+  await expect(readFile(corruptFile, 'utf8')).rejects.toThrow();
 });

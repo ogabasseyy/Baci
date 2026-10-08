@@ -55,7 +55,7 @@ ngrok http 8787
 
 ### Public tool output contracts
 
-All nine public tools declare Zod object output schemas: the catalog, store,
+All ten public tools declare Zod object output schemas: the catalog, store,
 and cart-link tools from `../src/schemas/mcp-tool-output.ts`, and the guest
 cart tool from `../src/schemas/mcp-guest-cart.ts`. The installed MCP SDK
 converts these to JSON Schema in `tools/list` and validates non-error
@@ -158,6 +158,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 |------|-------------|
 | `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
 | `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
+| `add_to_cart` | Deprecated alias of `prepare_storefront_cart_link` for cached tool lists |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
@@ -182,9 +183,9 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `update_ucp_cart` | Replace UCP cart line items or fulfillment context |
 
 Rollout note: `prepare_storefront_cart_link` was renamed from `add_to_cart`;
-there is no compatibility alias. Callers with a cached `tools/list` entry or a
-hardcoded tool name must refresh tool discovery after upgrading, otherwise
-calls to the old name fail with method-not-found.
+the old name stays registered as a deprecated alias on the same handler, so
+callers with a cached `tools/list` entry or a hardcoded tool name keep working
+while they refresh tool discovery.
 
 ## Example Prompts
 

@@ -206,6 +206,7 @@ describe('MCP streamable HTTP probe compatibility', () => {
       .sort();
 
     expect(toolNames).toEqual([
+      'add_to_cart',
       'browse_categories',
       'get_brands',
       'get_delivery_fee_info',

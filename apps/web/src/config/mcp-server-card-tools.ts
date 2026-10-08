@@ -125,6 +125,31 @@ export const PUBLIC_MCP_TOOLS = [
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
+    name: 'add_to_cart',
+    title: 'Add to Cart (Deprecated Alias)',
+    description:
+      'Deprecated alias of prepare_storefront_cart_link for callers with a cached tool list. Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
+    inputSchema: {
+      $schema: DRAFT_07_SCHEMA,
+      type: 'object',
+      properties: {
+        product_id: {
+          type: 'string',
+          description: 'The product ID to add to cart',
+        },
+        quantity: {
+          default: 1,
+          description: 'Quantity to add',
+          type: 'integer',
+          minimum: 1,
+          maximum: 10,
+        },
+      },
+      required: ['product_id'],
+    },
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+  },
+  {
     name: 'get_product',
     title: 'Get Product Details',
     description: `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,

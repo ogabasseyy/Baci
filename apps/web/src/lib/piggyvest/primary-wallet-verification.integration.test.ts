@@ -76,6 +76,7 @@ DECLARE
   proof jsonb := '{"providerCustomerId":"customer","providerWalletId":"wallet","businessId":"fixture-business","currency":"NGN","status":"active","hasFundingAccount":true}';
   principal text;
   desired_state text;
+  reclaim jsonb;
 BEGIN
   FOREACH principal IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
     IF has_function_privilege(principal,'piggyvest_primary.verify_onboarding(jsonb,jsonb)','EXECUTE') THEN
@@ -96,8 +97,15 @@ BEGIN
     IF piggyvest_primary.read_onboarding(scope) IS NOT NULL THEN
       RAISE EXCEPTION 'uncertain or dispatched identity became readable';
     END IF;
-    IF piggyvest_primary.claim_onboarding(scope, repeat('a',64))->>'status' <> 'pending' THEN
-      RAISE EXCEPTION 'uncertain or dispatched identity was dispatched again';
+    IF desired_state = 'dispatched'
+      AND piggyvest_primary.claim_onboarding(scope, repeat('a',64))->>'status' <> 'pending' THEN
+      RAISE EXCEPTION 'dispatched identity was dispatched again';
+    END IF;
+    IF desired_state = 'unknown' THEN
+      reclaim := piggyvest_primary.claim_onboarding(scope, repeat('a',64));
+      IF reclaim->>'status' <> 'claimed' OR reclaim->>'reclaimed' IS DISTINCT FROM 'true' THEN
+        RAISE EXCEPTION 'uncertain identity was not reclaimable';
+      END IF;
     END IF;
     RESET SESSION AUTHORIZATION;
   END LOOP;

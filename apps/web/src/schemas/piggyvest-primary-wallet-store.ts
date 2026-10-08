@@ -29,6 +29,7 @@ export const piggyvestPrimaryWalletStoreSchemas = {
             status: z.literal('claimed'),
             intentId: z.uuid(),
             claimToken: z.uuid(),
+            reclaimed: z.boolean().optional(),
           }),
           z.strictObject({ status: z.enum(['pending', 'ready', 'conflict']) }),
         ]),

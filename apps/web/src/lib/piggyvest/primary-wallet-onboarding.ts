@@ -85,9 +85,26 @@ export async function onboardPiggyvestPrimaryWallet(
     const result = piggyvestPrimaryWalletCreationSchema.safeParse(
       await input.createCustomer(providerRequest)
     );
-    if (!result.success || !result.data.new_customer) {
+    if (!result.success) {
       await input.storage.recordUncertain(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+    }
+    if (!result.data.new_customer && claim.reclaimed !== true) {
+      await input.storage.recordUncertain(claimedScope);
+      return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+    }
+    // A reclaimed intent retries the same fingerprinted request, so when
+    // the provider's idempotent creation returns the existing customer,
+    // adopt those identifiers instead of stranding the wallet unknown.
+    if (!result.data.new_customer) {
+      const adopted = await input.storage.recordAccepted({
+        ...claimedScope,
+        providerCustomerId: result.data.customer_id,
+        providerWalletId: result.data.wallet_id,
+      });
+      return adopted
+        ? { status: 'pending' }
+        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     const recorded = await input.storage.recordAccepted({
       ...claimedScope,

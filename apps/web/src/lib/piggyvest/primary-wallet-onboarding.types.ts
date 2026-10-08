@@ -8,7 +8,12 @@ export interface PrimaryWalletIntentScope {
 }
 
 export type PrimaryWalletClaim =
-  | { status: 'claimed'; intentId: string; claimToken: string }
+  | {
+      status: 'claimed';
+      intentId: string;
+      claimToken: string;
+      reclaimed?: boolean;
+    }
   | { status: 'pending' | 'ready' | 'conflict' };
 
 export interface PrimaryWalletOnboardingStorage {

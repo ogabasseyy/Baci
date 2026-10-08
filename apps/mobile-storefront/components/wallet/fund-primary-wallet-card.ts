@@ -133,6 +133,43 @@ export async function fundPrimaryWalletCard(
         returnTo: sanitizeWalletReturnTo(input.walletReturnTo),
       });
     }
+    // Adopted checkout: the server resumed the customer's stored
+    // unresolved operation (lost device storage, re-entered amount) instead
+    // of the just-entered amount. Never open its checkout silently — the
+    // consent prompt showed a different figure — so confirm the stored
+    // amount first. A closed adoption just reports; the saved record was
+    // already dropped so the next attempt starts fresh.
+    if ('adopted' in result && result.adopted) {
+      if (result.status === 'abandoned') {
+        Alert.alert(
+          'Previous funding closed',
+          'Your earlier card funding could not complete. Start a new funding with the amount you want.'
+        );
+        input.resetFundPanel();
+        return;
+      }
+      const resume = await new Promise<boolean>((resolve) =>
+        Alert.alert(
+          'Resume pending funding',
+          `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. Continue with this amount?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+            {
+              text: `Resume ₦${formatNairaFromKobo(result.amountKobo)}`,
+              onPress: () => resolve(true),
+            },
+          ],
+          { cancelable: true, onDismiss: () => resolve(false) }
+        )
+      );
+      if (!resume) {
+        Alert.alert(
+          'Card funding pending',
+          'This operation is saved. Check again later; do not start another card charge.'
+        );
+        return;
+      }
+    }
     if (result.status === 'ready' && result.authorizationUrl) {
       input.resetFundPanel();
       router.push({

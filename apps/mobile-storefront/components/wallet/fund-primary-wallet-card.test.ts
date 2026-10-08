@@ -91,6 +91,61 @@ it('does not initialize on cancelled consent', async () => {
   expect(mockStart).not.toHaveBeenCalled();
   expect(router.push).not.toHaveBeenCalled();
 });
+it('confirms the adopted amount before opening a resumed checkout', async () => {
+  mockStart.mockResolvedValue({ ...response, adopted: true });
+  alert.mockImplementation((_title, _message, buttons) => {
+    (
+      buttons?.find((button) => button.text === 'Authorize one-time charge') ??
+      buttons?.find((button) => button.text === 'Cancel')
+    )?.onPress?.();
+  });
+  await fundPrimaryWalletCard(input);
+  expect(alert).toHaveBeenCalledWith(
+    'Resume pending funding',
+    expect.stringContaining('₦1,000.00'),
+    expect.any(Array),
+    expect.any(Object)
+  );
+  // A declined resume keeps the adopted checkout closed and retained.
+  expect(router.push).not.toHaveBeenCalled();
+  expect(input.resetFundPanel).not.toHaveBeenCalled();
+  expect(alert).toHaveBeenCalledWith(
+    'Card funding pending',
+    expect.stringContaining('saved')
+  );
+});
+it('opens the adopted checkout only after explicit resume confirmation', async () => {
+  mockStart.mockResolvedValue({ ...response, adopted: true });
+  alert.mockImplementation((_title, _message, buttons) => {
+    (
+      buttons?.find((button) => button.text === 'Authorize one-time charge') ??
+      buttons?.find((button) => String(button.text).startsWith('Resume'))
+    )?.onPress?.();
+  });
+  await fundPrimaryWalletCard(input);
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/payment-gateway',
+    params: expect.objectContaining({
+      reference: response.reference,
+      amount: '1000',
+    }),
+  });
+});
+it('reports a closed adoption without opening checkout', async () => {
+  mockStart.mockResolvedValue({
+    ...response,
+    adopted: true,
+    status: 'abandoned',
+    authorizationUrl: undefined,
+  });
+  await fundPrimaryWalletCard(input);
+  expect(alert).toHaveBeenCalledWith(
+    'Previous funding closed',
+    expect.stringContaining('Start a new funding')
+  );
+  expect(router.push).not.toHaveBeenCalled();
+  expect(input.resetFundPanel).toHaveBeenCalled();
+});
 it('recovers the persisted operation instead of accepting a new amount/choice after restart', async () => {
   mockRead.mockResolvedValue({ operationId: 'persisted' });
   mockRecover.mockResolvedValue({ status: 'custody_pending' });

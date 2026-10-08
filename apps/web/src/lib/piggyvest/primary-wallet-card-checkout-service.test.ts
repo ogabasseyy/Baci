@@ -304,4 +304,33 @@ describe('durable goal-independent card checkout service', () => {
     ).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
   });
+  it('adopts the stored unresolved checkout when the re-entered amount differs', async () => {
+    const { service, provider } = setup();
+    const adopted = await service.initialize({
+      ...request,
+      idempotencyKey: '33333333-3333-4333-8333-333333333333',
+      amountKobo: 30000,
+    });
+    // The stored intent is authoritative: the response carries the stored
+    // amount and operation ID so the client persists and resumes it.
+    expect(adopted.amountKobo).toBe(25000);
+    expect(adopted.operationId).toBe(fixture.intent.operationId);
+    expect(adopted.status).toBe('ready');
+    expect(provider.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: fixture.intent.operationId,
+        amountKobo: 25000,
+      })
+    );
+  });
+  it('adopts the stored unresolved checkout when consent differs', async () => {
+    const { service } = setup();
+    const adopted = await service.initialize({
+      ...request,
+      amountKobo: 25000,
+      consent: { ...request.consent, saveCard: !request.consent.saveCard },
+    });
+    expect(adopted.amountKobo).toBe(25000);
+    expect(adopted.operationId).toBe(fixture.intent.operationId);
+  });
 });

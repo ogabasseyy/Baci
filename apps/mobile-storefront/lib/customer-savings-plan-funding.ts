@@ -1,8 +1,8 @@
 import { SavingsPlanFundingResponseSchema } from '@/schemas/customer-savings';
 import { PrimarySavingsPlanFundingSchemas as schemas } from '@/schemas/primary-savings-plan-funding';
-import { getCustomerSavingsApiClient } from './customer-savings-api';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
+import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 type Selection = {
   goalId: string;
@@ -16,8 +16,11 @@ async function primaryFunding(input: Selection, interestAccepted?: boolean) {
     merchantId: input.merchantId,
     goalId: input.goalId,
   });
+  // Per-operation client, like the other primary wallet clients: the
+  // module singleton caches the first user's access token until expiry,
+  // so an account switch would provision under the former customer.
   const response = schemas.response.parse(
-    await getCustomerSavingsApiClient().fetchJson({
+    await createStorefrontCustomerApiClient().fetchJson({
       path: '/api/storefront/customer/savings/primary-provisioning',
       method: interestAccepted === undefined ? 'PATCH' : 'POST',
       includeCsrf: true,
@@ -58,7 +61,7 @@ export const customerSavingsPlanFunding = {
           throw error;
       }
     }
-    const client = getCustomerSavingsApiClient();
+    const client = createStorefrontCustomerApiClient();
     return SavingsPlanFundingResponseSchema.parse(
       await client.fetchJson({
         body: {
@@ -84,7 +87,7 @@ export const customerSavingsPlanFunding = {
           throw error;
       }
     }
-    const client = getCustomerSavingsApiClient();
+    const client = createStorefrontCustomerApiClient();
     return SavingsPlanFundingResponseSchema.parse(
       await client.fetchJson({
         method: 'GET',

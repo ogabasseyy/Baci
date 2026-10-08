@@ -10,12 +10,18 @@ export function verifyPrimaryWalletSavingsProof(
     piggyvestPrimarySavingsTransferSchemas.reserved.safeParse(
       storedReservation
     );
-  const response =
+  const success =
     prefundedCardTransferVerificationSchemas.rich.safeParse(providerResponse);
-  if (!reservation.success || !response.success)
+  const failure = success.success
+    ? null
+    : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
+        providerResponse
+      );
+  if (!reservation.success || (!success.success && !failure?.success))
     return { status: 'unverified' as const };
   const expected = reservation.data;
-  const actual = response.data.data;
+  const actual = (success.success ? success.data : failure?.data)?.data;
+  if (!actual) return { status: 'unverified' as const };
   if (
     expected.sourceWalletId === expected.destinationWalletId ||
     actual.amount !== expected.amountKobo ||
@@ -28,6 +34,19 @@ export function verifyPrimaryWalletSavingsProof(
     (actual.currency !== undefined && actual.currency !== 'NGN')
   )
     return { status: 'unverified' as const };
+  // A failed transfer authenticates against the same bindings, but its
+  // proof releases the hold instead of settling: no funds moved.
+  if (!success.success)
+    return {
+      status: 'failed' as const,
+      providerTransactionId: actual.id,
+      operationId: expected.operationId,
+      reference: expected.reference,
+      amountKobo: expected.amountKobo,
+      sourceWalletId: expected.sourceWalletId,
+      destinationWalletId: expected.destinationWalletId,
+      businessId: expected.businessId,
+    };
   return {
     status: 'verified' as const,
     providerTransactionId: actual.id,

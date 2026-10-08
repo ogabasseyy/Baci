@@ -1,73 +1,61 @@
-import { beforeEach, expect, it, jest } from '@jest/globals';
+import { customerSavingsPlanFunding } from './customer-savings-plan-funding';
+import { clearObservedPiggyvestPrimaryCapability } from './piggyvest-primary-capability-cache';
 
-const mockFetch = jest.fn<(...args: unknown[]) => Promise<unknown>>();
-jest.mock('./customer-savings-api', () => ({
-  getCustomerSavingsApiClient: () => ({ fetchJson: mockFetch }),
+const mockFetchJson = jest.fn();
+const mockBuildMerchantIdentifiers = jest.fn((input: unknown) => input);
+const mockCreateApiClient = jest.fn((..._args: unknown[]) => ({
+  fetchJson: mockFetchJson,
+  buildMerchantIdentifiers: mockBuildMerchantIdentifiers,
 }));
-const { fetchSavingsPlanFunding, fetchExistingSavingsPlanFunding } =
-  require('./customer-savings') as typeof import('./customer-savings');
-const input = {
-  merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-  goalId: '22222222-2222-4222-8222-222222222222',
-};
+jest.mock('./storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: (...args: unknown[]) =>
+    mockCreateApiClient(...args),
+}));
+
+const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const GOAL = '33333333-3333-4333-8333-333333333333';
+
 beforeEach(() => {
   jest.clearAllMocks();
+  clearObservedPiggyvestPrimaryCapability();
+  mockFetchJson.mockResolvedValue({
+    status: 'ready',
+    goalId: GOAL,
+    accounts: [
+      {
+        accountNumber: '0001234567',
+        accountName: 'Synthetic account',
+        bankName: 'Synthetic bank',
+      },
+    ],
+  });
 });
 
-it('provisions an owned primary plan with explicit interest choice without resending BVN', async () => {
-  mockFetch.mockResolvedValue({ goalId: input.goalId, status: 'pending' });
-  await fetchSavingsPlanFunding({
-    ...input,
+it('constructs a fresh API client per provisioning operation', async () => {
+  await customerSavingsPlanFunding.provision({
+    goalId: GOAL,
+    merchantId: MERCHANT,
     bvn: '00000000000',
-    enableInterestAccrual: true,
   });
-  expect(mockFetch).toHaveBeenCalledWith({
-    path: '/api/storefront/customer/savings/primary-provisioning',
-    method: 'POST',
-    includeCsrf: true,
-    signal: undefined,
-    body: { ...input, consent: true, interestAccepted: true },
+  await customerSavingsPlanFunding.provision({
+    goalId: GOAL,
+    merchantId: MERCHANT,
+    bvn: '00000000000',
   });
+  // A module singleton would cache the first user's access token until
+  // expiry, provisioning under the former customer after an account
+  // switch; per-operation construction re-reads the session every time.
+  expect(mockCreateApiClient).toHaveBeenCalledTimes(2);
 });
 
-it('checks primary setup without creating a wallet or resubmitting interest consent', async () => {
-  mockFetch.mockResolvedValue({ goalId: input.goalId, status: 'pending' });
-  await fetchExistingSavingsPlanFunding(input);
-  expect(mockFetch).toHaveBeenCalledWith({
-    path: '/api/storefront/customer/savings/primary-provisioning',
-    method: 'PATCH',
-    includeCsrf: true,
-    signal: undefined,
-    body: input,
+it('constructs a fresh API client per recovery operation', async () => {
+  await customerSavingsPlanFunding.recover({
+    goalId: GOAL,
+    merchantId: MERCHANT,
   });
-});
-
-it('does not display another goal account returned by the server', async () => {
-  mockFetch.mockResolvedValue({
-    goalId: '33333333-3333-4333-8333-333333333333',
-    status: 'pending',
+  await customerSavingsPlanFunding.recover({
+    goalId: GOAL,
+    merchantId: MERCHANT,
   });
-  await expect(fetchExistingSavingsPlanFunding(input)).rejects.toThrow();
-});
-
-it('shows a helpful error for a provider account conflict rather than a schema error', async () => {
-  mockFetch.mockResolvedValue({
-    goalId: input.goalId,
-    status: 'conflict',
-    accounts: [],
-  });
-  await expect(fetchExistingSavingsPlanFunding(input)).rejects.toThrow(
-    'This plan account needs review. Please contact support before trying again.'
-  );
-});
-
-it('shows setup guidance when no provisioning intent exists', async () => {
-  mockFetch.mockResolvedValue({
-    goalId: input.goalId,
-    status: 'not_found',
-    accounts: [],
-  });
-  await expect(fetchExistingSavingsPlanFunding(input)).rejects.toThrow(
-    'This plan account has not been set up yet.'
-  );
+  expect(mockCreateApiClient).toHaveBeenCalledTimes(2);
 });

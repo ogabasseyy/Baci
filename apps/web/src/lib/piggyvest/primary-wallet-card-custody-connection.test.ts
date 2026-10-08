@@ -20,14 +20,21 @@ function setup() {
       new Response(JSON.stringify(body))
     );
   const submitApprovedTransfer = vi.fn().mockResolvedValue(undefined);
+  const lookupApprovedTransfer = vi.fn().mockResolvedValue('absent');
   const connection = createPrimaryCardCustodyConnection({
     configuration: fixture.configuration,
     fetchImplementation,
     submitApprovedTransfer,
+    lookupApprovedTransfer,
     resolveAuthenticatedCrosswalk: vi.fn().mockResolvedValue(fixture.crosswalk),
     now: () => fixture.now,
   });
-  return { connection, fetchImplementation, submitApprovedTransfer };
+  return {
+    connection,
+    fetchImplementation,
+    submitApprovedTransfer,
+    lookupApprovedTransfer,
+  };
 }
 describe('concrete storage to signed settlement connection', () => {
   it('never submits a claimed destination different from the durable scoped context', async () => {

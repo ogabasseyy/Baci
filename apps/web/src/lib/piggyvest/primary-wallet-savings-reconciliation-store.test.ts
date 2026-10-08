@@ -46,6 +46,26 @@ it('rejects unknown acknowledgements instead of claiming settlement', async () =
   });
   await expect(store.settle(proof)).rejects.toThrow('settlement unavailable');
 });
+it('releases failed holds through the same parameterized receipt without settling', async () => {
+  const execute = vi
+    .fn()
+    .mockResolvedValueOnce({ rows: [{ result: 'released' }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'credited' }] });
+  const store = createPrimaryWalletSavingsReconciliationStore({
+    integrationId,
+    environment: 'staging',
+    execute,
+  });
+  const failed = { ...proof, status: 'failed' as const };
+  expect(await store.release(failed)).toBe('released');
+  const { status: _status, ...receipt } = failed;
+  expect(execute).toHaveBeenNthCalledWith(
+    1,
+    'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
+    [integrationId, 'staging', JSON.stringify(receipt)]
+  );
+  await expect(store.release(failed)).rejects.toThrow('settlement unavailable');
+});
 it('rejects malformed operation IDs before storage', async () => {
   const execute = vi.fn();
   const store = createPrimaryWalletSavingsReconciliationStore({

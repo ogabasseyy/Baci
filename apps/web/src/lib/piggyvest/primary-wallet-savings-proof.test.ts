@@ -61,6 +61,39 @@ describe('primary wallet savings settlement proof', () => {
     ).toEqual({ status: 'unverified' });
   });
 
+  it('authenticates a failed transfer against the same bindings without verifying settlement', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        ...response,
+        data: { ...response.data, status: 'failed' },
+      })
+    ).toEqual({
+      status: 'failed',
+      providerTransactionId: 'provider-transaction',
+      operationId: reservation.operationId,
+      reference: reservation.reference,
+      amountKobo: 10000,
+      sourceWalletId: 'source-wallet',
+      destinationWalletId: 'savings-wallet',
+      businessId: 'business',
+    });
+  });
+
+  it.each([
+    { amount: 9999 },
+    { source_wallet: 'another-wallet' },
+    { third_party_reference: 'another-operation' },
+    { customer_id: 'another-customer' },
+    { fee: 1 },
+  ])('does not release the hold on mismatched failed evidence: %j', (change) => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, {
+        ...response,
+        data: { ...response.data, status: 'failed', ...change },
+      })
+    ).toEqual({ status: 'unverified' });
+  });
+
   it('does not treat a flat status response or processing acceptance as wallet settlement', () => {
     for (const evidence of [
       {
@@ -73,6 +106,8 @@ describe('primary wallet savings settlement proof', () => {
       },
       { accepted: true },
       { status: true, data: { ...response.data, status: 'pending' } },
+      { status: true, data: { status: 'failed' } },
+      { status: false, data: { ...response.data, status: 'failed' } },
     ])
       expect(verifyPrimaryWalletSavingsProof(reservation, evidence)).toEqual({
         status: 'unverified',

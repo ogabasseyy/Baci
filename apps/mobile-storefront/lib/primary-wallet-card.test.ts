@@ -199,6 +199,36 @@ it('blocks unrelated callbacks and response identities without deleting the dura
   await expect(client.recover(scope)).rejects.toThrow('could not be confirmed');
   expect(mockStorage.size).toBe(1);
 });
+it('adopts the stored operation when initialize returns a different amount after storage loss', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  const result = await client.start({ ...start, amountKobo: 200000 });
+  expect(result).toMatchObject({
+    adopted: true,
+    operationId,
+    amountKobo: 100000,
+    status: 'ready',
+  });
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    operationId,
+    amountKobo: 100000,
+  });
+  // The adopted record resumes through status polling with its own amount.
+  mockFetchJson.mockResolvedValueOnce({ ...response, status: 'completed' });
+  const recovered = await client.recover(scope);
+  expect(recovered).toMatchObject({ amountKobo: 100000, status: 'completed' });
+  expect('adopted' in recovered).toBe(false);
+  expect(mockStorage.size).toBe(0);
+});
+it('keeps the strict amount binding on status polls after adoption', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  await client.start({ ...start, amountKobo: 200000 });
+  mockFetchJson.mockResolvedValue({ ...response, amountKobo: 99999 });
+  await expect(client.recover(scope)).rejects.toThrow('could not be confirmed');
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    operationId,
+    amountKobo: 100000,
+  });
+});
 it('fails closed on storage failure before any provider initialization and preserves malformed records', async () => {
   mockSetItem.mockRejectedValueOnce(new Error('Synthetic storage failure'));
   await expect(

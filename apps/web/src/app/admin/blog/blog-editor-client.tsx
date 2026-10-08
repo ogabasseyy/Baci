@@ -147,10 +147,18 @@ export function BlogEditorClient({
     setForm,
     toast,
   });
-  const { inlineUploadsPending, uploadInlineImage } = useBlogInlineImageUpload({
+  const {
+    cleanupSettledInlineUploads,
+    inlineUploadsPending,
+    uploadInlineImage,
+  } = useBlogInlineImageUpload({
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    toast,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({
+    cleanupSettledInlineUploads,
     cleanupSettledSessionUploads,
     contentGenerationRef,
     coverStashRef,

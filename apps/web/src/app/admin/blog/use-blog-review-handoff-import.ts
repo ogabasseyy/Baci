@@ -31,6 +31,7 @@ function isFormDirty(form: PlatformAdminBlogFormState): boolean {
 }
 
 type UseBlogReviewHandoffImportArgs = {
+  cleanupSettledInlineUploads: (draft: PlatformAdminBlogFormState) => void;
   cleanupSettledSessionUploads: (draft: PlatformAdminBlogFormState) => void;
   contentGenerationRef: RefObject<number>;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
@@ -44,6 +45,7 @@ type UseBlogReviewHandoffImportArgs = {
 };
 
 export function useBlogReviewHandoffImport({
+  cleanupSettledInlineUploads,
   cleanupSettledSessionUploads,
   contentGenerationRef,
   coverStashRef,
@@ -70,6 +72,7 @@ export function useBlogReviewHandoffImport({
     }
     invalidateFeaturedUploads();
     cleanupSettledSessionUploads(draft);
+    cleanupSettledInlineUploads(draft);
     pendingContentEditRef.current = false;
     // The draft is a new baseline: a stashed pre-diversion cover belongs
     // to the replaced form and must not resurrect over the import.

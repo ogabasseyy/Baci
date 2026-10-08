@@ -89,7 +89,7 @@ function isThemeTextColor(color: string): boolean {
   );
 }
 
-const RESPONSIVE_SIZE_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
+const SIZE_UTILITY_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
 
 function responsiveUtility(token: string): string | null {
@@ -145,6 +145,11 @@ function isOpaqueTextColor(token: string): boolean {
  * escapes). Exact tokens and responsive variants both count. Size
  * restoration is tracked per constraint kind: used height is
  * min(max(h, min-h), max-h), so max-h-0 still caps after md:h-auto.
+ * Base (non-responsive) size utilities restore zero width/height
+ * ATTRIBUTES only: author rules unconditionally override
+ * presentational hints, while utility-vs-utility conflicts depend on
+ * stylesheet order, so class-token zeros still need a responsive
+ * override. A base max cap restores nothing: it cannot raise a zero.
  */
 export function showingMarkers(classes: readonly string[]): {
   display: boolean;
@@ -156,6 +161,8 @@ export function showingMarkers(classes: readonly string[]): {
   maxHeightRestored: boolean;
   widthRestored: boolean;
   maxWidthRestored: boolean;
+  baseHeightRestored: boolean;
+  baseWidthRestored: boolean;
 } {
   let visible = false;
   let opacity = false;
@@ -165,6 +172,8 @@ export function showingMarkers(classes: readonly string[]): {
   let maxHeightRestored = false;
   let widthRestored = false;
   let maxWidthRestored = false;
+  let baseHeightRestored = false;
+  let baseWidthRestored = false;
   // Display resolves per breakpoint: Tailwind emits `hidden` after the
   // showing display utilities, so `md:hidden` beats `md:block` at md
   // while other breakpoints decide independently.
@@ -181,18 +190,23 @@ export function showingMarkers(classes: readonly string[]): {
     if (utility !== null && isNonZeroOpacityUtility(utility)) opacity = true;
     if (token === 'not-sr-only' || utility === 'not-sr-only') notSrOnly = true;
     if (isOpaqueTextColor(token)) opaqueColor = true;
-    const size =
-      utility === null ? null : RESPONSIVE_SIZE_PATTERN.exec(utility);
+    const sizeTarget = utility === null ? token : utility;
+    const size = SIZE_UTILITY_PATTERN.exec(sizeTarget);
     if (size !== null && isNonZeroSizeValue(size[2])) {
       const property = size[1];
-      if (property === 'h' || property === 'size' || property === 'min-h') {
-        heightRestored = true;
+      const restoresHeight =
+        property === 'h' || property === 'size' || property === 'min-h';
+      const restoresWidth =
+        property === 'w' || property === 'size' || property === 'min-w';
+      if (utility === null) {
+        if (restoresHeight) baseHeightRestored = true;
+        if (restoresWidth) baseWidthRestored = true;
+      } else {
+        if (restoresHeight) heightRestored = true;
+        if (property === 'max-h') maxHeightRestored = true;
+        if (restoresWidth) widthRestored = true;
+        if (property === 'max-w') maxWidthRestored = true;
       }
-      if (property === 'max-h') maxHeightRestored = true;
-      if (property === 'w' || property === 'size' || property === 'min-w') {
-        widthRestored = true;
-      }
-      if (property === 'max-w') maxWidthRestored = true;
     }
   }
   const display = [...displayShowing].some(
@@ -208,5 +222,7 @@ export function showingMarkers(classes: readonly string[]): {
     maxHeightRestored,
     widthRestored,
     maxWidthRestored,
+    baseHeightRestored,
+    baseWidthRestored,
   };
 }

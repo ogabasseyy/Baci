@@ -109,6 +109,44 @@ describe('matchMediaElements', () => {
     ]);
   });
 
+  it('ignores unmatched end tags when tracking picture ancestry', () => {
+    // Browsers ignore a `</div>` with no open div; it must not pop
+    // the picture ancestor the following img belongs to.
+    const matches = matchMediaElements(
+      '<picture><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture>'
+    );
+    expect(matches.map((match) => match[0])).toEqual([
+      '<picture>',
+      '<source srcset="https://cdn.example.com/a.webp">',
+      '<img alt="">',
+      '</picture>',
+    ]);
+    expect(matches.map((match) => match.directPictureChild)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it('closes open descendants up to a matching end tag', () => {
+    // `</picture>` closes the still-open div as well as the picture,
+    // so a later source is an orphan, not a candidate.
+    expect(
+      matchMediaElements(
+        '<picture><div></picture><source srcset="https://cdn.example.com/a.webp">'
+      ).map((match) => match[0])
+    ).toEqual(['<picture>', '</picture>']);
+  });
+
+  it('skips stray picture end tags with no open picture', () => {
+    expect(
+      matchMediaElements('<picture><img alt=""></picture></picture>').map(
+        (match) => match[0]
+      )
+    ).toEqual(['<picture>', '<img alt="">', '</picture>']);
+  });
+
   it('returns no matches for text without elements', () => {
     expect(matchMediaElements('a < b and c > d')).toEqual([]);
   });

@@ -17,6 +17,18 @@ it.each([
   'not all, (',
   '(, [x]',
   '(, screen',
+  '(max-width: -1px)',
+  '(MAX-WIDTH: -1PX)',
+  '(width: -0.5px)',
+  '(width < 0px)',
+  '(width <= -1px)',
+  '(100px > width > 400px)',
+  '(100px < width < 50px)',
+  'screen and (max-width: -1px)',
+  '(max-width: -1px) and (color)',
+  '(max-width: -1px) or (max-height: -1px)',
+  'not (min-width: -1px)',
+  '((max-width: -1px))',
 ])('detects a never-matching media value: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(true);
 });
@@ -34,6 +46,18 @@ it.each([
   '), screen',
   '(orientation: "(")',
   'not screen',
+  '(min-width: -1px)',
+  '(width >= -1px)',
+  '(MIN-WIDTH: 0px)',
+  '(width > 100px)',
+  '(400px > width > 100px)',
+  '(400px <= width <= 800px)',
+  '(width <= 0px)',
+  '(min-width: 100px)',
+  '(max-width: 100px)',
+  '(orientation: landscape)',
+  '(max-width: -1px) or (color)',
+  'not (max-width: -1px)',
 ])('keeps a possibly-matching media value applicable: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(false);
 });

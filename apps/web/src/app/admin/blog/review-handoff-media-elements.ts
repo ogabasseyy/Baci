@@ -53,13 +53,18 @@ export function matchMediaElements(html: string): MediaElementMatch[] {
   for (const match of html.matchAll(HTML_ELEMENT_PATTERN)) {
     const tagName = match[2].toLowerCase();
     if (match[1] === '/') {
-      // Stray void-element closers are ignored like browsers ignore
-      // them; anything else pops one open ancestor.
+      // Browsers ignore an end tag with no matching open element, and
+      // otherwise close through to the matching ancestor — so an
+      // unmatched `</div>` inside a picture leaves the picture open
+      // while `</picture>` also closes a still-open inner div. Only a
+      // matched close is recorded, keeping caller picture stacks in
+      // sync with this ancestry.
+      if (VOID_ELEMENTS.has(tagName)) continue;
+      const openIndex = ancestors.lastIndexOf(tagName);
+      if (openIndex === -1) continue;
+      ancestors.length = openIndex;
       if (tagName === 'picture') {
         elements.push(flagMatch(match, false));
-        ancestors.pop();
-      } else if (!VOID_ELEMENTS.has(tagName)) {
-        ancestors.pop();
       }
       continue;
     }

@@ -18,6 +18,10 @@ describe('hasReadableContent', () => {
     '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
     '<div class="text-transparent"><p class="text-foreground">Readable</p></div>',
     '<div class="hidden md:block lg:hidden">Readable</div>',
+    '<img width="0" class="w-auto" src="https://cdn.example.com/a.png">',
+    '<img height="0" class="h-auto" src="https://cdn.example.com/a.png">',
+    '<img width="0" height="0" class="size-auto" src="https://cdn.example.com/a.png">',
+    '<img width="0" class="min-w-full" src="https://cdn.example.com/a.png">',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });
@@ -45,6 +49,8 @@ describe('hasReadableContent', () => {
     '<div class="text-transparent"><p class="text-black/0">Hidden</p></div>',
     '<img class="max-h-0 md:h-auto" src="https://cdn.example.com/a.png">',
     '<div class="hidden md:block md:hidden">Hidden</div>',
+    '<img width="0" class="max-w-full" src="https://cdn.example.com/a.png">',
+    '<img width="0" class="h-auto" src="https://cdn.example.com/a.png">',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

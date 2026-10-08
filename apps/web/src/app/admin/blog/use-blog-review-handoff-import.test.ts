@@ -18,6 +18,7 @@ function setup(
     form: { ...DEFAULT_PLATFORM_BLOG_FORM_STATE },
     inlineUploadsPending: false,
     invalidateFeaturedUploads: vi.fn(),
+    cleanupSettledInlineUploads: vi.fn(),
     cleanupSettledSessionUploads: vi.fn(),
     pendingContentEditRef: { current: false },
     saving: false,
@@ -45,6 +46,7 @@ describe('useBlogReviewHandoffImport', () => {
     expect(args.setContentResetKey).toHaveBeenCalled();
     expect(args.invalidateFeaturedUploads).toHaveBeenCalled();
     expect(args.cleanupSettledSessionUploads).toHaveBeenCalledWith(draft);
+    expect(args.cleanupSettledInlineUploads).toHaveBeenCalledWith(draft);
     expect(args.contentGenerationRef.current).toBe(1);
   });
 
@@ -78,6 +80,7 @@ describe('useBlogReviewHandoffImport', () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(args.setForm).not.toHaveBeenCalled();
     expect(args.cleanupSettledSessionUploads).not.toHaveBeenCalled();
+    expect(args.cleanupSettledInlineUploads).not.toHaveBeenCalled();
   });
 
   it('refuses to import while an inline upload is pending', () => {

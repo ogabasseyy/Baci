@@ -63,6 +63,16 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('ignores a picture source with an impossible media range', () => {
+    // No viewport is narrower than -1px, so the source never matches
+    // and the src-less img renders nothing.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source media="(max-width: -1px)" srcset="https://cdn.example.com/a.webp"><img alt=""></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('accepts a device-dependent media query with an img fallback', () => {
     // Viewport-dependent queries cannot be evaluated without a
     // device, so they stay applicable; the img fallback supplies a
@@ -121,5 +131,15 @@ describe('validateImportedContent picture', () => {
         '<source srcset="http://example.com/old.webp"><p>Body</p>'
       )
     ).toContain('Body');
+  });
+
+  it('accepts a picture source followed by an unmatched end tag', () => {
+    // Browsers ignore the stray `</div>` and sanitization normalizes
+    // the markup, so the source still supplies the direct-child img.
+    expect(
+      validateImportedContent(
+        '<picture><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture>'
+      )
+    ).toContain('<img');
   });
 });

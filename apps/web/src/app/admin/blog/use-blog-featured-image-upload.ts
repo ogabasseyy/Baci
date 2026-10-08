@@ -11,6 +11,7 @@ import type {
   PlatformAdminBlogCoverState,
   PlatformAdminBlogFormState,
 } from './blog-types';
+import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 
 type UploadResult = {
   url: string;
@@ -132,7 +133,7 @@ export function useBlogFeaturedImageUpload({
   const cleanupSettledSessionUploads = (
     draft: Pick<
       PlatformAdminBlogFormState,
-      'featured_image_url' | 'featured_image_variants'
+      'content' | 'featured_image_url' | 'featured_image_variants'
     >
   ) => {
     // Settled uploads are past invalidation: when an accepted import
@@ -141,19 +142,12 @@ export function useBlogFeaturedImageUpload({
     // objects the incoming draft itself reuses, which must be kept.
     // Both sides compare by storage path: the draft may reference the
     // same object through another public URL form (Supabase public
-    // URLs vs the CDN URLs the upload returned).
+    // URLs vs the CDN URLs the upload returned), and the article body
+    // may embed uploads the cover does not use.
     const tracked = settledUploadsRef.current;
     settledUploadsRef.current = [];
     if (tracked.length === 0) return;
-    const keepPaths = new Set(
-      [
-        draft.featured_image_url,
-        ...Object.values(draft.featured_image_variants),
-      ]
-        .filter((url): url is string => typeof url === 'string')
-        .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
-        .filter((path): path is string => path !== null)
-    );
+    const keepPaths = draftReferencedMediaPaths(draft);
     void (async () => {
       for (const result of tracked) {
         const paths = [result.url, ...Object.values(result.variants ?? {})]

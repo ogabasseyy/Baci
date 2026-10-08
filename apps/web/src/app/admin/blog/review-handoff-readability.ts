@@ -11,9 +11,10 @@ function isZeroSizedImage(tag: string): boolean {
   // and ignored by browsers (natural size, still visible). Zero-size
   // utilities on the image itself need no overflow rule: replaced
   // content conforms to the zero box instead of overflowing it. CSS
-  // beats presentational attributes, so a responsive size utility
-  // restores zeroed tokens and zero attributes alike at its
-  // breakpoint, per constraint kind like the clipping path.
+  // beats presentational attributes, so any base or responsive size
+  // utility restores a zero attribute, per constraint kind like the
+  // clipping path — while a zeroed class token still needs a
+  // responsive override, since same-layer utility order is unproven.
   const classes: string[] = [];
   let widthAttrZero = false;
   let heightAttrZero = false;
@@ -27,14 +28,16 @@ function isZeroSizedImage(tag: string): boolean {
   }
   const markers = showingMarkers(classes);
   const heightZero =
-    ((classes.some((token) => ZERO_HEIGHT_CLASS_TOKENS.has(token)) ||
-      heightAttrZero) &&
+    (classes.some((token) => ZERO_HEIGHT_CLASS_TOKENS.has(token)) &&
       !markers.heightRestored) ||
+    (heightAttrZero &&
+      !markers.heightRestored &&
+      !markers.baseHeightRestored) ||
     (classes.includes('max-h-0') && !markers.maxHeightRestored);
   const widthZero =
-    ((classes.some((token) => ZERO_WIDTH_CLASS_TOKENS.has(token)) ||
-      widthAttrZero) &&
+    (classes.some((token) => ZERO_WIDTH_CLASS_TOKENS.has(token)) &&
       !markers.widthRestored) ||
+    (widthAttrZero && !markers.widthRestored && !markers.baseWidthRestored) ||
     (classes.includes('max-w-0') && !markers.maxWidthRestored);
   return heightZero || widthZero;
 }

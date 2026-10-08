@@ -19,14 +19,14 @@ BEGIN;
 DO $$
 BEGIN
   IF to_regprocedure(
-    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer,integer)'
   ) IS NULL THEN
     RAISE EXCEPTION 'transaction review search function is missing';
   END IF;
 
   IF NOT has_function_privilege(
     'authenticated',
-    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'::regprocedure,
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer,integer)'::regprocedure,
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'authenticated search execute grant is missing';
@@ -34,7 +34,7 @@ BEGIN
 
   IF has_function_privilege(
     'anon',
-    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'::regprocedure,
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer,integer)'::regprocedure,
     'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'anonymous search execute grant must remain revoked';
@@ -229,6 +229,39 @@ INSERT INTO public.orders (
   100.00,
   '2026-10-01T12:00:00Z',
   '2020-05-05T12:00:00Z'
+);
+
+-- Equal effective transaction dates (midnight edits): the capped set must
+-- prefer the newer-created row over UUID order. Ids deliberately
+-- anti-align with creation order so the tie-break is observable.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at, transaction_date
+) VALUES (
+  'c0000000-0000-4000-8000-000000000010',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'TIE-NEWER',
+  'Tiebreaker Newer',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-03T12:00:00Z',
+  '2026-09-20T00:00:00Z'
+);
+
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at, transaction_date
+) VALUES (
+  'c0000000-0000-4000-8000-000000000011',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'TIE-OLDER',
+  'Tiebreaker Older',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-01T12:00:00Z',
+  '2026-09-20T00:00:00Z'
 );
 
 -- Unpaid order: must never match.
@@ -495,6 +528,45 @@ BEGIN
   IF v_ids IS DISTINCT FROM
     ARRAY['c0000000-0000-4000-8000-000000000008'::uuid] THEN
     RAISE EXCEPTION 'limit buried a recent null-date match: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['tiebreaker']
+  );
+  IF v_ids IS DISTINCT FROM
+    ARRAY[
+      'c0000000-0000-4000-8000-000000000010'::uuid,
+      'c0000000-0000-4000-8000-000000000011'::uuid
+    ] THEN
+    RAISE EXCEPTION 'equal transaction dates must break by creation time: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['tiebreaker'],
+    1,
+    1
+  );
+  IF v_ids IS DISTINCT FROM
+    ARRAY['c0000000-0000-4000-8000-000000000011'::uuid] THEN
+    RAISE EXCEPTION 'search offset skipped ranked candidates: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['tiebreaker'],
+    1,
+    2
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'search offset past the end must return no rows: %', v_ids;
   END IF;
 
   SELECT array_agg(order_id)

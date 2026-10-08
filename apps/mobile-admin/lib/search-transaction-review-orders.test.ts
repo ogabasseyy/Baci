@@ -32,6 +32,7 @@ describe('searchTransactionReviewOrders', () => {
       {
         p_limit: 101,
         p_merchant_id: 'merchant-1',
+        p_offset: 0,
         p_terms: ['353232106161443', 'ada'],
       }
     );
@@ -98,6 +99,34 @@ describe('searchTransactionReviewOrders', () => {
       errorKind: 'missing-search-function',
       orderIds: [],
     });
+  });
+
+  it('pages ranked candidates with limit and offset', async () => {
+    const { searchTransactionReviewOrders } = await import(
+      './search-transaction-review-orders'
+    );
+    mocks.rpc.mockResolvedValue({
+      data: [{ order_id: 'order-9' }],
+      error: null,
+    });
+
+    const result = await searchTransactionReviewOrders({
+      limit: 101,
+      merchantId: 'merchant-1',
+      offset: 100,
+      search: 'ada',
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'search_mobile_admin_transaction_review_orders',
+      {
+        p_limit: 101,
+        p_merchant_id: 'merchant-1',
+        p_offset: 100,
+        p_terms: ['ada'],
+      }
+    );
+    expect(result.orderIds).toEqual(['order-9']);
   });
 
   it('reports other failures without the fallback kind', async () => {

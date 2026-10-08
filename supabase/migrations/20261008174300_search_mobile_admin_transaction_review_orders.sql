@@ -56,10 +56,16 @@ COMMENT ON FUNCTION public.transaction_review_jsonb_search_values(jsonb) IS
 REVOKE ALL ON FUNCTION public.transaction_review_jsonb_search_values(jsonb)
   FROM PUBLIC, anon, authenticated;
 
-CREATE OR REPLACE FUNCTION public.search_mobile_admin_transaction_review_orders(
+-- Dropped first because the signature gains p_offset below.
+DROP FUNCTION IF EXISTS public.search_mobile_admin_transaction_review_orders(
+  uuid, text[], integer
+);
+
+CREATE FUNCTION public.search_mobile_admin_transaction_review_orders(
   p_merchant_id uuid,
   p_terms text[],
-  p_limit integer DEFAULT 100
+  p_limit integer DEFAULT 100,
+  p_offset integer DEFAULT 0
 )
 RETURNS TABLE (order_id uuid)
 LANGUAGE plpgsql
@@ -71,6 +77,10 @@ DECLARE
   v_caller_role text := COALESCE((SELECT auth.role()), '');
   v_terms text[];
   v_limit integer := LEAST(GREATEST(COALESCE(p_limit, 100), 1), 200);
+  -- Paging support for post-filter backfill (e.g. the missing-costs tab):
+  -- the client pages while its post-filter set is short. Clamped so a deep
+  -- offset cannot force an unbounded sort-and-skip.
+  v_offset integer := LEAST(GREATEST(COALESCE(p_offset, 0), 0), 1000);
   v_has_cancelled_at boolean := false;
   v_has_transaction_date boolean := false;
   v_has_item_variant_id boolean := false;
@@ -94,7 +104,9 @@ BEGIN
   END IF;
 
   -- Normalize defensively: blank terms would match every row under ILIKE, so
-  -- drop them; cap term count and length to bound planning cost.
+  -- drop them; cap term count and length to bound planning cost. The client
+  -- splitter mirrors these caps exactly, so they bind only for direct RPC
+  -- callers.
   SELECT COALESCE(array_agg(term ORDER BY term), '{}')
   INTO v_terms
   FROM (
@@ -315,10 +327,13 @@ BEGIN
   END IF;
 
   -- Rank candidates by effective transaction date so a recent null-date
-  -- order is not buried behind every dated row when the cap applies.
+  -- order is not buried behind every dated row when the cap applies. Equal
+  -- effective dates break by creation time (matching browse order) before
+  -- the id tie-break, so the capped set keeps the newest rows rather than
+  -- an arbitrary UUID slice.
   IF v_has_transaction_date THEN
     v_order_by :=
-      'COALESCE(o.transaction_date, o.created_at) DESC, o.id DESC';
+      'COALESCE(o.transaction_date, o.created_at) DESC, o.created_at DESC, o.id DESC';
   END IF;
 
   v_sql := v_sql || $query$
@@ -328,20 +343,20 @@ BEGIN
       )
     ORDER BY
   $query$ || v_order_by || $query$
-    LIMIT $3
+    LIMIT $3 OFFSET $4
   $query$;
 
-  RETURN QUERY EXECUTE v_sql USING p_merchant_id, v_terms, v_limit;
+  RETURN QUERY EXECUTE v_sql USING p_merchant_id, v_terms, v_limit, v_offset;
 END;
 $$;
 
-ALTER FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer)
+ALTER FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer, integer)
   OWNER TO postgres;
 
-COMMENT ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer) IS
+COMMENT ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer, integer) IS
   'Returns paid, visible transaction-review order ids matching every search term after one merchant-access check.';
 
-REVOKE ALL ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer)
+REVOKE ALL ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer, integer)
   FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer)
+GRANT EXECUTE ON FUNCTION public.search_mobile_admin_transaction_review_orders(uuid, text[], integer, integer)
   TO authenticated, service_role;

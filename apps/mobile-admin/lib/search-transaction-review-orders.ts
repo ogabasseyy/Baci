@@ -28,10 +28,14 @@ function isMissingSearchFunction(error: TransactionReviewQueryError) {
 
 /** Returns bounded transaction-review order ids matching every search term. */
 export async function searchTransactionReviewOrders({
+  limit = TRANSACTION_REVIEW_SEARCH_LIMIT + 1,
   merchantId,
+  offset = 0,
   search,
 }: {
+  limit?: number;
   merchantId: string;
+  offset?: number;
   search: string;
 }): Promise<TransactionReviewSearchResult> {
   const terms = splitTransactionSearchTerms(search);
@@ -45,8 +49,9 @@ export async function searchTransactionReviewOrders({
   const { data, error } = await supabase.rpc(
     'search_mobile_admin_transaction_review_orders',
     {
-      p_limit: TRANSACTION_REVIEW_SEARCH_LIMIT + 1,
+      p_limit: limit,
       p_merchant_id: merchantId,
+      p_offset: offset,
       p_terms: terms,
     }
   );

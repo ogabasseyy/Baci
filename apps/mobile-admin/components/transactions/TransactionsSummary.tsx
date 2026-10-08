@@ -10,7 +10,7 @@ interface TransactionsSummaryProps {
   estimatedProfitLabel: string;
   onTabChange: (tab: TransactionReviewTab) => void;
   summary: {
-    missingCosts: number;
+    missingCosts: number | string;
     transactions: number | string;
   };
 }

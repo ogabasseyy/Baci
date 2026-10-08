@@ -180,6 +180,7 @@ it('searches an older IMEI beyond the first database page', async () => {
     selectStatement: 'id, fulfillment_details',
   });
   expect(result.data).toHaveLength(201);
+  expect(result.truncated).toBe(false);
   const matches = filterTransactionOrders(
     mapTransactionOrderRows(result.data ?? []),
     '354066782325743'
@@ -188,6 +189,33 @@ it('searches an older IMEI beyond the first database page', async () => {
   expect(mocks.gt).toHaveBeenCalledWith('id', 'a-199');
   expect(mocks.eq).toHaveBeenCalledWith('payment_status', 'paid');
   expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+});
+
+it('caps the legacy scan and reports truncation instead of paging forever', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  // Eleven full pages: the eleventh must never be requested.
+  for (let page = 0; page < 11; page += 1) {
+    mocks.returns.mockResolvedValueOnce({
+      data: Array.from({ length: 200 }, (_, index) => ({
+        created_at: '2025-01-01T00:00:00Z',
+        id: `p${page}-${String(index).padStart(3, '0')}`,
+      })),
+      error: null,
+    });
+  }
+  const result = await fetchTransactionReviewRows({
+    includeCancelledAt: true,
+    includeTransactionDate: false,
+    merchantId: 'merchant-1',
+    fetchAll: true,
+    selectStatement: 'id',
+  });
+  expect(result.error).toBeNull();
+  expect(result.data).toHaveLength(2000);
+  expect(result.truncated).toBe(true);
+  expect(mocks.returns).toHaveBeenCalledTimes(10);
 });
 
 it('returns an error rather than incomplete searchable history when a later page fails', async () => {

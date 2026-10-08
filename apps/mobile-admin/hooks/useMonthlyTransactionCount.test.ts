@@ -69,6 +69,31 @@ describe('useMonthlyTransactionCount', () => {
     });
   });
 
+  it('anchors the month to local midnight when UTC disagrees', async () => {
+    // 00:30 on Oct 1 in UTC+ zones is still Sep 30 in UTC: the window must
+    // follow the device calendar, not UTC day boundaries.
+    const { result } = renderHook(
+      () => useMonthlyTransactionCount(new Date(2026, 9, 1, 0, 30)),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.data).toBe(12));
+    const { endDateIso, startDateIso } =
+      mocks.fetchTransactionReviewCount.mock.calls[0][0];
+    const start = new Date(startDateIso);
+    const end = new Date(endDateIso);
+    expect([start.getFullYear(), start.getMonth(), start.getDate()]).toEqual([
+      2026, 9, 1,
+    ]);
+    expect([
+      end.getFullYear(),
+      end.getMonth(),
+      end.getDate(),
+      end.getHours(),
+      end.getMinutes(),
+    ]).toEqual([2026, 9, 31, 23, 59]);
+  });
+
   it('surfaces count errors', async () => {
     mocks.fetchTransactionReviewCount.mockResolvedValue({
       count: null,

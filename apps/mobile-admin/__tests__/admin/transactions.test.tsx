@@ -464,6 +464,35 @@ describe('TransactionsScreen', () => {
     expect(screen.getByText('No transactions yet.')).toBeInTheDocument();
   });
 
+  it('shows a placeholder missing-costs count while the range summary is pending', () => {
+    mocks.useTransactionReview.mockImplementation(
+      (_range: unknown, options?: { enabled?: boolean; search?: string }) => {
+        // The summary query passes { enabled } while the list query passes
+        // { search }.
+        if (options && 'enabled' in options) {
+          return {
+            data: undefined,
+            error: null,
+            isPending: true,
+            refetch: vi.fn(),
+          };
+        }
+        return {
+          data: sampleOrders,
+          error: null,
+          isLoading: false,
+          isPending: false,
+          isRefetching: false,
+          refetch: vi.fn(),
+        };
+      }
+    );
+
+    render(<TransactionsScreen />);
+
+    expect(screen.getByText('-- missing costs')).toBeInTheDocument();
+  });
+
   it('loads the estimated profit from the current-month analytics range', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-25T12:00:00.000Z'));
@@ -1083,6 +1112,7 @@ describe('TransactionsScreen', () => {
     expect(mocks.useDebounce).toHaveBeenCalledWith('353232106161443', 250);
     expect(mocks.useTransactionReview).toHaveBeenCalledWith(undefined, {
       search: '353232106161443',
+      tab: 'paid',
     });
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
   });

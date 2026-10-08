@@ -69,10 +69,12 @@ export default function TransactionsScreen() {
     searchTruncated,
   } = useTransactionReview(searching ? undefined : range, {
     search: searching ? debouncedSearchQuery : undefined,
+    tab: activeTab,
   });
-  const { data: rangeOrders = [] } = useTransactionReview(range, {
-    enabled: !searching,
-  });
+  const { data: rangeOrders = [], isPending: rangeSummaryPending } =
+    useTransactionReview(range, {
+      enabled: !searching,
+    });
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
@@ -80,10 +82,11 @@ export default function TransactionsScreen() {
   });
 
   const summary = {
-    missingCosts: rangeOrders.reduce(
-      (count, order) => count + order.missingCostCount,
-      0
-    ),
+    // The range query has no data on a cold cache (or while disabled during
+    // search): show a placeholder rather than a 0 that reads as final.
+    missingCosts: rangeSummaryPending
+      ? '--'
+      : rangeOrders.reduce((count, order) => count + order.missingCostCount, 0),
     transactions: monthlyCountQuery.error
       ? 'Unavailable'
       : (monthlyCountQuery.data ?? '--'),

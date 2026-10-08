@@ -54,6 +54,7 @@ describe.skipIf(!socketDirectory)(
         integrationId: configuration.integrationId,
         socketDirectory,
         port: 55454,
+        password: 'synthetic-local-only',
       });
       const adapter = createSavingsExitEvidence({
         configuration,

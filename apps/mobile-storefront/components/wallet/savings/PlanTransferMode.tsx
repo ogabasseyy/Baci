@@ -19,17 +19,11 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
   // the persisted initial contribution, not the wallet top-up shortfall.
   const transferAmount = controller.effectiveInitialContribution;
   const phase = controller.planFundingPhase;
-
-  // Staging never collects BVN (staging boundary: synthetic identities
-  // only): the lookup below hides the prompt and checks the existing
-  // account status instead, mirroring SavingsPlanFundingDetails.
   const isHostedStaging = isHostedStagingTestPaymentsEnabled();
 
-  const handleFetchPlanAccount = async () => {
+  const handleCheckPlanAccountStatus = async () => {
     try {
-      await controller.fetchPlanFunding(bvn, {
-        enableInterestAccrual: earnInterest,
-      });
+      await controller.fetchExistingPlanFunding();
     } catch (error) {
       handleSavingsActionError(
         error,
@@ -39,9 +33,11 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
     }
   };
 
-  const handleCheckPlanAccountStatus = async () => {
+  const handleFetchPlanAccount = async () => {
     try {
-      await controller.fetchExistingPlanFunding();
+      await controller.fetchPlanFunding(bvn, {
+        enableInterestAccrual: earnInterest,
+      });
     } catch (error) {
       handleSavingsActionError(
         error,

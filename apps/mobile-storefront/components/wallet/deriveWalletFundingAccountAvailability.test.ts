@@ -8,6 +8,22 @@ const enabledPaymentSettings = {
 } as PaymentSettings;
 
 describe('deriveWalletFundingAccountAvailability', () => {
+  it('opens primary wallet setup without manufacturing Paystack payment settings', () => {
+    const availability = deriveWalletFundingAccountAvailability({
+      customerPhone: ' 08012345678 ',
+      isPaymentSettingsError: true,
+      isPaymentSettingsPending: true,
+      paymentSettings: null,
+      primaryWalletSetup: true,
+    });
+    expect(availability).toMatchObject({
+      canCreateFundingAccount: true,
+      customerPhone: '08012345678',
+      isPaymentSettingsPending: false,
+      needsPhone: false,
+    });
+    expect(availability.createFundingAccountUnavailableMessage).toBeUndefined();
+  });
   it('allows account creation when DVA is enabled and the customer has a phone number', () => {
     const availability = deriveWalletFundingAccountAvailability({
       customerPhone: ' 08012345678 ',

@@ -9,6 +9,7 @@ import { PaymentErrorView } from '@/components/payment-gateway/PaymentErrorView'
 import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/PaymentGatewayCheckoutView';
 import { PaymentProcessingView } from '@/components/payment-gateway/PaymentProcessingView';
 import { PaymentSuccessView } from '@/components/payment-gateway/PaymentSuccessView';
+import { PrimaryWalletCardPendingView } from '@/components/payment-gateway/PrimaryWalletCardPendingView';
 import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendingView';
 import { resolvePendingOrdersRoute } from '@/components/payment-gateway/resolve-pending-orders-route';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
@@ -49,6 +50,20 @@ export default function PaymentGatewayScreen() {
       );
     }
 
+    if (
+      controller.paymentKind === 'primary_wallet_card' &&
+      (controller.status === 'pending' || controller.status === 'error')
+    ) {
+      return (
+        <PrimaryWalletCardPendingView
+          colors={colors}
+          statusError={controller.status === 'error'}
+          message={controller.errorMessage}
+          onCheck={controller.handleRetry}
+          onBack={() => router.replace('/wallet')}
+        />
+      );
+    }
     if (controller.status === 'pending' || controller.status === 'held') {
       return (
         <RedvaultPendingView

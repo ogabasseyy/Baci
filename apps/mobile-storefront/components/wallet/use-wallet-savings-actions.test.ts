@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { router } from 'expo-router';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
+import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import { createWalletSavingsActions } from './use-wallet-savings-actions';
 import { addSavingsContributionToGoal } from './wallet-screen-savings.handlers';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'synthetic-key' }));
+jest.mock('./check-pending-primary-savings', () => ({
+  checkPendingPrimarySavings: jest.fn(),
+}));
 const mockIsHostedStagingTestPaymentsEnabled = jest.fn();
 jest.mock('@/lib/is-hosted-staging-wallet-top-up-blocked', () => ({
   isHostedStagingTestPaymentsEnabled: () =>
@@ -48,6 +52,22 @@ function createInput(goal: WalletActiveSavingsGoal | null = activeGoal) {
 }
 
 describe('createWalletSavingsActions', () => {
+  it('exposes pending status only for an existing primary-wallet operation', () => {
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      idempotencyKeyRef: { current: 'pending-operation' },
+    };
+    expect(
+      createWalletSavingsActions(input).hasPendingSavingsContribution
+    ).toBe(true);
+    expect(
+      createWalletSavingsActions({
+        ...input,
+        activeMerchantId: 'other-merchant',
+      }).hasPendingSavingsContribution
+    ).toBe(false);
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(false);
@@ -81,6 +101,24 @@ describe('createWalletSavingsActions', () => {
 
     expect(input.startWalletTopUp).toHaveBeenCalledTimes(1);
     expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('checks an existing primary contribution instead of starting another wallet payment', () => {
+    const input = {
+      ...createInput(),
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      idempotencyKeyRef: { current: 'pending-operation' },
+    };
+    mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
+
+    createWalletSavingsActions(input).handleFundSavingsWallet();
+
+    expect(checkPendingPrimarySavings).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: 'pending-operation' })
+    );
+    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(input.idempotencyKeyRef.current).toBe('pending-operation');
   });
 
   it('opens selected plan bank funding only in pinned hosted staging', () => {

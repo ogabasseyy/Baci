@@ -1,5 +1,7 @@
 import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import { WalletFundingAccountResponseSchema } from '@/schemas/wallet-funding-account';
+import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
+import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 export type { WalletFundingAccount } from '@/schemas/wallet-funding-account';
 
@@ -42,6 +44,9 @@ export async function getWalletFundingAccount({
   merchantId?: string | null;
   merchantSlug?: string | null;
 }) {
+  if (isPiggyvestPrimaryMerchant(merchantId)) {
+    return piggyvestPrimaryWalletApi.read(merchantId ?? '');
+  }
   const data = await walletFundingApiClient.fetchJson({
     path: '/api/storefront/customer/wallet/funding-account',
     query: { merchantId, merchantSlug },
@@ -59,10 +64,25 @@ export async function getWalletFundingAccount({
 export async function createWalletFundingAccount({
   merchantId,
   merchantSlug,
+  bvn,
+  consent,
 }: {
   merchantId?: string | null;
   merchantSlug?: string | null;
+  bvn?: string;
+  consent?: boolean;
 }) {
+  if (isPiggyvestPrimaryMerchant(merchantId)) {
+    if (!bvn || consent !== true)
+      throw new Error(
+        'Your BVN and consent are required for PiggyVest wallet setup. No bank account was created.'
+      );
+    return piggyvestPrimaryWalletApi.create({
+      merchantId: merchantId ?? '',
+      bvn,
+      consent,
+    });
+  }
   const data = await walletFundingApiClient.fetchJson({
     body: {
       consent: true,

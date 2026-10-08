@@ -8,6 +8,36 @@ const { createWalletFundingAccount, getWalletFundingAccount } =
   require('@/lib/wallet-funding-account') as typeof import('@/lib/wallet-funding-account');
 
 describe('wallet funding account api client', () => {
+  it('does not dispatch a Paystack creation for the PiggyVest primary merchant', async () => {
+    mockFetchWithTimeout.mockClear();
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).rejects.toThrow('No bank account was created');
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+  it('does not return the legacy funding account for the PiggyVest primary merchant', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
+    await expect(
+      getWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).resolves.toEqual({
+      account: null,
+      requiresConsent: true,
+      provisioningStatus: 'pending',
+    });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      'https://usebaci.com/api/storefront/customer/wallet/piggyvest-primary?merchantId=6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
   it('fetches the customer funding account with merchant slug fallback', async () => {
     mockFetchWithTimeout.mockResolvedValue({
       ok: true,

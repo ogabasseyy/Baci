@@ -2,10 +2,12 @@ import { VTU_MIN_REDEEMABLE_POINTS } from '@baci/shared/lib';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { createLogger } from '@/lib/logger';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
 import { scheduleLocalNotification } from '@/services/push-notifications';
+import { fundPrimaryWalletCard } from './fund-primary-wallet-card';
 import { WALLET_FUNDING_ACCOUNT_MESSAGES } from './wallet-funding-account.constants';
 import {
   buildWalletTopUpGatewayParams,
@@ -132,9 +134,6 @@ export async function createWalletFundingAccount({
     Alert.alert('Unable to create account number', outcome.alertMessage);
     return false;
   }
-  if (outcome.accountSummary) {
-    Alert.alert('Account Ready', outcome.accountSummary);
-  }
   return true;
 }
 
@@ -160,6 +159,18 @@ export async function fundWallet({
       'Card wallet top-ups are disabled in this hosted staging preview.'
     );
     return;
+  }
+  if (isPiggyvestPrimaryMerchant(activeMerchantId)) {
+    return fundPrimaryWalletCard({
+      activeMerchantId,
+      activeMerchantSlug,
+      customer,
+      fundAmount,
+      resetFundPanel,
+      setIsFundPending,
+      user,
+      walletReturnTo,
+    });
   }
   setIsFundPending(true);
   try {

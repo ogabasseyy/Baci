@@ -20,6 +20,30 @@ const goal: WalletActiveSavingsGoal = {
 };
 
 describe('wallet-screen-savings.handlers', () => {
+  it('preserves the amount and operation key without announcing success for pending PiggyVest settlement', async () => {
+    const clearSavingsContributionAmount = jest.fn();
+    const clearIdempotencyKey = jest.fn();
+    const cancelSavingsReminder = jest.fn(async () => true);
+    await addSavingsContributionToGoal({
+      addSavingsContribution: async () => ({ status: 'pending' }),
+      clearSavingsContributionAmount,
+      clearIdempotencyKey,
+      cancelSavingsReminder,
+      createIdempotencyKey: () => 'pending-operation',
+      goal,
+      rawAmount: '4500',
+      refetchWallet: async () => ({}),
+      setIsAddingSavingsContribution: jest.fn(),
+      walletBalance: 5000,
+    });
+    expect(clearSavingsContributionAmount).not.toHaveBeenCalled();
+    expect(clearIdempotencyKey).not.toHaveBeenCalled();
+    expect(cancelSavingsReminder).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Contribution pending',
+      expect.stringContaining('PiggyVest confirms')
+    );
+  });
   beforeEach(() => {
     jest.clearAllMocks();
   });

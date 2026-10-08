@@ -10,8 +10,6 @@ export function useStartSavingsProductSearch({
   params: SavingsSearchParams;
   searchValue: string;
 }) {
-  // Debounced like storefront search: useProducts starts an uncancelled
-  // Supabase query per search string, so raw keystrokes would fan out.
   const debouncedSearch = useDebounce(searchValue, 300);
   const {
     products,

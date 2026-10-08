@@ -7,6 +7,30 @@ export function prefundedCardWebhookCases(
   post: (request: NextRequest) => Promise<Response>
 ) {
   describe('first-card capture isolation', () => {
+    it.each([
+      { transaction_type: 'primary_wallet_card_checkout' },
+      JSON.stringify({ transaction_type: 'primary_wallet_card_checkout' }),
+    ])('isolates signed primary metadata without a recognized reference: %j', async (metadata) => {
+      const raw = JSON.stringify({
+        event: 'charge.success',
+        data: { reference: 'different', metadata },
+      });
+      const signature = createHmac('sha512', 'test-paystack-secret')
+        .update(raw)
+        .digest('hex');
+      const response = await post(
+        new Request('https://staging.ogabassey.com/api/payments/webhook', {
+          method: 'POST',
+          headers: { 'x-paystack-signature': signature },
+          body: raw,
+        }) as NextRequest
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({
+        code: 'PRIMARY_CARD_WEBHOOK_PENDING',
+      });
+      expect(vi.mocked(createServiceClient)).not.toHaveBeenCalled();
+    });
     it('rejects an unsigned first-card event before deciding its routing', async () => {
       const request = new Request(
         'https://staging.ogabassey.com/api/payments/webhook',

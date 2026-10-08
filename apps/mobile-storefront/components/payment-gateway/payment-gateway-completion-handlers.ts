@@ -107,6 +107,25 @@ export function createPaymentGatewayCompletionHandlers({
       beginVtuPaymentCompletion();
       return;
     }
+    if (paymentKind === PAYMENT_KINDS.PRIMARY_WALLET_CARD) {
+      const { beginPrimaryWalletCardCompletion } = await import(
+        './primary-wallet-card-completion'
+      );
+      beginPrimaryWalletCardCompletion({
+        clearPendingLoadTimeout,
+        gateway,
+        merchantId,
+        merchantSlug,
+        queryClient,
+        reference,
+        refs,
+        returnTo,
+        scheduleDelayedNavigation,
+        setErrorMessage,
+        setPaymentStatus,
+      });
+      return;
+    }
 
     if (paymentKind === PAYMENT_KINDS.WALLET) {
       beginWalletTopUpCompletion({

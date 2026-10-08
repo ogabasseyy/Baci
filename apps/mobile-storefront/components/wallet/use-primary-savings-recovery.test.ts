@@ -1,0 +1,64 @@
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { usePrimarySavingsRecovery } from './use-primary-savings-recovery';
+
+const mockRecover = jest.fn();
+jest.mock('@/lib/piggyvest-primary-savings-recovery', () => ({
+  recoverPiggyvestPrimarySavings: (...args: unknown[]) => mockRecover(...args),
+}));
+const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const input = () => ({
+  merchantId,
+  userId: 'user-1',
+  goalId: 'goal-1',
+  operationRef: { current: null as string | null },
+  setAmount: jest.fn(),
+});
+beforeEach(() => jest.resetAllMocks());
+it('restores a server-owned pending operation after restarting the screen', async () => {
+  const props = input();
+  mockRecover.mockResolvedValue({
+    operationId: 'existing-operation',
+    goalId: props.goalId,
+    amountKobo: 12500,
+    state: 'dispatched',
+  });
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  expect(result.current.ready).toBe(false);
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  expect(props.operationRef.current).toBe('existing-operation');
+  expect(props.setAmount).toHaveBeenCalledWith('125');
+});
+it('keeps submission blocked after recovery fails and supports a read-only retry', async () => {
+  mockRecover
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValueOnce(null);
+  const props = input();
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.ready).toBe(false);
+  act(() => result.current.retry());
+  await waitFor(() => expect(result.current.ready).toBe(true));
+});
+it('ignores a previous goal response after switching goals', async () => {
+  const props = input();
+  let resolveOld!: (value: unknown) => void;
+  mockRecover
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+    )
+    .mockResolvedValueOnce(null);
+  const { result, rerender } = renderHook(
+    (goalId: string) => usePrimarySavingsRecovery({ ...props, goalId }),
+    { initialProps: 'goal-1' }
+  );
+  rerender('goal-2');
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  await act(async () =>
+    resolveOld({ operationId: 'old-operation', amountKobo: 100 })
+  );
+  expect(props.operationRef.current).toBeNull();
+  expect(props.setAmount).not.toHaveBeenCalled();
+});

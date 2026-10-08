@@ -58,7 +58,7 @@ const paymentGatewayParamsObject = z.object({
   amount: optionalPositiveAmount,
   orderTotal: optionalOrderTotal,
   paymentKind: z
-    .enum(['order', 'vtu', 'wallet', 'savings_auth'])
+    .enum(['order', 'vtu', 'wallet', 'savings_auth', 'primary_wallet_card'])
     .default('order'),
   paymentMethod: z.literal('uba_redvault').optional(),
   returnTo: sanitizedReturnTo,
@@ -73,6 +73,34 @@ const paymentGatewayParamsObject = z.object({
 
 export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
   .superRefine((data, ctx) => {
+    if (
+      data.reference.startsWith('pvb-first-primary-') &&
+      data.paymentKind !== 'primary_wallet_card'
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['paymentKind'],
+        message: 'Primary card references cannot use legacy confirmation',
+      });
+    if (data.paymentKind === 'primary_wallet_card') {
+      if (
+        data.gateway !== 'paystack' ||
+        !z.uuid().safeParse(data.merchantId).success ||
+        !/^pvb-first-primary-[0-9a-f-]{36}$/.test(data.reference) ||
+        !z.uuid().safeParse(data.reference.slice('pvb-first-primary-'.length))
+          .success ||
+        !/^https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+$/.test(
+          data.authorizationUrl
+        ) ||
+        data.amount === undefined
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paymentKind'],
+          message: 'Invalid primary wallet card context',
+        });
+      return;
+    }
     if (
       data.paymentMethod === 'uba_redvault' &&
       (data.gateway !== 'paystack' ||
@@ -152,7 +180,9 @@ export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
     }
   })
   .transform((data) =>
-    data.paymentKind === 'wallet' || data.paymentKind === 'savings_auth'
+    data.paymentKind === 'wallet' ||
+    data.paymentKind === 'savings_auth' ||
+    data.paymentKind === 'primary_wallet_card'
       ? data
       : { ...data, returnTo: undefined }
   );

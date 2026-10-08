@@ -17,6 +17,7 @@ export const PAYMENT_KINDS = {
   SAVINGS_AUTH: 'savings_auth',
   VTU: 'vtu',
   WALLET: 'wallet',
+  PRIMARY_WALLET_CARD: 'primary_wallet_card',
 } as const;
 
 export type PaymentKind = (typeof PAYMENT_KINDS)[keyof typeof PAYMENT_KINDS];

@@ -32,6 +32,22 @@ function buildParams(
 }
 
 describe('useWalletFundingAccountController', () => {
+  it('opens PiggyVest setup without creating a Paystack account or requiring Paystack settings', async () => {
+    const params = buildParams({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerPhone: null,
+      paymentSettings: null,
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+    expect(result.current.needsPhone).toBe(true);
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+    expect(params.setShowFundPanel).toHaveBeenCalledWith(true);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreate.mockResolvedValue(true);

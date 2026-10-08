@@ -1,0 +1,81 @@
+import { expect, it, vi } from 'vitest';
+import { createPrimaryWalletSavingsStore } from './primary-wallet-savings-store';
+
+vi.mock('server-only', () => ({}));
+const scope = {
+  merchantId: '00000000-0000-4000-8000-000000000001',
+  customerId: '00000000-0000-4000-8000-000000000002',
+  userId: '00000000-0000-4000-8000-000000000003',
+  integrationId: '00000000-0000-4000-8000-000000000004',
+  businessId: 'business',
+  environment: 'staging',
+};
+const operationId = '00000000-0000-4000-8000-000000000005';
+it('recovers an outstanding operation using only the authenticated scope and selected goal', async () => {
+  const operation = {
+    operationId,
+    goalId: operationId,
+    amountKobo: 500,
+    state: 'dispatched',
+  };
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: operation }] });
+  expect(
+    await createPrimaryWalletSavingsStore({ scope, execute }).recoverPending(
+      operationId
+    )
+  ).toEqual(operation);
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.read_pending_savings($1::jsonb,$2::uuid) AS result',
+    [JSON.stringify(scope), operationId]
+  );
+});
+it('rejects malformed recovered operations instead of permitting a second payment', async () => {
+  const execute = vi
+    .fn()
+    .mockResolvedValue({ rows: [{ result: { operationId, amountKobo: -1 } }] });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).recoverPending(
+      operationId
+    )
+  ).rejects.toThrow();
+});
+it('uses fixed dispatch SQL with the independently bound customer scope', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+  expect(
+    await createPrimaryWalletSavingsStore({ scope, execute }).claimDispatch(
+      operationId
+    )
+  ).toBe(true);
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result',
+    [JSON.stringify(scope), operationId, 'dispatch']
+  );
+});
+it('does not claim released funds when cancellation is refused', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: false }] });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).cancelBeforeDispatch(
+      operationId
+    )
+  ).rejects.toThrow('could not be released');
+});
+it('rejects injected wallet IDs before storage contact', async () => {
+  const execute = vi.fn();
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).reserve({
+      goalId: operationId,
+      operationId,
+      amountKobo: 100,
+      sourceWalletId: 'foreign',
+    })
+  ).rejects.toThrow();
+  expect(execute).not.toHaveBeenCalled();
+});
+it('rejects malformed database acknowledgements', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: 'true' }] });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).claimDispatch(
+      operationId
+    )
+  ).rejects.toThrow();
+});

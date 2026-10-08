@@ -9,6 +9,7 @@ import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wall
 import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 import { getSavingsProgress } from './get-savings-progress';
+import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
 import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
@@ -20,6 +21,7 @@ type WalletSavingsProgressModalProps = {
   colors: WalletColors;
   goal: WalletActiveSavingsGoal | null;
   isAdding: boolean;
+  hasPendingContribution?: boolean;
   isFundPending?: boolean;
   onAddAmountChange: (value: string) => void;
   onAddSavings: () => void;
@@ -37,6 +39,7 @@ export function WalletSavingsProgressModal({
   colors,
   goal,
   isAdding,
+  hasPendingContribution = false,
   isFundPending = false,
   onAddAmountChange,
   onAddSavings,
@@ -230,7 +233,13 @@ export function WalletSavingsProgressModal({
             </Text>
           </View>
         </View>
-        {canAddToSavings && usesPlanFunding ? (
+        {hasPendingContribution ? (
+          <WalletPendingSavingsContribution
+            colors={colors}
+            isChecking={isAdding}
+            onCheck={onAddSavings}
+          />
+        ) : canAddToSavings && usesPlanFunding ? (
           visible ? (
             <WalletSavingsPlanFunding
               key={goal.id}

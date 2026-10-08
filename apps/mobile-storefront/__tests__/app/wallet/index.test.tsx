@@ -665,10 +665,7 @@ describe('WalletScreen', () => {
     await waitFor(() => {
       expect(mockCreateFundingAccountMutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Account Ready',
-      'Titan Paystack - 1234567890'
-    );
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 
   it('does not announce account details when the provider returns no account summary', async () => {

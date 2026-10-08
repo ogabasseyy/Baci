@@ -27,6 +27,7 @@ import type { WalletDisplayFundingAccount } from './wallet.types';
 type WalletColors = (typeof Colors)['light'];
 
 export interface WalletContentProps {
+  merchantId?: string;
   hasSavedCards?: boolean;
   activeSavingsGoal: WalletActiveSavingsGoal | null;
   canCreateFundingAccount: boolean;
@@ -44,6 +45,7 @@ export interface WalletContentProps {
   /** Sanitized deep-link for the post-credit "Return to your purchase" CTA. */
   fundReturnTo?: WalletReturnHref;
   isAddingSavingsContribution: boolean;
+  hasPendingSavingsContribution?: boolean;
   isCreatingFundingAccount: boolean;
   isFundPending: boolean;
   isRedeemPending: boolean;
@@ -255,6 +257,7 @@ export function WalletContent(props: WalletContentProps) {
         colors={colors}
         goal={activeSavingsGoal}
         isAdding={isAddingSavingsContribution}
+        hasPendingContribution={props.hasPendingSavingsContribution}
         isFundPending={isFundPending}
         onAddAmountChange={onChangeSavingsContributionAmount}
         onAddSavings={onAddSavingsContribution}

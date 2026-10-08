@@ -92,6 +92,9 @@ For browser evidence:
   `public/__pilot`. Only the three hash-verified committed synthetic fillers
   are permitted. Keep lab builds/workspaces separate from deployable artifacts;
   use a clean public tree for non-lab builds. The gate never deletes evidence.
+  Recovery is a clean tree, not a flag flip: `rm -rf apps/web/public/__pilot
+  && git checkout -- apps/web/public/__pilot` (restores the committed
+  fillers; staged bytes regenerate via `pnpm pilot:stage`).
 - The no-AVIF profile uses Chromium CDP format emulation, not HTML rewriting;
   server markup and client hydration props remain identical. An unsupported
   CDP command fails before navigation. Retained AVIF candidates, confirmed

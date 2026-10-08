@@ -161,6 +161,10 @@ test('readInventoryJobs maps acquisition records to validated jobs', async () =>
   await assert.rejects(() => readInventoryJobs(path), /not valid JSON/);
   await writeFile(path, '{}');
   await assert.rejects(() => readInventoryJobs(path), /not an array/);
+  // A corrupt or swapped-in giant file rejects on size before parsing,
+  // never exhausts the generator ahead of the 20-job cap.
+  await writeFile(path, Buffer.alloc(1024 * 1024 + 1, 120));
+  await assert.rejects(() => readInventoryJobs(path), /exceeds 1048576/);
 });
 
 test('validateInventory rejects non-array input and invalid members', () => {

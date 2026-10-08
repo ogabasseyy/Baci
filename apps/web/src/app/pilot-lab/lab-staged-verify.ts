@@ -9,15 +9,14 @@ import { basename } from 'node:path';
 const MAX_STAGED_ENTRIES = 256;
 const MAX_STAGED_BYTES = 256 * 1024 * 1024;
 
-// Last fully verified snapshot: size+mtime per path, keyed by the exact
-// staged set (paths AND expected digests). Repeat GETs re-stat (cheap)
-// and skip the re-read/re-hash only when every entry is byte-identical
-// to a snapshot that already passed the full check. Any size change,
-// mtime change, missing file, or changed expectation re-runs the full
-// read+hash below. This trusts the filesystem clock at ms granularity:
-// a rewrite that preserves both size and mtime is not re-hashed, which
-// is acceptable for a flag-gated lab route — an actor able to rewrite
-// staged bytes while pinning mtimes already has host write access.
+// Last fully verified snapshot: size+mtime+ctime per path, keyed by the
+// exact staged set (paths AND expected digests). Repeat GETs re-stat
+// (cheap) and skip the re-read/re-hash only when every entry is
+// byte-identical to a snapshot that already passed the full check. Any
+// size change, mtime change, ctime change, missing file, or changed
+// expectation re-runs the full read+hash below. ctime closes the
+// mtime-pinning hole: utimens can freeze mtime after a rewrite, but the
+// write itself bumps ctime, so pinned-mtime drift always re-hashes.
 let lastVerified: { fingerprint: string; key: string } | null = null;
 
 function snapshotKey(paths: readonly { path: string; sha256: string }[]) {
@@ -25,14 +24,14 @@ function snapshotKey(paths: readonly { path: string; sha256: string }[]) {
 }
 
 function fingerprintStats(
-  sizes: readonly ({ mtimeMs: number; size: number } | null)[]
+  sizes: readonly ({ ctimeMs: number; mtimeMs: number; size: number } | null)[]
 ): string | null {
-  const parts: [number, number][] = [];
+  const parts: [number, number, number][] = [];
   for (const info of sizes) {
     if (info === null) {
       return null;
     }
-    parts.push([info.size, info.mtimeMs]);
+    parts.push([info.size, info.mtimeMs, info.ctimeMs]);
   }
   return JSON.stringify(parts);
 }

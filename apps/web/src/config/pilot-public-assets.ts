@@ -27,7 +27,8 @@ function directoryExists(path: string): boolean {
 
 function assertFillers(fillersDir: string, labEnabled: boolean): void {
   directoryExists(fillersDir);
-  for (const file of readdirSync(fillersDir)) {
+  const files = readdirSync(fillersDir);
+  for (const file of files) {
     const expected = FILLERS[file];
     const path = join(fillersDir, file);
     const stat = lstatSync(path);
@@ -45,6 +46,20 @@ function assertFillers(fillersDir: string, labEnabled: boolean): void {
       );
     }
   }
+  if (labEnabled) {
+    // The store grid always references all three filler URLs: a subset
+    // of valid files would still start the lab with broken
+    // sibling-card images and contaminate the comparison, so lab mode
+    // requires the exact complete set after every present file checks.
+    const missing = Object.keys(FILLERS).filter(
+      (file) => !files.includes(file)
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `lab public pilot tree is missing pinned fillers: ${missing.join(', ')}`
+      );
+    }
+  }
 }
 
 export function assertPilotPublicAssets(
@@ -53,6 +68,7 @@ export function assertPilotPublicAssets(
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) return;
+  let sawFillers = false;
   for (const name of readdirSync(root)) {
     // The approved filler set is hash-pinned in BOTH modes: a stale or
     // locally replaced filler in lab mode would otherwise pass startup
@@ -60,6 +76,7 @@ export function assertPilotPublicAssets(
     // compares against the same local file reports green.
     if (name === 'fillers') {
       assertFillers(join(root, name), labEnabled);
+      sawFillers = true;
       continue;
     }
     // Lab staging is generation directories (content-derived 64-hex ids)
@@ -70,5 +87,12 @@ export function assertPilotPublicAssets(
     throw new Error(
       'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
     );
+  }
+  // Lab mode additionally requires the fillers directory itself: the
+  // grid renders all three sibling-card images, so an absent directory
+  // (packaging omission, local deletion) must fail startup, not serve
+  // broken images into the comparison.
+  if (labEnabled && !sawFillers) {
+    throw new Error('lab public pilot tree is missing the fillers directory');
   }
 }

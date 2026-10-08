@@ -94,12 +94,12 @@ describe('verifyStagedBytes', () => {
     const restored = new Date(afterRestore.mtimeMs + 2000);
     await utimes(file, restored, restored);
     await expect(verifyStagedBytes([entry])).resolves.toBeUndefined();
-    // Same-size rewrite with the mtime pinned back: documents the
-    // mtime-trust assumption — the gate skips the re-hash, so a full
-    // read here would fail but the gated check passes.
+    // Same-size rewrite with the mtime pinned back: the write itself
+    // bumps ctime, which the fingerprint binds, so the gate re-runs the
+    // full read+hash and fails closed on the drifted bytes.
     await writeFile(file, Buffer.from('87654321'));
     await utimes(file, restored, restored);
-    await expect(verifyStagedBytes([entry])).resolves.toBeUndefined();
+    await expect(verifyStagedBytes([entry])).rejects.toThrow(/hash drift/);
     // Deletion after a passing verify still fails closed (missing
     // files never match the stored snapshot).
     await rm(file);

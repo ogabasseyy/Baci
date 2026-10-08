@@ -46,7 +46,34 @@ describe('non-lab public assets gate', () => {
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
       /staged merchant pilot assets/
     );
+    // Lab mode permits the staged entry once the required filler set is
+    // complete; without fillers the grid would render broken images.
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      { recursive: true }
+    );
     expect(() => assertPilotPublicAssets(dir, true)).not.toThrow();
+  });
+  it('requires the fillers directory and exact set when lab is enabled', () => {
+    const staged = root();
+    mkdirSync(join(staged, '__pilot', 'originals'), { recursive: true });
+    expect(() => assertPilotPublicAssets(staged, true)).toThrow(
+      /missing the fillers directory/
+    );
+    // A subset of valid fillers still fails: the grid references all
+    // three URLs, so a packaging omission must fail startup.
+    const partial = root();
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(partial, '__pilot/fillers'),
+      { recursive: true }
+    );
+    rmSync(join(partial, '__pilot/fillers/grid-filler-600x400-b.png'));
+    rmSync(join(partial, '__pilot/fillers/grid-filler-600x400-c.png'));
+    expect(() => assertPilotPublicAssets(partial, true)).toThrow(
+      /missing pinned fillers.*grid-filler-600x400-b\.png/
+    );
   });
   it('rejects merchant bytes disguised as a known filler', () => {
     const dir = root();

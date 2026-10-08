@@ -1,11 +1,12 @@
-import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import {
+  MAX_INVENTORY_BYTES,
   MAX_JOBS,
   PILOT_SCHEMA_VERSION,
   PILOT_UUID_PATTERN,
   ROLES,
 } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 
 export class PilotInventoryError extends Error {
   constructor(message) {
@@ -184,9 +185,18 @@ export function validateInventoryUniqueness(records) {
 }
 
 export async function readInventoryJobs(inventoryPath) {
-  const text = await readFile(inventoryPath, 'utf8').catch(() => {
+  const { bytes, truncated } = await readUpToBytes(
+    inventoryPath,
+    MAX_INVENTORY_BYTES
+  ).catch(() => {
     throw new PilotInventoryError('cannot read inventory file');
   });
+  if (truncated) {
+    throw new PilotInventoryError(
+      `inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
+    );
+  }
+  const text = bytes.toString('utf8');
   let records;
   try {
     records = JSON.parse(text);

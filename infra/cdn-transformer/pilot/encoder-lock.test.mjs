@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireEncoderLock } from './encoder-lock.mjs';
@@ -63,6 +63,30 @@ test('a live holder is never evicted', async () => {
     JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
   );
   await assert.rejects(acquireEncoderLock(outputRoot), /encoder lock/);
+});
+
+test('a symlinked locks directory is refused, never followed', async () => {
+  const outputRoot = await setupRoot();
+  const outside = join(outputRoot, 'outside');
+  await mkdir(outside, { recursive: true });
+  await symlink(outside, join(outputRoot, 'locks'));
+  await assert.rejects(acquireEncoderLock(outputRoot), /confined directory/);
+});
+
+test('release unlinks only its own claim', async () => {
+  const outputRoot = await setupRoot();
+  const lock = await acquireEncoderLock(outputRoot);
+  // A successor claim lands (simulated handoff): the stale release must
+  // not unlink it.
+  const path = lockPath(outputRoot);
+  const successor = JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    token: 'successor-claim',
+  });
+  await writeFile(path, successor);
+  await lock.release();
+  assert.equal(await readFile(path, 'utf8'), successor);
 });
 
 test('corrupt claims steal only past the grace window', async () => {

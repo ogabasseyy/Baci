@@ -119,6 +119,7 @@ function isDeniedIpLiteral(host) {
   return (
     first === 0 || // 0000::/8 reserved (::, ::1, compat)
     (first >= 0xfe80 && first <= 0xfebf) || // fe80::/10 link-local
+    (first >= 0xfec0 && first <= 0xfeff) || // fec0::/10 site-local (deprecated but still non-public)
     (first >= 0xfc00 && first <= 0xfdff) || // fc00::/7 unique-local
     first >= 0xff00 || // ff00::/8 multicast
     (first === 0x2001 && second === 0xdb8) || // 2001:db8::/32 documentation

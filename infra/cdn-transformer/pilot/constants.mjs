@@ -11,6 +11,10 @@ export const MAX_JOBS = 20;
 
 // Input resource limits (design section 2).
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
+// Inventory files are tiny (20 jobs of short records): cap the pre-parse
+// read so a corrupt or swapped-in giant file rejects on size instead of
+// exhausting the generator before validation runs.
+export const MAX_INVENTORY_BYTES = 1 * 1024 * 1024;
 export const MAX_DECODED_PIXELS = 40_000_000;
 export const MAX_AXIS_PIXELS = 16384;
 export const ACCEPTED_INPUT_FORMATS = ['jpeg', 'png', 'webp', 'avif'];

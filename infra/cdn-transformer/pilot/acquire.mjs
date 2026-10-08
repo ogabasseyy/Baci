@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, unlink, writeFile } from 'node:fs/promises';
+import { unlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { parseCliArgs } from './cli-args.mjs';
@@ -9,6 +9,7 @@ import {
   PILOT_UUID_PATTERN,
   ROLES,
 } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 import { assertPublicFetchUrl } from './fetch-policy.mjs';
 import {
   ASSET_ID_PATTERN,
@@ -169,12 +170,21 @@ export async function acquireSnapshot(options) {
     EXTENSION_FOR_CONTENT_TYPE[contentType]
   );
   const target = await resolveNewSnapshotPath(inputRoot, fileName);
-  const existing = await readFile(target).catch((error) => {
+  // Bounded like the download: a corrupt or swapped-in giant stale
+  // snapshot must reject on size before the equality comparison, never
+  // load fully into the acquisition process.
+  const prior = await readUpToBytes(target, maxBytes).catch((error) => {
     if (error?.code === 'ENOENT') {
       return null;
     }
     throw error;
   });
+  if (prior?.truncated) {
+    throw new PilotAcquireError(
+      `acquire: stored snapshot for "${assetId}" exceeds ${maxBytes} bytes`
+    );
+  }
+  const existing = prior?.bytes ?? null;
   if (existing && !existing.equals(bytes)) {
     throw new PilotAcquireError(
       `acquire: stored snapshot for "${assetId}" differs from fetched bytes`

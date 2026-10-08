@@ -30,6 +30,8 @@ test('denies loopback, private, and link-local fetch destinations', () => {
     '[::]',
     '[0:0:0:0:0:0:0:1]',
     '[fe80::1]',
+    '[fec0::1]',
+    '[feff::1]',
     '[fc00::1]',
     '[fd12:3456::1]',
     '[ff02::1]',

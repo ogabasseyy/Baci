@@ -10,6 +10,7 @@ import {
   checkBindingInput,
 } from './merchant-image-pilot-preflight-offline-input.mjs';
 import { checkBindingManifest } from './merchant-image-pilot-preflight-offline-manifest.mjs';
+import { checkSamplePin } from './merchant-image-pilot-preflight-offline-sample.mjs';
 import { checkBindingStaged } from './merchant-image-pilot-preflight-offline-staged.mjs';
 import { checkBindingTiers } from './merchant-image-pilot-preflight-offline-tiers.mjs';
 import {
@@ -129,72 +130,15 @@ export async function runOfflinePreflight(options) {
   }
   pass(checks, 'inventory-parse');
 
-  // Frozen-sample pin (mandatory): expectations derive from the supplied
-  // inventory, so a silently reduced sample (deleted record or merchant)
-  // would otherwise report ok:true on weaker evidence. The operator
-  // always pins the planned merchant/asset/slot matrix
-  // (merchant-image-pilot-frozen-sample.json for the handoff sample);
-  // any shrinkage or growth fails before expectations derive. There is
-  // no unpinned mode: an omitted pin fails instead of certifying an
-  // unknown sample.
-  if (options.expectSample === undefined || options.expectSample === null) {
-    fail(
+  if (
+    !(await checkSamplePin({
       checks,
+      expectSample: options.expectSample,
       failures,
-      'sample-pin',
-      'sample pin is required: pass --expect-sample <frozen-keys.json> so a reduced inventory cannot report ok'
-    );
+      inventory,
+    }))
+  ) {
     return { accepted, checks, failures, ok: false };
-  }
-  {
-    let expected;
-    try {
-      expected = await readJson(options.expectSample);
-    } catch (error) {
-      fail(
-        checks,
-        failures,
-        'sample-pin',
-        `cannot read expect-sample (${error.message})`
-      );
-      return { accepted, checks, failures, ok: false };
-    }
-    if (
-      !Array.isArray(expected) ||
-      expected.length === 0 ||
-      !expected.every((entry) => typeof entry === 'string')
-    ) {
-      fail(
-        checks,
-        failures,
-        'sample-pin',
-        'expect-sample must be a non-empty array of merchant/asset/slot keys'
-      );
-      return { accepted, checks, failures, ok: false };
-    }
-    const frozen = new Set(expected);
-    const actual = new Set(
-      inventory.map(
-        (record) => `${record.merchantId}/${record.assetId}/${record.slot}`
-      )
-    );
-    const missing = [...frozen].filter((key) => !actual.has(key));
-    const extra = [...actual].filter((key) => !frozen.has(key));
-    if (missing.length > 0 || extra.length > 0) {
-      const details = [
-        ...(missing.length > 0
-          ? [`sample bindings missing from inventory: ${missing.join(', ')}`]
-          : []),
-        ...(extra.length > 0
-          ? [
-              `inventory bindings outside the frozen sample: ${extra.join(', ')}`,
-            ]
-          : []),
-      ];
-      fail(checks, failures, 'sample-pin', details.join('; '));
-      return { accepted, checks, failures, ok: false };
-    }
-    pass(checks, 'sample-pin');
   }
 
   const malformed = [];

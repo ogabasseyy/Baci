@@ -15,7 +15,10 @@
 //     [--browser-version=<dotted-executable-build>]
 // Add --lighthouse plus --expect-form-factor, --expect-throttling-method,
 // --expect-lh-viewport, --expect-lh-dpr and --expect-cpu-slowdown to also
-// verify a Lighthouse report. Exits 0 with a JSON report on stdout when
+// verify a Lighthouse report, plus the method's network expectations
+// (--expect-rtt-ms/--expect-throughput-kbps for simulate,
+// --expect-request-latency-ms/--expect-download-kbps/--expect-upload-kbps
+// for devtools). Exits 0 with a JSON report on stdout when
 // every setting matches. --cache-provenance is REQUIRED for the cold-cache
 // claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold; --browser-version stays optional.
 // --cache-provenance takes a PATH to a runner profile-reset artifact
@@ -31,12 +34,14 @@ import {
   parsePositiveNumber,
   pngDimensions,
   verifyBrowserVersion,
-  verifyCacheProvenance,
   verifyHarConnectivity,
   verifyHarIterations,
-  verifyScreenshotProvenance,
 } from './merchant-image-pilot-settings-helpers.mjs';
 import { checkLighthouse } from './merchant-image-pilot-settings-lighthouse.mjs';
+import {
+  verifyCacheProvenance,
+  verifyScreenshotProvenance,
+} from './merchant-image-pilot-settings-provenance.mjs';
 
 async function checkHar(args, pass, fail, warn, recorded) {
   let har;
@@ -242,7 +247,30 @@ async function run() {
           `missing ${lhMissing.map((key) => `--${key}`).join(', ')}`
         );
       } else {
-        await checkLighthouse(args, pass, fail, recorded);
+        // Method-relevant network expectations: the method alone cannot
+        // match evidence, so each comparable method requires its own
+        // explicit network flags.
+        const networkRequired =
+          args['expect-throttling-method'] === 'devtools'
+            ? [
+                'expect-request-latency-ms',
+                'expect-download-kbps',
+                'expect-upload-kbps',
+              ]
+            : args['expect-throttling-method'] === 'simulate'
+              ? ['expect-rtt-ms', 'expect-throughput-kbps']
+              : [];
+        const networkMissing = networkRequired.filter(
+          (key) => args[key] === undefined
+        );
+        if (networkMissing.length > 0) {
+          fail(
+            'usage',
+            `missing ${networkMissing.map((key) => `--${key}`).join(', ')}`
+          );
+        } else {
+          await checkLighthouse(args, pass, fail, recorded);
+        }
       }
     }
   } catch (error) {

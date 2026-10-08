@@ -442,6 +442,49 @@ test('re-acquisition is idempotent for identical bytes only', async () => {
   );
 });
 
+test('rejects an oversized stored snapshot without loading it', async () => {
+  const inputRoot = await makeInputRoot();
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await acquireSnapshot({
+        allowPrivateHosts: true,
+        assetId: 'swollen',
+        inputRoot,
+        merchantId: MERCHANT,
+        probe: stubProbe,
+        role: 'logo',
+        slot: 'header-logo',
+        url,
+      });
+      // Corrupt or swapped-in giant stale file: the re-acquire must
+      // reject on size before the equality comparison.
+      await writeFile(
+        join(inputRoot, `${MERCHANT}-swollen.png`),
+        Buffer.alloc(2048, 7)
+      );
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'swollen',
+            inputRoot,
+            maxBytes: 1024,
+            merchantId: MERCHANT,
+            probe: stubProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /stored snapshot.*exceeds 1024/
+      );
+    }
+  );
+});
+
 test('removes a newly written snapshot when the probe rejects it', async () => {
   const inputRoot = await makeInputRoot();
   const failingProbe = async () => {

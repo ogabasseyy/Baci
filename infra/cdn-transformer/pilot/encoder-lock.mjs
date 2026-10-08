@@ -1,6 +1,14 @@
-import { mkdir, open, readFile, stat, unlink } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { join } from 'node:path';
-import { JOB_TIMEOUT_MS, MAX_JOBS } from './constants.mjs';
 import { PilotGenerateError } from './generate-job.mjs';
 
 // Output-root-wide encoder lock: the worker pool serializes encodes
@@ -12,19 +20,17 @@ import { PilotGenerateError } from './generate-job.mjs';
 // overlapping. Different output roots lock independently.
 //
 // Staleness: a crashed holder leaves the file behind, so a contender
-// steals it when the recorded pid is dead (kill(pid, 0) ESRCH — EPERM
-// means alive-but-unowned). Age steals a live holder only past the
-// provable run ceiling (PID reuse or a stuck runaway — never a
-// legitimate run). Corrupt content steals only past a grace window, so
-// a contender never unlinks a file its holder is still writing.
+// steals it only when the recorded pid is dead (kill(pid, 0) ESRCH —
+// EPERM means alive-but-unowned). A LIVE pid is ALWAYS held, however
+// old the claim: elapsed time never proves ownership loss (a stalled
+// syscall is not a dead process), so PID reuse after a crash needs
+// explicit operator recovery, not automatic eviction. Corrupt content
+// steals only past a grace window, so a contender never unlinks a file
+// its holder is still writing. Release is ownership-checked: a resumed
+// original never unlinks a successor's claim.
 const LOCK_FILE = 'encoder.lock';
 const ACQUIRE_ATTEMPTS = 3;
 const CORRUPT_GRACE_MS = 30_000;
-// Provable run ceiling: at most MAX_JOBS sequential jobs, each under the
-// absolute job deadline, doubled for I/O slack. A holder older than this
-// with a live pid is PID reuse after a crash (or a stuck runaway), never
-// a legitimate run — safe to reclaim.
-const MAX_RUN_MS = MAX_JOBS * JOB_TIMEOUT_MS * 2;
 
 function holderAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
@@ -40,9 +46,29 @@ function holderAlive(pid) {
   }
 }
 
-export async function acquireEncoderLock(outputRoot) {
-  const locksDir = join(outputRoot, 'locks');
+async function confinedLocksDir(outputRoot) {
+  const root = await realpath(outputRoot);
+  const locksDir = join(root, 'locks');
   await mkdir(locksDir, { recursive: true });
+  // A pre-existing symlink would sail through recursive mkdir and push
+  // every lock op outside the output tree (same confinement as the
+  // claims/generations/reports directories in generate.mjs).
+  const info = await lstat(locksDir);
+  if (
+    info.isSymbolicLink() ||
+    !info.isDirectory() ||
+    (await realpath(locksDir)) !== locksDir
+  ) {
+    throw new PilotGenerateError(
+      'unsafe-output-directory',
+      'locks must be a confined directory, not a symlink'
+    );
+  }
+  return locksDir;
+}
+
+export async function acquireEncoderLock(outputRoot) {
+  const locksDir = await confinedLocksDir(outputRoot);
   const path = join(locksDir, LOCK_FILE);
   for (let attempt = 0; attempt < ACQUIRE_ATTEMPTS; attempt += 1) {
     let handle = null;
@@ -55,14 +81,19 @@ export async function acquireEncoderLock(outputRoot) {
       if (!(await stealWhenStale(path))) {
         throw new PilotGenerateError(
           'encoder-lock-held',
-          `another pilot generation holds the encoder lock for ${outputRoot}; refusing to encode concurrently (stale locks from crashed runs are reclaimed automatically)`
+          `another pilot generation holds the encoder lock for ${outputRoot}; refusing to encode concurrently (crashed-run locks reclaim automatically once their pid exits — if no generation is running, verify with ps and remove ${path})`
         );
       }
       continue;
     }
+    const token = randomBytes(16).toString('hex');
     try {
       await handle.writeFile(
-        JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
+        JSON.stringify({
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+          token,
+        })
       );
     } finally {
       await handle.close();
@@ -74,6 +105,21 @@ export async function acquireEncoderLock(outputRoot) {
           return;
         }
         released = true;
+        // Ownership-checked: unlink only our own claim. A successor's
+        // claim (or an unreadable file) is left untouched.
+        const text = await readFile(path, 'utf8').catch(() => null);
+        if (text === null) {
+          return;
+        }
+        let holder = null;
+        try {
+          holder = JSON.parse(text);
+        } catch {
+          return;
+        }
+        if (holder?.token !== token) {
+          return;
+        }
         await unlink(path).catch(() => undefined);
       },
     };
@@ -99,12 +145,8 @@ async function stealWhenStale(path) {
     holder = null;
   }
   if (holder && typeof holder === 'object' && holderAlive(holder.pid)) {
-    const startedAt = Date.parse(holder.startedAt);
-    if (!Number.isFinite(startedAt) || Date.now() - startedAt <= MAX_RUN_MS) {
-      return false;
-    }
-    // Live pid past the provable run ceiling: PID reuse or a stuck
-    // runaway. Reclaim.
+    // Live pid: held, at any age. Never evict on elapsed time.
+    return false;
   }
   if (!holder || typeof holder !== 'object') {
     // Corrupt content: steal only past the grace window (a live

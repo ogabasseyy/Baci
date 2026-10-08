@@ -10,7 +10,7 @@
 -- price while native charges the resolved variant price: no single pair
 -- price satisfies both PDPs. The shared projection therefore only emits
 -- offer rows for variantless products; the inventory-qualified base row
--- still emits independently of alternate offers (see 20261004130000).
+-- still emits independently of alternate offers (see 20261004131000).
 -- Also restores the nullish-unmanaged contract the option guards
 -- regressed (the original projection used IS NOT TRUE): legacy NULL
 -- manage_stock rows are purchasable, matching storefront hydration and

@@ -47,11 +47,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 - Refinement fields split: `RefinementGroup` moves to its own module with a colocated suite (291 + 37 lines).
 - Desktop refinement commits carry `minRating`; native request-id generation moved inside the submit try (proven wedged on old code, recoverable on new).
-- New migration `20261004130000` relaxes the price-options predicates: product-level offers emit for attribute-variant products (still suppressed when variants carry canonical conditions, mirroring the PDP axis rule), and the inventory-qualified base row emits regardless of alternate offers. Validated on scratch Postgres across five catalog shapes (base+offer, storage-variants+offer, condition-axis+offer, plain, OOS parent); the `anon` GRANT noise is a scratch-role artifact. Registration against the live project stays author triage with the other unregistered PR migrations.
+- New migration `20261004131000` (renamed from 20261004130000 after a main-collision in Round 34) relaxes the price-options predicates: product-level offers emit for attribute-variant products (still suppressed when variants carry canonical conditions, mirroring the PDP axis rule), and the inventory-qualified base row emits regardless of alternate offers. Validated on scratch Postgres across five catalog shapes (base+offer, storage-variants+offer, condition-axis+offer, plain, OOS parent); the `anon` GRANT noise is a scratch-role artifact. Registration against the live project stays author triage with the other unregistered PR migrations.
 
 ## Round 9 follow-ups (Codex + Muse on f05f806ef1)
 
-- Migration `20261004150000` pulls standalone offer rows back out of the shared projection for variant products: native purchase state ignores condition offers on variant products and prices the resolved variant, while web charges the matched offer — no single pair price satisfies both PDPs, so emitting them guarantees a card/PDP mismatch on one platform. The base-row widening from Round 8 stays.
+- Migration `20261004151000` (renamed from 20261004150000 in Round 34) pulls standalone offer rows back out of the shared projection for variant products: native purchase state ignores condition offers on variant products and prices the resolved variant, while web charges the matched offer — no single pair price satisfies both PDPs, so emitting them guarantees a card/PDP mismatch on one platform. The base-row widening from Round 8 stays.
 - The same migration restores the nullish-unmanaged contract (`IS NOT TRUE`) the option guards regressed from the original projection; NULL `manage_stock` rows are purchasable again, matching hydration and both PDPs. Re-validated on scratch Postgres across six shapes (adds legacy NULL stock).
 - Muse inbox-XSS report adjudicated invalid with two routes of evidence: both merchant-inbox renderers interpolate React-escaped text with no `dangerouslySetInnerHTML`, and delivered rows carry `sent_at` so the scheduled-notification worker never re-processes them. Native "resolved merchant" ask likewise invalid: the app is single-merchant-per-build and `useMerchant` resolves from the same build config the gate reads.
 - Settled comparison-refresh failures now mark every cached id unavailable instead of presenting stale prices as current; saved matched options drop the parent strike-through like the search card; both assistance hooks generate request ids inside the guarded block.
@@ -207,3 +207,15 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 - CX-59: saved ID-less matches now forward match_base=1 with the condition. Reverses the Round 27 "indistinguishable" note: match_* fields persist ONLY from searchMatch (saved-store grep-verified), so condition-without-ids necessarily denotes a base-row match. Saved nav test updated.
 - CX-60: variant-matched search cards suppress the parent storage/RAM subtitle (empty detail hides the element); base/condition matches keep parent specs. Single render site (grep-verified); card test encodes the 128GB-price-vs-256GB-subtitle scenario both ways.
+
+## Round 33 (LOOP CLEAN on 8f0f504257 — Codex no-issues + 0 inline; Muse 3 repeats adjudicated)
+
+- Codex: "Didn't find any major issues. Swish!" with zero inline comments on the head.
+- Muse medium (assurance totals) + low (global compare key) + low (zero-price discipline): all repeats of Rounds 26/30/31 adjudications (documented product behavior; namespaced mounts verified; invariant JSDoc + single wired consumer). No critical/high; no code change.
+- Note held uncommitted: committing would move the head past the double-clean commit for docs only.
+
+## Round 34 (merge-ready: 2 threads resolved; 3 migration collisions renamed; CI root-caused)
+
+- Conversations: paginated audit (113 threads) found only CX-59/CX-60 unresolved; both fixed in 8f0f504257 and verified present — resolved, 0 remaining.
+- CI red root cause: our migrations collided with main's savings/push versions (04130000/04150000/04170000) — failed DB Replay, Misc, and web shards 2/3/4/6 with duplicate-version errors. Renamed ours to 04131000/04151000/04170500 (order-preserving; 0415 depends on 0413), updated 3 registry/test files + 1 SQL test include + 1 in-file cross-ref, recomputed the one sha changed by the comment edit. Replay suites green locally (pin 1, gigl 2, manifest+ordering 16). Two older duplicate pairs are pre-existing on main and untouched.
+- Checkout e2e red is infra-only: "Install browser engines" exceeded the 20m job cap before the suite ran; reruns with the push.

@@ -28,6 +28,7 @@ function Harness() {
         onFormChange={setForm}
         onAltEdit={() => {}}
         onContentChange={() => {}}
+        onCoverUrlEdit={() => {}}
         onInlineImageUpload={async () => ''}
         onSubmit={() => {}}
         onUploadFeatured={() => {}}

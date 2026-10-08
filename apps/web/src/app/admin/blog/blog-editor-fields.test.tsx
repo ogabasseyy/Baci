@@ -56,6 +56,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
     .fn()
     .mockResolvedValue('https://cdn.example.com/inline.png');
   const onAltEdit = vi.fn();
+  const onCoverUrlEdit = vi.fn();
   const onSubmit = vi.fn();
   const onUploadFeatured = vi.fn();
 
@@ -66,6 +67,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
       isEditMode={false}
       onAltEdit={onAltEdit}
       onContentChange={onContentChange}
+      onCoverUrlEdit={onCoverUrlEdit}
       onFormChange={onFormChange}
       onInlineImageUpload={onInlineImageUpload}
       onSubmit={onSubmit}
@@ -80,6 +82,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
     getCurrentForm: () => currentForm,
     onAltEdit,
     onContentChange,
+    onCoverUrlEdit,
     onFormChange,
     onInlineImageUpload,
     onSubmit,
@@ -144,6 +147,19 @@ describe('BlogEditorFields', () => {
     expect(ctx.onAltEdit).toHaveBeenCalledTimes(1);
     expect(ctx.getCurrentForm().featured_image_alt).toBe('Typed description');
     expect(ctx.getCurrentForm().featured_image_alt_edited).toBe(true);
+  });
+
+  it('reports cover URL edits so pending uploads are invalidated', () => {
+    const ctx = renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Featured Image URL'), {
+      target: { value: 'https://cdn.example.com/manual.webp' },
+    });
+
+    expect(ctx.onCoverUrlEdit).toHaveBeenCalledTimes(1);
+    expect(ctx.getCurrentForm().featured_image_url).toBe(
+      'https://cdn.example.com/manual.webp'
+    );
   });
 
   it('forwards content and inline image events from BlogEditor', () => {

@@ -277,6 +277,7 @@ export function BlogEditorClient({
         onContentDirty={() => {
           pendingContentEditRef.current = true;
         }}
+        onCoverUrlEdit={invalidateFeaturedUploads}
         onFormChange={(updater) => {
           setForm((current) =>
             typeof updater === 'function' ? updater(current) : updater

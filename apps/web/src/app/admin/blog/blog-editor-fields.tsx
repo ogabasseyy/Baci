@@ -33,6 +33,7 @@ type BlogEditorFieldsProps = {
   onAltEdit: () => void;
   onContentChange: (value: string) => void;
   onContentDirty?: () => void;
+  onCoverUrlEdit: () => void;
   onFormChange: (
     updater:
       | PlatformAdminBlogFormState
@@ -55,6 +56,7 @@ export function BlogEditorFields({
   onAltEdit,
   onContentChange,
   onContentDirty,
+  onCoverUrlEdit,
   onFormChange,
   onInlineImageUpload,
   onSubmit,
@@ -158,7 +160,11 @@ export function BlogEditorFields({
         <Input
           id="featured-image-url"
           value={form.featured_image_url}
-          onChange={(event) =>
+          onChange={(event) => {
+            // A manual URL edit takes over from any pending upload: the
+            // in-flight result (and alt typed for this URL) must not be
+            // claimed by the abandoned request when it resolves.
+            onCoverUrlEdit();
             setForm((current) =>
               applyCoverUrlChange({
                 coverStashRef,
@@ -166,8 +172,8 @@ export function BlogEditorFields({
                 initialCover,
                 nextUrl: event.target.value,
               })
-            )
-          }
+            );
+          }}
         />
         <Label htmlFor="featured-image-alt">Featured image alt text</Label>
         <Input

@@ -8,6 +8,7 @@ describe('hasReadableContent', () => {
     '<img class="text-transparent" src="https://cdn.example.com/a.png">',
     '<div class="text-transparent"><img src="https://cdn.example.com/a.png"></div>',
     '<div class="hidden"></div><p>Visible body</p>',
+    '<div class="invisible"><p class="visible">Readable</p></div>',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });
@@ -23,6 +24,7 @@ describe('hasReadableContent', () => {
     '<!-- <img src="https://cdn.example.com/a.png"> -->',
     '<!-- <p>Draft note</p> -->',
     `<div title="<img src='https://cdn.example.com/a.png'>"></div>`,
+    '<div class="invisible"><div class="visible"><p class="invisible">Hidden</p></div></div>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

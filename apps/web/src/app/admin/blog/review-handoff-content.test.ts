@@ -56,6 +56,16 @@ describe('validateImportedContent', () => {
     );
   });
 
+  it('ignores an orphan source element outside any picture', () => {
+    // A source contributes candidates only inside picture; outside it
+    // renders nothing, so its URL must not reject the handoff.
+    expect(
+      validateImportedContent(
+        '<source srcset="http://example.com/old.webp"><p>Body</p>'
+      )
+    ).toContain('Body');
+  });
+
   it('accepts secure inline media', () => {
     const content = validateImportedContent(
       '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A">'

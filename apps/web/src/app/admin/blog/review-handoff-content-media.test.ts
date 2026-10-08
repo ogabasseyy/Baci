@@ -88,6 +88,24 @@ describe('validateImportedContent media', () => {
     expect(validateImportedContent(body)).toContain('Only body');
   });
 
+  it('counts a visible paragraph inside an invisible ancestor as readable', () => {
+    // visibility inherits but the child's `visible` utility overrides
+    // it, so the paragraph renders and the handoff must not be rejected.
+    expect(
+      validateImportedContent(
+        '<div class="invisible"><p class="visible">Readable</p></div>'
+      )
+    ).toContain('Readable');
+  });
+
+  it('counts a visible image inside an invisible ancestor as readable', () => {
+    expect(
+      validateImportedContent(
+        '<div class="invisible"><img class="visible" src="https://cdn.example.com/a.png"></div>'
+      )
+    ).toContain('a.png');
+  });
+
   it('counts visible text alongside hidden text as readable', () => {
     expect(
       validateImportedContent(

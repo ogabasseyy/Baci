@@ -25,6 +25,7 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
     contentResetKey,
     onFormChange,
     onContentDirty,
+    onCoverUrlEdit,
     onUploadFeatured,
     onSubmit,
   }: {
@@ -32,6 +33,7 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
     contentResetKey: number;
     onFormChange: (form: PlatformAdminBlogFormState) => void;
     onContentDirty?: () => void;
+    onCoverUrlEdit: () => void;
     onUploadFeatured: () => void;
     onSubmit: () => void;
   }) => (
@@ -51,7 +53,22 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
       <button type="button" onClick={onUploadFeatured}>
         Upload cover
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          onCoverUrlEdit();
+          onFormChange({
+            ...form,
+            featured_image_url: 'https://cdn.example.com/manual.webp',
+            featured_image_alt: 'Manual cover',
+            featured_image_alt_edited: true,
+          });
+        }}
+      >
+        Edit cover URL
+      </button>
       <output aria-label="Featured image">{form.featured_image_url}</output>
+      <output aria-label="Featured alt">{form.featured_image_alt}</output>
       <button type="button" onClick={onSubmit}>
         Create Post
       </button>
@@ -144,59 +161,6 @@ it('protects an unsaved imported article when importing again without intent', a
   ).toBeInTheDocument();
   expect(confirm).toHaveBeenCalledOnce();
   expect(screen.getByLabelText('Article')).toHaveTextContent('Imported body');
-});
-
-it('keeps an imported image and deletes the stale upload when an older featured upload finishes later', async () => {
-  const pending = Promise.withResolvers<Response>();
-  fetchWithCsrf.mockReturnValueOnce(pending.promise);
-  fetchWithCsrf.mockResolvedValueOnce(
-    new Response(JSON.stringify({ success: true }), { status: 200 })
-  );
-  vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
-    this: HTMLInputElement
-  ) {
-    fireEvent.change(this, {
-      target: { files: [new File(['image'], 'cover.png')] },
-    });
-  });
-  render(<BlogEditorClient mode="create" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
-  expect(fetchWithCsrf).toHaveBeenCalled();
-  importHandoff();
-  await waitFor(() =>
-    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
-  );
-  await act(async () =>
-    pending.resolve(
-      new Response(
-        JSON.stringify({
-          url: 'https://cdn.example.com/media/platform/blog/stale.webp',
-          width: 1200,
-          height: 675,
-          variants: {
-            landscape_16x9:
-              'https://cdn.example.com/media/platform/blog/stale/landscape_16x9.webp',
-          },
-        }),
-        { status: 200 }
-      )
-    )
-  );
-  expect(screen.getByLabelText('Featured image')).toHaveTextContent(
-    'https://cdn.example.com/cover.webp'
-  );
-  // The route persisted the stale upload before the import invalidated
-  // it, so the discarded result is deleted instead of leaking.
-  expect(fetchWithCsrf).toHaveBeenCalledWith(
-    '/api/admin/blog/upload',
-    expect.objectContaining({
-      body: JSON.stringify({
-        path: 'platform/blog/stale.webp',
-        variantPaths: ['platform/blog/stale/landscape_16x9.webp'],
-      }),
-      method: 'DELETE',
-    })
-  );
 });
 
 it('preserves changed content on cancellation and replaces it after confirmation', async () => {

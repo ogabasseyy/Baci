@@ -56,6 +56,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
     .fn()
     .mockResolvedValue('https://cdn.example.com/inline.png');
   const onAltEdit = vi.fn();
+  const onCoverUrlEdit = vi.fn();
   const onSubmit = vi.fn();
   const onUploadFeatured = vi.fn();
 
@@ -66,6 +67,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
       isEditMode={false}
       onAltEdit={onAltEdit}
       onContentChange={onContentChange}
+      onCoverUrlEdit={onCoverUrlEdit}
       onFormChange={onFormChange}
       onInlineImageUpload={onInlineImageUpload}
       onSubmit={onSubmit}

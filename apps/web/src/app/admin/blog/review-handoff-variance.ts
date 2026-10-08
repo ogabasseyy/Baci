@@ -31,9 +31,10 @@ const KNOWN_WIDTH_VARIANTS = new Set([
 
 // State variants that never change at-rest rendering: the editor
 // keeps the resting state, so hiding gated on these alone is moot.
-// Structural (`first:`), orientation (`portrait:`), and condition
-// (`supports-[]:`, `data-[]:`) variants are deliberately absent:
-// they can hide content at rest, so they reject below.
+// Structural (`first:`), orientation (`portrait:`), condition
+// (`supports-[]:`, `data-[]:`), and media-query (`motion-reduce:`,
+// `print:`, ...) variants are deliberately absent: they can hide
+// content at rest, so they reject below.
 const AT_REST_NEUTRAL_VARIANTS = new Set([
   'hover',
   'focus',
@@ -56,12 +57,6 @@ const AT_REST_NEUTRAL_VARIANTS = new Set([
   'autofill',
   'read-only',
   'open',
-  'motion-safe',
-  'motion-reduce',
-  'contrast-more',
-  'contrast-less',
-  'forced-colors',
-  'print',
 ]);
 
 function isKnownVariant(variant: string): boolean {
@@ -130,10 +125,18 @@ function wrapsUnsupportedVariant(token: string): boolean {
   // Colons inside arbitrary values (`supports-[a:b]:hidden`) split
   // into extra segments, but any unrecognized segment still rejects:
   // only fully-known variant stacks defer to the width model.
+  // Stacked width variants (`md:max-lg:hidden`) form rankless layers
+  // the width model cannot evaluate, so they reject even though each
+  // segment is known alone; scheme (`dark:`) still stacks freely.
   const segments = stripImportantModifier(token).split(':');
   if (segments.length < 2) return false;
   if (!isChannelUtility(segments[segments.length - 1])) return false;
-  return segments.slice(0, -1).some((variant) => !isKnownVariant(variant));
+  const variants = segments.slice(0, -1);
+  if (variants.some((variant) => !isKnownVariant(variant))) return true;
+  const widthCount = variants.filter(
+    (variant) => variant !== 'dark' && KNOWN_WIDTH_VARIANTS.has(variant)
+  ).length;
+  return widthCount > 1;
 }
 
 function hasUnsupportedVariantChannelUtility(content: string): boolean {

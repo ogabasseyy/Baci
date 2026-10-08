@@ -17,27 +17,47 @@ import { updatePlatformBlogPost } from './platform-blog-post-update-handler';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-function fakeClient(present: string[] | null) {
+function fakeClient(args: {
+  claimed?: string[];
+  present: string[] | null;
+  restoreErrors?: ({ message: string } | null)[];
+}) {
+  const claimed = args.claimed ?? [];
+  const restoreErrors = [...(args.restoreErrors ?? [])];
   const state = { restored: [] as Record<string, unknown>[] };
   const client = {
     from: (table: string) => {
-      if (table !== 'blog_posts') throw new Error(`unexpected ${table}`);
+      if (table !== 'blog_posts' && table !== 'blog_media_delete_tombstones') {
+        throw new Error(`unexpected ${table}`);
+      }
       return {
+        select: () => ({
+          eq: () => ({
+            in: (_column: string, paths: string[]) =>
+              Promise.resolve({
+                data: paths
+                  .filter((path) => claimed.includes(path))
+                  .map((path) => ({ path })),
+                error: null,
+              }),
+          }),
+        }),
         update: (value: Record<string, unknown>) => {
           state.restored.push(value);
+          const error = restoreErrors.length > 0 ? restoreErrors.shift() : null;
           return {
-            eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
+            eq: () => ({ eq: () => ({ is: () => ({ error }) }) }),
           };
         },
       };
     },
-    rpc: (_name: string, args: { p_paths: string[] }) => {
-      if (present === null) {
+    rpc: (_name: string, rpcArgs: { p_paths: string[] }) => {
+      if (args.present === null) {
         return Promise.resolve({ data: null, error: { message: 'down' } });
       }
       return Promise.resolve({
-        data: args.p_paths
-          .filter((path) => present.includes(path))
+        data: rpcArgs.p_paths
+          .filter((path) => (args.present as string[]).includes(path))
           .map((path) => ({ path })),
         error: null,
       });
@@ -48,7 +68,9 @@ function fakeClient(present: string[] | null) {
 
 describe('verifyPatchedBlogPostMediaOrRestore', () => {
   it('accepts the save when every referenced object still exists', async () => {
-    const { client, state } = fakeClient(['platform/blog/kept.webp']);
+    const { client, state } = fakeClient({
+      present: ['platform/blog/kept.webp'],
+    });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
       existingPost: { content: '<p>Old</p>' },
@@ -65,7 +87,10 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
   });
 
   it('restores the pre-update fields when the sweep claimed mid-save', async () => {
-    const { client, state } = fakeClient([]);
+    const { client, state } = fakeClient({
+      claimed: ['platform/blog/swept.webp'],
+      present: ['platform/blog/swept.webp'],
+    });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
       existingPost: { content: '<p>Old</p>', slug: 'old-slug' },
@@ -90,8 +115,32 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
     ]);
   });
 
+  it('retries the restore when it resolves with an error', async () => {
+    const { client, state } = fakeClient({
+      claimed: ['platform/blog/swept.webp'],
+      present: ['platform/blog/swept.webp'],
+      restoreErrors: [{ message: 'locked' }, null],
+    });
+
+    const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      existingPost: { content: '<p>Old</p>' },
+      finalUpdateData: { content: '<p>New</p>' },
+      mediaRow: {
+        content:
+          '<img src="https://cdn.example.com/media/platform/blog/swept.webp">',
+      },
+      postId: 'post-1',
+    });
+
+    expect(result).toEqual({ ok: false });
+    expect(state.restored).toEqual([
+      { content: '<p>Old</p>' },
+      { content: '<p>Old</p>' },
+    ]);
+  });
+
   it('restores when media presence is unverifiable', async () => {
-    const { client, state } = fakeClient(null);
+    const { client, state } = fakeClient({ present: null });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
       existingPost: { content: '<p>Old</p>' },

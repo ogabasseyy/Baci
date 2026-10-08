@@ -31,10 +31,13 @@ export function blogPostMediaPaths(row: BlogPostMediaRow): string[] {
 }
 
 /**
- * Resurrect tombstones a saved payload references. Clearing is
- * best-effort: the save already committed, and any tombstone missed
- * here is rechecked against persisted references at sweep time, so a
- * transient failure delays cleanup instead of breaking media.
+ * Resurrect tombstones a saved payload references. Only unclaimed rows
+ * clear: a claimed row means the sweep already decided to remove the
+ * object, and deleting the flag would blind the save's verification
+ * instead of stopping the removal. Clearing is best-effort: the save
+ * already committed, and any tombstone missed here is rechecked
+ * against persisted references at sweep time, so a transient failure
+ * delays cleanup instead of breaking media.
  */
 export async function clearBlogMediaTombstonesForRow(
   supabase: ServerSupabaseClient,
@@ -46,7 +49,8 @@ export async function clearBlogMediaTombstonesForRow(
     const { error } = await supabase
       .from(BLOG_MEDIA_TOMBSTONE_TABLE)
       .delete()
-      .in('path', paths);
+      .in('path', paths)
+      .eq('claimed', false);
     if (error) {
       console.error('Failed to clear blog media tombstones', { error, paths });
     }

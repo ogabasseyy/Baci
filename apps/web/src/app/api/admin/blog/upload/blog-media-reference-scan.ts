@@ -40,12 +40,14 @@ const BLOG_MEDIA_REFERENCE_SCAN_PAGE_SIZE = 1000;
 /**
  * Split candidate delete paths by persisted references. A session that
  * abandons an upload cannot know another tab already saved its URL, so
- * deletion stays conditional on no persisted platform post referencing
- * each path. The scan pages through every matching row in id order —
- * range windows without a stable order could skip or repeat rows —
- * and stops early once every candidate is known-referenced. Returns
- * null when the reference scan itself fails so the route fails closed
- * instead of deleting blind.
+ * deletion stays conditional on no persisted post referencing each
+ * path. Merchant article content accepts sanitized HTTPS images, so a
+ * merchant post can embed a public platform URL: the scan covers every
+ * persisted row unfiltered. The scan pages through every matching row
+ * in id order — range windows without a stable order could skip or
+ * repeat rows — and stops early once every candidate is
+ * known-referenced. Returns null when the reference scan itself fails
+ * so the route fails closed instead of deleting blind.
  */
 export async function filterBlogMediaPathsWithoutPersistedReferences(
   supabase: ServerSupabaseClient,
@@ -61,8 +63,6 @@ export async function filterBlogMediaPathsWithoutPersistedReferences(
         .select(
           'content, excerpt, featured_image_url, featured_image_variants, author_image_url'
         )
-        .eq('is_platform_post', true)
-        .is('merchant_id', null)
         .order('id')
         .range(offset, offset + BLOG_MEDIA_REFERENCE_SCAN_PAGE_SIZE - 1);
       if (page.error) return null;

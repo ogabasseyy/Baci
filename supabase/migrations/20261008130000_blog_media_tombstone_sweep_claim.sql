@@ -1,13 +1,24 @@
--- Atomic tombstone sweep claim. The sweep used to read due tombstones,
--- scan references, and remove objects in separate statements, so a post
--- save committing between the final read and the removal lost the race
--- and its media was deleted. The claim below locks the due rows,
--- re-scans persisted references under the same snapshot, and drops
--- servable metadata for unreferenced paths in one transaction: a
--- concurrent save clearing these rows blocks on the row locks until the
--- claim commits, then its post-insert verification sees the final
--- metadata state and rolls back loudly instead of persisting broken
--- media.
+-- Atomic tombstone sweep claim with API-first removal and cross-scope
+-- reference protection.
+--
+-- The sweep used to read due tombstones, scan references, and remove
+-- objects in separate statements, so a post save committing between
+-- the final read and the removal lost the race and its media was
+-- deleted. The claim below locks the due rows and flags unreferenced
+-- ones in one transaction; the Storage API then performs the actual
+-- deletion (direct SQL deletes would orphan file bytes), and the
+-- sweep drops the claimed rows. A concurrent save clearing these rows
+-- blocks on the row locks until the claim commits, then its
+-- post-insert verification sees claimed flags or missing metadata and
+-- rolls back loudly instead of persisting broken media. Claimed rows
+-- persist until the API removal succeeds, so a crashed sweep retries
+-- its bytes instead of leaking them. The reference scan covers every
+-- persisted blog row: merchant article content accepts sanitized HTTPS
+-- images, so a merchant post can embed a public platform URL that
+-- staging must never remove.
+ALTER TABLE public.blog_media_delete_tombstones
+  ADD COLUMN IF NOT EXISTS claimed BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE OR REPLACE FUNCTION public.claim_sweepable_blog_media_tombstones(
   p_cutoff TIMESTAMPTZ,
   p_limit INTEGER
@@ -35,42 +46,29 @@ BEGIN
     RETURN;
   END IF;
   RETURN QUERY
-  WITH unreferenced AS (
-    SELECT candidate AS path
-      FROM pg_catalog.unnest(v_due) AS candidate
-     WHERE NOT EXISTS (
-       SELECT 1
-         FROM public.blog_posts AS post
-        WHERE post.is_platform_post IS TRUE
-          AND post.merchant_id IS NULL
-          AND (
-            pg_catalog.strpos(post.content, candidate) > 0
-            OR pg_catalog.strpos(post.excerpt, candidate) > 0
-            OR pg_catalog.strpos(post.featured_image_url, candidate) > 0
-            OR pg_catalog.strpos(post.author_image_url, candidate) > 0
-            OR pg_catalog.strpos(
-              post.featured_image_variants::text,
-              candidate
-            ) > 0
-          )
-      )
+  WITH referenced AS (
+    SELECT DISTINCT candidate AS path
+      FROM public.blog_posts AS post
+     CROSS JOIN pg_catalog.unnest(v_due) AS candidate
+     WHERE pg_catalog.strpos(post.content, candidate) > 0
+        OR pg_catalog.strpos(post.excerpt, candidate) > 0
+        OR pg_catalog.strpos(post.featured_image_url, candidate) > 0
+        OR pg_catalog.strpos(post.author_image_url, candidate) > 0
+        OR pg_catalog.strpos(post.featured_image_variants::text, candidate) > 0
   ),
-  claimed AS (
-    DELETE FROM public.blog_media_delete_tombstones AS tomb
-     WHERE tomb.path IN (SELECT path FROM unreferenced)
+  newly_claimed AS (
+    UPDATE public.blog_media_delete_tombstones AS tomb
+       SET claimed = TRUE
+     WHERE tomb.path = ANY(v_due)
+       AND tomb.path NOT IN (SELECT path FROM referenced)
      RETURNING tomb.path
-  ),
-  metadata_dropped AS (
-    DELETE FROM storage.objects AS object
-     WHERE object.bucket_id = 'media'
-       AND object.name IN (SELECT path FROM claimed)
   ),
   resurrected AS (
     DELETE FROM public.blog_media_delete_tombstones AS tomb
      WHERE tomb.path = ANY(v_due)
-       AND tomb.path NOT IN (SELECT path FROM claimed)
+       AND tomb.path IN (SELECT path FROM referenced)
   )
-  SELECT due.path, due.path IN (SELECT path FROM claimed)
+  SELECT due.path, due.path NOT IN (SELECT path FROM referenced)
     FROM pg_catalog.unnest(v_due) AS due(path);
 END;
 $function$;

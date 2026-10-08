@@ -244,9 +244,27 @@ export async function POST(request: NextRequest) {
           postId: data.id,
         });
       }
-      try {
-        await supabase.from('blog_posts').delete().eq('id', data.id);
-      } catch (rollbackError) {
+      // PostgREST reports deletion failures through the resolved error
+      // field rather than throwing, so inspect it and retry: returning
+      // 500 while the broken post persists leaves a slug conflict for
+      // the user's retry.
+      let rollbackError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const { error } = await supabase
+            .from('blog_posts')
+            .delete()
+            .eq('id', data.id);
+          if (!error) {
+            rollbackError = null;
+            break;
+          }
+          rollbackError = error;
+        } catch (error) {
+          rollbackError = error;
+        }
+      }
+      if (rollbackError !== null) {
         console.error('Failed to roll back platform blog post save', {
           error: rollbackError,
           postId: data.id,

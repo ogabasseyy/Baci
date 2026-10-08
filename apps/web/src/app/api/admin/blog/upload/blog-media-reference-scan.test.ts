@@ -25,14 +25,14 @@ function fakeClient(pages: PostsPage[] | { throws: true }) {
     });
   });
   const order = vi.fn(() => ({ range }));
+  const select = vi.fn(() => ({ order }));
   return {
     client: {
-      from: () => ({
-        select: () => ({ eq: () => ({ is: () => ({ order }) }) }),
-      }),
+      from: () => ({ select }),
     } as unknown as ServerSupabaseClient,
     order,
     range,
+    select,
   };
 }
 
@@ -43,6 +43,36 @@ function fillerRows(count: number): BlogPostMediaRow[] {
 }
 
 describe('filterBlogMediaPathsWithoutPersistedReferences', () => {
+  it('protects paths referenced by merchant posts', async () => {
+    // Merchant article content accepts sanitized HTTPS images, so a
+    // merchant post can embed a public platform/blog URL. The scan
+    // must cover every persisted row unfiltered: any is_platform_post
+    // gate would stage the live merchant image for deletion.
+    const { client, select } = fakeClient([
+      {
+        data: [
+          {
+            content:
+              '<p>Merchant story</p><img src="https://cdn.example.com/media/platform/blog/shared.webp">',
+          },
+        ],
+        error: null,
+      },
+    ]);
+    expect(
+      await filterBlogMediaPathsWithoutPersistedReferences(client, [
+        'platform/blog/shared.webp',
+        'platform/blog/orphan.webp',
+      ])
+    ).toEqual({
+      deletable: ['platform/blog/orphan.webp'],
+      skipped: ['platform/blog/shared.webp'],
+    });
+    expect(select).toHaveBeenCalledWith(
+      'content, excerpt, featured_image_url, featured_image_variants, author_image_url'
+    );
+  });
+
   it('splits referenced from unreferenced paths', async () => {
     const { client } = fakeClient([
       {

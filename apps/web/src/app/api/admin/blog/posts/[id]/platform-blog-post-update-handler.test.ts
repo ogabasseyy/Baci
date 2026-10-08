@@ -27,13 +27,14 @@ function createSupabase(
 ) {
   const updates: Record<string, unknown>[] = [];
   const cleared: string[][] = [];
+  const clearIn = vi.fn((_column: string, paths: string[]) => {
+    cleared.push(paths);
+    return { eq: () => Promise.resolve({ error: null }) };
+  });
   const query = {
     delete: vi.fn(),
     eq: vi.fn(),
-    in: vi.fn((_column: string, paths: string[]) => {
-      cleared.push(paths);
-      return Promise.resolve({ error: null });
-    }),
+    in: vi.fn(() => Promise.resolve({ data: [], error: null })),
     is: vi.fn(),
     select: vi.fn(),
     single: vi
@@ -65,7 +66,7 @@ function createSupabase(
   query.eq.mockReturnValue(query);
   query.is.mockReturnValue(query);
   query.select.mockReturnValue(query);
-  query.delete.mockReturnValue(query);
+  query.delete.mockReturnValue({ in: clearIn });
   const rpc = vi.fn((_name: string, args: { p_paths: string[] }) =>
     Promise.resolve({
       data: args.p_paths.map((path) => ({ path })),

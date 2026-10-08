@@ -13,14 +13,16 @@ VALUES
   ('media', 'platform/blog/stale.webp', NULL, NULL, '{}'::jsonb),
   ('media', 'platform/blog/kept.webp', NULL, NULL, '{}'::jsonb),
   ('media', 'platform/blog/fresh.webp', NULL, NULL, '{}'::jsonb),
-  ('media', 'platform/blog/special_%_name.webp', NULL, NULL, '{}'::jsonb);
+  ('media', 'platform/blog/special_%_name.webp', NULL, NULL, '{}'::jsonb),
+  ('media', 'platform/blog/merchant.webp', NULL, NULL, '{}'::jsonb);
 
 INSERT INTO public.blog_media_delete_tombstones (path, created_at)
 VALUES
   ('platform/blog/stale.webp', now() - interval '2 hours'),
   ('platform/blog/kept.webp', now() - interval '2 hours'),
   ('platform/blog/fresh.webp', now() - interval '10 minutes'),
-  ('platform/blog/special_%_name.webp', now() - interval '2 hours');
+  ('platform/blog/special_%_name.webp', now() - interval '2 hours'),
+  ('platform/blog/merchant.webp', now() - interval '2 hours');
 
 INSERT INTO public.blog_posts (
   title, slug, content, author_name, is_platform_post, merchant_id,
@@ -34,6 +36,24 @@ VALUES (
   true,
   NULL,
   '{"landscape_16x9": "https://cdn.example.com/media/platform/blog/kept.webp"}'::jsonb
+);
+
+INSERT INTO public.merchants (id, email)
+VALUES (
+  '6f9d0e12-0000-4000-8000-00000000c001',
+  'sweep-claim-merchant@example.test'
+);
+
+INSERT INTO public.blog_posts (
+  title, slug, content, author_name, is_platform_post, merchant_id
+)
+VALUES (
+  'Merchant story',
+  'sweep-claim-merchant-post',
+  '<img src="https://cdn.example.com/media/platform/blog/merchant.webp">',
+  'Merchant',
+  false,
+  '6f9d0e12-0000-4000-8000-00000000c001'
 );
 
 DO $claim$
@@ -50,16 +70,16 @@ BEGIN
       )
   LOOP
     v_total_count := v_total_count + 1;
-    IF v_row.tombstone_path = 'platform/blog/stale.webp'
-      AND v_row.tombstone_claimed IS TRUE
+    IF v_row.tombstone_path IN (
+      'platform/blog/stale.webp',
+      'platform/blog/special_%_name.webp'
+    ) AND v_row.tombstone_claimed IS TRUE
     THEN
       v_claimed_count := v_claimed_count + 1;
-    ELSIF v_row.tombstone_path = 'platform/blog/special_%_name.webp'
-      AND v_row.tombstone_claimed IS TRUE
-    THEN
-      v_claimed_count := v_claimed_count + 1;
-    ELSIF v_row.tombstone_path = 'platform/blog/kept.webp'
-      AND v_row.tombstone_claimed IS FALSE
+    ELSIF v_row.tombstone_path IN (
+      'platform/blog/kept.webp',
+      'platform/blog/merchant.webp'
+    ) AND v_row.tombstone_claimed IS FALSE
     THEN
       CONTINUE;
     ELSE
@@ -70,37 +90,46 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF v_total_count <> 3 THEN
-    RAISE EXCEPTION 'claim must return exactly the 3 due rows, got %', v_total_count;
+  IF v_total_count <> 4 THEN
+    RAISE EXCEPTION 'claim must return exactly the 4 due rows, got %', v_total_count;
   END IF;
   IF v_claimed_count <> 2 THEN
     RAISE EXCEPTION 'claim must claim exactly stale + special, got %', v_claimed_count;
   END IF;
 
-  IF EXISTS (
-    SELECT 1
+  IF (
+    SELECT count(*)
       FROM public.blog_media_delete_tombstones
-     WHERE path <> 'platform/blog/fresh.webp'
-  ) THEN
-    RAISE EXCEPTION 'claim must leave only the fresh tombstone row';
+     WHERE path IN ('platform/blog/stale.webp', 'platform/blog/special_%_name.webp')
+       AND claimed IS TRUE
+  ) <> 2 THEN
+    RAISE EXCEPTION 'claim must flag exactly stale + special as claimed';
   END IF;
 
   IF EXISTS (
     SELECT 1
-      FROM storage.objects
-     WHERE bucket_id = 'media'
-       AND name IN ('platform/blog/stale.webp', 'platform/blog/special_%_name.webp')
+      FROM public.blog_media_delete_tombstones
+     WHERE path IN ('platform/blog/kept.webp', 'platform/blog/merchant.webp')
   ) THEN
-    RAISE EXCEPTION 'claim must drop metadata for claimed objects';
+    RAISE EXCEPTION 'claim must resurrect platform and merchant references';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/fresh.webp'
+       AND claimed IS FALSE
+  ) THEN
+    RAISE EXCEPTION 'claim must leave the fresh row untouched and unclaimed';
   END IF;
 
   IF (
     SELECT count(*)
       FROM storage.objects
      WHERE bucket_id = 'media'
-       AND name IN ('platform/blog/kept.webp', 'platform/blog/fresh.webp')
-  ) <> 2 THEN
-    RAISE EXCEPTION 'claim must keep metadata for resurrected and fresh objects';
+       AND name LIKE 'platform/blog/%'
+  ) <> 5 THEN
+    RAISE EXCEPTION 'claim must not touch object metadata; the Storage API removes it';
   END IF;
 END;
 $claim$;
@@ -119,8 +148,8 @@ BEGIN
         'platform/blog/missing.webp'
       ]
     );
-  IF v_present_count <> 2 THEN
-    RAISE EXCEPTION 'presence probe must report kept + fresh only, got %', v_present_count;
+  IF v_present_count <> 3 THEN
+    RAISE EXCEPTION 'presence probe must report stale + kept + fresh, got %', v_present_count;
   END IF;
 
   SELECT count(*)
@@ -130,14 +159,17 @@ BEGIN
     RAISE EXCEPTION 'presence probe must report nothing for an empty input';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-      FROM public.claim_sweepable_blog_media_tombstones(
-        now() - interval '1 hour',
-        500
-      )
-  ) THEN
-    RAISE EXCEPTION 'second claim must return no rows once staging is empty';
+  SELECT count(*)
+    INTO v_present_count
+    FROM public.claim_sweepable_blog_media_tombstones(
+      now() - interval '1 hour',
+      500
+    )
+   WHERE tombstone_claimed IS TRUE;
+  IF v_present_count <> 2 THEN
+    RAISE EXCEPTION
+      'second claim must re-return the 2 still-claimed rows for retry, got %',
+      v_present_count;
   END IF;
 END;
 $probe$;

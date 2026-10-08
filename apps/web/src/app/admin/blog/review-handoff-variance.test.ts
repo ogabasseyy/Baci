@@ -42,6 +42,15 @@ describe('hasUnrepresentableVariance', () => {
     '<p class="portrait:hidden">Note</p><p>Body</p>',
     '<p class="data-[state=open]:hidden">Note</p><p>Body</p>',
     '<p class="max-[600px]:text-red-500">Note</p><p>Body</p>',
+    '<p class="motion-reduce:hidden">Draft note</p><p>Body</p>',
+    '<p class="motion-safe:hidden">Draft note</p><p>Body</p>',
+    '<p class="contrast-more:hidden">Draft note</p><p>Body</p>',
+    '<p class="contrast-less:invisible">Draft note</p><p>Body</p>',
+    '<p class="forced-colors:hidden">Draft note</p><p>Body</p>',
+    '<p class="print:hidden">Note</p><p>Body</p>',
+    '<p class="md:max-lg:hidden">Draft note</p><p>Body</p>',
+    '<p class="dark:md:max-lg:hidden">Draft note</p><p>Body</p>',
+    '<p class="max-md:max-lg:hidden">Draft note</p><p>Body</p>',
   ])('rejects unsupported variants wrapping visibility utilities: %s', (content) => {
     expect(hasUnrepresentableVariance(content)).toBe(true);
   });
@@ -50,7 +59,7 @@ describe('hasUnrepresentableVariance', () => {
     '<p class="hover:hidden">Note</p><p>Body</p>',
     '<p class="md:hover:hidden">Note</p><p>Body</p>',
     '<p class="group-hover:hidden">Note</p><p>Body</p>',
-    '<p class="print:hidden">Note</p><p>Body</p>',
+    '<p class="hidden dark:md:hidden">Note</p><p>Body</p>',
     '<p class="max-[600px]:p-4">Note</p><p>Body</p>',
   ])('accepts at-rest-neutral or non-hiding variants: %s', (content) => {
     expect(hasUnrepresentableVariance(content)).toBe(false);
@@ -60,6 +69,22 @@ describe('hasUnrepresentableVariance', () => {
     expect(() =>
       validateImportedContent(
         '<p class="max-[600px]:hidden">Mobile note</p><p>Body</p>'
+      )
+    ).toThrow('responsive visibility');
+  });
+
+  it('rejects reduced-motion hiding at import', () => {
+    expect(() =>
+      validateImportedContent(
+        '<p class="motion-reduce:hidden">Draft note</p><p>Body</p>'
+      )
+    ).toThrow('responsive visibility');
+  });
+
+  it('rejects stacked breakpoint ranges at import', () => {
+    expect(() =>
+      validateImportedContent(
+        '<p class="md:max-lg:hidden">Draft note</p><p>Body</p>'
       )
     ).toThrow('responsive visibility');
   });

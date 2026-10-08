@@ -40,24 +40,29 @@ export async function verifyPatchedBlogPostMediaOrRestore(
   for (const key of Object.keys(args.finalUpdateData)) {
     if (key in snapshot) restore[key] = snapshot[key];
   }
-  try {
-    if (Object.keys(restore).length > 0) {
-      const { error } = await supabase
-        .from('blog_posts')
-        .update(restore)
-        .eq('id', args.postId)
-        .eq('is_platform_post', true)
-        .is('merchant_id', null);
-      if (error) {
-        console.error('Failed to restore platform blog post media save', {
-          error,
-          postId: args.postId,
-        });
+  let restoreError: unknown = null;
+  if (Object.keys(restore).length > 0) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const { error } = await supabase
+          .from('blog_posts')
+          .update(restore)
+          .eq('id', args.postId)
+          .eq('is_platform_post', true)
+          .is('merchant_id', null);
+        if (!error) {
+          restoreError = null;
+          break;
+        }
+        restoreError = error;
+      } catch (error) {
+        restoreError = error;
       }
     }
-  } catch (error) {
+  }
+  if (restoreError !== null) {
     console.error('Failed to restore platform blog post media save', {
-      error,
+      error: restoreError,
       postId: args.postId,
     });
   }

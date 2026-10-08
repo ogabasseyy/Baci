@@ -32,6 +32,7 @@ export const blogPostSupabaseMock = {
   delete: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
+  in: vi.fn(() => Promise.resolve({ data: [], error: null })),
   is: vi.fn(),
   rpc: vi.fn((_name: string, args: { p_paths: string[] }) =>
     Promise.resolve({

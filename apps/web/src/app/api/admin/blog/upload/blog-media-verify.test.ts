@@ -4,8 +4,27 @@ import { verifyBlogMediaObjectsPresent } from './blog-media-verify';
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-function fakeClient(present: string[], error: { message: string } | null) {
+function fakeClient(
+  present: string[],
+  claimed: string[],
+  error: { message: string } | null
+) {
   return {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          in: (_column: string, paths: string[]) => {
+            if (error) return Promise.resolve({ data: null, error });
+            return Promise.resolve({
+              data: paths
+                .filter((path) => claimed.includes(path))
+                .map((path) => ({ path })),
+              error: null,
+            });
+          },
+        }),
+      }),
+    }),
     rpc: (name: string, args: { p_paths: string[] }) => {
       if (name !== 'blog_media_objects_present_v1') {
         throw new Error(`unexpected rpc ${name}`);
@@ -22,18 +41,34 @@ function fakeClient(present: string[], error: { message: string } | null) {
 }
 
 describe('verifyBlogMediaObjectsPresent', () => {
-  it('reports no missing paths when every object exists', async () => {
+  it('reports no missing paths when every object exists unclaimed', async () => {
     const paths = ['platform/blog/a.webp', 'platform/blog/b.webp'];
 
     await expect(
-      verifyBlogMediaObjectsPresent(fakeClient(paths, null), paths)
+      verifyBlogMediaObjectsPresent(fakeClient(paths, [], null), paths)
     ).resolves.toEqual({ missing: [] });
   });
 
   it('reports paths the sweep already claimed', async () => {
+    // The claimed flag is set while the object metadata is still
+    // present, so the flag probe must catch the in-flight claim even
+    // though the presence probe still passes.
     await expect(
       verifyBlogMediaObjectsPresent(
-        fakeClient(['platform/blog/a.webp'], null),
+        fakeClient(
+          ['platform/blog/a.webp', 'platform/blog/swept.webp'],
+          ['platform/blog/swept.webp'],
+          null
+        ),
+        ['platform/blog/a.webp', 'platform/blog/swept.webp']
+      )
+    ).resolves.toEqual({ missing: ['platform/blog/swept.webp'] });
+  });
+
+  it('reports paths whose metadata is gone', async () => {
+    await expect(
+      verifyBlogMediaObjectsPresent(
+        fakeClient(['platform/blog/a.webp'], [], null),
         ['platform/blog/a.webp', 'platform/blog/swept.webp']
       )
     ).resolves.toEqual({ missing: ['platform/blog/swept.webp'] });
@@ -41,14 +76,17 @@ describe('verifyBlogMediaObjectsPresent', () => {
 
   it('returns null when presence is unverifiable', async () => {
     await expect(
-      verifyBlogMediaObjectsPresent(fakeClient([], { message: 'down' }), [
+      verifyBlogMediaObjectsPresent(fakeClient([], [], { message: 'down' }), [
         'platform/blog/a.webp',
       ])
     ).resolves.toBeNull();
   });
 
-  it('skips the probe when the payload references no media', async () => {
+  it('skips the probes when the payload references no media', async () => {
     const client = {
+      from: () => {
+        throw new Error('must not query');
+      },
       rpc: () => {
         throw new Error('must not probe');
       },

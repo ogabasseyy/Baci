@@ -11,11 +11,20 @@ function fakeClient(
     if ('throws' in result) return Promise.reject(new Error('down'));
     return Promise.resolve(result);
   };
-  const remove = vi.fn(terminal);
+  const remove = vi.fn();
+  const onlyUnclaimed = vi.fn(terminal);
   return {
     client: {
-      from: () => ({ delete: () => ({ in: remove }) }),
+      from: () => ({
+        delete: () => ({
+          in: (...args: unknown[]) => {
+            remove(...args);
+            return { eq: onlyUnclaimed };
+          },
+        }),
+      }),
     } as unknown as ServerSupabaseClient,
+    onlyUnclaimed,
     remove,
   };
 }
@@ -43,6 +52,15 @@ describe('clearBlogMediaTombstonesForRow', () => {
       'platform/blog/author.webp',
       'platform/blog/kept/landscape_16x9.webp',
     ]);
+  });
+
+  it('clears only unclaimed rows', async () => {
+    // A claimed row means the sweep already decided to remove the
+    // object; deleting the flag would blind verification instead of
+    // stopping the removal.
+    const { client, onlyUnclaimed } = fakeClient({ error: null });
+    await clearBlogMediaTombstonesForRow(client, MEDIA_ROW);
+    expect(onlyUnclaimed).toHaveBeenCalledWith('claimed', false);
   });
 
   it('skips the query when no managed paths are referenced', async () => {

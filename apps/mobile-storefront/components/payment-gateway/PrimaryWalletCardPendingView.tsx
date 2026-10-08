@@ -6,6 +6,7 @@ export function PrimaryWalletCardPendingView({
   statusError,
   message,
   operationReference,
+  terminalDirective,
   onCheck,
   onBack,
 }: {
@@ -13,6 +14,7 @@ export function PrimaryWalletCardPendingView({
   statusError: boolean;
   message: string | null;
   operationReference?: string;
+  terminalDirective?: string | null;
   onCheck: () => void;
   onBack: () => void;
 }) {
@@ -25,7 +27,8 @@ export function PrimaryWalletCardPendingView({
       </Text>
       <Text accessibilityRole="alert" style={{ color: colors.text }}>
         {statusError
-          ? 'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'
+          ? (terminalDirective ??
+            'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.')
           : (message ??
             'We are waiting for funding confirmation. Money appears in your wallet once confirmed. Your operation is saved. Do not pay again.')}
       </Text>

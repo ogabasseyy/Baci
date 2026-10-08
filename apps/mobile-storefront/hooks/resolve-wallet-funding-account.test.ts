@@ -1,3 +1,4 @@
+import { clearPiggyvestPrimaryCapabilityCache } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import {
   readPrimaryFundingAccount,
@@ -23,7 +24,10 @@ const primaryAccount = {
 } as const;
 const read = jest.mocked(piggyvestPrimaryWalletApi.read);
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  clearPiggyvestPrimaryCapabilityCache();
+});
 
 it('displays the confirmed PiggyVest account rather than the legacy account', async () => {
   read.mockResolvedValue({
@@ -71,8 +75,48 @@ it('resolves no account for freshly onboarded customers without legacy rows', as
   expect(resolveWalletFundingAccount(null, merchantId, primary)).toBeNull();
 });
 
-it('preserves other merchants accounts without contacting PiggyVest', async () => {
+it('preserves other merchants accounts while caching the negative probe', async () => {
+  read.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
+  );
   const primary = await readPrimaryFundingAccount('other');
   expect(resolveWalletFundingAccount(legacy, 'other', primary)).toEqual(legacy);
-  expect(read).not.toHaveBeenCalled();
+  expect(read).toHaveBeenCalledTimes(1);
+  await readPrimaryFundingAccount('other');
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it('resolves a server-enabled merchant on first load via one probe', async () => {
+  read.mockResolvedValue({
+    account: primaryAccount,
+    requiresConsent: false,
+    provisioningStatus: 'ready',
+  });
+  const primary = await readPrimaryFundingAccount(
+    '00000000-0000-4000-8000-000000000000'
+  );
+  expect(
+    resolveWalletFundingAccount(
+      legacy,
+      '00000000-0000-4000-8000-000000000000',
+      primary
+    )
+  ).toEqual({
+    account_name: 'Verified',
+    account_number: '0987654321',
+    bank_name: 'Provider Bank',
+    provider: 'piggyvest',
+  });
+});
+
+it('treats an ambiguous probe failure as unavailable and retries next load', async () => {
+  read.mockRejectedValueOnce(new Error('timeout'));
+  await expect(readPrimaryFundingAccount('other')).resolves.toEqual({
+    status: 'unavailable',
+  });
+  read.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
+  );
+  await readPrimaryFundingAccount('other');
+  expect(read).toHaveBeenCalledTimes(2);
 });

@@ -59,6 +59,7 @@ interface FundWalletParams {
   activeMerchantSlug?: string;
   customer?: WalletHandlerCustomer | null;
   fundAmount: string;
+  refetchWalletBalance?: () => Promise<unknown>;
   resetFundPanel: () => void;
   setIsFundPending: (isPending: boolean) => void;
   user?: WalletHandlerUser | null;
@@ -143,6 +144,7 @@ export async function fundWallet({
   activeMerchantSlug,
   customer,
   fundAmount,
+  refetchWalletBalance,
   resetFundPanel,
   setIsFundPending,
   user,
@@ -166,6 +168,7 @@ export async function fundWallet({
         activeMerchantSlug,
         customer,
         fundAmount,
+        refetchWalletBalance,
         resetFundPanel,
         setIsFundPending,
         user,

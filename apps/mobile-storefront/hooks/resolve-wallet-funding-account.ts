@@ -1,4 +1,5 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { getPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import {
   parseProjectWalletFundingAccount,
@@ -20,7 +21,18 @@ export type SettledPrimaryFundingAccount =
 export async function readPrimaryFundingAccount(
   merchantId: string
 ): Promise<SettledPrimaryFundingAccount> {
-  if (!isPiggyvestPrimaryMerchant(merchantId)) return { status: 'unavailable' };
+  if (!isPiggyvestPrimaryMerchant(merchantId)) {
+    // Unknown verdict: probe once so a server-enabled merchant resolves
+    // its primary account on first load instead of projecting legacy
+    // until a manual refetch. Pilot and observed merchants skip the
+    // probe; a cached negative answers without network.
+    try {
+      if (!(await getPiggyvestPrimaryCapability(merchantId)))
+        return { status: 'unavailable' };
+    } catch {
+      return { status: 'unavailable' };
+    }
+  }
   try {
     const { account } = await piggyvestPrimaryWalletApi.read(merchantId);
     return { status: 'ready', account };

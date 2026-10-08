@@ -60,7 +60,10 @@ export default function PaymentGatewayScreen() {
           colors={colors}
           statusError={controller.status === 'error'}
           message={controller.errorMessage}
-          operationReference={controller.validatedParams.data?.reference}
+          operationReference={
+            controller.confirmedOperationReference ?? undefined
+          }
+          terminalDirective={controller.terminalDirective}
           onCheck={controller.handleRetry}
           onBack={() =>
             router.replace(getWalletReturnHref(controller.returnTo))

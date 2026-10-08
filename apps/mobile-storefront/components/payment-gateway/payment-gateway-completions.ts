@@ -31,8 +31,10 @@ interface SharedCompletionInput {
   reference?: string;
   refs: PaymentGatewayRefs;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setConfirmedOperationReference?: (reference: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   setPaymentStatus: PaymentStatusSetter;
+  setTerminalDirective?: (message: string | null) => void;
 }
 
 export function beginWalletTopUpCompletion({

@@ -93,8 +93,13 @@ export async function provisionPrimarySavingsWallet(input: Input) {
     const wallet = schemas.wallet.parse(
       await input.retrieveWallet(candidate.id)
     );
+    // The owning provider customer is part of the evidence binding: a
+    // wallet with the expected ID, business, and name that belongs to a
+    // different customer must never enroll, or contributions would land
+    // in another customer's wallet.
     if (
       wallet.id !== candidate.id ||
+      wallet.api_customer_id !== intent.providerCustomerId ||
       wallet.business_id !== scope.businessId ||
       wallet.name !== intent.walletName
     )
@@ -104,7 +109,9 @@ export async function provisionPrimarySavingsWallet(input: Input) {
     const parsedAccounts = schemas.accounts.safeParse(accounts);
     if (!parsedAccounts.success) return outcome('pending');
     const enrolled = await input.store.enroll(goalId, {
-      providerCustomerId: intent.providerCustomerId,
+      // Provider-returned identity, not the stored one: the database
+      // compares it against the onboarding mapping as a second factor.
+      providerCustomerId: wallet.api_customer_id,
       providerWalletId: wallet.id,
       walletName: wallet.name,
       businessId: wallet.business_id,

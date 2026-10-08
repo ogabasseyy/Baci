@@ -7,6 +7,7 @@ import {
 } from '@/lib/piggyvest-primary-capability';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
+import { PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO } from '@/schemas/primary-wallet-card';
 import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
@@ -54,6 +55,11 @@ function validateFundAmountKobo(
     return { error: 'Enter a valid amount using digits only.' };
   }
   if (amountKobo <= 0) return { error: 'Enter an amount greater than zero.' };
+  // Same floor as the charge schema: failing here shows a specific
+  // correctable error before consent instead of a generic
+  // retained-operation message after it.
+  if (amountKobo < PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO)
+    return { error: 'Enter an amount of at least ₦50.00.' };
   if (amountKobo > MAX_FUND_AMOUNT_KOBO)
     return { error: 'Enter a smaller amount.' };
   return { amountKobo };
@@ -142,10 +148,10 @@ export async function fundPrimaryWalletCard(
         },
       });
     } else if (result.status === 'completed') {
-      Alert.alert(
-        'Funding confirmed',
-        'Your wallet funding is confirmed. Refresh your wallet balance.'
-      );
+      // Refresh before confirming: the user lands on the wallet balance,
+      // which would otherwise stay stale until a manual refresh.
+      await input.refetchWalletBalance?.().catch(() => undefined);
+      Alert.alert('Funding confirmed', 'Your wallet funding is confirmed.');
       input.resetFundPanel();
       // Re-sanitize at the navigation boundary: the saved handoff was
       // validated at write time, but storage is outside our trust.

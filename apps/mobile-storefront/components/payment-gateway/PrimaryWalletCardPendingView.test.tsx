@@ -49,3 +49,48 @@ it('distinguishes a network status failure without inviting another charge', () 
   );
   expect(screen.queryByText('Try payment again')).toBeNull();
 });
+
+it('shows the terminal directive instead of retained-operation copy', () => {
+  render(
+    <PrimaryWalletCardPendingView
+      colors={Colors.light}
+      statusError
+      message="Network request failed"
+      terminalDirective="Start a new funding to try again."
+      onCheck={jest.fn()}
+      onBack={jest.fn()}
+    />
+  );
+  expect(screen.getByRole('alert').props.children).toContain(
+    'Start a new funding to try again.'
+  );
+  expect(screen.getByRole('alert').props.children).not.toContain(
+    'Do not pay again'
+  );
+});
+
+it('shows only a confirmed operation reference, never an unverified one', () => {
+  const { rerender } = render(
+    <PrimaryWalletCardPendingView
+      colors={Colors.light}
+      statusError={false}
+      message={null}
+      onCheck={jest.fn()}
+      onBack={jest.fn()}
+    />
+  );
+  expect(screen.queryByText(/Reference:/)).toBeNull();
+  rerender(
+    <PrimaryWalletCardPendingView
+      colors={Colors.light}
+      statusError={false}
+      message={null}
+      operationReference="pvb-first-primary-confirmed"
+      onCheck={jest.fn()}
+      onBack={jest.fn()}
+    />
+  );
+  expect(screen.getByText(/Reference:/).props.children).toContain(
+    'pvb-first-primary-confirmed'
+  );
+});

@@ -19,6 +19,7 @@ export function useWalletFundRedeemPanels({
   activeMerchantSlug,
   customer,
   redeemPointsMutation,
+  refetchWalletBalance,
   routeAction,
   routeRequiredAmount,
   user,
@@ -28,6 +29,7 @@ export function useWalletFundRedeemPanels({
   activeMerchantSlug?: string;
   customer?: Customer | null;
   redeemPointsMutation: RedeemPointsMutation;
+  refetchWalletBalance?: () => Promise<unknown>;
   routeAction?: string;
   routeRequiredAmount: string;
   user?: User | null;
@@ -57,6 +59,7 @@ export function useWalletFundRedeemPanels({
       activeMerchantSlug,
       customer,
       fundAmount,
+      refetchWalletBalance,
       resetFundPanel,
       setIsFundPending,
       user,

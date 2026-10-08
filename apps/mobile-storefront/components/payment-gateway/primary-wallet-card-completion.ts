@@ -9,6 +9,9 @@ import {
 
 const client = createPrimaryWalletCardFundingClient();
 
+const TERMINAL_DIRECTIVE_COPY =
+  'This card checkout was cancelled before payment. No money moved. Start a new funding to try again.';
+
 export function beginPrimaryWalletCardCompletion(
   input: Parameters<typeof beginWalletTopUpCompletion>[0]
 ) {
@@ -16,10 +19,16 @@ export function beginPrimaryWalletCardCompletion(
   input.refs.paymentCompletionStartedRef.current = true;
   input.clearPendingLoadTimeout();
   input.setPaymentStatus('processing');
+  // A new run has verified nothing yet: clear the previously confirmed
+  // reference and terminal directive so a stale value can never display
+  // if this run fails before recovering.
+  input.setConfirmedOperationReference?.(null);
+  input.setTerminalDirective?.(null);
   void (async () => {
     let failureCause:
       | 'incomplete_details'
       | 'account_changed'
+      | 'operation_dropped'
       | 'recovery_unconfirmed' = 'recovery_unconfirmed';
     try {
       const userId = useAuthStore.getState().user?.id;
@@ -44,6 +53,10 @@ export function beginPrimaryWalletCardCompletion(
         userId,
         reference: input.reference,
       });
+      // Recover validated the callback reference against the persisted
+      // operation and the server answered: this reference is confirmed,
+      // unlike the raw URL parameter.
+      input.setConfirmedOperationReference?.(result.reference);
       if (!input.refs.isMountedRef.current) {
         input.refs.paymentCompletionStartedRef.current = false;
         return;
@@ -57,9 +70,8 @@ export function beginPrimaryWalletCardCompletion(
       requireSameAccount();
       if (result.status === 'abandoned') {
         input.refs.paymentCompletionStartedRef.current = false;
-        input.setErrorMessage(
-          'This card checkout was cancelled before payment. No money moved. Start a new funding to try again.'
-        );
+        input.setErrorMessage(TERMINAL_DIRECTIVE_COPY);
+        input.setTerminalDirective?.(TERMINAL_DIRECTIVE_COPY);
         input.setPaymentStatus('error');
         return;
       }
@@ -85,15 +97,31 @@ export function beginPrimaryWalletCardCompletion(
           router.replace(getWalletReturnHref(result.returnTo));
       });
     } catch {
+      // A dropped operation (abandoned terminal state removes the
+      // persisted record) can never succeed on re-check: direct a new
+      // funding instead of claiming an operation is retained.
+      if (failureCause === 'recovery_unconfirmed') {
+        const retained = await client
+          .readPending({
+            merchantId: input.merchantId,
+            userId: useAuthStore.getState().user?.id ?? '',
+          })
+          .catch(() => 'unknown' as const);
+        if (retained === null) failureCause = 'operation_dropped';
+      }
       // Redacted cause only: the error itself may carry provider or
       // account details, so log the classification, never the value.
       console.warn(`[primary-wallet-card] completion failed: ${failureCause}`);
       input.refs.paymentCompletionStartedRef.current = false;
       if (!input.refs.isMountedRef.current) return;
       input.setPaymentStatus('error');
-      input.setErrorMessage(
-        'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'
-      );
+      if (failureCause === 'operation_dropped') {
+        input.setErrorMessage(TERMINAL_DIRECTIVE_COPY);
+        input.setTerminalDirective?.(TERMINAL_DIRECTIVE_COPY);
+      } else
+        input.setErrorMessage(
+          'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'
+        );
     }
   })();
 }

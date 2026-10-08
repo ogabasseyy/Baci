@@ -84,6 +84,7 @@ export function createWalletSavingsActions({
         activeMerchantSlug,
         fundAmount: savingsContributionAmount,
         goalId: goal.id,
+        refetchWalletBalance: refetchWallet,
       });
   };
 

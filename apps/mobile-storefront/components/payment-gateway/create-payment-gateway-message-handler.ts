@@ -138,6 +138,20 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
+    // Primary card confirms only through the hosted status boundary:
+    // route every success-claim message to the wired server confirmer
+    // (or drop it when unwired) before any branch below can credit it.
+    // Clipboard messages fall through; copying text never confirms.
+    if (
+      paymentKind === 'primary_wallet_card' &&
+      (data.type === 'crypto_success' ||
+        data.type === 'success' ||
+        data.type === 'payment_success')
+    ) {
+      if (confirmRedvaultPayment) confirmRedvaultPayment();
+      return;
+    }
+
     if (data.type === PAYMENT_CLIPBOARD_BRIDGE.clipboardMessageType) {
       handleClipboardText({
         copiedGatewayTextRef,

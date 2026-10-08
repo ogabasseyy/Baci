@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
-import { getPiggyvestApiConfig, getPiggyvestWebhookSecret } from '@/env';
+import { getPiggyvestApiConfig } from '@/env';
 import {
   digestRawBody,
   recordQuarantineEvent,
@@ -14,6 +14,7 @@ import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-infl
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
+import { collectPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
 import {
   type RecordPiggyvestEventInput,
   recordPiggyvestEvent,
@@ -35,9 +36,12 @@ import {
  *   `x-pvb-signature`, verified over the exact wire bytes.
  *
  * Status mapping:
- * - No secret configured -> 503 (fail closed; nothing is accepted).
+ * - No secret configured anywhere -> 503 (fail closed; nothing is
+ *   accepted).
  * - Bad/missing signature -> 200 without processing (docs behavior;
- *   forged traffic must not consume the 10 retries).
+ *   forged traffic must not consume the 10 retries). Verification spans
+ *   the legacy secret plus every primary inbox's current and retained
+ *   keys, so rotation never strands a signed delivery at this gate.
  * - Authentic but unparseable/unknown/conflicting event -> quarantine
  *   (durable receipt of a non-retryable observation) -> 200. Retries
  *   cannot fix these, so they must not burn the 10 attempts; nothing
@@ -145,8 +149,8 @@ async function quarantineAndAck(
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const secret = getPiggyvestWebhookSecret();
-  if (!secret) {
+  const secrets = collectPiggyvestWebhookSecrets();
+  if (secrets.length === 0) {
     return NextResponse.json(
       { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
       { status: 503, headers: noStore }
@@ -177,12 +181,16 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   const rawBody: Buffer = bounded.body;
   const signature = request.headers.get('x-pvb-signature');
-  const authentic = verifyPiggyvestPayloadSignature({
-    payload: rawBody,
-    signature,
-    secret,
-  });
-  if (!authentic) {
+  // Accept any secret a downstream intake trusts (current or retained):
+  // the matched secret flows on so re-verifying handlers agree.
+  const matchedSecret = secrets.find((secret) =>
+    verifyPiggyvestPayloadSignature({
+      payload: rawBody,
+      signature,
+      secret,
+    })
+  );
+  if (!matchedSecret) {
     return NextResponse.json(
       { received: false, code: 'PIGGYVEST_INVALID_SIGNATURE' },
       { status: 200, headers: noStore }
@@ -235,7 +243,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       const primary = await dispatchPrimaryWalletInflow({
         rawBody,
         signature,
-        secret,
+        secret: matchedSecret,
       });
       if (primary === 'credited' || primary === 'duplicate') {
         return NextResponse.json(

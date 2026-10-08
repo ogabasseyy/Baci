@@ -34,9 +34,9 @@ it('exposes signing keys while the worker stays unconfigured', () => {
     webhookSecret: fixture.config.webhookSecret,
     retainedWebhookSecrets: [],
   });
-  expect(() =>
-    readPrimaryWalletPaidInterestInboxRuntime(incomplete)
-  ).toThrow(/configuration unavailable/);
+  expect(() => readPrimaryWalletPaidInterestInboxRuntime(incomplete)).toThrow(
+    /configuration unavailable/
+  );
   expect(
     readPrimaryWalletPaidInterestInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();

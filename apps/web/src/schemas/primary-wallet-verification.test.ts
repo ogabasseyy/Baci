@@ -5,6 +5,7 @@ const proof = {
   mapping: { providerCustomerId: 'customer', providerWalletId: 'wallet' },
   wallet: {
     id: 'wallet',
+    api_customer_id: 'customer',
     business_id: 'business',
     currency: 'NGN',
     status: 'active',
@@ -32,6 +33,7 @@ describe('primary wallet verification schemas', () => {
     { wallet: { ...proof.wallet, currency: 'USD' } },
     { wallet: { ...proof.wallet, balance: -1 } },
     { wallet: { ...proof.wallet, balance: 0.5 } },
+    { wallet: { ...proof.wallet, api_customer_id: undefined } },
     { mapping: { ...proof.mapping, email: 'synthetic@example.test' } },
     { phone: '08000000000' },
   ])('rejects incomplete, malformed, or profile-selected proof %j', (change) => {

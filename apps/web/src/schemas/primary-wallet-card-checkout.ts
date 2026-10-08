@@ -60,6 +60,7 @@ const intent = scope
       'custody_pending',
       'reconciliation_required',
       'completed',
+      'abandoned',
     ]),
     authorizationUrl: session.shape.authorizationUrl.nullable(),
   })

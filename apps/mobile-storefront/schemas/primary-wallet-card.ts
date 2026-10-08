@@ -22,6 +22,7 @@ const response = z
       'custody_pending',
       'reconciliation_required',
       'completed',
+      'abandoned',
     ]),
     authorizationUrl: z
       .string()

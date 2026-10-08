@@ -46,8 +46,7 @@ export function useSavingsPlanFunding({
   // identity from auth plus goal ownership), so an early primary
   // confirmation never misuses the collected value.
   const planFundingRequiresBvn =
-    !isPiggyvestPrimaryMerchant(activeMerchantId) ||
-    primaryCapability !== true;
+    !isPiggyvestPrimaryMerchant(activeMerchantId) || primaryCapability !== true;
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

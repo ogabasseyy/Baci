@@ -27,11 +27,10 @@ describe('intake-only configured custody capability', () => {
       PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD: undefined,
     };
     expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
-      webhookSecret: fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+      webhookSecret:
+        fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
     });
-    expect(
-      readPrimaryCardCustodyIntakeRuntime(env, fixture.now)
-    ).toBeNull();
+    expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
     expect(
       readPrimaryCardCustodyIntakeSecrets({
         ...fixture.environment,

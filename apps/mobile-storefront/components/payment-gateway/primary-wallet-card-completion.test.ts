@@ -80,6 +80,24 @@ it.each([
   expect(router.replace).not.toHaveBeenCalled();
   expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
 });
+it('treats an abandoned checkout as cancelled with retry copy, never credit', async () => {
+  const input = fixture();
+  mockRecover.mockResolvedValue({ status: 'abandoned' });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
+  expect(input.setPaymentStatus).not.toHaveBeenCalledWith('success');
+  expect(input.setPaymentStatus).not.toHaveBeenCalledWith('pending');
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Start a new funding to try again')
+  );
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.not.stringContaining('Do not pay again')
+  );
+  expect(input.queryClient.invalidateQueries).not.toHaveBeenCalled();
+  expect(router.replace).not.toHaveBeenCalled();
+  expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
+});
 it('shows a status-check failure, not a failed charge, and permits read-only retry', async () => {
   const input = fixture();
   mockRecover.mockRejectedValueOnce(new Error('Network unavailable'));

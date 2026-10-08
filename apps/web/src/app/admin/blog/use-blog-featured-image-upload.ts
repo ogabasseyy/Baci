@@ -60,9 +60,10 @@ export function useBlogFeaturedImageUpload({
   coverStashRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
-  deleteUpload: (paths: {
+  deleteUpload: (request: {
     path: string;
     variantPaths: string[];
+    signal: AbortSignal;
   }) => Promise<void>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
@@ -72,6 +73,10 @@ export function useBlogFeaturedImageUpload({
   const generationRef = useRef(0);
   const altEditGenerationRef = useRef(0);
   const settledUploadsRef = useRef<UploadResult[]>([]);
+  const inflightBatchRef = useRef<{
+    controller: AbortController;
+    paths: Set<string>;
+  } | null>(null);
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;
@@ -97,7 +102,11 @@ export function useBlogFeaturedImageUpload({
       .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
       .filter((variantPath): variantPath is string => variantPath !== null);
     try {
-      await deleteUpload({ path, variantPaths });
+      await deleteUpload({
+        path,
+        variantPaths,
+        signal: new AbortController().signal,
+      });
     } catch (error) {
       toast({
         title: 'Could not remove abandoned upload',
@@ -179,9 +188,18 @@ export function useBlogFeaturedImageUpload({
     // embed uploads the cover does not use. Unreferenced paths batch
     // into one DELETE call so a long session cannot trip the shared
     // per-minute delete budget one upload at a time.
+    const keepPaths = draftReferencedMediaPaths(draft);
+    // A new import that reuses a path the in-flight batch is deleting
+    // aborts it first: the batch would otherwise remove active-draft
+    // media. The aborted entries stay tracked through the batch's
+    // catch, so a later import that drops them deletes them then.
+    const inflight = inflightBatchRef.current;
+    if (inflight && [...inflight.paths].some((path) => keepPaths.has(path))) {
+      inflight.controller.abort();
+      inflightBatchRef.current = null;
+    }
     const tracked = settledUploadsRef.current;
     if (tracked.length === 0) return;
-    const keepPaths = draftReferencedMediaPaths(draft);
     const retained: UploadResult[] = [];
     const droppedPaths: string[] = [];
     const droppedResults: UploadResult[] = [];
@@ -197,19 +215,34 @@ export function useBlogFeaturedImageUpload({
     settledUploadsRef.current = retained;
     if (droppedPaths.length === 0) return;
     const [path, ...variantPaths] = [...new Set(droppedPaths)];
+    const controller = new AbortController();
+    const batch = {
+      controller,
+      paths: new Set([path, ...variantPaths]),
+    };
+    inflightBatchRef.current = batch;
     void (async () => {
       try {
-        await deleteUpload({ path, variantPaths });
+        await deleteUpload({ path, variantPaths, signal: controller.signal });
       } catch (error) {
         // The batch is all-or-nothing: preserve the contributing
         // results so the next import retries them instead of
-        // leaking the abandoned objects.
+        // leaking the abandoned objects. An abort is intentional —
+        // the next import reuses the paths — so it stays silent.
         settledUploadsRef.current.push(...droppedResults);
-        toast({
-          title: 'Could not remove replaced upload',
-          description: error instanceof Error ? error.message : 'Unknown error',
-          variant: 'destructive',
-        });
+        const aborted = error instanceof Error && error.name === 'AbortError';
+        if (!aborted) {
+          toast({
+            title: 'Could not remove replaced upload',
+            description:
+              error instanceof Error ? error.message : 'Unknown error',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (inflightBatchRef.current === batch) {
+          inflightBatchRef.current = null;
+        }
       }
     })();
   };

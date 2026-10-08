@@ -1,47 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { textColorMarkers } from './review-handoff-text-color';
 
+const ALL = [true, true, true, true, true, true];
+const NONE = [false, false, false, false, false, false];
+const MD_UP = [false, false, true, true, true, true];
+const BELOW_MD = [true, true, false, false, false, false];
+const LG_UP = [false, false, false, true, true, true];
+
 describe('textColorMarkers', () => {
   it.each([
-    [['text-black']],
-    [['text-emerald-600']],
-    [['text-foreground']],
-    [['text-store-primary-text']],
-    [['text-black/50']],
-    [['text-black/[var(--alpha)]']],
-    [['md:text-black']],
-    [['text-white', 'text-transparent']],
-    [['text-black', 'md:text-transparent']],
-    [['md:text-transparent', 'lg:text-black']],
-  ])('reports an opaque winner: %s', (classes) => {
-    expect(textColorMarkers(classes).opaqueColor).toBe(true);
+    [['text-black'], ALL],
+    [['text-emerald-600'], ALL],
+    [['text-foreground'], ALL],
+    [['text-store-primary-text'], ALL],
+    [['text-black/50'], ALL],
+    [['text-black/[var(--alpha)]'], ALL],
+    [['md:text-black'], MD_UP],
+    [['text-white', 'text-transparent'], ALL],
+    [['text-black', 'md:text-transparent'], BELOW_MD],
+    [['md:text-transparent', 'lg:text-black'], LG_UP],
+  ])('reports an opaque winner: %s', (classes, expected) => {
+    expect(textColorMarkers(classes).opaqueAt).toEqual(expected);
   });
 
   it.each([
-    [['text-transparent']],
-    [['text-black', 'text-transparent']],
-    [['md:text-black', 'md:text-transparent', 'text-transparent']],
-    [['text-black/0']],
-    [['text-white/0', 'text-black']],
-    [['text-transparent', 'md:text-transparent']],
-  ])('reports transparency without an opaque winner: %s', (classes) => {
+    [['text-transparent'], ALL],
+    [['text-black', 'text-transparent'], ALL],
+    [['md:text-black', 'md:text-transparent', 'text-transparent'], ALL],
+    [['text-black/0'], ALL],
+    [['text-white/0', 'text-black'], ALL],
+    [['text-transparent', 'md:text-transparent'], ALL],
+    [['md:text-transparent'], MD_UP],
+  ])('reports transparency without an opaque winner: %s', (classes, expected) => {
     const markers = textColorMarkers(classes);
-    expect(markers.opaqueColor).toBe(false);
-    expect(markers.transparentColor).toBe(true);
+    expect(markers.opaqueAt).toEqual(NONE);
+    expect(markers.transparentAt).toEqual(expected);
   });
 
   it.each([
     [['text-black', 'text-inherit']],
     [['text-current']],
-    [['md:text-transparent']],
     [['text-sm']],
     [['text-center']],
     [['text-unknown']],
     [[]],
   ])('passes through without a deciding winner: %s', (classes) => {
     const markers = textColorMarkers(classes);
-    expect(markers.opaqueColor).toBe(false);
-    expect(markers.transparentColor).toBe(false);
+    expect(markers.opaqueAt).toEqual(NONE);
+    expect(markers.transparentAt).toEqual(NONE);
   });
 
   it.each([
@@ -54,25 +60,38 @@ describe('textColorMarkers', () => {
         'bg-clip-text',
         'text-transparent',
       ],
+      ALL,
     ],
-    ['solid paint', ['bg-red-500', 'bg-clip-text', 'text-transparent']],
-    ['theme paint', ['bg-store-primary', 'bg-clip-text', 'text-transparent']],
+    ['solid paint', ['bg-red-500', 'bg-clip-text', 'text-transparent'], ALL],
+    [
+      'theme paint',
+      ['bg-store-primary', 'bg-clip-text', 'text-transparent'],
+      ALL,
+    ],
     [
       'cross-layer paint',
       ['md:bg-red-500', 'bg-clip-text', 'text-transparent'],
+      MD_UP,
     ],
-    ['cross-layer clip', ['bg-red-500', 'md:bg-clip-text', 'text-transparent']],
+    [
+      'cross-layer clip',
+      ['bg-red-500', 'md:bg-clip-text', 'text-transparent'],
+      MD_UP,
+    ],
     [
       'arbitrary paint',
       ['bg-[url(/a.png)]', 'bg-clip-text', 'text-transparent'],
+      ALL,
     ],
     [
       'legacy gradient',
       ['bg-gradient-to-r', 'from-red-500', 'bg-clip-text', 'text-transparent'],
+      ALL,
     ],
     [
       'white beats transparent',
       ['bg-white', 'bg-transparent', 'bg-clip-text', 'text-transparent'],
+      ALL,
     ],
     [
       'gradient paints despite transparent color',
@@ -83,14 +102,17 @@ describe('textColorMarkers', () => {
         'bg-clip-text',
         'text-transparent',
       ],
+      ALL,
     ],
     [
       'cross-layer painted stop',
       ['bg-linear-to-r', 'md:from-red-500', 'bg-clip-text', 'text-transparent'],
+      MD_UP,
     ],
     [
       'via channel paints',
       ['bg-linear-to-r', 'via-red-500', 'bg-clip-text', 'text-transparent'],
+      ALL,
     ],
     [
       'stop position does not blank',
@@ -101,9 +123,10 @@ describe('textColorMarkers', () => {
         'bg-clip-text',
         'text-transparent',
       ],
+      ALL,
     ],
-  ])('pairs a clip with an effective background: %s', (_, classes) => {
-    expect(textColorMarkers(classes).clippedBackground).toBe(true);
+  ])('pairs a clip with an effective background: %s', (_, classes, expected) => {
+    expect(textColorMarkers(classes).clippedAt).toEqual(expected);
   });
 
   it.each([
@@ -182,6 +205,6 @@ describe('textColorMarkers', () => {
       ],
     ],
   ])('withholds pairing without both sides: %s', (_, classes) => {
-    expect(textColorMarkers(classes).clippedBackground).toBe(false);
+    expect(textColorMarkers(classes).clippedAt).toEqual(NONE);
   });
 });

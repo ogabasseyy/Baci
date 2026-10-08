@@ -141,8 +141,8 @@ export function BlogEditorClient({
     noteAltEdit,
   } = useBlogFeaturedImageUpload({
     coverStashRef,
-    deleteUpload: ({ path, variantPaths }) =>
-      deleteBlogMediaUpload(path, variantPaths),
+    deleteUpload: ({ path, variantPaths, signal }) =>
+      deleteBlogMediaUpload(path, variantPaths, { signal }),
     upload: (file) => uploadBlogMedia(file, 'featured'),
     setForm,
     toast,
@@ -152,8 +152,8 @@ export function BlogEditorClient({
     inlineUploadsPending,
     uploadInlineImage,
   } = useBlogInlineImageUpload({
-    deleteUpload: ({ path, variantPaths }) =>
-      deleteBlogMediaUpload(path, variantPaths),
+    deleteUpload: ({ path, variantPaths, signal }) =>
+      deleteBlogMediaUpload(path, variantPaths, { signal }),
     toast,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });

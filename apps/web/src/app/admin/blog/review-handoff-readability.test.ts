@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { hasReadableContent } from './review-handoff-readability';
+import {
+  hasReadableContent,
+  stripHiddenContent,
+} from './review-handoff-readability';
 
 describe('hasReadableContent', () => {
   it.each([
@@ -99,6 +102,7 @@ describe('hasReadableContent', () => {
     '<div class="opacity-0">Only body</div>',
     '<div class="opacity-0 opacity-[0]">Only body</div>',
     '<div class="opacity-[0]">Only body</div>',
+    '<p class="opacity-0 md:opacity-100 text-black md:text-transparent">Only body</p>',
     '<img class="opacity-[0]" src="https://cdn.example.com/a.png">',
     '<div class="opacity-0 md:opacity-0">Only body</div>',
   ])('disregards non-rendering content: %s', (content) => {
@@ -115,6 +119,25 @@ describe('hasReadableContent', () => {
     expect(hasReadableContent(`<div class="hidden">${images}</div>`)).toBe(
       false
     );
+  });
+
+  it.each([
+    [
+      '<p class="hidden">Draft note</p><p>Visible article</p>',
+      '<p>Visible article</p>',
+    ],
+    ['<div class="hidden"><p>Nested</p></div><p>Visible</p>', '<p>Visible</p>'],
+    [
+      '<img class="hidden" src="https://cdn.example.com/a.png"><p>Visible</p>',
+      '<p>Visible</p>',
+    ],
+    [
+      '<div class="hidden md:block">Shown</div>',
+      '<div class="hidden md:block">Shown</div>',
+    ],
+    ['<p>Untouched</p>', '<p>Untouched</p>'],
+  ])('strips only always-hidden subtrees: %s', (content, expected) => {
+    expect(stripHiddenContent(content)).toBe(expected);
   });
 
   it('finds a visible image after many hidden sibling images', () => {

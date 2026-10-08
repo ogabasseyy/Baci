@@ -1,111 +1,114 @@
 import { describe, expect, it } from 'vitest';
 import { showingMarkers } from './review-handoff-showing-markers';
 
+const NONE = [false, false, false, false, false, false];
+const ALL = [true, true, true, true, true, true];
+const BELOW_MD = [true, true, false, false, false, false];
+const NULLS = [null, null, null, null, null, null];
+
 describe('showingMarkers', () => {
   it('reports no markers for an empty class list', () => {
     expect(showingMarkers([])).toEqual({
-      baseHeightRestored: false,
-      baseWidthRestored: false,
-      clippedBackground: false,
-      display: false,
-      heightRestored: false,
-      maxHeightRestored: false,
-      maxWidthRestored: false,
-      notSrOnly: false,
-      opacity: false,
-      opacityZero: false,
-      opaqueColor: false,
-      scaleXRestored: false,
-      scaleXZero: false,
-      scaleYRestored: false,
-      scaleYZero: false,
-      transparentColor: false,
-      visible: false,
-      widthRestored: false,
+      colorAt: NULLS,
+      terminalAt: NONE,
+      visibilityAt: NULLS,
     });
   });
 
   it.each([
-    [['hidden', 'md:block'], { display: true }],
-    [['hidden', 'md:block', 'md:hidden'], { display: false }],
-    [['md:block', 'lg:hidden'], { display: true }],
-    [['block'], { display: false }],
-    [['visible'], { visible: true }],
-    [['md:visible'], { visible: true }],
-    [['md:opacity-100'], { opacity: true }],
-    [['md:opacity-0'], { opacity: false }],
-    [['md:opacity-[var(--o)]'], { opacity: true }],
-    [['opacity-100'], { opacity: true }],
-    [['opacity-0', 'opacity-100'], { opacity: true }],
-    [['opacity-0', 'opacity-50'], { opacity: true }],
-    [['opacity-0', 'opacity-[0]'], { opacity: false }],
-    [['opacity-[0]'], { opacity: false, opacityZero: true }],
-    [['opacity-0'], { opacityZero: true }],
-    [['md:opacity-0'], { opacityZero: false }],
-    [['opacity-0', 'md:opacity-100'], { opacityZero: false }],
-    [['opacity-0', 'opacity-[0]'], { opacityZero: true }],
-    [['opacity-[0]', 'md:opacity-100'], { opacityZero: false }],
-    [['opacity-0', 'opacity-[0%]'], { opacity: false }],
-    [['opacity-0', 'opacity-foo'], { opacity: false }],
-    [['opacity-foo'], { opacity: false }],
-    [['opacity-0', 'md:opacity-0', 'md:opacity-100'], { opacity: true }],
-    [['opacity-0', 'md:opacity-0'], { opacity: false }],
-    [['not-sr-only'], { notSrOnly: true }],
-    [['md:not-sr-only'], { notSrOnly: true }],
-    [['md:h-auto'], { heightRestored: true, maxHeightRestored: false }],
-    [['md:h-0'], { heightRestored: false }],
-    [['md:min-h-screen'], { heightRestored: true, maxHeightRestored: true }],
-    [['md:max-h-full'], { maxHeightRestored: true, heightRestored: false }],
-    [['min-h-screen'], { baseHeightRestored: true, maxHeightRestored: true }],
-    [['h-screen'], { baseHeightRestored: true, maxHeightRestored: false }],
-    [['max-h-full'], { baseHeightRestored: false, maxHeightRestored: false }],
-    [['md:h-auto'], { baseHeightRestored: false }],
-    [['md:w-auto'], { widthRestored: true, maxWidthRestored: false }],
-    [['md:max-w-full'], { maxWidthRestored: true, widthRestored: false }],
-    [['min-w-full'], { baseWidthRestored: true, maxWidthRestored: true }],
-    [['size-4'], { baseHeightRestored: true, baseWidthRestored: true }],
-    [['md:size-4'], { heightRestored: true, widthRestored: true }],
-    [['scale-x-0'], { scaleXZero: true, scaleYZero: false }],
-    [['scale-0'], { scaleXZero: true, scaleYZero: true }],
-    [['scale-x-[0]'], { scaleXZero: true }],
-    [['scale-x-100'], { scaleXZero: false }],
-    [['md:scale-x-100'], { scaleXRestored: true, scaleYRestored: false }],
-    [['md:scale-100'], { scaleXRestored: true, scaleYRestored: true }],
-    [['md:scale-none'], { scaleXRestored: true, scaleYRestored: true }],
-    [['md:scale-x-0'], { scaleXRestored: false }],
-    [['scale-none'], { scaleXRestored: false, scaleYRestored: false }],
-    [['scale-x-0', 'scale-x-100'], { scaleXZero: false }],
-    [['scale-0', 'scale-x-100'], { scaleXZero: false, scaleYZero: true }],
-    [['scale-x-0', 'scale-none'], { scaleXZero: false }],
-    [['scale-[0]'], { scaleXZero: true, scaleYZero: true }],
-    [['scale-[0]', 'scale-none'], { scaleXZero: false, scaleYZero: false }],
-    [['scale-x-100', 'scale-[0]'], { scaleXZero: true, scaleYZero: true }],
-    [['scale-x-0', '-scale-x-100'], { scaleXZero: true }],
-    [['scale-x-[0]', 'scale-x-100'], { scaleXZero: true }],
-    [['scale-y-0', 'scale-100'], { scaleXZero: false, scaleYZero: true }],
-    [['scale-x-[var(--x)]'], { scaleXZero: false }],
-  ])('tracks display, visibility, size, and scale markers: %s', (classes, expected) => {
-    expect(showingMarkers(classes)).toMatchObject(expected);
+    [['hidden'], ALL],
+    [['hidden', 'md:block'], BELOW_MD],
+    [['hidden', 'md:block', 'md:hidden'], ALL],
+    [['sr-only'], ALL],
+    [['sr-only', 'md:not-sr-only'], BELOW_MD],
+    [['opacity-0'], ALL],
+    [['opacity-0', 'md:opacity-100'], BELOW_MD],
+    [
+      ['opacity-100', 'md:opacity-0'],
+      [false, false, true, true, true, true],
+    ],
+    [['scale-x-0'], ALL],
+    [['scale-x-0', 'md:scale-x-100'], BELOW_MD],
+    [['scale-0', 'md:scale-100'], BELOW_MD],
+    [['h-0', 'overflow-hidden'], ALL],
+    [['h-0', 'overflow-hidden', 'md:h-auto'], BELOW_MD],
+    [['max-h-0', 'overflow-hidden', 'md:h-auto'], ALL],
+    [['w-0', 'overflow-x-clip'], ALL],
+    [['h-0', 'overflow-x-hidden'], NONE],
+  ])('unions hiding channels per point: %s', (classes, expected) => {
+    expect(showingMarkers(classes).terminalAt).toEqual(expected);
   });
 
   it.each([
-    [['text-black'], { opaqueColor: true, transparentColor: false }],
-    [['text-transparent'], { opaqueColor: false, transparentColor: true }],
+    [
+      ['invisible'],
+      [
+        'invisible',
+        'invisible',
+        'invisible',
+        'invisible',
+        'invisible',
+        'invisible',
+      ],
+    ],
+    [
+      ['visible'],
+      ['visible', 'visible', 'visible', 'visible', 'visible', 'visible'],
+    ],
+    [['md:visible'], [null, null, 'visible', 'visible', 'visible', 'visible']],
+    [
+      ['invisible', 'md:visible'],
+      ['invisible', 'invisible', 'visible', 'visible', 'visible', 'visible'],
+    ],
+  ])('tracks inherited visibility per point: %s', (classes, expected) => {
+    expect(showingMarkers(classes).visibilityAt).toEqual(expected);
+  });
+
+  it.each([
+    [
+      ['text-black'],
+      ['opaque', 'opaque', 'opaque', 'opaque', 'opaque', 'opaque'],
+    ],
+    [
+      ['text-transparent'],
+      [
+        'transparent',
+        'transparent',
+        'transparent',
+        'transparent',
+        'transparent',
+        'transparent',
+      ],
+    ],
+    [
+      ['md:text-transparent'],
+      [null, null, 'transparent', 'transparent', 'transparent', 'transparent'],
+    ],
+    [
+      ['text-black', 'md:text-transparent'],
+      [
+        'opaque',
+        'opaque',
+        'transparent',
+        'transparent',
+        'transparent',
+        'transparent',
+      ],
+    ],
     [
       ['bg-red-500', 'bg-clip-text', 'text-transparent'],
-      { clippedBackground: true },
+      ['opaque', 'opaque', 'opaque', 'opaque', 'opaque', 'opaque'],
     ],
-    [['text-black'], { clippedBackground: false }],
-  ])('delegates text color markers: %s', (classes, expected) => {
-    expect(showingMarkers(classes)).toMatchObject(expected);
+    [['text-current'], NULLS],
+  ])('tracks inherited color per point: %s', (classes, expected) => {
+    expect(showingMarkers(classes).colorAt).toEqual(expected);
   });
 
   it('ignores non-marker tokens', () => {
-    expect(showingMarkers(['foo', 'text-sm', 'hover:block'])).toMatchObject({
-      display: false,
-      heightRestored: false,
-      opaqueColor: false,
-      widthRestored: false,
+    expect(showingMarkers(['foo', 'text-sm', 'hover:block'])).toEqual({
+      colorAt: NULLS,
+      terminalAt: NONE,
+      visibilityAt: NULLS,
     });
   });
 });

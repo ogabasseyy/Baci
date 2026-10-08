@@ -14,7 +14,13 @@ function setup(
     variants?: Record<string, string>;
   }>
 ) {
-  const deleteUpload = vi.fn(async () => {});
+  const deleteUpload = vi.fn(
+    async (_request: {
+      path: string;
+      variantPaths: string[];
+      signal: AbortSignal;
+    }): Promise<void> => {}
+  );
   const toast = vi.fn();
   const hook = renderHook(() => {
     const [form, setForm] = useState(DEFAULT_PLATFORM_BLOG_FORM_STATE);
@@ -66,6 +72,52 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/session-1.webp',
       variantPaths: expectedRest,
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('aborts an in-flight delete when the next import reuses the upload', async () => {
+    const reused = 'https://cdn.example.com/media/platform/blog/cover.webp';
+    const { deleteUpload, result } = setup(async () => ({ url: reused }));
+    await act(async () => {
+      await result.current.uploadFeatured(file);
+    });
+    const pending = Promise.withResolvers<void>();
+    deleteUpload.mockReturnValueOnce(pending.promise);
+    await act(async () => {
+      result.current.cleanupSettledSessionUploads(discardDraft);
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    const signal = deleteUpload.mock.calls[0]?.[0].signal as
+      | AbortSignal
+      | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    // Second import reuses the upload while its delete is in flight:
+    // the batch is aborted before it can remove active-draft media.
+    await act(async () => {
+      result.current.cleanupSettledSessionUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: '<p>Imported body</p>',
+        featured_image_url: reused,
+      });
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.reject(
+        Object.assign(new Error('Aborted'), { name: 'AbortError' })
+      );
+    });
+    // The aborted upload stays tracked: a later import that drops it
+    // deletes it then.
+    await act(async () => {
+      result.current.cleanupSettledSessionUploads(discardDraft);
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(2);
+    expect(deleteUpload).toHaveBeenLastCalledWith({
+      path: 'platform/blog/cover.webp',
+      variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -88,6 +140,7 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     expect(deleteUpload).toHaveBeenLastCalledWith({
       path: 'platform/blog/settled.webp',
       variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -115,6 +168,7 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/cover/landscape_16x9.webp',
       variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
     // Second import discards the cover too: the already-deleted
     // variant must not be retried.
@@ -124,6 +178,7 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     expect(deleteUpload).toHaveBeenLastCalledWith({
       path: 'platform/blog/cover.webp',
       variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 });

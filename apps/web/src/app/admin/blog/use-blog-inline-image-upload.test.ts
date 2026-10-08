@@ -6,7 +6,13 @@ import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
 const file = new File(['image'], 'inline.png');
 
 function setup(upload: (file: File) => Promise<{ url: string }>) {
-  const deleteUpload = vi.fn(async () => {});
+  const deleteUpload = vi.fn(
+    async (_request: {
+      path: string;
+      variantPaths: string[];
+      signal: AbortSignal;
+    }): Promise<void> => {}
+  );
   const toast = vi.fn();
   const hook = renderHook(() =>
     useBlogInlineImageUpload({ deleteUpload, toast, upload })
@@ -89,6 +95,7 @@ describe('useBlogInlineImageUpload', () => {
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -133,6 +140,7 @@ describe('useBlogInlineImageUpload', () => {
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -165,6 +173,57 @@ describe('useBlogInlineImageUpload', () => {
         { length: 30 },
         (_, index) => `platform/blog/session-${index + 2}.png`
       ),
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('aborts an in-flight delete when the next import reuses the upload', async () => {
+    const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
+    const { deleteUpload, result } = setup(async () => ({ url: reused }));
+    await act(async () => {
+      await result.current.uploadInlineImage(file);
+    });
+    const pending = Promise.withResolvers<void>();
+    deleteUpload.mockReturnValueOnce(pending.promise);
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: '<p>Imported body</p>',
+      });
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    const signal = deleteUpload.mock.calls[0]?.[0].signal as
+      | AbortSignal
+      | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    // Second import reuses the upload while its delete is in flight:
+    // the batch is aborted before it can remove active-draft media.
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: `<p>Body</p><img src="${reused}">`,
+      });
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.reject(
+        Object.assign(new Error('Aborted'), { name: 'AbortError' })
+      );
+    });
+    // The aborted upload stays tracked: a later import that drops it
+    // deletes it then.
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: '<p>Imported body</p>',
+      });
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(2);
+    expect(deleteUpload).toHaveBeenLastCalledWith({
+      path: 'platform/blog/inline-1.png',
+      variantPaths: [],
+      signal: expect.any(AbortSignal),
     });
   });
 

@@ -4,7 +4,10 @@ import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { matchMediaElements } from './review-handoff-media-elements';
 import { isNeverMatchingMediaQuery } from './review-handoff-media-query';
-import { hasReadableContent } from './review-handoff-readability';
+import {
+  hasReadableContent,
+  stripHiddenContent,
+} from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
@@ -281,15 +284,17 @@ export function validateImportedContent(rawContent: string): string {
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(content)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
-  if (!hasReadableContent(content)) {
+  // The editor drops input classes: strip always-hidden content first.
+  const visible = stripHiddenContent(content);
+  if (!hasReadableContent(visible)) {
     throw new Error('Article content has no readable text or images');
   }
   // Validate the rendered markup as well as the stored markup: the
   // sanitizer strips invalid descriptors and data: candidates, which would
   // otherwise hide broken media from a stored-only check. Either layer
   // rejects loudly instead of silently persisting a crippled image.
-  if (hasBrokenMediaTag(rendered) || hasBrokenMediaTag(content)) {
+  if (hasBrokenMediaTag(rendered) || hasBrokenMediaTag(visible)) {
     throw new Error('Imported inline images must use HTTPS URLs');
   }
-  return content;
+  return visible;
 }

@@ -20,9 +20,10 @@ function setup(
   coverStashRef: { current: PlatformAdminBlogCoverState | null } = {
     current: null,
   },
-  deleteUpload: (paths: {
+  deleteUpload: (request: {
     path: string;
     variantPaths: string[];
+    signal: AbortSignal;
   }) => Promise<void> = vi.fn().mockResolvedValue(undefined)
 ) {
   const toast = vi.fn();
@@ -199,6 +200,7 @@ describe('useBlogFeaturedImageUpload', () => {
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/stale.webp',
       variantPaths: ['platform/blog/stale/landscape_16x9.webp'],
+      signal: expect.any(AbortSignal),
     });
     expect(result.current.form.featured_image_url).toBe(
       'https://cdn.example.com/handoff.webp'

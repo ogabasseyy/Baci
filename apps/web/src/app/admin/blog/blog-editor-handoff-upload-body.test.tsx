@@ -206,3 +206,24 @@ it('retains a settled upload embedded in the imported article body', async () =>
     })
   );
 });
+
+it('drops hidden paragraphs from the imported article', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<BlogEditorClient mode="create" />);
+  const concealedHandoff = {
+    ...handoff,
+    content_html: '<p class="hidden">Draft note</p><p>Visible article</p>',
+  };
+  fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+    target: {
+      files: [new File([JSON.stringify(concealedHandoff)], 'handoff.json')],
+    },
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
+  // The editor drops input classes, so a concealed paragraph would
+  // surface on mount: the import removes hidden content instead.
+  expect(screen.getByLabelText('Article')).toHaveTextContent('Visible article');
+  expect(screen.getByLabelText('Article')).not.toHaveTextContent('Draft note');
+});

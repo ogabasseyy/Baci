@@ -56,6 +56,17 @@ describe('validateImportedContent', () => {
     );
   });
 
+  it('accepts a src-less img supplied by its picture source', () => {
+    // The source contributes the image candidate, so the img element
+    // does not need its own src; judging it alone would reject valid
+    // responsive markup with a misleading HTTPS error.
+    expect(
+      validateImportedContent(
+        '<picture><source srcset="https://cdn.example.com/a.webp"><img alt="A"></picture>'
+      )
+    ).toContain('<img');
+  });
+
   it('ignores an orphan source element outside any picture', () => {
     // A source contributes candidates only inside picture; outside it
     // renders nothing, so its URL must not reject the handoff.

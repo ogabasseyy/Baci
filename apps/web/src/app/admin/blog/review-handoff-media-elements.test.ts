@@ -8,11 +8,15 @@ describe('matchMediaElements', () => {
     const matches = matchMediaElements(html);
     expect(matches.map((match) => match[0])).toEqual([
       '<img src="https://cdn.example.com/a.png">',
+      '<picture>',
       '<source srcset="https://cdn.example.com/a.webp">',
+      '</picture>',
     ]);
     expect(matches.map((match) => match.index)).toEqual([
       html.indexOf('<img'),
+      html.indexOf('<picture>'),
       html.indexOf('<source'),
+      html.indexOf('</picture>'),
     ]);
   });
 
@@ -21,7 +25,12 @@ describe('matchMediaElements', () => {
       matchMediaElements(
         '<IMG SRC="https://cdn.example.com/a.png" /><PICTURE><SOURCE SRCSET="https://cdn.example.com/a.webp" /></PICTURE>'
       ).map((match) => match[0])
-    ).toHaveLength(2);
+    ).toEqual([
+      '<IMG SRC="https://cdn.example.com/a.png" />',
+      '<PICTURE>',
+      '<SOURCE SRCSET="https://cdn.example.com/a.webp" />',
+      '</PICTURE>',
+    ]);
   });
 
   it('consumes quoted angle brackets inside media attributes', () => {
@@ -60,7 +69,11 @@ describe('matchMediaElements', () => {
       matchMediaElements(
         '<picture><source srcset="https://cdn.example.com/a.webp"></picture><source srcset="https://cdn.example.com/b.webp">'
       ).map((match) => match[0])
-    ).toEqual(['<source srcset="https://cdn.example.com/a.webp">']);
+    ).toEqual([
+      '<picture>',
+      '<source srcset="https://cdn.example.com/a.webp">',
+      '</picture>',
+    ]);
   });
 
   it('skips sources inside video elements', () => {

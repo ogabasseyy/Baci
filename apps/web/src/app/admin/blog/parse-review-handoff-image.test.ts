@@ -161,6 +161,37 @@ describe('parseReviewHandoff featured image', () => {
     ).toEqual({});
   });
 
+  it('drops a generated variant from another article than the source', () => {
+    // Both URLs are trusted generated-Codex images, but the variant
+    // belongs to article B while the source belongs to article A.
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/core-assets/blog/codex/article-a/galaxy-a.jpg`,
+          variants: {
+            landscape_16x9: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/core-assets/blog/codex/article-b/galaxy-b-landscape_16x9.jpg`,
+          },
+        },
+      }).featured_image_variants
+    ).toEqual({});
+  });
+
+  it('keeps a generated variant sharing the source article identity', () => {
+    const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/image/format=auto/core-assets/blog/codex/article-a/galaxy-a-landscape_16x9.jpg`;
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/image/format=auto/core-assets/blog/codex/article-a/galaxy-a.jpg`,
+          variants: { landscape_16x9: variant },
+        },
+      }).featured_image_variants
+    ).toEqual({ landscape_16x9: variant });
+  });
+
   it('keeps a managed variant sharing the source upload token', () => {
     const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa/landscape_16x9.webp`;
     expect(

@@ -4,14 +4,14 @@
 // are consumed whole so their contents never match standalone.
 const HTML_ELEMENT_PATTERN =
   /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
-const MEDIA_ELEMENT_NAME_PATTERN = /^<(img|source)\b/i;
+const MEDIA_ELEMENT_NAME_PATTERN = /^<(img|source|picture)\b/i;
 
 /**
- * Match img elements and picture-bound source elements, skipping
- * media-like text quoted inside other elements' attributes. A source
- * contributes candidates only inside picture, so orphan sources (and
- * video/audio sources) never match. Callers must strip HTML comments
- * first: the tokenizer does not recognize comment openers.
+ * Match img elements, picture-bound source elements, and picture
+ * open/close tags in document order. A source contributes candidates
+ * only inside picture, so orphan sources (and video/audio sources)
+ * never match. Callers must strip HTML comments first: the tokenizer
+ * does not recognize comment openers.
  */
 export function matchMediaElements(html: string): RegExpMatchArray[] {
   const elements: RegExpMatchArray[] = [];
@@ -21,6 +21,7 @@ export function matchMediaElements(html: string): RegExpMatchArray[] {
     if (tagName === 'picture') {
       pictureDepth =
         match[1] === '/' ? Math.max(0, pictureDepth - 1) : pictureDepth + 1;
+      elements.push(match);
       continue;
     }
     if (!MEDIA_ELEMENT_NAME_PATTERN.test(match[0])) continue;

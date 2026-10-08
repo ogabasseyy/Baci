@@ -95,7 +95,7 @@ function getVariantMap(
   return value;
 }
 
-function isBlogFeaturedVariantKey(
+export function isBlogFeaturedVariantKey(
   value: string
 ): value is BlogFeaturedVariantKey {
   return BLOG_FEATURED_VARIANT_KEY_SET.has(value);
@@ -120,7 +120,7 @@ function isTrustedManagedBlogImageUrl(raw: string): boolean {
   }
 }
 
-function getTrustedCdnSourcePath(raw: string): string | null {
+export function getTrustedCdnSourcePath(raw: string): string | null {
   try {
     const url = new URL(raw);
     if (
@@ -147,7 +147,7 @@ function getTrustedCdnSourcePath(raw: string): string | null {
   }
 }
 
-function isTrustedGeneratedCodexBlogImageUrl(raw: string): boolean {
+export function isTrustedGeneratedCodexBlogImageUrl(raw: string): boolean {
   const sourcePath = getTrustedCdnSourcePath(raw);
   return Boolean(
     sourcePath?.startsWith(GENERATED_CODEX_BLOG_IMAGE_PREFIX) &&
@@ -156,7 +156,7 @@ function isTrustedGeneratedCodexBlogImageUrl(raw: string): boolean {
   );
 }
 
-function isTrustedGeneratedCodexBlogVariantUrl(
+export function isTrustedGeneratedCodexBlogVariantUrl(
   raw: string,
   variantKey: BlogFeaturedVariantKey
 ): boolean {

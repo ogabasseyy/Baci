@@ -130,20 +130,50 @@ function normalizeContent(
   }
 }
 
+type MediaGroup = { candidates: MediaCandidate[]; hasMedia: boolean };
+
 function hasBrokenMediaTag(html: string): boolean {
   // Markdown rendering preserves editorial comments while the sanitizer
   // discards them, so strip first: a commented-out draft URL is not a
   // rendered image and must not reject the handoff. Elements (not
   // substrings) are matched so media-like text quoted inside another
-  // element's attribute is not mistaken for a real image.
+  // element's attribute is not mistaken for a real image. Candidates
+  // are evaluated per picture: a src-less img is supplied by its
+  // picture sources, so judging it alone would reject valid responsive
+  // markup. Standalone images form singleton groups under the same
+  // rule; pictures without media elements are inert, not broken.
   const withoutComments = stripHtmlComments(html);
-  return matchMediaElements(withoutComments).some(([tag]) => {
-    const candidates = mediaTagCandidates(tag);
-    return (
-      candidates.length === 0 ||
-      candidates.some(({ url, valid }) => !valid || !isImportableMediaUrl(url))
-    );
-  });
+  const groups: MediaGroup[] = [];
+  const pictureStack: MediaGroup[] = [];
+  for (const [tag] of matchMediaElements(withoutComments)) {
+    if (/^<picture\b/i.test(tag)) {
+      const group: MediaGroup = { candidates: [], hasMedia: false };
+      groups.push(group);
+      pictureStack.push(group);
+      continue;
+    }
+    if (/^<\/picture\s*>/i.test(tag)) {
+      pictureStack.pop();
+      continue;
+    }
+    let group: MediaGroup;
+    if (pictureStack.length > 0) {
+      group = pictureStack[pictureStack.length - 1];
+    } else {
+      group = { candidates: [], hasMedia: true };
+      groups.push(group);
+    }
+    group.hasMedia = true;
+    group.candidates.push(...mediaTagCandidates(tag));
+  }
+  return groups.some(
+    ({ candidates, hasMedia }) =>
+      hasMedia &&
+      (candidates.length === 0 ||
+        candidates.some(
+          ({ url, valid }) => !valid || !isImportableMediaUrl(url)
+        ))
+  );
 }
 
 /**

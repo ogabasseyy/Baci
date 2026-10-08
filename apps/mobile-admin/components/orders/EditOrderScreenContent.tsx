@@ -180,8 +180,9 @@ export function EditOrderScreenContent({
           <NewOrderDetailsSection
             controller={controller}
             showDateField={
-              controller.order?.shipping_status !== 'cancelled' &&
-              controller.order?.shipping_status !== 'returned'
+              controller.order !== undefined &&
+              controller.order.shipping_status !== 'cancelled' &&
+              controller.order.shipping_status !== 'returned'
             }
           />
           <NewOrderChannelSection controller={controller} />

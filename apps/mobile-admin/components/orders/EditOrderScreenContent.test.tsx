@@ -209,6 +209,16 @@ describe('EditOrderScreenContent', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('hides the date picker while the order is loading', () => {
+    const controller = createController({ order: undefined });
+
+    render(<EditOrderScreenContent controller={controller} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Select order date' })
+    ).not.toBeInTheDocument();
+  });
+
   it('disables the cancel action while submitting', () => {
     const controller = createController({ isSubmitting: true });
 

@@ -1,7 +1,7 @@
 import 'server-only';
-import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
-import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
-import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
+import { readPrimaryWalletBankInboxSecrets } from './primary-wallet-bank-inbox-runtime';
+import { readPrimaryCardCustodyIntakeSecrets } from './primary-wallet-card-custody-intake-runtime';
+import { readPrimaryWalletPaidInterestInboxSecrets } from './primary-wallet-paid-interest-inbox-runtime';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
 
 interface WebhookSecretConfig {
@@ -39,13 +39,17 @@ export interface PiggyvestFamilySecret {
 export function collectPiggyvestWebhookSecretsWithFamilies(
   env: NodeJS.ProcessEnv = process.env
 ): PiggyvestFamilySecret[] {
+  // Secrets-only readers: key material survives incomplete provisioning
+  // (missing database password, unparseable scope, expired worker) so the
+  // outer gate verifies and the unready intake answers a retryable 503
+  // instead of the delivery being 200-ACKed as invalid and lost.
   const readers: [
     PiggyvestWebhookKeyFamily,
     () => WebhookSecretConfig | null,
   ][] = [
-    ['bank', () => readPrimaryWalletBankInboxRuntime('intake', env)],
-    ['custody', () => readPrimaryCardCustodyIntakeRuntime(env)],
-    ['interest', () => readPrimaryWalletPaidInterestInboxRuntime(env)],
+    ['bank', () => readPrimaryWalletBankInboxSecrets(env)],
+    ['custody', () => readPrimaryCardCustodyIntakeSecrets(env)],
+    ['interest', () => readPrimaryWalletPaidInterestInboxSecrets(env)],
   ];
   const secrets: PiggyvestFamilySecret[] = [];
   const seen = new Set<string>();

@@ -171,6 +171,7 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
         retrieveWallet: vi.fn().mockResolvedValue({
           id: 'integrated-destination',
           name: walletName,
+          api_customer_id: 'customer',
           business_id: 'fixture-business',
           currency: 'NGN',
           type: 'api',

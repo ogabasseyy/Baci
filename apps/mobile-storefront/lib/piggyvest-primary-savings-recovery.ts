@@ -1,11 +1,14 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
-const client = createStorefrontCustomerApiClient();
 export async function recoverPiggyvestPrimarySavings(input: {
   merchantId?: string;
   goalId: string;
 }) {
+  // Fresh client per operation: the factory caches the access token in a
+  // closure, so a module-level singleton would keep serving the previous
+  // user's Bearer [REDACTED] after an account switch.
+  const client = createStorefrontCustomerApiClient();
   const parsed = schemas.recoveryRequest.parse(input);
   // Never translate a failed lookup into "no operation": the pending
   // endpoint answers SAVINGS_NOT_READY without consulting durable state,

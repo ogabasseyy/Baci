@@ -34,6 +34,7 @@ export async function readPrimaryWalletSnapshot(
     );
     if (
       wallet.id !== mapping.providerWalletId ||
+      wallet.api_customer_id !== mapping.providerCustomerId ||
       wallet.business_id !== input.businessId
     ) {
       return { status: 'unavailable', account: null };

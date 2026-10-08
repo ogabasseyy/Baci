@@ -201,11 +201,16 @@ export async function POST(request: NextRequest): Promise<Response> {
       if (primary) return primary;
     }
     if (parsed.data.eventType === 'bank-transfer.inflow.success') {
-      const bank = await dispatchPrimaryWalletBankInboxIntake({
-        rawBody,
-        signature,
-      });
-      if (bank.response) return bank.response;
+      // The bank inbox verifies against bank keys only: invoke it solely for
+      // bank-family deliveries so a legacy-signed inflow keeps flowing to
+      // the shared inflow dispatcher instead of 503-looping here.
+      if (verification.families.includes('bank')) {
+        const bank = await dispatchPrimaryWalletBankInboxIntake({
+          rawBody,
+          signature,
+        });
+        if (bank.response) return bank.response;
+      }
       const primary = await dispatchPrimaryWalletInflow({
         rawBody,
         signature,

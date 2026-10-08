@@ -1,10 +1,13 @@
 import { PiggyvestPrimaryWalletSchemas as schemas } from '@/schemas/piggyvest-primary-wallet';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
-const client = createStorefrontCustomerApiClient();
 const PATH = '/api/storefront/customer/wallet/piggyvest-primary';
 
+// Fresh client per operation: the factory caches the access token in a
+// closure, so a module-level singleton would keep serving the previous
+// user's Bearer [REDACTED] after an account switch.
 async function read(merchantId: string) {
+  const client = createStorefrontCustomerApiClient();
   const data = await client.fetchJson({
     path: `${PATH}?merchantId=${encodeURIComponent(merchantId)}`,
   });
@@ -31,6 +34,7 @@ async function create(input: {
       parsed.error.issues[0]?.message ?? 'Check your wallet setup details.'
     );
   }
+  const client = createStorefrontCustomerApiClient();
   const data = await client.fetchJson({
     path: PATH,
     method: 'POST',

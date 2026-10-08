@@ -161,3 +161,63 @@ DO $$ BEGIN
   IF EXISTS(SELECT 1 FROM piggyvest_primary_card.operations WHERE state <> 'custody_pending') THEN RAISE EXCEPTION 'collection bypassed custody pending'; END IF;
   IF NOT EXISTS(SELECT 1 FROM piggyvest_primary_card.collections WHERE saved_token IS NOT NULL) THEN RAISE EXCEPTION 'consented token missing'; END IF;
 END $$;
+-- Provider checkout URL variants (hostname validation follow-up): the
+-- pre-migration single-segment regex rejects legitimate provider URLs with
+-- extra segments, hyphens, or query strings. Negative control first.
+INSERT INTO public.customers VALUES('51000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000003','urlvariant@example.test');
+INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000002','51000000-0000-4000-8000-000000000003',repeat('c',64),'verified','variant-customer','variant-primary');
+CREATE TEMP TABLE card_variant_fixture(operation_id uuid, token uuid);
+GRANT SELECT, INSERT ON card_variant_fixture TO baci_primary_card_authorizer;
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  intent jsonb;
+  claim jsonb;
+  session jsonb;
+BEGIN
+  scope := scope || '{"customerId":"51000000-0000-4000-8000-000000000002","userId":"51000000-0000-4000-8000-000000000003","email":"urlvariant@example.test"}';
+  intent := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"51000000-0000-4000-8000-000000000005","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  claim := piggyvest_primary_card.claim_initialization(scope,(intent->>'operationId')::uuid);
+  INSERT INTO card_variant_fixture VALUES((intent->>'operationId')::uuid,(claim->>'token')::uuid);
+  session := jsonb_build_object('reference',intent->>'reference','authorizationUrl','https://checkout.paystack.com/pay/fixture-123_ABC?reference=xyz');
+  BEGIN
+    PERFORM piggyvest_primary_card.record_initialization(scope,(intent->>'operationId')::uuid,(claim->>'token')::uuid,session);
+    RAISE EXCEPTION 'provider URL variant accepted before hostname migration';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+\ir ../../../../../supabase/migrations/20261008090500_primary_card_checkout_url_hostname.sql
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  operation_id uuid := (SELECT fixture.operation_id FROM card_variant_fixture fixture);
+  token uuid := (SELECT fixture.token FROM card_variant_fixture fixture);
+  intent jsonb;
+  session jsonb;
+BEGIN
+  scope := scope || '{"customerId":"51000000-0000-4000-8000-000000000002","userId":"51000000-0000-4000-8000-000000000003","email":"urlvariant@example.test"}';
+  intent := piggyvest_primary_card.read_operation(scope,operation_id);
+  session := jsonb_build_object('reference',intent->>'reference','authorizationUrl','https://checkout.paystack.com/pay/fixture-123_ABC?reference=xyz');
+  IF NOT piggyvest_primary_card.record_initialization(scope,operation_id,token,session) THEN RAISE EXCEPTION 'provider URL variant rejected after hostname migration'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,operation_id)->>'authorizationUrl' <> session->>'authorizationUrl' THEN RAISE EXCEPTION 'variant session lost'; END IF;
+  FOR session IN SELECT jsonb_build_object('reference',intent->>'reference','authorizationUrl',url) FROM (VALUES
+    ('http://checkout.paystack.com/fixture123'),
+    ('https://checkout.paystack.com.evil.example.com/fixture123'),
+    ('https://checkout.paystack.com@evil.example.com/'),
+    ('https://evil.example.com/checkout.paystack.com/x')) AS lookalike(url) LOOP
+    BEGIN
+      PERFORM piggyvest_primary_card.record_initialization(scope,operation_id,token,session);
+      RAISE EXCEPTION 'lookalike checkout host accepted: %', session->>'authorizationUrl';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+  END LOOP;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  BEGIN
+    UPDATE piggyvest_primary_card.operations SET authorization_url='https://checkout.paystack.com.evil.example.com/x'
+    WHERE customer_id='51000000-0000-4000-8000-000000000002';
+    RAISE EXCEPTION 'table constraint accepted lookalike host';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  DELETE FROM piggyvest_primary_card.operations WHERE customer_id='51000000-0000-4000-8000-000000000002';
+END $$;

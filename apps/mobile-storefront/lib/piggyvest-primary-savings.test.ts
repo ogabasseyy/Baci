@@ -2,8 +2,12 @@ import { beforeEach, expect, it, jest } from '@jest/globals';
 
 const mockFetchJson = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockLegacyAdd = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockCreateClient = jest.fn((..._args: unknown[]) => ({
+  fetchJson: mockFetchJson,
+}));
 jest.mock('./storefront-customer-api-client', () => ({
-  createStorefrontCustomerApiClient: () => ({ fetchJson: mockFetchJson }),
+  createStorefrontCustomerApiClient: (...args: unknown[]) =>
+    mockCreateClient(...args),
 }));
 jest.mock('./customer-savings', () => ({
   addSavingsContribution: (...args: unknown[]) => mockLegacyAdd(...args),
@@ -71,4 +75,13 @@ it('surfaces ambiguous failures instead of silently switching rails', async () =
     'timeout'
   );
   expect(mockLegacyAdd).not.toHaveBeenCalled();
+});
+it('constructs a fresh API client for every contribution', async () => {
+  mockFetchJson.mockResolvedValue({
+    status: 'pending',
+    operationId: input.idempotencyKey,
+  });
+  await addPiggyvestPrimarySavingsContribution(input);
+  await addPiggyvestPrimarySavingsContribution(input);
+  expect(mockCreateClient).toHaveBeenCalledTimes(2);
 });

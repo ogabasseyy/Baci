@@ -92,6 +92,12 @@ BEGIN
   SELECT * INTO STRICT operation FROM piggyvest_savings_ledger.operations WHERE id=NEW.operation_id;
   PERFORM id FROM public.customer_savings_goals WHERE id=operation.goal_id AND merchant_id=operation.merchant_id
     AND customer_id=operation.customer_id FOR UPDATE;
+  IF operation.command->>'kind'='reverse_credit'
+    AND EXISTS(SELECT 1 FROM piggyvest_savings_ledger.operations original
+      WHERE original.id=operation.reference_id AND original.goal_id=operation.goal_id
+        AND original.merchant_id=operation.merchant_id AND original.customer_id=operation.customer_id) THEN
+    RETURN NEW;
+  END IF;
   IF EXISTS(SELECT 1 FROM piggyvest_primary.paid_interest_receipts WHERE goal_id=operation.goal_id
     AND merchant_id=operation.merchant_id AND customer_id=operation.customer_id) THEN
     RAISE EXCEPTION 'production primary interest source is exclusive; reconciliation required' USING ERRCODE='23514';

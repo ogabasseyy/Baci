@@ -89,6 +89,31 @@ SET SESSION AUTHORIZATION production_primary_interest_fixture;
 SELECT pg_temp.assert_true(pg_temp.production_apply(pg_temp.production_goal_proof(47))='prerequisite',
   'Existing legacy source prevents new production attribution even when the crosswalk is enabled');
 RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION primary_interest_fixture;
+SELECT pg_temp.apply_interest(47,pg_temp.command(502,'credit_eligible_paid_interest',3000));
+RESET SESSION AUTHORIZATION;
+INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id,payout_id,crosswalk_id,goal_id,merchant_id,customer_id,
+  net_kobo,financial_identity,body_digest)
+VALUES('00000000-0000-4000-8000-000000000005','legacy-transition-proof-47',pg_temp.goal_id(47),pg_temp.goal_id(47),
+  '00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002',0,
+  '{"source":"legacy-transition-test"}',repeat('a',64));
+SET SESSION AUTHORIZATION primary_interest_fixture;
+SELECT pg_temp.apply_interest(47,pg_temp.command(503,'reverse_credit',0,pg_temp.goal_id(502)));
+DO $$ BEGIN
+  BEGIN
+    PERFORM pg_temp.apply_interest(47,pg_temp.command(504,'credit_eligible_paid_interest',100));
+    RAISE EXCEPTION 'Post-transition legacy credit accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+SELECT pg_temp.assert_true((SELECT count(*)=1 FROM piggyvest_savings_ledger.operations WHERE id=pg_temp.goal_id(503)),
+  'Reversal of pre-transition legacy interest is recorded after the source transition');
+SELECT pg_temp.assert_true((SELECT coalesce(sum(posting.amount_kobo),0)=0 FROM piggyvest_savings_ledger.postings posting
+  JOIN piggyvest_savings_ledger.operations operation ON operation.id=posting.operation_id
+  WHERE operation.goal_id=pg_temp.goal_id(47) AND posting.account='paid_interest'),
+  'Reversed pre-transition interest no longer inflates the legacy earnings balance');
+SELECT pg_temp.assert_true(NOT EXISTS(SELECT 1 FROM piggyvest_savings_ledger.operations WHERE id=pg_temp.goal_id(504)),
+  'Post-transition legacy credit rolls back atomically while reversals stay permitted');
 
 SET SESSION AUTHORIZATION production_primary_interest_fixture;
 SELECT pg_temp.assert_true(pg_temp.production_apply(pg_temp.production_goal_proof(48)||'{"netKobo":1000,"grossKobo":1053,"taxKobo":53,"amountKobo":1000}')='credited',

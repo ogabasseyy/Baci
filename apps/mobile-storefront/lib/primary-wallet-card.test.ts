@@ -219,6 +219,49 @@ it('adopts the stored operation when initialize returns a different amount after
   expect('adopted' in recovered).toBe(false);
   expect(mockStorage.size).toBe(0);
 });
+it.each([
+  '{{{truncated-json',
+  '{"operationId":42}',
+])('drops a corrupt persisted record and starts fresh: %s', async (raw) => {
+  mockStorage.set(
+    `@baci_primary_card:${scope.merchantId}:${scope.userId}`,
+    raw
+  );
+  const client = createPrimaryWalletCardFundingClient();
+  const result = await client.start(start);
+  expect(result).toMatchObject({ operationId, status: 'ready' });
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: '/api/storefront/customer/wallet/primary-card/initialize',
+    })
+  );
+  // The corrupt value is gone; the fresh pending record replaced it.
+  expect(mockStorage.size).toBe(1);
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    amountKobo: 100000,
+  });
+});
+it('preserves a foreign-account record while refusing to use it', async () => {
+  const foreign = JSON.stringify({
+    merchantId: scope.merchantId,
+    userId: '99999999-9999-4999-8999-999999999999',
+    idempotencyKey: '44444444-4444-4444-8444-444444444444',
+    amountKobo: 100000,
+    consent: start.consent,
+    returnTo: '/wallet',
+    operationId: null,
+  });
+  mockStorage.set(
+    `@baci_primary_card:${scope.merchantId}:${scope.userId}`,
+    foreign
+  );
+  const client = createPrimaryWalletCardFundingClient();
+  await expect(client.start(start)).rejects.toThrow('ownership');
+  expect(
+    mockStorage.get(`@baci_primary_card:${scope.merchantId}:${scope.userId}`)
+  ).toBe(foreign);
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
 it('keeps the strict amount binding on status polls after adoption', async () => {
   const client = createPrimaryWalletCardFundingClient();
   await client.start({ ...start, amountKobo: 200000 });
@@ -229,21 +272,29 @@ it('keeps the strict amount binding on status polls after adoption', async () =>
     amountKobo: 100000,
   });
 });
-it('fails closed on storage failure before any provider initialization and preserves malformed records', async () => {
+it('fails closed on storage failure before any provider initialization', async () => {
   mockSetItem.mockRejectedValueOnce(new Error('Synthetic storage failure'));
   await expect(
     createPrimaryWalletCardFundingClient().start(start)
   ).rejects.toThrow();
   expect(mockFetchJson).not.toHaveBeenCalled();
+});
+it('drops a malformed record and starts fresh instead of pinning the scope', async () => {
   mockStorage.set(
     `@baci_primary_card:${scope.merchantId}:${scope.userId}`,
     'invalid'
   );
-  await expect(
-    createPrimaryWalletCardFundingClient().start(start)
-  ).rejects.toThrow();
+  const result = await createPrimaryWalletCardFundingClient().start(start);
+  expect(result).toMatchObject({ operationId, status: 'ready' });
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: '/api/storefront/customer/wallet/primary-card/initialize',
+    })
+  );
   expect(mockStorage.size).toBe(1);
-  expect(mockFetchJson).not.toHaveBeenCalled();
+  expect(JSON.parse([...mockStorage.values()][0])).toMatchObject({
+    amountKobo: 100000,
+  });
 });
 it('does not recover another account or dispatch after the authenticated account switches', async () => {
   const client = createPrimaryWalletCardFundingClient();

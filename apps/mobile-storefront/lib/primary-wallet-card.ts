@@ -35,7 +35,18 @@ export function createPrimaryWalletCardFundingClient() {
   const read = async (scope: Scope) => {
     const raw = await AsyncStorage.getItem(key(scope));
     if (raw === null) return null;
-    const record = schemas.pending.parse(JSON.parse(raw));
+    let record: Pending;
+    try {
+      record = schemas.pending.parse(JSON.parse(raw));
+    } catch {
+      // A corrupt or schema-drifted record must never pin the scope:
+      // drop it so the next attempt starts fresh with explicit consent
+      // (a surviving server operation is re-adopted by initialize).
+      // Ownership mismatches below are NOT dropped — that record belongs
+      // to another account and must survive.
+      await AsyncStorage.removeItem(key(scope));
+      return null;
+    }
     if (
       record.userId !== scope.userId ||
       record.merchantId !== scope.merchantId

@@ -17,6 +17,7 @@ const API_URL = resolveApiBaseUrl(
 const availabilitySchema = z.object({
   available: z.literal(true),
   reason: z.string(),
+  expiresAt: z.number().optional(),
 });
 
 const verificationSchema = z.object({
@@ -43,6 +44,7 @@ export async function getCheckoutAuthorizationHeaders() {
 export type RedvaultPaymentAvailability = {
   available: boolean;
   reason: string;
+  expiresAt?: number;
 };
 
 const UNAVAILABLE: RedvaultPaymentAvailability = {
@@ -69,7 +71,16 @@ export async function getRedvaultPaymentAvailability(
     if (!response.ok) return UNAVAILABLE;
     const parsed = availabilitySchema.safeParse(await response.json());
     if (!parsed.success) return UNAVAILABLE;
-    return { available: true, reason: parsed.data.reason };
+    const expiresAt =
+      typeof parsed.data.expiresAt === 'number' &&
+      Number.isFinite(parsed.data.expiresAt)
+        ? parsed.data.expiresAt
+        : undefined;
+    return {
+      available: true,
+      reason: parsed.data.reason,
+      ...(expiresAt === undefined ? {} : { expiresAt }),
+    };
   } catch {
     return UNAVAILABLE;
   }

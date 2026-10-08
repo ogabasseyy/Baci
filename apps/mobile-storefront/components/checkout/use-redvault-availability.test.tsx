@@ -3,7 +3,7 @@ import type { CartItem } from '@/stores/cart-store';
 import { useRedvaultAvailability } from './use-redvault-availability';
 
 const mockGetAvailability = jest.fn<
-  Promise<{ available: boolean; reason: string }>,
+  Promise<{ available: boolean; reason: string; expiresAt?: number }>,
   [merchantId: string, productId?: string]
 >();
 
@@ -148,5 +148,38 @@ describe('useRedvaultAvailability', () => {
 
     await act(async () => undefined);
     expect(staged.current).toBe(true);
+  });
+
+  it('revalidates and hides once the pilot expiry passes', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetAvailability
+        .mockResolvedValueOnce({
+          available: true,
+          reason: 'private_live_pilot',
+          expiresAt: Date.now() + 1000,
+        })
+        .mockResolvedValueOnce({ available: false, reason: 'unavailable' });
+      const { result } = renderHook(() =>
+        useRedvaultAvailability({
+          customerId: 'customer-a',
+          isAuthenticated: true,
+          items,
+          merchantId,
+        })
+      );
+
+      await act(async () => undefined);
+      expect(result.current).toBe(true);
+
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      await act(async () => undefined);
+      expect(result.current).toBe(false);
+      expect(mockGetAvailability).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

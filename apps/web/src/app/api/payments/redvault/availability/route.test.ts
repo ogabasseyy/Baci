@@ -85,7 +85,10 @@ describe('GET /api/payments/redvault/availability', () => {
       available: true,
       reason: 'private_live_pilot',
     });
-    routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({ productId });
+    routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({
+      productId,
+      expiresAt: 1_789_000_000_000,
+    });
     routeMocks.authenticateApiRequest.mockResolvedValue({
       user: { id: routeMocks.pilotUserId },
     });
@@ -97,6 +100,7 @@ describe('GET /api/payments/redvault/availability', () => {
     await expect(response.json()).resolves.toEqual({
       available: true,
       reason: 'private_live_pilot',
+      expiresAt: 1_789_000_000_000,
     });
   });
 

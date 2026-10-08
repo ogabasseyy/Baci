@@ -197,4 +197,35 @@ describe('REDVAULT availability', () => {
       complete(Response.json({ available: true, reason: 'reviewed' }));
     });
   });
+  it('revalidates and hides once the pilot expiry passes', async () => {
+    vi.useFakeTimers();
+    try {
+      const request = vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json({
+            available: true,
+            reason: 'private_live_pilot',
+            expiresAt: Date.now() + 1000,
+          })
+        )
+        .mockResolvedValueOnce(
+          Response.json({ available: false, reason: 'unavailable' })
+        );
+      vi.stubGlobal('fetch', request);
+      const { result } = renderHook(() =>
+        useRedvaultPaymentAvailability(merchant)
+      );
+      await act(async () => {});
+      expect(result.current.available).toBe(true);
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      await act(async () => {});
+      expect(result.current.available).toBe(false);
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

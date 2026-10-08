@@ -6,6 +6,7 @@ type RedvaultCallbackUrlInput = {
   vercelEnv?: string;
   vercelUrl?: string;
   localBaseUrl?: string;
+  localAllowedHosts?: readonly string[];
 };
 
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
@@ -19,6 +20,7 @@ export function getRedvaultCallbackUrl({
   vercelEnv,
   vercelUrl,
   localBaseUrl,
+  localAllowedHosts,
 }: RedvaultCallbackUrlInput): string {
   if (!HOSTNAME_LABEL.test(merchantSlug)) {
     throw new Error('REDVAULT callback host is unavailable');
@@ -39,13 +41,24 @@ export function getRedvaultCallbackUrl({
     // Local staging has no Vercel Preview host and may have no root
     // domain at all; route the test callback at an explicitly provided
     // loopback base URL instead of emitting an unresolvable merchant
-    // domain (or rejecting outright when the root domain is unset).
+    // domain (or rejecting outright when the root domain is unset). A
+    // loopback origin is unreachable from an emulator or physical device
+    // (it resolves on the device, not the dev host), so an explicitly
+    // configured allowlist may additionally admit a device-reachable
+    // origin such as the emulator gateway or a LAN host. This branch
+    // stays staging-only: production still requires the merchant domain.
+    const extraHosts = new Set(
+      (localAllowedHosts ?? [])
+        .map((host) => host.trim().toLowerCase())
+        .filter((host) => host.length > 0)
+    );
     let origin: string | null = null;
     try {
       const parsed = new URL(localBaseUrl ?? '');
       if (
         (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
-        ['localhost', '127.0.0.1'].includes(parsed.hostname)
+        (['localhost', '127.0.0.1'].includes(parsed.hostname) ||
+          extraHosts.has(parsed.hostname))
       ) {
         origin = parsed.origin;
       }

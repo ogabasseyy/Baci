@@ -3,7 +3,20 @@
 import { useEffect, useState } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 
-type AvailabilityResponse = { available: boolean; reason: string };
+type AvailabilityResponse = {
+  available: boolean;
+  reason: string;
+  expiresAt?: number;
+};
+
+const MAX_TIMEOUT_DELAY_MS = 2_147_483_647;
+
+function readExpiresAt(body: AvailabilityResponse): number | undefined {
+  return typeof body.expiresAt === 'number' &&
+    Number.isFinite(body.expiresAt)
+    ? body.expiresAt
+    : undefined;
+}
 
 export function useRedvaultPaymentAvailability(
   merchantId?: string | null,
@@ -31,6 +44,10 @@ export function useRedvaultPaymentAvailability(
     identity: '',
     value: { available: false, reason: 'unavailable' },
   });
+  // Bumped when the pilot expiry passes (or the tab regains focus) so a
+  // checkout left open past the short pilot window revalidates instead of
+  // retaining its cached positive result.
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
     if (merchantId !== OGABASSEY_MERCHANT_ID) {
@@ -62,7 +79,12 @@ export function useRedvaultPaymentAvailability(
         ) {
           return { available: false, reason: 'unavailable' };
         }
-        return body as AvailabilityResponse;
+        const expiresAt = readExpiresAt(body as AvailabilityResponse);
+        return {
+          available: true,
+          reason: (body as AvailabilityResponse).reason,
+          ...(expiresAt === undefined ? {} : { expiresAt }),
+        };
       })
       .then((result) => {
         if (!controller.signal.aborted) {
@@ -84,19 +106,64 @@ export function useRedvaultPaymentAvailability(
       });
 
     return () => controller.abort();
-  }, [merchantId, productId, authKey, requestKey, identityKey]);
+  }, [merchantId, productId, authKey, requestKey, identityKey, refreshNonce]);
+
+  const resolvedExpiresAt =
+    availability.value.available === true
+      ? readExpiresAt(availability.value)
+      : undefined;
+
+  useEffect(() => {
+    // Revalidate exactly when the pilot window ends. An already-passed
+    // expiry schedules nothing: the render gate below already fails
+    // closed, and refetching here would loop when client and server
+    // clocks disagree; the focus listener still heals that case.
+    if (resolvedExpiresAt === undefined) return;
+    const delay = resolvedExpiresAt - Date.now();
+    if (!(delay > 0)) return;
+    const timer = setTimeout(
+      () => setRefreshNonce((nonce) => nonce + 1),
+      Math.min(delay, MAX_TIMEOUT_DELAY_MS)
+    );
+    return () => clearTimeout(timer);
+  }, [resolvedExpiresAt]);
+
+  const stateAvailable = availability.value.available === true;
+  useEffect(() => {
+    // A backgrounded tab may sleep past the expiry with its timer
+    // throttled; revalidate on focus so a stale positive result is never
+    // retained. Gated on the cached state (not the gated render output)
+    // so clock-skew false expiries self-heal as well.
+    if (!stateAvailable || typeof window === 'undefined') return;
+    const onFocus = () => setRefreshNonce((nonce) => nonce + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [stateAvailable]);
 
   if (merchantId !== OGABASSEY_MERCHANT_ID) {
     return { available: false, reason: 'merchant_unavailable' };
   }
+  let resolved: AvailabilityResponse = {
+    available: false,
+    reason: 'unavailable',
+  };
   if (availability.key === requestKey) {
-    return availability.value;
-  }
-  if (
+    resolved = availability.value;
+  } else if (
     availability.identity !== '' &&
     availability.identity === identityKey
   ) {
-    return availability.value;
+    resolved = availability.value;
   }
-  return { available: false, reason: 'unavailable' };
+  // Fail closed at render time once the pilot window has passed, even
+  // before the scheduled revalidation lands.
+  const resolvedExpiry = readExpiresAt(resolved);
+  if (
+    resolved.available === true &&
+    resolvedExpiry !== undefined &&
+    resolvedExpiry <= Date.now()
+  ) {
+    return { available: false, reason: 'unavailable' };
+  }
+  return resolved;
 }

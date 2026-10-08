@@ -1387,6 +1387,10 @@ export async function POST(request: NextRequest) {
           vercelUrl: process.env.VERCEL_URL,
           localBaseUrl:
             process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+          localAllowedHosts: (process.env.REDVAULT_LOCAL_CALLBACK_HOSTS ?? '')
+            .split(',')
+            .map((host) => host.trim())
+            .filter((host) => host.length > 0),
         });
       } catch {
         return createErrorResponse(

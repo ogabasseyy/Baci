@@ -57,6 +57,30 @@ describe('getRedvaultCallbackUrl', () => {
     ).toThrow('REDVAULT local callback host is unavailable');
   });
 
+  it('admits a configured device-reachable host for local staging', () => {
+    expect(
+      getRedvaultCallbackUrl({
+        ...input,
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        localBaseUrl: 'http://10.0.2.2:3000/shop?x=1#y',
+        localAllowedHosts: [' 10.0.2.2 ', ''],
+      })
+    ).toBe('http://10.0.2.2:3000/ogabassey/checkout/success');
+  });
+
+  it('rejects a non-allowlisted device host in local staging', () => {
+    expect(() =>
+      getRedvaultCallbackUrl({
+        ...input,
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        localBaseUrl: 'http://10.0.2.2:3000',
+        localAllowedHosts: ['192.168.1.10'],
+      })
+    ).toThrow('REDVAULT local callback host is unavailable');
+  });
+
   it('still rejects a bad slug in local staging', () => {
     expect(() =>
       getRedvaultCallbackUrl({

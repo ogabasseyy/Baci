@@ -46,6 +46,12 @@ export async function GET(request: NextRequest) {
         { headers: NO_STORE_HEADERS }
       );
     }
+    // Expose the pilot expiry so checkout clients can stop retaining a
+    // positive result (and revalidate) once the short pilot window ends.
+    return NextResponse.json(
+      { ...availability, expiresAt: policy.expiresAt },
+      { headers: NO_STORE_HEADERS }
+    );
   }
   return NextResponse.json(availability, {
     headers: NO_STORE_HEADERS,

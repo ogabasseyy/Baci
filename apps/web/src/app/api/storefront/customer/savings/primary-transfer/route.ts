@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/customer/savings/customer-savings-feature-settings';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
@@ -135,6 +136,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'PROFILE_VERIFICATION_REQUIRED',
         },
         { status: 409 }
+      );
+    const features = await getPrimaryCustomerSavingsFeatureSettings({
+      supabase: auth.supabase,
+      merchantId: identity.merchantId,
+      customerId: identity.customerId,
+    });
+    if (!features.savingsEnabled)
+      return NextResponse.json(
+        { error: 'Savings is not enabled.', code: 'CUSTOMER_SAVINGS_DISABLED' },
+        { status: 403 }
       );
     const { merchantId: _merchantId, ...selection } = parsed.data;
     const result = await submitPrimaryWalletSavings({

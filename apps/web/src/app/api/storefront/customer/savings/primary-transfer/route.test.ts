@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   runtime: vi.fn(),
   identity: vi.fn(),
   submit: vi.fn(),
+  features: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -25,6 +26,12 @@ vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
 vi.mock('@/lib/piggyvest/primary-wallet-savings-submission-runtime', () => ({
   submitPrimaryWalletSavings: mocks.submit,
 }));
+vi.mock(
+  '@/app/api/storefront/customer/savings/customer-savings-feature-settings',
+  () => ({
+    getPrimaryCustomerSavingsFeatureSettings: mocks.features,
+  })
+);
 const merchantId = '11111111-1111-4111-8111-111111111111';
 const body = {
   merchantId,
@@ -55,6 +62,11 @@ beforeEach(() => {
     userId: 'user',
   });
   mocks.submit.mockResolvedValue({ status: 'pending' });
+  mocks.features.mockResolvedValue({
+    autoDebitEnabled: true,
+    paystackEnabled: true,
+    savingsEnabled: true,
+  });
 });
 it('refreshes only an authenticated operation without invoking submission', async () => {
   const response = await PATCH(
@@ -133,4 +145,29 @@ it('does not expose database errors or start a fallback payment', async () => {
   expect(JSON.stringify(await response.json())).not.toContain(
     'private database detail'
   );
+});
+it('refuses new transfers after savings is disabled', async () => {
+  mocks.features.mockResolvedValue({
+    autoDebitEnabled: true,
+    paystackEnabled: true,
+    savingsEnabled: false,
+  });
+  const response = await POST(request());
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    code: 'CUSTOMER_SAVINGS_DISABLED',
+  });
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('keeps status reads available after savings is disabled', async () => {
+  mocks.features.mockResolvedValue({
+    autoDebitEnabled: true,
+    paystackEnabled: true,
+    savingsEnabled: false,
+  });
+  const response = await PATCH(
+    request({ merchantId, operationId: body.operationId })
+  );
+  expect(response.status).toBe(200);
+  expect(checkStatus).toHaveBeenCalled();
 });

@@ -27,6 +27,16 @@ describe('assisted search proposals', () => {
       maxPrice: 0,
     });
   });
+  it('defaults a missing filters object to empty instead of rejecting', () => {
+    // A compliant provider omits filters for subjective asks ("good
+    // camera") rather than inventing one; the proposal must still
+    // parse so the shopper gets the query suggestion.
+    const proposal = parseSearchAssistanceProposal({
+      query: 'phone',
+      explanation: 'Compare camera specifications across phones.',
+    });
+    expect(proposal.filters).toEqual({});
+  });
   it('rejects extra actions, unsafe ranges and missing searchable terms', () => {
     expect(() =>
       parseSearchAssistanceProposal({

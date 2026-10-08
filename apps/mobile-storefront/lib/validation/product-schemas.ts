@@ -3,10 +3,10 @@ import {
   NullableNonnegativeIntegerLikeSchema,
   NullableNumberLikeSchema,
   NumberLikeSchema,
-  ProductConditionOfferSchema,
-  ProductImageEntrySchema,
-  ProductVariantSchema,
-} from './product-variant-schemas';
+} from './number-like-schemas';
+import { ProductConditionOfferSchema } from './product-condition-offer-schema';
+import { ProductImageEntrySchema } from './product-image-entry-schema';
+import { ProductVariantSchema } from './product-variant-schema';
 
 export const MerchantRowSchema = z.object({
   id: z.uuid(),

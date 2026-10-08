@@ -526,3 +526,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low slug oracle: repeat of the PR-disclosed item (distinct codes for operability, client collapses 404, budgets bound).
 - Muse low unknown-sort FIXED: parseSearchRefinements now returns success:false for unrecognized sort strings (absent still defaults, arrays already failed) so the page flags invalidFilters and normalizes the URL like other bad filters. All 7 callers already branch on success; native degrades to empty + flag. Test updated; 9/9.
 - Muse low snapshot-UUID catch ADJUDICATED (designed): the .catch(undefined) on match ids is deliberate documented fail-soft for persisted client state (malformed values keep the parent-basis item instead of failing readers); writers emit UUIDs only.
+
+## Round 73 (Codex 3 P1 + 1 P2 on 85e5b5c5 — all fixed; Muse 1 med + 3 low — all adjudicated; CI green on 85e5b5c5)
+
+- CX-145 (P1) FIXED: VariantSelector storage options now resolve stock from effective policy/units (unlimited → enabled with no count; strict → exact units; else raw), mirroring the PDP predicate. Test 5/5.
+- CX-146 (P1) FIXED: variants RPC authorizes platform-admin merchants (M10, 20261008280000, sha c33e64d8) — public branch published-or-admin, unpublished branch excludes admin so each merchant flows through exactly one UNION ALL leg (no dupes). DEFINER read of the revoked column is safe. Live anon probe: admin 1/1, plain 0/0, pub 3/3. Registered; PR body → 33.
+- CX-147 (P1) FIXED: product-variant-schemas split into number-like utility + image/variant/offer schema modules (4 files, single-purpose each); barrel + product-schemas rewired. Guard green; validation 96/96.
+- CX-148 (P2) FIXED: assistance filters object defaults to {} in schema + prompt clarified (object mandatory, properties optional). Test 6/6; route suites 22/22.
+- Muse low deploy-order: repeat of the Round 68 adjudication (in-PR ordered migrations).
+- Muse low merchant-scope ADJUDICATED: stock quantities are public PDP-displayed catalog data; product UUIDs unguessable; RLS is the real boundary — client-side scoping cannot be a security control since anon key holders query products directly. No PII; no change.
+- Muse low isInCompare ADJUDICATED (bounded by design): mutations hydrate-on-write so duplicate-add is impossible; only read paths flicker until first interaction/idle/timeout, matching the deliberate SSR-safe deferred design. No correctness issue.
+- Muse med Assurance disclosure: repeat of the tracked merchant sign-off item (code verified correct).

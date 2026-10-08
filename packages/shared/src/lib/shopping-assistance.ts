@@ -19,6 +19,9 @@ export const searchAssistanceProposalSchema = z
   .object({
     query: searchAssistanceQuerySchema,
     explanation: z.string().trim().min(1).max(320),
+    // The object defaults to {} when a compliant provider omits it
+    // (the prompt forbids inventing filters for subjective asks); its
+    // properties stay optional.
     filters: z
       .object({
         brands: z.array(z.string().trim().min(1).max(160)).max(5).optional(),
@@ -32,7 +35,9 @@ export const searchAssistanceProposalSchema = z
           value.minPrice === undefined ||
           value.maxPrice === undefined ||
           value.minPrice <= value.maxPrice
-      ),
+      )
+      .optional()
+      .default({}),
   })
   .strict();
 export type SearchAssistanceProposal = z.infer<

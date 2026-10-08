@@ -56,6 +56,7 @@ import {
 import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
+import { reconcilePrimaryWalletCardCheckoutWebhook } from '@/lib/piggyvest/primary-wallet-card-checkout-webhook-reconcile';
 import { walletCardWebhookBoundary } from '@/lib/piggyvest/wallet-card-webhook-boundary';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -734,6 +735,9 @@ export async function POST(request: NextRequest) {
     // store.flagReconciliation on mismatch). Mutations stay disabled by
     // default and require PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED=true.
     if (gateway === 'paystack') {
+      const primaryCardReconciled =
+        await reconcilePrimaryWalletCardCheckoutWebhook({ body });
+      if (primaryCardReconciled) return primaryCardReconciled;
       const firstCardBoundary = walletCardWebhookBoundary(body);
       if (firstCardBoundary) return firstCardBoundary;
     }

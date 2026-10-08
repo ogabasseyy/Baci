@@ -8,6 +8,7 @@ import {
   normalizeFormat,
   orientedDimensions,
 } from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
+import { generationIdFor } from '../../../../infra/cdn-transformer/pilot/generation-identity.mjs';
 import { assertManifestContract } from './merchant-image-pilot-preflight-manifest.mjs';
 import { stagedOriginalName } from './merchant-image-pilot-preflight-records.mjs';
 import {
@@ -71,6 +72,29 @@ export async function checkBindingManifest({
       failures,
       `${name}:manifest`,
       'manifest identity does not match the bound inventory record'
+    );
+    return null;
+  }
+  // Generation-identity binding: recompute the content-derived ID the
+  // same way the runtime does, so a valid generation copied or renamed
+  // under another directory never passes offline preflight while the
+  // runtime rejects it as binding-mismatch.
+  const expectedGenerationId = generationIdFor({
+    encoderIdentity: manifest.encoder,
+    job: {
+      assetId: record.assetId,
+      merchantId: record.merchantId,
+      role: record.role,
+    },
+    recipeId: manifest.recipeId,
+    sourceSha256: manifest.source.sha256,
+  });
+  if (expectedGenerationId !== acceptance.generationId) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      'generation directory is not the recipe output for this binding'
     );
     return null;
   }

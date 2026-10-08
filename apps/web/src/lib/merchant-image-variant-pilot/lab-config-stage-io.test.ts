@@ -91,6 +91,22 @@ describe('stageVerifiedTier', () => {
     await expect(stat(join(dir, 'bad-sha.avif'))).rejects.toThrow();
     await expect(stat(join(dir, 'bad-size.avif'))).rejects.toThrow();
   });
+
+  it('rejects an oversized source without allocating the whole file', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
+    const sourcePath = join(dir, 'huge.avif');
+    await writeFile(sourcePath, Buffer.alloc(2 * 1024 * 1024, 9));
+    await expect(
+      stageVerifiedTier({
+        destPath: join(dir, 'huge-staged.avif'),
+        expectedBytes: 10,
+        expectedSha256: '0'.repeat(64),
+        sourcePath,
+        stageRoot: await realpath(dir),
+      })
+    ).rejects.toThrow(/byte size/);
+    await expect(stat(join(dir, 'huge-staged.avif'))).rejects.toThrow();
+  });
 });
 
 describe('writeStagedBytesIfChanged', () => {

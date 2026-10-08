@@ -100,8 +100,13 @@ function LabStoreHeaderSection({
 }) {
   const { binding } = status;
   if (status.status !== 'accepted') {
+    const stagedOriginal = config.originalUrlFor({
+      merchantId: binding.merchantId,
+      slotId: binding.slotId,
+    });
     return (
       <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
         binding={binding}
         reason={`binding status "${status.status}"${status.detail ? `: ${status.detail}` : ''}; the control path is retained and this slot is excluded from the optimized denominator.`}
       />
@@ -111,6 +116,7 @@ function LabStoreHeaderSection({
   if (!resolved || !stagedOriginal) {
     return (
       <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
         binding={binding}
         reason="binding has no staged tiers or verified original; refusing to render rather than mixing arms."
       />

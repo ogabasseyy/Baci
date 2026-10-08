@@ -57,6 +57,7 @@ export function LabStoreGridSection({
   if (!resolved || !stagedOriginal) {
     return (
       <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
         binding={binding}
         reason="binding has no staged tiers or verified original; refusing to render rather than mixing arms."
       />

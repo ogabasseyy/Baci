@@ -107,6 +107,24 @@ describe('pilot-lab route', () => {
     expect(html).not.toContain(`/__pilot/${roots.generationIds['hero-s0']}/`);
   });
 
+  it('keeps the staged control visible for unreviewed bindings', async () => {
+    const roots = await setupLabRoots();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
+    // Excluded from the optimized denominator, but the baseline stays
+    // visible so operators can validate the control for the slot.
+    const baseline = `/__pilot/originals/${MERCHANT}-orphan-card.png`;
+    for (const arm of ['pilot', 'control']) {
+      const html = await renderPage(arm);
+      expect(html).toContain('data-pilot-lab-status="not-optimized"');
+      expect(html).toContain(baseline);
+      expect(html).toContain('staged control baseline');
+    }
+  });
+
   it('caveats the per-format guard and the over-source exception', async () => {
     const roots = await setupLabRoots();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

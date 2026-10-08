@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { generationIdFor } from '../../../../infra/cdn-transformer/pilot/generation-identity.mjs';
 import {
   checkBindingManifest,
   checkBindingStaged,
@@ -57,9 +58,9 @@ function manifestFor({ bytes, format = 'webp', sha, width = 48, height = 48 }) {
   };
 }
 
-async function outputRootWith(manifest, files = {}) {
+async function outputRootWith(manifest, files = {}, generationId = GENERATION) {
   const root = await mkdtemp(join(tmpdir(), 'pilot-offline-output-'));
-  const dir = join(root, 'generations', GENERATION);
+  const dir = join(root, 'generations', generationId);
   await mkdir(dir, { recursive: true });
   if (manifest) {
     await writeFile(join(dir, 'manifest.json'), JSON.stringify(manifest));
@@ -78,8 +79,8 @@ const RECORD = {
   sourcePath: 'snapshots/logo-a.png',
 };
 
-function acceptanceFor(hashes) {
-  return { generationId: GENERATION, outputHashes: hashes };
+function acceptanceFor(hashes, generationId = GENERATION) {
+  return { generationId, outputHashes: hashes };
 }
 
 async function boundSourceFixture() {
@@ -127,17 +128,33 @@ async function boundSourceFixture() {
     },
     tiers,
   };
-  return { inputBytes, manifest, sourceSha };
+  // The manifest gate recomputes the content-derived identity, so the
+  // fixture acceptance must reference the real derived directory.
+  const generationId = generationIdFor({
+    encoderIdentity: manifest.encoder,
+    job: {
+      assetId: manifest.assetId,
+      merchantId: manifest.merchantId,
+      role: manifest.role,
+    },
+    recipeId: manifest.recipeId,
+    sourceSha256: sourceSha,
+  });
+  return { generationId, inputBytes, manifest, sourceSha };
 }
 
 describe('checkBindingManifest', () => {
   it('binds manifest source facts to the verified input bytes', async () => {
-    const { inputBytes, manifest, sourceSha } = await boundSourceFixture();
-    const root = await outputRootWith(manifest);
+    const { generationId, inputBytes, manifest, sourceSha } =
+      await boundSourceFixture();
+    const root = await outputRootWith(manifest, {}, generationId);
     const checks = [];
     const failures = [];
     const parsed = await checkBindingManifest({
-      acceptance: acceptanceFor(manifest.tiers.map((tier) => tier.sha256)),
+      acceptance: acceptanceFor(
+        manifest.tiers.map((tier) => tier.sha256),
+        generationId
+      ),
       checks,
       effectiveRecipe: RECIPE_ID,
       failures,
@@ -151,15 +168,17 @@ describe('checkBindingManifest', () => {
   });
 
   it('compares acceptance hashes positionally, not as a sorted set', async () => {
-    const { inputBytes, manifest, sourceSha } = await boundSourceFixture();
-    const root = await outputRootWith(manifest);
+    const { generationId, inputBytes, manifest, sourceSha } =
+      await boundSourceFixture();
+    const root = await outputRootWith(manifest, {}, generationId);
     const checks = [];
     const failures = [];
     // Same hashes, reversed: a sorted-set comparison would pass, but the
     // runtime matcher binds each hash to one rung positionally.
     const parsed = await checkBindingManifest({
       acceptance: acceptanceFor(
-        manifest.tiers.map((tier) => tier.sha256).reverse()
+        manifest.tiers.map((tier) => tier.sha256).reverse(),
+        generationId
       ),
       checks,
       effectiveRecipe: RECIPE_ID,
@@ -174,21 +193,29 @@ describe('checkBindingManifest', () => {
   });
 
   it('rejects source-fact drift against the verified input', async () => {
-    const { inputBytes, manifest, sourceSha } = await boundSourceFixture();
+    const { generationId, inputBytes, manifest, sourceSha } =
+      await boundSourceFixture();
     const record = { ...RECORD, sha256: sourceSha };
     for (const [label, patch, pattern] of [
       ['bytes', { bytes: inputBytes.length + 1 }, /claims .* bytes/],
       ['format', { format: 'jpeg' }, /claims format/],
       ['dims', { orientedWidth: 385 }, /decodes/],
     ]) {
-      const root = await outputRootWith({
-        ...manifest,
-        source: { ...manifest.source, ...patch },
-      });
+      const root = await outputRootWith(
+        {
+          ...manifest,
+          source: { ...manifest.source, ...patch },
+        },
+        {},
+        generationId
+      );
       const checks = [];
       const failures = [];
       const parsed = await checkBindingManifest({
-        acceptance: acceptanceFor(manifest.tiers.map((tier) => tier.sha256)),
+        acceptance: acceptanceFor(
+          manifest.tiers.map((tier) => tier.sha256),
+          generationId
+        ),
         checks,
         effectiveRecipe: RECIPE_ID,
         failures,

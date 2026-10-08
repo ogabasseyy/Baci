@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import { main, parseStageArgs } from './merchant-image-pilot-stage.cli';
 
@@ -21,20 +22,33 @@ const GENERATOR_FIXTURES = join(
 );
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-const GENERATION_ID = 'c'.repeat(64);
 
 async function setupStageFiles() {
   const base = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   const publicDir = join(base, 'public');
-  const generationDir = join(outputRoot, 'generations', GENERATION_ID);
-  await mkdir(generationDir, { recursive: true });
   await mkdir(inputRoot, { recursive: true });
 
   const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
   await writeFile(join(inputRoot, 'logo-1.png'), snapshot);
   const sourceSha256 = createHash('sha256').update(snapshot).digest('hex');
+  // The loader recomputes the generation identity and rejects renamed
+  // directories, so the fixture must use the real derived ID.
+  const generationId = labGenerationIdFor({
+    assetId: 'logo-1',
+    encoderIdentity: {
+      libvipsVersion: '8.18.6',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
+    merchantId: MERCHANT,
+    recipeId: PILOT_RECIPE_ID,
+    role: 'logo',
+    sourceSha256,
+  });
+  const generationDir = join(outputRoot, 'generations', generationId);
+  await mkdir(generationDir, { recursive: true });
 
   const tiers = [];
   for (const requestedWidth of [96, 192, 384]) {
@@ -93,7 +107,7 @@ async function setupStageFiles() {
     JSON.stringify([
       {
         assetId: 'logo-1',
-        generationId: GENERATION_ID,
+        generationId,
         merchantId: MERCHANT,
         note: 'Lab review passed.',
         outputHashes: tiers.map((tier) => tier.sha256),
@@ -120,7 +134,7 @@ async function setupStageFiles() {
       },
     ])
   );
-  return { inputRoot, outputRoot, publicDir, tiers };
+  return { generationId, inputRoot, outputRoot, publicDir, tiers };
 }
 
 describe('parseStageArgs', () => {
@@ -188,7 +202,7 @@ describe('stage main', () => {
     expect(summary).toMatchObject({
       acceptedBindings: 1,
       baseUrl: '/__pilot',
-      generationIds: [GENERATION_ID],
+      generationIds: [lab.generationId],
       ok: true,
     });
     for (const tier of lab.tiers) {
@@ -196,7 +210,7 @@ describe('stage main', () => {
         join(
           lab.publicDir,
           '__pilot',
-          GENERATION_ID,
+          lab.generationId,
           `${tier.sha256}.${tier.format}`
         )
       );

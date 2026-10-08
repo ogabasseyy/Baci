@@ -60,6 +60,17 @@ describe('verifyOutputHashes', () => {
     expect(error).toMatch(/byte size changed: tier\.avif/);
   });
 
+  it('rejects an oversized tier without allocating the whole file', async () => {
+    // 2 MiB on disk against a 10-byte claim: the bounded read stops at
+    // claim+1 and reports the size change instead of hashing megabytes.
+    const bytes = Buffer.alloc(2 * 1024 * 1024, 7);
+    const outputRoot = await setupGeneration({ 'huge.avif': bytes });
+    const error = await verifyOutputHashes(outputRoot, GENERATION_ID, {
+      tiers: [{ bytes: 10, path: 'huge.avif', sha256: sha256(bytes) }],
+    } as never);
+    expect(error).toMatch(/byte size changed: huge\.avif/);
+  });
+
   it('reports a tier whose hash mismatches at the same size', async () => {
     const bytes = Buffer.from('tier-bytes');
     const outputRoot = await setupGeneration({ 'tier.avif': bytes });

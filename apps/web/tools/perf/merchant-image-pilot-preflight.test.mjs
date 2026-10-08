@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { generationIdFor } from '../../../../infra/cdn-transformer/pilot/generation-identity.mjs';
 import {
   runOfflinePreflight,
   runPreflight,
@@ -55,7 +56,19 @@ async function setupOfflineAssets(assets) {
     const snapshot = await readFile(join(inputRoot, sourcePath));
     const sourceSha = sha256(snapshot);
     const sourceMeta = await sharp(snapshot).metadata();
-    const generationDir = join(outputRoot, 'generations', asset.generationId);
+    // The offline gate recomputes the content-derived identity (renamed
+    // directories fail), so fixtures must use the real derived ID.
+    const generationId = generationIdFor({
+      encoderIdentity: {
+        libvipsVersion: '8.18.6',
+        name: 'sharp',
+        sharpVersion: '0.35.4',
+      },
+      job: { assetId: asset.assetId, merchantId, role: asset.role },
+      recipeId: RECIPE,
+      sourceSha256: sourceSha,
+    });
+    const generationDir = join(outputRoot, 'generations', generationId);
     await mkdir(generationDir, { recursive: true });
     // Real encodings on the genuine role ladder so descriptor checks verify
     // actual decoded dimensions, not string shapes. Aspect-preserving
@@ -118,7 +131,7 @@ async function setupOfflineAssets(assets) {
     );
     // Mirror the lab-config staging layout: committed bytes plus the frozen
     // original under the lab base URL.
-    const stageDir = join(publicDir, '__pilot', asset.generationId);
+    const stageDir = join(publicDir, '__pilot', generationId);
     await mkdir(stageDir, { recursive: true });
     for (const tier of tiers) {
       await copyFile(join(generationDir, tier.path), join(stageDir, tier.path));
@@ -132,7 +145,7 @@ async function setupOfflineAssets(assets) {
     );
     staged.push({
       assetId: asset.assetId,
-      generationId: asset.generationId,
+      generationId,
       merchantId,
       record: {
         assetId: asset.assetId,
@@ -189,7 +202,6 @@ async function setupOffline() {
   const fixture = await setupOfflineAssets([
     {
       assetId: 'logo-a',
-      generationId: 'e'.repeat(64),
       ladder: [96, 192, 384],
       role: 'logo',
       slot: 'header-logo',
@@ -331,7 +343,6 @@ describe('preflight entry orchestration', () => {
     const fixture = await setupOfflineAssets([
       {
         assetId: 'logo-a',
-        generationId: 'e'.repeat(64),
         ladder: [96, 192, 384],
         role: 'logo',
         slot: 'header-logo',
@@ -339,7 +350,6 @@ describe('preflight entry orchestration', () => {
       },
       {
         assetId: 'hero-s0',
-        generationId: 'd'.repeat(64),
         ladder: [384, 768, 1280],
         role: 'hero',
         slot: 'mobile-hero-slide-0',

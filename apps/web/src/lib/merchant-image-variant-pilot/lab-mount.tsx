@@ -1,10 +1,11 @@
 import 'server-only';
 import { useId } from 'react';
 import { preload } from 'react-dom';
-import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pilot';
 import type { ProjectedCssHero } from './css-hero-adapter';
 import type { ProjectedPilotImage } from './next-image-adapter';
 import type { ProjectedOgabasseyMobile } from './ogabassey-mobile-adapter';
+
+export { PilotLabNotOptimized } from './lab-not-optimized';
 
 // Lab-only mounted consumers for the merchant image pilot. Both comparison
 // arms render through these same components: the pilot arm is fed pilot
@@ -222,31 +223,6 @@ export function PilotLabPictureMount({
         width={projection.width}
       />
     </picture>
-  );
-}
-
-// Reported-not-optimized row, shared by the gallery and the per-store pages
-// so the served markers are identical everywhere preflight reads them.
-// Unaccepted, unresolved, or unmounted slots are REPORTED here — never
-// silently omitted, never counted as optimized coverage.
-export function PilotLabNotOptimized({
-  binding,
-  reason,
-}: {
-  binding: PilotInventoryBinding;
-  reason: string;
-}): React.JSX.Element {
-  return (
-    <section
-      data-pilot-lab-binding={`${binding.merchantId}/${binding.assetId}`}
-      data-pilot-lab-slot={binding.slotId}
-      data-pilot-lab-status="not-optimized"
-    >
-      <h2>
-        {binding.slotId} · {binding.assetId} — not optimized
-      </h2>
-      <p>{reason}</p>
-    </section>
   );
 }
 

@@ -57,8 +57,15 @@ function LabBinding({
 }): React.JSX.Element {
   const { binding } = status;
   if (status.status !== 'accepted') {
+    // The loader stages verified originals for unaccepted bindings
+    // precisely so the excluded slot keeps its real control visible.
+    const stagedOriginal = config.originalUrlFor({
+      merchantId: binding.merchantId,
+      slotId: binding.slotId,
+    });
     return (
       <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
         binding={binding}
         reason={`binding status "${status.status}"${status.detail ? `: ${status.detail}` : ''}; the control path is retained and this slot is excluded from the optimized denominator.`}
       />

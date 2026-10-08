@@ -29,6 +29,28 @@ function escapeHtml(value) {
     .replaceAll('"', '&quot;');
 }
 
+// Source MIME allowlist, mirroring the keys of
+// EXTENSION_FOR_CONTENT_TYPE in acquire.mjs: the inventory value lands
+// inside an <img src> data URI, so anything outside the acquired-source
+// set (in particular a string with a quote) would break into
+// operator-executed markup.
+const ORIGINAL_CONTENT_TYPES = new Set([
+  'image/avif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+function originalContentType(record) {
+  const contentType = record.contentType ?? 'image/png';
+  if (!ORIGINAL_CONTENT_TYPES.has(contentType)) {
+    throw new PilotSheetError(
+      `unsupported original content-type for asset "${record.assetId}"`
+    );
+  }
+  return escapeHtml(contentType);
+}
+
 async function findGenerationFor(outputRoot, record) {
   // Bind the sheet to the generation the current recipe+encoder would
   // produce: stale generations from earlier recipes may coexist in the
@@ -140,7 +162,7 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
     overSourceTiers += manifest.tiers.filter(
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
-    const originalUri = `data:${record.contentType ?? 'image/png'};base64,${snapshot.bytes.toString('base64')}`;
+    const originalUri = `data:${originalContentType(record)};base64,${snapshot.bytes.toString('base64')}`;
     const seenTiers = new Map();
     for (const tier of manifest.tiers) {
       if (!seenTiers.has(tier.requestedWidth)) {
@@ -165,7 +187,7 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
         const ceilingNote =
           compareWidth < dprCeiling ? 'encoded-pixel ceiling' : '3× CSS';
         return `<tr><td>${requestedWidth}px tier</td>
-<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${record.width}x${record.height} · compared at ${compareWidth}px (${ceilingNote})</figcaption></figure></td>
+<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (${ceilingNote})</figcaption></figure></td>
 ${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).join('\n')}</tr>`;
       })
       .join('\n');

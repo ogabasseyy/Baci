@@ -18,6 +18,40 @@ import type { PilotInventoryBinding } from '@/schemas/merchant-image-variant-pil
 // must not import infra directly.
 const MAX_STAGED_SNAPSHOT_BYTES = 10 * 1024 * 1024;
 
+// Bounded read: at most maxBytes + 1, looping to EOF-or-cap (a single
+// read may return short). Returns truncated: true when the file is
+// longer, so callers reject the size mismatch without ever allocating
+// the full file — a corrupted tier concatenated into a huge file must
+// fail closed, not exhaust the server. Throws when unreadable (callers
+// map that to their missing-input error).
+export async function readUpToBytes(
+  path: string,
+  maxBytes: number
+): Promise<{ bytes: Buffer; truncated: boolean }> {
+  const handle = await open(path, 'r');
+  try {
+    const probe = Buffer.alloc(maxBytes + 1);
+    let bytesRead = 0;
+    let short = false;
+    while (bytesRead < probe.length && !short) {
+      const chunk = await handle.read(
+        probe,
+        bytesRead,
+        probe.length - bytesRead,
+        bytesRead
+      );
+      bytesRead += chunk.bytesRead;
+      short = chunk.bytesRead === 0;
+    }
+    return {
+      bytes: Buffer.from(probe.subarray(0, Math.min(bytesRead, maxBytes))),
+      truncated: bytesRead > maxBytes,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
 // Staged-original suffixes must describe the bytes: Next serves public/
 // files with a suffix-derived MIME type, and the served gate pins the
 // response type to that same suffix. The inventory filename is
@@ -100,40 +134,24 @@ export async function readVerifiedSnapshot(
       'merchant image pilot: snapshot path escapes the input root'
     );
   }
-  // Bounded read: never allocate an unbounded file into memory. Reads
-  // loop to EOF-or-cap (a single read may return short) and reject
-  // past-cap inputs instead of hashing a truncation.
-  const handle = await open(real, 'r');
-  try {
-    const probe = Buffer.alloc(MAX_STAGED_SNAPSHOT_BYTES + 1);
-    let bytesRead = 0;
-    let short = false;
-    while (bytesRead < probe.length && !short) {
-      const chunk = await handle.read(
-        probe,
-        bytesRead,
-        probe.length - bytesRead,
-        bytesRead
-      );
-      bytesRead += chunk.bytesRead;
-      short = chunk.bytesRead === 0;
-    }
-    if (bytesRead > MAX_STAGED_SNAPSHOT_BYTES) {
-      throw new Error(
-        `merchant image pilot: snapshot exceeds the ${MAX_STAGED_SNAPSHOT_BYTES}-byte input limit`
-      );
-    }
-    const bytes = Buffer.from(probe.subarray(0, bytesRead));
-    const sha256 = createHash('sha256').update(bytes).digest('hex');
-    if (sha256 !== expectedSha256) {
-      throw new Error(
-        'merchant image pilot: snapshot bytes differ from the frozen hash'
-      );
-    }
-    return bytes;
-  } finally {
-    await handle.close();
+  // Bounded read: never allocate an unbounded file into memory.
+  // Past-cap inputs are rejected instead of hashing a truncation.
+  const { bytes, truncated } = await readUpToBytes(
+    real,
+    MAX_STAGED_SNAPSHOT_BYTES
+  );
+  if (truncated) {
+    throw new Error(
+      `merchant image pilot: snapshot exceeds the ${MAX_STAGED_SNAPSHOT_BYTES}-byte input limit`
+    );
   }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  if (sha256 !== expectedSha256) {
+    throw new Error(
+      'merchant image pilot: snapshot bytes differ from the frozen hash'
+    );
+  }
+  return bytes;
 }
 
 // Writes staged bytes so a planted symlink can neither divert them nor
@@ -191,8 +209,13 @@ export async function stageVerifiedTier(input: {
   sourcePath: string;
   stageRoot: string;
 }): Promise<void> {
-  const bytes = await readFile(input.sourcePath);
-  if (bytes.length !== input.expectedBytes) {
+  // Bounded by the claimed size: a corrupted tier replaced with a
+  // huge file rejects on size without allocating the whole file.
+  const { bytes, truncated } = await readUpToBytes(
+    input.sourcePath,
+    input.expectedBytes
+  );
+  if (truncated || bytes.length !== input.expectedBytes) {
     throw new Error(
       'merchant image pilot: tier byte size changed before staging'
     );

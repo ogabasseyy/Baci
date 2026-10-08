@@ -278,6 +278,51 @@ test('rejects oversized and malformed inventories before rendering', async () =>
   );
 });
 
+test('rejects inventory content-types outside the acquired-source set', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));
+  // A quote in the MIME would break out of the <img src> data URI into
+  // operator-executed markup; unknown types fail closed instead.
+  const evilPath = join(inputRoot, 'inventory-evil.json');
+  await writeFile(
+    evilPath,
+    JSON.stringify([
+      {
+        ...record,
+        contentType: 'image/png";base64,xxx" onerror="alert(1)',
+      },
+    ])
+  );
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath: evilPath,
+        outputRoot,
+        slots: { 'header-logo': { cssWidth: 40 } },
+      }),
+    /unsupported original content-type/
+  );
+});
+
+test('escapes inventory dimension metadata in captions', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));
+  const metaPath = join(inputRoot, 'inventory-meta.json');
+  await writeFile(
+    metaPath,
+    JSON.stringify([{ ...record, height: 48, width: '48<x' }])
+  );
+  const html = await buildQualitySheet({
+    inputRoot,
+    inventoryPath: metaPath,
+    outputRoot,
+    slots: { 'header-logo': { cssWidth: 40 } },
+  });
+  assert.doesNotMatch(html, /48<x/);
+  assert.match(html, /48&lt;x/);
+});
+
 test('keeps tier aspect ratio under the DPR-3 cap and warns on over-source', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const html = await buildQualitySheet({

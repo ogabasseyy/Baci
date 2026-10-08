@@ -2,6 +2,7 @@ import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
@@ -47,6 +48,12 @@ export function WalletFundModal({
   onSubmitPhone,
   showFundPanel,
 }: WalletFundModalProps) {
+  const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  const showPrimarySetup =
+    !!merchantId &&
+    isPiggyvestPrimaryMerchant(merchantId) &&
+    primaryCapability !== false &&
+    !fundingAccount;
   return (
     <ModalSheet
       backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
@@ -69,9 +76,7 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {merchantId &&
-          isPiggyvestPrimaryMerchant(merchantId) &&
-          !fundingAccount ? (
+          {showPrimarySetup ? (
             <PiggyvestWalletSetupPanel
               colors={colors}
               merchantId={merchantId}

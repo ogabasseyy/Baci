@@ -5,6 +5,11 @@ const mockRecover = jest.fn();
 jest.mock('@/lib/piggyvest-primary-savings-recovery', () => ({
   recoverPiggyvestPrimarySavings: (...args: unknown[]) => mockRecover(...args),
 }));
+const mockUseCapability = jest.fn();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const input = () => ({
   merchantId,
@@ -13,7 +18,10 @@ const input = () => ({
   operationRef: { current: null as string | null },
   setAmount: jest.fn(),
 });
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  mockUseCapability.mockReturnValue(null);
+});
 it('restores a server-owned pending operation after restarting the screen', async () => {
   const props = input();
   mockRecover.mockResolvedValue({
@@ -60,5 +68,17 @@ it('ignores a previous goal response after switching goals', async () => {
     resolveOld({ operationId: 'old-operation', amountKobo: 100 })
   );
   expect(props.operationRef.current).toBeNull();
+  expect(props.setAmount).not.toHaveBeenCalled();
+});
+it('stays ready without recovering when the server reports unconfigured', async () => {
+  mockUseCapability.mockReturnValue(false);
+  const props = input();
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBe(false);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(mockRecover).not.toHaveBeenCalled();
   expect(props.setAmount).not.toHaveBeenCalled();
 });

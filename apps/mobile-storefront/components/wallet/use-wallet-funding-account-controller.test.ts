@@ -8,6 +8,12 @@ jest.mock('./wallet-screen.handlers', () => ({
   createWalletFundingAccount: jest.fn(),
 }));
 
+const mockUseCapability = jest.fn();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
+
 const mockCreate = jest.mocked(createWalletFundingAccount);
 
 const enabledSettings = {
@@ -48,9 +54,25 @@ describe('useWalletFundingAccountController', () => {
     expect(params.setShowFundPanel).toHaveBeenCalledWith(true);
     expect(mockCreate).not.toHaveBeenCalled();
   });
+  it('routes primary merchants through legacy creation when the server reports unconfigured', async () => {
+    mockUseCapability.mockReturnValue(false);
+    const params = buildParams({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerPhone: '08012345678',
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+    await act(async () => {
+      await result.current.onCreateFundingAccount();
+    });
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(params.setShowFundPanel).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreate.mockResolvedValue(true);
+    mockUseCapability.mockReturnValue(null);
   });
 
   it('flags needsPhone and blocks creation when the customer has no phone', () => {

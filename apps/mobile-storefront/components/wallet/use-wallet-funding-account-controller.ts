@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import type { Customer } from '@/stores/auth-store.types';
 import { deriveWalletFundingAccountAvailability } from './deriveWalletFundingAccountAvailability';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -46,8 +47,11 @@ export function useWalletFundingAccountController({
   setShowFundPanel,
   updateProfile,
 }: UseWalletFundingAccountControllerParams) {
+  const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
   const primary = Boolean(
-    activeMerchantId && isPiggyvestPrimaryMerchant(activeMerchantId)
+    activeMerchantId &&
+      isPiggyvestPrimaryMerchant(activeMerchantId) &&
+      primaryCapability !== false
   );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,

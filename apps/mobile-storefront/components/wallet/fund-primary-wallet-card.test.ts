@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 const mockRead = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockStart = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockRecover = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockCapability = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.mock('@/lib/primary-wallet-card', () => ({
   createPrimaryWalletCardFundingClient: () => ({
     readPending: mockRead,
@@ -12,6 +13,12 @@ jest.mock('@/lib/primary-wallet-card', () => ({
     recover: mockRecover,
   }),
 }));
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return { ...actual, getPiggyvestPrimaryCapability: mockCapability };
+});
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
 }));
@@ -35,6 +42,7 @@ const response = {
 const alert = jest.spyOn(Alert, 'alert');
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCapability.mockResolvedValue(true);
   mockRead.mockResolvedValue(null);
   mockStart.mockResolvedValue(response);
   mockRecover.mockResolvedValue(response);
@@ -104,6 +112,16 @@ it('does not expose checkout or credit after a failed or unavailable primary run
   await fundPrimaryWalletCard(input);
   expect(router.push).not.toHaveBeenCalled();
   expect(input.resetFundPanel).not.toHaveBeenCalled();
+});
+it('rethrows unconfigured primary silently so the caller can run the legacy top-up', async () => {
+  mockCapability.mockResolvedValue(false);
+  await expect(fundPrimaryWalletCard(input)).rejects.toMatchObject({
+    code: 'PRIMARY_CARD_NOT_READY',
+  });
+  expect(mockRead).not.toHaveBeenCalled();
+  expect(mockStart).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
+  expect(input.setIsFundPending).toHaveBeenLastCalledWith(false);
 });
 it('resumes the stored real savings handoff only after completed restart recovery', async () => {
   const returnTo =

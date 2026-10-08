@@ -1,6 +1,10 @@
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { isPrimaryWalletNotReady } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
-import { projectWalletFundingAccount } from './project-wallet-funding-account';
+import {
+  parseProjectWalletFundingAccount,
+  projectWalletFundingAccount,
+} from './project-wallet-funding-account';
 
 export async function resolveWalletFundingAccount(
   data: unknown,
@@ -17,7 +21,12 @@ export async function resolveWalletFundingAccount(
       bank_name: account.bankName,
       provider: account.provider,
     };
-  } catch {
+  } catch (error) {
+    // The server positively reports primary as unconfigured (e.g. mobile
+    // released ahead of the server capability): keep the working legacy
+    // funding account instead of stranding the customer with none.
+    if (isPrimaryWalletNotReady(error))
+      return parseProjectWalletFundingAccount(data);
     return null;
   }
 }

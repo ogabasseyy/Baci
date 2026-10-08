@@ -31,3 +31,15 @@ it('rejects a recovered operation belonging to a different goal', async () => {
     'could not be recovered'
   );
 });
+it('reports no pending operation when primary savings is unconfigured', async () => {
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  await expect(recoverPiggyvestPrimarySavings(input)).resolves.toBeNull();
+});
+it('surfaces ambiguous recovery failures', async () => {
+  mockFetchJson.mockRejectedValue(new Error('timeout'));
+  await expect(recoverPiggyvestPrimarySavings(input)).rejects.toThrow(
+    'timeout'
+  );
+});

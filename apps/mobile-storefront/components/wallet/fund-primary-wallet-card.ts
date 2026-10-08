@@ -1,5 +1,9 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import {
+  getPiggyvestPrimaryCapability,
+  isPrimaryWalletNotReady,
+} from '@/lib/piggyvest-primary-capability';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import type { fundWallet } from './wallet-screen.handlers';
@@ -23,6 +27,16 @@ export async function fundPrimaryWalletCard(
   active = true;
   input.setIsFundPending(true);
   try {
+    // Confirm the server capability before writing any pending funding
+    // state: when primary is unconfigured the caller falls back to the
+    // working legacy top-up instead of stranding a primary-only pending op.
+    if (!(await getPiggyvestPrimaryCapability(merchantId))) {
+      const unavailable = new Error(
+        'Primary card funding is unavailable.'
+      ) as Error & { code: string };
+      unavailable.code = 'PRIMARY_CARD_NOT_READY';
+      throw unavailable;
+    }
     const pending = await client.readPending({ merchantId, userId });
     let result: Awaited<ReturnType<typeof client.start>>;
     if (pending) result = await client.recover({ merchantId, userId });
@@ -85,7 +99,10 @@ export async function fundPrimaryWalletCard(
         'Card funding pending',
         'This operation is saved. Check again later; do not start another card charge.'
       );
-  } catch {
+  } catch (error) {
+    // Unconfigured primary is the caller's cue to run the legacy top-up;
+    // rethrow without an alert so the fallback stays invisible.
+    if (isPrimaryWalletNotReady(error)) throw error;
     Alert.alert(
       'Card funding could not be confirmed',
       'Any pending operation is retained. Check again before attempting another charge.'

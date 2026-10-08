@@ -12,6 +12,12 @@ jest.mock('@/lib/customer-savings', () => ({
     mockFetchSavingsPlanFunding(...args),
 }));
 
+const mockUseCapability = jest.fn<(...args: unknown[]) => unknown>();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
+
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
 const input = {
@@ -31,6 +37,7 @@ function createDeferred<T>() {
 describe('useSavingsPlanFunding', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseCapability.mockReturnValue(null);
   });
   it('loads the existing goal mapping before any BVN provisioning request', async () => {
     mockFetchExistingSavingsPlanFunding.mockResolvedValue({
@@ -295,5 +302,25 @@ describe('useSavingsPlanFunding', () => {
     });
 
     expect(mockFetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(1);
+  });
+  it('requires BVN for primary merchants when the server reports unconfigured', async () => {
+    mockUseCapability.mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useSavingsPlanFunding({
+        ...input,
+        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    );
+    expect(result.current.planFundingRequiresBvn).toBe(true);
+  });
+  it('skips BVN for primary merchants while the capability is confirmed', async () => {
+    mockUseCapability.mockReturnValue(true);
+    const { result } = renderHook(() =>
+      useSavingsPlanFunding({
+        ...input,
+        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    );
+    expect(result.current.planFundingRequiresBvn).toBe(false);
   });
 });

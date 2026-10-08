@@ -4,6 +4,7 @@ import {
   fetchSavingsPlanFunding,
 } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import type { SavingsPlanFundingAccount } from '@/schemas/customer-savings';
 import { getErrorMessage } from './start-savings-controller.utils';
 
@@ -38,7 +39,10 @@ export function useSavingsPlanFunding({
   const [accounts, setAccounts] = useState<SavingsPlanFundingAccount[]>([]);
   const [statusCode, setStatusCode] = useState<string | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
-  const planFundingRequiresBvn = !isPiggyvestPrimaryMerchant(activeMerchantId);
+  const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
+  const planFundingRequiresBvn =
+    !isPiggyvestPrimaryMerchant(activeMerchantId) ||
+    primaryCapability === false;
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

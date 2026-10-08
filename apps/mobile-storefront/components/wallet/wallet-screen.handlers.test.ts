@@ -21,6 +21,11 @@ jest.mock('@/lib/wallet-top-up', () => ({
   initializeWalletTopUp: jest.fn(),
 }));
 
+const mockFundPrimaryWalletCard = jest.fn<(...args: never[]) => Promise<void>>();
+jest.mock('./fund-primary-wallet-card', () => ({
+  fundPrimaryWalletCard: (...args: never[]) => mockFundPrimaryWalletCard(...args),
+}));
+
 jest.mock('@/lib/logger', () => ({
   createLogger: () => ({
     error: jest.fn(),
@@ -209,6 +214,42 @@ describe('wallet-screen.handlers', () => {
     expect(setIsFundPending).toHaveBeenLastCalledWith(false);
   });
 
+  it('falls back to the legacy top-up when primary reports unconfigured', async () => {
+    mockFundPrimaryWalletCard.mockRejectedValue(
+      Object.assign(new Error('unavailable'), {
+        code: 'PRIMARY_CARD_NOT_READY',
+      })
+    );
+    mockInitializeWalletTopUp.mockResolvedValue({
+      authorization_url: 'https://pay.example/authorize',
+      gateway: 'paystack',
+      reference: 'ref-legacy',
+      success: true,
+    });
+
+    await fundWallet({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      activeMerchantSlug: 'ogabassey',
+      customer: {
+        first_name: 'Ada',
+        id: 'customer-1',
+        last_name: 'Buyer',
+        phone: '08012345678',
+      },
+      fundAmount: '5000',
+      resetFundPanel: jest.fn(),
+      setIsFundPending: jest.fn(),
+      user: null,
+      walletReturnTo: undefined,
+    });
+
+    expect(mockFundPrimaryWalletCard).toHaveBeenCalledTimes(1);
+    expect(mockInitializeWalletTopUp).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/payment-gateway',
+      params: expect.objectContaining({ reference: 'ref-legacy' }),
+    });
+  });
   it('returns a savings-origin top-up to the plan without submitting a savings transfer', async () => {
     mockInitializeWalletTopUp.mockResolvedValue({
       authorization_url: 'https://pay.example/authorize',

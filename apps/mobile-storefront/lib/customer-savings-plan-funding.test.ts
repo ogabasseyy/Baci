@@ -71,6 +71,55 @@ describe('fetchSavingsPlanFunding', () => {
     expect(body).toEqual({ bvn: '00000000000', goalId: 'goal-1' });
   });
 
+  it('provisions through legacy funding when primary reports unconfigured', async () => {
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ token: 'csrf-token' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Savings wallet setup is unavailable.',
+          code: 'SAVINGS_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          status: 'ready',
+          accounts: [
+            {
+              accountNumber: '0001234567',
+              accountName: 'Synthetic account',
+              bankName: 'Synthetic bank',
+            },
+          ],
+        }),
+      });
+
+    await expect(
+      fetchSavingsPlanFunding({
+        bvn: '00000000000',
+        goalId: '22222222-2222-4222-8222-222222222222',
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        merchantSlug: 'ogabassey',
+      })
+    ).resolves.toMatchObject({ status: 'ready' });
+
+    const urls = mockFetchWithTimeout.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => !url.includes('/api/csrf'));
+    expect(urls[0]).toContain('/api/storefront/customer/savings/primary-provisioning');
+    expect(urls[1]).toContain('/api/storefront/customer/savings/funding');
+  });
+
   it('includes the interest opt-in only when requested', async () => {
     okJson({ status: 'pending', code: 'PROVISIONING_IN_PROGRESS' });
 

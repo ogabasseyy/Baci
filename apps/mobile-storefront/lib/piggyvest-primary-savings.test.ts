@@ -1,8 +1,12 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
 
 const mockFetchJson = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockLegacyAdd = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 jest.mock('./storefront-customer-api-client', () => ({
   createStorefrontCustomerApiClient: () => ({ fetchJson: mockFetchJson }),
+}));
+jest.mock('./customer-savings', () => ({
+  addSavingsContribution: (...args: unknown[]) => mockLegacyAdd(...args),
 }));
 const { addPiggyvestPrimarySavingsContribution } =
   require('./piggyvest-primary-savings') as typeof import('./piggyvest-primary-savings');
@@ -50,4 +54,21 @@ it('rejects fractions smaller than kobo before requesting a payment', async () =
     addPiggyvestPrimarySavingsContribution({ ...input, amount: 0.001 })
   ).rejects.toThrow();
   expect(mockFetchJson).not.toHaveBeenCalled();
+});
+it('routes the contribution through legacy savings when primary is unconfigured', async () => {
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  mockLegacyAdd.mockResolvedValue({ status: 'pending' });
+  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual(
+    { status: 'pending' }
+  );
+  expect(mockLegacyAdd).toHaveBeenCalledWith(input);
+});
+it('surfaces ambiguous failures instead of silently switching rails', async () => {
+  mockFetchJson.mockRejectedValue(new Error('timeout'));
+  await expect(addPiggyvestPrimarySavingsContribution(input)).rejects.toThrow(
+    'timeout'
+  );
+  expect(mockLegacyAdd).not.toHaveBeenCalled();
 });

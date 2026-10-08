@@ -3,8 +3,10 @@ import {
   clearPiggyvestPrimaryCapabilityCache,
   getPiggyvestPrimaryCapability,
   isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
 } from './piggyvest-primary-capability';
+import { readObservedPiggyvestPrimaryCapability } from './piggyvest-primary-capability-cache';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 jest.mock('./piggyvest-primary-wallet', () => ({
@@ -97,6 +99,59 @@ describe('getPiggyvestPrimaryCapability', () => {
     expect(read).toHaveBeenCalledTimes(1);
     await getPiggyvestPrimaryCapability(PRIMARY_MERCHANT);
     expect(read).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('rollbackObservedCapabilityOnNotReady', () => {
+  it('rolls back a cached positive verdict when authoritative NOT_READY arrives off-probe', async () => {
+    read.mockResolvedValue({ account: null });
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(
+      rollbackObservedCapabilityOnNotReady(
+        PRIMARY_MERCHANT,
+        notReady('PIGGYVEST_NOT_READY')
+      )
+    ).toBe(true);
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(
+      false
+    );
+    // The rolled-back negative fails closed without re-probing the server.
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      false
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the cache untouched for transient and foreign failures', async () => {
+    read.mockResolvedValue({ account: null });
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
+    );
+    expect(
+      rollbackObservedCapabilityOnNotReady(PRIMARY_MERCHANT, new Error('boom'))
+    ).toBe(false);
+    expect(
+      rollbackObservedCapabilityOnNotReady(
+        PRIMARY_MERCHANT,
+        notReady('PRIMARY_CARD_UNAVAILABLE')
+      )
+    ).toBe(false);
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(true);
+  });
+
+  it('still reports authoritative NOT_READY when the merchant scope is unknown', () => {
+    expect(
+      rollbackObservedCapabilityOnNotReady(null, notReady('SAVINGS_NOT_READY'))
+    ).toBe(true);
+    expect(
+      rollbackObservedCapabilityOnNotReady(
+        undefined,
+        notReady('SAVINGS_NOT_READY')
+      )
+    ).toBe(true);
   });
 });
 

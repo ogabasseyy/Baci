@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import type { z } from 'zod';
 import { primaryWalletCardSchemas as schemas } from '@/schemas/primary-wallet-card';
-import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
+import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 import { supabase } from './supabase';
 
@@ -101,7 +101,10 @@ export function createPrimaryWalletCardFundingClient() {
       // null-operation placeholder is safe to drop: keeping it would let a
       // later readPending initialize a stale amount without fresh consent.
       // Ambiguous failures keep the record for recovery.
-      if (record.operationId === null && isPrimaryWalletNotReady(requestError))
+      if (
+        rollbackObservedCapabilityOnNotReady(record.merchantId, requestError) &&
+        record.operationId === null
+      )
         await AsyncStorage.removeItem(key(record)).catch(() => undefined);
       throw requestError;
     }

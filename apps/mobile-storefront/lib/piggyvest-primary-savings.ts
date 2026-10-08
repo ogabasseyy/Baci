@@ -1,6 +1,6 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
 import { addSavingsContribution } from './customer-savings';
-import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
+import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 export async function addPiggyvestPrimarySavingsContribution(input: {
@@ -43,7 +43,8 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   } catch (error) {
     // The server positively reports primary savings as unconfigured: route
     // the contribution through the working legacy flow instead of failing.
-    if (!isPrimaryWalletNotReady(error)) throw error;
+    if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
+      throw error;
     return addSavingsContribution({
       amount: input.amount,
       goalId: input.goalId,

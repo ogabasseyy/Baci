@@ -1,3 +1,4 @@
+\ir ../../../../../supabase/migrations/20261008091300_primary_card_treasury_release.sql
 BEGIN;
 INSERT INTO prefunded_card.treasury_snapshots VALUES('90000000-0000-4000-8000-000000000002','stale-local',2,now()-interval '16 minutes',980000,'fixture_verifier',now());
 SET SESSION AUTHORIZATION baci_primary_card_transfer;
@@ -40,5 +41,31 @@ END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
  IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>60000 THEN RAISE EXCEPTION 'failed reservation leaked capacity'; END IF;
+END $$;
+ROLLBACK;
+BEGIN;
+UPDATE piggyvest_primary_card.operations SET state='ready' WHERE customer_id='40000000-0000-4000-8000-000000000002';
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM public.custody_fixture WHERE label='fourth@example.test';
+ IF NOT piggyvest_primary_card.record_abandonment(fixture.scope,fixture.operation_id) THEN RAISE EXCEPTION 'ready checkout not abandoned'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id=(SELECT fixture.operation_id FROM public.custody_fixture fixture WHERE fixture.label='fourth@example.test'))<>'released' THEN RAISE EXCEPTION 'abandonment kept reservation'; END IF;
+ IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>35000 THEN RAISE EXCEPTION 'abandonment kept treasury capacity'; END IF;
+END $$;
+ROLLBACK;
+BEGIN;
+UPDATE piggyvest_primary_card.operations SET state='ready' WHERE customer_id='40000000-0000-4000-8000-000000000002';
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM public.custody_fixture WHERE label='fourth@example.test';
+ IF NOT piggyvest_primary_card.flag_reconciliation(fixture.scope,fixture.operation_id) THEN RAISE EXCEPTION 'ready checkout not flagged'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF (SELECT state FROM piggyvest_primary_card.reservations WHERE operation_id=(SELECT fixture.operation_id FROM public.custody_fixture fixture WHERE fixture.label='fourth@example.test'))<>'released' THEN RAISE EXCEPTION 'flag kept reservation'; END IF;
+ IF (SELECT reserved_kobo FROM prefunded_card.treasury_bindings)<>35000 THEN RAISE EXCEPTION 'flag kept treasury capacity'; END IF;
 END $$;
 ROLLBACK;

@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import { isHostedStagingWalletTopUpBlocked } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { createLogger } from '@/lib/logger';
-import { isPrimaryWalletNotReady } from '@/lib/piggyvest-primary-capability';
+import { rollbackObservedCapabilityOnNotReady } from '@/lib/piggyvest-primary-capability';
 import { initializeWalletTopUp } from '@/lib/wallet-top-up';
 import { trackError, trackEvent } from '@/services/analytics';
 import { scheduleLocalNotification } from '@/services/push-notifications';
@@ -174,7 +174,8 @@ export async function fundWallet({
     } catch (error) {
       // The server reports primary as unconfigured: fall through to the
       // working legacy top-up below instead of stranding the customer.
-      if (!isPrimaryWalletNotReady(error)) throw error;
+      if (!rollbackObservedCapabilityOnNotReady(activeMerchantId, error))
+        throw error;
     }
   }
   const amount = Number(fundAmount);

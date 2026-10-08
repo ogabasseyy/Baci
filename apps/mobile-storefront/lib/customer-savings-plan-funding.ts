@@ -2,7 +2,7 @@ import { SavingsPlanFundingResponseSchema } from '@/schemas/customer-savings';
 import { PrimarySavingsPlanFundingSchemas as schemas } from '@/schemas/primary-savings-plan-funding';
 import { getCustomerSavingsApiClient } from './customer-savings-api';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
-import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
+import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
 
 type Selection = {
   goalId: string;
@@ -54,7 +54,8 @@ export const customerSavingsPlanFunding = {
           input.enableInterestAccrual === true
         );
       } catch (error) {
-        if (!isPrimaryWalletNotReady(error)) throw error;
+        if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
+          throw error;
       }
     }
     const client = getCustomerSavingsApiClient();
@@ -79,7 +80,8 @@ export const customerSavingsPlanFunding = {
       try {
         return await primaryFunding(input);
       } catch (error) {
-        if (!isPrimaryWalletNotReady(error)) throw error;
+        if (!rollbackObservedCapabilityOnNotReady(input.merchantId, error))
+          throw error;
       }
     }
     const client = getCustomerSavingsApiClient();

@@ -3,7 +3,7 @@ import { WalletFundingAccountResponseSchema } from '@/schemas/wallet-funding-acc
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import {
   getPiggyvestPrimaryCapability,
-  isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
 } from './piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
@@ -52,7 +52,7 @@ export async function getWalletFundingAccount({
     try {
       return await piggyvestPrimaryWalletApi.read(merchantId ?? '');
     } catch (error) {
-      if (!isPrimaryWalletNotReady(error)) throw error;
+      if (!rollbackObservedCapabilityOnNotReady(merchantId, error)) throw error;
     }
   }
   const data = await walletFundingApiClient.fetchJson({
@@ -96,7 +96,8 @@ export async function createWalletFundingAccount({
           consent,
         });
       } catch (error) {
-        if (!isPrimaryWalletNotReady(error)) throw error;
+        if (!rollbackObservedCapabilityOnNotReady(merchantId, error))
+          throw error;
       }
     }
   }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import {
-  isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
 } from '@/lib/piggyvest-primary-capability';
 import { recoverPiggyvestPrimarySavings } from '@/lib/piggyvest-primary-savings-recovery';
@@ -55,7 +55,10 @@ export function usePrimarySavingsRecovery({
         // Savings runtime positively off with no outstanding operation:
         // allow the contribution path, which falls back to legacy savings.
         // A bound operation or any ambiguous failure keeps blocking.
-        if (isPrimaryWalletNotReady(error) && operationRef.current === null) {
+        if (
+          rollbackObservedCapabilityOnNotReady(merchantId, error) &&
+          operationRef.current === null
+        ) {
           setState({ key, revision, ready: true, error: false });
           return;
         }

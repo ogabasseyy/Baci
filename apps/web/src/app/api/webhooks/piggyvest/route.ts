@@ -163,7 +163,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   } catch {
     console.warn('[PiggyVest Webhook] Authentic delivery with invalid JSON');
-    return quarantineAndAck(rawBody, 'unparseable', {}, null);
+    return quarantineAndAck(
+      rawBody,
+      'unparseable',
+      {},
+      null,
+      createPiggyvestIntakeServiceClient
+    );
   }
 
   const parsed = piggyvestWebhookEventSchema.safeParse(jsonPayload);
@@ -174,7 +180,8 @@ export async function POST(request: NextRequest): Promise<Response> {
       rawBody,
       'unknown-event',
       correlation.success ? correlation.data : {},
-      null
+      null,
+      createPiggyvestIntakeServiceClient
     );
   }
 
@@ -216,7 +223,8 @@ export async function POST(request: NextRequest): Promise<Response> {
           rawBody,
           'conflict',
           { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-          redactEventDetails(parsed.data)
+          redactEventDetails(parsed.data),
+          createPiggyvestIntakeServiceClient
         );
       }
     }
@@ -229,7 +237,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         rawBody,
         'key-family',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data)
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
       );
     }
     // Processing runs even for duplicates: if the first delivery recorded
@@ -247,7 +256,8 @@ export async function POST(request: NextRequest): Promise<Response> {
         rawBody,
         'conflict',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data)
+        redactEventDetails(parsed.data),
+        createPiggyvestIntakeServiceClient
       );
     }
     const processing = await processPiggyvestEvent(

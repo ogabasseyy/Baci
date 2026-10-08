@@ -55,14 +55,24 @@ SELECT 'key-family-accepted' AS marker;
 it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
   'quarantine accepts the key-family reason only after the 090400 migration',
   () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'quarantine-key-family-'));
+    const directory = mkdtempSync(
+      path.join(tmpdir(), 'quarantine-key-family-')
+    );
     const dataDirectory = path.join(directory, 'data');
     const options = { encoding: 'utf8' as const, timeout: 15000 };
     let started = false;
     try {
       execFileSync(
         'initdb',
-        ['-D', dataDirectory, '-U', 'quarantine_owner', '-A', 'trust', '--no-locale'],
+        [
+          '-D',
+          dataDirectory,
+          '-U',
+          'quarantine_owner',
+          '-A',
+          'trust',
+          '--no-locale',
+        ],
         options
       );
       execFileSync(

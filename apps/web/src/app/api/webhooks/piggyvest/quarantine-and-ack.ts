@@ -3,7 +3,6 @@ import {
   digestRawBody,
   recordQuarantineEvent,
 } from '@/lib/piggyvest/event-quarantine';
-import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 
 export type PiggyvestQuarantineReason =
   | 'unparseable'
@@ -11,16 +10,25 @@ export type PiggyvestQuarantineReason =
   | 'conflict'
   | 'key-family';
 
+type IntakeClient = Parameters<typeof recordQuarantineEvent>[0];
+
 const noStore = { 'Cache-Control': 'no-store' };
 
+/**
+ * Durable-receipt helper for the webhook route. The service-client factory
+ * is injected by the caller: the event-pipeline boundary permits API
+ * routes to reach the intake service authority directly, but not through
+ * an intermediate importer, so this module must never import it.
+ */
 export async function quarantineAndAck(
   rawBody: Buffer,
   reason: PiggyvestQuarantineReason,
   correlation: { eventId?: string; eventType?: string },
-  detail: Record<string, unknown> | null
+  detail: Record<string, unknown> | null,
+  createClient: () => IntakeClient
 ): Promise<Response> {
   try {
-    await recordQuarantineEvent(createPiggyvestIntakeServiceClient(), {
+    await recordQuarantineEvent(createClient(), {
       bodyDigest: digestRawBody(rawBody),
       reason,
       eventId: correlation.eventId,

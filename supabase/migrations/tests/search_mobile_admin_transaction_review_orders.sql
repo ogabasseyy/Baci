@@ -388,6 +388,12 @@ INSERT INTO public.orders (
 );
 
 -- Other merchant's paid order with the same IMEI: tenant isolation.
+-- Seeded as owner B: the orders INSERT policy requires merchant ownership.
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-4222-8222-222222222222',
+  true
+);
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, shipping_status, payment_status,
   total, fulfillment_details, created_at
@@ -401,6 +407,12 @@ INSERT INTO public.orders (
   100.00,
   '{"imei": "353232106161443"}'::jsonb,
   '2026-10-06T10:00:00Z'
+);
+
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-4111-8111-111111111111',
+  true
 );
 
 SET LOCAL ROLE authenticated;

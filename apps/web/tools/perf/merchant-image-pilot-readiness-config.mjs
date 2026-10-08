@@ -50,6 +50,12 @@ export function parseArgs(argv, allowed) {
         `unknown option --${match[1]} (allowed: ${[...allow].map((key) => `--${key}`).join(', ')})`
       );
     }
+    // A repeated option is conflicting intent, not an override: silently
+    // keeping the last value would certify a profile the caller did not
+    // mean (--expect-dpr=3 --expect-dpr=2 must not pass as DPR-2).
+    if (match[1] in args) {
+      throw new Error(`duplicate option --${match[1]}`);
+    }
     args[match[1]] = match[2];
   }
   return args;

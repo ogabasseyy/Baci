@@ -9,7 +9,25 @@ export const PilotAcceptanceSchema = z
     note: z.string().min(1).max(500),
     // Tier sha256 in canonical manifest tier order (requestedWidth
     // ascending, avif before webp): matchAcceptance compares positionally.
-    outputHashes: z.array(z.string().regex(/^[0-9a-f]{64}$/)).min(1).max(24),
+    outputHashes: z
+      .array(z.string().regex(/^[0-9a-f]{64}$/))
+      .min(1)
+      .max(24),
+    // Reviewed encode quality per tier, same canonical order: a quality
+    // change invalidates the acceptance even when the bytes (and their
+    // hashes) are unchanged, per the design contract.
+    qualities: z
+      .array(
+        z.union([
+          z.literal(70),
+          z.literal(65),
+          z.literal(60),
+          z.literal(55),
+          z.null(),
+        ])
+      )
+      .min(1)
+      .max(24),
     // Mirror of the web acceptance originalUrl: the exact URL the reviewer
     // approved. Zod v3 has no protocol option, so http(s) is refined.
     originalUrl: z
@@ -81,6 +99,18 @@ export function matchAcceptance({ acceptance, binding, manifest }) {
   );
   if (swapped !== -1) {
     return { ok: false, reason: 'encoded output bytes changed' };
+  }
+  // Quality binding: the same bytes at a different encode quality are a
+  // different reviewed artifact. Positional like the hashes above.
+  const recordQualities = acceptance.qualities ?? [];
+  if (recordQualities.length !== (manifest.tiers ?? []).length) {
+    return { ok: false, reason: 'tier quality changed' };
+  }
+  const qualityChanged = (manifest.tiers ?? []).findIndex(
+    (tier, index) => tier.quality !== recordQualities[index]
+  );
+  if (qualityChanged !== -1) {
+    return { ok: false, reason: 'tier quality changed' };
   }
   return { ok: true };
 }

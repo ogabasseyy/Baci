@@ -24,6 +24,7 @@ describe('sameAcceptance', () => {
     generationId: 'c'.repeat(64),
     originalUrl: 'https://cdn.example.com/media/logo-a.png',
     outputHashes: ['a'.repeat(64), 'b'.repeat(64)],
+    qualities: [70, 65],
     recipeId: 'pilot/r1',
     sourceSha256: 'd'.repeat(64),
     verdict: 'accepted',
@@ -41,6 +42,8 @@ describe('sameAcceptance', () => {
     expect(
       sameAcceptance(base, { ...base, outputHashes: ['a'.repeat(64)] })
     ).toBe(false);
+    // Same bytes at a different encode quality: a different artifact.
+    expect(sameAcceptance(base, { ...base, qualities: [70, 60] })).toBe(false);
     // A retargeted review is a conflicting record, not the same approval.
     expect(
       sameAcceptance(base, {
@@ -160,6 +163,7 @@ describe('validAcceptanceShape', () => {
     note: 'looks right',
     originalUrl: 'https://cdn.example.com/media/logo-a.png',
     outputHashes: ['e'.repeat(64)],
+    qualities: [70],
     recipeId: 'pilot/r1',
     reviewedAt: '2026-10-01T10:00:00Z',
     reviewer: 'lab-operator',
@@ -181,6 +185,8 @@ describe('validAcceptanceShape', () => {
       { ...good, verdict: 'maybe' },
       { ...good, outputHashes: [] },
       { ...good, outputHashes: ['short'] },
+      { ...good, qualities: [] },
+      { ...good, qualities: ['high'] },
       { ...good, reviewedAt: '2026-10-01' },
       { ...good, schemaVersion: 2 },
       { ...good, generationId: 'short' },

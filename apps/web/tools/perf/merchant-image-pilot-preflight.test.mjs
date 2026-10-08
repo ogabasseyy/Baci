@@ -178,6 +178,7 @@ async function setupOfflineAssets(assets) {
         merchantId: entry.merchantId,
         note: 'Lab review: fixture acceptance.',
         outputHashes: entry.tiers.map((tier) => tier.sha256),
+        qualities: entry.tiers.map((tier) => tier.quality),
         originalUrl: entry.record.url,
         recipeId: RECIPE,
         reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -325,6 +326,30 @@ describe('preflight entry orchestration', () => {
     );
     expect(report.ok).toBe(false);
     expect(report.failures.join('\n')).toMatch(/mounts not written/);
+    await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
+  });
+
+  it('removes a stale mounts artifact when the offline gate fails', async () => {
+    // A previous successful run wrote mounts.json; the next offline run
+    // fails (new binding, rejected inputs). The stale list must not
+    // survive: readiness consumes it as the complete authority and would
+    // otherwise report green on outdated expectations.
+    const fixture = await setupOffline();
+    const mountsPath = join(fixture.publicDir, 'mounts.json');
+    const passing = await runPreflight(
+      offlineOptions(fixture, { writeMounts: mountsPath })
+    );
+    expect(passing.ok).toBe(true);
+    expect(JSON.parse(await readFile(mountsPath, 'utf8'))).toEqual(
+      passing.accepted
+    );
+    const failing = await runPreflight(
+      offlineOptions(fixture, {
+        inventory: join(fixture.publicDir, 'missing.json'),
+        writeMounts: mountsPath,
+      })
+    );
+    expect(failing.ok).toBe(false);
     await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
   });
 

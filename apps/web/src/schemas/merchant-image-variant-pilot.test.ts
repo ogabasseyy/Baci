@@ -131,6 +131,27 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     ).toEqual({ ok: false, reason: 'encoded output bytes changed' });
   });
 
+  it('rejects a quality change with identical hashes and bytes', async () => {
+    const fixtures = await loadFixtures();
+    const tiers = fixtures.validManifest.tiers;
+    const regraded = {
+      ...fixtures.validManifest,
+      tiers: tiers.map((tier: { quality: number }, index: number) => ({
+        ...tier,
+        quality: index === 0 ? 65 : tier.quality,
+      })),
+    };
+    expect(
+      matchPilotAcceptance({
+        acceptance: fixtures.validAcceptance,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+        } as never,
+        manifest: regraded,
+      })
+    ).toEqual({ ok: false, reason: 'tier quality changed' });
+  });
+
   it('rejects a retargeted original URL with everything else unchanged', async () => {
     const fixtures = await loadFixtures();
     expect(

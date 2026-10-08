@@ -53,4 +53,6 @@ jobs:
           name: pilot-codec-fixture-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/pilot-codec-evidence
           retention-days: 7
-          if-no-files-found: warn
+          # A compatibility gate with zero retained evidence is a failure,
+          # not a pass: fail when the smoke script produced nothing.
+          if-no-files-found: error

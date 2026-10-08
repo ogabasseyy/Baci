@@ -11,6 +11,7 @@ import {
   fail,
   pass,
   readUpToBytes,
+  resolveGenerationDir,
   sha256Hex,
   TIER_FILE,
 } from './merchant-image-pilot-preflight-shared.mjs';
@@ -23,6 +24,17 @@ export async function checkBindingTiers({
   name,
   options,
 }) {
+  try {
+    await resolveGenerationDir(options.outputRoot, acceptance.generationId);
+  } catch (error) {
+    fail(
+      checks,
+      failures,
+      `${name}:tiers`,
+      error instanceof Error ? error.message : String(error)
+    );
+    return false;
+  }
   for (const tier of manifest.tiers) {
     const match = TIER_FILE.exec(tier.path ?? '');
     if (!match || match[1] !== tier.sha256 || match[2] !== tier.format) {

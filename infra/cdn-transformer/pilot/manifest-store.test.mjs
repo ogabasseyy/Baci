@@ -504,6 +504,71 @@ test('loadGeneration rejects oversized tiers without allocating the whole file',
   );
 });
 
+test('loadGeneration rejects oversized manifests before parsing', async () => {
+  const staged = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const recipeId = 'pilot-r1-manifest-ceiling';
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId,
+    sourceSha256: staged.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    recipeId,
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: 48,
+      orientedWidth: 48,
+      sha256: staged.expectedSha256,
+    },
+    tiers: staged.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  const files = staged.ladder.tiers
+    .filter(
+      (tier, index, all) =>
+        all.findIndex((other) => other.path === tier.path) === index
+    )
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
+  await commitGeneration({
+    files,
+    generationId,
+    job: { ...JOB, expectedSha256: staged.expectedSha256 },
+    manifest,
+    outputRoot: staged.root,
+    stagingDir: staged.stagingDir,
+  });
+  // A committed manifest.json replaced with a huge file rejects on size
+  // instead of allocating the whole file before schema validation.
+  const manifestPath = join(
+    staged.root,
+    'generations',
+    generationId,
+    'manifest.json'
+  );
+  await writeFile(manifestPath, Buffer.alloc(2 * 1024 * 1024, 0x7b));
+  await assert.rejects(
+    () => loadGeneration(staged.root, generationId),
+    /size ceiling/
+  );
+});
+
 test('commitGeneration degrades honestly on sync failure and fails safe on rename failure', async () => {
   const staged = await realLadderStaging();
   const encoderIdentity = buildEncoderIdentity();

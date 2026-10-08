@@ -18,8 +18,9 @@
 //
 // --write-mounts persists the offline accepted list for downstream gates
 // (the browser readiness gate consumes it as --mounts): written only when
-// the offline gate passes, so a failing offline run never hands a partial
-// expectation downstream.
+// the offline gate passes, and any prior artifact is removed when the run
+// fails — otherwise a stale list (missing a newly added binding) would
+// still produce a green browser report downstream.
 //
 // The recipe and role ladders are pinned to the generator constants (the
 // same values the lab route enforces): --recipe only declares the operator's
@@ -45,7 +46,7 @@
 //   preflight-mounts.mjs        mount coverage by role kind
 //   preflight-served-checks.mjs descriptors, purity, response bytes
 //   preflight-served.mjs        served gate orchestration
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import {
   parsePreflightArgs,
@@ -74,11 +75,18 @@ export async function runPreflight(options) {
   const offline = await runOfflinePreflight(options);
   if (options.writeMounts) {
     if (!offline.ok) {
+      // Invalidate any prior artifact: the readiness gate treats this
+      // file as the complete expected-mount authority, so leaving a
+      // stale list would certify outdated expectations as green.
+      const removal = await rm(options.writeMounts, { force: true }).catch(
+        (error) =>
+          ` (stale artifact removal failed: ${error instanceof Error ? error.message : String(error)})`
+      );
       return {
         ...offline,
         failures: [
           ...offline.failures,
-          'mounts not written: offline gate failed',
+          `mounts not written: offline gate failed${removal ?? ''}`,
         ],
         served: null,
       };
@@ -89,6 +97,9 @@ export async function runPreflight(options) {
         `${JSON.stringify(offline.accepted, null, 2)}\n`
       );
     } catch (error) {
+      // A failed write can leave a partial file: remove it so no
+      // downstream gate consumes a truncated expectation list.
+      await rm(options.writeMounts, { force: true }).catch(() => undefined);
       return {
         ...offline,
         failures: [

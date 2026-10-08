@@ -41,6 +41,10 @@ function decodeLayers(value: string): string[] {
   return layers;
 }
 
+// Necessary but NOT sufficient: overlong-UTF-8 forms that no decoder
+// accepts can pass this check, so every caller must pair it with
+// realpath confinement (readVerifiedSnapshot) before touching disk. Do
+// not reuse this helper alone as a traversal gate.
 export function isSafeRelativePath(value: string): boolean {
   if (value.length < 1 || value.length > 256) {
     return false;

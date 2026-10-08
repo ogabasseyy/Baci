@@ -83,7 +83,7 @@ export async function isStaleInventoryLock(lockDir) {
   return false;
 }
 
-async function acquireInventoryLock(lockDir) {
+export async function acquireInventoryLock(lockDir, hooks = {}) {
   const deadline = Date.now() + INVENTORY_LOCK_TIMEOUT_MS;
   for (;;) {
     let fresh = false;
@@ -115,11 +115,35 @@ async function acquireInventoryLock(lockDir) {
           }),
           { flag: 'wx' }
         );
-        return token;
       } catch (error) {
         if (error?.code !== 'EEXIST' && error?.code !== 'ENOENT') {
           throw error;
         }
+        continue;
+      }
+      // Revalidate before entering: the write above can complete through
+      // an already-open descriptor after a stealer renamed our directory
+      // away (partial owner observed past the grace), landing our bytes
+      // in the deleted directory while a replacement lock certifies
+      // another appender. Entering on the write's success alone would
+      // run two critical sections concurrently and silently drop a
+      // record — so the claim counts only when our complete record is
+      // readable at the live path. A stealer acting after that sees a
+      // live owner and backs off, which closes the race both ways.
+      await hooks.afterOwnerWrite?.();
+      const live = await readFile(join(lockDir, 'owner.json'), 'utf8').catch(
+        () => null
+      );
+      let liveToken = null;
+      if (live !== null) {
+        try {
+          liveToken = JSON.parse(live).token ?? null;
+        } catch {
+          liveToken = null;
+        }
+      }
+      if (liveToken === token) {
+        return token;
       }
     }
     // Steal a crashed holder's lock instead of wedging every future append.

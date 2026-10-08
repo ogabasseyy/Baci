@@ -31,6 +31,12 @@ export const JOB_TIMEOUT_MS = 120_000;
 export const MIN_FREE_BYTES = 2 * 1024 ** 3;
 export const MAX_STAGING_BYTES = 100 * 1024 ** 2;
 
+// Stored-manifest ceiling: 24 tiers cap the honest manifest near 10 KiB,
+// so 64 KiB bounds a corrupted/replaced manifest.json without valid
+// manifests approaching it. loadGeneration reads ceiling+1 and rejects
+// truncation before parsing.
+export const MAX_MANIFEST_BYTES = 64 * 1024;
+
 // Roles and their pixel-width ladders (pixel widths, not CSS viewports).
 export const ROLES = ['logo', 'product', 'hero'];
 export const TIERS = {

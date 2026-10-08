@@ -111,6 +111,7 @@ async function setupStageFiles() {
         merchantId: MERCHANT,
         note: 'Lab review passed.',
         outputHashes: tiers.map((tier) => tier.sha256),
+        qualities: tiers.map((tier) => tier.quality),
         originalUrl: 'https://cdn.example.com/media/logo.png',
         recipeId: PILOT_RECIPE_ID,
         reviewedAt: '2026-10-01T21:00:00.000Z',

@@ -57,6 +57,7 @@ const fixtures = {
   },
   invalidAcceptanceSchemas: {
     badHash: { ...acceptance, outputHashes: ['not-a-hash'] },
+    badQualities: { ...acceptance, qualities: ['high'] },
     badOriginalUrl: { ...acceptance, originalUrl: 'not-a-url' },
     badVerdict: { ...acceptance, verdict: 'maybe' },
     emptyHashes: { ...acceptance, outputHashes: [] },
@@ -218,11 +219,17 @@ const fixtures = {
     rejectedVerdict: { ...acceptance, verdict: 'rejected' },
   },
   validAcceptance: acceptance,
-  validAcceptanceOffset: { ...acceptance, reviewedAt: '2026-10-01T22:00:00+01:00' },
+  validAcceptanceOffset: {
+    ...acceptance,
+    reviewedAt: '2026-10-01T22:00:00+01:00',
+  },
   validManifest: manifest,
   validManifestGuarded: guarded,
   validManifestOffset: { ...manifest, createdAt: '2026-10-01T21:00:00+01:00' },
 };
 
-await writeFile(join(here, 'contract-fixtures.json'), `${JSON.stringify(fixtures, null, 2)}\n`);
+await writeFile(
+  join(here, 'contract-fixtures.json'),
+  `${JSON.stringify(fixtures, null, 2)}\n`
+);
 console.log('wrote contract-fixtures.json');

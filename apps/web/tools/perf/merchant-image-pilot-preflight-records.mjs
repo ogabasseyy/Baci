@@ -17,7 +17,9 @@ export function acceptanceKey(record) {
 export function sameAcceptance(left, right) {
   // Positional, mirroring the route's buildLabIndex dedupe: outputHashes
   // pins each rung positionally, so a reordered duplicate is a
-  // conflicting record, not the same acceptance.
+  // conflicting record, not the same acceptance. Qualities join the
+  // comparison: the same bytes at a different encode quality are a
+  // different reviewed artifact.
   return (
     left.generationId === right.generationId &&
     left.verdict === right.verdict &&
@@ -25,7 +27,13 @@ export function sameAcceptance(left, right) {
     left.sourceSha256 === right.sourceSha256 &&
     left.originalUrl === right.originalUrl &&
     left.outputHashes.length === right.outputHashes.length &&
-    left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
+    left.outputHashes.every(
+      (hash, index) => hash === right.outputHashes[index]
+    ) &&
+    (left.qualities ?? []).length === (right.qualities ?? []).length &&
+    (left.qualities ?? []).every(
+      (quality, index) => quality === (right.qualities ?? [])[index]
+    )
   );
 }
 
@@ -171,6 +179,17 @@ export function validAcceptanceShape(record) {
     record.outputHashes.length > 0 &&
     record.outputHashes.length <= 24 &&
     record.outputHashes.every((hash) => HEX64.test(hash ?? '')) &&
+    Array.isArray(record.qualities) &&
+    record.qualities.length > 0 &&
+    record.qualities.length <= 24 &&
+    record.qualities.every(
+      (quality) =>
+        quality === 70 ||
+        quality === 65 ||
+        quality === 60 ||
+        quality === 55 ||
+        quality === null
+    ) &&
     text(record.note, 500) &&
     text(record.reviewer, 128) &&
     isRouteDatetime(record.reviewedAt) &&

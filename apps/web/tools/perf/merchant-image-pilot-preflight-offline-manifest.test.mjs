@@ -1,4 +1,5 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RECIPE_ID } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
@@ -180,5 +181,37 @@ describe('checkBindingManifest', () => {
       expect(manifest, label).toBeNull();
       expect(failures.length, label).toBeGreaterThan(0);
     }
+  });
+
+  it('rejects a symlinked generation entry before reading its manifest', async () => {
+    // The outside directory carries a fully valid manifest: confinement,
+    // not the contract, must reject it.
+    const { manifest } = await boundSourceFixture();
+    const root = await outputRootWith(null);
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-outside-'));
+    const moved = join(outside, 'generation');
+    await mkdir(moved, { recursive: true });
+    await writeFile(join(moved, 'manifest.json'), JSON.stringify(manifest));
+    await rm(join(root, 'generations', GENERATION), {
+      force: true,
+      recursive: true,
+    });
+    await symlink(moved, join(root, 'generations', GENERATION));
+    const checks = [];
+    const failures = [];
+    const parsed = await checkBindingManifest({
+      acceptance: acceptanceFor(
+        manifest.tiers.map((tier) => tier.sha256),
+        GENERATION
+      ),
+      checks,
+      effectiveRecipe: RECIPE_ID,
+      failures,
+      name: 'symlinked',
+      options: { outputRoot: root },
+      record: RECORD,
+    });
+    expect(parsed).toBeNull();
+    expect(failures.join('\n')).toMatch(/escapes the output root/);
   });
 });

@@ -53,9 +53,11 @@ export default async function PilotLabStoreRoute({
   // Request origin for the card path's absolute staged URLs (the original
   // card renderer rejects relative URLs — see lab-store-page.tsx).
   const requestHeaders = await headers();
+  // Host only: X-Forwarded-Proto is untrusted without a trusted proxy,
+  // so request-derived origins pin http; operators needing https set
+  // BACI_IMAGE_PILOT_ORIGIN.
   const origin = labRequestOrigin({
     host: requestHeaders.get('host'),
-    proto: requestHeaders.get('x-forwarded-proto'),
   });
   return (
     <div data-pilot-lab-arm={arm}>

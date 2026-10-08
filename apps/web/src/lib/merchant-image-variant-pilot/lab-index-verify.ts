@@ -5,6 +5,7 @@ import type {
   PilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
 import { readUpToBytes } from './lab-config-stage-io';
+import { resolveLabGenerationDir } from './lab-generation-dir';
 import { labGenerationIdFor } from './lab-generation-identity';
 
 // Re-reads every tier file the manifest names and compares size and hash:
@@ -17,6 +18,14 @@ export async function verifyOutputHashes(
   generationId: string,
   manifest: PilotManifest
 ): Promise<string | null> {
+  // Re-confine at tier-read time: the manifest read above passed its own
+  // confinement, but the entry must still be inside the output tree when
+  // its bytes are verified.
+  try {
+    await resolveLabGenerationDir(outputRoot, generationId);
+  } catch {
+    return 'generation entry escapes the output root';
+  }
   const seen = new Set<string>();
   for (const tier of manifest.tiers) {
     if (seen.has(tier.path)) {

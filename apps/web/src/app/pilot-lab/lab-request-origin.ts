@@ -40,10 +40,7 @@ function isLoopbackHostname(hostname: string): boolean {
   );
 }
 
-export function labRequestOrigin(headers: {
-  host: string | null;
-  proto: string | null;
-}): string {
+export function labRequestOrigin(headers: { host: string | null }): string {
   const override = labAssetOriginOverride();
   if (override) {
     return override;
@@ -51,7 +48,7 @@ export function labRequestOrigin(headers: {
   // Scheme is pinned to http for request-derived origins: X-Forwarded-Proto
   // is untrusted without a trusted proxy, and the lab's local runs serve
   // http. Operators needing https set BACI_IMAGE_PILOT_ORIGIN (validated
-  // above), so headers.proto is intentionally ignored here.
+  // above). No proto parameter: there is no trusted value to pass.
   const scheme = 'http';
   const host = (headers.host ?? '').trim();
   if (!host) {

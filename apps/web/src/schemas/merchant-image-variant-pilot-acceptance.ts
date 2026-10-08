@@ -19,6 +19,21 @@ export const pilotAcceptanceSchema = z
       .array(z.string().regex(PILOT_SHA256_PATTERN))
       .min(1)
       .max(24),
+    // Reviewed encode quality per tier, same canonical order: a quality
+    // change invalidates the acceptance even when the bytes (and their
+    // hashes) are unchanged, per the design contract.
+    qualities: z
+      .array(
+        z.union([
+          z.literal(70),
+          z.literal(65),
+          z.literal(60),
+          z.literal(55),
+          z.null(),
+        ])
+      )
+      .min(1)
+      .max(24),
     // The exact original URL the reviewer approved: a retargeted binding
     // (same merchant/asset/hash, new URL) must not activate an old
     // acceptance, per the frozen-binding contract.

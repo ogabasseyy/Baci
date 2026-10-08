@@ -140,6 +140,7 @@ export function validAcceptance() {
     merchantId: MERCHANT,
     note: 'Contract review: text legible, colors preserved.',
     outputHashes: logoTiers().map((tier) => tier.sha256),
+    qualities: logoTiers().map((tier) => tier.quality),
     originalUrl: 'https://cdn.example.com/media/logo-contract.png',
     recipeId: RECIPE_FROZEN_R1,
     reviewedAt: '2026-10-01T21:00:00.000Z',

@@ -18,6 +18,16 @@ export function LabProductCardImage({
   const style = loaded
     ? undefined
     : { backgroundImage: `url("${placeholder}")`, backgroundSize: 'cover' };
+  const clearOnDecoded = (image: HTMLImageElement): void => {
+    const decoded = image.decode ? image.decode() : Promise.resolve();
+    void decoded
+      .catch(() => {
+        // Match Next Image: load succeeded even if decode rejects.
+      })
+      .then(() => {
+        if (image.parentElement && image.isConnected) setLoaded(true);
+      });
+  };
   return (
     <picture data-pilot-lab-card-image="true" style={style}>
       {projection.sources.map((source) => (
@@ -39,16 +49,18 @@ export function LabProductCardImage({
         fetchPriority={projection.fetchPriority}
         decoding="async"
         className="object-cover w-full h-auto aspect-video"
+        ref={(image) => {
+          // A manually preloaded candidate can finish before hydration
+          // attaches onLoad; the lost event would leave the blur behind
+          // the decoded image (visible through transparent pixels),
+          // diverging the pilot arm from the control. An
+          // already-complete image clears through the same decode path.
+          if (image?.complete && image.naturalWidth > 0) {
+            clearOnDecoded(image);
+          }
+        }}
         onLoad={(event) => {
-          const image = event.currentTarget;
-          const decoded = image.decode ? image.decode() : Promise.resolve();
-          void decoded
-            .catch(() => {
-              // Match Next Image: load succeeded even if decode rejects.
-            })
-            .then(() => {
-              if (image.parentElement && image.isConnected) setLoaded(true);
-            });
+          clearOnDecoded(event.currentTarget);
         }}
       />
     </picture>

@@ -1,18 +1,15 @@
 import 'server-only';
-import { join } from 'node:path';
 import type {
   PilotAcceptance,
   PilotInventoryBinding,
-  PilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
 import {
   matchPilotAcceptance,
   PILOT_RECIPE_ID,
   parsePilotAcceptance,
-  parsePilotManifest,
 } from '@/schemas/merchant-image-variant-pilot';
-import { readBoundedLabJson } from './lab-bounded-json';
 import { indexKey } from './lab-index-lookup';
+import { loadBindingManifest } from './lab-index-manifest';
 import {
   verifyGenerationBinding,
   verifyOutputHashes,
@@ -76,14 +73,14 @@ export interface PilotBindingStatus {
   status: PilotBindingStatusCode;
 }
 
-const GENERATION_ID_PATTERN = /^[0-9a-f]{64}$/;
-
 function sameAcceptance(
   left: PilotAcceptance,
   right: PilotAcceptance
 ): boolean {
   // Positional: binding pins each hash to one rung, so swapped multisets
-  // are conflicting verdicts, not idempotent duplicates.
+  // are conflicting verdicts, not idempotent duplicates. Qualities join
+  // the comparison: the same bytes at a different encode quality are a
+  // different reviewed artifact.
   return (
     left.generationId === right.generationId &&
     left.verdict === right.verdict &&
@@ -91,7 +88,11 @@ function sameAcceptance(
     left.sourceSha256 === right.sourceSha256 &&
     left.originalUrl === right.originalUrl &&
     left.outputHashes.length === right.outputHashes.length &&
-    left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
+    left.outputHashes.every(
+      (hash, index) => hash === right.outputHashes[index]
+    ) &&
+    left.qualities.length === right.qualities.length &&
+    left.qualities.every((quality, index) => quality === right.qualities[index])
   );
 }
 
@@ -160,54 +161,21 @@ export async function buildLabIndex(input: {
       statuses.push({ binding, status: 'missing-acceptance' });
       continue;
     }
-    if (!GENERATION_ID_PATTERN.test(record.generationId)) {
+    const loaded = await loadBindingManifest({
+      binding,
+      generationId: record.generationId,
+      outputRoot: input.outputRoot,
+    });
+    if (!loaded.ok) {
       statuses.push({
         binding,
-        detail: 'acceptance references an unsafe generation id',
-        status: 'invalid-manifest',
+        ...(loaded.detail ? { detail: loaded.detail } : {}),
+        ...(loaded.generationId ? { generationId: loaded.generationId } : {}),
+        status: loaded.status,
       });
       continue;
     }
-    let manifestText: string;
-    try {
-      manifestText = await readBoundedLabJson(
-        join(
-          input.outputRoot,
-          'generations',
-          record.generationId,
-          'manifest.json'
-        ),
-        256 * 1024
-      );
-    } catch {
-      statuses.push({
-        binding,
-        generationId: record.generationId,
-        status: 'missing-manifest',
-      });
-      continue;
-    }
-    let parsedManifest: PilotManifest;
-    try {
-      const parsed = parsePilotManifest(JSON.parse(manifestText));
-      if (!parsed.ok) {
-        statuses.push({
-          binding,
-          detail: parsed.issues.join('; '),
-          generationId: record.generationId,
-          status: 'invalid-manifest',
-        });
-        continue;
-      }
-      parsedManifest = parsed.manifest;
-    } catch {
-      statuses.push({
-        binding,
-        generationId: record.generationId,
-        status: 'invalid-manifest',
-      });
-      continue;
-    }
+    const parsedManifest = loaded.manifest;
     if (
       parsedManifest.merchantId !== binding.merchantId ||
       parsedManifest.assetId !== binding.assetId ||

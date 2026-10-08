@@ -85,11 +85,16 @@ export const RECORD = {
   url: 'https://cdn.example.com/media/logo-a.png',
 };
 
-export function acceptanceFor(hashes, generationId = GENERATION) {
+export function acceptanceFor(
+  hashes,
+  generationId = GENERATION,
+  qualities = hashes.map(() => 70)
+) {
   return {
     generationId,
     originalUrl: RECORD.url,
     outputHashes: hashes,
+    qualities,
   };
 }
 

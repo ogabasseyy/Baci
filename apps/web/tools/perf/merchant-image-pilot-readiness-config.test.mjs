@@ -99,6 +99,20 @@ describe('merchant-image-pilot-readiness CLI parsing', () => {
     ).toThrow(/unknown option --bogus/);
   });
 
+  it('rejects repeated options instead of keeping the last value', () => {
+    // --expect-dpr=3 --expect-dpr=2 must not silently certify DPR-2 while
+    // discarding the requested DPR-3 profile.
+    expect(() =>
+      parseArgs(['--expect-dpr=3', '--expect-dpr=2'], SETTINGS_CLI_OPTIONS)
+    ).toThrow(/duplicate option --expect-dpr/);
+    expect(() =>
+      parseArgs(
+        ['--origin=https://a', '--origin=https://b'],
+        READINESS_CLI_OPTIONS
+      )
+    ).toThrow(/duplicate option --origin/);
+  });
+
   it('rejects malformed tokens and cross-tool flags', () => {
     expect(() => parseArgs(['--profiles'], READINESS_CLI_OPTIONS)).toThrow(
       /expected --key=value/

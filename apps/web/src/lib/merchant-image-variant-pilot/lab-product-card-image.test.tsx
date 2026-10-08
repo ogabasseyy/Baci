@@ -72,4 +72,42 @@ describe('LabProductCardImage decode parity', () => {
     });
     expect(picture?.style.backgroundImage).not.toBe('');
   });
+
+  it('clears the blur for an image already complete before hydration', async () => {
+    // A manually preloaded candidate can finish before hydration attaches
+    // onLoad: no load event ever fires, so the ref callback must clear
+    // through the same decode path.
+    const complete = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      'complete'
+    );
+    const naturalWidth = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      'naturalWidth'
+    );
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', {
+      configurable: true,
+      get: () => true,
+    });
+    Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', {
+      configurable: true,
+      get: () => 48,
+    });
+    try {
+      const { picture } = mount();
+      await act(async () => {});
+      expect(picture?.style.backgroundImage).toBe('');
+    } finally {
+      if (complete) {
+        Object.defineProperty(HTMLImageElement.prototype, 'complete', complete);
+      }
+      if (naturalWidth) {
+        Object.defineProperty(
+          HTMLImageElement.prototype,
+          'naturalWidth',
+          naturalWidth
+        );
+      }
+    }
+  });
 });

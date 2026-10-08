@@ -14,7 +14,9 @@ import {
   fail,
   pass,
   positionalHashesMatch,
+  positionalQualitiesMatch,
   readJson,
+  resolveGenerationDir,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
 export async function checkBindingManifest({
@@ -27,6 +29,17 @@ export async function checkBindingManifest({
   options,
   record,
 }) {
+  try {
+    await resolveGenerationDir(options.outputRoot, acceptance.generationId);
+  } catch (error) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      error instanceof Error ? error.message : String(error)
+    );
+    return null;
+  }
   let manifest;
   try {
     manifest = await readJson(
@@ -170,6 +183,20 @@ export async function checkBindingManifest({
       failures,
       `${name}:manifest`,
       'encoded output bytes changed: acceptance hashes differ from manifest tiers'
+    );
+    return null;
+  }
+  if (
+    !positionalQualitiesMatch(
+      manifest.tiers.map((tier) => tier.quality ?? null),
+      acceptance.qualities
+    )
+  ) {
+    fail(
+      checks,
+      failures,
+      `${name}:manifest`,
+      'tier quality changed: acceptance qualities differ from manifest tiers'
     );
     return null;
   }

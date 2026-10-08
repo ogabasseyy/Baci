@@ -8,6 +8,7 @@ import {
   stageVerifiedTier,
   writeStagedBytesIfChanged,
 } from './lab-config-stage-io';
+import { resolveLabGenerationDir } from './lab-generation-dir';
 import {
   buildLabIndex,
   lookupPilotTiers,
@@ -131,6 +132,9 @@ export async function loadLabConfig(
     const generationId =
       status.status === 'accepted' ? status.generationId : undefined;
     if (generationId) {
+      // Re-confine at stage time: index-build verified this entry, but
+      // the bytes staged here must come from inside the output tree now.
+      await resolveLabGenerationDir(input.outputRoot, generationId);
       const generationStage = shouldStage
         ? await ensureStageDir(pilotStage, generationId)
         : join(pilotStage, generationId);

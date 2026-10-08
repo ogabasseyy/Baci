@@ -2,7 +2,8 @@
 // small predicates. Every preflight module builds on these; nothing here
 // knows about inventories, manifests, or served pages.
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile, realpath } from 'node:fs/promises';
+import { join } from 'node:path';
 
 export { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
 
@@ -47,6 +48,7 @@ export const ACCEPTANCE_KEYS = new Set([
   'note',
   'originalUrl',
   'outputHashes',
+  'qualities',
   'recipeId',
   'reviewedAt',
   'reviewer',
@@ -133,4 +135,42 @@ export function positionalHashesMatch(manifestHashes, recordHashes) {
     manifestHashes.length === record.length &&
     manifestHashes.every((hash, index) => hash === record[index])
   );
+}
+
+// Quality binding, mirroring the matchers: the same bytes at a different
+// encode quality are a different reviewed artifact.
+export function positionalQualitiesMatch(manifestQualities, recordQualities) {
+  const record = recordQualities ?? [];
+  return (
+    manifestQualities.length === record.length &&
+    manifestQualities.every((quality, index) => quality === record[index])
+  );
+}
+
+// Generation-directory confinement for the offline stages (mirror of the
+// generator's loadGeneration guard): a symlinked generations/<id> entry
+// must never serve manifest or tier reads from outside the output tree.
+export async function resolveGenerationDir(outputRoot, generationId) {
+  const dir = join(outputRoot, 'generations', generationId);
+  if (!HEX64.test(generationId ?? '')) {
+    throw new Error('generation is not published');
+  }
+  const stat = await lstat(dir).catch(() => null);
+  if (!stat) {
+    throw new Error('generation is not published');
+  }
+  if (!stat.isDirectory()) {
+    throw new Error('generation entry escapes the output root');
+  }
+  const generationsRoot = join(outputRoot, 'generations');
+  const realRoot = await realpath(generationsRoot).catch(() => null);
+  if (!realRoot) {
+    throw new Error('generation is not published');
+  }
+  if (
+    (await realpath(dir).catch(() => null)) !== join(realRoot, generationId)
+  ) {
+    throw new Error('generation entry escapes the output root');
+  }
+  return dir;
 }

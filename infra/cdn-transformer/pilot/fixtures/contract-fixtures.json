@@ -13,6 +13,38 @@
       "outputHashes": [
         "not-a-hash"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
+      "originalUrl": "https://cdn.example.com/media/logo-contract.png",
+      "recipeId": "pilot-r1-0123456789abcdef",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "badQualities": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        "high"
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -33,6 +65,14 @@
         "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
       ],
       "originalUrl": "not-a-url",
       "recipeId": "pilot-r1-0123456789abcdef",
@@ -55,6 +95,14 @@
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -69,6 +117,14 @@
       "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
       "note": "Contract review: text legible, colors preserved.",
       "outputHashes": [],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -90,6 +146,14 @@
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -110,6 +174,14 @@
         "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
       ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
@@ -4261,6 +4333,14 @@
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
         "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -4281,6 +4361,14 @@
         "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
         "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
         "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
       ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
@@ -4303,6 +4391,14 @@
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-other",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -4323,6 +4419,14 @@
         "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
       ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
@@ -4345,6 +4449,14 @@
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
       ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
       "originalUrl": "https://cdn.example.com/media/logo-retargeted.png",
       "recipeId": "pilot-r1-0123456789abcdef",
       "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -4365,6 +4477,14 @@
         "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
         "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
         "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
       ],
       "originalUrl": "https://cdn.example.com/media/logo-contract.png",
       "recipeId": "pilot-r1-0123456789abcdef",
@@ -4388,6 +4508,14 @@
       "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
       "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
     ],
+    "qualities": [
+      70,
+      70,
+      70,
+      70,
+      70,
+      70
+    ],
     "originalUrl": "https://cdn.example.com/media/logo-contract.png",
     "recipeId": "pilot-r1-0123456789abcdef",
     "reviewedAt": "2026-10-01T21:00:00.000Z",
@@ -4408,6 +4536,14 @@
       "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
       "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
       "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+    ],
+    "qualities": [
+      70,
+      70,
+      70,
+      70,
+      70,
+      70
     ],
     "originalUrl": "https://cdn.example.com/media/logo-contract.png",
     "recipeId": "pilot-r1-0123456789abcdef",

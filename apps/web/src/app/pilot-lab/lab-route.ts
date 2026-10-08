@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
-import { open, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import {
   isPilotLabEnabled,
@@ -11,6 +11,7 @@ import {
   getFrozenLabRuntime,
   publishLabRuntime,
 } from '@/lib/merchant-image-variant-pilot/lab-runtime';
+import { readBoundedOperatorJson } from './lab-route-operator-json';
 import { isSafeRelativePath } from './lab-safe-path';
 import { verifyStagedBytes } from './lab-staged-verify';
 
@@ -163,34 +164,6 @@ async function statFingerprint(path: string): Promise<string> {
     );
   }
   return `${info.size}:${info.mtimeMs}`;
-}
-
-// Frozen operator JSON is small (KBs for a pilot inventory); cap the
-// request-path read so a malformed/huge file fails with an
-// input-validation error instead of an OOM-prone read. Bounded before
-// allocating: read at most budget+1 bytes through an open handle, so a
-// multi-GB file is rejected without ever buffering or decoding it. (A
-// stat-size pre-check alone has a grow-between-stat-and-read TOCTOU.)
-const MAX_OPERATOR_JSON_BYTES = 8 * 1024 * 1024;
-
-async function readBoundedOperatorJson(path: string): Promise<string> {
-  const handle = await open(path, 'r');
-  try {
-    const { buffer, bytesRead } = await handle.read(
-      Buffer.alloc(MAX_OPERATOR_JSON_BYTES + 1),
-      0,
-      MAX_OPERATOR_JSON_BYTES + 1,
-      0
-    );
-    if (bytesRead > MAX_OPERATOR_JSON_BYTES) {
-      throw new Error(
-        `merchant image pilot: ${basename(path)} exceeds the ${MAX_OPERATOR_JSON_BYTES}-byte operator JSON budget`
-      );
-    }
-    return buffer.subarray(0, bytesRead).toString('utf8');
-  } finally {
-    await handle.close();
-  }
 }
 
 export function getLabConfig(): PilotLabConfig {

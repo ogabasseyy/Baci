@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  cp,
+  mkdir,
+  readFile,
+  rename,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -154,6 +161,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -191,6 +199,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Reviewed',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -220,6 +229,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Reviewed',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -253,6 +263,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: guardedTiers.map((tier) => tier.sha256),
+          qualities: guardedTiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -295,6 +306,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: undelivered.map((tier) => tier.sha256),
+          qualities: undelivered.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -331,6 +343,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: violating.map((tier) => tier.sha256),
+          qualities: violating.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -355,6 +368,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -406,6 +420,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: tampered.tiers.map((tier) => tier.sha256),
+          qualities: tampered.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -428,6 +443,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      qualities: lab.tiers.map((tier) => tier.quality),
       originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -497,6 +513,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -513,6 +530,41 @@ describe('buildLabIndex', () => {
     expect(result.statuses[0]?.generationId).toBe(GENERATION_ID);
   });
 
+  it('rejects a symlinked generation entry before reading its manifest', async () => {
+    // The entry carries a fully valid manifest — but from outside the
+    // configured output tree, so confinement must reject it before the
+    // loader accepts or stages a single byte.
+    const outside = join(tmpdir(), `pilot-outside-${Date.now()}`);
+    await mkdir(outside, { recursive: true });
+    const moved = join(outside, 'generation');
+    await rename(lab.generationDir, moved);
+    await symlink(moved, lab.generationDir);
+    const result = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'n',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(result.statuses[0]?.status).toBe('invalid-manifest');
+    expect(result.statuses[0]?.detail).toMatch(/escapes the output root/);
+    expect(Object.keys(result.index.entries)).toHaveLength(0);
+  });
+
   it('rejects a copied generation served under a different id', async () => {
     const renamed = 'd'.repeat(64);
     await cp(lab.generationDir, join(lab.outputRoot, 'generations', renamed), {
@@ -526,6 +578,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -550,6 +603,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      qualities: lab.tiers.map((tier) => tier.quality),
       originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -591,6 +645,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      qualities: lab.tiers.map((tier) => tier.quality),
       originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -626,10 +681,11 @@ describe('buildLabIndex', () => {
     // Same multiset, swapped positions: binding pins each hash to one
     // rung positionally, so these are conflicting verdicts. An
     // order-insensitive dedupe would silently drop the second.
+    const qualities = lab.tiers.map((tier) => tier.quality);
     const result = await buildLabIndex({
       acceptances: [
-        { ...base, outputHashes: hashes },
-        { ...base, outputHashes: [...hashes].reverse() },
+        { ...base, outputHashes: hashes, qualities },
+        { ...base, outputHashes: [...hashes].reverse(), qualities },
       ],
       bindings: lab.bindings,
       outputRoot: lab.outputRoot,
@@ -664,6 +720,7 @@ describe('lookupPilotTiers and selectPilotTier', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
           originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',

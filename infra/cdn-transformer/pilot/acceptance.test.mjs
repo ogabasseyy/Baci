@@ -1,10 +1,7 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import {
-  matchAcceptance,
-  parsePilotAcceptance,
-} from './acceptance.mjs';
+import test from 'node:test';
+import { matchAcceptance, parsePilotAcceptance } from './acceptance.mjs';
 
 const RECIPE = 'pilot-r1-0123456789abcdef';
 const SOURCE = 'b'.repeat(64);
@@ -30,6 +27,7 @@ function manifest(overrides = {}) {
     source: { sha256: SOURCE },
     tiers: tierHashes().map((sha, index) => ({
       format: index % 2 === 0 ? 'avif' : 'webp',
+      quality: 70,
       requestedWidth: [96, 192, 384][Math.floor(index / 2)],
       sha256: sha,
     })),
@@ -44,6 +42,7 @@ function acceptance(overrides = {}) {
     merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
     note: 'Text legible at 96/192/384; brand blue preserved; edges clean.',
     outputHashes: tierHashes(),
+    qualities: Array(6).fill(70),
     originalUrl: 'https://cdn.example.com/media/logo-1.png',
     recipeId: RECIPE,
     reviewedAt: '2026-10-01T21:00:00.000Z',
@@ -75,38 +74,63 @@ test('parsePilotAcceptance rejects malformed records strictly', () => {
     false
   );
   assert.equal(
+    parsePilotAcceptance(acceptance({ qualities: ['high'] })).ok,
+    false
+  );
+  assert.equal(parsePilotAcceptance(acceptance({ qualities: [] })).ok, false);
+  assert.equal(
     parsePilotAcceptance(acceptance({ note: 'x'.repeat(501) })).ok,
     false
   );
-  assert.equal(
-    parsePilotAcceptance(acceptance({ reviewer: '' })).ok,
-    false
-  );
+  assert.equal(parsePilotAcceptance(acceptance({ reviewer: '' })).ok, false);
   assert.equal(
     parsePilotAcceptance(acceptance({ originalUrl: 'not-a-url' })).ok,
     false
   );
   assert.equal(
-    parsePilotAcceptance(acceptance({ originalUrl: 'ftp://cdn.example.com/x.png' })).ok,
+    parsePilotAcceptance(
+      acceptance({ originalUrl: 'ftp://cdn.example.com/x.png' })
+    ).ok,
     false
   );
 });
 
 test('matchAcceptance binds every identity and output hash', () => {
-  assert.deepEqual(matchAcceptance({ acceptance: acceptance(), binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: manifest() }), {
-    ok: true,
-  });
+  assert.deepEqual(
+    matchAcceptance({
+      acceptance: acceptance(),
+      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      manifest: manifest(),
+    }),
+    {
+      ok: true,
+    }
+  );
 });
 
 test('matchAcceptance binds capped rungs positionally, not as a set', () => {
   const deduped = manifest();
   // Small sources share one file across requested tiers; the record still
   // lists one hash per tier position so each rung stays bound.
-  deduped.tiers = deduped.tiers.map((tier) => ({ ...tier, sha256: tierHashes()[0] }));
+  deduped.tiers = deduped.tiers.map((tier) => ({
+    ...tier,
+    sha256: tierHashes()[0],
+  }));
   const record = acceptance({ outputHashes: Array(6).fill(tierHashes()[0]) });
-  assert.deepEqual(matchAcceptance({ acceptance: record, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: deduped }), { ok: true });
+  assert.deepEqual(
+    matchAcceptance({
+      acceptance: record,
+      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      manifest: deduped,
+    }),
+    { ok: true }
+  );
   const short = acceptance({ outputHashes: [tierHashes()[0]] });
-  const result = matchAcceptance({ acceptance: short, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: deduped });
+  const result = matchAcceptance({
+    acceptance: short,
+    binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+    manifest: deduped,
+  });
   assert.equal(result.ok, false);
 });
 
@@ -118,18 +142,53 @@ test('matchAcceptance invalidates on any drift or rejection', () => {
   }));
   const cases = [
     ['rejected verdict', acceptance({ verdict: 'rejected' }), manifest()],
-    ['changed source', acceptance(), manifest({ source: { sha256: 'd'.repeat(64) } })],
+    [
+      'changed source',
+      acceptance(),
+      manifest({ source: { sha256: 'd'.repeat(64) } }),
+    ],
     ['changed recipe', acceptance(), manifest({ recipeId: 'pilot-r1-other' })],
-    ['changed merchant', acceptance(), manifest({ merchantId: 'de968340-de02-4aa8-95f9-9d5f7d2b1f20' })],
+    [
+      'changed merchant',
+      acceptance(),
+      manifest({ merchantId: 'de968340-de02-4aa8-95f9-9d5f7d2b1f20' }),
+    ],
     ['changed asset', acceptance(), manifest({ assetId: 'logo-2' })],
-    ['changed output bytes', acceptance({ outputHashes: ['e'.repeat(64)] }), manifest()],
+    [
+      'changed output bytes',
+      acceptance({ outputHashes: ['e'.repeat(64)] }),
+      manifest(),
+    ],
+    // Same hashes and bytes, different encode quality: the reviewed
+    // artifact changed, so the old acceptance must not activate.
+    [
+      'changed tier quality',
+      acceptance(),
+      manifest({
+        tiers: manifest().tiers.map((tier, index) =>
+          index === 0 ? { ...tier, quality: 65 } : tier
+        ),
+      }),
+    ],
     // Same hash set, wrong rungs: positional binding rejects the swap.
     ['swapped tier hashes', acceptance(), swapped],
-    ['reordered record hashes', acceptance({ outputHashes: [...tierHashes()].reverse() }), manifest()],
-    ['retargeted original URL', acceptance({ originalUrl: 'https://cdn.example.com/media/logo-2.png' }), manifest()],
+    [
+      'reordered record hashes',
+      acceptance({ outputHashes: [...tierHashes()].reverse() }),
+      manifest(),
+    ],
+    [
+      'retargeted original URL',
+      acceptance({ originalUrl: 'https://cdn.example.com/media/logo-2.png' }),
+      manifest(),
+    ],
   ];
   for (const [label, record, manifestValue] of cases) {
-    const result = matchAcceptance({ acceptance: record, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: manifestValue });
+    const result = matchAcceptance({
+      acceptance: record,
+      binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' },
+      manifest: manifestValue,
+    });
     assert.equal(result.ok, false, label);
     assert.ok(result.reason.length > 0, label);
   }

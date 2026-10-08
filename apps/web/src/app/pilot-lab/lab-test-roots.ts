@@ -78,6 +78,7 @@ export async function setupLabRoots(input: {
     generationId: string;
     record: Record<string, unknown>;
     tierHashes: string[];
+    tierQualities: number[];
   }> {
     const sourcePath = `${asset.assetId}.png`;
     await copyFile(
@@ -184,6 +185,7 @@ export async function setupLabRoots(input: {
         width: 2000,
       },
       tierHashes: tiers.map((tier) => tier.sha256),
+      tierQualities: tiers.map((tier) => tier.quality),
     };
   }
 
@@ -191,7 +193,8 @@ export async function setupLabRoots(input: {
   const acceptances: Record<string, unknown>[] = [];
   const generationIds: Record<string, string> = {};
   for (const asset of input.accepted) {
-    const { generationId, record, tierHashes } = await addAsset(asset);
+    const { generationId, record, tierHashes, tierQualities } =
+      await addAsset(asset);
     records.push(record);
     generationIds[asset.assetId] = generationId;
     acceptances.push({
@@ -200,6 +203,7 @@ export async function setupLabRoots(input: {
       merchantId: asset.merchantId,
       note: 'Lab review: fixture acceptance.',
       outputHashes: tierHashes,
+      qualities: tierQualities,
       originalUrl: asset.url,
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',

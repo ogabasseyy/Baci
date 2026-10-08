@@ -260,5 +260,16 @@ export function matchPilotAcceptance(input: {
   if (swapped !== -1) {
     return { ok: false, reason: 'encoded output bytes changed' };
   }
+  // Quality binding: the same bytes at a different encode quality are a
+  // different reviewed artifact. Positional like the hashes above.
+  if (acceptance.qualities.length !== manifest.tiers.length) {
+    return { ok: false, reason: 'tier quality changed' };
+  }
+  const qualityChanged = manifest.tiers.findIndex(
+    (tier, index) => tier.quality !== acceptance.qualities[index]
+  );
+  if (qualityChanged !== -1) {
+    return { ok: false, reason: 'tier quality changed' };
+  }
   return { ok: true };
 }

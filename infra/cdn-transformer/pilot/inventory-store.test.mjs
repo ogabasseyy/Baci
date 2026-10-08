@@ -268,7 +268,11 @@ test('releaseInventoryLock removes only its own owner token', async () => {
   await mkdir(lockDir);
   await write(
     join(lockDir, 'owner.json'),
-    JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), token: 'token-b' })
+    JSON.stringify({
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+      token: 'token-b',
+    })
   );
   // A stale victim releasing with its own (superseded) token must not
   // delete the replacement lock.
@@ -279,4 +283,43 @@ test('releaseInventoryLock removes only its own owner token', async () => {
   await assert.rejects(() => readdir(lockDir));
   // Releasing an already-gone lock is a no-op, never a crash.
   await releaseInventoryLock(lockDir, 'token-b');
+});
+
+test('acquireInventoryLock revalidates its claim after the owner write', async () => {
+  const { mkdir, rename, writeFile: write } = await import('node:fs/promises');
+  const { acquireInventoryLock, releaseInventoryLock } = await import(
+    './inventory-store.mjs'
+  );
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-revalidate-'));
+  const lockDir = join(dir, 'inventory.json.lock');
+  // A stealer that renames our fresh directory away between our owner
+  // write and our entry (partial owner observed past the grace): our
+  // bytes land in the deleted directory while the live path certifies
+  // the replacement. The intruder is already dead so the retry steals
+  // it back instead of wedging the test on the live-pid wait.
+  let fired = false;
+  const token = await acquireInventoryLock(lockDir, {
+    afterOwnerWrite: async () => {
+      if (fired) {
+        return;
+      }
+      fired = true;
+      await rename(lockDir, `${lockDir}.stolen`);
+      await mkdir(lockDir);
+      await write(
+        join(lockDir, 'owner.json'),
+        JSON.stringify({
+          pid: 999_999_999,
+          startedAt: new Date().toISOString(),
+          token: 'intruder',
+        })
+      );
+    },
+  });
+  // The returned claim must match the live owner record: entering on the
+  // displaced write's success would run two critical sections at once.
+  const live = JSON.parse(await readFile(join(lockDir, 'owner.json'), 'utf8'));
+  assert.equal(live.token, token);
+  assert.notEqual(token, 'intruder');
+  await releaseInventoryLock(lockDir, token);
 });

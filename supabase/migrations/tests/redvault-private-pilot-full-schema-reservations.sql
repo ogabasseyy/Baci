@@ -132,6 +132,44 @@ BEGIN
 END;
 $$;
 
+-- Variants enabled after activation must fail binding at order time:
+-- availability is advisory, the quote never reads has_variants, and
+-- the order RPC accepts a null variant, so the order guard rechecks
+-- the locked catalog row. Flip the flag as the session owner (the
+-- authenticated test role cannot update the catalog row).
+RESET ROLE;
+UPDATE public.products SET has_variants = true
+WHERE id = (SELECT product_id FROM redvault_private_pilot_case);
+SET LOCAL ROLE authenticated;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
+  variant_order jsonb;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  variant_order := jsonb_set(
+    fixture.order_input,
+    '{checkout_idempotency_key}', '"redvault-private-pilot-full-schema-variant-enabled"'
+  );
+  BEGIN
+    PERFORM * FROM public.create_storefront_redvault_order(
+      variant_order, fixture.quote,
+      public.redvault_private_pilot_test_route_proof(variant_order, fixture.quote)
+    );
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_order_binding_mismatch' THEN
+    RAISE EXCEPTION 'pilot_variant_enabled_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+END;
+$$;
+
+RESET ROLE;
+UPDATE public.products SET has_variants = false
+WHERE id = (SELECT product_id FROM redvault_private_pilot_case);
+
 RESET ROLE;
 
 DO $$

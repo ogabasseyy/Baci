@@ -32,6 +32,8 @@ reenable_tracking="$root/supabase/migrations/20261006190600_uba_redvault_pilot_r
 eligibility_guard="$root/supabase/migrations/20261006190700_uba_redvault_pilot_product_eligibility_guard.sql"
 atomic_publish="$root/supabase/migrations/20261006190800_uba_redvault_pilot_atomic_activation_publish.sql"
 require_active="$root/supabase/migrations/20261006190900_uba_redvault_pilot_require_active_product.sql"
+lock_before_activation="$root/supabase/migrations/20261006191000_uba_redvault_pilot_lock_product_before_activation.sql"
+order_variant_recheck="$root/supabase/migrations/20261006191100_uba_redvault_pilot_order_variant_recheck.sql"
 test_setup="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-setup.sql"
 test_staging="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-staging.sql"
 test_reservations="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-reservations.sql"
@@ -65,6 +67,6 @@ SQL
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey IMMEDIATE;\n'
   cat "$activation_lock"
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey DEFERRED;\n'
-  cat "$reserve_lock_order" "$savings_and_expiry" "$preserve_binding" "$preserved_shipment_savings" "$staging_passthrough" "$item_fulfillment" "$db_staging_mode" "$bound_product_immutable" "$reenable_tracking" "$eligibility_guard" "$atomic_publish" "$require_active"
+  cat "$reserve_lock_order" "$savings_and_expiry" "$preserve_binding" "$preserved_shipment_savings" "$staging_passthrough" "$item_fulfillment" "$db_staging_mode" "$bound_product_immutable" "$reenable_tracking" "$eligibility_guard" "$atomic_publish" "$require_active" "$lock_before_activation" "$order_variant_recheck"
   cat "$test_setup" "$test_staging" "$test_reservations" "$test_fulfillment" "$test_winddown"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

@@ -31,6 +31,8 @@ export async function runConcurrencyPilotCases({
     '20261006190700_uba_redvault_pilot_product_eligibility_guard.sql',
     '20261006190800_uba_redvault_pilot_atomic_activation_publish.sql',
     '20261006190900_uba_redvault_pilot_require_active_product.sql',
+    '20261006191000_uba_redvault_pilot_lock_product_before_activation.sql',
+    '20261006191100_uba_redvault_pilot_order_variant_recheck.sql',
   ]) {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }

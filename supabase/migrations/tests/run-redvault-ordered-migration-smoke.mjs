@@ -590,15 +590,13 @@ try {
       RAISE EXCEPTION 'pilot_expiry_predicate_not_aligned';
     END IF;
   END $$;`);
-  sql(
-    readFileSync(
-      resolve(
-        migrations,
-        '20261006190000_uba_redvault_pilot_preserve_binding_after_disable.sql'
-      ),
-      'utf8'
-    )
-  );
+  for (const part of [
+    '20261006190000_uba_redvault_pilot_preserve_binding_after_disable.sql',
+    '20261006190100_uba_redvault_pilot_preserved_binding_shipment_savings.sql',
+    '20261006190200_uba_redvault_pilot_disabled_policy_staging_passthrough.sql',
+  ]) {
+    sql(readFileSync(resolve(migrations, part), 'utf8'));
+  }
   sql(`DO $$ BEGIN
     UPDATE private.uba_redvault_live_pilot_policy
     SET product_id = '55555555-5555-4555-8555-555555555555',

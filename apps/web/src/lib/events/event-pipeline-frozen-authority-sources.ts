@@ -28,8 +28,11 @@ export const eventPipelineFrozenRoutes = {
   // plan-tier-authoritative entitlement additions.
   // Re-pinned for the origin/main merge combining this branch's REDVAULT
   // pilot validation gate with main's live related-product pricing (#3419).
+  // Re-pinned for derived pilot tax totals: the route now passes
+  // server-computed tax kobo into the pilot validator; notification and
+  // payment authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'e27b66b765eac839763afbdafd89624d69813ca4bdc3a3ddd5169066f020bb40',
+    '48d36a84bc10d6e7029b118c10e0a23e68e7b8ed5f98932f076ab5283f7dfc5e',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

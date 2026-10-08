@@ -7,6 +7,12 @@ import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
 
+function readStructuredContent(response: unknown): unknown {
+  return typeof response === 'object' && response !== null
+    ? Reflect.get(response, 'structuredContent')
+    : undefined;
+}
+
 function openOgabasseyUrl(url: string, pendingTab?: Window | null): boolean {
   if (window.openai?.openExternal) {
     window.openai.openExternal({ href: url });
@@ -65,17 +71,39 @@ export function useCartHandoff() {
       const existingQuantity =
         widgetState?.cart.find((item) => item.product.id === product.id)
           ?.quantity ?? 0;
-      const result = await window.openai.callTool(
+      const quantity = Math.min(existingQuantity + 1, 10);
+      let result = await window.openai.callTool(
         'update_ogabassey_guest_cart',
         {
           product_id: product.id,
-          quantity: Math.min(existingQuantity + 1, 10),
+          quantity,
           cart_token: widgetState?.cartToken,
         }
       );
       if (requestId !== handoffRequestId.current) {
         pendingTab?.close();
         return;
+      }
+      // A stale token (expired or evicted cart) retries once without the
+      // token so the server mints a fresh cart; the retry response replaces
+      // prior state through the same merge below. Other failures retry never.
+      if (
+        widgetState?.cartToken &&
+        parseCartToolOutput(readStructuredContent(result))?.cart_expired ===
+          true
+      ) {
+        result = await window.openai.callTool(
+          'update_ogabassey_guest_cart',
+          {
+            product_id: product.id,
+            quantity,
+            cart_token: undefined,
+          }
+        );
+        if (requestId !== handoffRequestId.current) {
+          pendingTab?.close();
+          return;
+        }
       }
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id);
@@ -90,11 +118,7 @@ export function useCartHandoff() {
       }
       pendingTab?.close();
 
-      const content = parseCartToolOutput(
-        typeof result === 'object' && result !== null
-          ? Reflect.get(result, 'structuredContent')
-          : undefined
-      );
+      const content = parseCartToolOutput(readStructuredContent(result));
       const cartUrl = content?.success === true ? content.cart_url : undefined;
       let validatedUrl: URL | undefined;
       try {
@@ -166,11 +190,36 @@ export function useCartHandoff() {
           cart_token: widgetState.cartToken,
         }
       );
-      const content = parseCartToolOutput(
-        typeof response === 'object' && response !== null
-          ? Reflect.get(response, 'structuredContent')
-          : undefined
-      );
+      const content = parseCartToolOutput(readStructuredContent(response));
+      if (content?.success === false && content.cart_expired === true) {
+        // The server cart is gone, so the removed line is gone with it: drop
+        // it locally, forget the dead token, and rebuild the handoff URL from
+        // the surviving lines. (Tokenless removals are rejected, so unlike
+        // adds this path cannot retry without the token.)
+        setWidgetState((previous) => {
+          const survivors = (previous?.cart ?? []).filter(
+            (item) => item.product.id !== productId
+          );
+          const review = new URL('https://ogabassey.com/cart');
+          if (survivors.length > 0)
+            review.searchParams.set(
+              'guest_cart',
+              JSON.stringify(
+                survivors.map((item) => ({
+                  product_id: item.product.id,
+                  quantity: item.quantity,
+                }))
+              )
+            );
+          return {
+            ...previous!,
+            cart: survivors,
+            cartUrl: survivors.length > 0 ? review.toString() : undefined,
+            cartToken: undefined,
+          };
+        });
+        return;
+      }
       const url = content?.cart_url ? new URL(content.cart_url) : null;
       const raw = url?.searchParams.get('guest_cart') ?? null;
       const remaining = raw === '[]' ? [] : parseHandoffLines(raw);
@@ -210,7 +259,13 @@ export function useCartHandoff() {
         url.password
       )
         return;
-      openOgabasseyUrl(url.toString());
+      // Legacy one-shot `?item_id=&qty=` handoffs replay the add on every
+      // open, so Review keeps only the idempotent `guest_cart` payload and
+      // otherwise opens the bare cart.
+      const guestCart = url.searchParams.get('guest_cart');
+      const review = new URL('https://ogabassey.com/cart');
+      if (guestCart) review.searchParams.set('guest_cart', guestCart);
+      openOgabasseyUrl(review.toString());
     } catch {
       setCartError('Could not open your guest cart. Please try again.');
     }

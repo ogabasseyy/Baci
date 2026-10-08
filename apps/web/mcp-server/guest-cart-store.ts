@@ -12,13 +12,35 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { guestCartLineSchema } from '../src/schemas/mcp-guest-cart';
+import { acquireWriterLock } from './guest-cart-writer-lock';
 
 const storedCartSchema = z.object({
   expires_at: z.number(),
   items: z.array(guestCartLineSchema).max(20),
 });
 export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
+export class GuestCartExpiredError extends Error {
+  override readonly name = 'GuestCartExpiredError';
+  constructor() {
+    super('Guest cart expired or was removed');
+  }
+}
 const queues = new Map<string, Promise<unknown>>();
+
+/** Runs an operation exclusively per key, chaining onto any in-flight work. */
+async function runExclusive<T>(
+  key: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = queues.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => undefined).then(operation);
+  queues.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (queues.get(key) === pending) queues.delete(key);
+  }
+}
 const TTL = 7 * 24 * 60 * 60 * 1000;
 // Crash temporaries (`<cart>.json.<uuid>.tmp`) share no pattern with cart
 // files and no queue key with live writers, so only sweep ones old enough
@@ -31,10 +53,38 @@ const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
 // and crash-temp cleanup below always runs.
 const SWEEP_INTERVAL_MS = 60 * 1000;
 let lastExpirySweepMs = 0;
+async function readStoredCart(file: string) {
+  let raw: string;
+  try {
+    raw = await readFile(file, 'utf8');
+  } catch (error) {
+    // A swept, evicted, or never-minted token is recoverable: the caller
+    // retries without the token. Other I/O failures stay generic.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
+      throw new GuestCartExpiredError();
+    throw error;
+  }
+  return storedCartSchema.parse(JSON.parse(raw));
+}
 
 /** Opaque guest capability, never an account identity. One writer process owns this directory. */
 export class GuestCartStore {
-  constructor(private readonly directory: string) {}
+  constructor(private readonly directory: string) {
+    acquireWriterLock(directory);
+  }
+
+  /** True when the token names a live, parseable, unexpired cart. */
+  async hasToken(token: string): Promise<boolean> {
+    if (!/^[a-f0-9]{64}$/.test(token)) return false;
+    try {
+      const stored = storedCartSchema.parse(
+        JSON.parse(await readFile(path.join(this.directory, `${token}.json`), 'utf8'))
+      );
+      return stored.expires_at > Date.now();
+    } catch {
+      return false;
+    }
+  }
 
   async update(
     token: string | undefined,
@@ -104,37 +154,57 @@ export class GuestCartStore {
             // the least-recently-written cart instead of failing. Idle carts
             // may be dropped under sustained pressure; active carts survive
             // because every write refreshes mtime.
-            const withMtime = await Promise.all(
-              cartFiles.map(async (entry) => {
-                try {
-                  const info = await stat(path.join(this.directory, entry));
-                  return { entry, mtimeMs: info.mtimeMs };
-                } catch {
-                  return { entry, mtimeMs: Number.POSITIVE_INFINITY };
-                }
-              })
+            const withMtime = (
+              await Promise.all(
+                cartFiles.map(async (entry) => {
+                  try {
+                    const info = await stat(path.join(this.directory, entry));
+                    return { entry, mtimeMs: info.mtimeMs };
+                  } catch {
+                    return null;
+                  }
+                })
+              )
+            ).filter(
+              (found): found is { entry: string; mtimeMs: number } =>
+                found !== null
             );
             withMtime.sort((a, b) => a.mtimeMs - b.mtimeMs);
             let evicted = false;
-            for (const { entry } of withMtime) {
+            for (const { entry, mtimeMs } of withMtime) {
               const candidate = path.join(this.directory, entry);
-              if (queues.has(candidate)) continue;
-              try {
-                await unlink(candidate);
+              // Join the cart's own queue so eviction runs strictly before
+              // or after any in-flight update instead of racing it, then
+              // re-check mtime: a preceding update refreshes it, so a newer
+              // file is skipped in favor of the next oldest.
+              const done = await runExclusive(candidate, async () => {
+                try {
+                  const info = await stat(candidate);
+                  if (info.mtimeMs > mtimeMs) return false;
+                  await unlink(candidate);
+                  return true;
+                } catch {
+                  return false;
+                }
+              });
+              if (done) {
                 evicted = true;
                 break;
-              } catch {
-                /* Already gone; try the next oldest. */
               }
             }
             if (!evicted) throw new Error('Guest cart capacity reached');
           }
         }
-        const stored = token
-          ? storedCartSchema.parse(JSON.parse(await readFile(file, 'utf8')))
-          : { expires_at: Date.now() + TTL, items: [] };
-        if (stored.expires_at <= Date.now())
-          throw new Error('Guest cart expired');
+        let stored: z.infer<typeof storedCartSchema>;
+        if (!token) {
+          stored = { expires_at: Date.now() + TTL, items: [] };
+        } else {
+          stored = await readStoredCart(file);
+          if (stored.expires_at <= Date.now()) {
+            await unlink(file).catch(() => undefined);
+            throw new GuestCartExpiredError();
+          }
+        }
         // Absolute quantities make a lost-response retry safe without incrementing twice.
         const items = [
           ...stored.items.filter((item) => item.product_id !== line.product_id),

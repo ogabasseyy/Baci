@@ -30,11 +30,12 @@ services:
       - MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts
     volumes:
       - mcp-guest-carts:/var/lib/baci/guest-carts
-    # Single writer only: guest-cart admission is enforced in-process, and
-    # `deploy.replicas` is honored only by `docker stack deploy` (plain
-    # `docker compose up` ignores it). Deploy via stack deploy and do not
-    # scale past 1 replica without a shared transactional store (see README
-    # "Guest cart").
+    # Single writer only: in-process queues serialize one replica, and an
+    # exclusive `.writer.lock` in the cart directory refuses a second writer
+    # process. `deploy.replicas` is honored only by `docker stack deploy`
+    # (plain `docker compose up` ignores it). Deploy via stack deploy and do
+    # not scale past 1 replica without a shared transactional store (see
+    # README "Guest cart").
     deploy:
       replicas: 1
     healthcheck:

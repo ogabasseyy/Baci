@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GuestCartStore } from './guest-cart-store';
+import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const directories: string[] = [];
@@ -231,17 +231,54 @@ it('evicts the least-recently-written cart at capacity', async () => {
   expect(remaining).toHaveLength(2000);
 });
 
-it('does not count unrelated files against guest cart capacity', async () => {
+it('refuses a second writer while a live lock is held', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-lock-live-'));
+  try {
+    await writeFile(
+      path.join(directory, '.writer.lock'),
+      JSON.stringify({ pid: 99999999, startedAt: new Date().toISOString() })
+    );
+    expect(() => new GuestCartStore(directory)).toThrow(
+      /Another MCP writer owns/
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('reports expired or missing tokens distinctly so the caller can recover', async () => {
   const { directory, instance } = await store();
-  await Promise.all(
-    Array.from({ length: 2000 }, (_, index) =>
-      writeFile(path.join(directory, `unrelated-${index}.tmp`), '')
+  const expiredToken = 'e'.repeat(64);
+  await writeFile(
+    path.join(directory, `${expiredToken}.json`),
+    JSON.stringify({ expires_at: 1, items: [] })
+  );
+  await expect(
+    instance.update(
+      expiredToken,
+      { product_id: id, quantity: 1 },
+      async () => {}
     )
-  );
-  const cart = await instance.update(
-    undefined,
-    { product_id: id, quantity: 1 },
-    async () => {}
-  );
-  expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+  await expect(
+    readFile(path.join(directory, `${expiredToken}.json`), 'utf8')
+  ).rejects.toThrow();
+  await expect(
+    instance.update(
+      '0'.repeat(64),
+      { product_id: id, quantity: 1 },
+      async () => {}
+    )
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
+});
+
+it('keeps corrupt carts on the generic failure path', async () => {
+  const { directory, instance } = await store();
+  const corruptToken = 'f'.repeat(64);
+  await writeFile(path.join(directory, `${corruptToken}.json`), 'not-json');
+  const failure = await instance
+    .update(corruptToken, { product_id: id, quantity: 1 }, async () => {})
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).not.toBeInstanceOf(GuestCartExpiredError);
 });

@@ -55,11 +55,13 @@ ngrok http 8787
 
 ### Public tool output contracts
 
-All nine public tools declare Zod object output schemas from
-`../src/schemas/mcp-tool-output.ts`. The installed MCP SDK converts these to
-JSON Schema in `tools/list` and validates non-error `structuredContent` before
-returning a tool result. Keep schemas aligned with the actual response branches,
-including empty results, unavailable lookups, and product-option handoffs.
+All nine public tools declare Zod object output schemas: the catalog, store,
+and cart-link tools from `../src/schemas/mcp-tool-output.ts`, and the guest
+cart tool from `../src/schemas/mcp-guest-cart.ts`. The installed MCP SDK
+converts these to JSON Schema in `tools/list` and validates non-error
+`structuredContent` before returning a tool result. Keep schemas aligned with
+the actual response branches, including empty results, unavailable lookups,
+and product-option handoffs.
 Never replace an unknown stock value with `true` or invent a delivery quote.
 
 The current SDK requires an object schema at the root, so response fields retain
@@ -178,6 +180,11 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `search_products` | Search products by name, price range |
 | `update_agentic_checkout_session` | Update items, shipping details, or fulfillment options on a signed Baci agentic checkout session |
 | `update_ucp_cart` | Replace UCP cart line items or fulfillment context |
+
+Rollout note: `prepare_storefront_cart_link` was renamed from `add_to_cart`;
+there is no compatibility alias. Callers with a cached `tools/list` entry or a
+hardcoded tool name must refresh tool discovery after upgrading, otherwise
+calls to the old name fail with method-not-found.
 
 ## Example Prompts
 
@@ -319,8 +326,14 @@ Guest carts expire after seven days. Only the changed line is revalidated on
 each call, so a stale line never blocks unrelated updates; the website
 re-checks stock at transfer. At capacity the store evicts the
 least-recently-written cart instead of failing, so one guest cannot
-permanently exhaust the shared pool. Multiple MCP writer processes
-require a shared transactional store before horizontal scaling.
+permanently exhaust the shared pool. A call with an expired, evicted, or
+unknown token returns `cart_expired: true` instead of a generic failure; the
+widget retries adds once without the token and recovers removals locally, so
+the shopper can keep shopping without starting over. Multiple MCP writer
+processes require a shared transactional store before horizontal scaling:
+the cart directory carries an exclusive `.writer.lock`, and a second writer
+refuses to start while the lock is held (a lock idle over 30 seconds is
+treated as a crashed holder and taken over).
 
 The website handoff contains only product IDs and quantities. The website reloads
 public merchant-scoped products and current availability, preserving existing cart

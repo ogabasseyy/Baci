@@ -6,7 +6,7 @@ import {
   mcpGuestCartOutputSchema,
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
-import { GuestCartStore } from './guest-cart-store';
+import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
 
 class VariantSelectionRequired extends Error {
   constructor(
@@ -104,6 +104,19 @@ export function registerGuestCartTool(
           },
         };
       } catch (error) {
+        // An expired, evicted, or unknown token is recoverable: the typed
+        // flag tells the widget to retry once without the stale token.
+        if (error instanceof GuestCartExpiredError) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'This guest cart expired or is no longer available. Retry without the cart token to start a new cart.',
+              },
+            ],
+            structuredContent: { success: false, cart_expired: true },
+          };
+        }
         if (error instanceof VariantSelectionRequired) {
           return {
             content: [

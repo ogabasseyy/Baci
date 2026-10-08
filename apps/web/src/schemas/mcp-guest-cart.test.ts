@@ -150,6 +150,14 @@ describe('mcpGuestCartOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('parses an expired-cart recovery flag', () => {
+    const result = mcpGuestCartOutputSchema.safeParse({
+      success: false,
+      cart_expired: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects invalid token, oversized items, datetime, and url fields', () => {
     const base = {
       success: true,

@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
@@ -152,6 +154,11 @@ function buildMcpServerEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     MCP_AGENTIC_CHECKOUT_BASE_URL: 'https://ogabassey.test',
+    // Single-writer semantics forbid sharing one cart directory, so each
+    // spawned test server gets a private directory unless overridden.
+    MCP_GUEST_CART_DIRECTORY:
+      overrides.MCP_GUEST_CART_DIRECTORY ??
+      mkdtempSync(join(tmpdir(), 'mcp-guest-carts-test-')),
     MCP_PORT: '0',
     NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
     OPENAI_AGENTIC_API_KEY: 'test-agentic-key',

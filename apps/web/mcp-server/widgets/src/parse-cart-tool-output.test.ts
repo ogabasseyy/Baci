@@ -17,6 +17,15 @@ describe('parseCartToolOutput', () => {
     });
   });
 
+  it('preserves the expired-cart recovery flag', () => {
+    expect(
+      parseCartToolOutput({ success: false, cart_expired: true })
+    ).toEqual({ success: false, cart_expired: true });
+    expect(parseCartToolOutput({ success: false, cart_expired: 1 })).toEqual({
+      success: false,
+    });
+  });
+
   it('rejects non-record and non-boolean payloads', () => {
     for (const value of [null, undefined, 'bad', 42, [], { success: 'yes' }])
       expect(parseCartToolOutput(value)).toBeUndefined();

@@ -49,6 +49,7 @@ export const mcpGuestCartOutputSchema = z
     expires_at: z.string().datetime().optional(),
     cart_url: z.string().url().optional(),
     requires_variant_selection: z.literal(true).optional(),
+    cart_expired: z.literal(true).optional(),
     product_id: z.string().uuid().optional(),
     product_url: z.string().url().optional(),
   })

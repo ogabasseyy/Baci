@@ -62,3 +62,17 @@ it('passes variant selection through instead of returning a generic failure', as
     expect(result.structuredContent).toMatchObject({ success: false, requires_variant_selection: true, product_id: id, product_url: 'https://ogabassey.com/products/slug' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+it('returns a recoverable flag when the token names a dead cart', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-expired-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockClear();
+    const result = await handler?.({ product_id: id, quantity: 1, cart_token: '0'.repeat(64) }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toEqual({ success: false, cart_expired: true });
+    expect(validate).not.toHaveBeenCalled();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

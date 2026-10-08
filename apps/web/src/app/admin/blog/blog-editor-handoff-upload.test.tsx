@@ -144,6 +144,63 @@ it('keeps an imported image and deletes the stale upload when an older featured 
   );
 });
 
+it('deletes a settled session upload when an accepted import replaces it', async () => {
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        url: 'https://cdn.example.com/media/platform/blog/settled.webp',
+        width: 1200,
+        height: 675,
+        variants: {
+          landscape_16x9:
+            'https://cdn.example.com/media/platform/blog/settled/landscape_16x9.webp',
+        },
+      }),
+      { status: 200 }
+    )
+  );
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(JSON.stringify({ success: true }), { status: 200 })
+  );
+  vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
+    this: HTMLInputElement
+  ) {
+    fireEvent.change(this, {
+      target: { files: [new File(['image'], 'cover.png')] },
+    });
+  });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<BlogEditorClient mode="create" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
+  await waitFor(() =>
+    expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+      'https://cdn.example.com/media/platform/blog/settled.webp'
+    )
+  );
+  importHandoff();
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
+  expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+    'https://cdn.example.com/cover.webp'
+  );
+  // The settled upload is no longer pending, so invalidation alone
+  // would leave its persisted objects behind: the import deletes the
+  // replaced session upload instead of leaking it.
+  await waitFor(() =>
+    expect(fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/admin/blog/upload',
+      expect.objectContaining({
+        body: JSON.stringify({
+          path: 'platform/blog/settled.webp',
+          variantPaths: ['platform/blog/settled/landscape_16x9.webp'],
+        }),
+        method: 'DELETE',
+      })
+    )
+  );
+});
+
 it('keeps a manual cover when its URL edit invalidates a pending upload', async () => {
   // Upload C pending; the reviewer instead types URL B with alt for B.
   // The manual edit takes over: C is discarded and cleaned up when it

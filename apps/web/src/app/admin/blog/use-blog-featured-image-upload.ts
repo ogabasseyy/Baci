@@ -38,6 +38,7 @@ export function useBlogFeaturedImageUpload({
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);
   const altEditGenerationRef = useRef(0);
+  const settledUploadsRef = useRef<UploadResult[]>([]);
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;
@@ -83,6 +84,7 @@ export function useBlogFeaturedImageUpload({
         await cleanupInvalidatedUpload(result);
         return;
       }
+      settledUploadsRef.current.push(result);
       setForm((current) => {
         // Replacing the cover orphans the alt text just like a URL edit;
         // a first upload or same-URL re-upload keeps both text and flag.
@@ -127,7 +129,51 @@ export function useBlogFeaturedImageUpload({
     }
   };
 
+  const cleanupSettledSessionUploads = (
+    draft: Pick<
+      PlatformAdminBlogFormState,
+      'featured_image_url' | 'featured_image_variants'
+    >
+  ) => {
+    // Settled uploads are past invalidation: when an accepted import
+    // replaces the form, every tracked session result is unreferenced
+    // (saves navigate away, so nothing persisted them) — except URLs
+    // the incoming draft itself reuses, which must be kept.
+    const tracked = settledUploadsRef.current;
+    settledUploadsRef.current = [];
+    if (tracked.length === 0) return;
+    const keepUrls = new Set(
+      [
+        draft.featured_image_url,
+        ...Object.values(draft.featured_image_variants),
+      ].filter((url): url is string => typeof url === 'string')
+    );
+    void (async () => {
+      for (const result of tracked) {
+        const paths = [result.url, ...Object.values(result.variants ?? {})]
+          .filter((url) => !keepUrls.has(url))
+          .map((url) =>
+            extractManagedBlogStoragePath(url, { kind: 'platform' })
+          )
+          .filter((path): path is string => path !== null);
+        if (paths.length === 0) continue;
+        const [path, ...variantPaths] = paths;
+        try {
+          await deleteUpload({ path, variantPaths });
+        } catch (error) {
+          toast({
+            title: 'Could not remove replaced upload',
+            description:
+              error instanceof Error ? error.message : 'Unknown error',
+            variant: 'destructive',
+          });
+        }
+      }
+    })();
+  };
+
   return {
+    cleanupSettledSessionUploads,
     invalidateFeaturedUploads,
     noteAltEdit,
     uploadFeatured,

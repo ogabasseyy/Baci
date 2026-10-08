@@ -42,6 +42,53 @@ const DISPLAY_UTILITIES = new Set([
 const TEXT_COLOR_PATTERN =
   /^text-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/;
 
+// Nontransparent theme color utilities: the shadcn palette from
+// tailwind.config.mjs plus the storefront tokens from the globals.css
+// @theme inline block. All resolve to solid colors (alpha comes only
+// from slash modifiers, handled below), so any of them overrides
+// inherited transparency. Keep in sync when the theme gains colors.
+const SEMANTIC_TEXT_COLOR_NAMES = new Set([
+  'foreground',
+  'background',
+  'border',
+  'input',
+  'ring',
+  'primary',
+  'primary-foreground',
+  'secondary',
+  'secondary-foreground',
+  'destructive',
+  'destructive-foreground',
+  'muted',
+  'muted-foreground',
+  'accent',
+  'accent-foreground',
+  'popover',
+  'popover-foreground',
+  'card',
+  'card-foreground',
+  'store-primary',
+  'store-primary-text',
+  'store-on-primary',
+  'store-secondary',
+  'store-secondary-text',
+  'store-accent',
+  'store-accent-text',
+  'store-background',
+  'store-background-text',
+  'store-foreground',
+  'store-border',
+  'store-rating',
+  'store-option-secondary',
+]);
+
+function isThemeTextColor(color: string): boolean {
+  return (
+    color.startsWith('text-') &&
+    SEMANTIC_TEXT_COLOR_NAMES.has(color.slice('text-'.length))
+  );
+}
+
 const RESPONSIVE_SIZE_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
 
@@ -70,7 +117,9 @@ function isOpaqueColorUtility(utility: string): boolean {
   const modifierIndex = utility.lastIndexOf('/');
   const color =
     modifierIndex === -1 ? utility : utility.slice(0, modifierIndex);
-  if (!TEXT_COLOR_PATTERN.test(color)) return false;
+  if (!TEXT_COLOR_PATTERN.test(color) && !isThemeTextColor(color)) {
+    return false;
+  }
   if (modifierIndex === -1) return true;
   // A zero-alpha modifier (text-black/0) renders no pixels: it is not
   // an opaque override. Arbitrary alphas cannot be evaluated, so

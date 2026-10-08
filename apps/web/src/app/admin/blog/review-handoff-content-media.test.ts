@@ -78,6 +78,17 @@ describe('validateImportedContent media', () => {
     ).toContain('Visible body');
   });
 
+  it.each([
+    '<p>Body</p><script>const draft = \'<img src="http://example.com/draft.png">\'</script>',
+    '<p>Body</p><style>/* <img src="http://example.com/draft.png"> */</style>',
+    '<p>Body</p><script>const draft = \'<img src="http://example.com/draft.png">\'',
+  ])('ignores media-like text inside raw-text elements: %s', (body) => {
+    // Raw-text contents are never parsed as elements, and the
+    // sanitizer strips the blocks from the stored article, so the
+    // draft URL inside must not reject the handoff.
+    expect(validateImportedContent(body)).toContain('Body');
+  });
+
   it('ignores media-like text inside another element quoted attribute', () => {
     // The <img> text is the div's title, not an element: its HTTP URL
     // must not reject the handoff.
@@ -169,6 +180,15 @@ describe('validateImportedContent media', () => {
         '<div class="text-transparent"><p class="text-black">Readable</p></div>'
       )
     ).toContain('Readable');
+  });
+
+  it.each([
+    '<div class="text-transparent"><p class="text-foreground">Readable</p></div>',
+    '<div class="text-transparent"><p class="text-muted-foreground">Readable</p></div>',
+  ])('counts semantic theme text inside a transparent ancestor as readable: %s', (body) => {
+    // Theme color utilities from the app palette override inherited
+    // transparency exactly like palette colors do.
+    expect(validateImportedContent(body)).toContain('Readable');
   });
 
   it('disregards a zero-height image without any overflow rule', () => {

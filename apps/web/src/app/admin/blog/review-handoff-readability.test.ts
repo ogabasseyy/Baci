@@ -16,6 +16,7 @@ describe('hasReadableContent', () => {
     '<div class="h-0 overflow-hidden md:h-auto">Only body</div>',
     '<div class="text-transparent"><p class="text-black/50">Readable</p></div>',
     '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
+    '<div class="text-transparent"><p class="text-foreground">Readable</p></div>',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });

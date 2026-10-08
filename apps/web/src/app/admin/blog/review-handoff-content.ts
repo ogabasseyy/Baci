@@ -3,11 +3,13 @@ import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { matchMediaElements } from './review-handoff-media-elements';
+import { isNeverMatchingMediaQuery } from './review-handoff-media-query';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripLeadingNonRenderingText } from './strip-leading-non-rendering-text';
+import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 
@@ -119,8 +121,11 @@ function normalizeContent(
     // GFM bare-URL autolinks are the same trap: rendering adds an <a> the
     // text comparison cannot see, so the stored copy must be the rendered
     // output or the published page loses a link the reviewer saw.
+    // Count, not presence: raw input may already hold an anchor while
+    // rendering adds another for a bare URL on the same line.
+    const countAnchors = (html: string) => html.match(/<a[\s>]/gi)?.length ?? 0;
     const renderedIntroducesLink =
-      /<a[\s>]/i.test(rendered) && !/<a[\s>]/i.test(rawContent);
+      countAnchors(rendered) > countAnchors(rawContent);
     if (
       !/<pre[\s>]/i.test(rendered) &&
       !renderedIntroducesLink &&
@@ -155,20 +160,11 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   'image/x-icon',
 ]);
 
-function isAlwaysFalseMediaQuery(value: string): boolean {
-  // `not all` never matches any device, so the source can never be
-  // selected. Every other query needs a viewport or device the
-  // validator has not — including `not <type>` negations, which
-  // match other devices — so only this exact shape is provably
-  // inapplicable.
-  return value.trim().toLowerCase().replace(/\s+/g, ' ') === 'not all';
-}
-
 function isApplicableSource(tag: string): boolean {
   // Browsers skip sources with unsupported types. In picture context
   // only supported image MIME types are meaningful; anything else
   // (or an empty type) contributes no candidate. A provably
-  // non-matching media query skips the same way; any other media
+  // never-matching media value skips the same way; any other media
   // value is assumed applicable, since matching it requires a
   // viewport the validator has not.
   let applicable = true;
@@ -177,7 +173,7 @@ function isApplicableSource(tag: string): boolean {
       const essence = value.split(';')[0].trim().toLowerCase();
       if (!SUPPORTED_IMAGE_MIME_TYPES.has(essence)) applicable = false;
     } else if (name === 'media') {
-      if (isAlwaysFalseMediaQuery(value)) applicable = false;
+      if (isNeverMatchingMediaQuery(value)) applicable = false;
     }
   }
   return applicable;
@@ -193,7 +189,7 @@ function hasBrokenMediaTag(html: string): boolean {
   // picture sources, so judging it alone would reject valid responsive
   // markup. Standalone images form singleton groups under the same
   // rule; pictures without media elements are inert, not broken.
-  const withoutComments = stripHtmlComments(html);
+  const withoutComments = stripRawTextBlocks(stripHtmlComments(html));
   const groups: MediaGroup[] = [];
   const pictureStack: MediaGroup[] = [];
   for (const match of matchMediaElements(withoutComments)) {

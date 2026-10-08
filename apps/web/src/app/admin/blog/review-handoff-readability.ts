@@ -3,6 +3,7 @@ import { showingMarkers } from './review-handoff-showing-markers';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
+import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
 function isZeroSizedImage(tag: string): boolean {
   // A zero width or height renders no pixels. Only bare zeros count: the
@@ -263,7 +264,7 @@ export function hasReadableContent(content: string): boolean {
   // (glyph-only: images under transparent text still count). Comments render
   // nothing, so strip them before matching: a commented-out <img> must
   // neither satisfy readability itself nor donate a hidden ancestor.
-  const withoutComments = stripHtmlComments(content);
+  const withoutComments = stripRawTextBlocks(stripHtmlComments(content));
   for (const match of matchMediaElements(withoutComments)) {
     if (!/^<img\b/i.test(match[0])) continue;
     const tag = match[0];

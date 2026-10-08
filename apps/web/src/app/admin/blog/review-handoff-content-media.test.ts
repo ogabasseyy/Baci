@@ -28,6 +28,7 @@ describe('validateImportedContent media', () => {
     '<div class="hidden"><img src="https://cdn.example.com/a.png"></div>',
     '<span class="invisible"><p><img src="https://cdn.example.com/a.png"></p></span>',
     '<div class="max-h-0 overflow-hidden"><img src="https://cdn.example.com/a.png"></div>',
+    '<div class="h-0 overflow-hidden"><img src="https://cdn.example.com/a.png"></div>',
   ])('disregards images inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -41,6 +42,7 @@ describe('validateImportedContent media', () => {
     '<p class="text-transparent">Only body</p>',
     '<div class="sr-only">Only body</div>',
     '<div class="max-h-0 overflow-hidden">Only body</div>',
+    '<div class="h-0 overflow-hidden">Only body</div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -80,6 +82,7 @@ describe('validateImportedContent media', () => {
 
   it.each([
     '<div class="max-h-0">Only body</div>',
+    '<div class="h-0">Only body</div>',
     '<div class="overflow-hidden">Only body</div>',
   ])('counts partial clip utilities without their partner as readable: %s', (body) => {
     // max-h-0 alone does not clip (content overflows visibly) and

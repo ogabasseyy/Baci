@@ -42,13 +42,17 @@ function tagHasHidingClass(tag: string, tokens: ReadonlySet<string>): boolean {
 }
 
 function hasClippedZeroHeightClass(tag: string): boolean {
-  // max-h-0 caps the box at zero height but content still overflows
-  // visibly; overflow-hidden clips but sizes normally. Only the pair
-  // hides, so each utility alone must keep matching as visible.
+  // max-h-0 and h-0 cap the box at zero height but content still
+  // overflows visibly; overflow-hidden clips but sizes normally. Only
+  // the pair hides, so each utility alone must keep matching as
+  // visible.
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
-    if (classes.includes('max-h-0') && classes.includes('overflow-hidden')) {
+    if (
+      (classes.includes('max-h-0') || classes.includes('h-0')) &&
+      classes.includes('overflow-hidden')
+    ) {
       return true;
     }
   }

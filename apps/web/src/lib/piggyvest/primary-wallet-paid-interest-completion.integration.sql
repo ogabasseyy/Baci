@@ -54,7 +54,7 @@ SELECT pg_temp.goal_id(number),'00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000002','active',130,100 FROM generate_series(11,19) number;
 INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
 SELECT intent.integration_id,pg_temp.goal_id(number),intent.id,'interest-goal-'||number,true
-FROM piggyvest_primary.onboarding_intents intent CROSS JOIN generate_series(11,18) number;
+FROM piggyvest_primary.onboarding_intents intent CROSS JOIN generate_series(11,18) number WHERE intent.customer_id='00000000-0000-4000-8000-000000000002';
 INSERT INTO piggyvest_savings_ledger.bindings(goal_id,integration_id,merchant_id,customer_id,authorized_login,enabled)
 SELECT pg_temp.goal_id(number),CASE WHEN number=15 THEN '10000000-0000-4000-8000-000000000002'::uuid
   ELSE '10000000-0000-4000-8000-000000000001'::uuid END,
@@ -63,7 +63,7 @@ FROM generate_series(11,19) number;
 INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,target_amount,current_amount)
 VALUES(pg_temp.goal_id(20),'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',130,130);
 INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
-SELECT integration_id,pg_temp.goal_id(20),id,'backfill-principal-goal',true FROM piggyvest_primary.onboarding_intents;
+SELECT integration_id,pg_temp.goal_id(20),id,'backfill-principal-goal',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
 
 \if :{?without_primary_completion}
 \else

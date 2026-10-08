@@ -197,4 +197,36 @@ describe('useCheckoutRedvaultAvailability', () => {
       undefined,
     ]);
   });
+
+  it('reuses a caller-provided session instead of mounting a second one', () => {
+    const cartItems = [
+      { id: '11111111-1111-4111-8111-111111111111', quantity: 1 },
+    ];
+    const { result } = renderHook(() =>
+      useCheckoutRedvaultAvailability({
+        cartItems,
+        merchantId: 'merchant',
+        merchantSlug: 'store',
+        userId: 'customer',
+        customerSession: {
+          accountId: 'account-9',
+          isAuthenticated: true,
+          revision: 7,
+          status: 'authenticated',
+          waitForResolvedAuthenticated,
+        },
+      })
+    );
+
+    expect(mockUseCustomerSession).toHaveBeenCalledWith(undefined);
+    expect(mockUseAvailability).toHaveBeenCalledWith(
+      'merchant',
+      '11111111-1111-4111-8111-111111111111',
+      'customer:authenticated:7:11111111-1111-4111-8111-111111111111:1:',
+      'customer:account-9:11111111-1111-4111-8111-111111111111:1:'
+    );
+    expect(result.current.waitForResolvedAuthenticated).toBe(
+      waitForResolvedAuthenticated
+    );
+  });
 });

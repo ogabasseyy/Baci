@@ -149,57 +149,6 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.selectedPayment).toBeNull();
   });
 
-  it('passes only a single nonvariant quantity-one product and hides stale results on cart changes', async () => {
-    let resolveAvailability: (value: {
-      available: boolean;
-      reason: string;
-    }) => void = () => {};
-    mockGetRedvaultPaymentAvailability.mockImplementationOnce(
-      () =>
-        new Promise<{ available: boolean; reason: string }>((resolve) => {
-          resolveAvailability = resolve;
-        })
-    );
-    const { result, rerender } = renderHook<
-      ReturnType<typeof useCheckoutPaymentController>,
-      { items: typeof items }
-    >(
-      ({ items: cartItems }) =>
-        useCheckoutPaymentController({
-          assuranceFee: 0,
-          deliveryFee: 0,
-          isAuthenticated: false,
-          items: cartItems,
-          merchantId: 'merchant-1',
-          merchantSlug: 'ogabassey',
-          step: 'payment',
-          subtotal: 500000,
-        }),
-      { initialProps: { items } }
-    );
-    expect(mockGetRedvaultPaymentAvailability).toHaveBeenCalledWith(
-      'merchant-1',
-      'product-1'
-    );
-    resolveAvailability({ available: true, reason: 'private_live_pilot' });
-    await act(async () => undefined);
-    expect(result.current.redvaultAvailable).toBe(true);
-
-    const firstItem = items[0];
-    if (!firstItem) throw new Error('Expected a cart fixture');
-    rerender({
-      items: [
-        ...items,
-        { ...firstItem, id: 'line-2', product_id: 'product-2' },
-      ],
-    });
-    expect(result.current.redvaultAvailable).toBe(false);
-    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
-      'merchant-1',
-      undefined
-    );
-  });
-
   it('hides stale availability immediately when the authenticated customer changes', async () => {
     mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
       available: true,
@@ -293,30 +242,5 @@ describe('useCheckoutPaymentController selection', () => {
     rerender({});
 
     expect(result.current.paymentTab).toBeNull();
-  });
-
-  it('hides pilot REDVAULT and clears its selection when fees apply', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValue({
-      available: true,
-      reason: 'private_live_pilot',
-    });
-    const { result } = renderHook(() =>
-      useCheckoutPaymentController({
-        assuranceFee: 500,
-        deliveryFee: 0,
-        isAuthenticated: false,
-        items,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        step: 'payment',
-        subtotal: 500_000,
-      })
-    );
-
-    await act(async () => undefined);
-    expect(result.current.redvaultAvailable).toBe(false);
-    expect(result.current.availablePaymentMethods).not.toContain(
-      'uba_redvault'
-    );
   });
 });

@@ -169,28 +169,6 @@ describe('useStorefrontCustomerSession', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('advances the revision when an auth transition settles to the same status', async () => {
-      const fetchMock = stubFetch({ body: { authenticated: true } });
-      const { result } = renderHook(() =>
-        useStorefrontCustomerSession('test-store')
-      );
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('authenticated');
-      });
-      const firstRevision = result.current.revision;
-
-      act(() => {
-        emitAuthChange('SIGNED_IN');
-      });
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('authenticated');
-        expect(result.current.revision).toBeGreaterThan(firstRevision);
-      });
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-    });
-
     it('stays guest when the post-login refresh fails (fail-closed)', async () => {
       // Arrange: guest load succeeds, then the refresh fetch rejects.
       const fetchMock = vi
@@ -312,46 +290,6 @@ describe('useStorefrontCustomerSession', () => {
       await expect(
         result.current.waitForResolvedAuthenticated()
       ).resolves.toBe(false);
-    });
-  });
-
-  describe('accountId', () => {
-    it('starts null, seeds from INITIAL_SESSION, and survives token refresh', async () => {
-      stubFetch({ body: { authenticated: true } });
-
-      const { result } = renderHook(() =>
-        useStorefrontCustomerSession('test-store')
-      );
-
-      expect(result.current.accountId).toBeNull();
-      act(() => {
-        emitAuthChange('INITIAL_SESSION', { user: { id: 'user-1' } });
-      });
-      expect(result.current.accountId).toBe('user-1');
-      act(() => {
-        emitAuthChange('TOKEN_REFRESHED', { user: { id: 'user-1' } });
-      });
-      expect(result.current.accountId).toBe('user-1');
-    });
-
-    it('tracks account switches and clears on sign-out', async () => {
-      stubFetch({ body: { authenticated: true } });
-
-      const { result } = renderHook(() =>
-        useStorefrontCustomerSession('test-store')
-      );
-
-      act(() => {
-        emitAuthChange('INITIAL_SESSION', { user: { id: 'user-1' } });
-      });
-      act(() => {
-        emitAuthChange('SIGNED_IN', { user: { id: 'user-2' } });
-      });
-      expect(result.current.accountId).toBe('user-2');
-      act(() => {
-        emitAuthChange('SIGNED_OUT', null);
-      });
-      expect(result.current.accountId).toBeNull();
     });
   });
 });

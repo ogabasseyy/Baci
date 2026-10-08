@@ -1044,6 +1044,10 @@ export async function POST(request: NextRequest) {
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)
       : null;
+    // Latched once alongside the admission check below: the pilot gates
+    // must keep using this request's verdict even if the short expiry
+    // window ends mid-initialization.
+    let redvaultLivePilotInitialize = false;
     if (redvaultRequested) {
       if (data.gateway && data.gateway !== 'paystack') {
         return createErrorResponse(
@@ -1067,6 +1071,8 @@ export async function POST(request: NextRequest) {
           409
         );
       }
+      redvaultLivePilotInitialize =
+        availability.reason === 'private_live_pilot';
       const pilotAuthRejection = rejectUnauthorizedRedvaultLivePilot({
         reason: availability.reason,
         userId: redvaultCustomerAuth?.user?.id,
@@ -1196,6 +1202,7 @@ export async function POST(request: NextRequest) {
     const pilotSnapshotRejection = await rejectInvalidRedvaultLivePilotSnapshot(
       {
         redvaultRequested,
+        isLivePilot: redvaultLivePilotInitialize,
         client: paymentDataClient,
         orderId: data.order_id,
         userId: redvaultCustomerAuth?.user?.id,
@@ -1302,6 +1309,7 @@ export async function POST(request: NextRequest) {
 
     const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
       redvaultRequested,
+      isLivePilot: redvaultLivePilotInitialize,
       walletAmountUsed,
       savingsAmountUsed,
     });
@@ -1391,7 +1399,10 @@ export async function POST(request: NextRequest) {
         fallbackClient,
         merchantId,
         orderId: data.order_id,
-        preserveAttempts: preserveRedvaultLivePilotAttempts(redvaultRequested),
+        preserveAttempts: preserveRedvaultLivePilotAttempts({
+          redvaultRequested,
+          isLivePilot: redvaultLivePilotInitialize,
+        }),
         redirectUrl,
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });

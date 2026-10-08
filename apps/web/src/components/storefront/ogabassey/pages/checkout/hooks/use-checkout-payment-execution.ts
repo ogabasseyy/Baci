@@ -115,6 +115,7 @@ export function useCheckoutPaymentExecution({
       merchantId: identity.merchantId,
       merchantSlug: identity.merchantSlug,
       userId: form.user?.id,
+      customerSession,
       pilotFeeBlockers: {
         hasAssurance: cart.checkoutCart.some(
           (item) => item.hasAssurance === true

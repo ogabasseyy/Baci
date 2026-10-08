@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gateMocks = vi.hoisted(() => ({
   getRedvaultCallbackUrl: vi.fn(),
-  getRedvaultPaymentAvailability: vi.fn(),
   verifyRedvaultLivePilotFunding: vi.fn(),
   verifyRedvaultLivePilotSnapshot: vi.fn(),
   pilotUserId: 'pilot-user',
@@ -13,9 +12,6 @@ vi.mock('@/lib/checkout/redvault-callback-url', () => ({
 }));
 vi.mock('@/lib/checkout/redvault-live-pilot', () => ({
   REDVAULT_PILOT_USER_ID: gateMocks.pilotUserId,
-}));
-vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
-  getRedvaultPaymentAvailability: gateMocks.getRedvaultPaymentAvailability,
 }));
 vi.mock('@/lib/checkout/redvault-live-pilot-verification', () => ({
   verifyRedvaultLivePilotFunding: gateMocks.verifyRedvaultLivePilotFunding,
@@ -34,13 +30,8 @@ describe('redvault live pilot initialize gate', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     gateMocks.getRedvaultCallbackUrl.mockReset();
-    gateMocks.getRedvaultPaymentAvailability.mockReset();
     gateMocks.verifyRedvaultLivePilotFunding.mockReset();
     gateMocks.verifyRedvaultLivePilotSnapshot.mockReset();
-    gateMocks.getRedvaultPaymentAvailability.mockReturnValue({
-      available: true,
-      reason: 'private_live_pilot',
-    });
   });
 
   it('rejects a non-pilot user during the live pilot', () => {
@@ -73,19 +64,17 @@ describe('redvault live pilot initialize gate', () => {
     await expect(
       rejectInvalidRedvaultLivePilotSnapshot({
         redvaultRequested: false,
+        isLivePilot: true,
         client: {} as never,
         orderId: 'order',
         userId: 'pilot-user',
         merchantId: 'merchant',
       })
     ).resolves.toBeNull();
-    gateMocks.getRedvaultPaymentAvailability.mockReturnValue({
-      available: true,
-      reason: 'staging_test_mode',
-    });
     await expect(
       rejectInvalidRedvaultLivePilotSnapshot({
         redvaultRequested: true,
+        isLivePilot: false,
         client: {} as never,
         orderId: 'order',
         userId: 'pilot-user',
@@ -110,6 +99,7 @@ describe('redvault live pilot initialize gate', () => {
     });
     const input = {
       redvaultRequested: true,
+      isLivePilot: true,
       client: {} as never,
       orderId: 'order',
       userId: 'pilot-user',
@@ -142,6 +132,7 @@ describe('redvault live pilot initialize gate', () => {
     });
     const input = {
       redvaultRequested: true,
+      isLivePilot: true,
       walletAmountUsed: 0,
       savingsAmountUsed: 0,
     };
@@ -152,6 +143,9 @@ describe('redvault live pilot initialize gate', () => {
         ...input,
         redvaultRequested: false,
       })
+    ).toBeNull();
+    expect(
+      rejectInvalidRedvaultLivePilotFunding({ ...input, isLivePilot: false })
     ).toBeNull();
     expect(gateMocks.verifyRedvaultLivePilotFunding).toHaveBeenCalledWith({
       walletAmountUsed: 0,
@@ -186,12 +180,23 @@ describe('redvault live pilot initialize gate', () => {
   });
 
   it('preserves attempts only for live-pilot REDVAULT initializations', () => {
-    expect(preserveRedvaultLivePilotAttempts(true)).toBe(true);
-    expect(preserveRedvaultLivePilotAttempts(false)).toBe(false);
-    gateMocks.getRedvaultPaymentAvailability.mockReturnValue({
-      available: true,
-      reason: 'staging_test_mode',
-    });
-    expect(preserveRedvaultLivePilotAttempts(true)).toBe(false);
+    expect(
+      preserveRedvaultLivePilotAttempts({
+        redvaultRequested: true,
+        isLivePilot: true,
+      })
+    ).toBe(true);
+    expect(
+      preserveRedvaultLivePilotAttempts({
+        redvaultRequested: false,
+        isLivePilot: true,
+      })
+    ).toBe(false);
+    expect(
+      preserveRedvaultLivePilotAttempts({
+        redvaultRequested: true,
+        isLivePilot: false,
+      })
+    ).toBe(false);
   });
 });

@@ -1,7 +1,10 @@
 'use client';
 
 import { useRedvaultPaymentAvailability } from './use-redvault-payment-availability';
-import { useStorefrontCustomerSession } from './use-storefront-customer-session';
+import {
+  type StorefrontCustomerSession,
+  useStorefrontCustomerSession,
+} from './use-storefront-customer-session';
 
 type CheckoutCartItem = {
   id: string;
@@ -15,6 +18,7 @@ export function useCheckoutRedvaultAvailability({
   merchantSlug,
   userId,
   pilotFeeBlockers,
+  customerSession,
 }: {
   cartItems: readonly CheckoutCartItem[];
   merchantId?: string | null;
@@ -25,8 +29,15 @@ export function useCheckoutRedvaultAvailability({
     shippingFee: number;
     giftWrappingCost: number;
   };
+  // Callers that already resolve the storefront session pass it in so this
+  // hook does not mount a second session instance (double fetch plus a
+  // second, divergent revision counter feeding the availability keys).
+  customerSession?: StorefrontCustomerSession;
 }) {
-  const storefrontCustomerSession = useStorefrontCustomerSession(merchantSlug);
+  const fallbackSession = useStorefrontCustomerSession(
+    customerSession ? undefined : merchantSlug
+  );
+  const storefrontCustomerSession = customerSession ?? fallbackSession;
   const pilotCartProductId =
     cartItems.length === 1 &&
     cartItems[0]?.quantity === 1 &&

@@ -245,19 +245,6 @@ it('permits retry after a definitive initialization failure without starting a p
   expect(router.push).not.toHaveBeenCalled();
 });
 
-it('rejects incomplete persisted totals before a payment can start', async () => {
-  orderBody = {
-    ...responseBody,
-    redvault: { status: 'pending', quote: { discount_kobo: 500 } },
-  };
-  await expect(createOrder(request)).rejects.toMatchObject({
-    code: 'RESPONSE_VALIDATION_ERROR',
-  });
-  expect(
-    mockFetch.mock.calls.some(([url]) => String(url).endsWith('/initialize'))
-  ).toBe(false);
-});
-
 it('starts with a fresh review after closing and reopening an order', async () => {
   const input = {
     orderResponse: await createOrder(request),

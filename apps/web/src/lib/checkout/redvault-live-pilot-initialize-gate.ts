@@ -7,23 +7,21 @@ import {
   verifyRedvaultLivePilotFunding,
   verifyRedvaultLivePilotSnapshot,
 } from './redvault-live-pilot-verification';
-import { getRedvaultPaymentAvailability } from './redvault-payment-availability';
 
 // Pilot orchestration for payment initialization, extracted from the
 // initialize route so the payment handler stays a thin wiring layer:
 // pilot authorization, snapshot/funding verification, callback
 // construction, and attempt-preservation wiring all live here. Each
 // gate returns a rejection to map into the route's error response,
-// or null when the request may proceed.
+// or null when the request may proceed. Gates take the route's latched
+// pilot flag rather than recomputing availability: re-reading the
+// short-lived policy mid-request could flip across the expiry boundary
+// and strand an initializing attempt on the ordinary path.
 const UNAVAILABLE: RedvaultLivePilotRejection = {
   message: 'REDVAULT payment is not available',
   code: 'REDVAULT_UNAVAILABLE',
   status: 409,
 };
-
-export function isRedvaultLivePilotInitialize(): boolean {
-  return getRedvaultPaymentAvailability().reason === 'private_live_pilot';
-}
 
 export function rejectUnauthorizedRedvaultLivePilot(input: {
   reason: string;
@@ -40,12 +38,13 @@ export function rejectUnauthorizedRedvaultLivePilot(input: {
 
 export async function rejectInvalidRedvaultLivePilotSnapshot(input: {
   redvaultRequested: boolean;
+  isLivePilot: boolean;
   client: SupabaseClient;
   orderId: string;
   userId: string | null | undefined;
   merchantId: string;
 }): Promise<RedvaultLivePilotRejection | null> {
-  if (!input.redvaultRequested || !isRedvaultLivePilotInitialize()) {
+  if (!input.redvaultRequested || !input.isLivePilot) {
     return null;
   }
   const snapshot = await verifyRedvaultLivePilotSnapshot({
@@ -59,10 +58,11 @@ export async function rejectInvalidRedvaultLivePilotSnapshot(input: {
 
 export function rejectInvalidRedvaultLivePilotFunding(input: {
   redvaultRequested: boolean;
+  isLivePilot: boolean;
   walletAmountUsed: number;
   savingsAmountUsed: number;
 }): RedvaultLivePilotRejection | null {
-  if (!input.redvaultRequested || !isRedvaultLivePilotInitialize()) {
+  if (!input.redvaultRequested || !input.isLivePilot) {
     return null;
   }
   const funding = verifyRedvaultLivePilotFunding({
@@ -92,8 +92,9 @@ export function buildRedvaultLivePilotCallbackUrl(input: {
   });
 }
 
-export function preserveRedvaultLivePilotAttempts(
-  redvaultRequested: boolean
-): boolean {
-  return redvaultRequested && isRedvaultLivePilotInitialize();
+export function preserveRedvaultLivePilotAttempts(input: {
+  redvaultRequested: boolean;
+  isLivePilot: boolean;
+}): boolean {
+  return input.redvaultRequested && input.isLivePilot;
 }

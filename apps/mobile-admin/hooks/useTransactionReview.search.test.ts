@@ -19,6 +19,7 @@ vi.mock('@/lib/fetch-transaction-review-rows', () => ({
 }));
 
 vi.mock('@/lib/search-transaction-review-orders', () => ({
+  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
   searchTransactionReviewOrders: mocks.searchTransactionReviewOrders,
 }));
 
@@ -89,6 +90,7 @@ describe('useTransactionReview search', () => {
     );
 
     await waitFor(() => expect(result.current.data).toEqual(rows));
+    expect(result.current.searchTruncated).toBe(false);
     expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
       search: '353232106161443',
@@ -96,6 +98,33 @@ describe('useTransactionReview search', () => {
     expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledWith(
       expect.objectContaining({ orderIds: ['match-1', 'match-2'] })
     );
+  });
+
+  it('discloses truncation when refinement shrinks an over-cap result', async () => {
+    const orderIds = Array.from({ length: 101 }, (_, index) => `id-${index}`);
+    mocks.searchTransactionReviewOrders.mockResolvedValue({
+      error: null,
+      errorKind: null,
+      orderIds,
+    });
+    const rows = Array.from({ length: 60 }, (_, index) => ({
+      cancelled_at: null,
+      id: `match-${index}`,
+      searchText: '353232106161443',
+      shipping_status: 'pending',
+    }));
+    mocks.fetchTransactionReviewRows.mockResolvedValue({
+      data: rows,
+      error: null,
+    });
+
+    const { result } = renderHook(
+      () => useTransactionReview(undefined, { search: '353232106161443' }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.data).toEqual(rows));
+    expect(result.current.searchTruncated).toBe(true);
   });
 
   it('refines RPC candidates to exact multi-term matches', async () => {
@@ -179,9 +208,38 @@ describe('useTransactionReview search', () => {
     );
 
     await waitFor(() => expect(result.current.data).toEqual([legacyMatch]));
+    expect(result.current.searchTruncated).toBe(false);
     expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledWith(
       expect.objectContaining({ fetchAll: true })
     );
+  });
+
+  it('caps fallback results with a truncation signal', async () => {
+    mocks.searchTransactionReviewOrders.mockResolvedValue({
+      error: { message: 'Could not find the function' },
+      errorKind: 'missing-search-function',
+      orderIds: [],
+    });
+    const rows = Array.from({ length: 101 }, (_, index) => ({
+      cancelled_at: null,
+      id: `legacy-${index}`,
+      searchText: 'ada',
+      shipping_status: 'pending',
+    }));
+    mocks.fetchTransactionReviewRows.mockResolvedValue({
+      data: rows,
+      error: null,
+    });
+
+    const { result } = renderHook(
+      () => useTransactionReview(undefined, { search: 'ada' }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual(rows.slice(0, 100))
+    );
+    expect(result.current.searchTruncated).toBe(true);
   });
 
   it('surfaces search failures', async () => {

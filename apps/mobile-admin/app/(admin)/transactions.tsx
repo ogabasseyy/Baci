@@ -25,7 +25,6 @@ import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEd
 import { useTransactionReview } from '@/hooks/useTransactionReview';
 import { resolveAnalyticsDateRange } from '@/lib/analytics-period';
 import { parseTransactionReviewRangeParams } from '@/lib/parse-transaction-review-range-params';
-import { TRANSACTION_REVIEW_SEARCH_LIMIT } from '@/lib/search-transaction-review-orders';
 import {
   filterOrdersForTransactionTab,
   filterTransactionOrders,
@@ -67,10 +66,13 @@ export default function TransactionsScreen() {
     isRefetching,
     error,
     refetch,
+    searchTruncated,
   } = useTransactionReview(searching ? undefined : range, {
     search: searching ? debouncedSearchQuery : undefined,
   });
-  const { data: rangeOrders = [] } = useTransactionReview(range);
+  const { data: rangeOrders = [] } = useTransactionReview(range, {
+    enabled: !searching,
+  });
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
@@ -93,15 +95,10 @@ export default function TransactionsScreen() {
       : '--';
 
   const tabFilteredOrders = filterOrdersForTransactionTab(orders, activeTab);
-  const searchFilteredOrders = filterTransactionOrders(
+  const visibleOrders = filterTransactionOrders(
     tabFilteredOrders,
     searching ? debouncedSearchQuery : searchQuery
   );
-  const searchTruncated =
-    searching && searchFilteredOrders.length > TRANSACTION_REVIEW_SEARCH_LIMIT;
-  const visibleOrders = searchTruncated
-    ? searchFilteredOrders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT)
-    : searchFilteredOrders;
   const unmatchedItemCount = visibleOrders.reduce(
     (count, order) =>
       count +

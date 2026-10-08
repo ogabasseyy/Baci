@@ -2,7 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
 import { fetchTransactionReviewWithFallbacks } from '@/lib/fetch-transaction-review-with-fallbacks';
 import { filterExcludedTransactionReviewRows } from '@/lib/filter-excluded-transaction-review-rows';
-import { searchTransactionReviewOrders } from '@/lib/search-transaction-review-orders';
+import {
+  searchTransactionReviewOrders,
+  TRANSACTION_REVIEW_SEARCH_LIMIT,
+} from '@/lib/search-transaction-review-orders';
 import {
   buildTransactionReviewRangeFilters,
   filterTransactionOrders,
@@ -33,7 +36,7 @@ function mapTransactionReviewData(data: unknown) {
 
 export function useTransactionReview(
   range?: TransactionReviewRange,
-  options: { exactDates?: boolean; search?: string } = {}
+  options: { enabled?: boolean; exactDates?: boolean; search?: string } = {}
 ) {
   const { merchant } = useMerchant();
   const trimmedSearch = options.search?.trim() ?? '';
@@ -73,7 +76,7 @@ export function useTransactionReview(
     endDateIso
   );
 
-  return useQuery<TransactionReviewOrder[]>({
+  const query = useQuery({
     queryKey: [
       'transaction-review',
       merchant?.id,
@@ -103,11 +106,17 @@ export function useTransactionReview(
         throw new Error(error.message);
       }
 
-      return mapTransactionReviewData(data);
+      return { orders: mapTransactionReviewData(data), searchTruncated: false };
     },
-    enabled: Boolean(merchant?.id),
+    enabled: Boolean(merchant?.id) && options.enabled !== false,
     staleTime: 1000 * 60,
   });
+
+  return {
+    ...query,
+    data: query.data?.orders,
+    searchTruncated: query.data?.searchTruncated ?? false,
+  };
 }
 
 async function searchTransactionReview(merchantId: string, search: string) {
@@ -120,7 +129,7 @@ async function searchTransactionReview(merchantId: string, search: string) {
     // Databases that predate the search RPC keep working through the
     // client-side scan until the migration lands. The scan stays complete so
     // older matches are not silently dropped on unmigrated databases; the
-    // screen additionally caps displayed search results.
+    // displayed results are still capped with a truncation notice.
     if (searchResult.errorKind === 'missing-search-function') {
       const { data, error } = await fetchTransactionReviewWithFallbacks({
         fetchAll: true,
@@ -131,14 +140,22 @@ async function searchTransactionReview(merchantId: string, search: string) {
         throw new Error(error.message);
       }
 
-      return filterTransactionOrders(mapTransactionReviewData(data), search);
+      const orders = filterTransactionOrders(
+        mapTransactionReviewData(data),
+        search
+      );
+
+      return {
+        orders: orders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
+        searchTruncated: orders.length > TRANSACTION_REVIEW_SEARCH_LIMIT,
+      };
     }
 
     throw new Error(searchResult.error.message);
   }
 
   if (searchResult.orderIds.length === 0) {
-    return [];
+    return { orders: [], searchTruncated: false };
   }
 
   const { data, error } = await fetchTransactionReviewWithFallbacks({
@@ -150,7 +167,17 @@ async function searchTransactionReview(merchantId: string, search: string) {
     throw new Error(error.message);
   }
 
-  // The RPC predicate set is a superset of the client matcher; refine here so
-  // hook consumers always see exact multi-term matches.
-  return filterTransactionOrders(mapTransactionReviewData(data), search);
+  // The truncation signal comes from the pre-refinement id count: refinement
+  // can only shrink the set, so post-refinement length would hide capped
+  // results.
+  const orders = filterTransactionOrders(
+    mapTransactionReviewData(data),
+    search
+  );
+
+  return {
+    orders: orders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
+    searchTruncated:
+      searchResult.orderIds.length > TRANSACTION_REVIEW_SEARCH_LIMIT,
+  };
 }

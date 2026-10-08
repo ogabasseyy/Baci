@@ -1087,19 +1087,15 @@ describe('TransactionsScreen', () => {
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
   });
 
-  it('caps displayed search results and discloses truncation', () => {
-    const manyOrders = Array.from({ length: 101 }, (_, index) => ({
-      ...sampleOrders[0],
-      id: `order-many-${index}`,
-      orderNumber: `ORD-MANY-${index}`,
-    }));
-    mocks.useTransactionReview.mockReturnValue({
-      data: manyOrders,
+  it('discloses truncated search results from the hook signal', () => {
+    mocks.useTransactionReview.mockImplementation((_range, options) => ({
+      data: options?.search ? [sampleOrders[0]] : sampleOrders,
       error: null,
       isLoading: false,
       isRefetching: false,
       refetch: vi.fn(),
-    });
+      searchTruncated: Boolean(options?.search),
+    }));
 
     render(<TransactionsScreen />);
 
@@ -1112,8 +1108,19 @@ describe('TransactionsScreen', () => {
         'Showing the first 100 matches. Refine your search to narrow results.'
       )
     ).toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-MANY-0')).toBeInTheDocument();
-    expect(screen.queryByText('Edit ORD-MANY-100')).not.toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
+  });
+
+  it('disables the range query while searching', () => {
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: '353232106161443' },
+    });
+
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(undefined, {
+      enabled: false,
+    });
   });
 
   it('refines with the debounced query while searching', () => {

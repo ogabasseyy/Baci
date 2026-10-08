@@ -19,6 +19,7 @@ vi.mock('@/lib/fetch-transaction-review-rows', () => ({
 }));
 
 vi.mock('@/lib/search-transaction-review-orders', () => ({
+  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
   searchTransactionReviewOrders: mocks.searchTransactionReviewOrders,
 }));
 
@@ -156,6 +157,27 @@ describe('useTransactionReview', () => {
 
     await waitFor(() =>
       expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledTimes(2)
+    );
+  });
+
+  it('skips fetching when disabled', async () => {
+    const { rerender, result } = renderHook(
+      ({ enabled }: { enabled?: boolean }) =>
+        useTransactionReview(undefined, { enabled }),
+      {
+        initialProps: { enabled: false as boolean | undefined },
+        wrapper: createWrapper(),
+      }
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.searchTruncated).toBe(false);
+    expect(mocks.fetchTransactionReviewRows).not.toHaveBeenCalled();
+
+    rerender({ enabled: true });
+
+    await waitFor(() =>
+      expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledTimes(1)
     );
   });
 });

@@ -201,6 +201,36 @@ INSERT INTO public.orders (
   '2026-09-15T12:00:00Z'
 );
 
+-- Recent null-date order outranks ancient dated orders under the cap.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000008',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'RANK-RECENT-NULL',
+  'Rank Recent',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-08T12:00:00Z'
+);
+
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at, transaction_date
+) VALUES (
+  'c0000000-0000-4000-8000-000000000009',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'RANK-ANCIENT-DATED',
+  'Rank Ancient',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-01T12:00:00Z',
+  '2020-05-05T12:00:00Z'
+);
+
 -- Unpaid order: must never match.
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, shipping_status, payment_status,
@@ -453,6 +483,18 @@ BEGIN
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_order_imei_order_id] THEN
     RAISE EXCEPTION 'limit did not rank by transaction date: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['RANK-'],
+    1
+  );
+  IF v_ids IS DISTINCT FROM
+    ARRAY['c0000000-0000-4000-8000-000000000008'::uuid] THEN
+    RAISE EXCEPTION 'limit buried a recent null-date match: %', v_ids;
   END IF;
 
   SELECT array_agg(order_id)

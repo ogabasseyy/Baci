@@ -37,6 +37,15 @@ export const MAX_STAGING_BYTES = 100 * 1024 ** 2;
 // truncation before parsing.
 export const MAX_MANIFEST_BYTES = 64 * 1024;
 
+// Merchant UUID predicate shared by every contract mirror. Zod 3's
+// .uuid() accepts version nibbles (0, f) that Zod 4's z.uuid() rejects,
+// so both sides spell the rule explicitly instead: versions 1-8 plus the
+// nil/max exceptions. The preflight mirror imports this constant; the
+// web schemas duplicate the source (web runtime code must not import
+// infra) and the shared corpus pins all three to the same verdicts.
+export const PILOT_UUID_PATTERN =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+
 // Roles and their pixel-width ladders (pixel widths, not CSS viewports).
 export const ROLES = ['logo', 'product', 'hero'];
 export const TIERS = {

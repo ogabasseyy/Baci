@@ -3,8 +3,10 @@ import {
   ACCEPTED_INPUT_FORMATS,
   BUDGETS,
   MAX_DECODED_PIXELS,
+  MAX_INPUT_BYTES,
   PILOT_POLICY_VERSION,
   PILOT_SCHEMA_VERSION,
+  PILOT_UUID_PATTERN,
   RECIPE_ID,
   TIERS,
 } from './constants.mjs';
@@ -42,13 +44,21 @@ const TierSchema = z
     // 'original-passthrough' are capped at source bytes, while
     // 'generated-over-source' is the explicit over-source exception.
     // Absent on frozen r1 manifests, which keep their legacy meaning.
-    delivery: z.enum(['generated', 'original-passthrough', 'generated-over-source']).optional(),
+    delivery: z
+      .enum(['generated', 'original-passthrough', 'generated-over-source'])
+      .optional(),
     format: z.enum(['avif', 'webp']),
     height: z.number().int().min(1).max(16384),
     path: z.string().regex(/^[0-9a-f]{64}\.(avif|webp)$/),
     // Pass-through tiers reuse validated source bytes, so no ladder
     // quality applies; generated tiers always carry their encode quality.
-    quality: z.union([z.literal(70), z.literal(65), z.literal(60), z.literal(55), z.null()]),
+    quality: z.union([
+      z.literal(70),
+      z.literal(65),
+      z.literal(60),
+      z.literal(55),
+      z.null(),
+    ]),
     requestedWidth: z.number().int().min(1).max(16384),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     width: z.number().int().min(1).max(16384),
@@ -56,22 +66,38 @@ const TierSchema = z
   .strict()
   .superRefine((tier, context) => {
     if (tier.path !== `${tier.sha256}.${tier.format}`) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'path must bind the output hash and format' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'path must bind the output hash and format',
+      });
     }
     if (tier.contentType !== `image/${tier.format}`) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'content type must match the format' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'content type must match the format',
+      });
     }
     if (tier.width !== tier.actualWidth) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'width must equal the encoded width' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'width must equal the encoded width',
+      });
     }
     if (tier.delivery === 'original-passthrough' && tier.quality !== null) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'pass-through tiers carry no encode quality' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'pass-through tiers carry no encode quality',
+      });
     }
     if (
-      (tier.delivery === 'generated' || tier.delivery === 'generated-over-source') &&
+      (tier.delivery === 'generated' ||
+        tier.delivery === 'generated-over-source') &&
       tier.quality === null
     ) {
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'generated tiers must carry their encode quality' });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'generated tiers must carry their encode quality',
+      });
     }
   });
 
@@ -86,14 +112,17 @@ export const PilotManifestSchema = z
         sharpVersion: z.string().min(1),
       })
       .strict(),
-    merchantId: z.string().uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     policyVersion: z.literal(PILOT_POLICY_VERSION),
     recipeId: z.string().min(1).max(64),
     role: z.enum(['logo', 'product', 'hero']),
     schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
     source: z
       .object({
-        bytes: z.number().int().min(1),
+        // Capped at the acquisition ceiling: an unbounded byte claim
+        // would become the allocation ceiling of every bounded tier
+        // read (pass-through tiers are exempt from recipe budgets).
+        bytes: z.number().int().min(1).max(MAX_INPUT_BYTES),
         format: z.enum(ACCEPTED_INPUT_FORMATS),
         orientedHeight: z.number().int().min(1).max(16384),
         orientedWidth: z.number().int().min(1).max(16384),
@@ -214,7 +243,8 @@ export const PilotManifestSchema = z
       }
       if (
         tier.delivery === 'generated-over-source' &&
-        (tier.bytes <= manifest.source.bytes || tier.format === manifest.source.format)
+        (tier.bytes <= manifest.source.bytes ||
+          tier.format === manifest.source.format)
       ) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
@@ -279,4 +309,3 @@ export function parsePilotManifest(value) {
   }
   return { manifest: parsed.data, ok: true };
 }
-

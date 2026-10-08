@@ -106,6 +106,42 @@ describe('preflight served gate', () => {
     }
   });
 
+  it('rejects oversized served bodies without buffering them', async () => {
+    const fixture = await setupOffline();
+    const html = labHtml({ arm: 'pilot', ...fixture });
+    const server = createServer((req, res) => {
+      const urlPath = req.url ?? '';
+      if (urlPath === '/pilot-lab?arm=pilot') {
+        res.writeHead(200, { 'content-type': 'text/html' }).end(html);
+        return;
+      }
+      if (urlPath.startsWith('/__pilot/')) {
+        // Runaway origin: correct content type, unbounded body. The gate
+        // must fail on overflow instead of buffering the whole response.
+        res.writeHead(200, { 'content-type': 'image/avif' });
+        for (let i = 0; i < 200; i += 1) {
+          res.write(Buffer.alloc(64 * 1024, 0x61));
+        }
+        res.end();
+        return;
+      }
+      res.writeHead(404).end('missing');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      const origin = `http://127.0.0.1:${address.port}`;
+      const report = await fetchServedAgreement(origin, {
+        arms: ['pilot'],
+        publicDir: fixture.publicDir,
+      });
+      expect(report.ok).toBe(false);
+      expect(report.failures.join('\n')).toMatch(/exceeded the staged/);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
   it('fails unreachable pages before any mount verdict', async () => {
     const report = await fetchServedAgreement('http://unused.invalid', {
       arms: ['pilot'],

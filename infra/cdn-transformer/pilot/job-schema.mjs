@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { MAX_JOBS, PILOT_SCHEMA_VERSION, ROLES } from './constants.mjs';
+import {
+  MAX_JOBS,
+  PILOT_SCHEMA_VERSION,
+  PILOT_UUID_PATTERN,
+  ROLES,
+} from './constants.mjs';
 
 export class PilotInventoryError extends Error {
   constructor(message) {
@@ -73,7 +78,7 @@ export const PilotJobSchema = z
   .object({
     assetId: z.string().regex(ASSET_ID_PATTERN),
     expectedSha256: z.string().regex(SHA256_PATTERN),
-    merchantId: z.string().uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     role: z.enum(ROLES),
     schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
     sourcePath: z.string().refine(isConfinedRelativePath),
@@ -111,9 +116,7 @@ export function validateInventory(value) {
   }
   if (value.length > MAX_JOBS) {
     return {
-      errors: [
-        `inventory: at most ${MAX_JOBS} jobs, received ${value.length}`,
-      ],
+      errors: [`inventory: at most ${MAX_JOBS} jobs, received ${value.length}`],
       ok: false,
     };
   }

@@ -53,6 +53,64 @@
       "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
       "verdict": "accepted"
     },
+    "badMerchantV0": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "12345678-1234-0234-8234-123456789abc",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
+      "originalUrl": "https://cdn.example.com/media/logo-contract.png",
+      "recipeId": "pilot-r1-0123456789abcdef",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
+    "badMerchantVf": {
+      "assetId": "logo-contract",
+      "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
+      "merchantId": "12345678-1234-f234-8234-123456789abc",
+      "note": "Contract review: text legible, colors preserved.",
+      "outputHashes": [
+        "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+        "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+        "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+        "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+        "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+        "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7"
+      ],
+      "qualities": [
+        70,
+        70,
+        70,
+        70,
+        70,
+        70
+      ],
+      "originalUrl": "https://cdn.example.com/media/logo-contract.png",
+      "recipeId": "pilot-r1-0123456789abcdef",
+      "reviewedAt": "2026-10-01T21:00:00.000Z",
+      "reviewer": "pilot-owner",
+      "schemaVersion": 1,
+      "sourceSha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a",
+      "verdict": "accepted"
+    },
     "badOriginalUrl": {
       "assetId": "logo-contract",
       "generationId": "3562d89d794cb4a15f5abf9b94bbe5f32149c995989a78e0f671c308741b931a",
@@ -779,6 +837,101 @@
       "schemaVersion": 1,
       "source": {
         "bytes": 23837,
+        "format": "png",
+        "orientedHeight": 600,
+        "orientedWidth": 800,
+        "sha256": "0ef4d212471d5999b0d8b52edf2fa0dae46c7a9b33acee2eeb37f4fea6884c3a"
+      },
+      "tiers": [
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 72,
+          "path": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36.avif",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "dd2bd375a761374ba27ce0d5d3ce1c3bad6d8d96c7efea93e45b37a2b0eaff36",
+          "width": 96
+        },
+        {
+          "actualWidth": 96,
+          "bytes": 1096,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 72,
+          "path": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a.webp",
+          "quality": 70,
+          "requestedWidth": 96,
+          "sha256": "c067768ee179f63f5107e12105fa4a8bd17df33bf3c818a7e857c3e123ec959a",
+          "width": 96
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 144,
+          "path": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381.avif",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "dc02914ff3bfc1b29b3613730bfccc908d69019ee6c57a0f2123fda4145cc381",
+          "width": 192
+        },
+        {
+          "actualWidth": 192,
+          "bytes": 1192,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 144,
+          "path": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b.webp",
+          "quality": 70,
+          "requestedWidth": 192,
+          "sha256": "1527023500a0ed18dded4e7cb40b96f86a2393aaee8b83874531637ac0d9245b",
+          "width": 192
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/avif",
+          "format": "avif",
+          "height": 288,
+          "path": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc.avif",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "4887d26e8a4e231d65d4d44b6c7cdd2f8fcff61e4729e3d9a14894d069afddbc",
+          "width": 384
+        },
+        {
+          "actualWidth": 384,
+          "bytes": 1384,
+          "contentType": "image/webp",
+          "format": "webp",
+          "height": 288,
+          "path": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7.webp",
+          "quality": 70,
+          "requestedWidth": 384,
+          "sha256": "61577e4b15d25080179226536b2fccc29a50e13c4c56fa13169a62b3ff072ee7",
+          "width": 384
+        }
+      ]
+    },
+    "badSourceBytes": {
+      "assetId": "logo-contract",
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "encoder": {
+        "libvipsVersion": "8.18.6",
+        "name": "sharp",
+        "sharpVersion": "0.35.4"
+      },
+      "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+      "policyVersion": 1,
+      "recipeId": "pilot-r1-0123456789abcdef",
+      "role": "logo",
+      "schemaVersion": 1,
+      "source": {
+        "bytes": 524288000,
         "format": "png",
         "orientedHeight": 600,
         "orientedWidth": 800,

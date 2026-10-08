@@ -1,7 +1,7 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { matchAcceptance, parsePilotAcceptance } from '../acceptance.mjs';
 import {
@@ -14,7 +14,9 @@ import { parsePilotManifest } from '../manifest.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 
 async function loadFixtures() {
-  return JSON.parse(await readFile(join(here, 'contract-fixtures.json'), 'utf8'));
+  return JSON.parse(
+    await readFile(join(here, 'contract-fixtures.json'), 'utf8')
+  );
 }
 
 test('generator pins the shared contract identity', async () => {
@@ -77,6 +79,7 @@ test('corpus pins the invalid-manifest key set (no silent case loss)', async () 
     'badQuality',
     'badRole',
     'badSchemaVersion',
+    'badSourceBytes',
     'contentTypeFormatMismatch',
     'deliveryNull',
     'duplicateTier',
@@ -112,7 +115,9 @@ test('corpus pins the invalid-manifest key set (no silent case loss)', async () 
 
 test('generator rejects every shared invalid acceptance and matcher drift', async () => {
   const fixtures = await loadFixtures();
-  for (const [label, candidate] of Object.entries(fixtures.invalidAcceptanceSchemas)) {
+  for (const [label, candidate] of Object.entries(
+    fixtures.invalidAcceptanceSchemas
+  )) {
     assert.equal(parsePilotAcceptance(candidate).ok, false, label);
   }
   for (const [label, candidate] of Object.entries(fixtures.matcherRejections)) {

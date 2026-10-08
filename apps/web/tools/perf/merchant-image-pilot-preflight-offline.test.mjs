@@ -265,6 +265,80 @@ describe('preflight offline gate', () => {
     ).toBe(true);
   });
 
+  it('pins the inventory to the frozen sample matrix when provided', async () => {
+    const fixture = await setupOffline();
+    const frozen = [`${MERCHANT}/logo-a/header-logo`];
+    const samplePath = join(fixture.base, 'sample.json');
+    await writeFile(samplePath, JSON.stringify(frozen));
+    const pinned = await runOfflinePreflight(
+      offlineOptions(fixture, { expectSample: samplePath })
+    );
+    expect(pinned.ok).toBe(true);
+    // A deleted record (or merchant) shrinks the evidence: the reduced
+    // inventory must fail against the frozen matrix, not report ok.
+    await writeFile(
+      samplePath,
+      JSON.stringify([...frozen, `${MERCHANT}/logo-b/header-logo`])
+    );
+    const shrunk = await runOfflinePreflight(
+      offlineOptions(fixture, { expectSample: samplePath })
+    );
+    expect(shrunk.ok).toBe(false);
+    expect(shrunk.failures.join('\n')).toMatch(
+      /sample bindings missing from inventory/
+    );
+    // Growth without a matrix update fails too: the certified sample is
+    // exactly the frozen set.
+    const grown = await setupOfflineAssets([
+      {
+        assetId: 'logo-a',
+        ladder: [96, 192, 384],
+        role: 'logo',
+        slot: 'header-logo',
+        url: 'https://cdn.example.com/media/logo-a.png',
+      },
+      {
+        assetId: 'logo-b',
+        ladder: [96, 192, 384],
+        role: 'logo',
+        slot: 'footer-logo',
+        url: 'https://cdn.example.com/media/logo-b.png',
+      },
+    ]);
+    const grownSample = join(grown.base, 'sample.json');
+    await writeFile(grownSample, JSON.stringify(frozen));
+    const extra = await runOfflinePreflight(
+      offlineOptions(grown, { expectSample: grownSample })
+    );
+    expect(extra.ok).toBe(false);
+    expect(extra.failures.join('\n')).toMatch(
+      /inventory bindings outside the frozen sample/
+    );
+    // A malformed pin (empty matrix) fails instead of certifying nothing.
+    await writeFile(samplePath, JSON.stringify([]));
+    const empty = await runOfflinePreflight(
+      offlineOptions(fixture, { expectSample: samplePath })
+    );
+    expect(empty.ok).toBe(false);
+  });
+
+  it('rejects orphan acceptances for bindings outside the inventory', async () => {
+    const fixture = await setupOffline();
+    const acceptances = JSON.parse(
+      await readFile(fixture.acceptancesPath, 'utf8')
+    );
+    acceptances.push({
+      ...acceptances[0],
+      assetId: 'logo-ghost',
+    });
+    await writeFile(fixture.acceptancesPath, JSON.stringify(acceptances));
+    const report = await runOfflinePreflight(offlineOptions(fixture));
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(
+      /acceptances without inventory records/
+    );
+  });
+
   it('rejects a valid generation copied under another directory ID', async () => {
     const fixture = await setupOffline();
     // Every hash inside still verifies; only the directory identity is

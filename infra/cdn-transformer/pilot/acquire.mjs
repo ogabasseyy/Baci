@@ -1,21 +1,25 @@
 import { createHash } from 'node:crypto';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { parseCliArgs } from './cli-args.mjs';
-import { MAX_INPUT_BYTES, OP_TIMEOUT_MS, ROLES } from './constants.mjs';
+import {
+  MAX_INPUT_BYTES,
+  OP_TIMEOUT_MS,
+  PILOT_UUID_PATTERN,
+  ROLES,
+} from './constants.mjs';
 import { assertPublicFetchUrl } from './fetch-policy.mjs';
 import {
   ASSET_ID_PATTERN,
   resolveNewSnapshotPath,
   snapshotNameForAsset,
 } from './input-store.mjs';
-import { parsePilotJob } from './job-schema.mjs';
 import {
   appendInventoryRecord,
   PilotAcquireError,
 } from './inventory-store.mjs';
+import { parsePilotJob } from './job-schema.mjs';
 
 export const EXTENSION_FOR_CONTENT_TYPE = {
   'image/avif': 'avif',
@@ -29,7 +33,7 @@ const AcquireIdentitySchema = z
     // Same contract the shared job schema and snapshot namer enforce, so a
     // bad id fails here instead of after the whole remote image downloads.
     assetId: z.string().regex(ASSET_ID_PATTERN),
-    merchantId: z.string().uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     role: z.enum(ROLES),
     slot: z.string().min(1).max(128),
   })
@@ -88,7 +92,7 @@ async function fetchBoundedBytes(
     .trim()
     .toLowerCase();
   if (!Object.hasOwn(EXTENSION_FOR_CONTENT_TYPE, contentType)) {
-    await response.body?.cancel?.().catch(() => {});
+    await response.body?.cancel?.().catch(() => undefined);
     throw new PilotAcquireError(
       `acquire: unsupported content-type "${contentType}"`
     );
@@ -107,7 +111,7 @@ async function fetchBoundedBytes(
       }
       total += value.length;
       if (total > maxBytes) {
-        await reader.cancel().catch(() => {});
+        await reader.cancel().catch(() => undefined);
         throw new PilotAcquireError(
           `acquire: body exceeds ${maxBytes} byte limit`
         );
@@ -190,7 +194,7 @@ export async function acquireSnapshot(options) {
     // call wrote, never a pre-existing snapshot, then rethrow the original
     // probe error (cleanup best-effort).
     if (wroteSnapshot) {
-      await unlink(target).catch(() => {});
+      await unlink(target).catch(() => undefined);
     }
     throw error;
   }
@@ -199,7 +203,7 @@ export async function acquireSnapshot(options) {
   const decodedContentType = CONTENT_TYPE_FOR_DECODED_FORMAT[geometry?.format];
   if (decodedContentType !== contentType) {
     if (wroteSnapshot) {
-      await unlink(target).catch(() => {});
+      await unlink(target).catch(() => undefined);
     }
     throw new PilotAcquireError(
       `acquire: origin labeled bytes "${contentType}" but they decode as "${geometry?.format ?? 'unknown'}"`
@@ -255,7 +259,7 @@ export async function acquireSnapshot(options) {
     return { ...record, inventoryCount };
   } catch (error) {
     if (wroteSnapshot) {
-      await unlink(target).catch(() => {});
+      await unlink(target).catch(() => undefined);
     }
     throw error;
   }

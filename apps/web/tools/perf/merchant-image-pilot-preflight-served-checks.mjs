@@ -33,6 +33,34 @@ const CONTENT_TYPE_FOR_EXTENSION = {
   webp: 'image/webp',
 };
 
+// Bounded response read: at most maxBytes stream through the reader, so a
+// runaway origin cannot exhaust the validator. Reports truncation (the
+// caller fails the byte check) and cancels the body on overflow.
+export async function readBoundedBody(response, maxBytes) {
+  if (!response.body) {
+    return { bytes: Buffer.alloc(0), truncated: false };
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        return { bytes: Buffer.concat(chunks), truncated: false };
+      }
+      total += value.byteLength;
+      if (total > maxBytes) {
+        return { bytes: Buffer.alloc(0), truncated: true };
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
 export async function assertServedDescriptors(
   html,
   { arm, origin, publicDir }
@@ -247,8 +275,17 @@ export async function assertServedResponseBytes(
       );
       continue;
     }
-    const served = Buffer.from(await response.arrayBuffer());
-    if (sha256Hex(served) !== sha256Hex(expected)) {
+    // Bounded by the staged size: a runaway origin serving a huge or
+    // unending body rejects on overflow instead of exhausting the
+    // validation process inside arrayBuffer().
+    const served = await readBoundedBody(response, expected.length + 1);
+    if (served.truncated) {
+      failures.push(
+        `served:${arm}:response-bytes: GET "${urlPath}" exceeded the staged ${expected.length} bytes`
+      );
+      continue;
+    }
+    if (sha256Hex(served.bytes) !== sha256Hex(expected)) {
       failures.push(
         `served:${arm}:response-bytes: served bytes differ from the staged hash: "${urlPath}"`
       );

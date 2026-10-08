@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { PILOT_SCHEMA_VERSION } from './constants.mjs';
+import { PILOT_SCHEMA_VERSION, PILOT_UUID_PATTERN } from './constants.mjs';
 
 export const PilotAcceptanceSchema = z
   .object({
     assetId: z.string().min(1).max(128),
     generationId: z.string().regex(/^[0-9a-f]{64}$/),
-    merchantId: z.string().uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     note: z.string().min(1).max(500),
     // Tier sha256 in canonical manifest tier order (requestedWidth
     // ascending, avif before webp): matchAcceptance compares positionally.

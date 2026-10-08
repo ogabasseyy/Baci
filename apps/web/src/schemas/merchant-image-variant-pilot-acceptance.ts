@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   PILOT_SCHEMA_VERSION,
   PILOT_SHA256_PATTERN,
+  PILOT_UUID_PATTERN,
 } from './merchant-image-variant-pilot-constants';
 
 // Lab-only reviewer acceptance record. Re-exported from
@@ -10,7 +11,7 @@ export const pilotAcceptanceSchema = z
   .object({
     assetId: z.string().min(1).max(128),
     generationId: z.string().regex(PILOT_SHA256_PATTERN),
-    merchantId: z.uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     note: z.string().min(1).max(500),
     // Tier sha256 in canonical manifest tier order (requestedWidth
     // ascending, avif before webp): matchPilotAcceptance compares

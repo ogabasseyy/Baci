@@ -194,6 +194,45 @@ describe('loadLabConfig', () => {
     ).toBeNull();
   });
 
+  it('removes stale generations and originals on restage', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const first = await loadLabConfig({ ...lab }, { stage: true });
+    expect(first.statuses[0]?.status).toBe('accepted');
+    expect(first.reconciled).toEqual([]);
+    // Previous-run leftovers: a removed generation dir, a stale tier in
+    // the current generation, and a stale original.
+    const staleGen = join(lab.publicDir, '__pilot', 'f'.repeat(64));
+    await mkdir(staleGen, { recursive: true });
+    await writeFile(join(staleGen, 'stale.avif'), 'stale');
+    await writeFile(
+      join(lab.publicDir, '__pilot', lab.generationId, 'stale-tier.webp'),
+      'stale'
+    );
+    await writeFile(
+      join(lab.publicDir, '__pilot', 'originals', 'stale-original.png'),
+      'stale'
+    );
+    const second = await loadLabConfig({ ...lab }, { stage: true });
+    expect(second.statuses[0]?.status).toBe('accepted');
+    expect([...(second.reconciled ?? [])].sort()).toEqual(
+      [
+        'f'.repeat(64),
+        join(lab.generationId, 'stale-tier.webp'),
+        join('originals', 'stale-original.png'),
+      ].sort()
+    );
+    await expect(stat(staleGen)).rejects.toThrow();
+    await expect(
+      stat(join(lab.publicDir, '__pilot', lab.generationId, 'stale-tier.webp'))
+    ).rejects.toThrow();
+    // Current files survive the reconciliation.
+    expect(second.stagedPaths.length).toBeGreaterThan(0);
+    for (const entry of second.stagedPaths) {
+      expect((await stat(entry.path)).isFile()).toBe(true);
+    }
+  });
+
   it('stages the original suffix from the verified format, not the filename', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();

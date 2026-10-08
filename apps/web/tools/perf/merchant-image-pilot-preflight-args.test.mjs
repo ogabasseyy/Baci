@@ -28,6 +28,7 @@ describe('preflight args', () => {
     ]);
     expect(parsed).toMatchObject({
       acceptances: 'acc.json',
+      expectSample: null,
       inventory: 'inv.json',
       origin: 'http://localhost:3000',
       recipe: RECIPE_ID,
@@ -48,9 +49,12 @@ describe('preflight args', () => {
       'pilot/other',
       '--write-mounts',
       'mounts.json',
+      '--expect-sample',
+      'sample.json',
     ]);
     expect(explicit.recipe).toBe('pilot/other');
     expect(explicit.writeMounts).toBe('mounts.json');
+    expect(explicit.expectSample).toBe('sample.json');
   });
 
   it('rejects unknown and duplicate flags instead of degrading silently', () => {

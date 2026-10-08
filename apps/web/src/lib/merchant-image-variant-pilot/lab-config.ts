@@ -8,6 +8,7 @@ import {
   stageVerifiedTier,
   writeStagedBytesIfChanged,
 } from './lab-config-stage-io';
+import { reconcileStagedTree } from './lab-config-stage-reconcile';
 import { resolveLabGenerationDir } from './lab-generation-dir';
 import {
   buildLabIndex,
@@ -41,6 +42,11 @@ export interface PilotLabConfig {
   // re-hashes when size/mtime changed, so deleted or drifted files fail
   // closed instead of serving URLs for 404s or swapped bytes.
   stagedPaths: readonly { path: string; sha256: string }[];
+  // Paths removed by restage reconciliation, relative to the __pilot
+  // stage root. Present only on staging loads: a rerun after the
+  // inventory changed removes previous generations/originals instead of
+  // leaving stale merchant bytes reachable.
+  reconciled?: readonly string[];
   statuses: PilotBindingStatus[];
 }
 
@@ -223,6 +229,18 @@ export async function loadLabConfig(
       `${baseUrl}/originals/${fileName}`
     );
   }
+  // Reconcile only staging loads: read-only route loads must never write.
+  const reconciled = shouldStage
+    ? await reconcileStagedTree({
+        generationIds: statuses.flatMap((status) =>
+          status.status === 'accepted' && status.generationId
+            ? [status.generationId]
+            : []
+        ),
+        pilotStage,
+        stagedFiles: stagedPaths.map((entry) => entry.path),
+      })
+    : undefined;
   return {
     baseUrl,
     bindings: parsed.bindings,
@@ -230,6 +248,7 @@ export async function loadLabConfig(
     originalUrlFor: (slot) =>
       stagedOriginals.get(`${slot.merchantId}/${slot.slotId}`) ?? null,
     stagedPaths,
+    ...(reconciled === undefined ? {} : { reconciled }),
     statuses,
   };
 }

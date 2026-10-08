@@ -15,6 +15,12 @@
 //     --acceptances <path> --input-root <dir> --output-root <dir> \
 //     --public-dir <dir> [--recipe <recipe-id>] [--origin <url> \
 //     --store-map <merchantId=slug,...>] [--write-mounts <path>]
+//     [--expect-sample <frozen-keys.json>]
+//
+// --expect-sample pins the planned merchant/asset/slot matrix (a JSON
+// array of "merchantId/assetId/slotId" keys): expectations derive from
+// the supplied inventory, so without the pin a silently reduced sample
+// would report ok:true on weaker evidence. Evidence runs must pass it.
 //
 // --write-mounts persists the offline accepted list for downstream gates
 // (the browser readiness gate consumes it as --mounts): written only when

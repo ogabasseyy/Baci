@@ -100,6 +100,7 @@ export async function main(): Promise<void> {
         baseUrl: config.baseUrl,
         generationIds: accepted.map((status) => status.generationId),
         ok: true,
+        removedStale: config.reconciled ?? [],
       },
       null,
       2

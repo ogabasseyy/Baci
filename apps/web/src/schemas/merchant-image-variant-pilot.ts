@@ -3,12 +3,14 @@ import type { PilotAcceptance } from './merchant-image-variant-pilot-acceptance'
 import type { PilotInventoryBinding } from './merchant-image-variant-pilot-binding';
 import {
   PILOT_MAX_DECODED_PIXELS,
+  PILOT_MAX_INPUT_BYTES,
   PILOT_POLICY_VERSION,
   PILOT_RECIPE_ID,
   PILOT_SCHEMA_VERSION,
   PILOT_SHA256_PATTERN,
   PILOT_TIER_PATH_PATTERN,
   PILOT_TIERS,
+  PILOT_UUID_PATTERN,
 } from './merchant-image-variant-pilot-constants';
 import { tierContractIssues } from './merchant-image-variant-pilot-tiers';
 
@@ -118,14 +120,17 @@ export const pilotManifestSchema = z
         sharpVersion: z.string().min(1),
       })
       .strict(),
-    merchantId: z.uuid(),
+    merchantId: z.string().regex(PILOT_UUID_PATTERN),
     policyVersion: z.literal(PILOT_POLICY_VERSION),
     recipeId: z.string().min(1).max(64),
     role: z.enum(['logo', 'product', 'hero']),
     schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
     source: z
       .object({
-        bytes: z.number().int().min(1),
+        // Capped at the acquisition ceiling (mirrors MAX_INPUT_BYTES):
+        // an unbounded byte claim would become the allocation ceiling
+        // of every bounded tier read.
+        bytes: z.number().int().min(1).max(PILOT_MAX_INPUT_BYTES),
         // Generator-supported inputs only (mirrors ACCEPTED_INPUT_FORMATS
         // in infra/cdn-transformer/pilot/constants.mjs): a hash-valid
         // manifest claiming gif/svg would pass source verification yet

@@ -58,6 +58,14 @@ const fixtures = {
   invalidAcceptanceSchemas: {
     badHash: { ...acceptance, outputHashes: ['not-a-hash'] },
     badQualities: { ...acceptance, qualities: ['high'] },
+    badMerchantV0: {
+      ...acceptance,
+      merchantId: '12345678-1234-0234-8234-123456789abc',
+    },
+    badMerchantVf: {
+      ...acceptance,
+      merchantId: '12345678-1234-f234-8234-123456789abc',
+    },
     badOriginalUrl: { ...acceptance, originalUrl: 'not-a-url' },
     badVerdict: { ...acceptance, verdict: 'maybe' },
     emptyHashes: { ...acceptance, outputHashes: [] },
@@ -86,6 +94,10 @@ const fixtures = {
       encoder: { name: 'sharp', sharpVersion: '0.35.4' },
     },
     badMerchant: { ...manifest, merchantId: 'not-a-uuid' },
+    badSourceBytes: {
+      ...manifest,
+      source: { ...manifest.source, bytes: 500 * 1024 * 1024 },
+    },
     badPolicyVersion: { ...manifest, policyVersion: 2 },
     badQuality: {
       ...manifest,

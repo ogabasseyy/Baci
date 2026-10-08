@@ -2,7 +2,10 @@
 // facts, and positional acceptance hashes for one binding.
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { SHARP_LIMITS } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import {
+  MAX_MANIFEST_BYTES,
+  SHARP_LIMITS,
+} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import {
   assertAcceptedMetadata,
   normalizeFormat,
@@ -15,7 +18,7 @@ import {
   pass,
   positionalHashesMatch,
   positionalQualitiesMatch,
-  readJson,
+  readBoundedJson,
   resolveGenerationDir,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
@@ -42,13 +45,16 @@ export async function checkBindingManifest({
   }
   let manifest;
   try {
-    manifest = await readJson(
+    // Same ceiling as the runtime loaders: a replaced huge manifest
+    // rejects on size before contract validation parses it.
+    manifest = await readBoundedJson(
       join(
         options.outputRoot,
         'generations',
         acceptance.generationId,
         'manifest.json'
-      )
+      ),
+      MAX_MANIFEST_BYTES
     );
   } catch {
     fail(
@@ -140,6 +146,10 @@ export async function checkBindingManifest({
   try {
     meta = await sharp(inputBytes, { ...SHARP_LIMITS }).metadata();
     assertAcceptedMetadata(meta);
+    // metadata() is header-only: force a full pixel decode so a
+    // header-readable but truncated source (generator-rejected input)
+    // fails here instead of staging as the control image.
+    await sharp(inputBytes, { ...SHARP_LIMITS }).stats();
   } catch {
     fail(
       checks,

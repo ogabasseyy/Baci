@@ -8,6 +8,7 @@ import { UUID } from './merchant-image-pilot-preflight-shared.mjs';
 // served check behind an offline-only ok:true).
 const PREFLIGHT_FLAGS = new Set([
   'acceptances',
+  'expect-sample',
   'input-root',
   'inventory',
   'origin',
@@ -62,6 +63,7 @@ export function parsePreflightArgs(argv) {
   }
   return {
     acceptances: options.acceptances,
+    expectSample: options['expect-sample'] ?? null,
     inputRoot: options['input-root'],
     inventory: options.inventory,
     origin: options.origin ?? null,

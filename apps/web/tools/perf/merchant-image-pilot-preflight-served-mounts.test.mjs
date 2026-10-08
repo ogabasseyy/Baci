@@ -200,6 +200,30 @@ describe('preflight served gate', () => {
     expect(report.failures.join('\n')).toMatch(/outside this generation/);
   });
 
+  it('fails pilot mounts with an unreviewed WebP rung and clean AVIF', async () => {
+    // AVIF-only prefix checking would pass this ladder: every AVIF
+    // candidate is approved while the WebP source serves an unreviewed
+    // generation. Every typed source must carry the approved generation.
+    const fixture = await setupOffline();
+    const [logo] = fixture.assets;
+    const [pageHead, pageTail] = labHtml({ arm: 'pilot', ...fixture }).split(
+      'header-logo'
+    );
+    const html = `${pageHead}header-logo${pageTail.replace(
+      /(\S+ 384w)(" type="image\/webp")/,
+      `$1, /__pilot/${'f'.repeat(64)}/evil.webp 1280w$2`
+    )}`;
+    const report = await fetchServedAgreement('http://unused.invalid', {
+      arms: ['pilot'],
+      expectedBindings: [`${MERCHANT}/logo-a`, `${MERCHANT}/hero-s0`],
+      expectedMounts: [mountFor(logo)],
+      fetchImpl: async () => html,
+      publicDir: fixture.publicDir,
+    });
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(/outside this generation/);
+  });
+
   it('accepts same-origin absolute staged URLs on a store control card', async () => {
     const fixture = await setupOfflineAssets([
       {

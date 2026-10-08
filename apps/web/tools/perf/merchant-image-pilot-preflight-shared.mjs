@@ -4,8 +4,11 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
+import { PILOT_UUID_PATTERN } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
-export { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
+import { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
+
+export { readUpToBytes };
 
 export const HEX64 = /^[0-9a-f]{64}$/;
 export const ASSET_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -14,8 +17,9 @@ export const ASSET_ID = /^[A-Za-z0-9._-]{1,128}$/;
 // A shape-only pattern would pass merchants the route rejects (offline
 // green, route 500). Shared by the inventory, acceptance, manifest, and
 // store-map mirrors — all four route contracts use z.uuid().
-export const UUID =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+// Merchant UUIDs: the shared contract predicate (versions 1-8 plus the
+// nil/max exceptions), not Zod 3's looser .uuid().
+export const UUID = PILOT_UUID_PATTERN;
 // Mirror of z.iso.datetime({ offset: true }) (verified empirically):
 // calendar date + T + minutes with optional seconds/fraction, then Z or a
 // colon offset. Naive, date-only, space-separated, and basic-offset forms
@@ -114,6 +118,17 @@ export function pass(checks, name) {
 
 export async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
+}
+
+// Bounded JSON read: at most maxBytes + 1 stream through the handle, so
+// a huge corrupt file rejects on size instead of exhausting the gate
+// before validation runs. Throws on overflow, like readJson on bad JSON.
+export async function readBoundedJson(path, maxBytes) {
+  const { bytes, truncated } = await readUpToBytes(path, maxBytes);
+  if (truncated) {
+    throw new Error(`JSON exceeds the ${maxBytes}-byte budget`);
+  }
+  return JSON.parse(bytes.toString('utf8'));
 }
 
 export function isIntIn(value, min, max) {

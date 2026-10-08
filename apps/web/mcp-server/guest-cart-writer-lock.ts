@@ -265,7 +265,13 @@ export function acquireWriterLock(directory: string): void {
       const now = new Date();
       utimesSync(lockPath, now, now);
     } catch {
-      /* Lock lost; takeover is another writer's decision now. */
+      // Ownership verified above, yet the refresh failed (read-only
+      // remount, metadata I/O fault): the mtime will go stale and invite
+      // takeover while this process keeps writing. A stale-but-serving
+      // writer violates the guarantee exactly like a displaced one, so
+      // fail closed instead of serving until the next tick notices.
+      failClosed();
+      return;
     }
     // A claimant may have installed a fresh claim between the ownership
     // read and the refresh, so our utimes may have landed on their file:

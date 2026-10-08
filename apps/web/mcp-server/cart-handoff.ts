@@ -114,16 +114,26 @@ export async function prepareCartHandoff({
       optionAvailable ||= !offersError && Boolean(offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
     }
     if (product.has_variants === true) {
+      // The search-shaped RPC projects each variant's effective inventory
+      // policy; the storefront RPC returns raw stock only, which would
+      // report a purchasable serialized_then_unlimited variant at zero
+      // units as unavailable instead of returning option selection.
       const { data: variants, error: variantsError } = await supabase.rpc(
-        'get_storefront_product_variants',
-        { p_product_ids: [productId] }
+        'get_mcp_search_product_variants',
+        { p_product_ids: [productId], p_merchant_id: merchantId }
       );
       if (variantsError) transient = true;
       optionAvailable ||= !variantsError && Array.isArray(variants) &&
-        variants.some((variant) =>
-          variant.product_id === productId &&
-          Number(variant.stock_quantity ?? 0) >= quantity
-        );
+        variants.some((variant) => {
+          if (variant.product_id !== productId) return false;
+          // Mirrors isPublicVariantPurchasable for the serialized
+          // policies: then-unlimited is purchasable at any units, strict
+          // gates on exact units, and unprojected rows keep the existing
+          // raw-stock comparison for the requested quantity.
+          if (variant.effective_policy === 'serialized_then_unlimited')
+            return true;
+          return Number(variant.stock_quantity ?? 0) >= quantity;
+        });
     }
     if (product.has_condition_offers === true || product.has_variants === true) {
       unavailable ||= !optionAvailable;

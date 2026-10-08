@@ -113,6 +113,58 @@ it('matches an uppercase variant UUID against canonical lowercase rows', async (
   });
 });
 
+it('selects options for a then-unlimited variant with zero raw stock', async () => {
+  const lower = '11111111-1111-4111-8111-111111111111';
+  const rpc = vi.fn(async () => ({
+    data: [
+      {
+        product_id: lower,
+        stock_quantity: 0,
+        effective_policy: 'serialized_then_unlimited',
+      },
+    ],
+    error: null,
+  }));
+  const supabase = {
+    from: (table: string) =>
+      chainable(
+        table === 'products'
+          ? {
+              data: {
+                name: 'Phone',
+                slug: 'phone',
+                price: 100,
+                manage_stock: true,
+                has_variants: true,
+                has_condition_offers: false,
+              },
+              error: null,
+            }
+          : { data: null, error: null }
+      ),
+    rpc,
+  } as unknown as SupabaseClient;
+  const result = await prepareCartHandoff({
+    supabase,
+    merchantId: 'merchant',
+    productId: lower,
+    quantity: 1,
+    formatPrice: String,
+  });
+  // The projected policy (not raw stock) decides: the variant is
+  // purchasable, so the shopper selects options instead of seeing
+  // product_unavailable.
+  expect(rpc).toHaveBeenCalledWith('get_mcp_search_product_variants', {
+    p_product_ids: [lower],
+    p_merchant_id: 'merchant',
+  });
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});
+
 it('gates a strict serialized line on anchor units despite stored stock', async () => {
   const lower = '11111111-1111-4111-8111-111111111111';
   const result = await prepareCartHandoff({

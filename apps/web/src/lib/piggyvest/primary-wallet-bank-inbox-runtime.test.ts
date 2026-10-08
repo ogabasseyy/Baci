@@ -34,6 +34,18 @@ it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-e
       /Primary bank inbox/
     );
 });
+it.each([
+  'intake',
+  'worker',
+] as const)('exposes configured retained keys in %s mode so rotation retries verify', (mode) => {
+  const config = readPrimaryWalletBankInboxRuntime(mode, {
+    ...fixture.env,
+    PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: JSON.stringify([
+      'retained-bank-key',
+    ]),
+  });
+  expect(config?.retainedWebhookSecrets).toEqual(['retained-bank-key']);
+});
 it('pins distinct intake/worker identities and accepts exact production configuration', () => {
   expect(
     readPrimaryWalletBankInboxRuntime('intake', fixture.env)?.database.login

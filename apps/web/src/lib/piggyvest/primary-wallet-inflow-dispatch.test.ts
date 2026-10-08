@@ -21,6 +21,7 @@ it('does not intercept legacy inflows while explicitly disabled', async () => {
       rawBody: new Uint8Array(),
       signature: null,
       secret: undefined,
+      families: ['legacy'],
     })
   ).toBe('disabled');
   expect(applyPrimaryWalletSignedInflow).not.toHaveBeenCalled();
@@ -34,7 +35,20 @@ it('does not fall back to legacy credit when enabled configuration is invalid', 
       rawBody: new Uint8Array(),
       signature: null,
       secret: undefined,
+      families: ['legacy'],
     })
   ).rejects.toThrow('Unavailable');
+  expect(applyPrimaryWalletSignedInflow).not.toHaveBeenCalled();
+});
+it('passes foreign-family deliveries through unmapped without verifying', async () => {
+  expect(
+    await dispatchPrimaryWalletInflow({
+      rawBody: new Uint8Array(),
+      signature: null,
+      secret: undefined,
+      families: ['interest'],
+    })
+  ).toBe('unmapped');
+  expect(readPrimaryWalletInflowRuntime).not.toHaveBeenCalled();
   expect(applyPrimaryWalletSignedInflow).not.toHaveBeenCalled();
 });

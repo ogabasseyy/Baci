@@ -17,11 +17,14 @@ export async function dispatchPrimaryWalletBankInboxIntake(input: {
     if (!input.rawBody.byteLength || input.rawBody.byteLength > 65536)
       throw new Error('Invalid envelope');
     if (
-      !verifyPiggyvestPayloadSignature({
-        payload: input.rawBody,
-        signature: input.signature,
-        secret: config.webhookSecret,
-      })
+      ![config.webhookSecret, ...(config.retainedWebhookSecrets ?? [])].some(
+        (secret) =>
+          verifyPiggyvestPayloadSignature({
+            payload: input.rawBody,
+            signature: input.signature,
+            secret,
+          })
+      )
     )
       throw new Error('Invalid signature');
     const event: unknown = JSON.parse(

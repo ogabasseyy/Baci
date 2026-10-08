@@ -73,6 +73,16 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('ignores a picture source whose media ends in an unclosed comment', () => {
+    // CSS consumes an unclosed comment through EOF, so the browser
+    // evaluates the remaining `not all` and skips the source.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source media="not all/*" srcset="https://cdn.example.com/a.webp"><img alt=""></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('ignores a picture source with an impossible mixed-unit range', () => {
     // 1in is 96px, so no viewport satisfies both bounds and the
     // src-less img renders nothing.

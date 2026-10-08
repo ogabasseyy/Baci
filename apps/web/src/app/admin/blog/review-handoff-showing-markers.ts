@@ -8,6 +8,7 @@
 // overrides apply same-element only. Visibility and text color
 // inherit, so their showing markers also act as descendant escapes,
 // like `visible`.
+import { textColorMarkers } from './review-handoff-text-color';
 
 const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
 
@@ -36,59 +37,6 @@ const DISPLAY_UTILITIES = new Set([
   'list-item',
 ]);
 
-// Concrete Tailwind v4 palette colors. text-current and text-inherit
-// pass the ancestor color through, and font-size or alignment
-// utilities (text-sm, text-center) set no color at all.
-const TEXT_COLOR_PATTERN =
-  /^text-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/;
-
-// Nontransparent theme color utilities: the shadcn palette from
-// tailwind.config.mjs plus the storefront tokens from the globals.css
-// @theme inline block. All resolve to solid colors (alpha comes only
-// from slash modifiers, handled below), so any of them overrides
-// inherited transparency. Keep in sync when the theme gains colors.
-const SEMANTIC_TEXT_COLOR_NAMES = new Set([
-  'foreground',
-  'background',
-  'border',
-  'input',
-  'ring',
-  'primary',
-  'primary-foreground',
-  'secondary',
-  'secondary-foreground',
-  'destructive',
-  'destructive-foreground',
-  'muted',
-  'muted-foreground',
-  'accent',
-  'accent-foreground',
-  'popover',
-  'popover-foreground',
-  'card',
-  'card-foreground',
-  'store-primary',
-  'store-primary-text',
-  'store-on-primary',
-  'store-secondary',
-  'store-secondary-text',
-  'store-accent',
-  'store-accent-text',
-  'store-background',
-  'store-background-text',
-  'store-foreground',
-  'store-border',
-  'store-rating',
-  'store-option-secondary',
-]);
-
-function isThemeTextColor(color: string): boolean {
-  return (
-    color.startsWith('text-') &&
-    SEMANTIC_TEXT_COLOR_NAMES.has(color.slice('text-'.length))
-  );
-}
-
 const SIZE_UTILITY_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
 const SCALE_UTILITY_PATTERN = /^(scale-x|scale-y|scale)-(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
@@ -115,46 +63,12 @@ function isNonZeroOpacityUtility(utility: string): boolean {
   return Number.isNaN(numeric) ? true : numeric !== 0;
 }
 
-function isOpaqueColorUtility(utility: string): boolean {
-  const modifierIndex = utility.lastIndexOf('/');
-  const color =
-    modifierIndex === -1 ? utility : utility.slice(0, modifierIndex);
-  if (!TEXT_COLOR_PATTERN.test(color) && !isThemeTextColor(color)) {
-    return false;
-  }
-  if (modifierIndex === -1) return true;
-  // A zero-alpha modifier (text-black/0) renders no pixels: it is not
-  // an opaque override. Arbitrary alphas cannot be evaluated, so
-  // assume visible rather than declaring content hidden.
-  const raw = utility
-    .slice(modifierIndex + 1)
-    .replace(/^\[|\]$/g, '')
-    .replace(/%$/, '');
-  const numeric = Number(raw);
-  return Number.isNaN(numeric) ? true : numeric !== 0;
-}
-
-type TextColorKind = 'opaque' | 'transparent' | 'passthrough';
-
-function textColorKind(utility: string): TextColorKind | null {
-  // Non-colors (font-size, alignment, unknown text-*) return null;
-  // current/inherit pass the ancestor through.
-  const slash = utility.lastIndexOf('/');
-  const color = slash === -1 ? utility : utility.slice(0, slash);
-  if (color === 'text-transparent') return 'transparent';
-  if (color === 'text-current' || color === 'text-inherit')
-    return 'passthrough';
-  if (!TEXT_COLOR_PATTERN.test(color) && !isThemeTextColor(color)) return null;
-  return isOpaqueColorUtility(utility) ? 'opaque' : 'transparent';
-}
-
 /**
  * Showing markers for one element's class list: display, opacity, and
  * screen-reader restoration (same-element overrides only) plus
- * visibility and text color (inherited, so also descendant escapes).
- * Conflicting colors resolve per layer (alphabetically last wins per
- * Tailwind v4.3.1 compiled order); responsive layers ascend. Size
- * restoration is tracked per constraint kind: used height is
+ * visibility (inherited, so also a descendant escape). Text color
+ * markers come from ./review-handoff-text-color. Size restoration is
+ * tracked per constraint kind: used height is
  * min(max(h, min-h), max-h), so max-h-0 still caps after md:h-auto.
  * Base (non-responsive) size utilities restore zero width/height
  * ATTRIBUTES only: author rules unconditionally override
@@ -172,6 +86,7 @@ export function showingMarkers(classes: readonly string[]): {
   notSrOnly: boolean;
   opaqueColor: boolean;
   transparentColor: boolean;
+  clippedBackground: boolean;
   heightRestored: boolean;
   maxHeightRestored: boolean;
   widthRestored: boolean;
@@ -201,10 +116,7 @@ export function showingMarkers(classes: readonly string[]): {
   // while other breakpoints decide independently.
   const displayShowing = new Set<string>();
   const displayHidden = new Set<string>();
-  const colorWinners = new Map<
-    string,
-    { token: string; kind: TextColorKind }
-  >();
+  const textColor = textColorMarkers(classes);
   for (const token of classes) {
     const utility = responsiveUtility(token);
     if (utility !== null) {
@@ -215,14 +127,6 @@ export function showingMarkers(classes: readonly string[]): {
     if (token === 'visible' || utility === 'visible') visible = true;
     if (utility !== null && isNonZeroOpacityUtility(utility)) opacity = true;
     if (token === 'not-sr-only' || utility === 'not-sr-only') notSrOnly = true;
-    const colorUtility = utility === null ? token : utility;
-    const colorKind = textColorKind(colorUtility);
-    if (colorKind !== null) {
-      const layer = token.slice(0, token.length - colorUtility.length);
-      const winner = colorWinners.get(layer);
-      if (!winner || colorUtility > winner.token)
-        colorWinners.set(layer, { token: colorUtility, kind: colorKind });
-    }
     const sizeTarget = utility === null ? token : utility;
     const size = SIZE_UTILITY_PATTERN.exec(sizeTarget);
     if (size !== null && isNonZeroUtilityValue(size[2])) {
@@ -231,14 +135,23 @@ export function showingMarkers(classes: readonly string[]): {
         property === 'h' || property === 'size' || property === 'min-h';
       const restoresWidth =
         property === 'w' || property === 'size' || property === 'min-w';
+      // A nonzero minimum beats a zero maximum at any layer: min and
+      // max are different properties, so constraint resolution (not
+      // cascade order) lets the minimum win.
       if (utility === null) {
         if (restoresHeight) baseHeightRestored = true;
         if (restoresWidth) baseWidthRestored = true;
+        if (property === 'min-h') maxHeightRestored = true;
+        if (property === 'min-w') maxWidthRestored = true;
       } else {
         if (restoresHeight) heightRestored = true;
-        if (property === 'max-h') maxHeightRestored = true;
+        if (property === 'max-h' || property === 'min-h') {
+          maxHeightRestored = true;
+        }
         if (restoresWidth) widthRestored = true;
-        if (property === 'max-w') maxWidthRestored = true;
+        if (property === 'max-w' || property === 'min-w') {
+          maxWidthRestored = true;
+        }
       }
     }
     if (utility !== null && utility === 'scale-none') {
@@ -267,23 +180,14 @@ export function showingMarkers(classes: readonly string[]): {
   const display = [...displayShowing].some(
     (breakpoint) => !displayHidden.has(breakpoint)
   );
-  // An opaque winner anywhere renders at its layer; transparency needs
-  // a transparent base winner with transparent-or-absent winners above.
-  const opaqueColor = [...colorWinners.values()].some(
-    (winner) => winner.kind === 'opaque'
-  );
-  const transparentColor =
-    colorWinners.get('')?.kind === 'transparent' &&
-    [...colorWinners].every(
-      ([layer, winner]) => layer === '' || winner.kind === 'transparent'
-    );
   return {
     display,
     visible,
     opacity,
     notSrOnly,
-    opaqueColor,
-    transparentColor,
+    opaqueColor: textColor.opaqueColor,
+    transparentColor: textColor.transparentColor,
+    clippedBackground: textColor.clippedBackground,
     heightRestored,
     maxHeightRestored,
     widthRestored,

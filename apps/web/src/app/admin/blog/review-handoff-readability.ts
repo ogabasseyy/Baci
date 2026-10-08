@@ -147,8 +147,9 @@ function elementColor(tag: string): 'opaque' | 'transparent' | null {
     // Same-layer color conflicts resolve by generated precedence
     // (alphabetically last wins), so a transparent winner beats
     // text-black while text-white beats transparent. current/inherit
-    // winners pass through to the ancestor frames.
-    if (markers.opaqueColor) return 'opaque';
+    // winners pass through to the ancestor frames. A background
+    // clipped to the glyphs renders transparent text like opaque.
+    if (markers.opaqueColor || markers.clippedBackground) return 'opaque';
     if (markers.transparentColor) return 'transparent';
   }
   return null;

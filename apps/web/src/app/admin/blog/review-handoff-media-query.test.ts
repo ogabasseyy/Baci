@@ -35,6 +35,9 @@ it.each([
   '(1in < width < 96px)',
   '(2.54cm <= width <= 95px)',
   '(72pt <= height <= 50px)',
+  'not all/*',
+  'not all/* unclosed trailing text',
+  '(max-width: -1px)/*',
 ])('detects a never-matching media value: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(true);
 });
@@ -69,6 +72,9 @@ it.each([
   '(1in <= width <= 200px)',
   '(50vw <= width <= 100px)',
   '(10em <= width <= 5px)',
+  'screen/*unclosed',
+  '/* unclosed leading everything',
+  'screen/*closed*/ and (color)',
 ])('keeps a possibly-matching media value applicable: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(false);
 });

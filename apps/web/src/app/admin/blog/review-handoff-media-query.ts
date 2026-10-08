@@ -12,7 +12,9 @@ import { evaluateDimensionAtom } from './review-handoff-media-query-dimension';
 const MAX_CONDITION_DEPTH = 32;
 
 function stripMediaComments(value: string): string {
-  return value.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  // Per CSS Syntax 3 an unclosed comment consumes through EOF, so
+  // `not all/*` evaluates as `not all` and must strip the same way.
+  return value.replace(/\/\*[\s\S]*?(?:\*\/|$)/g, ' ');
 }
 
 function splitTopLevelQueries(value: string): string[] {

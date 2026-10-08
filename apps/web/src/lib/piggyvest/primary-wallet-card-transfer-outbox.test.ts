@@ -46,8 +46,7 @@ beforeEach(() => {
               (mocks.state === 'ready' || mocks.stuckSibling)
             ? [fixture.context.operationId]
             : [],
-        unknownCount:
-          mocks.state === 'unknown' || mocks.stuckSibling ? 1 : 0,
+        unknownCount: mocks.state === 'unknown' || mocks.stuckSibling ? 1 : 0,
         dispatchingCount: mocks.state === 'dispatching' ? 1 : 0,
       };
     if (sql.includes('dispatch_context')) result = fixture.context;

@@ -68,9 +68,7 @@ export function beginPrimaryWalletCardCompletion(
     } catch {
       // Redacted cause only: the error itself may carry provider or
       // account details, so log the classification, never the value.
-      console.warn(
-        `[primary-wallet-card] completion failed: ${failureCause}`
-      );
+      console.warn(`[primary-wallet-card] completion failed: ${failureCause}`);
       if (!input.refs.isMountedRef.current) return;
       input.refs.paymentCompletionStartedRef.current = false;
       input.setPaymentStatus('error');

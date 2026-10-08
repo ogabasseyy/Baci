@@ -8,6 +8,12 @@
 
 BEGIN;
 
+-- Merchant writes fire the canonical audit trigger, which rejects actorless
+-- callers (28000), so the fixtures run under the service actor like the
+-- other SQL checks that seed merchants.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 INSERT INTO storage.objects (bucket_id, name, owner, owner_id, metadata)
 VALUES
   ('media', 'platform/blog/stale.webp', NULL, NULL, '{}'::jsonb),

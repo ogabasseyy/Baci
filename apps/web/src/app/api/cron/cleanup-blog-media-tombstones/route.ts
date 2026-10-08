@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await sweepDueBlogMediaTombstones(createServiceClient());
+    const result = await sweepDueBlogMediaTombstones(
+      createServiceClient('event-pipeline')
+    );
     if (result === null) {
       return NextResponse.json(
         { error: 'Tombstone sweep failed' },

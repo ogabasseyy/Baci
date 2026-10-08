@@ -54,9 +54,14 @@ function isNonZeroUtilityValue(value: string): boolean {
   return !ZERO_SIZE_VALUE_PATTERN.test(raw);
 }
 
+const OPACITY_UTILITY_PATTERN = /^opacity-(\d+(?:\.\d+)?|\[.+\])$/;
+
 function isNonZeroOpacityUtility(utility: string): boolean {
   if (!utility.startsWith('opacity-')) return false;
-  const raw = utility.slice('opacity-'.length).replace(/^\[|\]$/g, '');
+  const raw = utility
+    .slice('opacity-'.length)
+    .replace(/^\[|\]$/g, '')
+    .replace(/%$/, '');
   const numeric = Number(raw);
   // Arbitrary values (var(), color-mix) cannot be evaluated: assume
   // visible rather than declaring content hidden.
@@ -99,7 +104,6 @@ export function showingMarkers(classes: readonly string[]): {
   scaleYRestored: boolean;
 } {
   let visible = false;
-  let opacity = false;
   let notSrOnly = false;
   let heightRestored = false;
   let maxHeightRestored = false;
@@ -117,6 +121,10 @@ export function showingMarkers(classes: readonly string[]): {
   const displayShowing = new Set<string>();
   const displayHidden = new Set<string>();
   const textColor = textColorMarkers(classes);
+  // Opacity resolves per layer like colors: the alphabetically last
+  // opacity utility wins (Tailwind v4.3.1 compiled order), and any
+  // nonzero winner shows the element at its layer or below.
+  const opacityWinners = new Map<string, string>();
   for (const token of classes) {
     const utility = responsiveUtility(token);
     if (utility !== null) {
@@ -125,7 +133,14 @@ export function showingMarkers(classes: readonly string[]): {
       else if (utility === 'hidden') displayHidden.add(breakpoint);
     }
     if (token === 'visible' || utility === 'visible') visible = true;
-    if (utility !== null && isNonZeroOpacityUtility(utility)) opacity = true;
+    const opacityTarget = utility === null ? token : utility;
+    if (OPACITY_UTILITY_PATTERN.test(opacityTarget)) {
+      const layer = token.slice(0, token.length - opacityTarget.length);
+      const winner = opacityWinners.get(layer);
+      if (!winner || opacityTarget > winner) {
+        opacityWinners.set(layer, opacityTarget);
+      }
+    }
     if (token === 'not-sr-only' || utility === 'not-sr-only') notSrOnly = true;
     const sizeTarget = utility === null ? token : utility;
     const size = SIZE_UTILITY_PATTERN.exec(sizeTarget);
@@ -180,6 +195,7 @@ export function showingMarkers(classes: readonly string[]): {
   const display = [...displayShowing].some(
     (breakpoint) => !displayHidden.has(breakpoint)
   );
+  const opacity = [...opacityWinners.values()].some(isNonZeroOpacityUtility);
   return {
     display,
     visible,

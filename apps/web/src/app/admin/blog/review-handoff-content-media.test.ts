@@ -259,4 +259,15 @@ describe('validateImportedContent media', () => {
     expect(content).toContain('<img');
     expect(content).not.toContain('![');
   });
+
+  it('rejects a srcset-only img without an src fallback', () => {
+    // The editor parses `img[src]` and drops this image on mount, so
+    // the import requires `src` even though the srcset alone could
+    // supply the browser.
+    expect(() =>
+      validateImportedContent(
+        '<img srcset="https://cdn.example.com/a.webp 1x" alt="A">'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
 });

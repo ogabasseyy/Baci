@@ -28,6 +28,10 @@ describe('hasReadableContent', () => {
     '<img class="max-h-0 min-h-screen" src="https://cdn.example.com/a.png">',
     '<img class="max-w-0 min-w-full" src="https://cdn.example.com/a.png">',
     '<div class="max-h-0 min-h-screen overflow-hidden">Only body</div>',
+    '<div class="opacity-0 opacity-100">Only body</div>',
+    '<div class="opacity-0 md:opacity-0 md:opacity-100">Only body</div>',
+    '<img class="opacity-0 opacity-50" src="https://cdn.example.com/a.png">',
+    '<div class="opacity-100 md:opacity-0">Only body</div>',
     '<img width="0" class="w-auto" src="https://cdn.example.com/a.png">',
     '<img height="0" class="h-auto" src="https://cdn.example.com/a.png">',
     '<img width="0" height="0" class="size-auto" src="https://cdn.example.com/a.png">',
@@ -78,8 +82,12 @@ describe('hasReadableContent', () => {
     '<p class="bg-transparent bg-clip-text text-transparent">Only body</p>',
     '<p class="bg-red-500/0 bg-clip-text text-transparent">Only body</p>',
     '<p class="bg-linear-to-r bg-clip-text text-transparent">Only body</p>',
+    '<p class="bg-red-500 bg-transparent bg-clip-text text-transparent">Only body</p>',
     '<img class="max-h-0 min-h-0" src="https://cdn.example.com/a.png">',
     '<img class="max-h-0 h-screen" src="https://cdn.example.com/a.png">',
+    '<div class="opacity-0">Only body</div>',
+    '<div class="opacity-0 opacity-[0]">Only body</div>',
+    '<div class="opacity-0 md:opacity-0">Only body</div>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

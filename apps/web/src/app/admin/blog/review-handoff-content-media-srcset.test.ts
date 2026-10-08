@@ -142,7 +142,9 @@ describe('validateImportedContent media srcset', () => {
     'https://cdn.example.com/a.webp 1e999x',
   ])('rejects srcset candidates with invalid descriptors: %s', (srcset) => {
     expect(() =>
-      validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)
+      validateImportedContent(
+        `<p>Body</p><img alt="A" src="https://cdn.example.com/a.png" srcset="${srcset}">`
+      )
     ).toThrow('must use HTTPS URLs');
   });
 
@@ -153,7 +155,9 @@ describe('validateImportedContent media srcset', () => {
     'https://cdn.example.com/a.webp .5x',
   ])('accepts srcset candidates with valid descriptors: %s', (srcset) => {
     expect(
-      validateImportedContent(`<p>Body</p><img alt="A" srcset="${srcset}">`)
+      validateImportedContent(
+        `<p>Body</p><img alt="A" src="https://cdn.example.com/a.png" srcset="${srcset}">`
+      )
     ).toContain('srcset');
   });
 });

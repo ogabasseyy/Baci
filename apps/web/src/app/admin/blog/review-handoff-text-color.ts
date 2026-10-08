@@ -90,6 +90,8 @@ function isOpaqueColorUtility(utility: string): boolean {
 
 type TextColorKind = 'opaque' | 'transparent' | 'passthrough';
 
+type LayerWinner<Kind> = { token: string; kind: Kind };
+
 function textColorKind(utility: string): TextColorKind | null {
   // Non-colors (font-size, alignment, unknown text-*) return null;
   // current/inherit pass the ancestor through.
@@ -129,29 +131,90 @@ function splitUtilityModifier(utility: string): [string, string | null] {
   return [utility.slice(0, split), utility.slice(split + 1)];
 }
 
-function backgroundPaint(utility: string): 'solid' | 'gradient' | null {
-  // Only painted backgrounds show through clipped glyphs: transparent,
-  // none, current (resolving to the transparent text color), and
-  // inherit (transparent unless an ancestor paints) do not. Arbitrary
-  // backgrounds are assumed to paint unless transparent or none.
-  if (BACKGROUND_GRADIENT_PATTERN.test(utility)) return 'gradient';
-  const [base, modifier] = splitUtilityModifier(utility);
-  let solid = false;
-  if (base.startsWith('bg-[') && base.endsWith(']')) {
-    const raw = base.slice('bg-['.length, -1);
-    solid = raw !== 'transparent' && raw !== 'none';
-  } else if (
-    BACKGROUND_COLOR_PATTERN.test(base) ||
-    isThemeBackgroundColor(base)
-  ) {
-    solid = true;
-  }
-  if (!solid) return null;
-  if (modifier === null) return 'solid';
+function isZeroAlphaModifier(modifier: string | null): boolean {
+  if (modifier === null) return false;
   const alpha = modifier.replace(/^\[|\]$/g, '').replace(/%$/, '');
   const numeric = Number(alpha);
-  if (!Number.isNaN(numeric) && numeric === 0) return null;
-  return 'solid';
+  return !Number.isNaN(numeric) && numeric === 0;
+}
+
+const BACKGROUND_ARBITRARY_IMAGE_PATTERN =
+  /(url|image-set|image|gradient|element|cross-fade)\s*\(/i;
+const BACKGROUND_ARBITRARY_NON_PAINT_PATTERN = /^bg-\[(length|position|size):/;
+
+function backgroundColorKind(utility: string): 'solid' | 'blank' | null {
+  // background-color utilities: palette, theme, transparent, current,
+  // inherit, and arbitrary colors. transparent/current/inherit and
+  // zero alphas occupy sort positions but never paint. Size/position
+  // arbitrary values and image-likes stay out of this channel.
+  if (BACKGROUND_ARBITRARY_NON_PAINT_PATTERN.test(utility)) return null;
+  const [base, modifier] = splitUtilityModifier(utility);
+  let color = false;
+  if (base.startsWith('bg-[') && base.endsWith(']')) {
+    const raw = base.slice('bg-['.length, -1);
+    if (BACKGROUND_ARBITRARY_IMAGE_PATTERN.test(raw)) return null;
+    if (raw === 'none') return null;
+    color = true;
+  } else if (
+    BACKGROUND_COLOR_PATTERN.test(base) ||
+    isThemeBackgroundColor(base) ||
+    base === 'bg-transparent' ||
+    base === 'bg-current' ||
+    base === 'bg-inherit'
+  ) {
+    color = true;
+  }
+  if (!color) return null;
+  if (
+    base === 'bg-transparent' ||
+    base === 'bg-current' ||
+    base === 'bg-inherit' ||
+    (base.startsWith('bg-[') && base.slice('bg-['.length, -1) === 'transparent')
+  ) {
+    return 'blank';
+  }
+  return isZeroAlphaModifier(modifier) ? 'blank' : 'solid';
+}
+
+type BackgroundImage = {
+  token: string;
+  rank: number;
+  paints: boolean;
+  gradient: boolean;
+};
+
+function backgroundImageKind(
+  utility: string
+): Omit<BackgroundImage, 'token'> | null {
+  // background-image utilities, probe-ordered (Tailwind v4.3.1): named
+  // gradients, arbitrary images, `none` last. Alphabetical order
+  // breaks ties within a rank.
+  if (BACKGROUND_GRADIENT_PATTERN.test(utility)) {
+    const [, modifier] = splitUtilityModifier(utility);
+    return { gradient: true, paints: !isZeroAlphaModifier(modifier), rank: 0 };
+  }
+  if (utility === 'bg-none') {
+    return { gradient: false, paints: false, rank: 2 };
+  }
+  const [base, modifier] = splitUtilityModifier(utility);
+  if (!base.startsWith('bg-[') || !base.endsWith(']')) return null;
+  if (!BACKGROUND_ARBITRARY_IMAGE_PATTERN.test(base.slice('bg-['.length, -1))) {
+    return null;
+  }
+  return { gradient: false, paints: !isZeroAlphaModifier(modifier), rank: 1 };
+}
+
+function isGradientStop(utility: string): boolean {
+  if (!GRADIENT_STOP_PATTERN.test(utility)) return false;
+  const [base, modifier] = splitUtilityModifier(utility);
+  if (
+    /-transparent$/.test(base) ||
+    /-current$/.test(base) ||
+    /-inherit$/.test(base)
+  ) {
+    return false;
+  }
+  return !isZeroAlphaModifier(modifier);
 }
 
 /**
@@ -167,13 +230,13 @@ export function textColorMarkers(classes: readonly string[]): {
   transparentColor: boolean;
   clippedBackground: boolean;
 } {
-  const colorWinners = new Map<
-    string,
-    { token: string; kind: TextColorKind }
-  >();
+  const colorWinners = new Map<string, LayerWinner<TextColorKind>>();
   const clipLayers = new Set<string>();
-  const paintLayers = new Set<string>();
-  const gradientLayers = new Set<string>();
+  const backgroundColorWinners = new Map<
+    string,
+    LayerWinner<'solid' | 'blank'>
+  >();
+  const backgroundImageWinners = new Map<string, BackgroundImage>();
   let hasGradientStops = false;
   for (const token of classes) {
     const utility = responsiveUtility(token);
@@ -186,12 +249,26 @@ export function textColorMarkers(classes: readonly string[]): {
         colorWinners.set(layer, { token: bare, kind: colorKind });
     }
     if (bare === 'bg-clip-text') clipLayers.add(layer);
-    const paint = backgroundPaint(bare);
-    if (paint === 'solid') paintLayers.add(layer);
-    else if (paint === 'gradient') gradientLayers.add(layer);
-    if (GRADIENT_STOP_PATTERN.test(bare) && !bare.endsWith('-transparent')) {
-      hasGradientStops = true;
+    const backgroundColor = backgroundColorKind(bare);
+    if (backgroundColor !== null) {
+      const winner = backgroundColorWinners.get(layer);
+      if (!winner || bare > winner.token)
+        backgroundColorWinners.set(layer, {
+          token: bare,
+          kind: backgroundColor,
+        });
     }
+    const backgroundImage = backgroundImageKind(bare);
+    if (backgroundImage !== null) {
+      const winner = backgroundImageWinners.get(layer);
+      if (
+        !winner ||
+        backgroundImage.rank > winner.rank ||
+        (backgroundImage.rank === winner.rank && bare > winner.token)
+      )
+        backgroundImageWinners.set(layer, { token: bare, ...backgroundImage });
+    }
+    if (isGradientStop(bare)) hasGradientStops = true;
   }
   const opaqueColor = [...colorWinners.values()].some(
     (winner) => winner.kind === 'opaque'
@@ -201,8 +278,14 @@ export function textColorMarkers(classes: readonly string[]): {
     [...colorWinners].every(
       ([layer, winner]) => layer === '' || winner.kind === 'transparent'
     );
-  if (hasGradientStops) {
-    for (const layer of gradientLayers) paintLayers.add(layer);
+  const paintLayers = new Set<string>();
+  for (const [layer, winner] of backgroundColorWinners) {
+    if (winner.kind === 'solid') paintLayers.add(layer);
+  }
+  for (const [layer, winner] of backgroundImageWinners) {
+    if (winner.paints && (!winner.gradient || hasGradientStops)) {
+      paintLayers.add(layer);
+    }
   }
   const clippedBackground = clipLayers.size > 0 && paintLayers.size > 0;
   return { opaqueColor, transparentColor, clippedBackground };

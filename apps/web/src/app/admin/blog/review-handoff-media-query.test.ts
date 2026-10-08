@@ -28,6 +28,7 @@ it.each([
   '(max-width: -1px) and (color)',
   '(max-width: -1px) or (max-height: -1px)',
   'not (min-width: -1px)',
+  'not all and (min-width: -1px)',
   '((max-width: -1px))',
   '(1in <= width <= 10px)',
   '(10px >= width >= 1in)',
@@ -35,6 +36,7 @@ it.each([
   '(1in < width < 96px)',
   '(2.54cm <= width <= 95px)',
   '(72pt <= height <= 50px)',
+  '(1in &lt;= width &lt;= 10px)',
   'not all/*',
   'not all/* unclosed trailing text',
   '(max-width: -1px)/*',
@@ -75,6 +77,11 @@ it.each([
   'screen/*unclosed',
   '/* unclosed leading everything',
   'screen/*closed*/ and (color)',
+  'not all and (max-width: -1px)',
+  'NOT ALL AND (MAX-WIDTH: -1PX)',
+  'not all and (color)',
+  'not screen and (max-width: -1px)',
+  'not (all and (max-width: -1px))',
 ])('keeps a possibly-matching media value applicable: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(false);
 });

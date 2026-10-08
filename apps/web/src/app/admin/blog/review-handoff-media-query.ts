@@ -7,6 +7,7 @@
 // grammar (combinator placement, feature names) and possibly
 // matching values stay applicable: the validator has no viewport,
 // and an over-eager skip would reject rendering articles.
+import { decodeHTMLAttribute } from 'entities';
 import { evaluateDimensionAtom } from './review-handoff-media-query-dimension';
 
 const MAX_CONDITION_DEPTH = 32;
@@ -164,16 +165,45 @@ function splitTopLevelKeyword(condition: string, keyword: string): string[] {
   return parts;
 }
 
+const MEDIA_TYPE_QUERY_PATTERN = /^\s*(not\s+|only\s+)?([a-z-]+)\s*([\s\S]*)$/i;
+
 function evaluateMediaCondition(
   condition: string,
   depth: number
 ): 'false' | 'true' | 'other' {
-  // Three-valued evaluation with `not` > `and` > `or` precedence. Only
+  // Three-valued evaluation. A query-level `[not|only]? <type> [and
+  // ...]` binds its modifier to the type plus the whole and-chain, so
+  // `not all and (max-width: -1px)` negates false into a match. Only
   // proven-false conditions skip the source; anything else stays
   // applicable, including unknown features and deep nesting.
   if (depth > MAX_CONDITION_DEPTH) return 'other';
   const stripped = stripRedundantParens(condition);
   if (/^all$/i.test(stripped)) return 'true';
+  const typed = MEDIA_TYPE_QUERY_PATTERN.exec(stripped);
+  if (typed && (typed[3] === '' || /^and\b/i.test(typed[3]))) {
+    const negated = typed[1] !== undefined && /^not/i.test(typed[1]);
+    const values: ('false' | 'true' | 'other')[] = [
+      typed[2].toLowerCase() === 'all' ? 'true' : 'other',
+    ];
+    if (typed[3] !== '') {
+      const operands = splitTopLevelKeyword(typed[3].slice(3), 'and');
+      for (const part of operands) {
+        values.push(evaluateMediaCondition(part, depth + 1));
+      }
+    }
+    let combined: 'false' | 'true' | 'other' = 'true';
+    for (const value of values) {
+      if (value === 'false') {
+        combined = 'false';
+        break;
+      }
+      if (value === 'other') combined = 'other';
+    }
+    if (!negated) return combined;
+    if (combined === 'false') return 'true';
+    if (combined === 'true') return 'false';
+    return 'other';
+  }
   const disjuncts = splitTopLevelKeyword(stripped, 'or');
   if (disjuncts.length > 1) {
     const values = disjuncts.map((part) =>
@@ -217,10 +247,13 @@ function isProvablyFalseCondition(query: string, depth: number): boolean {
  * Whether a picture source media value provably never matches any
  * device. A list applies when any alternative could match, and an
  * empty list applies to all devices, so only a value whose every
- * query is `not all` or structurally invalid counts.
+ * query is `not all`, structurally invalid, or provably false counts.
  */
 export function isNeverMatchingMediaQuery(value: string): boolean {
-  const queries = splitTopLevelQueries(stripMediaComments(value))
+  // Stored markup arrives entity-escaped (`&lt;` for `<`), so decode
+  // to the value the browser's CSS parser sees, like src/srcset.
+  const decoded = decodeHTMLAttribute(value);
+  const queries = splitTopLevelQueries(stripMediaComments(decoded))
     .map((query) => query.trim())
     .filter((query) => query !== '');
   if (queries.length === 0) return false;

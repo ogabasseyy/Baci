@@ -70,6 +70,20 @@ describe('textColorMarkers', () => {
       'legacy gradient',
       ['bg-gradient-to-r', 'from-red-500', 'bg-clip-text', 'text-transparent'],
     ],
+    [
+      'white beats transparent',
+      ['bg-white', 'bg-transparent', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'gradient paints despite transparent color',
+      [
+        'bg-linear-to-r',
+        'from-red-500',
+        'bg-transparent',
+        'bg-clip-text',
+        'text-transparent',
+      ],
+    ],
   ])('pairs a clip with an effective background: %s', (_, classes) => {
     expect(textColorMarkers(classes).clippedBackground).toBe(true);
   });
@@ -97,6 +111,27 @@ describe('textColorMarkers', () => {
     ],
     ['non-text clip', ['bg-red-500', 'bg-clip-border', 'text-transparent']],
     ['no clip or paint', ['text-transparent']],
+    [
+      'transparent beats solid',
+      ['bg-red-500', 'bg-transparent', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'zero-alpha beats solid',
+      ['bg-red-500', 'bg-white/0', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'same-layer responsive conflict',
+      [
+        'md:bg-red-500',
+        'md:bg-transparent',
+        'bg-clip-text',
+        'text-transparent',
+      ],
+    ],
+    [
+      'transparent beats theme',
+      ['bg-foreground', 'bg-transparent', 'bg-clip-text', 'text-transparent'],
+    ],
   ])('withholds pairing without both sides: %s', (_, classes) => {
     expect(textColorMarkers(classes).clippedBackground).toBe(false);
   });

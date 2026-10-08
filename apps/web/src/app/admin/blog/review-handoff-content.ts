@@ -145,6 +145,13 @@ type MediaGroup = {
   imgSeen: boolean;
 };
 
+function imgHasSrcValue(tag: string): boolean {
+  // The editor parses `img[src]` and drops src-less images on mount.
+  return tagAttributes(tag).some(
+    ({ name, value }) => name === 'src' && value.trim() !== ''
+  );
+}
+
 // Image MIME types browsers universally render. Anything else is
 // skipped when selecting a picture resource, so it contributes no
 // candidate here either.
@@ -185,10 +192,11 @@ function hasBrokenMediaTag(html: string): boolean {
   // rendered image and must not reject the handoff. Elements (not
   // substrings) are matched so media-like text quoted inside another
   // element's attribute is not mistaken for a real image. Candidates
-  // are evaluated per picture: a src-less img is supplied by its
-  // picture sources, so judging it alone would reject valid responsive
-  // markup. Standalone images form singleton groups under the same
-  // rule; pictures without media elements are inert, not broken.
+  // are evaluated per picture while every img still needs its own
+  // src: the editor drops src-less images on mount, so picture
+  // sources validate but never substitute for it. Standalone images
+  // form singleton groups under the same rule; pictures without
+  // media elements are inert, not broken.
   const withoutComments = stripRawTextBlocks(stripHtmlComments(html));
   const groups: MediaGroup[] = [];
   const pictureStack: MediaGroup[] = [];
@@ -225,6 +233,9 @@ function hasBrokenMediaTag(html: string): boolean {
     // selecting the resource for the img: sources after the group's
     // img, and sources with inapplicable types, are ignored entirely.
     if (isImg) {
+      // A src-less img breaks the handoff on its own: the editor
+      // drops it on mount whatever the picture sources supply.
+      if (!imgHasSrcValue(tag)) return true;
       group.hasMedia = true;
       group.candidates.push(...mediaTagCandidates(tag));
       group.imgSeen = true;

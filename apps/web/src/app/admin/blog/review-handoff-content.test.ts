@@ -177,4 +177,32 @@ describe('validateImportedContent', () => {
       )
     ).toContain('https://cdn.example.com/a.webp');
   });
+
+  it('stores only editor-compatible images with an src fallback', () => {
+    // The editor parses `img[src]` and drops anything else, so every
+    // image in accepted content must carry a usable src: this is the
+    // import-boundary half of the editor round-trip guarantee.
+    const bodies = [
+      '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A">',
+      '<picture><source srcset="https://cdn.example.com/a.webp"><img alt="A"></picture>',
+      '<picture><source srcset="https://cdn.example.com/a.webp"><img src="https://cdn.example.com/a.png" alt="A"></picture>',
+      '![Photo](https://cdn.example.com/photo.png)',
+    ];
+    let accepted = 0;
+    for (const body of bodies) {
+      let stored: string;
+      try {
+        stored = validateImportedContent(body);
+      } catch {
+        continue;
+      }
+      accepted += 1;
+      const imgs = stored.match(/<img\b[^>]*>/gi) ?? [];
+      expect(imgs.length).toBeGreaterThan(0);
+      for (const img of imgs) {
+        expect(img).toMatch(/src="https:\/\//i);
+      }
+    }
+    expect(accepted).toBeGreaterThan(0);
+  });
 });

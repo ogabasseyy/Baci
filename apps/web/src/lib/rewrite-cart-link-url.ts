@@ -33,7 +33,9 @@ export function rewriteCartLinkUrl(
     url.searchParams.delete('item_id');
     url.searchParams.delete('qty');
   }
-  if (guestQuantities && rejectedIds.length === 0)
+  // A transfer that did not originate from guest_cart (legacy item_id link
+  // or unparseable handoff) must not leave a dead guest_cart value behind.
+  if (!guestQuantities || rejectedIds.length === 0)
     url.searchParams.delete('guest_cart');
   url.searchParams.delete('quiz_award_id');
   url.searchParams.delete('quiz_voucher_token');

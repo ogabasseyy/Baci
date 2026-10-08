@@ -19,6 +19,10 @@ export interface CartUpdateCall {
  * instead of dropping every other displayed item. Returns the last usable
  * tool result for the normal merge: the retry result when the retry failed
  * or found variant selection, otherwise the newest successful replay.
+ * Throws when a replay cannot complete: the caller merges the returned
+ * result as authoritative, so a partial cart would silently drop the
+ * unreplayed lines from widget state. The caller keeps local state and
+ * shows an error instead, and the next add retries the recovery.
  */
 export async function recoverExpiredAdd(
   callCartTool: CartUpdateCall,
@@ -45,16 +49,19 @@ export async function recoverExpiredAdd(
         cart_token: freshToken,
       });
     } catch {
-      // Transport failure: further replays would fail the same way, so keep
-      // the last good result instead of hanging the recovery.
-      break;
+      // Transport failure: further replays would fail the same way, and
+      // returning the partial cart would drop the unreplayed lines.
+      throw new Error('Guest cart recovery did not complete; retry the add.');
     }
     const content = parseCartToolOutput(readStructuredContent(response));
     if (content?.success === true && content.cart_token === freshToken) {
       result = response;
       continue;
     }
-    if (content?.cart_expired === true) break;
+    // The fresh cart died mid-replay (evicted under capacity pressure):
+    // same incomplete recovery, same failure instead of a partial merge.
+    if (content?.cart_expired === true)
+      throw new Error('Guest cart recovery did not complete; retry the add.');
     // Stale survivor (catalog validation failed, variant selection required,
     // or an unexpected token): skip it and keep the last good result.
   }

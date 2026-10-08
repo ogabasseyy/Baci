@@ -6,7 +6,10 @@ import {
   mcpGuestCartOutputSchema,
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
-import { consumeGuestCartCreation } from './guest-cart-creation-quota';
+import {
+  consumeGuestCartCreation,
+  peekGuestCartCreation,
+} from './guest-cart-creation-quota';
 import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
 
 class VariantSelectionRequired extends Error {
@@ -56,11 +59,11 @@ export function registerGuestCartTool(
     async (args) => {
       try {
         // Tokenless calls mint a fresh cart file, so anonymous creation (but
-        // never token-bound updates) is capped per caller IP.
+        // never token-bound updates) is capped per caller IP. Peek first:
+        // failed validations and store errors return below without
+        // consuming quota; only a persisted cart is recorded.
         if (!args.cart_token) {
-          const quota = consumeGuestCartCreation(
-            options.clientIp ?? 'unknown'
-          );
+          const quota = peekGuestCartCreation(options.clientIp ?? 'unknown');
           if (!quota.allowed) {
             return {
               isError: true,
@@ -113,6 +116,12 @@ export function registerGuestCartTool(
             }
           }
         );
+        if (!args.cart_token) {
+          // Record the persisted cart. A denial here means concurrent
+          // creations filled the window mid-flight; the cart already
+          // exists, so the overshoot stands and no error is returned.
+          consumeGuestCartCreation(options.clientIp ?? 'unknown');
+        }
         const url = new URL('https://ogabassey.com/cart');
         url.searchParams.set('guest_cart', JSON.stringify(cart.items));
         return {

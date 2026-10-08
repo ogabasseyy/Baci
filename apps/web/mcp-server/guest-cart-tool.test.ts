@@ -5,6 +5,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import { registerGuestCartTool } from './guest-cart-tool';
+import { GUEST_CART_QUOTA_MAX_CREATIONS as MAX_QUOTA } from './guest-cart-creation-quota';
 import { GuestCartStore } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 const validate = vi.hoisted(() => vi.fn());
@@ -85,8 +86,12 @@ it('caps anonymous cart creation per caller while token updates stay unlimited',
   try {
     registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String, clientIp: 'quota-test-client' });
     validate.mockResolvedValue({ structuredContent: { success: true } });
+    // A failed validation burns no quota: the full burst below still fits.
+    validate.mockResolvedValueOnce({ structuredContent: { success: false } });
+    const failed = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean };
+    expect(failed.isError).toBe(true);
     let firstToken = '';
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < MAX_QUOTA; i += 1) {
       const created = await handler?.({ product_id: id, quantity: 1 }) as { structuredContent: { success: boolean; cart_token: string } };
       expect(created.structuredContent.success).toBe(true);
       if (i === 0) firstToken = created.structuredContent.cart_token;

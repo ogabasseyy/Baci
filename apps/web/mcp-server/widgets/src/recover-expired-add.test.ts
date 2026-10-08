@@ -61,33 +61,47 @@ it('returns the retry result untouched when it fails or selects variants', async
   expect(callTool).toHaveBeenCalledTimes(1);
 });
 
-it('skips stale survivors and stops when the fresh cart re-expires', async () => {
+it('skips stale survivors and resolves with the last good replay', async () => {
   const stale = { structuredContent: { success: false } };
+  const third = { ...second, id: '33333333-3333-4333-8333-333333333333' };
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(success(fresh, [product.id]))
+    .mockResolvedValueOnce(stale)
+    .mockResolvedValueOnce(success(fresh, [product.id, third.id]));
+  const result = await recoverExpiredAdd(callTool, product.id, 1, [
+    { product: second, quantity: 1 },
+    { product: third, quantity: 1 },
+  ]);
+  expect(result).toEqual(success(fresh, [product.id, third.id]));
+  expect(callTool).toHaveBeenCalledTimes(3);
+});
+
+it('rejects when the fresh cart re-expires mid-replay', async () => {
   const reexpired = {
     structuredContent: { success: false, cart_expired: true },
   };
   const callTool = vi
     .fn()
     .mockResolvedValueOnce(success(fresh, [product.id]))
-    .mockResolvedValueOnce(stale)
     .mockResolvedValueOnce(reexpired);
-  const third = { ...second, id: '33333333-3333-4333-8333-333333333333' };
-  const result = await recoverExpiredAdd(callTool, product.id, 1, [
-    { product: second, quantity: 1 },
-    { product: third, quantity: 1 },
-  ]);
-  expect(result).toEqual(success(fresh, [product.id]));
-  expect(callTool).toHaveBeenCalledTimes(3);
+  await expect(
+    recoverExpiredAdd(callTool, product.id, 1, [
+      { product: second, quantity: 1 },
+    ])
+  ).rejects.toThrow(/did not complete/);
+  expect(callTool).toHaveBeenCalledTimes(2);
 });
 
-it('stops replaying on transport failure and keeps the last good result', async () => {
+it('rejects on transport failure instead of merging a partial cart', async () => {
   const callTool = vi
     .fn()
     .mockResolvedValueOnce(success(fresh, [product.id]))
     .mockRejectedValueOnce(new Error('offline'));
-  const result = await recoverExpiredAdd(callTool, product.id, 1, [
-    { product: second, quantity: 1 },
-  ]);
-  expect(result).toEqual(success(fresh, [product.id]));
+  await expect(
+    recoverExpiredAdd(callTool, product.id, 1, [
+      { product: second, quantity: 1 },
+    ])
+  ).rejects.toThrow(/did not complete/);
   expect(callTool).toHaveBeenCalledTimes(2);
 });

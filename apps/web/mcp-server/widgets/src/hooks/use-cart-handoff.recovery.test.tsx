@@ -125,6 +125,29 @@ it('surfaces an error when the recovery retry also reports an expired cart', asy
     'This item cannot be added right now. Please choose another product.'
   );
 });
+it('keeps local lines and surfaces an error when a replay transport fails', async () => {
+  const freshToken = 'b'.repeat(64);
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce(expiredResponse())
+    .mockResolvedValueOnce(response([second], freshToken))
+    .mockRejectedValueOnce(new Error('offline'));
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(second);
+  });
+  expect(callTool).toHaveBeenCalledTimes(4);
+  expect(result.current.cart).toHaveLength(1);
+  expect(result.current.cart[0].product.id).toBe(product.id);
+  expect(result.current.cartError).toBe(
+    'Could not save the guest cart. Please try again.'
+  );
+});
 it('recovers a removal against an expired cart locally and forgets the dead token', async () => {
   const callTool = vi
     .fn()

@@ -64,4 +64,26 @@ describe('rewriteCartLinkUrl', () => {
       { product_id: line.product_id, quantity: line.quantity },
     ]);
   });
+
+  it('clears a dead guest_cart when the transfer did not originate from it', () => {
+    const retry = new URL(
+      rewriteCartLinkUrl(
+        'https://ogabassey.com/cart?guest_cart=dead&item_id=a',
+        undefined,
+        ['b']
+      ),
+      'https://ogabassey.com'
+    );
+    expect(retry.searchParams.get('item_id')).toBe('b');
+    expect(retry.searchParams.has('guest_cart')).toBe(false);
+    const done = new URL(
+      rewriteCartLinkUrl(
+        'https://ogabassey.com/cart?guest_cart=dead&item_id=a',
+        undefined,
+        []
+      ),
+      'https://ogabassey.com'
+    );
+    expect(done.search).toBe('');
+  });
 });

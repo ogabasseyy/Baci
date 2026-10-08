@@ -57,7 +57,9 @@ export function useCheckoutPaymentController({
       paymentSettings.wallet_order_auto_debit_enabled
   );
   const redvaultAvailable = useRedvaultAvailability({
+    assuranceFee,
     customerId,
+    deliveryFee,
     isAuthenticated,
     items,
     merchantId,

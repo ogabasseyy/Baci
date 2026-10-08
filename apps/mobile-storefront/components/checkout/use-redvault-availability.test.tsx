@@ -3,7 +3,7 @@ import type { CartItem } from '@/stores/cart-store';
 import { useRedvaultAvailability } from './use-redvault-availability';
 
 const mockGetAvailability = jest.fn<
-  Promise<boolean>,
+  Promise<{ available: boolean; reason: string }>,
   [merchantId: string, productId?: string]
 >();
 
@@ -26,7 +26,10 @@ const items: CartItem[] = [item];
 describe('useRedvaultAvailability', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetAvailability.mockResolvedValue(true);
+    mockGetAvailability.mockResolvedValue({
+      available: true,
+      reason: 'private_live_pilot',
+    });
   });
 
   it('includes only a sole quantity-one nonvariant item and hides account changes pending refresh', async () => {
@@ -45,7 +48,9 @@ describe('useRedvaultAvailability', () => {
     await act(async () => undefined);
     expect(result.current).toBe(true);
 
-    mockGetAvailability.mockReturnValue(new Promise<boolean>(() => undefined));
+    mockGetAvailability.mockReturnValue(
+      new Promise<{ available: boolean; reason: string }>(() => undefined)
+    );
     rerender({ customerId: 'customer-b' });
     expect(result.current).toBe(false);
     expect(mockGetAvailability).toHaveBeenLastCalledWith(
@@ -91,5 +96,57 @@ describe('useRedvaultAvailability', () => {
 
     await act(async () => undefined);
     expect(mockGetAvailability).toHaveBeenCalledWith(merchantId, undefined);
+  });
+
+  it.each([
+    ['assurance', { assuranceFee: 500, deliveryFee: 0 }],
+    ['delivery', { assuranceFee: 0, deliveryFee: 1500 }],
+  ])('hides a pilot result when %s fees apply', async (_label, fees) => {
+    const { result } = renderHook(() =>
+      useRedvaultAvailability({
+        ...fees,
+        customerId: 'customer-a',
+        isAuthenticated: true,
+        items,
+        merchantId,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(result.current).toBe(false);
+  });
+
+  it('keeps pilot results without fees and non-pilot results with fees', async () => {
+    const { result: pilot } = renderHook(() =>
+      useRedvaultAvailability({
+        assuranceFee: 0,
+        customerId: 'customer-a',
+        deliveryFee: 0,
+        isAuthenticated: true,
+        items,
+        merchantId,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(pilot.current).toBe(true);
+
+    mockGetAvailability.mockResolvedValue({
+      available: true,
+      reason: 'staging_test_mode',
+    });
+    const { result: staged } = renderHook(() =>
+      useRedvaultAvailability({
+        assuranceFee: 500,
+        customerId: 'customer-a',
+        deliveryFee: 1500,
+        isAuthenticated: true,
+        items,
+        merchantId,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(staged.current).toBe(true);
   });
 });

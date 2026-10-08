@@ -5,7 +5,9 @@ import { useCheckoutPaymentController } from './use-checkout-payment-controller'
 
 const mockCalculateCommerce = jest.fn();
 const mockGetRedvaultPaymentAvailability =
-  jest.fn<(...args: unknown[]) => Promise<boolean>>();
+  jest.fn<
+    (...args: unknown[]) => Promise<{ available: boolean; reason: string }>
+  >();
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
@@ -60,7 +62,7 @@ describe('useCheckoutPaymentController selection', () => {
       Promise.reject(new Error('offline'))
     );
     mockGetRedvaultPaymentAvailability.mockReturnValue(
-      new Promise<boolean>(() => undefined)
+      new Promise<{ available: boolean; reason: string }>(() => undefined)
     );
   });
 
@@ -95,7 +97,10 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('selects REDVAULT only after the server availability result succeeds', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValue(true);
+    mockGetRedvaultPaymentAvailability.mockResolvedValue({
+      available: true,
+      reason: 'staging_test_mode',
+    });
     const { result } = renderHook(() =>
       useCheckoutPaymentController({
         assuranceFee: 0,
@@ -117,7 +122,10 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('hides stale availability immediately when the merchant changes', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce(true);
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
     const { result, rerender } = renderHook(
       ({ merchantId }: { merchantId: string }) =>
         useCheckoutPaymentController({
@@ -142,10 +150,13 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('passes only a single nonvariant quantity-one product and hides stale results on cart changes', async () => {
-    let resolveAvailability: (value: boolean) => void = () => {};
+    let resolveAvailability: (value: {
+      available: boolean;
+      reason: string;
+    }) => void = () => {};
     mockGetRedvaultPaymentAvailability.mockImplementationOnce(
       () =>
-        new Promise<boolean>((resolve) => {
+        new Promise<{ available: boolean; reason: string }>((resolve) => {
           resolveAvailability = resolve;
         })
     );
@@ -170,7 +181,7 @@ describe('useCheckoutPaymentController selection', () => {
       'merchant-1',
       'product-1'
     );
-    resolveAvailability(true);
+    resolveAvailability({ available: true, reason: 'private_live_pilot' });
     await act(async () => undefined);
     expect(result.current.redvaultAvailable).toBe(true);
 
@@ -190,7 +201,10 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('hides stale availability immediately when the authenticated customer changes', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce(true);
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
     const { result, rerender } = renderHook(
       ({ customerId }: { customerId: string }) =>
         useCheckoutPaymentController({
@@ -279,5 +293,30 @@ describe('useCheckoutPaymentController selection', () => {
     rerender({});
 
     expect(result.current.paymentTab).toBeNull();
+  });
+
+  it('hides pilot REDVAULT and clears its selection when fees apply', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValue({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentController({
+        assuranceFee: 500,
+        deliveryFee: 0,
+        isAuthenticated: false,
+        items,
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        step: 'payment',
+        subtotal: 500_000,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(result.current.availablePaymentMethods).not.toContain(
+      'uba_redvault'
+    );
   });
 });

@@ -27,7 +27,11 @@ preserved_shipment_savings="$root/supabase/migrations/20261006190100_uba_redvaul
 staging_passthrough="$root/supabase/migrations/20261006190200_uba_redvault_pilot_disabled_policy_staging_passthrough.sql"
 item_fulfillment="$root/supabase/migrations/20261006190300_uba_redvault_pilot_item_fulfillment_guard.sql"
 db_staging_mode="$root/supabase/migrations/20261006190400_uba_redvault_pilot_db_staging_mode.sql"
-test_sql="$root/supabase/migrations/tests/redvault-private-pilot-full-schema.sql"
+test_setup="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-setup.sql"
+test_staging="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-staging.sql"
+test_reservations="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-reservations.sql"
+test_fulfillment="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-fulfillment.sql"
+test_winddown="$root/supabase/migrations/tests/redvault-private-pilot-full-schema-winddown.sql"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]; then
   printf 'Required local database container is not running: %s\n' "$container" >&2
@@ -57,5 +61,5 @@ SQL
   cat "$activation_lock"
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey DEFERRED;\n'
   cat "$reserve_lock_order" "$savings_and_expiry" "$preserve_binding" "$preserved_shipment_savings" "$staging_passthrough" "$item_fulfillment" "$db_staging_mode"
-  sed '1{/^BEGIN;$/d;}' "$test_sql"
+  cat "$test_setup" "$test_staging" "$test_reservations" "$test_fulfillment" "$test_winddown"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

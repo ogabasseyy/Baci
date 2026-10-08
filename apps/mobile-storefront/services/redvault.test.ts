@@ -44,9 +44,10 @@ describe('getRedvaultPaymentAvailability', () => {
     } as Response);
     const { getRedvaultPaymentAvailability } = await import('./redvault');
 
-    await expect(getRedvaultPaymentAvailability(merchantId)).resolves.toBe(
-      false
-    );
+    await expect(getRedvaultPaymentAvailability(merchantId)).resolves.toEqual({
+      available: false,
+      reason: 'unavailable',
+    });
     expect(mockFetch).toHaveBeenCalledWith(
       expect.objectContaining({
         pathname: '/api/payments/redvault/availability',
@@ -68,7 +69,7 @@ describe('getRedvaultPaymentAvailability', () => {
         merchantId,
         '11111111-1111-4111-8111-111111111111'
       )
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ available: true, reason: 'private_live_pilot' });
     expect(mockFetch).toHaveBeenCalledWith(
       expect.objectContaining({
         search: `?merchant_id=${merchantId}&product_id=11111111-1111-4111-8111-111111111111`,
@@ -81,9 +82,10 @@ describe('getRedvaultPaymentAvailability', () => {
     mockFetch.mockRejectedValue(new Error('offline'));
     const { getRedvaultPaymentAvailability } = await import('./redvault');
 
-    await expect(getRedvaultPaymentAvailability(merchantId)).resolves.toBe(
-      false
-    );
+    await expect(getRedvaultPaymentAvailability(merchantId)).resolves.toEqual({
+      available: false,
+      reason: 'unavailable',
+    });
   });
 
   it('rejects another merchant before making an availability request', async () => {
@@ -91,7 +93,7 @@ describe('getRedvaultPaymentAvailability', () => {
 
     await expect(
       getRedvaultPaymentAvailability('11111111-1111-4111-8111-111111111111')
-    ).resolves.toBe(false);
+    ).resolves.toEqual({ available: false, reason: 'merchant_unavailable' });
 
     expect(mockFetch).not.toHaveBeenCalled();
   });

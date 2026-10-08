@@ -119,7 +119,7 @@ export function useCheckoutPaymentExecution({
         hasAssurance: cart.checkoutCart.some(
           (item) => item.hasAssurance === true
         ),
-        shippingFee: delivery.session.quotes.selected?.price ?? 0,
+        shippingFee: delivery.session.cost,
         giftWrappingCost: delivery.giftWrappingCost,
       },
     });

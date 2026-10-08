@@ -110,7 +110,7 @@ beforeEach(() => {
 async function mountReview() {
   expect(
     await getRedvaultPaymentAvailability('6b5cb8a4-5575-456c-b936-8cdfae30db74')
-  ).toBe(true);
+  ).toEqual({ available: true, reason: 'ready' });
   const orderResponse = await createOrder(request);
   const onClose = jest.fn();
   render(

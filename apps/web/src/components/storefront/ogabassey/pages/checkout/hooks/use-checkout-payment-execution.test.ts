@@ -256,7 +256,7 @@ describe('useCheckoutPaymentExecution', () => {
       { id: 'line-1', quantity: 1, hasAssurance: true },
     ] as never;
     options.delivery = {
-      session: { quotes: { selected: { price: 1500 } } },
+      session: { cost: 1500 },
       giftWrappingCost: 500,
     } as never;
 

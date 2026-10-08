@@ -164,6 +164,26 @@ BEGIN
 END;
 $$;
 
+-- A differing explicit day on a non-manual order with a matching instant is
+-- rejected instead of silently dropped.
+DO $$
+DECLARE
+  v_id uuid := '33333333-3333-4333-8333-333333333333';
+BEGIN
+  BEGIN
+    PERFORM public.update_admin_order_with_transaction_discount_metadata(
+      v_id,
+      '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":"2024-01-03"}');
+    RAISE EXCEPTION 'non-manual day mismatch accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM NOT LIKE '%order_date_invalid%'
+      OR SQLERRM LIKE '%order_date_in_future%' THEN
+      RAISE EXCEPTION 'non-manual day code wrong: %', SQLERRM;
+    END IF;
+  END;
+END;
+$$;
+
 -- The reverse move skips the sync and preserves explicit document dates.
 DO $$
 DECLARE

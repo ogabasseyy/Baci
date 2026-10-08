@@ -493,6 +493,33 @@ describe('TransactionsScreen', () => {
     expect(screen.getByText('-- missing costs')).toBeInTheDocument();
   });
 
+  it('shows an unavailable missing-costs count when the range summary fails', () => {
+    mocks.useTransactionReview.mockImplementation(
+      (_range: unknown, options?: { enabled?: boolean; search?: string }) => {
+        if (options && 'enabled' in options) {
+          return {
+            data: [],
+            error: new Error('range boom'),
+            isPending: false,
+            refetch: vi.fn(),
+          };
+        }
+        return {
+          data: sampleOrders,
+          error: null,
+          isLoading: false,
+          isPending: false,
+          isRefetching: false,
+          refetch: vi.fn(),
+        };
+      }
+    );
+
+    render(<TransactionsScreen />);
+
+    expect(screen.getByText('Unavailable missing costs')).toBeInTheDocument();
+  });
+
   it('loads the estimated profit from the current-month analytics range', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-25T12:00:00.000Z'));

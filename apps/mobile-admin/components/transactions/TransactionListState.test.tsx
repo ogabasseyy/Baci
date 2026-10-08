@@ -192,4 +192,26 @@ describe('TransactionListState', () => {
       )
     ).toBeInTheDocument();
   });
+
+  it('reports partial results instead of no matches when truncation empties the list', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={false}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searching={true}
+        searchTruncated={true}
+        visibleOrderCount={0}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 0 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
 });

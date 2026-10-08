@@ -92,6 +92,7 @@ DECLARE
   v_has_product_metadata boolean := false;
   v_has_product_variants boolean := false;
   v_has_unit_costs boolean := false;
+  v_can_read_unit_costs boolean := false;
   v_order_by text := 'o.created_at DESC, o.id DESC';
   v_sql text;
 BEGIN
@@ -106,6 +107,28 @@ BEGIN
     AND public.has_merchant_access(p_merchant_id) IS NOT TRUE THEN
     RAISE EXCEPTION 'insufficient_privilege' USING ERRCODE = '42501';
   END IF;
+
+  -- The unit-cost ledger restricts reads to the owner and staff with
+  -- orders:edit or analytics:view (owners_and_order_staff_read_unit_costs),
+  -- narrower than merchant membership. This function is SECURITY DEFINER,
+  -- so the ledger branch applies the same predicate explicitly instead of
+  -- relying on RLS; other callers search everything except the ledger.
+  -- check_staff_permission returns true for the owner and has existed
+  -- since the baseline, so no catalog probe is needed.
+  v_can_read_unit_costs :=
+    v_caller_role = 'service_role'
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'orders',
+      'edit'
+    )
+    OR public.check_staff_permission(
+      (SELECT auth.uid()),
+      p_merchant_id,
+      'analytics',
+      'view'
+    );
 
   -- Normalize defensively: blank terms would match every row under ILIKE, so
   -- drop them; cap term count and length to bound planning cost. The client
@@ -332,7 +355,7 @@ BEGIN
     $query$;
   END IF;
 
-  IF v_has_unit_costs THEN
+  IF v_has_unit_costs AND v_can_read_unit_costs THEN
     v_sql := v_sql || $query$
                 OR EXISTS (
                   SELECT 1

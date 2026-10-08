@@ -85,6 +85,18 @@ INSERT INTO auth.users (
   now(),
   '{}'::jsonb,
   '{}'::jsonb
+), (
+  '33333333-3333-4333-8333-333333333333',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated',
+  'authenticated',
+  'search-test-staff-a@example.com',
+  'test',
+  now(),
+  now(),
+  now(),
+  '{}'::jsonb,
+  '{}'::jsonb
 );
 
 INSERT INTO public.merchants (id, user_id, email) VALUES
@@ -98,6 +110,22 @@ INSERT INTO public.merchants (id, user_id, email) VALUES
     '22222222-2222-4222-8222-222222222222',
     'search-test-b@example.com'
   );
+
+-- Active staff without ledger rights: explicit false on every path
+-- check_staff_permission reads (including wildcards), so the denial holds
+-- regardless of the role's defaults.
+INSERT INTO public.staff_members (
+  id, merchant_id, user_id, email, name, role, permissions, status
+) VALUES (
+  'e0000000-0000-4000-8000-000000000001',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  '33333333-3333-4333-8333-333333333333',
+  'search-test-staff-a@example.com',
+  'Search Staff',
+  'sales_rep',
+  '{"*": {"*": false, "edit": false, "view": false}, "orders": {"*": false, "edit": false, "all": false}, "analytics": {"*": false, "view": false, "all": false}, "full_access": {"all": false}}'::jsonb,
+  'active'
+);
 
 INSERT INTO public.products (id, merchant_id, name, price, sku, metadata) VALUES
   (
@@ -122,6 +150,13 @@ INSERT INTO public.product_variants (
 
 -- Cross-merchant catalog references: merchant B's product/variant text must
 -- never satisfy a match for merchant A's order, even when referenced.
+-- Seeded as owner B: the products/variants INSERT policies require
+-- merchant ownership.
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-4222-8222-222222222222',
+  true
+);
 INSERT INTO public.products (id, merchant_id, name, price, sku) VALUES (
   '10000000-0000-4000-8000-000000000002',
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -138,6 +173,12 @@ INSERT INTO public.product_variants (
   'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
   'XMERCHANT-VAR-7',
   'new'
+);
+
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-4111-8111-111111111111',
+  true
 );
 
 -- The cross-merchant item insert lives with the order-item seeds below,
@@ -488,6 +529,51 @@ BEGIN
   IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
     RAISE EXCEPTION 'unit-cost supplier search failed: %', v_ids;
   END IF;
+
+  -- Staff without orders:edit or analytics:view keeps membership search
+  -- but must not match through the unit-cost ledger: the RPC is SECURITY
+  -- DEFINER, so it must enforce the ledger's narrower SELECT policy itself.
+  PERFORM set_config(
+    'request.jwt.claim.sub',
+    '33333333-3333-4333-8333-333333333333',
+    false
+  );
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['355555550000001']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'ledger identifier must stay hidden from staff: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['unitcost vendor']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'ledger supplier must stay hidden from staff: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['353232106161443']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'membership search must still work for staff: %', v_ids;
+  END IF;
+
+  PERFORM set_config(
+    'request.jwt.claim.sub',
+    '11111111-1111-4111-8111-111111111111',
+    false
+  );
 
   SELECT array_agg(order_id)
   INTO v_ids

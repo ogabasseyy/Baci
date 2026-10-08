@@ -280,7 +280,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
-    sha256: 'e3a991d8b33a173d80ee3f825ae1c108ce9ba66bab33e5a72f88c9439c31e090',
+    sha256: 'b559684fcb4c4d0afed114ef42b37be2efde2dca631260114a145fde80f1081b',
   },
 ]
   .sort((left, right) =>

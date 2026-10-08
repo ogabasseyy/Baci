@@ -41,6 +41,9 @@ export function useMonthlyTransactionCount(anchor: Date) {
       return count ?? 0;
     },
     enabled: Boolean(merchant?.id),
+    // Same-month resumes keep the query key, so a fresh cache would skip
+    // the focus refetch and hide externally completed payments.
+    refetchOnWindowFocus: 'always',
     staleTime: 1000 * 60,
   });
 }

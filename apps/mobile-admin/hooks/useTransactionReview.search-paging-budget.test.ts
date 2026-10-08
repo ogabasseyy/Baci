@@ -207,4 +207,59 @@ describe('useTransactionReview search paging budget', () => {
       )
     ).toBe(true);
   });
+
+  it('marks a short final page truncated when qualifying orders overflow the cap', async () => {
+    const pageOneIds = Array.from(
+      { length: 101 },
+      (_, index) => `new-${index}`
+    );
+    const pageTwoIds = Array.from({ length: 60 }, (_, index) => `old-${index}`);
+    mocks.searchTransactionReviewOrders.mockImplementation(
+      ({ offset = 0 }: { offset?: number }) =>
+        Promise.resolve({
+          error: null,
+          errorKind: null,
+          orderIds: offset === 0 ? pageOneIds : pageTwoIds,
+        })
+    );
+    const row = (id: string, costPrice: number | null) => ({
+      cancelled_at: null,
+      customerEmail: null,
+      customerName: 'Ada',
+      customerPhone: null,
+      id,
+      items: [{ costPrice, id: `${id}-item`, profit: null, searchText: 'ada' }],
+      missingCostCount: costPrice == null ? 1 : 0,
+      orderNumber: id,
+      paymentMethod: 'card',
+      searchText: 'ada lovelace',
+      shipping_status: 'pending',
+    });
+    mocks.fetchTransactionReviewRows.mockImplementation(
+      ({ orderIds = [] }: { orderIds?: string[] }) =>
+        Promise.resolve({
+          data: orderIds[0]?.startsWith('old-')
+            ? pageTwoIds.map((id, index) => row(id, index < 50 ? null : 4000))
+            : pageOneIds
+                .slice(0, 100)
+                .map((id, index) => row(id, index < 90 ? null : 4000)),
+          error: null,
+        })
+    );
+
+    const { result } = renderHook(
+      () =>
+        useTransactionReview(undefined, {
+          search: 'ada',
+          tab: 'missing-costs',
+        }),
+      { wrapper: createWrapper() }
+    );
+
+    // 90 accumulate from the full first page; the short final page holds
+    // 50 qualifying orders but only 10 fit, so the set is partial.
+    await waitFor(() => expect(result.current.data).toHaveLength(100));
+    expect(result.current.searchTruncated).toBe(true);
+    expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledTimes(2);
+  });
 });

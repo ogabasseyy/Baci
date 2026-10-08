@@ -79,25 +79,26 @@ export function TransactionListState({
     );
   }
 
+  if (searchTruncated) {
+    // Name the displayed count, not the cap: refinement and tab paging can
+    // shrink 101 candidates to a handful of visible rows — or none, in
+    // which case the search is still partial, not definitively empty.
+    const matchNoun = visibleOrderCount === 1 ? 'match' : 'matches';
+    return (
+      <View style={styles.stateContainer}>
+        <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+          {`Showing ${visibleOrderCount} ${matchNoun} (partial results). Refine your search to narrow results.`}
+        </Text>
+      </View>
+    );
+  }
+
   if (visibleOrderCount === 0 || !hasOrders) {
     return (
       <View style={styles.stateContainer}>
         <Ionicons name="search-outline" size={32} color={colors.textMuted} />
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
           No matching transactions.
-        </Text>
-      </View>
-    );
-  }
-
-  if (searchTruncated) {
-    // Name the displayed count, not the cap: refinement and tab paging can
-    // shrink 101 candidates to a handful of visible rows.
-    const matchNoun = visibleOrderCount === 1 ? 'match' : 'matches';
-    return (
-      <View style={styles.stateContainer}>
-        <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-          {`Showing ${visibleOrderCount} ${matchNoun} (partial results). Refine your search to narrow results.`}
         </Text>
       </View>
     );

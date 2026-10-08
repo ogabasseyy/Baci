@@ -1,8 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fetchTransactionReviewCount: vi.fn(),
@@ -38,6 +42,12 @@ describe('useMonthlyTransactionCount', () => {
     mocks.fetchTransactionReviewCount.mockResolvedValue({
       count: 12,
       error: null,
+    });
+  });
+
+  afterEach(() => {
+    act(() => {
+      focusManager.setFocused(true);
     });
   });
 
@@ -106,5 +116,24 @@ describe('useMonthlyTransactionCount', () => {
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect((result.current.error as Error).message).toBe('boom');
+  });
+
+  it('refetches a fresh count when the app regains focus', async () => {
+    const { result } = renderHook(
+      () => useMonthlyTransactionCount(new Date(2026, 9, 8, 12)),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.data).toBe(12));
+    expect(mocks.fetchTransactionReviewCount).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+
+    await waitFor(() =>
+      expect(mocks.fetchTransactionReviewCount).toHaveBeenCalledTimes(2)
+    );
   });
 });

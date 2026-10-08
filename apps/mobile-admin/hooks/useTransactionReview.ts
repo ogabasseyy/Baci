@@ -263,18 +263,15 @@ async function searchTransactionReview(
       ),
       search
     );
-    for (const order of pageOrders) {
-      if (accumulated.length >= TRANSACTION_REVIEW_SEARCH_LIMIT) {
-        break;
-      }
-      accumulated.push(order);
-    }
-
     // A full page carries the peek row, so more candidates may exist; a
-    // short page means the source is exhausted and the set is complete.
+    // short page means the source is exhausted. Either way, qualifying
+    // orders dropped for cap space are truncation, not a complete set.
+    const remaining = TRANSACTION_REVIEW_SEARCH_LIMIT - accumulated.length;
+    accumulated.push(...pageOrders.slice(0, remaining));
     const pageFull = orderIds.length > TRANSACTION_REVIEW_SEARCH_LIMIT;
+    const truncated = pageFull || pageOrders.length > remaining;
     if (!pageFull || accumulated.length >= TRANSACTION_REVIEW_SEARCH_LIMIT) {
-      return { orders: accumulated, searchTruncated: pageFull };
+      return { orders: accumulated, searchTruncated: truncated };
     }
     if (pageIndex + 1 >= TRANSACTION_REVIEW_TAB_SEARCH_MAX_PAGES) {
       // The page budget ran out with a full last page: more candidates

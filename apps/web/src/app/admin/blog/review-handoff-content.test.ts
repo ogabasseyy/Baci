@@ -67,6 +67,25 @@ describe('validateImportedContent', () => {
     ).toContain('<img');
   });
 
+  it('ignores a picture source with an inapplicable type', () => {
+    // Browsers skip sources with unsupported types, leaving the
+    // src-less img with no candidate: the image-only article renders
+    // no pixels and must be rejected.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source type="text/plain" srcset="https://cdn.example.com/a.webp"><img alt="A"></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it('accepts a picture source with an applicable image type', () => {
+    expect(
+      validateImportedContent(
+        '<picture><source type="image/webp" srcset="https://cdn.example.com/a.webp"><img alt="A"></picture>'
+      )
+    ).toContain('<img');
+  });
+
   it('ignores a picture source placed after the img', () => {
     // Only preceding source siblings participate in selecting the
     // resource for the img, so this source cannot supply the src-less

@@ -136,6 +136,19 @@ type MediaGroup = {
   imgSeen: boolean;
 };
 
+function isApplicableSource(tag: string): boolean {
+  // Browsers skip sources with unsupported types. In picture context
+  // only image MIME types are meaningful; anything else (or an empty
+  // type) contributes no candidate. The media attribute is assumed
+  // applicable: matching it requires a viewport the validator has not.
+  for (const { name, value } of tagAttributes(tag)) {
+    if (name !== 'type') continue;
+    const essence = value.split(';')[0].trim().toLowerCase();
+    return essence.startsWith('image/');
+  }
+  return true;
+}
+
 function hasBrokenMediaTag(html: string): boolean {
   // Markdown rendering preserves editorial comments while the sanitizer
   // discards them, so strip first: a commented-out draft URL is not a
@@ -171,13 +184,15 @@ function hasBrokenMediaTag(html: string): boolean {
       group = { candidates: [], hasMedia: true, imgSeen: false };
       groups.push(group);
     }
-    group.hasMedia = true;
-    // Only preceding source siblings participate in selecting the
-    // resource for the img: sources after the group's img are ignored.
+    // Only preceding applicable source siblings participate in
+    // selecting the resource for the img: sources after the group's
+    // img, and sources with inapplicable types, are ignored entirely.
     if (/^<img\b/i.test(tag)) {
+      group.hasMedia = true;
       group.candidates.push(...mediaTagCandidates(tag));
       group.imgSeen = true;
-    } else if (!group.imgSeen) {
+    } else if (!group.imgSeen && isApplicableSource(tag)) {
+      group.hasMedia = true;
       group.candidates.push(...mediaTagCandidates(tag));
     }
   }

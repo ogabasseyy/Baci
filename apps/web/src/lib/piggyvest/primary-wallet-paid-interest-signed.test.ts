@@ -4,6 +4,7 @@ import { paidInterestFixture as fixture } from './primary-wallet-paid-interest.t
 import { applyPrimaryWalletSignedPaidInterest } from './primary-wallet-paid-interest-signed';
 
 vi.mock('server-only', () => ({}));
+const involved = vi.fn();
 const resolveCrosswalk = vi.fn();
 const retrieveWallet = vi.fn();
 const apply = vi.fn();
@@ -15,6 +16,7 @@ function signed(event: unknown = fixture.event) {
       .update(rawBody)
       .digest('hex'),
     configuration: fixture.config,
+    involved,
     resolveCrosswalk,
     retrieveWallet,
     apply,
@@ -23,6 +25,7 @@ function signed(event: unknown = fixture.event) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  involved.mockResolvedValue(true);
   resolveCrosswalk.mockResolvedValue(fixture.crosswalk);
   retrieveWallet.mockResolvedValue(fixture.wallet);
   apply.mockResolvedValue('credited');
@@ -83,6 +86,15 @@ describe('signed production primary paid interest', () => {
     expect(await applyPrimaryWalletSignedPaidInterest(signed())).toBe(
       'prerequisite'
     );
+    expect(retrieveWallet).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+  });
+  it('declines uninvolved legacy payouts before any crosswalk, wallet, or ledger read', async () => {
+    involved.mockResolvedValue(false);
+    expect(await applyPrimaryWalletSignedPaidInterest(signed())).toBe(
+      'not_handled'
+    );
+    expect(resolveCrosswalk).not.toHaveBeenCalled();
     expect(retrieveWallet).not.toHaveBeenCalled();
     expect(apply).not.toHaveBeenCalled();
   });

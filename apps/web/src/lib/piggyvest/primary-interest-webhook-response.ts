@@ -8,6 +8,7 @@ export async function primaryInterestWebhookResponse(input: {
   signature: string | null;
 }): Promise<NextResponse | null> {
   const receipt = await dispatchPrimaryWalletPaidInterestInbox(input);
+  if (receipt === 'not_handled') return null;
   if (receipt !== 'disabled') {
     const durable = ['accepted', 'duplicate', 'quarantined'].includes(receipt);
     return NextResponse.json(
@@ -27,7 +28,7 @@ export async function primaryInterestWebhookResponse(input: {
     );
   }
   const outcome = await dispatchPrimaryWalletPaidInterest(input);
-  if (outcome === 'disabled') return null;
+  if (outcome === 'disabled' || outcome === 'not_handled') return null;
   if (outcome === 'credited' || outcome === 'duplicate') {
     return NextResponse.json(
       { received: true, duplicate: outcome === 'duplicate' },

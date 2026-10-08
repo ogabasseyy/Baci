@@ -47,6 +47,32 @@ beforeEach(() => {
       : { rows: [{ result: fixture.crosswalk }] }
   );
 });
+it('reports crosswalk involvement without resolving eligibility', async () => {
+  mocks.query.mockImplementation(async (statement: string) =>
+    statement.includes('pg_stat_ssl')
+      ? {
+          rows: [
+            {
+              database_name: 'postgres',
+              login_name: fixture.config.database.login,
+              role_name: fixture.config.database.login,
+              safe: true,
+              tls: true,
+            },
+          ],
+        }
+      : { rows: [{ result: false }] }
+  );
+  expect(
+    await createPrimaryWalletPaidInterestStore(fixture.config).involved(
+      selection
+    )
+  ).toBe(false);
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    'SELECT piggyvest_primary.paid_interest_event_involved($1::uuid,$2::text,$3::jsonb) AS result',
+    [fixture.config.integrationId, 'production', JSON.stringify(selection)]
+  );
+});
 it('reads only the environment-bound exact crosswalk through a verified restricted TLS session', async () => {
   expect(
     await createPrimaryWalletPaidInterestStore(fixture.config).resolveCrosswalk(

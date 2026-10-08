@@ -21,7 +21,7 @@ export const primaryWalletPaidInterestInboxSchemas = {
         .default([]),
     }),
   enqueue: z.strictObject({ rawHex, signature }),
-  intake: z.enum(['accepted', 'duplicate', 'quarantined']),
+  intake: z.enum(['accepted', 'duplicate', 'quarantined', 'not_handled']),
   claim: z.strictObject({ batchSize: z.number().int().min(1).max(10) }),
   claims: z
     .array(

@@ -56,6 +56,15 @@ it('preserves legacy processing only when the primary bridge is explicitly disab
   dispatch.mockResolvedValue('disabled');
   expect(await primaryInterestWebhookResponse(input)).toBeNull();
 });
+it('routes inbox-declined payouts back to the legacy processor', async () => {
+  intake.mockResolvedValue('not_handled');
+  expect(await primaryInterestWebhookResponse(input)).toBeNull();
+  expect(dispatch).not.toHaveBeenCalled();
+});
+it('routes direct-declined payouts back to the legacy processor', async () => {
+  dispatch.mockResolvedValue('not_handled');
+  expect(await primaryInterestWebhookResponse(input)).toBeNull();
+});
 it.each([
   'credited',
   'duplicate',

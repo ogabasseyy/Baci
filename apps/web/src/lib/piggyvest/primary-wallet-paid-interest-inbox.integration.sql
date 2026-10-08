@@ -55,6 +55,18 @@ SELECT pg_temp.assert_true(NOT piggyvest_primary.paid_interest_inbox_readiness('
   'Readiness cannot authorize a guessed provider business');
 SELECT pg_temp.assert_true(pg_temp.inbox_enqueue(pg_temp.inbox_payload())='accepted','Signed raw receipt persists even before a customer crosswalk becomes eligible');
 SELECT pg_temp.assert_true(pg_temp.inbox_enqueue(pg_temp.inbox_payload())='duplicate','Same raw event is a durable duplicate');
+SELECT pg_temp.assert_true(pg_temp.inbox_enqueue(jsonb_set(jsonb_set(jsonb_set(jsonb_set(
+  pg_temp.inbox_payload('legacy-event'),'{"customer_id"}','"legacy-customer"'),'{"pvb_wallet"}','"legacy-wallet"'),
+  '{"pvb_accrued_interest_wallet"}','"legacy-accrued"'),'{"eventData","destination_wallet"}','"legacy-destination"'))='not_handled',
+  'Legacy payouts without a primary crosswalk fall through to the legacy processor');
+SELECT pg_temp.assert_true(piggyvest_primary.paid_interest_event_involved('00000000-0000-4000-8000-000000000005','production',
+  jsonb_build_object('webhookCustomerId','legacy-customer','sourceWalletId',pg_temp.inbox_payload('x')->>'pvb_wallet',
+    'accruedWalletId','legacy-accrued','destinationWalletId','legacy-destination','envelopeDestinationWalletId',NULL)),
+  'Partial wallet overlap retains primary custody instead of splitting the payout');
+SELECT pg_temp.assert_true(NOT piggyvest_primary.paid_interest_event_involved('00000000-0000-4000-8000-000000000005','production',
+  jsonb_build_object('webhookCustomerId','legacy-customer','sourceWalletId','legacy-wallet','accruedWalletId','legacy-accrued',
+    'destinationWalletId','legacy-destination','envelopeDestinationWalletId',NULL)),
+  'Unrelated wallets are not primary-involved');
 SELECT pg_temp.assert_true(pg_temp.production_apply(pg_temp.production_goal_proof(49)||jsonb_build_object('bodyDigest',
   encode(sha256(convert_to(pg_temp.inbox_payload()::text,'UTF8')),'hex')))='prerequisite',
   'Queued pending intake cannot be synchronously credited before a worker claim');
@@ -72,6 +84,8 @@ SELECT pg_temp.assert_true((SELECT state='pending' AND reason='prerequisite' AND
   'Missing provider crosswalk preserves signed evidence as pending');
 SELECT pg_temp.assert_true(NOT EXISTS(SELECT 1 FROM piggyvest_primary.paid_interest_receipts WHERE goal_id=pg_temp.goal_id(49)),
   'Enqueue and failed prerequisite never perform financial accounting');
+SELECT pg_temp.assert_true(NOT EXISTS(SELECT 1 FROM piggyvest_primary.paid_interest_inbox WHERE event_id='legacy-event'),
+  'Declined legacy payouts leave no primary inbox residue');
 UPDATE piggyvest_primary.paid_interest_inbox SET available_at=clock_timestamp()-interval '1 second';
 SET SESSION AUTHORIZATION production_primary_interest_fixture;
 INSERT INTO interest_inbox_claims VALUES('expired',pg_temp.inbox_claim());

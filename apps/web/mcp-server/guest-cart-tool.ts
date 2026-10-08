@@ -7,6 +7,7 @@ import {
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
 import {
+  type GuestCartQuotaReservation,
   refundGuestCartCreation,
   reserveGuestCartCreation,
 } from './guest-cart-creation-quota';
@@ -95,8 +96,12 @@ export function registerGuestCartTool(
         // each other's reservations instead of all peeking budget and then
         // overshooting it. Failures refund below; a persisted cart keeps
         // its reservation.
+        // Hoisted so the failure path below can refund the exact window
+        // this call reserved from (undefined for token-bound updates,
+        // which never reserve).
+        let quota: GuestCartQuotaReservation | undefined;
         if (!args.cart_token) {
-          const quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
+          quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
           if (!quota.allowed) {
             return {
               isError: true,
@@ -166,7 +171,7 @@ export function registerGuestCartTool(
           // error. A persisted cart keeps its reservation: the quota was
           // already consumed atomically by the reserve call above.
           if (!args.cart_token)
-            refundGuestCartCreation(options.clientIp ?? 'unknown');
+            refundGuestCartCreation(options.clientIp ?? 'unknown', quota?.windowStart);
           throw error;
         });
         const url = new URL('https://ogabassey.com/cart');

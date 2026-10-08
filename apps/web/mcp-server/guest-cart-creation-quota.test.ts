@@ -32,6 +32,7 @@ it('tracks callers independently and resets after one hour', () => {
   expect(reserveGuestCartCreation('10.0.0.2')).toEqual({
     allowed: true,
     retryAfterSeconds: 0,
+    windowStart: new Date('2026-01-01T01:00:01Z').getTime(),
   });
 });
 
@@ -43,6 +44,23 @@ it('refunds reservations for creations that never persist', () => {
   refundGuestCartCreation('10.0.0.9');
   expect(reserveGuestCartCreation('10.0.0.9').allowed).toBe(true);
   expect(reserveGuestCartCreation('10.0.0.9').allowed).toBe(false);
+});
+
+it('binds refunds to the reserving window across rollover', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-02-01T00:00:00Z'));
+  const first = reserveGuestCartCreation('10.0.0.11');
+  expect(first.allowed).toBe(true);
+  vi.setSystemTime(new Date('2026-02-01T01:00:01Z'));
+  // A new window: one fresh reservation is consumed here.
+  expect(reserveGuestCartCreation('10.0.0.11').allowed).toBe(true);
+  // Refunding the previous window's reservation must not inflate the new
+  // window past MAX: the fresh window still holds exactly one unit.
+  refundGuestCartCreation('10.0.0.11', first.windowStart);
+  for (let i = 1; i < MAX; i += 1) {
+    expect(reserveGuestCartCreation('10.0.0.11').allowed).toBe(true);
+  }
+  expect(reserveGuestCartCreation('10.0.0.11').allowed).toBe(false);
 });
 
 it('ignores refunds with no matching reservation', () => {
@@ -98,11 +116,14 @@ it('rejects fresh callers once the map is full of live windows', () => {
     expect(
       reserveGuestCartCreation('2001:db8:abcd:12::99').allowed
     ).toBe(false);
+    expect(reserveGuestCartCreation('2001:db8::1').allowed).toBe(false);
     const logged = warn.mock.calls.map((call) => String(call[0])).join('\n');
     expect(logged).toContain('10.8.xxx.xxx');
     expect(logged).not.toContain('10.8.0.1');
     expect(logged).toContain('2001:db8:abcd:12:xxxx');
     expect(logged).not.toContain('2001:db8:abcd:12::99');
+    expect(logged).toContain('2001:db8:0:0:xxxx');
+    expect(logged).not.toContain('2001:db8::1');
   } finally {
     warn.mockRestore();
   }

@@ -9,6 +9,24 @@ export function isPermissionError(error: unknown): boolean {
   return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
 }
 
+// Runtime cart writes fail the same typed way as a misconfigured volume,
+// plus disk-full: callers already handle GuestCartStorageUnavailableError.
+export function isStorageWriteError(error: unknown): boolean {
+  if (isPermissionError(error)) return true;
+  return (error as NodeJS.ErrnoException)?.code === 'ENOSPC';
+}
+
+export function guestCartWriteError(
+  target: string,
+  cause: unknown
+): GuestCartStorageUnavailableError {
+  const detail =
+    cause instanceof Error ? cause.message : 'unknown filesystem error';
+  return new GuestCartStorageUnavailableError(
+    `Guest-cart write failed: ${target} (${detail}). The cart volume may be unwritable or full.`
+  );
+}
+
 // Typed storage-config failures (unwritable directory, wrong mode): the
 // server degrades the guest-cart tool on these while keeping catalog tools
 // up. A second-writer refusal is NOT one of these — that deployment bug

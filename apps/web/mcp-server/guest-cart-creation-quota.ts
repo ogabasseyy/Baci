@@ -29,13 +29,14 @@ export interface GuestCartQuotaVerdict {
 
 // Partial-IP logging: keep the routable prefix, drop host bits. IPv4
 // keeps its /16; IPv6 keeps its /64, dropping the interface identifier.
+// The /64 comes from the quota key (which expands compressed forms), so a
+// short prefix like 2001:db8::1 cannot leak its host bits into the log.
 function maskIpForLog(ip: string): string {
   // IPv4 first so mapped forms (::ffff:1.2.3.4) mask the embedded address.
   if (/(\d+)\.(\d+)\.(\d+)\.(\d+)/.test(ip))
     return ip.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.xxx.xxx');
   if (ip.includes(':')) {
-    const head = ip.split(':').slice(0, 4).join(':');
-    return `${head}:xxxx:xxxx:xxxx:xxxx`;
+    return `${quotaKeyForIp(ip)}:xxxx:xxxx:xxxx:xxxx`;
   }
   return ip;
 }
@@ -110,13 +111,22 @@ function inspectQuota(ip: string, now: number): GuestCartQuotaVerdict {
 }
 
 /**
+ * Allowed reservation: the window the single unit was consumed from, so a
+ * later refund can only return it to that same window.
+ */
+export interface GuestCartQuotaReservation extends GuestCartQuotaVerdict {
+  windowStart?: number;
+}
+
+/**
  * Atomically reserves one anonymous creation from the caller's budget. The
  * check and the increment run synchronously with no await between them, so
  * concurrent in-flight creations cannot all observe remaining budget and
  * then overshoot it: at most MAX reservations are outstanding per window.
- * Callers must refund the reservation when no cart ends up persisted.
+ * Callers must refund the reservation (with its windowStart) when no cart
+ * ends up persisted.
  */
-export function reserveGuestCartCreation(ip: string): GuestCartQuotaVerdict {
+export function reserveGuestCartCreation(ip: string): GuestCartQuotaReservation {
   const now = Date.now();
   const verdict = inspectQuota(ip, now);
   if (!verdict.allowed) return verdict;
@@ -124,25 +134,27 @@ export function reserveGuestCartCreation(ip: string): GuestCartQuotaVerdict {
   const entry = quotaByIp.get(key);
   if (entry && now - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS) {
     entry.count += 1;
-  } else {
-    quotaByIp.set(key, { count: 1, windowStart: now });
+    return { ...verdict, windowStart: entry.windowStart };
   }
-  return verdict;
+  quotaByIp.set(key, { count: 1, windowStart: now });
+  return { ...verdict, windowStart: now };
 }
 
 /**
  * Returns one reservation to the caller's budget after a creation failed
- * before persistence (validation rejection, store error). Never drops the
- * count below zero; a rolled-over window keeps its fresh budget instead of
- * receiving a refund for the previous window.
+ * before persistence (validation rejection, store error). The refund only
+ * applies to the window the reservation consumed: a mismatched windowStart
+ * (the hour rolled over mid-request) leaves the fresh window untouched
+ * instead of inflating it past MAX. Never drops the count below zero.
  */
-export function refundGuestCartCreation(ip: string): void {
+export function refundGuestCartCreation(ip: string, windowStart?: number): void {
   const entry = quotaByIp.get(quotaKeyForIp(ip));
+  if (!entry || entry.count <= 0) return;
   if (
-    entry &&
-    Date.now() - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS &&
-    entry.count > 0
-  ) {
-    entry.count -= 1;
-  }
+    windowStart !== undefined &&
+    entry.windowStart !== windowStart
+  )
+    return;
+  if (Date.now() - entry.windowStart >= GUEST_CART_QUOTA_WINDOW_MS) return;
+  entry.count -= 1;
 }

@@ -1,22 +1,5 @@
 import { z } from 'zod';
-
-export const guestCartLineSchema = z.object({
-  product_id: z.string().uuid(),
-  quantity: z.number().int().min(1).max(10),
-});
-export const storedCartSchema = z.object({
-  expires_at: z.number(),
-  items: z.array(guestCartLineSchema).max(20),
-});
-export const guestCartHandoffSchema = z
-  .array(guestCartLineSchema)
-  .min(1)
-  .max(20)
-  .refine(
-    (items) =>
-      new Set(items.map((item) => item.product_id.toLowerCase())).size ===
-      items.length
-  );
+import { guestCartLineSchema } from './guest-cart-line';
 
 export const MCP_GUEST_CART_DESCRIPTION =
   'Save a simple product in a persistent Ogabassey guest cart without signing in. Supply the cart_token returned previously to continue the same cart. Use quantity 0 to remove a product. quantity is the desired total for this product, not an increment, so retries with the same cart token are safe. Products requiring options must be selected on the website. Open cart_url to transfer all items to the website for guest checkout; account creation is optional there. Guest carts expire seven days after the last update. A response reporting cart_emptied retires its token: drop it and omit cart_token on the next call to start a new cart. Website transfer only adds items; it never removes lines or decreases website quantities, so decreases made here never shrink an already-transferred website cart.';

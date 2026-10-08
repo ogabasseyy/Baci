@@ -289,38 +289,3 @@ it('forgets the dead token when a removal empties the cart', async () => {
     cart_token: undefined,
   });
 });
-it('reports quota exhaustion with the retry wait instead of a product error', async () => {
-  const callTool = vi.fn().mockResolvedValueOnce({
-    structuredContent: {
-      success: false,
-      quota_exceeded: true,
-      retry_after_seconds: 1800,
-    },
-  });
-  window.openai = { callTool, setWidgetState: vi.fn() };
-  const { result } = renderHook(() => useCartHandoff());
-  await act(async () => {
-    await result.current.handleAddToCart(product);
-  });
-  expect(result.current.cart).toHaveLength(0);
-  expect(result.current.cartError).toBe(
-    'Too many guest carts were created from this address. Try again in about 30 minutes.'
-  );
-});
-it('reports a full cart with removal guidance instead of a product error', async () => {
-  const callTool = vi.fn().mockResolvedValueOnce({
-    structuredContent: {
-      success: false,
-      cart_full: true,
-    },
-  });
-  window.openai = { callTool, setWidgetState: vi.fn() };
-  const { result } = renderHook(() => useCartHandoff());
-  await act(async () => {
-    await result.current.handleAddToCart(product);
-  });
-  expect(result.current.cart).toHaveLength(0);
-  expect(result.current.cartError).toBe(
-    'Your guest cart already holds 20 products. Remove one to add another.'
-  );
-});

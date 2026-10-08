@@ -16,7 +16,10 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
 
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { createGuestCartStoreOrDegraded } from './guest-cart-store';
+import {
+  createGuestCartStoreOrDegraded,
+  describeGuestCartStoreHealth,
+} from './guest-cart-store';
 import { registerCartLinkTools } from './cart-link-tool';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
@@ -2456,26 +2459,40 @@ const httpServer = createServer(
       return;
     }
 
-    // Readiness probe
+    // Readiness probe. Guest-cart storage rides along as a signal only: a
+    // degraded cart volume must not flip the probe red, or catalog traffic
+    // loses the server the degradation exists to protect.
     if (req.method === 'GET' && url.pathname === '/health') {
+      const carts = describeGuestCartStoreHealth(guestCartStore);
       try {
         const merchantId = await getMerchantId();
         if (merchantId) {
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ status: 'healthy', database: 'connected' }));
+          res.end(
+            JSON.stringify({
+              status: 'healthy',
+              database: 'connected',
+              ...carts,
+            })
+          );
         } else {
           res.writeHead(503, { 'content-type': 'application/json' });
           res.end(
             JSON.stringify({
               status: 'unhealthy',
               database: 'merchant not found',
+              ...carts,
             })
           );
         }
       } catch {
         res.writeHead(503, { 'content-type': 'application/json' });
         res.end(
-          JSON.stringify({ status: 'unhealthy', database: 'connection failed' })
+          JSON.stringify({
+            status: 'unhealthy',
+            database: 'connection failed',
+            ...carts,
+          })
         );
       }
       return;

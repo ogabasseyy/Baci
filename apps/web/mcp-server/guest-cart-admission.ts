@@ -2,7 +2,7 @@ import { readFile, readdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 
-import { storedCartSchema } from '../src/schemas/mcp-guest-cart';
+import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
 
 const queues = new Map<string, Promise<unknown>>();
 
@@ -43,6 +43,9 @@ const MAX_CART_FILES = 2000;
 // that no in-flight write can still own them.
 const STALE_FILE_MAX_AGE_MS = 60 * 60 * 1000;
 const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
+// A crash between the stale-lock rename and its unlink orphans the sidecar
+// (guest-cart-writer-lock.ts); it never matches the cart patterns below.
+const STALE_LOCK_PATTERN = /^\.writer\.lock\.stale-.+$/;
 const CART_FILE_PATTERN = /^[a-f0-9]{64}\.json$/;
 // The expiry sweep reads and parses every cart file, so run it at most once
 // per interval; expiry is still enforced per cart on every read, and
@@ -82,10 +85,12 @@ export async function admitGuestCartWrite(
   if (sweepDue) lastExpirySweepMsByDirectory.set(directory, sweepStart);
   const entries = await readdir(directory);
   for (const entry of entries) {
-    if (CRASH_TEMP_PATTERN.test(entry)) {
+    if (CRASH_TEMP_PATTERN.test(entry) || STALE_LOCK_PATTERN.test(entry)) {
       // A crash between writeFile and rename orphans the temp file and the
-      // cart-file janitor below never matches it. Sweep only stale files so
-      // a concurrent writer's in-flight temp survives.
+      // cart-file janitor below never matches it; the same holds for a
+      // stale-lock sidecar orphaned between rename and unlink. Sweep only
+      // stale files so a concurrent writer's in-flight temp (or a live
+      // takeover's fresh sidecar) survives.
       try {
         const orphan = path.join(directory, entry);
         const info = await stat(orphan);

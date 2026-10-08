@@ -9,22 +9,24 @@ export function rewriteCartLinkUrl(
 ): string {
   const url = new URL(href);
   if (guestQuantities && rejectedIds.length > 0) {
-    url.searchParams.set(
-      'guest_cart',
-      JSON.stringify(
-        rejectedIds
-          .map((product_id) => ({
-            product_id,
-            quantity: guestQuantities.get(product_id),
-          }))
-          // A rejected id without a handoff quantity would serialize without
-          // `quantity` and poison the whole retry URL; drop it instead.
-          .filter(
-            (line): line is { product_id: string; quantity: number } =>
-              line.quantity !== undefined
-          )
-      )
-    );
+    const retryLines = rejectedIds
+      .map((product_id) => ({
+        product_id,
+        quantity: guestQuantities.get(product_id),
+      }))
+      // A rejected id without a handoff quantity would serialize without
+      // `quantity` and poison the whole retry URL; drop it instead.
+      .filter(
+        (line): line is { product_id: string; quantity: number } =>
+          line.quantity !== undefined
+      );
+    // An empty survivor list must delete the param: guest_cart=[] fails the
+    // min(1) handoff schema, which would drop the retry handoff entirely.
+    if (retryLines.length > 0) {
+      url.searchParams.set('guest_cart', JSON.stringify(retryLines));
+    } else {
+      url.searchParams.delete('guest_cart');
+    }
     url.searchParams.delete('item_id');
     url.searchParams.delete('qty');
   } else if (rejectedIds.length > 0) {

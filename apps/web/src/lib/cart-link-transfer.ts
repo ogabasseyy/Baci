@@ -1,13 +1,13 @@
 import type { useCart } from '@/hooks/cart';
 import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import type { useToast } from '@/hooks/use-toast';
+import { fetchCartLinkAnchorStock } from './cart-link-anchor-stock';
 import {
   getPrimaryProductImage,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from './product-image';
 import { resolveGuestQuantityToAdd } from './resolve-guest-quantity-to-add';
 import { rewriteCartLinkUrl } from './rewrite-cart-link-url';
-import { resolveSerializedAnchorStock } from './serialized-anchor-stock';
 import { createClient } from './supabase/client';
 
 const QUIZ_PRIZE_PLATFORM = 'quiz_prize';
@@ -125,25 +125,14 @@ export async function fetchAndAddCartItems({
       return false;
     }
 
-    // Serialized-inventory projection, shared with the MCP handoff: a chat
-    // save and this website recheck must evaluate the same anchor policy
-    // for the same product, or a unit sold in between is still added here
-    // (strict) or a purchasable line is wrongly rejected (then-unlimited).
-    // A lookup failure keeps stored stock, failing open exactly like the
-    // MCP path; rejections below stay retryable via the rewritten URL.
-    const anchorStock = await resolveSerializedAnchorStock({
+    // Shared anchor projection (see cart-link-anchor-stock): the chat
+    // save and this website recheck evaluate the same anchor policy, and a
+    // lookup failure keeps stored stock with rejections staying retryable.
+    const anchorStock = await fetchCartLinkAnchorStock({
       supabase,
       merchantId,
-      productIds: activeProducts
-        .filter((product) => product.has_variants !== true)
-        .map((product) => product.id),
+      products: activeProducts,
     });
-    if (anchorStock.failed) {
-      console.error(
-        'Failed to fetch serialized anchor policy for cart transfer:',
-        anchorStock.error
-      );
-    }
 
     // Lines the catalog no longer returns stay retryable in the link instead
     // of being silently consumed with the rest of the handoff. UUID text is

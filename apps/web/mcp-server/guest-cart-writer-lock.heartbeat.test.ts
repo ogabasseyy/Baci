@@ -89,7 +89,7 @@ it('never refreshes a lock file it does not own', async () => {
 
 it(
   'exits under cross-process same-content replacement pressure',
-  { timeout: 20000 },
+  { timeout: 40000 },
   async () => {
     const exit = vi
       .spyOn(process, 'exit')
@@ -100,8 +100,9 @@ it(
     // A rival writer atomically reinstalls our own claim bytes in a tight
     // loop, so replacements land across the heartbeat's read and refresh:
     // renewal must still detect the new generation and exit on the tick.
-    // Plain node (not tsx) keeps child startup fast under CI load so the
-    // churn reliably overlaps the 5s heartbeat ticks.
+    // Plain node (not tsx) keeps child startup fast, and the child signals
+    // readiness so the wait below never starts before churn is running no
+    // matter how slow the spawn is under CI load.
     const childScript = path.join(root, 'churn-child.mjs');
     try {
       acquireWriterLock(root);
@@ -110,7 +111,8 @@ it(
         childScript,
         `import { renameSync, writeFileSync } from 'node:fs';
 const [, , lockPath, claim, sidePath] = process.argv;
-const deadline = Date.now() + 9000;
+process.stdout.write('ready\\n');
+const deadline = Date.now() + 25000;
 while (Date.now() < deadline) {
   writeFileSync(sidePath, claim);
   renameSync(sidePath, lockPath);
@@ -124,18 +126,42 @@ while (Date.now() < deadline) {
       // A failed spawn must fail the exit assertion below, not crash the
       // runner with an unhandled 'error' event.
       child.on('error', () => {});
+      // Track closure from spawn on: awaiting 'close' in the finally below
+      // would hang forever if the child already exited before we listened.
+      let closed = false;
+      child.on('close', () => {
+        closed = true;
+      });
+      let churnReady!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        churnReady = resolve;
+      });
+      child.stdout?.on('data', (chunk: Buffer) => {
+        if (chunk.toString().includes('ready')) churnReady();
+      });
       try {
-        // Poll instead of a fixed sleep: a loaded CI worker can delay the
-        // child start or the heartbeat tick past any fixed budget, while a
-        // replaced lock file stays detectable on every later tick.
-        const deadline = Date.now() + 15_000;
+        // Wait for churn to be running (not merely spawned), then poll for
+        // the heartbeat exit: a loaded CI worker can delay the spawn or a
+        // tick past any fixed budget, while a replaced lock file stays
+        // detectable on every later tick.
+        const startTimeout = new Promise<never>((_, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error('churn child never started')),
+            10_000
+          );
+          void ready.then(() => clearTimeout(timer));
+        });
+        await Promise.race([ready, startTimeout]);
+        const deadline = Date.now() + 20_000;
         while (exit.mock.calls.length === 0 && Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
         expect(exit).toHaveBeenCalledWith(1);
       } finally {
+        // Default SIGTERM disposition kills even a child stuck in a sync
+        // loop; skip the close wait if it already exited.
         child.kill();
-        await new Promise((resolve) => child.on('close', resolve));
+        if (!closed) await new Promise((resolve) => child.on('close', resolve));
       }
     } finally {
       exit.mockRestore();

@@ -172,6 +172,16 @@ describe('MCP streamable HTTP probe compatibility', () => {
     );
   });
 
+  it('reports guest-cart storage state in the readiness probe', async () => {
+    const response = await fetch(`${serverBaseUrl}/health`);
+    const body = (await response.json()) as Record<string, unknown>;
+
+    // The spawned test server gets a private writable cart directory, so
+    // storage reports ok regardless of the database outcome.
+    expect(body.guestCarts).toBe('ok');
+    expect(body).not.toHaveProperty('guestCartsReason');
+  });
+
   it('publishes product lookup inputs for product detail tools', async () => {
     const payload = await postMcpJsonRpc(serverBaseUrl, {
       id: 1,

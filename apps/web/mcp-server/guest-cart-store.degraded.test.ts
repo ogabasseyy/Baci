@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   GuestCartStore,
   createGuestCartStoreOrDegraded,
+  describeGuestCartStoreHealth,
 } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
@@ -29,6 +30,26 @@ it('builds a live store when storage is healthy', async () => {
   const store = createGuestCartStoreOrDegraded(root);
   expect(store).toBeInstanceOf(GuestCartStore);
   expect(await store.hasToken('0'.repeat(64))).toBe(false);
+  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+});
+
+it('marks the degraded stub for /health without failing the probe', async () => {
+  // Root bypasses permission bits, so the probe is meaningless there.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
+  const parent = await directory('guest-degraded-health-');
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await chmod(parent, 0o555);
+    const store = createGuestCartStoreOrDegraded(path.join(parent, 'carts'));
+    expect(store).not.toBeInstanceOf(GuestCartStore);
+    expect(describeGuestCartStoreHealth(store)).toEqual({
+      guestCarts: 'degraded',
+      guestCartsReason: expect.stringContaining('not writable'),
+    });
+  } finally {
+    error.mockRestore();
+    await chmod(parent, 0o755);
+  }
 });
 
 it('still refuses a second writer instead of degrading', async () => {

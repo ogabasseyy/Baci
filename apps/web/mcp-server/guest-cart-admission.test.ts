@@ -33,7 +33,7 @@ afterEach(async () => {
   );
 });
 
-it('sweeps expired carts and stale temps without touching live carts', async () => {
+it('sweeps expired carts, stale temps, and stale lock sidecars without touching live carts', async () => {
   const root = await directory();
   const live = 'a'.repeat(64);
   const dead = 'd'.repeat(64);
@@ -49,17 +49,24 @@ it('sweeps expired carts and stale temps without touching live carts', async () 
   const freshTemp = path.join(root, `${live}.json.def.tmp`);
   await writeFile(staleTemp, '{}');
   await writeFile(freshTemp, '{}');
+  const staleSidecar = path.join(root, '.writer.lock.stale-4242');
+  const freshSidecar = path.join(root, '.writer.lock.stale-5150');
+  await writeFile(staleSidecar, '{}');
+  await writeFile(freshSidecar, '{}');
   const old = new Date(Date.now() - 2 * 3_600_000);
   await utimes(staleTemp, old, old);
+  await utimes(staleSidecar, old, old);
   await admitGuestCartWrite(root, false);
   await expect(
     readFile(path.join(root, `${dead}.json`), 'utf8')
   ).rejects.toThrow();
   await expect(readFile(staleTemp, 'utf8')).rejects.toThrow();
+  await expect(readFile(staleSidecar, 'utf8')).rejects.toThrow();
   await expect(
     readFile(path.join(root, `${live}.json`), 'utf8')
   ).resolves.toContain('expires_at');
   await expect(readFile(freshTemp, 'utf8')).resolves.toBe('{}');
+  await expect(readFile(freshSidecar, 'utf8')).resolves.toBe('{}');
 });
 
 it('admits without evicting below capacity', async () => {

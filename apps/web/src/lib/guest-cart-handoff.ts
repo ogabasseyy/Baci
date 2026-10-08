@@ -1,4 +1,4 @@
-import { guestCartHandoffSchema } from '@/schemas/mcp-guest-cart';
+import { guestCartHandoffSchema } from '@/schemas/guest-cart-handoff';
 
 export function parseGuestCartHandoff(raw: string | null) {
   if (!raw || raw.length > 4000) return null;

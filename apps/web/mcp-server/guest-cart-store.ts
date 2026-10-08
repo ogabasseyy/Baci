@@ -9,16 +9,18 @@ import {
 import path from 'node:path';
 import { z } from 'zod';
 
-import {
-  guestCartLineSchema,
-  storedCartSchema,
-} from '../src/schemas/mcp-guest-cart';
+import { guestCartLineSchema } from '../src/schemas/guest-cart-line';
+import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
 import {
   admitGuestCartWrite,
   runExclusive,
 } from './guest-cart-admission';
 import { acquireWriterLock } from './guest-cart-writer-lock';
-import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
+import {
+  GuestCartStorageUnavailableError,
+  guestCartWriteError,
+  isStorageWriteError,
+} from './guest-cart-writer-lock-errors';
 
 export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
 export class GuestCartExpiredError extends Error {
@@ -60,6 +62,24 @@ async function readStoredCart(file: string) {
 export interface GuestCartStoreLike {
   update: GuestCartStore['update'];
   hasToken: GuestCartStore['hasToken'];
+  /** Present only on the degraded stub, so /health can report the outage. */
+  degraded?: boolean;
+  degradedReason?: string;
+}
+
+/**
+ * /health fragment for guest-cart storage: degraded (with the startup
+ * failure reason) when the factory fell back to the stub, ok otherwise.
+ * Callers keep the overall probe green either way — catalog tools stay up
+ * by design — so ops get a signal without a restart loop.
+ */
+export function describeGuestCartStoreHealth(store: GuestCartStoreLike): {
+  guestCarts: 'ok' | 'degraded';
+  guestCartsReason?: string;
+} {
+  if (store.degraded === true)
+    return { guestCarts: 'degraded', guestCartsReason: store.degradedReason };
+  return { guestCarts: 'ok' };
 }
 
 /**
@@ -83,6 +103,8 @@ export function createGuestCartStoreOrDegraded(
         throw error;
       },
       hasToken: async () => false,
+      degraded: true,
+      degradedReason: error.message,
     };
   }
 }
@@ -149,7 +171,16 @@ export class GuestCartStore {
       await validate([guestCartLineSchema.parse(normalizedLine)]);
     }
     return runExclusive(queueKey, async () => {
-        await mkdir(this.directory, { recursive: true, mode: 0o700 });
+        // A volume that becomes unwritable at runtime (remount, chmod,
+        // read-only root) must surface the typed storage outage the tool
+        // already handles, not a generic save failure.
+        try {
+          await mkdir(this.directory, { recursive: true, mode: 0o700 });
+        } catch (error) {
+          if (isStorageWriteError(error))
+            throw guestCartWriteError(this.directory, error);
+          throw error;
+        }
         let stored: z.infer<typeof storedCartSchema>;
         if (!token) {
           stored = { expires_at: Date.now() + TTL, items: [] };
@@ -198,6 +229,10 @@ export class GuestCartStore {
             mode: 0o600,
           });
           await rename(temporary, file);
+        } catch (error) {
+          if (isStorageWriteError(error))
+            throw guestCartWriteError(file, error);
+          throw error;
         } finally {
           await unlink(temporary).catch(() => undefined);
         }

@@ -86,4 +86,16 @@ describe('rewriteCartLinkUrl', () => {
     );
     expect(done.search).toBe('');
   });
+
+  it('deletes guest_cart when no rejected line has a quantity', () => {
+    const retry = new URL(
+      rewriteCartLinkUrl(
+        'https://ogabassey.com/cart?guest_cart=old',
+        new Map(),
+        ['a']
+      ),
+      'https://ogabassey.com'
+    );
+    expect(retry.searchParams.has('guest_cart')).toBe(false);
+  });
 });

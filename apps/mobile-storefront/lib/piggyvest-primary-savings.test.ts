@@ -60,9 +60,9 @@ it('routes the contribution through legacy savings when primary is unconfigured'
     Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
   );
   mockLegacyAdd.mockResolvedValue({ status: 'pending' });
-  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual(
-    { status: 'pending' }
-  );
+  await expect(addPiggyvestPrimarySavingsContribution(input)).resolves.toEqual({
+    status: 'pending',
+  });
   expect(mockLegacyAdd).toHaveBeenCalledWith(input);
 });
 it('surfaces ambiguous failures instead of silently switching rails', async () => {

@@ -51,7 +51,9 @@ describe('wallet funding account api client', () => {
       account: { accountNumber: '1234567890', provider: 'paystack' },
     });
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
-      expect.stringContaining('/api/storefront/customer/wallet/funding-account'),
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/funding-account'
+      ),
       expect.objectContaining({ method: 'GET' })
     );
   });

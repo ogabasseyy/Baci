@@ -49,7 +49,10 @@ export const customerSavingsPlanFunding = {
   ) {
     if (isPiggyvestPrimaryMerchant(input.merchantId)) {
       try {
-        return await primaryFunding(input, input.enableInterestAccrual === true);
+        return await primaryFunding(
+          input,
+          input.enableInterestAccrual === true
+        );
       } catch (error) {
         if (!isPrimaryWalletNotReady(error)) throw error;
       }

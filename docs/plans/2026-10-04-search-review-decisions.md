@@ -466,3 +466,13 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse med web-tray identity ADJUDICATED (documented interim design): the tray header states parent-rows-only refresh with verify-on-PDP markers + PDP-as-truth; per-item price-projection verification is a follow-up (new RPCs per tray item + mismatch UX), not a silent defect.
 - Muse low idempotency-canonical: documented the exact-resend requirement on submitProductRequest (same id + different payload → 409 by design; equivalent repeats under fresh ids hit canonical dedup).
 - Muse low offset clamp FIXED: getRefinedSearchArgs clamps to [0, 1980] (truncated) so native deep links / long tails snap instead of raising 22023 → generic failure. 6 clamp cases; consumers green (web 2/2, native 15/15).
+
+## Round 67 (Codex 2 P1 + 3 P2 on 2fa2bab — all fixed; Muse 2 med + 2 low adjudicated)
+
+- CX-126 (P1) FIXED: comparison-session split on both apps (context + provider + hook modules, hook tests). Web suites 19/19, native 11/11.
+- CX-127 (P1) FIXED: checkStock takes variantId and validates option-level effective stock (finite wins, null inherits parent, serialized bypasses, vanished → 0 / other errors throw). Both use-cart call sites pass item.variant_id. Stock suite 11/11. (Cart lines carry no offer id, so offers stay parent-validated — noted.)
+- CX-128 (P2) FIXED: migration 20261008230000 folds the 00 dialing prefix into contact keys (8f62f43b…); submit needs no change (dynamic reference). Probe: +/00 fold, domestic/email intact, cross-prefix dedup. verify-sql applies M5 + 00 probe. Registered; PR body → 28.
+- CX-129 (P2) FIXED: index card shows Options for exact variant matches (searchMatch.variantId in predicate). 2 label cases (14/14).
+- CX-130 (P2) FIXED: brand search input stays while its query is nonempty (brands ≤ 6 shrink case). Regression test (8/8).
+- Muse: med rotation + med tray identity repeats; low idempotency satisfied via the Round 66 doc; low inbox-XSS adjudicated (React-default escaping, pre-existing files, no unescaped sinks).
+- CI inventory regen + pin (session split moved the tree).

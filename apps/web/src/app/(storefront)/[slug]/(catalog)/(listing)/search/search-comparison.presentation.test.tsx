@@ -45,10 +45,8 @@ vi.mock('./use-search-comparison-facts', () => ({
 import { SearchCompareButton } from './search-compare-button';
 import { SearchComparisonTray } from './search-comparison';
 
-import {
-  SearchComparisonSession,
-  useSearchComparisonIntent,
-} from './search-comparison-session';
+import { SearchComparisonSession } from './search-comparison-session';
+import { useSearchComparisonIntent } from './use-search-comparison-intent';
 
 function ActivateCompare() {
   const { activate } = useSearchComparisonIntent();

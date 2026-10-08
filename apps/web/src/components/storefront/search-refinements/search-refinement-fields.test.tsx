@@ -26,6 +26,37 @@ it('keeps selected exact brands visible while searching other brands', () => {
   );
 });
 
+it('keeps the brand search visible while its query filters a shrunken list', () => {
+  const onChange = vi.fn();
+  const draft = createRefinementDraft({ brands: [], sort: 'relevance' });
+  const { rerender } = render(
+    <SearchRefinementFields
+      draft={draft}
+      onChange={onChange}
+      brands={['Apple', 'Samsung', 'LG', 'HP', 'Dell', 'Asus', 'Acer']}
+      categories={[]}
+    />
+  );
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search brands' }), {
+    target: { value: 'zzz' },
+  });
+  // Navigation shrinks the facets to six or fewer; the input must stay
+  // so the stuck query can be cleared.
+  rerender(
+    <SearchRefinementFields
+      draft={draft}
+      onChange={onChange}
+      brands={['Apple', 'Samsung']}
+      categories={[]}
+    />
+  );
+  const box = screen.getByRole('searchbox', { name: 'Search brands' });
+  expect(box).toBeInTheDocument();
+  expect(screen.getByText('No brands match this text.')).toBeInTheDocument();
+  fireEvent.change(box, { target: { value: '' } });
+  expect(screen.getByRole('checkbox', { name: 'Apple' })).toBeInTheDocument();
+});
+
 it('merges case-variant draft brands into the facet spelling', () => {
   const onChange = vi.fn();
   render(

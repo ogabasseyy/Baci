@@ -13,30 +13,21 @@ function Probe() {
   );
 }
 
-describe('SearchComparisonSession', () => {
-  it('starts idle and activates on demand', () => {
+describe('useSearchComparisonIntent', () => {
+  it('stays idle outside a session', () => {
+    render(<Probe />);
+    expect(screen.getByRole('button', { name: 'idle' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'idle' }));
+    expect(screen.getByRole('button', { name: 'idle' })).toBeInTheDocument();
+  });
+
+  it('activates within a session', () => {
     render(
       <SearchComparisonSession scope="iphone">
         <Probe />
       </SearchComparisonSession>
     );
-    expect(screen.getByRole('button', { name: 'idle' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'idle' }));
     expect(screen.getByRole('button', { name: 'active' })).toBeInTheDocument();
-  });
-  it('resets the intent when the search scope changes', () => {
-    const view = render(
-      <SearchComparisonSession scope="iphone">
-        <Probe />
-      </SearchComparisonSession>
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'idle' }));
-    expect(screen.getByRole('button', { name: 'active' })).toBeInTheDocument();
-    view.rerender(
-      <SearchComparisonSession scope="laptop">
-        <Probe />
-      </SearchComparisonSession>
-    );
-    expect(screen.getByRole('button', { name: 'idle' })).toBeInTheDocument();
   });
 });

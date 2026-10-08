@@ -156,4 +156,98 @@ describe('cart-stock helpers', () => {
       requestedQuantity: 1,
     });
   });
+
+  function mockProductAndVariant(
+    product: Record<string, unknown>,
+    variant: { data: Record<string, unknown> | null; error: unknown }
+  ) {
+    const productSingle = jest.fn().mockResolvedValue({
+      data: product,
+      error: null,
+    });
+    const variantSingle = jest.fn().mockResolvedValue(variant);
+    (supabase.from as jest.Mock).mockImplementation((table: string) => ({
+      select: () => ({
+        eq: () => ({
+          single: table === 'product_variants' ? variantSingle : productSingle,
+        }),
+      }),
+    }));
+  }
+
+  it('validates the variant stock instead of a zero parent total', async () => {
+    mockProductAndVariant(
+      { stock_quantity: 0, stock: 0, manage_stock: null },
+      {
+        data: { stock_quantity: 2, inventory_tracking_policy: 'tracked' },
+        error: null,
+      }
+    );
+
+    await expect(
+      checkStock('product-1', 2, undefined, { variantId: 'variant-2' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 2,
+      requestedQuantity: 2,
+    });
+    await expect(
+      checkStock('product-1', 3, undefined, { variantId: 'variant-2' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+  });
+
+  it('lets a null variant quantity inherit the parent stock', async () => {
+    mockProductAndVariant(
+      { stock_quantity: 5, stock: 0, manage_stock: null },
+      { data: { stock_quantity: null }, error: null }
+    );
+
+    await expect(
+      checkStock('product-1', 4, undefined, { variantId: 'variant-9' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 5,
+      requestedQuantity: 4,
+    });
+  });
+
+  it('bypasses the quantity check for serialized variants', async () => {
+    mockProductAndVariant(
+      { stock_quantity: 0, stock: 0, manage_stock: null },
+      {
+        data: {
+          stock_quantity: 0,
+          inventory_tracking_policy: 'serialized_then_unlimited',
+        },
+        error: null,
+      }
+    );
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-s' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('reports zero for a vanished variant instead of the parent total', async () => {
+    mockProductAndVariant(
+      { stock_quantity: 5, stock: 0, manage_stock: null },
+      { data: null, error: { code: 'PGRST116', message: 'No rows' } }
+    );
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-gone' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
 });

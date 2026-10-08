@@ -5,7 +5,7 @@ import type Colors from '@/constants/Colors';
 import { useCartStore } from '@/stores/cart-store';
 import { useComparisonStore } from '@/stores/comparison-store';
 
-import { useSearchComparisonIntent } from './SearchComparisonSession';
+import { useSearchComparisonIntent } from './useSearchComparisonIntent';
 
 type Theme = (typeof Colors)['light'];
 export function SearchShoppingActions({

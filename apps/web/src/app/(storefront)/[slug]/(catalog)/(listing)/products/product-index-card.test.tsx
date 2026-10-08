@@ -268,3 +268,46 @@ it('shows modern search text and separate compare and purchase actions', () => {
     screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
   ).toHaveAttribute('href', expect.stringContaining('v1'));
 });
+
+it.each([
+  {
+    label: 'legacy variant match',
+    product: { variant_model: 'legacy' as const, has_condition_offers: false },
+    match: { variantId: 'v1' },
+    expected: 'Options',
+  },
+  {
+    label: 'plain product without a match',
+    product: { variant_model: 'legacy' as const, has_condition_offers: false },
+    match: undefined,
+    expected: 'Buy',
+  },
+])('labels the card action $expected for a $label', ({
+  product,
+  match,
+  expected,
+}) => {
+  render(
+    <ProductIndexCard
+      modern
+      formattedPrice="₦550,000"
+      pathPrefix=""
+      product={makeProduct({
+        ...product,
+        ...(match
+          ? {
+              searchMatch: {
+                productId: 'product-1',
+                total: 1,
+                price: 550000,
+                ...match,
+              },
+            }
+          : {}),
+      })}
+    />
+  );
+  expect(
+    screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+  ).toHaveTextContent(expected);
+});

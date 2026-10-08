@@ -212,7 +212,8 @@ export function ProductIndexCard({
             className="flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-store-background-text/5 px-2 text-xs font-medium text-store-background-text"
           >
             {product.variant_model === 'sku_matrix' ||
-            product.has_condition_offers
+            product.has_condition_offers ||
+            product.searchMatch?.variantId
               ? 'Options'
               : 'Buy'}
           </Link>

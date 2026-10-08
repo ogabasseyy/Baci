@@ -4,7 +4,7 @@ import type Colors from '@/constants/Colors';
 import { useComparisonStore } from '@/stores/comparison-store';
 import type { Product } from '@/types/product';
 
-import { useSearchComparisonIntent } from './SearchComparisonSession';
+import { useSearchComparisonIntent } from './useSearchComparisonIntent';
 
 type Theme = (typeof Colors)['light'];
 export function SearchCompareButton({

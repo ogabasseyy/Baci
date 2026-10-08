@@ -9,8 +9,8 @@ import { useV2Comparison } from '@/components/storefront/ogabassey/providers/v2-
 import type { NormalizedProduct } from '@/lib/normalize-product';
 import { getProductUrl } from '@/lib/product-url';
 import { asRoute } from '@/lib/routes';
-import { useSearchComparisonIntent } from './search-comparison-session';
 import { useSearchComparisonFacts } from './use-search-comparison-facts';
+import { useSearchComparisonIntent } from './use-search-comparison-intent';
 export function SearchComparisonTray({
   currency = 'NGN',
   products,

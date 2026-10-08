@@ -143,7 +143,7 @@ export function SearchRefinementFields({
             : undefined
         }
       >
-        {brands.length > 6 && (
+        {(brands.length > 6 || brandQuery !== '') && (
           <label>
             <span className="sr-only">Search brands</span>
             <input

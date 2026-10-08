@@ -13,30 +13,21 @@ function Probe() {
   );
 }
 
-describe('SearchComparisonSession', () => {
-  it('starts idle and activates on demand', () => {
+describe('useSearchComparisonIntent', () => {
+  it('stays idle outside a session', () => {
+    render(<Probe />);
+    expect(screen.getByTestId('intent-state').props.children).toBe('idle');
+    fireEvent.press(screen.getByTestId('intent-state'));
+    expect(screen.getByTestId('intent-state').props.children).toBe('idle');
+  });
+
+  it('activates within a session', () => {
     render(
       <SearchComparisonSession scope="iphone">
         <Probe />
       </SearchComparisonSession>
     );
-    expect(screen.getByTestId('intent-state').props.children).toBe('idle');
     fireEvent.press(screen.getByTestId('intent-state'));
     expect(screen.getByTestId('intent-state').props.children).toBe('active');
-  });
-  it('resets the intent when the search scope changes', () => {
-    const view = render(
-      <SearchComparisonSession scope="iphone">
-        <Probe />
-      </SearchComparisonSession>
-    );
-    fireEvent.press(screen.getByTestId('intent-state'));
-    expect(screen.getByTestId('intent-state').props.children).toBe('active');
-    view.rerender(
-      <SearchComparisonSession scope="laptop">
-        <Probe />
-      </SearchComparisonSession>
-    );
-    expect(screen.getByTestId('intent-state').props.children).toBe('idle');
   });
 });

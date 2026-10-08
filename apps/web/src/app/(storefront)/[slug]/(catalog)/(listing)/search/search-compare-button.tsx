@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useV2Comparison } from '@/components/storefront/ogabassey/providers/v2-comparison-context';
 import type { Product } from '@/components/storefront/ogabassey/types';
 import type { NormalizedProduct } from '@/lib/normalize-product';
-import { useSearchComparisonIntent } from './search-comparison-session';
+import { useSearchComparisonIntent } from './use-search-comparison-intent';
 export function SearchCompareButton({
   product,
   price,

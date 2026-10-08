@@ -77,7 +77,8 @@ export function useCart() {
       const stockCheck = await checkStock(
         item.product_id,
         totalQuantity,
-        getCachedProductStock(queryClient, item.product_id)
+        getCachedProductStock(queryClient, item.product_id),
+        { variantId: item.variant_id ?? null }
       );
 
       if (!stockCheck.available) {
@@ -183,7 +184,8 @@ export function useCart() {
       const stockCheck = await checkStock(
         item.product_id,
         quantity,
-        getCachedProductStock(queryClient, item.product_id)
+        getCachedProductStock(queryClient, item.product_id),
+        { variantId: item.variant_id ?? null }
       );
 
       if (!stockCheck.available) {

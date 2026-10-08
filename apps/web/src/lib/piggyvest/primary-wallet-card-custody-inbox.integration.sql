@@ -3,6 +3,7 @@
 \ir primary-wallet-card-custody.integration.sql
 \ir ../../../../../supabase/migrations/20261007200900_primary_card_signed_inbox.sql
 \ir ../../../../../supabase/migrations/20261007201000_primary_card_signed_inbox_worker.sql
+\ir ../../../../../supabase/migrations/20261008090100_primary_card_signed_inbox_deferred_retry.sql
 CREATE TABLE public.signed_inbox_fixture(capability jsonb,envelope jsonb,raw_hex text,claim jsonb);
 GRANT SELECT,UPDATE ON public.signed_inbox_fixture TO baci_primary_card_custody;
 INSERT INTO public.signed_inbox_fixture(capability,envelope)
@@ -110,4 +111,36 @@ RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM piggyvest_primary_card.signed_inbox WHERE event_id='exhausted-signed-receipt' AND state='blocked' AND reason='attempts_exhausted') THEN RAISE EXCEPTION 'retry exhausted receipt discarded'; END IF;
  IF (SELECT count(*) FROM public.customer_wallet_transactions)<>2 THEN RAISE EXCEPTION 'retry bound credited funds'; END IF;
+END $$;
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+UPDATE public.signed_inbox_fixture SET envelope=envelope||'{"eventId":"deferred-signed-receipt"}';
+UPDATE public.signed_inbox_fixture SET raw_hex=encode(convert_to(envelope::text,'UTF8'),'hex');
+SELECT piggyvest_primary_card.enqueue_signed_inbox('10000000-0000-4000-8000-000000000004','staging',capability,raw_hex,repeat('a',128)) FROM public.signed_inbox_fixture;
+DO $$ DECLARE fixture record; claim jsonb; BEGIN
+ SELECT * INTO fixture FROM public.signed_inbox_fixture;
+ claim := piggyvest_primary_card.claim_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,2)->0;
+ IF NOT piggyvest_primary_card.finish_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,claim->>'eventId',(claim->>'token')::uuid,'deferred') THEN RAISE EXCEPTION 'deferred outcome not durable'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary_card.signed_inbox SET attempts=50,available_at=clock_timestamp()-interval '1 second' WHERE event_id='deferred-signed-receipt';
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+DO $$ DECLARE fixture record; claim jsonb; BEGIN
+ SELECT * INTO fixture FROM public.signed_inbox_fixture;
+ claim := piggyvest_primary_card.claim_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,2)->0;
+ IF claim->>'eventId' IS DISTINCT FROM 'deferred-signed-receipt' THEN RAISE EXCEPTION 'deferred receipt blocked at cap'; END IF;
+ IF NOT piggyvest_primary_card.finish_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,claim->>'eventId',(claim->>'token')::uuid,'deferred') THEN RAISE EXCEPTION 'capped deferred outcome lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary_card.signed_inbox SET available_at=clock_timestamp()-interval '1 second' WHERE event_id='deferred-signed-receipt';
+SET SESSION AUTHORIZATION baci_primary_card_custody;
+DO $$ DECLARE fixture record; claim jsonb; BEGIN
+ SELECT * INTO fixture FROM public.signed_inbox_fixture;
+ claim := piggyvest_primary_card.claim_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,2)->0;
+ IF claim->>'eventId' IS DISTINCT FROM 'deferred-signed-receipt' THEN RAISE EXCEPTION 'transient receipt blocked at cap'; END IF;
+ IF NOT piggyvest_primary_card.finish_signed_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.capability,claim->>'eventId',(claim->>'token')::uuid,'io_retry') THEN RAISE EXCEPTION 'capped transient outcome lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary_card.signed_inbox WHERE event_id='deferred-signed-receipt' AND state='pending' AND reason='io_retry' AND attempts=50) THEN RAISE EXCEPTION 'deferred receipt exhausted'; END IF;
+ IF (SELECT count(*) FROM public.customer_wallet_transactions)<>2 THEN RAISE EXCEPTION 'deferred retry credited funds'; END IF;
 END $$;

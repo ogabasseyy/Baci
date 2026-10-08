@@ -29,6 +29,7 @@ DECLARE
   v_has_item_supplier_name boolean := false;
   v_has_product_metadata boolean := false;
   v_has_product_variants boolean := false;
+  v_has_unit_costs boolean := false;
   v_sql text;
 BEGIN
   IF p_merchant_id IS NULL THEN
@@ -90,6 +91,10 @@ BEGIN
     EXISTS (
       SELECT 1 FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name = 'product_variants'
+    ),
+    EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'order_item_unit_costs'
     )
   INTO
     v_has_cancelled_at,
@@ -97,7 +102,8 @@ BEGIN
     v_has_item_variant_id,
     v_has_item_supplier_name,
     v_has_product_metadata,
-    v_has_product_variants;
+    v_has_product_variants,
+    v_has_unit_costs;
 
   v_sql := $query$
     WITH search_patterns AS (
@@ -200,6 +206,21 @@ BEGIN
                       v.sku ILIKE search_patterns.pattern ESCAPE '\'
                       OR v.condition ILIKE search_patterns.pattern ESCAPE '\'
                       OR v.attributes::text ILIKE search_patterns.pattern ESCAPE '\'
+                    )
+                )
+    $query$;
+  END IF;
+
+  IF v_has_unit_costs THEN
+    v_sql := v_sql || $query$
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.order_item_unit_costs AS u
+                  WHERE u.order_item_id = oi.id
+                    AND u.merchant_id = $1
+                    AND (
+                      u.identifier_value ILIKE search_patterns.pattern ESCAPE '\'
+                      OR u.supplier_name ILIKE search_patterns.pattern ESCAPE '\'
                     )
                 )
     $query$;

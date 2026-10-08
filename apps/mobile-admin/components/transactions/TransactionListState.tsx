@@ -11,6 +11,7 @@ interface TransactionListStateProps {
   isLoading: boolean;
   isRetrying: boolean;
   onRetry: () => void;
+  searching?: boolean;
   searchTruncated?: boolean;
   visibleOrderCount: number;
 }
@@ -22,6 +23,7 @@ export function TransactionListState({
   isLoading,
   isRetrying,
   onRetry,
+  searching,
   searchTruncated,
   visibleOrderCount,
 }: TransactionListStateProps) {
@@ -67,7 +69,7 @@ export function TransactionListState({
     );
   }
 
-  if (!hasOrders) {
+  if (!hasOrders && !searching) {
     return (
       <View style={styles.stateContainer}>
         <Ionicons name="receipt-outline" size={32} color={colors.textMuted} />
@@ -78,7 +80,7 @@ export function TransactionListState({
     );
   }
 
-  if (visibleOrderCount === 0) {
+  if (visibleOrderCount === 0 || !hasOrders) {
     return (
       <View style={styles.stateContainer}>
         <Ionicons name="search-outline" size={32} color={colors.textMuted} />

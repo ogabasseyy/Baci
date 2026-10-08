@@ -236,6 +236,7 @@ export default function TransactionsScreen() {
               void refetch();
               void monthlyCountQuery.refetch();
             }}
+            searching={searching}
             searchTruncated={searchTruncated}
             visibleOrderCount={visibleOrders.length}
           />

@@ -153,6 +153,21 @@ INSERT INTO public.order_items (
   '20000000-0000-4000-8000-000000000001'
 );
 
+-- Per-unit IMEI/supplier persisted only in the unit-cost ledger.
+INSERT INTO public.order_item_unit_costs (
+  merchant_id, order_id, order_item_id, unit_index, cost_price, supplier_name,
+  identifier_type, identifier_value
+) VALUES (
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'c0000000-0000-4000-8000-000000000001',
+  'd0000000-0000-4000-8000-000000000001',
+  0,
+  400.00,
+  'UnitCost Vendor',
+  'imei',
+  '355555550000001'
+);
+
 -- Order-level IMEI in fulfillment_details.
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, shipping_status, payment_status,
@@ -316,6 +331,26 @@ BEGIN
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
     RAISE EXCEPTION 'product metadata search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['355555550000001']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'unit-cost identifier search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['unitcost vendor']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'unit-cost supplier search failed: %', v_ids;
   END IF;
 
   SELECT array_agg(order_id)

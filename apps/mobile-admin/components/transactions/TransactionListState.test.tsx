@@ -112,6 +112,24 @@ describe('TransactionListState', () => {
     expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
   });
 
+  it('shows no-matching instead of no-transactions for empty searches', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={false}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searching={true}
+        visibleOrderCount={0}
+      />
+    );
+
+    expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
+    expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument();
+  });
+
   it('discloses truncated search results', () => {
     render(
       <TransactionListState

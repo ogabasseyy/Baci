@@ -1116,6 +1116,25 @@ describe('TransactionsScreen', () => {
     expect(screen.queryByText('Edit ORD-MANY-100')).not.toBeInTheDocument();
   });
 
+  it('shows no-matching when a server search returns nothing', () => {
+    mocks.useTransactionReview.mockReturnValue({
+      data: [],
+      error: null,
+      isLoading: false,
+      isRefetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: 'no-such-imei' },
+    });
+
+    expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
+    expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument();
+  });
+
   it('shows the monthly count without loading monthly rows', () => {
     mocks.useMonthlyTransactionCount.mockReturnValue({
       data: 41,

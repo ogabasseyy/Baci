@@ -183,8 +183,20 @@ export function acquireWriterLock(directory: string): void {
         // below decides.
       }
       if (renamed) {
-        if (readLockContent(staleSidePath) !== before) {
-          // Stole a fresh claim: put it back when nothing claimed
+        // A heartbeat refreshes only the timestamp, leaving content
+        // untouched: compare both, so a holder that resumed after our
+        // sandwich is detected and keeps its lock.
+        let movedMtime: number | null = null;
+        try {
+          movedMtime = statSync(staleSidePath).mtimeMs;
+        } catch {
+          movedMtime = null;
+        }
+        if (
+          movedMtime !== mtimeMs ||
+          readLockContent(staleSidePath) !== before
+        ) {
+          // Stole a live claim: put it back when nothing claimed
           // meanwhile, then refuse. A claimant displaced here heals via
           // its heartbeat instead of writing without the guarantee.
           if (readLockContent(lockPath) === null) {

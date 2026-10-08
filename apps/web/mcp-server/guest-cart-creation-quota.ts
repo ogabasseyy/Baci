@@ -9,6 +9,8 @@
 // available distinguisher. NAT and shared egress therefore share one
 // bucket; the 600-creations/hour limit tolerates legitimate bursts while
 // still binding a flooder to a fraction of the 2,000-cart pool per hour.
+// IPv6 callers share one bucket per /64: a single allocation otherwise
+// yields a fresh 600-creation budget per source address.
 export const GUEST_CART_QUOTA_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 export const GUEST_CART_QUOTA_MAX_CREATIONS = 600; // anonymous carts per IP per window
 const QUOTA_MAX_ENTRIES = 10_000; // Max unique IPs to track (prevent memory exhaustion)
@@ -38,8 +40,37 @@ function maskIpForLog(ip: string): string {
   return ip;
 }
 
+// Quota-bucket key: IPv4 addresses (and opaque identities) are used
+// as-is; IPv6 addresses collapse to their /64 so all spellings of one
+// allocation — full, compressed, mixed-case, zoned — share one bucket
+// and rotating source addresses cannot mint fresh budgets.
+export function quotaKeyForIp(ip: string): string {
+  if (!ip.includes(':')) return ip;
+  const withoutZone = ip.split('%')[0];
+  const embeddedV4 = withoutZone.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)/);
+  if (embeddedV4) return embeddedV4[0];
+  const halves = withoutZone.split('::');
+  let groups: string[];
+  if (halves.length === 2) {
+    const head = halves[0] ? halves[0].split(':') : [];
+    const tail = halves[1] ? halves[1].split(':') : [];
+    const missing = 8 - head.length - tail.length;
+    groups = [
+      ...head,
+      ...Array(Math.max(0, missing)).fill('0'),
+      ...tail,
+    ];
+  } else {
+    groups = withoutZone.split(':');
+  }
+  return groups
+    .slice(0, 4)
+    .map((group) => group.replace(/^0+(?=[0-9a-f]+$)/i, '').toLowerCase() || '0')
+    .join(':');
+}
+
 function inspectQuota(ip: string, now: number): GuestCartQuotaVerdict {
-  const entry = quotaByIp.get(ip);
+  const entry = quotaByIp.get(quotaKeyForIp(ip));
   if (entry && now - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS) {
     if (entry.count >= GUEST_CART_QUOTA_MAX_CREATIONS) {
       return {
@@ -94,11 +125,12 @@ export function consumeGuestCartCreation(ip: string): GuestCartQuotaVerdict {
   const now = Date.now();
   const verdict = inspectQuota(ip, now);
   if (!verdict.allowed) return verdict;
-  const entry = quotaByIp.get(ip);
+  const key = quotaKeyForIp(ip);
+  const entry = quotaByIp.get(key);
   if (entry && now - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS) {
     entry.count += 1;
   } else {
-    quotaByIp.set(ip, { count: 1, windowStart: now });
+    quotaByIp.set(key, { count: 1, windowStart: now });
   }
   return verdict;
 }

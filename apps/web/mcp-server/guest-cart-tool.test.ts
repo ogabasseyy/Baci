@@ -132,3 +132,20 @@ it('advertises the bare cart page when the last line is removed', async () => {
     expect(emptied.structuredContent.cart_url).toBe('https://ogabassey.com/cart');
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
+it('rejects cross-field violations before quota or database work', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-shape-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  const getMerchantId = vi.fn(async () => 'merchant');
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId, formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    validate.mockClear();
+    const result = await handler?.({ product_id: id, quantity: 0 }) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain('cart_token');
+    expect(validate).not.toHaveBeenCalled();
+    expect(getMerchantId).not.toHaveBeenCalled();
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -65,6 +65,25 @@ export function registerGuestCartTool(
     },
     async (args) => {
       try {
+        // Registration passes only the input shape, which drops the
+        // object-level refinement, so re-parse with the full schema
+        // before quota or database work: cross-field violations fail
+        // fast here instead of surfacing as generic store errors.
+        const parsed = mcpGuestCartInputSchema.safeParse(args);
+        if (!parsed.success) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `Invalid guest cart input: ${parsed.error.issues
+                  .map((issue) => issue.message)
+                  .join('; ')}`,
+              },
+            ],
+            structuredContent: { success: false },
+          };
+        }
         // Tokenless calls mint a fresh cart file, so anonymous creation (but
         // never token-bound updates) is capped per caller IP. Peek first:
         // failed validations and store errors return below without

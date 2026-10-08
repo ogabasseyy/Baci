@@ -243,10 +243,27 @@ export function useCartHandoff() {
         remaining.some((line) => line.product_id === productId)
       )
         throw new Error('Cart update failed');
+      // Another widget or direct tool call may have changed sibling lines
+      // under this token: reconcile displayed survivors with the server
+      // response like the add path does, instead of only dropping the
+      // clicked product.
+      const remainingQuantities = new Map(
+        remaining.map((line) => [line.product_id, line.quantity])
+      );
       setWidgetState((previous) => ({
         ...previous!,
         cart:
-          previous?.cart.filter((item) => item.product.id !== productId) || [],
+          previous?.cart
+            .filter(
+              (item) =>
+                item.product.id !== productId &&
+                remainingQuantities.has(item.product.id)
+            )
+            .map((item) => ({
+              ...item,
+              quantity:
+                remainingQuantities.get(item.product.id) ?? item.quantity,
+            })) || [],
         cartUrl: content.cart_url,
       }));
     } catch {

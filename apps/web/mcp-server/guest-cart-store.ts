@@ -105,6 +105,9 @@ export class GuestCartStore {
       // I/O: validate before queueing so a slow catalog lookup never
       // stalls other creators behind the shared directory lock. Rejected
       // lines still never reach eviction, which stays inside the queue.
+      // Accepted window: the catalog may change between this check and
+      // the persisted write; the website re-checks price and stock at
+      // transfer, so a line that went stale is dropped there.
       await validate([guestCartLineSchema.parse(normalizedLine)]);
     }
     return runExclusive(queueKey, async () => {

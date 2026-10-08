@@ -3,6 +3,7 @@ import {
   GUEST_CART_QUOTA_MAX_CREATIONS as MAX,
   consumeGuestCartCreation,
   peekGuestCartCreation,
+  quotaKeyForIp,
 } from './guest-cart-creation-quota';
 
 afterEach(() => {
@@ -42,6 +43,30 @@ it('peeks without consuming so failed validations burn no quota', () => {
     consumeGuestCartCreation('10.0.0.9');
   }
   expect(peekGuestCartCreation('10.0.0.9').allowed).toBe(false);
+});
+
+it('collapses IPv6 spellings of one /64 to a single quota key', () => {
+  const keys = new Set([
+    quotaKeyForIp('2001:0db8:abcd:0012:0000:0000:0000:0099'),
+    quotaKeyForIp('2001:db8:abcd:12::99'),
+    quotaKeyForIp('2001:DB8:ABCD:12:0:0:0:99'),
+    quotaKeyForIp('2001:db8:abcd:12::99%eth0'),
+  ]);
+  expect(keys).toEqual(new Set(['2001:db8:abcd:12']));
+  expect(quotaKeyForIp('2001:db8:abcd:99::1')).toBe('2001:db8:abcd:99');
+  expect(quotaKeyForIp('10.0.0.5')).toBe('10.0.0.5');
+  expect(quotaKeyForIp('::ffff:10.0.0.6')).toBe('10.0.0.6');
+});
+
+it('shares one creation budget across rotating IPv6 source addresses', () => {
+  for (let i = 0; i < MAX; i += 1) {
+    expect(
+      consumeGuestCartCreation(`2001:db8:ffff::${i.toString(16)}`).allowed
+    ).toBe(true);
+  }
+  expect(
+    consumeGuestCartCreation('2001:db8:ffff:0:0:0:0:ffff').allowed
+  ).toBe(false);
 });
 
 it('rejects fresh callers once the map is full of live windows', () => {

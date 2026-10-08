@@ -104,6 +104,46 @@ it('removes against a bare cart URL when the server emptied the cart', async () 
   expect(result.current.cart).toEqual([]);
   expect(result.current.cartError).toBeNull();
 });
+it('reconciles survivors with the removal response', async () => {
+  const third = {
+    ...product,
+    id: '33333333-3333-4333-8333-333333333333',
+    name: 'Watch',
+  };
+  const removalUrl = new URL('https://ogabassey.com/cart');
+  removalUrl.searchParams.set(
+    'guest_cart',
+    JSON.stringify([{ product_id: third.id, quantity: 7 }])
+  );
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce(response([product, second]))
+    .mockResolvedValueOnce(response([product, second, third]))
+    .mockResolvedValueOnce({
+      structuredContent: {
+        success: true,
+        cart_url: removalUrl.toString(),
+        cart_token: token,
+      },
+    });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(second);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(third);
+  });
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  expect(result.current.cartError).toBeNull();
+  expect(result.current.cart).toEqual([{ product: third, quantity: 7 }]);
+});
 it('retains the cart when removal fails and rejects hostile handoff destinations', async () => {
   window.openai = {
     callTool: vi

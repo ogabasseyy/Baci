@@ -1,5 +1,5 @@
 -- redvault-private-pilot-full-schema-setup.sql
--- Part 1/5: opens the single test transaction, seeds fixtures (temp case table, users, dedicated products, route-proof helper), and asserts the legacy grant/prerequisite baseline.
+-- Part 1/6: opens the single test transaction, seeds fixtures (temp case table, users, dedicated products, route-proof helper), and asserts the legacy grant/prerequisite baseline.
 --
 -- Runs concatenated with the other parts in filename order inside one
 -- psql session/transaction (see run-redvault-private-pilot-full-schema.sh);

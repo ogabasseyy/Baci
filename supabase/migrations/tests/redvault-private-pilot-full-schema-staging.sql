@@ -1,5 +1,5 @@
 -- redvault-private-pilot-full-schema-staging.sql
--- Part 2/5: disabled-policy behavior — unflagged staging fails closed at binding, then the flagged staging database lets the pilot account create and reserve an ordinary order through the normal path.
+-- Part 2/6: disabled-policy behavior — unflagged staging fails closed at binding, then the flagged staging database lets the pilot account create and reserve an ordinary order through the normal path.
 --
 -- Runs concatenated with the other parts in filename order inside one
 -- psql session/transaction (see run-redvault-private-pilot-full-schema.sh);

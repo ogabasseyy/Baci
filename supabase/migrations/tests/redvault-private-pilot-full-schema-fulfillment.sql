@@ -1,5 +1,5 @@
 -- redvault-private-pilot-full-schema-fulfillment.sql
--- Part 4/5: pre-approval fulfillment blocks (orders, shipments, items), expiry/disable transitions, and non-pilot compatibility.
+-- Part 5/6: pre-approval fulfillment blocks (orders, shipments, items), expiry/disable transitions, and non-pilot compatibility.
 --
 -- Runs concatenated with the other parts in filename order inside one
 -- psql session/transaction (see run-redvault-private-pilot-full-schema.sh);

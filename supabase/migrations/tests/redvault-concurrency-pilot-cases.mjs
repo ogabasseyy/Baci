@@ -33,6 +33,7 @@ export async function runConcurrencyPilotCases({
     '20261006190900_uba_redvault_pilot_require_active_product.sql',
     '20261006191000_uba_redvault_pilot_lock_product_before_activation.sql',
     '20261006191100_uba_redvault_pilot_order_variant_recheck.sql',
+    '20261006191200_uba_redvault_pilot_order_status_recheck.sql',
   ]) {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }

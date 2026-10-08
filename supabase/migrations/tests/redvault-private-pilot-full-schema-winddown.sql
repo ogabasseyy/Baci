@@ -1,5 +1,5 @@
 -- redvault-private-pilot-full-schema-winddown.sql
--- Part 5/5: post-expiry provider outcomes, cancel carve-outs, product boundary, and binding checks; reports success and rolls back.
+-- Part 6/6: post-expiry provider outcomes, cancel carve-outs, product boundary, and binding checks; reports success and rolls back.
 --
 -- Runs concatenated with the other parts in filename order inside one
 -- psql session/transaction (see run-redvault-private-pilot-full-schema.sh);

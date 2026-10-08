@@ -6,6 +6,10 @@ type VerifiedProof = Extract<
   ReturnType<typeof verifyPrimaryWalletSavingsProof>,
   { status: 'verified' }
 >;
+type FailedProof = Extract<
+  ReturnType<typeof verifyPrimaryWalletSavingsProof>,
+  { status: 'failed' }
+>;
 interface Ports {
   loadDispatched: (operationId: string) => Promise<unknown>;
   queryProvider: (selection: {
@@ -15,6 +19,9 @@ interface Ports {
   settle: (
     proof: VerifiedProof
   ) => Promise<'confirmed' | 'duplicate' | 'conflict'>;
+  release: (
+    proof: FailedProof
+  ) => Promise<'released' | 'duplicate' | 'conflict'>;
 }
 
 export async function reconcilePrimaryWalletSavings(
@@ -33,6 +40,15 @@ export async function reconcilePrimaryWalletSavings(
       walletId: reservation.data.sourceWalletId,
     });
     const proof = verifyPrimaryWalletSavingsProof(reservation.data, response);
+    if (proof.status === 'failed') {
+      const released = await ports.release(proof);
+      return {
+        status:
+          released === 'released' || released === 'duplicate'
+            ? ('abandoned' as const)
+            : ('pending' as const),
+      };
+    }
     if (proof.status !== 'verified') return { status: 'pending' as const };
     const result = await ports.settle(proof);
     return {

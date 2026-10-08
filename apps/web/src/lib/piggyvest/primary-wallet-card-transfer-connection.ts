@@ -1,6 +1,7 @@
 import 'server-only';
 import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wallet-card-custody';
 import { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
+import { createPrimaryCardTransferLookup } from './primary-wallet-card-transfer-lookup';
 import { assertPrimaryCardTransferPolicy } from './primary-wallet-card-transfer-policy';
 import { createPrimaryCardTransferProvider } from './primary-wallet-card-transfer-provider';
 import { runPrimaryCardTransfer } from './primary-wallet-card-transfer-worker';
@@ -15,6 +16,14 @@ export function createPrimaryCardTransferConnection(input: {
   const config = assertPrimaryCardTransferPolicy(input.configuration, clock());
   const execute = createPrimaryCardCustodyExecutor(config.runtime);
   const submit = createPrimaryCardTransferProvider({
+    ...input,
+    configuration: config,
+    fetchImplementation: (...parameters) => {
+      input.signal?.throwIfAborted();
+      return input.fetchImplementation(...parameters);
+    },
+  });
+  const lookup = createPrimaryCardTransferLookup({
     ...input,
     configuration: config,
     fetchImplementation: (...parameters) => {
@@ -53,6 +62,7 @@ export function createPrimaryCardTransferConnection(input: {
         return await execute('claim', [selected]);
       },
       submitTransfer: (command) => submit(command, context),
+      lookupTransfer: (command) => lookup(command, context),
       record: (selected, token, submitted) =>
         execute('record', [selected, token, submitted]),
     });

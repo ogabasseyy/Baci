@@ -7,6 +7,10 @@ type Proof = Extract<
   ReturnType<typeof verifyPrimaryWalletSavingsProof>,
   { status: 'verified' }
 >;
+type FailedProof = Extract<
+  ReturnType<typeof verifyPrimaryWalletSavingsProof>,
+  { status: 'failed' }
+>;
 type Execute = (
   statement: string,
   parameters: readonly string[]
@@ -55,6 +59,22 @@ export function createPrimaryWalletSavingsReconciliationStore(input: {
       );
       if (
         result !== 'confirmed' &&
+        result !== 'duplicate' &&
+        result !== 'conflict'
+      )
+        throw new Error('Savings settlement unavailable');
+      return result;
+    },
+    async release(
+      proof: FailedProof
+    ): Promise<'released' | 'duplicate' | 'conflict'> {
+      const { status: _status, ...receipt } = proof;
+      const result = await execute(
+        'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
+        JSON.stringify(receipt)
+      );
+      if (
+        result !== 'released' &&
         result !== 'duplicate' &&
         result !== 'conflict'
       )

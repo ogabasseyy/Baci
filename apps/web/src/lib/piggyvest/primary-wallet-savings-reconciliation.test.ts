@@ -31,6 +31,7 @@ function ports() {
       },
     }),
     settle: vi.fn().mockResolvedValue('confirmed'),
+    release: vi.fn().mockResolvedValue('released'),
   };
 }
 describe('primary savings reconciliation', () => {
@@ -92,5 +93,89 @@ describe('primary savings reconciliation', () => {
       await reconcilePrimaryWalletSavings(operationId, dependencies)
     ).toEqual({ status: 'pending' });
     expect(dependencies.settle).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    'released',
+    'duplicate',
+  ] as const)('abandons the hold on authenticated failed provider evidence (%s)', async (outcome) => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'failed',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'our-reference',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'source-customer',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    dependencies.release.mockResolvedValue(outcome);
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'abandoned' });
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId,
+        providerTransactionId: 'transaction',
+        amountKobo: 2000,
+      })
+    );
+  });
+  it('keeps failed evidence pending when its bindings do not match the reservation', async () => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'failed',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'another-operation',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'source-customer',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'pending' });
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
+  it('stays pending when the atomic release reports conflict or throws', async () => {
+    for (const outcome of ['conflict' as const, new Error('private lock')]) {
+      const dependencies = ports();
+      dependencies.queryProvider.mockResolvedValue({
+        status: true,
+        data: {
+          status: 'failed',
+          id: 'transaction',
+          internal_reference: 'transaction',
+          reference: 'provider-reference',
+          third_party_reference: 'our-reference',
+          amount: 2000,
+          fee: 0,
+          customer_id: 'source-customer',
+          source_wallet: 'source',
+          destination_wallet: 'destination',
+        },
+      });
+      if (outcome instanceof Error)
+        dependencies.release.mockRejectedValue(outcome);
+      else dependencies.release.mockResolvedValue(outcome);
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).toHaveBeenCalledTimes(1);
+    }
   });
 });

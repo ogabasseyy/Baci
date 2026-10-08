@@ -69,6 +69,7 @@ beforeEach(() => {
   });
   mocks.retrieve.mockImplementation(async (_config, id: string) => ({
     id,
+    api_customer_id: 'source-customer',
     business_id: 'business',
     currency: 'NGN',
     status: 'active',

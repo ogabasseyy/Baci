@@ -53,6 +53,10 @@ export const piggyvestPrimarySavingsTransferSchemas = {
   }),
   wallet: z.object({
     id: piggyvestProviderIdSchema,
+    // Owning provider customer, required for evidence binding: the
+    // transfer must prove the source wallet belongs to the reserved
+    // provider customer before dispatching.
+    api_customer_id: piggyvestProviderIdSchema,
     business_id: piggyvestProviderIdSchema,
     currency: z.literal('NGN'),
     status: z.literal('active'),

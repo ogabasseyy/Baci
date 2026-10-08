@@ -130,11 +130,15 @@ export function createPrimaryWalletCardCheckoutService(input: {
           JSON.stringify(storedRequest),
         ])
       );
-      if (
-        intent.amountKobo !== request.amountKobo ||
-        JSON.stringify(intent.consent) !== JSON.stringify(request.consent)
-      )
-        throw new Error('Primary card reservation unavailable');
+      // Adopt the stored intent when reserve-recovery returns the
+      // customer's unresolved operation for a different amount or consent
+      // (lost device storage with a re-entered amount). Throwing here
+      // strands a possibly charged checkout: the client never learns the
+      // stored operation ID, so every retry fails identically. The stored
+      // intent is authoritative — same user, same one-unresolved-operation
+      // slot — so initialization proceeds on it and the response carries
+      // the stored amount and operation ID for the client to persist and
+      // resume. The client must confirm the adopted amount before payment.
       active();
       const claim = schemas.claim.parse(
         await input.execute('claim', [storageScope, intent.operationId])

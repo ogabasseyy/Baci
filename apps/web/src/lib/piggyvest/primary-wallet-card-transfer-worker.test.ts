@@ -18,6 +18,7 @@ function setup() {
       },
     }),
     submitTransfer: vi.fn().mockResolvedValue(undefined),
+    lookupTransfer: vi.fn().mockResolvedValue('absent'),
     record: vi.fn().mockResolvedValue(true),
   };
 }
@@ -66,5 +67,84 @@ describe('irreversible primary transfer dispatch', () => {
       'Transfer result unavailable'
     );
     expect(input.submitTransfer).toHaveBeenCalledTimes(1);
+  });
+  it('never looks up a fresh claim before submitting', async () => {
+    const input = setup();
+    expect(await runPrimaryCardTransfer(input)).toBe('submitted');
+    expect(input.lookupTransfer).not.toHaveBeenCalled();
+  });
+  it('records a reclaimed claim as submitted without resubmitting when the provider holds the reference', async () => {
+    const input = setup();
+    input.claim.mockResolvedValue({
+      outcome: 'reclaimed',
+      token: fixture.context.customerId,
+      command: {
+        operationId: fixture.context.operationId,
+        sourceWalletId: fixture.context.sourceWalletId,
+        destinationWalletId: fixture.context.destinationWalletId,
+        amountKobo: 25000,
+        currency: 'NGN',
+        reference: fixture.context.reference,
+      },
+    });
+    input.lookupTransfer.mockResolvedValue('submitted');
+    expect(await runPrimaryCardTransfer(input)).toBe('submitted');
+    expect(input.submitTransfer).not.toHaveBeenCalled();
+    expect(input.record).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId,
+      true
+    );
+  });
+  it('submits fresh only when the reclaimed reference is proven absent', async () => {
+    const input = setup();
+    input.claim.mockResolvedValue({
+      outcome: 'reclaimed',
+      token: fixture.context.customerId,
+      command: {
+        operationId: fixture.context.operationId,
+        sourceWalletId: fixture.context.sourceWalletId,
+        destinationWalletId: fixture.context.destinationWalletId,
+        amountKobo: 25000,
+        currency: 'NGN',
+        reference: fixture.context.reference,
+      },
+    });
+    input.lookupTransfer.mockResolvedValue('absent');
+    expect(await runPrimaryCardTransfer(input)).toBe('submitted');
+    expect(input.submitTransfer).toHaveBeenCalledTimes(1);
+    expect(input.record).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId,
+      true
+    );
+  });
+  it.each([
+    'uncertain',
+    'lookup-crash',
+  ] as const)('records unknown without resubmitting when the reclaimed lookup is %s', async (mode) => {
+    const input = setup();
+    input.claim.mockResolvedValue({
+      outcome: 'reclaimed',
+      token: fixture.context.customerId,
+      command: {
+        operationId: fixture.context.operationId,
+        sourceWalletId: fixture.context.sourceWalletId,
+        destinationWalletId: fixture.context.destinationWalletId,
+        amountKobo: 25000,
+        currency: 'NGN',
+        reference: fixture.context.reference,
+      },
+    });
+    if (mode === 'lookup-crash')
+      input.lookupTransfer.mockRejectedValue(new Error('private lookup bug'));
+    else input.lookupTransfer.mockResolvedValue('uncertain');
+    expect(await runPrimaryCardTransfer(input)).toBe('unknown');
+    expect(input.submitTransfer).not.toHaveBeenCalled();
+    expect(input.record).toHaveBeenCalledWith(
+      input.operationId,
+      fixture.context.customerId,
+      false
+    );
   });
 });

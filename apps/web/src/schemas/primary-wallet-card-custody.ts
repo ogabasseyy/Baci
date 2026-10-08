@@ -71,6 +71,11 @@ export const primaryWalletCardCustodySchemas = {
   claim: z.discriminatedUnion('outcome', [
     z.strictObject({ outcome: z.literal('existing') }),
     z.strictObject({ outcome: z.literal('claimed'), token: z.uuid(), command }),
+    z.strictObject({
+      outcome: z.literal('reclaimed'),
+      token: z.uuid(),
+      command,
+    }),
   ]),
   outcome: z.enum(['completed', 'duplicate', 'conflict']),
   runtime: z.strictObject({

@@ -20,6 +20,7 @@ function ports() {
     reserve: vi.fn().mockResolvedValue({ status: 'claimed', reservation }),
     retrieveWallet: vi.fn(async (id: string) => ({
       id,
+      api_customer_id: 'source-customer',
       business_id: 'business',
       currency: 'NGN',
       status: 'active',
@@ -60,11 +61,32 @@ it('cancels before dispatch when the provider source cannot cover the reserved f
   const dependencies = ports();
   dependencies.retrieveWallet.mockResolvedValue({
     id: 'source',
+    api_customer_id: 'source-customer',
     business_id: 'business',
     currency: 'NGN',
     status: 'active',
     balance: 0,
   });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'unavailable' });
+  expect(dependencies.cancelBeforeDispatch).toHaveBeenCalledWith(
+    request.operationId
+  );
+  expect(dependencies.claimDispatch).not.toHaveBeenCalled();
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
+it('cancels before dispatch when the source wallet belongs to another provider customer', async () => {
+  const dependencies = ports();
+  dependencies.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id:
+      id === 'source' ? 'foreign-customer' : 'destination-customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 10000,
+  }));
   expect(
     await submitPrimaryWalletSavingsTransfer(request, dependencies)
   ).toEqual({ status: 'unavailable' });

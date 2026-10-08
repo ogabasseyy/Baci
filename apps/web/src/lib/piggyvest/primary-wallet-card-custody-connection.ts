@@ -14,6 +14,9 @@ export function createPrimaryCardCustodyConnection(input: {
   submitApprovedTransfer: Parameters<
     typeof runPrimaryCardTransfer
   >[0]['submitTransfer'];
+  lookupApprovedTransfer: Parameters<
+    typeof runPrimaryCardTransfer
+  >[0]['lookupTransfer'];
   now?: () => number;
 }) {
   const config = schemas.runtime.parse(input.configuration);
@@ -57,6 +60,19 @@ export function createPrimaryCardCustodyConnection(input: {
           )
             throw new Error('Transfer ownership unavailable');
           await input.submitApprovedTransfer(command);
+        },
+        lookupTransfer: async (command) => {
+          active();
+          if (
+            command.operationId !== context.operationId ||
+            command.reference !== context.reference ||
+            command.sourceWalletId !== context.sourceWalletId ||
+            command.destinationWalletId !== context.destinationWalletId ||
+            command.amountKobo !== context.amountKobo ||
+            command.currency !== 'NGN'
+          )
+            throw new Error('Transfer ownership unavailable');
+          return await input.lookupApprovedTransfer(command);
         },
         record: (selected, token, submitted) =>
           execute('record', [selected, token, submitted]),

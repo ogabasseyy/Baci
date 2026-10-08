@@ -43,6 +43,7 @@ export async function submitPrimaryWalletSavingsTransfer(
     verified =
       source.id === reservation.sourceWalletId &&
       destination.id === reservation.destinationWalletId &&
+      source.api_customer_id === reservation.providerCustomerId &&
       source.business_id === reservation.businessId &&
       destination.business_id === reservation.businessId &&
       source.balance >= reservation.amountKobo;

@@ -81,10 +81,19 @@ export function createPrimaryWalletCardFundingClient() {
               },
         })
       );
+      // Adoption: when device storage was lost and the customer re-entered
+      // a different amount, the server returns its stored unresolved
+      // operation instead of failing. Persist the stored operation ID and
+      // amount so the possibly charged checkout stays recoverable, and
+      // flag it so the UI confirms the adopted amount before any payment.
+      // Status polls keep the strict binding: a different operation or
+      // amount there is a real inconsistency, not a recovery.
+      const adopted = initialize && response.amountKobo !== record.amountKobo;
       if (
-        response.amountKobo !== record.amountKobo ||
-        (record.operationId !== null &&
-          response.operationId !== record.operationId)
+        !adopted &&
+        (response.amountKobo !== record.amountKobo ||
+          (record.operationId !== null &&
+            response.operationId !== record.operationId))
       )
         throw new Error(
           'Card funding could not be confirmed. Keep the pending operation for review.'
@@ -94,8 +103,19 @@ export function createPrimaryWalletCardFundingClient() {
       // would pin every later funding attempt to the dead operation.
       if (response.status === 'completed' || response.status === 'abandoned')
         await AsyncStorage.removeItem(key(record));
-      else await write({ ...record, operationId: response.operationId });
-      return { ...response, returnTo: record.returnTo };
+      else
+        await write(
+          adopted
+            ? {
+                ...record,
+                operationId: response.operationId,
+                amountKobo: response.amountKobo,
+              }
+            : { ...record, operationId: response.operationId }
+        );
+      return adopted
+        ? { ...response, returnTo: record.returnTo, adopted: true as const }
+        : { ...response, returnTo: record.returnTo };
     } catch (requestError) {
       // Authoritative not-ready means the server reserved nothing, so a
       // null-operation placeholder is safe to drop: keeping it would let a

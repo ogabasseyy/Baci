@@ -1,4 +1,7 @@
 -- Public intake must never use an RLS-bypassing service-role JWT.
+-- This supersedes the service-role-only grant in
+-- 20261002190000_storefront_product_requests.sql: only the least-privilege
+-- storefront_intake role may execute the submit RPC.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'storefront_intake') THEN
     CREATE ROLE storefront_intake NOLOGIN NOINHERIT NOBYPASSRLS;

@@ -672,7 +672,11 @@ export default function ProductDetailClient({
                         <Plus className="size-4" aria-hidden="true" />
                       </ThemedButton>
                     </div>
-                    <Link href={asRoute(getHref('/checkout'))}>
+                    {/* Route through the cart, not checkout: the cart carries
+                        the optional-service (assurance) disclosure and
+                        toggle, so a direct checkout link would let a
+                        default-on fee reach payment without an opt-out. */}
+                    <Link href={asRoute(getHref('/cart'))}>
                       <ThemedButton
                         size="lg"
                         colorRole="primary"

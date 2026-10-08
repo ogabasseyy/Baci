@@ -1,5 +1,6 @@
 'use client';
 import type { SearchRefinements } from '@baci/shared/lib';
+import { deduplicateFacetChoices, isSameFacetChoice } from '@baci/shared/lib';
 import { useState } from 'react';
 import { getSearchCurrencyFormatter } from './search-currency';
 import type { RefinementDraft } from './search-refinement-draft';
@@ -31,8 +32,10 @@ export function SearchRefinementFields({
       .find((part) => part.type === 'currency')?.value ?? currency;
   const [expanded, setExpanded] = useState(focusGroup ?? '');
   const [brandQuery, setBrandQuery] = useState('');
-  const visible = [...new Set([...brands, ...draft.brands])].filter((brand) =>
-    brand.toLowerCase().includes(brandQuery.toLowerCase())
+  // Facet spellings first so draft values resolve to the returned
+  // spelling; the SQL filter folds case, so the choices must too.
+  const visible = deduplicateFacetChoices([...brands, ...draft.brands]).filter(
+    (brand) => brand.toLowerCase().includes(brandQuery.toLowerCase())
   );
   const inputClass =
     'min-h-11 w-full rounded-lg border border-store-background-text/20 bg-store-background px-3 py-2 text-store-background-text';
@@ -153,12 +156,14 @@ export function SearchRefinementFields({
             <label key={brand} className="flex min-h-11 items-center gap-2">
               <input
                 type="checkbox"
-                checked={draft.brands.includes(brand)}
+                checked={draft.brands.some((b) => isSameFacetChoice(b, brand))}
                 onChange={() =>
                   onChange({
                     ...draft,
-                    brands: draft.brands.includes(brand)
-                      ? draft.brands.filter((b) => b !== brand)
+                    brands: draft.brands.some((b) =>
+                      isSameFacetChoice(b, brand)
+                    )
+                      ? draft.brands.filter((b) => !isSameFacetChoice(b, brand))
                       : [...draft.brands, brand],
                   })
                 }

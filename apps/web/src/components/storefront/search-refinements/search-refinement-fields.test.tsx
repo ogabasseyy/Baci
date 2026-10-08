@@ -26,6 +26,30 @@ it('keeps selected exact brands visible while searching other brands', () => {
   );
 });
 
+it('merges case-variant draft brands into the facet spelling', () => {
+  const onChange = vi.fn();
+  render(
+    <SearchRefinementFields
+      draft={createRefinementDraft({
+        brands: ['apple'],
+        sort: 'relevance',
+      })}
+      onChange={onChange}
+      brands={['Apple', 'Samsung']}
+      categories={[]}
+    />
+  );
+  // One checkbox in the facet spelling, checked via the draft value.
+  const boxes = screen.getAllByRole('checkbox', { name: 'Apple' });
+  expect(boxes).toHaveLength(1);
+  expect(boxes[0]).toBeChecked();
+  // Deselecting clears the equivalent lowercase constraint entirely.
+  fireEvent.click(boxes[0]);
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ brands: [] })
+  );
+});
+
 it('commits a minimum rating through the draft field', () => {
   const onChange = vi.fn();
   render(

@@ -1,4 +1,5 @@
 import type { SearchRefinements } from '@baci/shared/lib';
+import { deduplicateFacetChoices, isSameFacetChoice } from '@baci/shared/lib';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { type ReactNode, type RefObject, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
@@ -51,9 +52,12 @@ export function SearchRefinementFields({
 }: Props) {
   const [expanded, setExpanded] = useState(focusGroup);
   const labelStyle = { color: colors.text };
-  const visibleBrands = [...new Set([...brands, ...draft.brands])].filter(
-    (brand) => brand.toLowerCase().includes(brandQuery.toLowerCase())
-  );
+  // Facet spellings first so draft values resolve to the returned
+  // spelling; the SQL filter folds case, so the choices must too.
+  const visibleBrands = deduplicateFacetChoices([
+    ...brands,
+    ...draft.brands,
+  ]).filter((brand) => brand.toLowerCase().includes(brandQuery.toLowerCase()));
   const section = (key: string, title: string, children: ReactNode) => (
     <View
       key={key}
@@ -186,11 +190,11 @@ export function SearchRefinementFields({
               () =>
                 setDraft({
                   ...draft,
-                  brands: draft.brands.includes(brand)
-                    ? draft.brands.filter((b) => b !== brand)
+                  brands: draft.brands.some((b) => isSameFacetChoice(b, brand))
+                    ? draft.brands.filter((b) => !isSameFacetChoice(b, brand))
                     : [...draft.brands, brand],
                 }),
-              draft.brands.includes(brand),
+              draft.brands.some((b) => isSameFacetChoice(b, brand)),
               'checkbox',
               brand
             )

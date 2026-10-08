@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRefinedSearchHref,
+  deduplicateFacetChoices,
   emptySearchRefinements,
   hasActiveSearchRefinements,
+  isSameFacetChoice,
   parseSearchRefinements,
   resetRefinementsForQuery,
 } from './search-refinements';
@@ -103,4 +105,16 @@ it('round-trips processor filters and rejects malformed multi-value input', () =
     parseSearchRefinements({ processor: ['Intel Core i7', 'AMD Ryzen 5'] })
       .success
   ).toBe(false);
+});
+
+it('compares facet choices trimmed and case-insensitively', () => {
+  expect(isSameFacetChoice('Apple', 'apple')).toBe(true);
+  expect(isSameFacetChoice('  Apple ', 'apple')).toBe(true);
+  expect(isSameFacetChoice('Apple', 'Samsung')).toBe(false);
+});
+
+it('dedupes facet choices keeping the first spelling', () => {
+  expect(
+    deduplicateFacetChoices(['Apple', 'Samsung', 'apple', ' APPLE '])
+  ).toEqual(['Apple', 'Samsung']);
 });

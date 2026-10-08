@@ -520,4 +520,30 @@ describe('ProductDetailClient', () => {
       );
     });
   });
+
+  it('routes the in-cart action through the cart so opt-outs precede checkout', async () => {
+    mockUseCart.mockReturnValue({
+      addToCart: mockAddToCart,
+      cart: [
+        {
+          id: 'product-1',
+          name: 'iPad 11th Gen',
+          price: 600000,
+          quantity: 1,
+          slug: 'ipad-11th-gen',
+        } as CartItem,
+      ],
+      setMerchantSlug: mockSetMerchantSlug,
+      updateQuantity: mockUpdateQuantity,
+    });
+
+    render(<ProductDetailClient product={makeBaseProduct()} />);
+
+    // The cart page carries the optional-service disclosure and toggle;
+    // a direct checkout link would strand default-on fees at payment.
+    const action = await screen.findByRole('link', {
+      name: 'View Cart and Checkout',
+    });
+    expect(action).toHaveAttribute('href', '/cart');
+  });
 });

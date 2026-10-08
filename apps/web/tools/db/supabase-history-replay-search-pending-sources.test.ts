@@ -24,6 +24,7 @@ describe('search pending replay sources', () => {
       '20261004193000_private_purchasable_search_candidates.sql',
       '20261004210000_bounded_refined_search_offsets.sql',
       '20261004230000_storefront_search_brand_case_insensitive.sql',
+      '20261008090000_search_processor_filter_bounds.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

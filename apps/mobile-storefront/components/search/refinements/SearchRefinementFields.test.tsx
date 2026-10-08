@@ -68,6 +68,22 @@ it('filters available brands and retains selected brands', () => {
   );
   expect(view.getByLabelText('Retained')).toBeTruthy();
 });
+it('merges case-variant draft brands into the facet spelling', () => {
+  const setDraft = jest.fn();
+  const view = render(
+    <SearchRefinementFields
+      {...props}
+      focusGroup="brand"
+      setDraft={setDraft}
+      draft={{ ...draft, brands: ['apple'] }}
+    />
+  );
+  // One choice in the facet spelling, selected via the draft value.
+  expect(view.queryAllByLabelText(/apple/i)).toHaveLength(1);
+  fireEvent.press(view.getByLabelText('Apple'));
+  // Deselecting clears the equivalent lowercase constraint entirely.
+  expect(setDraft).toHaveBeenCalledWith({ ...draft, brands: [] });
+});
 it('projects only available conditions and processors into selectable options', () => {
   const view = render(
     <SearchRefinementFields {...props} focusGroup="condition" />

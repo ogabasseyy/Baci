@@ -349,3 +349,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-97 (P2) FIXED: brand chips dedupe by trimmed-lowercase identity (first spelling wins) and dismissal removes all equivalents. Existing test updated (it pinned the duplicate behavior).
 - CX-98 (P2) FIXED (regression from the M3 constraint): SearchCompareButton persists normalizeCanonicalProductCondition (uk_used→used; total function, ''→undefined) so the schema keeps the marker. Single writer verified. Test pins uk_used→used.
 - CX-99 (P2) FIXED: migration 20261008170000 applies published-or-platform-admin to the intake merchant lookup (grants preserved by OR REPLACE). Scratch: pub+admin accepted, unknown/dark rejected. Registered (sha c4822a10…).
+
+## Round 50 (Muse 1 med + 2 low on 05c0a29326 — all adjudicated; Codex pending)
+
+- Muse low intake-oracle: repeat (accepted public-slug signal).
+- Muse med intake-rotation: PR-disclosed repeat.
+- Muse low assurance-disclosure: repeat — checkout quote itemization + invoice line (Round 42) and the rehydration opt-out test already answer both asks.
+- CI Quality Gate - Test FIXED: compare screen test mocked useComparisonProducts without unavailableIds (unfaithful — the hook always returns it); the required prop exposed the mock. Added unavailableIds: [] (6/6). Swept: no other hook mocks.
+- CI shard 4 FIXED: inventory regen + pin (Round-49 sources moved the tree).

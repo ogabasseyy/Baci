@@ -97,6 +97,7 @@ jest.mock('@/hooks/use-comparison-products', () => ({
   useComparisonProducts: (products: unknown[]) => ({
     products,
     status: 'Current product prices. Select options on the product page.',
+    unavailableIds: [],
   }),
 }));
 

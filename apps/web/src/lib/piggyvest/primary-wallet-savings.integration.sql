@@ -3,6 +3,7 @@
 ALTER TABLE public.customer_wallet_transactions ADD COLUMN status text DEFAULT 'completed';
 CREATE TABLE public.customer_savings_goals(id uuid PRIMARY KEY,merchant_id uuid,customer_id uuid,status text,target_amount numeric,current_amount numeric);
 \ir ../../../../../supabase/migrations/20261007144000_piggyvest_primary_savings_reservations.sql
+\ir ../../../../../supabase/migrations/20261008090000_piggyvest_primary_savings_reservation_customer.sql
 CREATE ROLE primary_authorizer_fixture LOGIN;
 GRANT piggyvest_primary_authorizer TO primary_authorizer_fixture;
 INSERT INTO piggyvest_primary.savings_authorities VALUES('00000000-0000-4000-8000-000000000004','primary_authorizer_fixture',true);
@@ -17,7 +18,7 @@ DECLARE
   reserved jsonb;
 BEGIN
   reserved:=piggyvest_primary.reserve_savings(scope,request);
-  IF reserved->>'status'<>'claimed' OR reserved->'reservation'->>'sourceWalletId'<>'wallet' OR reserved->'reservation'->>'destinationWalletId'<>'destination' THEN RAISE EXCEPTION 'reservation failed'; END IF;
+  IF reserved->>'status'<>'claimed' OR reserved->'reservation'->>'sourceWalletId'<>'wallet' OR reserved->'reservation'->>'destinationWalletId'<>'destination' OR reserved->'reservation'->>'providerCustomerId' IS DISTINCT FROM 'customer' THEN RAISE EXCEPTION 'reservation failed'; END IF;
   IF piggyvest_primary.reserve_savings(scope,request)->>'status'<>'pending' THEN RAISE EXCEPTION 'duplicate re-dispatched'; END IF;
   IF piggyvest_primary.reserve_savings(scope,jsonb_set(request,'{amountKobo}','6000'))->>'status'<>'conflict' THEN RAISE EXCEPTION 'idempotency conflict ignored'; END IF;
   IF piggyvest_primary.reserve_savings(scope,jsonb_set(jsonb_set(request,'{operationId}','"00000000-0000-4000-8000-000000000008"'),'{amountKobo}','6000'))->>'status'<>'insufficient' THEN RAISE EXCEPTION 'legacy funds reserved'; END IF;

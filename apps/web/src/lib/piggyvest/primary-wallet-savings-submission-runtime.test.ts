@@ -63,6 +63,7 @@ beforeEach(() => {
       sourceWalletId: 'source',
       destinationWalletId: 'destination',
       businessId: 'business',
+      providerCustomerId: 'source-customer',
       reference: 'stable-reference',
     },
   });
@@ -164,6 +165,7 @@ it('does not dispatch stored reservations owned by another business', async () =
       sourceWalletId: 'source',
       destinationWalletId: 'destination',
       businessId: 'foreign-business',
+      providerCustomerId: 'source-customer',
       reference: 'stable-reference',
     },
   });

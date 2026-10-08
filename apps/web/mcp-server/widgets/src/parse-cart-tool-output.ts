@@ -7,6 +7,7 @@ export interface CartToolOutput {
   retry_after_seconds?: number;
   requires_variant_selection?: true;
   product_unavailable?: true;
+  cart_full?: true;
 }
 
 const CART_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -42,6 +43,7 @@ export function parseCartToolOutput(value: unknown): CartToolOutput | undefined 
     if (value.requires_variant_selection === true)
       failure.requires_variant_selection = true;
     if (value.product_unavailable === true) failure.product_unavailable = true;
+    if (value.cart_full === true) failure.cart_full = true;
     return failure;
   }
   const { cart_token, cart_url } = value;

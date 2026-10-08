@@ -46,11 +46,21 @@ const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
 const CART_FILE_PATTERN = /^[a-f0-9]{64}\.json$/;
 // The expiry sweep reads and parses every cart file, so run it at most once
 // per interval; expiry is still enforced per cart on every read, and
-// crash-temp cleanup below always runs.
+// crash-temp cleanup below always runs. The mark is set synchronously
+// before the first await so concurrent callers single-flight on one scan.
 const SWEEP_INTERVAL_MS = 60 * 1000;
 // Keyed per directory so instances over different directories (tests,
 // future multi-dir use) never suppress each other's first sweep.
 const lastExpirySweepMsByDirectory = new Map<string, number>();
+
+/**
+ * Test-only read of the per-directory sweep mark. The single-flight test
+ * uses it to assert the mark is set synchronously (before the first
+ * await) so concurrent admissions share one scan.
+ */
+export function getLastExpirySweepMsForTests(directory: string): number {
+  return lastExpirySweepMsByDirectory.get(directory) ?? 0;
+}
 
 /**
  * Prepares the cart directory for a write: always runs the throttled
@@ -65,9 +75,11 @@ export async function admitGuestCartWrite(
   directory: string,
   admitCapacity: boolean
 ): Promise<void> {
+  const sweepStart = Date.now();
   const sweepDue =
-    Date.now() - (lastExpirySweepMsByDirectory.get(directory) ?? 0) >=
+    sweepStart - (lastExpirySweepMsByDirectory.get(directory) ?? 0) >=
     SWEEP_INTERVAL_MS;
+  if (sweepDue) lastExpirySweepMsByDirectory.set(directory, sweepStart);
   const entries = await readdir(directory);
   for (const entry of entries) {
     if (CRASH_TEMP_PATTERN.test(entry)) {
@@ -107,7 +119,6 @@ export async function admitGuestCartWrite(
       }
     }
   }
-  if (sweepDue) lastExpirySweepMsByDirectory.set(directory, Date.now());
   if (!admitCapacity) return;
   let cartFiles = (await readdir(directory)).filter((entry) =>
     CART_FILE_PATTERN.test(entry)

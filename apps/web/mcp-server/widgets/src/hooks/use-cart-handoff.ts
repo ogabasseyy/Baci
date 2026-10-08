@@ -123,6 +123,14 @@ export function useCartHandoff() {
         );
         return;
       }
+      // A full cart is recoverable by removing a line: choosing another
+      // product cannot help, so say so instead of the generic message.
+      if (content?.cart_full === true) {
+        setCartError(
+          'Your guest cart already holds 20 products. Remove one to add another.'
+        );
+        return;
+      }
       const cartUrl = content?.success === true ? content.cart_url : undefined;
       let validatedUrl: URL | undefined;
       try {
@@ -180,18 +188,19 @@ export function useCartHandoff() {
   };
 
   const handleRemoveItem = async (productId: string) => {
-    if (busy.current || !window.openai?.callTool) return;
+    if (busy.current) return;
+    // Legacy conversations restore cart state without a token; with no
+    // server cart to update, the line is dropped locally instead, which
+    // needs no tool bridge.
+    if (!widgetState?.cartToken) {
+      setCartError(null);
+      setWidgetState((previous) => dropLineFromCartState(previous, productId));
+      return;
+    }
+    if (!window.openai?.callTool) return;
     busy.current = true;
     setIsSavingCart(true);
     setCartError(null);
-    // Legacy conversations restore cart state without a token; with no
-    // server cart to update, the line is dropped locally instead.
-    if (!widgetState?.cartToken) {
-      setWidgetState((previous) => dropLineFromCartState(previous, productId));
-      busy.current = false;
-      setIsSavingCart(false);
-      return;
-    }
     try {
       const response = await window.openai.callTool(
         'update_ogabassey_guest_cart',

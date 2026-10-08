@@ -9,7 +9,11 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
+import {
+  GuestCartExpiredError,
+  GuestCartFullError,
+  GuestCartStore,
+} from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -45,6 +49,20 @@ it('persists across server instances and makes an absolute-quantity retry safe',
   );
   expect(retry.items).toEqual(first.items);
   expect(retry.cart_token).toBe(first.cart_token);
+});
+it('rejects a 21st line with a typed full-cart error', async () => {
+  const { instance } = await store();
+  const line = (index: number) => ({
+    product_id: `${index.toString(16).padStart(8, '0')}-1111-4111-8111-111111111111`,
+    quantity: 1,
+  });
+  const first = await instance.update(undefined, line(0), async () => {});
+  for (let index = 1; index < 20; index += 1) {
+    await instance.update(first.cart_token, line(index), async () => {});
+  }
+  await expect(
+    instance.update(first.cart_token, line(20), async () => {})
+  ).rejects.toBeInstanceOf(GuestCartFullError);
 });
 it('isolates guests, preserves other products, and removes a line', async () => {
   const { instance } = await store();

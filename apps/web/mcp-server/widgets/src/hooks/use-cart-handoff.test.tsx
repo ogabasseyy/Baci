@@ -144,6 +144,22 @@ it('reconciles survivors with the removal response', async () => {
   expect(result.current.cartError).toBeNull();
   expect(result.current.cart).toEqual([{ product: third, quantity: 7 }]);
 });
+it('drops legacy tokenless lines without the tool bridge', async () => {
+  window.openai = {
+    widgetState: {
+      cart: [{ product, quantity: 1 }],
+      cartUrl: 'https://ogabassey.com/cart?item_id=legacy&qty=1',
+    },
+    setWidgetState: vi.fn(),
+  };
+  const { result } = renderHook(() => useCartHandoff());
+  expect(result.current.cart).toHaveLength(1);
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  expect(result.current.cart).toHaveLength(0);
+  expect(result.current.cartError).toBeNull();
+});
 it('retains the cart when removal fails and rejects hostile handoff destinations', async () => {
   window.openai = {
     callTool: vi
@@ -289,5 +305,22 @@ it('reports quota exhaustion with the retry wait instead of a product error', as
   expect(result.current.cart).toHaveLength(0);
   expect(result.current.cartError).toBe(
     'Too many guest carts were created from this address. Try again in about 30 minutes.'
+  );
+});
+it('reports a full cart with removal guidance instead of a product error', async () => {
+  const callTool = vi.fn().mockResolvedValueOnce({
+    structuredContent: {
+      success: false,
+      cart_full: true,
+    },
+  });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(result.current.cart).toHaveLength(0);
+  expect(result.current.cartError).toBe(
+    'Your guest cart already holds 20 products. Remove one to add another.'
   );
 });

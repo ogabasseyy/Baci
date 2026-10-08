@@ -12,6 +12,9 @@ export function openOgabasseyUrl(
     pendingTab.location.href = url;
     return true;
   } else {
-    return window.open(url, '_blank') !== null;
+    // Explicit noopener: unlike <a target=_blank>, window.open does not
+    // imply it, and the opened page would otherwise keep a live opener
+    // handle usable for reverse tabnabbing if a URL bug ever sneaks in.
+    return window.open(url, '_blank', 'noopener,noreferrer') !== null;
   }
 }

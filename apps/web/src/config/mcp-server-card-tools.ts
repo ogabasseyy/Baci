@@ -88,7 +88,12 @@ export const PUBLIC_MCP_TOOLS = [
     name: 'update_ogabassey_guest_cart',
     title: 'Update Ogabassey Guest Cart',
     description: MCP_GUEST_CART_DESCRIPTION,
-    inputSchema: z.toJSONSchema(mcpGuestCartInputSchema, { target: 'draft-7' }),
+    // Input mode: the runtime schema defaults quantity to 1, and discovery
+    // must advertise that default instead of a stricter required contract.
+    inputSchema: z.toJSONSchema(mcpGuestCartInputSchema, {
+      target: 'draft-7',
+      io: 'input',
+    }),
     annotations: {
       readOnlyHint: false,
       // Mirrors update_ogabassey_guest_cart: removals delete persisted lines.

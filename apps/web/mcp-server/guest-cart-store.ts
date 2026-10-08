@@ -27,6 +27,12 @@ export class GuestCartExpiredError extends Error {
     super('Guest cart expired or was removed');
   }
 }
+export class GuestCartFullError extends Error {
+  override readonly name = 'GuestCartFullError';
+  constructor() {
+    super('Guest cart is full');
+  }
+}
 const TTL = 7 * 24 * 60 * 60 * 1000;
 async function readStoredCart(file: string) {
   let raw: string;
@@ -163,7 +169,7 @@ export class GuestCartStore {
             ? []
             : [guestCartLineSchema.parse(normalizedLine)]),
         ];
-        if (items.length > 20) throw new Error('Guest cart is full');
+        if (items.length > 20) throw new GuestCartFullError();
         // Token-bound updates merge with the stored cart under its own
         // per-file queue, so they validate here; creations validated
         // above, before queueing. Either way a rejected line never

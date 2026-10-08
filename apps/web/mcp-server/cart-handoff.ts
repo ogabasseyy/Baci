@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY } from '../src/lib/hydrate-public-products';
+import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 type CartHandoffResult = {
@@ -79,44 +79,25 @@ export async function prepareCartHandoff({
   let manageStock = product?.manage_stock;
   let stockQuantity = product?.stock_quantity;
   if (product && product.has_variants !== true) {
-    try {
-      const { data: anchors, error: anchorsError } = await supabase.rpc(
-        'get_mcp_search_serialized_anchor_policies',
-        { p_product_ids: [productId], p_merchant_id: merchantId }
-      );
-      if (anchorsError) throw anchorsError;
-      const anchor = (
-        anchors as
-          | {
-              product_id: string;
-              effective_policy: string;
-              available_units: number | null;
-            }[]
-          | null
-      )?.find(
-        (row) =>
-          row.product_id === productId &&
-          (row.effective_policy === 'serialized_strict' ||
-            row.effective_policy === 'serialized_then_unlimited')
-      );
-      if (anchor) {
-        const units = anchor.available_units ?? 0;
-        if (anchor.effective_policy === 'serialized_strict') {
-          manageStock = true;
-          stockQuantity = units;
-        } else {
-          manageStock =
-            product.manage_stock !== false ? false : product.manage_stock;
-          stockQuantity =
-            units === 0 ? SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY : units;
-        }
-      }
-    } catch (rpcError) {
+    // Shared with the website transfer path so chat saves and website adds
+    // evaluate the same serialized policy for the same product.
+    const anchors = await resolveSerializedAnchorStock({
+      supabase,
+      merchantId,
+      productIds: [productId],
+    });
+    if (anchors.failed) {
       console.error(
         'Failed to fetch serialized anchor policy for cart handoff:',
-        rpcError
+        anchors.error
       );
       transient = true;
+    } else {
+      const projection = anchors.projections.get(productId);
+      if (projection) {
+        manageStock = projection.manageStock;
+        stockQuantity = projection.stockQuantity;
+      }
     }
   }
   if (product && manageStock === true) {

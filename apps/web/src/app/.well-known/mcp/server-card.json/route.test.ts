@@ -95,7 +95,7 @@ describe('GET /.well-known/mcp/server-card.json', () => {
         readOnlyHint: false,
       },
       inputSchema: {
-        required: ['product_id', 'quantity'],
+        required: ['product_id'],
         properties: {
           quantity: expect.objectContaining({ type: 'integer' }),
         },

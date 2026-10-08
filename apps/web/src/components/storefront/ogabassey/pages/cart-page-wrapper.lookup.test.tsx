@@ -63,6 +63,7 @@ function setupProductsQuery(result: {
   };
   vi.mocked(createClient).mockReturnValue({
     from: vi.fn(() => productsQuery),
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   } as unknown as ReturnType<typeof createClient>);
 
   return productsQuery;

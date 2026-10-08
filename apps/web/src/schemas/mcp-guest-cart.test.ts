@@ -202,6 +202,15 @@ describe('mcpGuestCartOutputSchema', () => {
     expect(result.data).toMatchObject({ product_unavailable: true });
   });
 
+  it('parses a full-cart payload without stripping its flag', () => {
+    const result = mcpGuestCartOutputSchema.safeParse({
+      success: false,
+      cart_full: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ cart_full: true });
+  });
+
   it('parses a quota-denial payload without stripping its flags', () => {
     const result = mcpGuestCartOutputSchema.safeParse({
       success: false,

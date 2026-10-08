@@ -13,6 +13,7 @@ import { afterEach, expect, it } from 'vitest';
 import {
   admitGuestCartWrite,
   didCartFileChange,
+  getLastExpirySweepMsForTests,
   runExclusive,
 } from './guest-cart-admission';
 
@@ -196,6 +197,37 @@ it(
   expect(remaining).toHaveLength(1999);
   }
 );
+
+it('single-flights concurrent expiry sweeps on one scan', async () => {
+  const root = await directory();
+  const live = JSON.stringify({
+    expires_at: Date.now() + 3_600_000,
+    items: [],
+  });
+  const dead = JSON.stringify({ expires_at: 1, items: [] });
+  const tokens = Array.from({ length: 40 }, (_, index) =>
+    index.toString(16).padStart(64, '0')
+  );
+  for (const [index, token] of tokens.entries())
+    await writeFile(
+      path.join(root, `${token}.json`),
+      index % 2 === 0 ? dead : live
+    );
+  // The mark must already be fresh before the first await resolves: a
+  // concurrent caller starting now observes it and skips its own scan.
+  const first = admitGuestCartWrite(root, false);
+  const sweepMark = getLastExpirySweepMsForTests(root);
+  expect(sweepMark).toBeGreaterThan(0);
+  const second = admitGuestCartWrite(root, false);
+  await Promise.all([first, second]);
+  // The second admission skipped its scan, so the mark is untouched, and
+  // the single shared scan still reclaimed the expired carts.
+  expect(getLastExpirySweepMsForTests(root)).toBe(sweepMark);
+  const remaining = (await readdir(root)).filter((entry) =>
+    entry.endsWith('.json')
+  );
+  expect(remaining).toHaveLength(tokens.length / 2);
+});
 
 it('treats an equal-mtime inode change as a fresh cart file', () => {
   const snapshot = { mtimeMs: 100, ino: 1 };

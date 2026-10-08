@@ -50,6 +50,16 @@ describe('parseCartToolOutput', () => {
     ).toEqual({ success: false });
   });
 
+  it('preserves the full-cart flag', () => {
+    expect(parseCartToolOutput({ success: false, cart_full: true })).toEqual({
+      success: false,
+      cart_full: true,
+    });
+    expect(parseCartToolOutput({ success: false, cart_full: 1 })).toEqual({
+      success: false,
+    });
+  });
+
   it('preserves the variant-selection flag for replay triage', () => {
     expect(
       parseCartToolOutput({ success: false, requires_variant_selection: true })

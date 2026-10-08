@@ -10,7 +10,6 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   acquireWriterLock,
@@ -98,18 +97,12 @@ it(
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const root = await directory('guest-lock-churn-');
     const lock = path.join(root, '.writer.lock');
-    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-    const repoRoot = path.dirname(path.dirname(path.dirname(moduleDir)));
-    const tsxExecutable = path.join(
-      repoRoot,
-      'node_modules',
-      '.bin',
-      process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
-    );
     // A rival writer atomically reinstalls our own claim bytes in a tight
     // loop, so replacements land across the heartbeat's read and refresh:
     // renewal must still detect the new generation and exit on the tick.
-    const childScript = path.join(root, 'churn-child.mts');
+    // Plain node (not tsx) keeps child startup fast under CI load so the
+    // churn reliably overlaps the 5s heartbeat ticks.
+    const childScript = path.join(root, 'churn-child.mjs');
     try {
       acquireWriterLock(root);
       const content = await readFile(lock, 'utf8');
@@ -124,7 +117,7 @@ while (Date.now() < deadline) {
 }`
       );
       const child = spawn(
-        tsxExecutable,
+        process.execPath,
         [childScript, lock, content, `${lock}.churn.tmp`],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       );
@@ -132,7 +125,13 @@ while (Date.now() < deadline) {
       // runner with an unhandled 'error' event.
       child.on('error', () => {});
       try {
-        await new Promise((resolve) => setTimeout(resolve, 6500));
+        // Poll instead of a fixed sleep: a loaded CI worker can delay the
+        // child start or the heartbeat tick past any fixed budget, while a
+        // replaced lock file stays detectable on every later tick.
+        const deadline = Date.now() + 15_000;
+        while (exit.mock.calls.length === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
         expect(exit).toHaveBeenCalledWith(1);
       } finally {
         child.kill();

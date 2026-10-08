@@ -110,18 +110,13 @@ function inspectQuota(ip: string, now: number): GuestCartQuotaVerdict {
 }
 
 /**
- * Checks the creation budget without consuming it. Failed validations and
- * store errors must not burn quota, so callers peek before doing work and
- * consume only after a cart is successfully persisted. Peek-then-consume
- * is not atomic: concurrent in-flight creations can overshoot the limit
- * by their own count, which a flood guard tolerates.
+ * Atomically reserves one anonymous creation from the caller's budget. The
+ * check and the increment run synchronously with no await between them, so
+ * concurrent in-flight creations cannot all observe remaining budget and
+ * then overshoot it: at most MAX reservations are outstanding per window.
+ * Callers must refund the reservation when no cart ends up persisted.
  */
-export function peekGuestCartCreation(ip: string): GuestCartQuotaVerdict {
-  return inspectQuota(ip, Date.now());
-}
-
-/** Records one persisted anonymous cart against the caller's budget. */
-export function consumeGuestCartCreation(ip: string): GuestCartQuotaVerdict {
+export function reserveGuestCartCreation(ip: string): GuestCartQuotaVerdict {
   const now = Date.now();
   const verdict = inspectQuota(ip, now);
   if (!verdict.allowed) return verdict;
@@ -133,4 +128,21 @@ export function consumeGuestCartCreation(ip: string): GuestCartQuotaVerdict {
     quotaByIp.set(key, { count: 1, windowStart: now });
   }
   return verdict;
+}
+
+/**
+ * Returns one reservation to the caller's budget after a creation failed
+ * before persistence (validation rejection, store error). Never drops the
+ * count below zero; a rolled-over window keeps its fresh budget instead of
+ * receiving a refund for the previous window.
+ */
+export function refundGuestCartCreation(ip: string): void {
+  const entry = quotaByIp.get(quotaKeyForIp(ip));
+  if (
+    entry &&
+    Date.now() - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS &&
+    entry.count > 0
+  ) {
+    entry.count -= 1;
+  }
 }

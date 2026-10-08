@@ -79,6 +79,26 @@ it('returns a recoverable flag when the token names a dead cart', async () => {
     expect(validate).not.toHaveBeenCalled();
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
+it('reports a full cart as a typed recoverable outcome', async () => {
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  const { GuestCartFullError } = await import('./guest-cart-store');
+  registerGuestCartTool({ registerTool } as unknown as McpServer, {
+    store: {
+      update: async () => {
+        throw new GuestCartFullError();
+      },
+      hasToken: async () => true,
+    } as unknown as GuestCartStore,
+    supabase: {} as SupabaseClient,
+    getMerchantId: async () => 'merchant',
+    formatPrice: String,
+  });
+  const result = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+  expect(result.isError).toBeUndefined();
+  expect(result.structuredContent).toEqual({ success: false, cart_full: true });
+});
 it('caps anonymous cart creation per caller while token updates stay unlimited', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-quota-'));
   type Args = { product_id: string; quantity: number; cart_token?: string };

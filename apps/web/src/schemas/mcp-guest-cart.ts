@@ -62,6 +62,7 @@ export const mcpGuestCartOutputSchema = z
     product_unavailable: z.literal(true).optional(),
     cart_expired: z.literal(true).optional(),
     cart_emptied: z.literal(true).optional(),
+    cart_full: z.literal(true).optional(),
     quota_exceeded: z.literal(true).optional(),
     retry_after_seconds: z.number().int().min(0).optional(),
     product_id: z.string().uuid().optional(),

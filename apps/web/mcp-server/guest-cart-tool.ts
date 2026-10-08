@@ -7,11 +7,12 @@ import {
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
 import {
-  consumeGuestCartCreation,
-  peekGuestCartCreation,
+  refundGuestCartCreation,
+  reserveGuestCartCreation,
 } from './guest-cart-creation-quota';
 import {
   GuestCartExpiredError,
+  GuestCartFullError,
   type GuestCartStoreLike,
 } from './guest-cart-store';
 import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
@@ -89,11 +90,13 @@ export function registerGuestCartTool(
           };
         }
         // Tokenless calls mint a fresh cart file, so anonymous creation (but
-        // never token-bound updates) is capped per caller IP. Peek first:
-        // failed validations and store errors return below without
-        // consuming quota; only a persisted cart is recorded.
+        // never token-bound updates) is capped per caller IP. Reserve
+        // atomically before doing work: concurrent creations must observe
+        // each other's reservations instead of all peeking budget and then
+        // overshooting it. Failures refund below; a persisted cart keeps
+        // its reservation.
         if (!args.cart_token) {
-          const quota = peekGuestCartCreation(options.clientIp ?? 'unknown');
+          const quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
           if (!quota.allowed) {
             return {
               isError: true,
@@ -157,13 +160,15 @@ export function registerGuestCartTool(
               );
             }
           }
-        );
-        if (!args.cart_token) {
-          // Record the persisted cart. A denial here means concurrent
-          // creations filled the window mid-flight; the cart already
-          // exists, so the overshoot stands and no error is returned.
-          consumeGuestCartCreation(options.clientIp ?? 'unknown');
-        }
+        ).catch((error: unknown) => {
+          // No cart was persisted, so return the pre-write reservation
+          // instead of burning budget on a failed validation or store
+          // error. A persisted cart keeps its reservation: the quota was
+          // already consumed atomically by the reserve call above.
+          if (!args.cart_token)
+            refundGuestCartCreation(options.clientIp ?? 'unknown');
+          throw error;
+        });
         const url = new URL('https://ogabassey.com/cart');
         // An emptied cart transfers nothing, so advertise the bare cart
         // page instead of a guest_cart=[] link the website would reject.
@@ -194,6 +199,20 @@ export function registerGuestCartTool(
               },
             ],
             structuredContent: { success: false, cart_expired: true },
+          };
+        }
+        // A full cart is recoverable by dropping a line, so it is typed
+        // (not a tool error): the model can tell the shopper exactly that
+        // instead of reporting a transient failure.
+        if (error instanceof GuestCartFullError) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'This guest cart already holds 20 products. Remove a product with quantity 0, then add the new one.',
+              },
+            ],
+            structuredContent: { success: false, cart_full: true },
           };
         }
         if (error instanceof VariantSelectionRequired) {

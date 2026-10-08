@@ -76,6 +76,16 @@ describe('matchMediaElements', () => {
     ]);
   });
 
+  it('skips sources nested below a non-picture element', () => {
+    // Only direct picture children participate; a source wrapped in
+    // a div is inert even inside a picture.
+    expect(
+      matchMediaElements(
+        '<picture><div><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture>'
+      ).map((match) => match[0])
+    ).toEqual(['<picture>', '<img alt="">', '</picture>']);
+  });
+
   it('skips sources inside video elements', () => {
     expect(
       matchMediaElements(

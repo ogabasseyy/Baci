@@ -17,21 +17,30 @@ function managedUploadToken(storagePath: string): string | null {
   return dot > 0 ? segments[2].slice(0, dot) : null;
 }
 
-function managedVariantBinds(sourceUrl: string, variantUrl: string): boolean {
+function managedVariantBinds(
+  sourceUrl: string,
+  variantUrl: string,
+  variantKey: string
+): boolean {
   const sourcePath = extractManagedBlogStoragePath(sourceUrl, {
     kind: 'platform',
   });
   if (!sourcePath) return true;
   // A managed source binds only managed variants sharing its token: a
   // codex-exempt (non-managed) variant cannot prove it belongs to this
-  // upload, and an unparseable source token fails closed.
+  // upload, and an unparseable source token fails closed. The variant
+  // filename must also match its map key, or landscape surfaces would
+  // display another key's crop.
   const variantPath = extractManagedBlogStoragePath(variantUrl, {
     kind: 'platform',
   });
   if (!variantPath) return false;
   const sourceToken = managedUploadToken(sourcePath);
+  const variantFilename = variantPath.split('/')[3] ?? '';
   return (
-    sourceToken !== null && managedUploadToken(variantPath) === sourceToken
+    sourceToken !== null &&
+    managedUploadToken(variantPath) === sourceToken &&
+    variantFilename === `${variantKey}.webp`
   );
 }
 
@@ -90,7 +99,7 @@ export function variantBindsToSource(
   sourceUrl: string
 ): boolean {
   return (
-    managedVariantBinds(sourceUrl, variantUrl) &&
+    managedVariantBinds(sourceUrl, variantUrl, variantKey) &&
     generatedCodexVariantBinds(variantUrl, variantKey, sourceUrl)
   );
 }

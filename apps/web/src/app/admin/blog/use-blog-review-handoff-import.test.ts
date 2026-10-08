@@ -16,6 +16,7 @@ function setup(
     contentGenerationRef: { current: 0 },
     coverStashRef: { current: null },
     form: { ...DEFAULT_PLATFORM_BLOG_FORM_STATE },
+    inlineUploadsPending: false,
     invalidateFeaturedUploads: vi.fn(),
     pendingContentEditRef: { current: false },
     saving: false,
@@ -74,6 +75,21 @@ describe('useBlogReviewHandoffImport', () => {
     expect(applied).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
     expect(args.setForm).not.toHaveBeenCalled();
+  });
+
+  it('refuses to import while an inline upload is pending', () => {
+    // Importing remounts the editor, abandoning the inline completion
+    // callback: the persisted upload would never enter the article.
+    const confirm = vi.spyOn(window, 'confirm');
+    const { args, result } = setup({ inlineUploadsPending: true });
+    let applied = true;
+    act(() => {
+      applied = result.current(draft);
+    });
+    expect(applied).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(args.setForm).not.toHaveBeenCalled();
+    expect(args.invalidateFeaturedUploads).not.toHaveBeenCalled();
   });
 
   it('confirms before replacing a dirty form', () => {

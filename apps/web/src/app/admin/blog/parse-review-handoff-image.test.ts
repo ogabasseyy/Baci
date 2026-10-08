@@ -192,6 +192,24 @@ describe('parseReviewHandoff featured image', () => {
     ).toEqual({ landscape_16x9: variant });
   });
 
+  it('drops a managed variant filed under another map key', () => {
+    // Same upload token, but the path holds the square asset: keeping
+    // it under the landscape key would display the wrong crop on
+    // landscape surfaces.
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa.jpg`,
+          variants: {
+            landscape_16x9: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa/square_1x1.webp`,
+          },
+        },
+      }).featured_image_variants
+    ).toEqual({});
+  });
+
   it('keeps a managed variant sharing the source upload token', () => {
     const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa/landscape_16x9.webp`;
     expect(

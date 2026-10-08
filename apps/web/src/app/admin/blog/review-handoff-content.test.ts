@@ -78,6 +78,16 @@ describe('validateImportedContent', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('ignores a picture source with an unsupported image subtype', () => {
+    // image/* alone is not enough: browsers skip MIME types they do
+    // not support, so an unknown subtype cannot supply the img.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source type="image/x-unknown" srcset="https://cdn.example.com/a.webp"><img alt=""></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('accepts a picture source with an applicable image type', () => {
     expect(
       validateImportedContent(
@@ -93,6 +103,14 @@ describe('validateImportedContent', () => {
     expect(() =>
       validateImportedContent(
         '<picture><img alt="A"><source srcset="https://cdn.example.com/a.webp"></picture><p>Body</p>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it('ignores a picture source nested below a non-picture element', () => {
+    expect(() =>
+      validateImportedContent(
+        '<picture><div><source srcset="https://cdn.example.com/a.webp"></div><img alt=""></picture>'
       )
     ).toThrow('must use HTTPS URLs');
   });

@@ -5,27 +5,61 @@
 const HTML_ELEMENT_PATTERN =
   /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
 const MEDIA_ELEMENT_NAME_PATTERN = /^<(img|source|picture)\b/i;
+// HTML void elements cannot have children, so they never join the
+// ancestry stack. This mirrors the same spec-fixed list used for
+// readability ancestry.
+const VOID_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
 
 /**
  * Match img elements, picture-bound source elements, and picture
  * open/close tags in document order. A source contributes candidates
- * only inside picture, so orphan sources (and video/audio sources)
- * never match. Callers must strip HTML comments first: the tokenizer
- * does not recognize comment openers.
+ * only as a direct picture child, so orphan, nested, and video/audio
+ * sources never match. Callers must strip HTML comments first: the
+ * tokenizer does not recognize comment openers.
  */
 export function matchMediaElements(html: string): RegExpMatchArray[] {
   const elements: RegExpMatchArray[] = [];
-  let pictureDepth = 0;
+  const ancestors: string[] = [];
   for (const match of html.matchAll(HTML_ELEMENT_PATTERN)) {
     const tagName = match[2].toLowerCase();
-    if (tagName === 'picture') {
-      pictureDepth =
-        match[1] === '/' ? Math.max(0, pictureDepth - 1) : pictureDepth + 1;
-      elements.push(match);
+    if (match[1] === '/') {
+      // Stray void-element closers are ignored like browsers ignore
+      // them; anything else pops one open ancestor.
+      if (tagName === 'picture') {
+        elements.push(match);
+        ancestors.pop();
+      } else if (!VOID_ELEMENTS.has(tagName)) {
+        ancestors.pop();
+      }
       continue;
     }
-    if (!MEDIA_ELEMENT_NAME_PATTERN.test(match[0])) continue;
-    if (tagName === 'source' && pictureDepth === 0) continue;
+    if (tagName === 'picture') {
+      elements.push(match);
+      ancestors.push(tagName);
+      continue;
+    }
+    if (!MEDIA_ELEMENT_NAME_PATTERN.test(match[0])) {
+      if (!VOID_ELEMENTS.has(tagName)) ancestors.push(tagName);
+      continue;
+    }
+    if (tagName === 'source' && ancestors[ancestors.length - 1] !== 'picture') {
+      continue;
+    }
     elements.push(match);
   }
   return elements;

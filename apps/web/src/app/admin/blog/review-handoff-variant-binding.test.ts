@@ -23,6 +23,13 @@ describe('variantBindsToSource', () => {
       false,
     ],
     [
+      'same-token managed variant filed under another key',
+      `${ORIGIN}/media/platform/blog/aaaa/square_1x1.webp`,
+      'landscape_16x9',
+      managedSource,
+      false,
+    ],
+    [
       'generated variant with managed source',
       `${ORIGIN}/core-assets/blog/codex/article-a/galaxy-a-landscape_16x9.jpg`,
       'landscape_16x9',

@@ -7,6 +7,7 @@ import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
+import { stripLeadingNonRenderingText } from './strip-leading-non-rendering-text';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 
@@ -80,7 +81,10 @@ function stripMarkupText(value: string): string {
 const LEADING_JSON_OBJECT_PATTERN = /^\{\s*"/u;
 
 function isJsonShapedText(value: string): boolean {
-  const trimmed = value.trimStart();
+  // Strip invisible formatting (zero-width, bidi, BOM) as well as
+  // whitespace so a pasted \u200B prefix cannot smuggle JSON into the
+  // structured-content path.
+  const trimmed = stripLeadingNonRenderingText(value);
   // Both consumers (BlogEditor, BlogContentRenderer) attempt JSON.parse and
   // fall back to ordinary content on failure, so full-parseable content is
   // barred while `{`-led prose ({Note}: ...) and `[`-led markdown (links,
@@ -136,15 +140,31 @@ type MediaGroup = {
   imgSeen: boolean;
 };
 
+// Image MIME types browsers universally render. Anything else is
+// skipped when selecting a picture resource, so it contributes no
+// candidate here either.
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  'image/avif',
+  'image/bmp',
+  'image/gif',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/svg+xml',
+  'image/webp',
+  'image/x-icon',
+]);
+
 function isApplicableSource(tag: string): boolean {
   // Browsers skip sources with unsupported types. In picture context
-  // only image MIME types are meaningful; anything else (or an empty
-  // type) contributes no candidate. The media attribute is assumed
-  // applicable: matching it requires a viewport the validator has not.
+  // only supported image MIME types are meaningful; anything else
+  // (or an empty type) contributes no candidate. The media attribute
+  // is assumed applicable: matching it requires a viewport the
+  // validator has not.
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'type') continue;
     const essence = value.split(';')[0].trim().toLowerCase();
-    return essence.startsWith('image/');
+    return SUPPORTED_IMAGE_MIME_TYPES.has(essence);
   }
   return true;
 }

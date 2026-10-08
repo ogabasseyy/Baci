@@ -26,6 +26,7 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
     onFormChange,
     onContentDirty,
     onCoverUrlEdit,
+    onInlineImageUpload,
     onUploadFeatured,
     onSubmit,
   }: {
@@ -34,6 +35,7 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
     onFormChange: (form: PlatformAdminBlogFormState) => void;
     onContentDirty?: () => void;
     onCoverUrlEdit: () => void;
+    onInlineImageUpload: (file: File) => Promise<string>;
     onUploadFeatured: () => void;
     onSubmit: () => void;
   }) => (
@@ -52,6 +54,14 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
       </button>
       <button type="button" onClick={onUploadFeatured}>
         Upload cover
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void onInlineImageUpload(new File(['image'], 'inline.png'));
+        }}
+      >
+        Upload inline
       </button>
       <button
         type="button"
@@ -161,6 +171,42 @@ it('protects an unsaved imported article when importing again without intent', a
   ).toBeInTheDocument();
   expect(confirm).toHaveBeenCalledOnce();
   expect(screen.getByLabelText('Article')).toHaveTextContent('Imported body');
+});
+
+it('blocks imports until a pending inline upload settles', async () => {
+  // Importing remounts the editor, which would abandon the inline
+  // completion callback and strand the persisted file.
+  const pending = Promise.withResolvers<Response>();
+  fetchWithCsrf.mockReturnValueOnce(pending.promise);
+  render(<BlogEditorClient mode="create" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Upload inline' }));
+  expect(screen.getByLabelText('Review handoff JSON')).toBeDisabled();
+
+  await act(async () => {
+    importHandoff();
+  });
+  expect(
+    screen.queryByText(
+      'Draft loaded for review. It has not been saved or published.'
+    )
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Draft title')).toHaveValue('');
+
+  await act(async () =>
+    pending.resolve(
+      new Response(
+        JSON.stringify({ url: 'https://cdn.example.com/inline.png' }),
+        { status: 200 }
+      )
+    )
+  );
+  expect(screen.getByLabelText('Review handoff JSON')).toBeEnabled();
+  await act(async () => {
+    importHandoff();
+  });
+  await screen.findByText(
+    'Draft loaded for review. It has not been saved or published.'
+  );
 });
 
 it('preserves changed content on cancellation and replaces it after confirmation', async () => {

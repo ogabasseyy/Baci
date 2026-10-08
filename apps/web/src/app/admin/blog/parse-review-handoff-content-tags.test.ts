@@ -17,6 +17,7 @@ it.each([
   '[{"type":"paragraph"}]',
   '  {"foo":"bar"} <p>Body</p>',
   '<script>bad()</script>{"foo":"bar"}',
+  '\u200B{"type":"doc","content":[]}',
 ])('rejects content that could enter the structured-content path: %s', (content_html) => {
   expect(() => parseReviewHandoff({ ...handoff, content_html })).toThrow(
     'HTML'

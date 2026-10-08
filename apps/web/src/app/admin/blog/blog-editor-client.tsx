@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { generateSlug } from '@/lib/blog-utils';
 import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
+import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
 import { useBlogReviewHandoffImport } from './use-blog-review-handoff-import';
 
 type BlogEditorClientProps = {
@@ -185,10 +186,14 @@ export function BlogEditorClient({
     setForm,
     toast,
   });
+  const { inlineUploadsPending, uploadInlineImage } = useBlogInlineImageUpload({
+    upload: (file) => uploadBlogMedia(file, 'inline'),
+  });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({
     contentGenerationRef,
     coverStashRef,
     form,
+    inlineUploadsPending,
     invalidateFeaturedUploads,
     pendingContentEditRef,
     saving,
@@ -246,7 +251,7 @@ export function BlogEditorClient({
 
       {!isEditMode && (
         <BlogReviewHandoffImporter
-          disabled={saving}
+          disabled={saving || inlineUploadsPending}
           onImport={handleReviewHandoffImport}
         />
       )}
@@ -283,9 +288,7 @@ export function BlogEditorClient({
             typeof updater === 'function' ? updater(current) : updater
           );
         }}
-        onInlineImageUpload={(file) =>
-          uploadBlogMedia(file, 'inline').then((upload) => upload.url)
-        }
+        onInlineImageUpload={uploadInlineImage}
         onSubmit={handleSubmit}
         onUploadFeatured={handleUploadFeatured}
         saving={saving}

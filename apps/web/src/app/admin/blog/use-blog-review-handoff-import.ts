@@ -34,6 +34,7 @@ type UseBlogReviewHandoffImportArgs = {
   contentGenerationRef: RefObject<number>;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
   form: PlatformAdminBlogFormState;
+  inlineUploadsPending: boolean;
   invalidateFeaturedUploads: () => void;
   pendingContentEditRef: RefObject<boolean>;
   saving: boolean;
@@ -45,6 +46,7 @@ export function useBlogReviewHandoffImport({
   contentGenerationRef,
   coverStashRef,
   form,
+  inlineUploadsPending,
   invalidateFeaturedUploads,
   pendingContentEditRef,
   saving,
@@ -54,7 +56,10 @@ export function useBlogReviewHandoffImport({
   draft: PlatformAdminBlogFormState
 ) => boolean {
   return (draft) => {
-    if (saving) return false;
+    // Importing remounts the editor, abandoning any inline completion
+    // callback: the persisted upload would never enter the article, so
+    // the import waits until inline uploads settle.
+    if (saving || inlineUploadsPending) return false;
     if (
       (isFormDirty(form) || pendingContentEditRef.current) &&
       !window.confirm('Replace your unsaved article with this review handoff?')

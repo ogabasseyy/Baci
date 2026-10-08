@@ -50,28 +50,33 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
     (input.now ?? Date.now)()
   );
   if (!config) {
-    if (environment.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'false')
-      return reply('not_ready');
+    // Unconfigured or explicitly disabled: only a positively-identified
+    // primary transfer waits for configuration (retryable 503). Anything
+    // else — including unparseable bytes the legacy path already validated
+    // upstream — falls through to the legacy outflow processor instead of
+    // starving it. A missing treasury customer id never matches: absence
+    // of configuration must not claim every outflow.
     let payload: unknown;
     try {
       if (input.rawBody.byteLength === 0 || input.rawBody.byteLength > 65536)
-        return reply('invalid_payload');
+        return { outcome: 'disabled', response: null };
       payload = JSON.parse(
         new TextDecoder('utf-8', { fatal: true }).decode(input.rawBody)
       );
     } catch {
-      return reply('invalid_payload');
+      return { outcome: 'disabled', response: null };
     }
     const parsed = schemas.envelope.safeParse(payload);
-    if (!parsed.success) return reply('invalid_payload');
+    if (!parsed.success) return { outcome: 'disabled', response: null };
+    const treasuryCustomerId =
+      environment.PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID;
     if (
       parsed.data.pvb_third_party_reference?.startsWith(
         'pvb-primary-transfer-'
       ) ||
       (parsed.data.eventType === 'wallet-transfer.outflow.success' &&
-        (!environment.PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID ||
-          parsed.data.customer_id ===
-            environment.PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID))
+        !!treasuryCustomerId &&
+        parsed.data.customer_id === treasuryCustomerId)
     )
       return reply('not_ready');
     return { outcome: 'disabled', response: null };

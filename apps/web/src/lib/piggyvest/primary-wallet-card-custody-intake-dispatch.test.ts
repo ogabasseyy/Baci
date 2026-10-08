@@ -30,8 +30,56 @@ describe('primary export webhook intake dispatcher without crosswalk delivery or
         PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined,
       },
     });
-    expect(result.outcome).toBe('not_ready');
-    expect(result.response?.status).toBe(503);
+    expect(result).toEqual({ outcome: 'disabled', response: null });
+  });
+  it('falls through to legacy outflows when the inbox flag was never configured', async () => {
+    const rawBody = Buffer.from(
+      JSON.stringify({ ...fixture.envelope, customer_id: 'legacy-plan' })
+    );
+    expect(
+      await dispatchPrimaryCardSignedCustodyIntake({
+        ...input(),
+        rawBody,
+        signature: 'unused-when-unconfigured',
+        environment: {
+          ...fixture.environment,
+          PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined,
+          PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined,
+        },
+      })
+    ).toEqual({ outcome: 'disabled', response: null });
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('waits for configuration only for positively-identified primary transfers', async () => {
+    const primaryBody = Buffer.from(
+      JSON.stringify({
+        ...fixture.envelope,
+        customer_id: 'legacy-plan',
+        pvb_third_party_reference: 'pvb-primary-transfer-7',
+      })
+    );
+    const reference = await dispatchPrimaryCardSignedCustodyIntake({
+      ...input(),
+      rawBody: primaryBody,
+      signature: 'unused-when-unconfigured',
+      environment: {
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined,
+        PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined,
+      },
+    });
+    expect(reference.outcome).toBe('not_ready');
+    expect(reference.response?.status).toBe(503);
+    const treasury = await dispatchPrimaryCardSignedCustodyIntake({
+      ...input(),
+      environment: {
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: undefined,
+      },
+    });
+    expect(treasury.outcome).toBe('not_ready');
+    expect(treasury.response?.status).toBe(503);
+    expect(execute).not.toHaveBeenCalled();
   });
   it.each([
     'accepted',

@@ -34,8 +34,10 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned after extracting the pilot order gate into
   // redvault-live-pilot-order-gate.ts; the route is now a thin call
   // site and inherited authority is unchanged.
+  // Re-pinned after moving the pilot gate below server-verified fee
+  // computation; it now judges the effective shipping fee.
   'apps/web/src/app/api/orders/route.ts':
-    'c98d41fedc8db869226a43c924f57bef0fc6efb9ee7cec98705452506485a90a',
+    '33166c90e60c3d9d0a2648abe4ba31df243205376696e1ceae6f9bfb0d9398b0',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

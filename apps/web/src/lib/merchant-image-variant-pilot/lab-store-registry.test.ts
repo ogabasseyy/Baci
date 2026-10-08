@@ -38,10 +38,17 @@ describe('pilot lab store table', () => {
     expect(uncovered).toEqual([
       ['omnimart', 'hero-banner'],
       ['squishyland', 'hero-banner'],
+      // Plan §3 row 4 covers the shared HeaderLogo mechanism, but the
+      // SquishyLand instance is null on the live site: no bytes to
+      // freeze, so the slot is declared uncovered (plan §4
+      // out-of-coverage) rather than silently absent.
+      ['squishyland', 'header-logo'],
     ]);
     for (const store of PILOT_LAB_STORES) {
       for (const slot of store.uncoveredSlots) {
-        expect(slot.consumer).toMatch(/hero-component/);
+        expect(slot.consumer).toMatch(
+          slot.slotId === 'header-logo' ? /HeaderLogo/ : /hero-component/
+        );
         expect(slot.reason.length).toBeGreaterThan(0);
         expect(store.slots).not.toContain(slot.slotId);
       }

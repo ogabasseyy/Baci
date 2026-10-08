@@ -34,11 +34,38 @@ function assertConfinedEntry(root: string, name: string): void {
     );
   }
   const realRoot = realpathSync(root);
-  const realEntry = realpathSync(entry);
-  if (realEntry !== realRoot && !realEntry.startsWith(`${realRoot}${sep}`)) {
-    throw new Error(
-      `lab public pilot tree entry "${name}" escapes the pilot root`
-    );
+  const confined = (candidate: string): void => {
+    const realCandidate = realpathSync(candidate);
+    if (
+      realCandidate !== realRoot &&
+      !realCandidate.startsWith(`${realRoot}${sep}`)
+    ) {
+      throw new Error(
+        `lab public pilot tree entry "${name}" escapes the pilot root`
+      );
+    }
+  };
+  confined(entry);
+  // The directory check alone is not enough: a symlink nested one level
+  // down (…/originals/evil → /etc) passes the entry gate and is still
+  // served by Next, so every descendant gets the same lstat/realpath
+  // confinement. lstat never follows links, so loops cannot hang this.
+  const pending = [entry];
+  while (pending.length > 0) {
+    const current = pending.pop() as string;
+    for (const child of readdirSync(current)) {
+      const childPath = join(current, child);
+      const childStat = lstatSync(childPath);
+      if (childStat.isSymbolicLink()) {
+        throw new Error(
+          `lab public pilot tree entry "${name}" contains a symlink`
+        );
+      }
+      confined(childPath);
+      if (childStat.isDirectory()) {
+        pending.push(childPath);
+      }
+    }
   }
 }
 

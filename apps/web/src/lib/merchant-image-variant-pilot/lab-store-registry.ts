@@ -50,12 +50,21 @@ export const PILOT_LAB_STORES: readonly PilotLabStore[] = [
     storeName: 'SquishyLand',
     slots: ['product-card'],
     // Plan §3 row 5: same shared builder hero file as Omnimart.
+    // Plan §3 row 4 covers the shared HeaderLogo mechanism, but the
+    // SquishyLand instance is null on the live site (plan §4
+    // out-of-coverage), so the slot is declared here with no bytes.
     uncoveredSlots: [
       {
         consumer:
           'heroComponent.render (builder/hero-component.tsx, CSS backgroundImage)',
         reason: 'no frozen hero-banner snapshot in the pilot sample',
         slotId: 'hero-banner',
+      },
+      {
+        consumer: 'HeaderLogo (storefront/blocks/header-logo.tsx, shared file)',
+        reason:
+          'null on the live site: no header image to freeze (plan §4 out-of-coverage, reported not counted)',
+        slotId: 'header-logo',
       },
     ],
   },

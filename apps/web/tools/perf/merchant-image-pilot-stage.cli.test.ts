@@ -289,6 +289,34 @@ describe('stage main', () => {
     expect(staged.length).toBeGreaterThan(0);
   });
 
+  it('rejects oversized operator files before the loader parses them', async () => {
+    // A corrupt or swapped-in giant inventory must reject on size
+    // through the same byte budget as the request path — never load
+    // fully into the staging process.
+    const lab = await setupStageFiles();
+    await writeFile(
+      join(lab.inputRoot, 'inventory.json'),
+      Buffer.alloc(8 * 1024 * 1024 + 1, 120)
+    );
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const argv = process.argv;
+    process.argv = [
+      'node',
+      'merchant-image-pilot-stage.cli.ts',
+      '--input-root',
+      lab.inputRoot,
+      '--output-root',
+      lab.outputRoot,
+      '--public-dir',
+      lab.publicDir,
+    ];
+    try {
+      await expect(main()).rejects.toThrow(/operator JSON budget/);
+    } finally {
+      process.argv = argv;
+    }
+  });
+
   it('fails closed without the lab flag or roots', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '');

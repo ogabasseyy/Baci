@@ -335,6 +335,18 @@ describe('preflight offline gate', () => {
     expect(empty.ok).toBe(false);
   });
 
+  it('carries the validated inventory snapshot for the served phase', async () => {
+    // The served gate reuses this snapshot instead of rereading the
+    // file, so a deleted or swapped inventory between phases fails
+    // closed instead of silently emptying the route matrix.
+    const fixture = await setupOffline();
+    const report = await runOfflinePreflight(offlineOptions(fixture));
+    expect(report.ok).toBe(true);
+    expect(report.inventory).toEqual(
+      JSON.parse(await readFile(fixture.inventoryPath, 'utf8'))
+    );
+  });
+
   it('refuses an unpinned run: no sample pin, no green preflight', async () => {
     const fixture = await setupOffline();
     const unpinned = await runOfflinePreflight(

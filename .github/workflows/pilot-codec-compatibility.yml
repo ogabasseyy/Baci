@@ -57,14 +57,40 @@ jobs:
           # not a pass: fail when the smoke script produced nothing.
           if-no-files-found: error
 
+  # Change detection for the transformer suite: the label gate alone
+  # would let transformer-area PRs merge untested whenever the label is
+  # absent, so transformer code changes run the suite with no label.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      transformer: ${{ steps.diff.outputs.transformer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          if git diff --name-only "$base...HEAD" -- 'infra/cdn-transformer/**' | grep -q .; then
+            echo 'transformer=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'transformer=false' >> "$GITHUB_OUTPUT"
+          fi
+
   # The transformer package lives outside the pnpm workspace (infra-only),
   # so no root turbo gate can discover its suite: without this job the
   # encoder/acceptance tests run nowhere in CI.
   transformer-tests:
+    needs: changes
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
       (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check'))
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')) ||
+      needs.changes.outputs.transformer == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

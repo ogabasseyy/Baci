@@ -378,6 +378,47 @@ describe('preflight entry orchestration', () => {
     expect(report.failures.join('\n')).toMatch(/store-map/);
   });
 
+  it('removes stale mounts when the served gate fails', async () => {
+    // Mounts publish only after the COMPLETE preflight succeeds: a
+    // served failure (bad store map, unreachable origin) must remove
+    // any prior artifact instead of leaving a valid-looking authority
+    // for defects the served gate caught (orphan preloads, bad rungs).
+    const fixture = await setupOffline();
+    const mountsPath = join(fixture.publicDir, 'mounts.json');
+    const passing = await runPreflight(
+      offlineOptions(fixture, { writeMounts: mountsPath })
+    );
+    expect(passing.ok).toBe(true);
+    const unmapped = await runPreflight({
+      ...offlineOptions(fixture),
+      origin: 'http://127.0.0.1:1',
+      storeMap: null,
+      writeMounts: mountsPath,
+    });
+    expect(unmapped.ok).toBe(false);
+    expect(unmapped.failures.join('\n')).toMatch(
+      /mounts not written: served gate failed/
+    );
+    await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
+    // Republish, then fail inside the served fetch itself.
+    const republished = await runPreflight(
+      offlineOptions(fixture, { writeMounts: mountsPath })
+    );
+    expect(republished.ok).toBe(true);
+    const unreachable = await runPreflight({
+      ...offlineOptions(fixture),
+      origin: 'http://127.0.0.1:1',
+      storeMap: `${MERCHANT}=labstore`,
+      timeoutMs: 50,
+      writeMounts: mountsPath,
+    });
+    expect(unreachable.ok).toBe(false);
+    expect(unreachable.failures.join('\n')).toMatch(
+      /mounts not written: served gate failed/
+    );
+    await expect(readFile(mountsPath, 'utf8')).rejects.toThrow();
+  });
+
   it('fails offline on the quality-zero hero while served correctly excludes it', async () => {
     const fixture = await setupOfflineAssets([
       {

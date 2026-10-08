@@ -36,6 +36,18 @@ export async function runOfflinePreflight(options) {
   // anything else must render a reporting row and is excluded from
   // optimized coverage by construction.
   const accepted = [];
+  // Validated inventory snapshot for the served phase: the served gate
+  // must reuse this instead of rereading the file, so a deleted or
+  // swapped inventory between phases fails closed instead of silently
+  // emptying the route matrix. Null until inventory-parse passes.
+  let validatedInventory = null;
+  const report = (ok) => ({
+    accepted,
+    checks,
+    failures,
+    inventory: validatedInventory,
+    ok,
+  });
   const effectiveRecipe = options.recipe ?? RECIPE_ID;
   if (effectiveRecipe !== RECIPE_ID) {
     fail(
@@ -44,7 +56,7 @@ export async function runOfflinePreflight(options) {
       'recipe-pin',
       `caller recipe "${effectiveRecipe}" does not match the pinned recipe "${RECIPE_ID}"`
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   pass(checks, 'recipe-pin');
   let inventory;
@@ -61,7 +73,7 @@ export async function runOfflinePreflight(options) {
       'inventory-parse',
       `cannot read inventory (${error.message})`
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   try {
     acceptances = await readBoundedJson(
@@ -75,7 +87,7 @@ export async function runOfflinePreflight(options) {
       'acceptances-parse',
       `cannot read acceptances (${error.message})`
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   if (!Array.isArray(inventory) || inventory.length === 0) {
     fail(
@@ -84,11 +96,11 @@ export async function runOfflinePreflight(options) {
       'inventory-parse',
       'inventory must be a non-empty array'
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   if (!Array.isArray(acceptances)) {
     fail(checks, failures, 'acceptances-parse', 'acceptances must be an array');
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   const badInventory = inventory.filter(
     (record) => !validInventoryRecord(record)
@@ -100,7 +112,7 @@ export async function runOfflinePreflight(options) {
       'inventory-parse',
       `${badInventory.length} inventor${badInventory.length === 1 ? 'y record is' : 'y records are'} malformed`
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   // Mirror of parsePilotInventory: size cap plus merchant-scoped slot and
   // asset uniqueness. Offline must never report ok for an inventory the
@@ -112,7 +124,7 @@ export async function runOfflinePreflight(options) {
       'inventory-parse',
       `inventory holds ${inventory.length} records, at most ${MAX_JOBS} allowed`
     );
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
   const seenSlots = new Set();
   const seenAssets = new Set();
@@ -121,7 +133,7 @@ export async function runOfflinePreflight(options) {
     const assetKey = `${record.merchantId}/${record.assetId}`;
     if (seenSlots.has(slotKey)) {
       fail(checks, failures, 'inventory-parse', `duplicate slot "${slotKey}"`);
-      return { accepted, checks, failures, ok: false };
+      return report(false);
     }
     if (seenAssets.has(assetKey)) {
       fail(
@@ -130,12 +142,13 @@ export async function runOfflinePreflight(options) {
         'inventory-parse',
         `duplicate asset "${assetKey}"`
       );
-      return { accepted, checks, failures, ok: false };
+      return report(false);
     }
     seenSlots.add(slotKey);
     seenAssets.add(assetKey);
   }
   pass(checks, 'inventory-parse');
+  validatedInventory = inventory;
 
   if (
     !(await checkSamplePin({
@@ -145,7 +158,7 @@ export async function runOfflinePreflight(options) {
       inventory,
     }))
   ) {
-    return { accepted, checks, failures, ok: false };
+    return report(false);
   }
 
   const malformed = [];
@@ -249,5 +262,5 @@ export async function runOfflinePreflight(options) {
       )}`,
     });
   }
-  return { accepted, checks, failures, ok: failures.length === 0 };
+  return report(failures.length === 0);
 }

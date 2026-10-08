@@ -14,9 +14,9 @@
 // pins a CLI-only tsconfig that stubs `server-only` (which throws outside
 // React Server Components) so this file can reuse the exact request-time
 // staging loader instead of duplicating its validation.
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { stageLabConfigFromText } from '@/app/pilot-lab/lab-route';
+import { readBoundedOperatorJson } from '@/app/pilot-lab/lab-route-operator-json';
 
 const STAGE_FLAGS = new Set(['--input-root', '--output-root', '--public-dir']);
 
@@ -79,14 +79,18 @@ export async function main(): Promise<void> {
     process.env.BACI_IMAGE_PILOT_PUBLIC_DIR || join(process.cwd(), 'public');
   // The sanctioned writer: same validated loader as the routes, with
   // staging enabled. Request-time loads stay read-only and fail closed
-  // when these bytes are missing or drifted.
+  // when these bytes are missing or drifted. Operator files stream
+  // through the same byte budget as the request path: a corrupt or
+  // swapped-in giant inventory/acceptances file rejects on size before
+  // the loader parses it.
   const config = await stageLabConfigFromText({
-    acceptancesText: await readFile(
-      join(outputRoot, 'acceptances.json'),
-      'utf8'
+    acceptancesText: await readBoundedOperatorJson(
+      join(outputRoot, 'acceptances.json')
     ),
     inputRoot,
-    inventoryText: await readFile(join(inputRoot, 'inventory.json'), 'utf8'),
+    inventoryText: await readBoundedOperatorJson(
+      join(inputRoot, 'inventory.json')
+    ),
     outputRoot,
     publicDir,
   });

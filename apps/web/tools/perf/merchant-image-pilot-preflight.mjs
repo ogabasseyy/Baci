@@ -57,18 +57,25 @@
 //   preflight-html.mjs          served-HTML extraction + URL helpers
 //   preflight-agreement.mjs     preload/picture owner agreement
 //   preflight-mounts.mjs        mount coverage by role kind
+//   preflight-mounts-publish.mjs --write-mounts publish/invalidate
+//   preflight-lab-stores.mjs    lab stores mirror reader
 //   preflight-served-checks.mjs descriptors, purity, response bytes
 //   preflight-served.mjs        served gate orchestration
-import { rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import {
   parsePreflightArgs,
   parseStoreMap,
 } from './merchant-image-pilot-preflight-args.mjs';
+import {
+  DEFAULT_LAB_STORES,
+  readLabStores,
+} from './merchant-image-pilot-preflight-lab-stores.mjs';
+import {
+  invalidateMounts,
+  publishMounts,
+} from './merchant-image-pilot-preflight-mounts-publish.mjs';
 import { runOfflinePreflight } from './merchant-image-pilot-preflight-offline.mjs';
 import { fetchServedAgreement } from './merchant-image-pilot-preflight-served.mjs';
-import { readJson } from './merchant-image-pilot-preflight-shared.mjs';
 
 export { assertServedAgreement } from './merchant-image-pilot-preflight-agreement.mjs';
 export {
@@ -85,78 +92,35 @@ export { assertServedMountCoverage } from './merchant-image-pilot-preflight-moun
 export { runOfflinePreflight } from './merchant-image-pilot-preflight-offline.mjs';
 export { fetchServedAgreement } from './merchant-image-pilot-preflight-served.mjs';
 
-// Committed mirror of the lab store registry (lab-store-registry.ts):
-// per-merchant declared uncovered slots the served gate requires as
-// explicit markers. Pinned by test to the TS source of truth.
-const DEFAULT_LAB_STORES = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'merchant-image-pilot-lab-stores.json'
-);
-
-async function readLabStores(path) {
-  const parsed = await readJson(path);
-  if (
-    !Array.isArray(parsed) ||
-    !parsed.every(
-      (entry) =>
-        entry &&
-        typeof entry === 'object' &&
-        typeof entry.merchantId === 'string' &&
-        Array.isArray(entry.uncoveredSlots) &&
-        entry.uncoveredSlots.every(
-          (slot) =>
-            slot && typeof slot === 'object' && typeof slot.slotId === 'string'
-        )
-    )
-  ) {
-    throw new Error(
-      `lab stores mirror ${path} must be an array of {merchantId, uncoveredSlots:[{slotId}]}`
-    );
-  }
-  return new Map(parsed.map((entry) => [entry.merchantId, entry]));
-}
-
 export async function runPreflight(options) {
   const offline = await runOfflinePreflight(options);
-  if (options.writeMounts) {
+  // Mounts publication is deferred until the COMPLETE preflight
+  // succeeds: the readiness gate treats this file as the complete
+  // expected-mount authority, so publishing after the offline phase
+  // would leave a valid-looking artifact behind a failed served gate.
+  const invalidate = (reason) => invalidateMounts(options.writeMounts, reason);
+  if (!options.origin) {
+    // Offline-only run: publish only on success, invalidate on failure.
     if (!offline.ok) {
-      // Invalidate any prior artifact: the readiness gate treats this
-      // file as the complete expected-mount authority, so leaving a
-      // stale list would certify outdated expectations as green.
-      const removal = await rm(options.writeMounts, { force: true }).catch(
-        (error) =>
-          ` (stale artifact removal failed: ${error instanceof Error ? error.message : String(error)})`
-      );
+      const note = await invalidate('offline gate failed');
       return {
         ...offline,
-        failures: [
-          ...offline.failures,
-          `mounts not written: offline gate failed${removal ?? ''}`,
-        ],
+        failures: [...offline.failures, ...(note ? [note] : [])],
         served: null,
       };
     }
-    try {
-      await writeFile(
-        options.writeMounts,
-        `${JSON.stringify(offline.accepted, null, 2)}\n`
-      );
-    } catch (error) {
-      // A failed write can leave a partial file: remove it so no
-      // downstream gate consumes a truncated expectation list.
-      await rm(options.writeMounts, { force: true }).catch(() => undefined);
+    const publishError = await publishMounts(
+      options.writeMounts,
+      offline.accepted
+    );
+    if (publishError) {
       return {
         ...offline,
-        failures: [
-          ...offline.failures,
-          `mounts not written: ${error instanceof Error ? error.message : String(error)}`,
-        ],
+        failures: [...offline.failures, publishError],
         ok: false,
         served: null,
       };
     }
-  }
-  if (!options.origin) {
     return { ...offline, served: null };
   }
   // Every inventory binding must render a section in each served arm
@@ -164,14 +128,23 @@ export async function runPreflight(options) {
   // gate fails when the route silently drops one. Every offline-accepted
   // binding must additionally have an actual mount of the expected
   // kind/identity on the gallery and on its merchant's store page.
-  let inventory = [];
-  try {
-    const parsed = await readJson(options.inventory);
-    if (Array.isArray(parsed)) {
-      inventory = parsed;
-    }
-  } catch {
-    inventory = [];
+  // The served phase reuses the validated offline snapshot — never a
+  // reread: a deleted, corrupted, or swapped inventory between phases
+  // must fail closed instead of silently emptying the route matrix.
+  const inventory = offline.inventory;
+  if (!Array.isArray(inventory) || inventory.length === 0) {
+    const note = await invalidate('served gate failed');
+    return {
+      accepted: offline.accepted,
+      checks: offline.checks,
+      failures: [
+        ...offline.failures,
+        'served:inventory: no validated inventory snapshot to serve',
+        ...(note ? [note] : []),
+      ],
+      ok: false,
+      served: null,
+    };
   }
   const expectedBindings = inventory.map(
     (record) => `${record.merchantId}/${record.assetId}`
@@ -180,10 +153,15 @@ export async function runPreflight(options) {
   try {
     storeMap = parseStoreMap(options.storeMap);
   } catch (error) {
+    const note = await invalidate('served gate failed');
     return {
       accepted: offline.accepted,
       checks: offline.checks,
-      failures: [...offline.failures, `served:store-map: ${error.message}`],
+      failures: [
+        ...offline.failures,
+        `served:store-map: ${error.message}`,
+        ...(note ? [note] : []),
+      ],
       ok: false,
       served: null,
     };
@@ -191,12 +169,14 @@ export async function runPreflight(options) {
   const merchants = [...new Set(inventory.map((record) => record.merchantId))];
   const unmapped = merchants.filter((merchant) => !storeMap[merchant]);
   if (unmapped.length > 0) {
+    const note = await invalidate('served gate failed');
     return {
       accepted: offline.accepted,
       checks: offline.checks,
       failures: [
         ...offline.failures,
         `served:store-map: no store slug for merchants: ${unmapped.join(', ')}`,
+        ...(note ? [note] : []),
       ],
       ok: false,
       served: null,
@@ -206,12 +186,14 @@ export async function runPreflight(options) {
   try {
     labStores = await readLabStores(options.labStores ?? DEFAULT_LAB_STORES);
   } catch (error) {
+    const note = await invalidate('served gate failed');
     return {
       accepted: offline.accepted,
       checks: offline.checks,
       failures: [
         ...offline.failures,
         `served:lab-stores: ${error instanceof Error ? error.message : String(error)}`,
+        ...(note ? [note] : []),
       ],
       ok: false,
       served: null,
@@ -246,12 +228,42 @@ export async function runPreflight(options) {
     publicDir: options.publicDir,
     timeoutMs: options.timeoutMs ?? 10_000,
   });
+  const ok = offline.ok && served.ok;
+  if (!ok) {
+    const note = await invalidate('served gate failed');
+    return {
+      accepted: offline.accepted,
+      checks: [...offline.checks, ...served.checks],
+      coverage: served.coverage,
+      failures: [
+        ...offline.failures,
+        ...served.failures,
+        ...(note ? [note] : []),
+      ],
+      ok: false,
+      served,
+    };
+  }
+  const publishError = await publishMounts(
+    options.writeMounts,
+    offline.accepted
+  );
+  if (publishError) {
+    return {
+      accepted: offline.accepted,
+      checks: [...offline.checks, ...served.checks],
+      coverage: served.coverage,
+      failures: [...offline.failures, ...served.failures, publishError],
+      ok: false,
+      served,
+    };
+  }
   return {
     accepted: offline.accepted,
     checks: [...offline.checks, ...served.checks],
     coverage: served.coverage,
     failures: [...offline.failures, ...served.failures],
-    ok: offline.ok && served.ok,
+    ok: true,
     served,
   };
 }

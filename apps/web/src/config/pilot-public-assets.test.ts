@@ -75,6 +75,14 @@ describe('non-lab public assets gate', () => {
       /not a confined directory/
     );
   });
+  it('rejects symlinks nested inside managed entries', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'originals', 'nested'), { recursive: true });
+    symlinkSync('/etc', join(dir, '__pilot', 'originals', 'nested', 'evil'));
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /contains a symlink/
+    );
+  });
   it('requires the fillers directory and exact set when lab is enabled', () => {
     const staged = root();
     mkdirSync(join(staged, '__pilot', 'originals'), { recursive: true });

@@ -22,6 +22,11 @@
         "consumer": "heroComponent.render (builder/hero-component.tsx, CSS backgroundImage)",
         "reason": "no frozen hero-banner snapshot in the pilot sample",
         "slotId": "hero-banner"
+      },
+      {
+        "consumer": "HeaderLogo (storefront/blocks/header-logo.tsx, shared file)",
+        "reason": "null on the live site: no header image to freeze (plan §4 out-of-coverage, reported not counted)",
+        "slotId": "header-logo"
       }
     ]
   },

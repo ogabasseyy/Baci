@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
+import { cartLinkInputSchema } from '../src/schemas/cart-link-input';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { prepareCartHandoff } from './cart-handoff';
 
@@ -17,21 +17,6 @@ export function registerCartLinkTools(
 ): void {
   // Tool: Add to Cart (Widget-accessible)
   // This tool can be called from the widget iframe using window.openai.callTool
-  const cartLinkInputSchema = {
-    product_id: z
-      .string()
-      .min(1)
-      .max(80)
-      .describe('The product ID to add to cart'),
-    quantity: z
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .optional()
-      .default(1)
-      .describe('Quantity to add'),
-  };
   const prepareCartLink = async (args: {
     product_id: string;
     quantity?: number;
@@ -67,7 +52,9 @@ export function registerCartLinkTools(
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     description:
       'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
-    inputSchema: cartLinkInputSchema,
+    // The registration takes a shape, not an object: share the schema
+    // module's shape so runtime and card stay on one contract.
+    inputSchema: cartLinkInputSchema.shape,
     _meta: {
       'openai/widgetAccessible': true, // Enable widget-initiated calls
       'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',

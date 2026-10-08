@@ -10,10 +10,13 @@ export function isPermissionError(error: unknown): boolean {
 }
 
 // Runtime cart writes fail the same typed way as a misconfigured volume,
-// plus disk-full: callers already handle GuestCartStorageUnavailableError.
+// plus disk-full (ENOSPC) and disk-quota exhaustion (EDQUOT: free
+// filesystem space with no remaining user/group quota): callers already
+// handle GuestCartStorageUnavailableError.
 export function isStorageWriteError(error: unknown): boolean {
   if (isPermissionError(error)) return true;
-  return (error as NodeJS.ErrnoException)?.code === 'ENOSPC';
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return code === 'ENOSPC' || code === 'EDQUOT';
 }
 
 export function guestCartWriteError(

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-color-evidence-guidance';
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
+import { cartLinkInputSchema } from '../schemas/cart-link-input';
 import {
   MCP_DELIVERY_FEE_INFO_DESCRIPTION,
   mcpDeliveryFeeInfoInputSchema,
@@ -13,6 +14,13 @@ import {
 import { SEARCH_PRODUCTS_INTENT_SCHEMA } from './mcp-server-card-intent-schema';
 
 const DRAFT_07_SCHEMA = 'http://json-schema.org/draft-07/schema#';
+
+// Generated from the same Zod contract the runtime registers, so the card
+// cannot drift from the tool. Shared by the tool and its alias entry.
+const CART_LINK_INPUT_SCHEMA = z.toJSONSchema(cartLinkInputSchema, {
+  target: 'draft-7',
+  io: 'input',
+});
 
 const PRODUCT_LOOKUP_INPUT_SCHEMA = {
   $schema: DRAFT_07_SCHEMA,
@@ -109,24 +117,7 @@ export const PUBLIC_MCP_TOOLS = [
     title: 'Prepare Ogabassey Cart Link',
     description:
       'Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
-    inputSchema: {
-      $schema: DRAFT_07_SCHEMA,
-      type: 'object',
-      properties: {
-        product_id: {
-          type: 'string',
-          description: 'The product ID to add to cart',
-        },
-        quantity: {
-          default: 1,
-          description: 'Quantity to add',
-          type: 'integer',
-          minimum: 1,
-          maximum: 10,
-        },
-      },
-      required: ['product_id'],
-    },
+    inputSchema: CART_LINK_INPUT_SCHEMA,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {
@@ -134,24 +125,7 @@ export const PUBLIC_MCP_TOOLS = [
     title: 'Add to Cart (Deprecated Alias)',
     description:
       'Deprecated alias of prepare_storefront_cart_link for callers with a cached tool list. Prepare an Ogabassey cart handoff URL. A simple item is added when the shopper opens that URL; products with options open their selection page.',
-    inputSchema: {
-      $schema: DRAFT_07_SCHEMA,
-      type: 'object',
-      properties: {
-        product_id: {
-          type: 'string',
-          description: 'The product ID to add to cart',
-        },
-        quantity: {
-          default: 1,
-          description: 'Quantity to add',
-          type: 'integer',
-          minimum: 1,
-          maximum: 10,
-        },
-      },
-      required: ['product_id'],
-    },
+    inputSchema: CART_LINK_INPUT_SCHEMA,
     annotations: READ_ONLY_TOOL_ANNOTATIONS,
   },
   {

@@ -23,6 +23,16 @@ import {
 } from './guest-cart-writer-lock-errors';
 
 export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
+/**
+ * Store entry-point line: quantity 0 expresses a removal, which the
+ * persisted-line schema (min 1) cannot represent. Removals are filtered
+ * before parsing, so only 1-10 lines ever reach storage; typing the entry
+ * point separately keeps a future parse-earlier refactor from rejecting
+ * every removal.
+ */
+export type GuestCartLineInput = Omit<GuestCartLine, 'quantity'> & {
+  quantity: number;
+};
 export class GuestCartExpiredError extends Error {
   override readonly name = 'GuestCartExpiredError';
   constructor() {
@@ -141,7 +151,7 @@ export class GuestCartStore {
 
   async update(
     token: string | undefined,
-    line: GuestCartLine,
+    line: GuestCartLineInput,
     validate: (items: GuestCartLine[]) => Promise<void>
   ) {
     if (!token && line.quantity === 0)

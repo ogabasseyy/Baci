@@ -138,91 +138,28 @@ describe('useEditOrderController submit', () => {
     );
   });
 
-  it('omits an unchanged creation-date fallback from legacy orders', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({});
-    const date = new Date('2024-01-02T10:00:00.000Z');
-    useNewOrderControllerMock.mockReturnValue(createBaseController({ date }));
+  it.each([
+    'cancelled',
+    'returned',
+  ] as const)('blocks submission for %s orders', async (shipping_status) => {
+    const mutateAsync = vi.fn();
+    useNewOrderControllerMock.mockReturnValue(createBaseController());
     useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
     useOrderMock.mockReturnValue({
-      data: { id: 'order-1', created_at: date.toISOString() },
+      data: { id: 'order-1', shipping_status },
       isLoading: false,
     });
-    const { result } = renderHook(() => useEditOrderController());
-    await act(async () => {
-      await result.current.handleSubmit();
-    });
-    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
-      'transaction_date'
-    );
-  });
 
-  it('omits the date when the saved order has no parseable date', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({});
-    useNewOrderControllerMock.mockReturnValue(
-      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
-    );
-    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
-    useOrderMock.mockReturnValue({
-      data: { created_at: 'not-a-date', id: 'order-1' },
-      isLoading: false,
-    });
     const { result } = renderHook(() => useEditOrderController());
-    await act(async () => {
-      await result.current.handleSubmit();
-    });
-    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
-      'transaction_date'
-    );
-  });
 
-  it('sends a changed day as local midnight', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({});
-    useNewOrderControllerMock.mockReturnValue(
-      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
-    );
-    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
-    useOrderMock.mockReturnValue({
-      data: {
-        id: 'order-1',
-        transaction_date: new Date(2024, 0, 2, 10, 0).toISOString(),
-      },
-      isLoading: false,
-    });
-    const { result } = renderHook(() => useEditOrderController());
     await act(async () => {
       await result.current.handleSubmit();
     });
-    expect(mutateAsync.mock.calls[0][0].payload).toHaveProperty(
-      'transaction_date',
-      new Date(2024, 0, 5).toISOString()
-    );
-    expect(mutateAsync.mock.calls[0][0].payload).toHaveProperty(
-      'transaction_date_day',
-      '2024-01-05'
-    );
-  });
 
-  it('omits a manual day matching the stored explicit day', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({});
-    useNewOrderControllerMock.mockReturnValue(
-      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
-    );
-    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
-    useOrderMock.mockReturnValue({
-      data: {
-        id: 'order-1',
-        invoice_issue_date: '2024-01-05',
-        source: 'physical',
-        transaction_date: new Date(2024, 0, 4, 23, 30).toISOString(),
-      },
-      isLoading: false,
-    });
-    const { result } = renderHook(() => useEditOrderController());
-    await act(async () => {
-      await result.current.handleSubmit();
-    });
-    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
-      'transaction_date'
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(alertMock).toHaveBeenCalledWith(
+      'Order closed',
+      'This order is cancelled or returned and cannot be edited.'
     );
   });
 

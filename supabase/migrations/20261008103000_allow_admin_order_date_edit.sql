@@ -196,19 +196,23 @@ BEGIN
 
     -- Merge into the audit event the delegated edit just wrote (same
     -- transaction) so one save produces one audit record; fall back to a
-    -- standalone insert if the delegate wrote anything unexpected.
+    -- standalone insert if the delegate wrote anything unexpected. Both the
+    -- xmin and the creation timestamp must match the current transaction so
+    -- a wrapped-around xid or a trigger-written row cannot misroute the merge.
     SELECT count(*)
       INTO v_delegated_audit_count
     FROM public.order_audit_events e
     WHERE e.order_id = p_order_id
-      AND e.xmin = pg_current_xact_id()::xid;
+      AND e.xmin = pg_current_xact_id()::xid
+      AND e.created_at = now();
 
     IF v_delegated_audit_count = 1 THEN
       SELECT e.id
         INTO v_delegated_audit_id
       FROM public.order_audit_events e
       WHERE e.order_id = p_order_id
-        AND e.xmin = pg_current_xact_id()::xid;
+        AND e.xmin = pg_current_xact_id()::xid
+        AND e.created_at = now();
 
       UPDATE public.order_audit_events
       SET changed_fields = changed_fields || v_changed_fields,

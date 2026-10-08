@@ -1,10 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import {
-  resolveEditOrderDate,
-  resolvePrefillDate,
-} from '@/lib/edit-order-date';
+import { resolveEditOrderDate } from '@/lib/edit-order-date';
 import {
   buildEditOrderPayload,
   type EditableOrderRecord,
@@ -12,6 +9,7 @@ import {
   mapOrderItemsForEdit,
   readShippingAddressValue,
 } from '@/lib/edit-order-payload';
+import { resolvePrefillDate } from '@/lib/edit-order-prefill-date';
 import { useUpdateOrder } from './orders/useUpdateOrder';
 import { useNewOrderController } from './useNewOrderController';
 import { useOrder } from './useOrders';
@@ -127,6 +125,17 @@ export function useEditOrderController() {
 
     if (!orderId) {
       Alert.alert('Invalid order', 'This order link is missing an id.');
+      return;
+    }
+
+    if (
+      order?.shipping_status === 'cancelled' ||
+      order?.shipping_status === 'returned'
+    ) {
+      Alert.alert(
+        'Order closed',
+        'This order is cancelled or returned and cannot be edited.'
+      );
       return;
     }
 

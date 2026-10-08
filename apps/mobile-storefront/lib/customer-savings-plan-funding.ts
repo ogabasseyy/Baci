@@ -2,6 +2,7 @@ import { SavingsPlanFundingResponseSchema } from '@/schemas/customer-savings';
 import { PrimarySavingsPlanFundingSchemas as schemas } from '@/schemas/primary-savings-plan-funding';
 import { getCustomerSavingsApiClient } from './customer-savings-api';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
+import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
 
 type Selection = {
   goalId: string;
@@ -46,8 +47,13 @@ export const customerSavingsPlanFunding = {
   async provision(
     input: Selection & { bvn: string; enableInterestAccrual?: boolean }
   ) {
-    if (isPiggyvestPrimaryMerchant(input.merchantId))
-      return primaryFunding(input, input.enableInterestAccrual === true);
+    if (isPiggyvestPrimaryMerchant(input.merchantId)) {
+      try {
+        return await primaryFunding(input, input.enableInterestAccrual === true);
+      } catch (error) {
+        if (!isPrimaryWalletNotReady(error)) throw error;
+      }
+    }
     const client = getCustomerSavingsApiClient();
     return SavingsPlanFundingResponseSchema.parse(
       await client.fetchJson({
@@ -66,8 +72,13 @@ export const customerSavingsPlanFunding = {
     );
   },
   async recover(input: Selection) {
-    if (isPiggyvestPrimaryMerchant(input.merchantId))
-      return primaryFunding(input);
+    if (isPiggyvestPrimaryMerchant(input.merchantId)) {
+      try {
+        return await primaryFunding(input);
+      } catch (error) {
+        if (!isPrimaryWalletNotReady(error)) throw error;
+      }
+    }
     const client = getCustomerSavingsApiClient();
     return SavingsPlanFundingResponseSchema.parse(
       await client.fetchJson({

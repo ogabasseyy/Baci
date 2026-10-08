@@ -40,6 +40,13 @@ it('never falls back to Paystack when PiggyVest reads fail', async () => {
   expect(await resolveWalletFundingAccount(legacy, merchantId)).toBeNull();
 });
 
+it('keeps the working legacy account when the server reports primary unconfigured', async () => {
+  read.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
+  );
+  expect(await resolveWalletFundingAccount(legacy, merchantId)).toEqual(legacy);
+});
+
 it('preserves other merchants accounts without contacting PiggyVest', async () => {
   expect(await resolveWalletFundingAccount(legacy, 'other')).toEqual(legacy);
   expect(read).not.toHaveBeenCalled();

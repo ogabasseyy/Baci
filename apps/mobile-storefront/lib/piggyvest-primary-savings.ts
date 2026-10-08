@@ -1,4 +1,6 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
+import { addSavingsContribution } from './customer-savings';
+import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 const client = createStorefrontCustomerApiClient();
@@ -22,17 +24,30 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     operationId: input.idempotencyKey,
     amountKobo,
   });
-  const response = schemas.response.safeParse(
-    await client.fetchJson({
-      path: '/api/storefront/customer/savings/primary-transfer',
-      method: 'POST',
-      includeCsrf: true,
-      body,
-    })
-  );
-  if (!response.success || response.data.operationId !== body.operationId)
-    throw new Error(
-      'Your contribution could not be confirmed. Check its status before trying again.'
+  try {
+    const response = schemas.response.safeParse(
+      await client.fetchJson({
+        path: '/api/storefront/customer/savings/primary-transfer',
+        method: 'POST',
+        includeCsrf: true,
+        body,
+      })
     );
-  return response.data;
+    if (!response.success || response.data.operationId !== body.operationId)
+      throw new Error(
+        'Your contribution could not be confirmed. Check its status before trying again.'
+      );
+    return response.data;
+  } catch (error) {
+    // The server positively reports primary savings as unconfigured: route
+    // the contribution through the working legacy flow instead of failing.
+    if (!isPrimaryWalletNotReady(error)) throw error;
+    return addSavingsContribution({
+      amount: input.amount,
+      goalId: input.goalId,
+      idempotencyKey: input.idempotencyKey,
+      merchantId: input.merchantId,
+      merchantSlug: input.merchantSlug,
+    });
+  }
 }

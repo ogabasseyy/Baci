@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { recoverPiggyvestPrimarySavings } from '@/lib/piggyvest-primary-savings-recovery';
 
 export function usePrimarySavingsRecovery({
@@ -15,8 +16,11 @@ export function usePrimarySavingsRecovery({
   operationRef: { current: string | null };
   setAmount: (value: string) => void;
 }) {
+  const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
   const enabled =
-    isPiggyvestPrimaryMerchant(merchantId) && Boolean(userId && goalId);
+    isPiggyvestPrimaryMerchant(merchantId) &&
+    primaryCapability !== false &&
+    Boolean(userId && goalId);
   const key = JSON.stringify([merchantId, userId, goalId]);
   const boundKey = useRef<string | null>(null);
   const [revision, setRevision] = useState(0);

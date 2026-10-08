@@ -154,6 +154,48 @@ describe('useEditOrderController submit', () => {
     );
   });
 
+  it('omits the date when the saved order has no parseable date', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    useNewOrderControllerMock.mockReturnValue(
+      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
+    );
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: { created_at: 'not-a-date', id: 'order-1' },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useEditOrderController());
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
+      'transaction_date'
+    );
+  });
+
+  it('sends a changed day as local midnight', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    useNewOrderControllerMock.mockReturnValue(
+      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
+    );
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: {
+        id: 'order-1',
+        transaction_date: new Date(2024, 0, 2, 10, 0).toISOString(),
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useEditOrderController());
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(mutateAsync.mock.calls[0][0].payload).toHaveProperty(
+      'transaction_date',
+      new Date(2024, 0, 5).toISOString()
+    );
+  });
+
   it('blocks submission when a customer has not been selected', async () => {
     const mutateAsync = vi.fn();
     useNewOrderControllerMock.mockReturnValue(

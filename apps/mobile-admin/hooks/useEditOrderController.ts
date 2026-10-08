@@ -7,6 +7,7 @@ import {
   isOrderFinanciallyLocked,
   mapOrderItemsForEdit,
   readShippingAddressValue,
+  resolveEditOrderDate,
 } from '@/lib/edit-order-payload';
 import { useUpdateOrder } from './orders/useUpdateOrder';
 import { useNewOrderController } from './useNewOrderController';
@@ -142,14 +143,12 @@ export function useEditOrderController() {
             ? order.customer_id !== baseController.customer.id
             : false,
           deliveryInfo: baseController.deliveryInfo,
-          orderDate:
-            order &&
-            baseController.date?.getTime() ===
-              new Date(
-                order.transaction_date ?? order.created_at ?? ''
-              ).getTime()
-              ? undefined
-              : baseController.date,
+          orderDate: resolveEditOrderDate({
+            currentDate: baseController.date,
+            hasSavedOrder: Boolean(order),
+            savedCreatedAt: order?.created_at,
+            savedTransactionDate: order?.transaction_date,
+          }),
           discount: baseController.discount,
           notes: baseController.notes,
           notifyCustomer,

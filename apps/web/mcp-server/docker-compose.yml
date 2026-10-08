@@ -5,6 +5,12 @@ services:
       context: ../../..
       dockerfile: apps/web/mcp-server/Dockerfile
     restart: unless-stopped
+    # Shutdown needs the full drain deadline plus release time: the app
+    # forces lock release at SHUTDOWN_DRAIN_TIMEOUT_MS (10s), and the
+    # compose default grace (10s) could SIGKILL first, leaving a
+    # heartbeat-fresh lock that delays the replacement by the 30s stale
+    # window.
+    stop_grace_period: 30s
     ports:
       - "127.0.0.1:8787:8787"
     environment:

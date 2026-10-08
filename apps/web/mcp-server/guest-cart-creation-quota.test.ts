@@ -128,3 +128,20 @@ it('rejects fresh callers once the map is full of live windows', () => {
     warn.mockRestore();
   }
 });
+
+it('keeps capacity after fully refunded reservations', () => {
+  vi.useFakeTimers();
+  // Expire windows left by earlier tests (including the map-full fill at
+  // +2h) so this flood starts empty.
+  vi.setSystemTime(Date.now() + 4 * 60 * 60 * 1000);
+  // A flood of failing validations: every reservation is refunded to
+  // zero. Fully refunded entries must release their tracker slots, or
+  // the map fills and every new address is rejected as quota_exceeded
+  // without a single cart being consumed.
+  for (let i = 0; i < 10000; i += 1) {
+    const ip = `10.9.${Math.floor(i / 256)}.${i % 256}`;
+    expect(reserveGuestCartCreation(ip).allowed).toBe(true);
+    refundGuestCartCreation(ip);
+  }
+  expect(reserveGuestCartCreation('10.10.0.1').allowed).toBe(true);
+});

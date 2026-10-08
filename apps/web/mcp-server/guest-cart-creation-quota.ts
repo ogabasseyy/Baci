@@ -148,7 +148,8 @@ export function reserveGuestCartCreation(ip: string): GuestCartQuotaReservation 
  * instead of inflating it past MAX. Never drops the count below zero.
  */
 export function refundGuestCartCreation(ip: string, windowStart?: number): void {
-  const entry = quotaByIp.get(quotaKeyForIp(ip));
+  const key = quotaKeyForIp(ip);
+  const entry = quotaByIp.get(key);
   if (!entry || entry.count <= 0) return;
   if (
     windowStart !== undefined &&
@@ -157,4 +158,9 @@ export function refundGuestCartCreation(ip: string, windowStart?: number): void 
     return;
   if (Date.now() - entry.windowStart >= GUEST_CART_QUOTA_WINDOW_MS) return;
   entry.count -= 1;
+  // A fully refunded entry holds no budget and must not pin a tracker slot
+  // for the rest of the hour: a flood of failing validations would
+  // otherwise fill the map and reject every new address as quota_exceeded
+  // without consuming a single cart.
+  if (entry.count === 0) quotaByIp.delete(key);
 }

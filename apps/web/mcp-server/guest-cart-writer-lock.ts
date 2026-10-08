@@ -15,7 +15,9 @@ import path from 'node:path';
 import {
   GuestCartStorageUnavailableError,
   directoryNotWritableError,
+  guestCartWriteError,
   isPermissionError,
+  isStorageWriteError,
   refuseSecondWriter,
 } from './guest-cart-writer-lock-errors';
 
@@ -109,6 +111,19 @@ export function acquireWriterLock(directory: string): void {
     }
     try {
       writeSync(fd, content);
+    } catch (error) {
+      // A claim that cannot be written (disk full, quota exhausted) must
+      // degrade the guest-cart tool instead of crashing the server — and
+      // must not leave an empty lock that later startups refuse on. The
+      // typed outage routes through createGuestCartStoreOrDegraded.
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        /* Best effort: the typed outage below is the signal. */
+      }
+      if (isStorageWriteError(error))
+        throw guestCartWriteError(lockPath, error);
+      throw error;
     } finally {
       closeSync(fd);
     }

@@ -47,4 +47,21 @@ describe('production MCP proxy configuration', () => {
       'MCP_TRUST_PROXY_REAL_IP=${MCP_TRUST_PROXY_REAL_IP:-false}'
     );
   });
+
+  it('gives shutdown longer than the drain deadline to release the lock', async () => {
+    const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
+    const { SHUTDOWN_DRAIN_TIMEOUT_MS } = await import(
+      './server-shutdown'
+    );
+    // The app forces lock release when the drain deadline fires; compose
+    // must not SIGKILL first (the 10s default ties the deadline exactly,
+    // so jitter decides). Pin the relationship, not just the value, so a
+    // future deadline bump fails here instead of redeploying into a stale
+    // lock wait.
+    const match = compose.match(/stop_grace_period:\s*(\d+)(s|m)/);
+    expect(match).not.toBeNull();
+    const graceMs =
+      Number(match?.[1]) * (match?.[2] === 'm' ? 60_000 : 1000);
+    expect(graceMs).toBeGreaterThan(SHUTDOWN_DRAIN_TIMEOUT_MS);
+  });
 });

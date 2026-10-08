@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { SearchShoppingActions } from './SearchComparisonControls';
+import { SearchShoppingActions } from './SearchShoppingActions';
 
 interface SearchScreenTopBarProps {
   colors: (typeof Colors)['light'];

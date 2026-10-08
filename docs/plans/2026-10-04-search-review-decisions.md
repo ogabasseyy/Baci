@@ -452,3 +452,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low contact-rotation: PR-disclosed repeat.
 - Muse low early-adds ADJUDICATED non-issue: storefront mount passes merchantSlug synchronously (shell snapshot route data) so state/ref init with the slug; bare mounts are non-storefront surfaces where opt-in is correct. No pre-hydration divergence on the storefront add path.
 - Muse med comparison-namespace ADJUDICATED (pre-existing): v2-comparison-scope.tsx untouched by this PR; current callers pass merchant.id. Required-prop hardening is a follow-up.
+
+## Round 65 (Codex 3 P1 on 8c19ca2 — all fixed; Muse all positive/repeat)
+
+- CX-123 (P1) FIXED: SearchShoppingActions → SearchShoppingActions.tsx (105 lines); Controls keeps the button (114 lines). TopBar + its test re-imported; actions + integration tests moved to the colocated file. Suites 8/8.
+- CX-124 (P1) FIXED: added use-product-detail-purchase-state.test.ts — exact offer id and ID-less base-match suppression forwarded into both price calls + offer selection, plus variant skip. 3/3.
+- CX-125 (P1) FIXED: product-request.ts split into schema module + product-request-client.ts (error + submit); barrel exports both; consumers untouched. Client tests moved, schema tests added (9/9). Web consumers 10/10; shared/native/web typechecks clean.
+- Muse on 8c19ca2: 2 med + 3 low, all positive observations or adjudicated repeats (PII retention policy, disclosure verification, no full-diff CodeRabbit, device QA). No code action.

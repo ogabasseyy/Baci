@@ -51,10 +51,12 @@ export * from './product-image-alt';
 export * from './product-inventory';
 export {
   type ProductRequest,
-  ProductRequestSubmitError,
   productRequestSchema,
-  submitProductRequest,
 } from './product-request';
+export {
+  ProductRequestSubmitError,
+  submitProductRequest,
+} from './product-request-client';
 export * from './product-search';
 export * from './product-selection-param-resolution';
 export * from './product-selection-params';

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { SearchScreenTopBar } from './SearchScreenTopBar';
 
-jest.mock('./SearchComparisonControls', () => {
+jest.mock('./SearchShoppingActions', () => {
   const { View } = jest.requireActual(
     'react-native'
   ) as typeof import('react-native');

@@ -197,6 +197,6 @@ export const ADMIN_PLATFORM_REPAIR_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008103000_allow_admin_order_date_edit.sql',
-    sha256: 'bf76518a82243c4b2dc7a2a1ab37f3f82a74fa88280b76b776eec660cc2d6dd5',
+    sha256: 'aa7078e4da729455c71f50e24a5f90c4c1c381038b07c5bc27775560beb38b34',
   },
 ] as const;

@@ -74,10 +74,19 @@ function mapOrderEditError(error: { code?: string; message?: string }) {
     );
   }
 
+  if (message.includes('order_terminal_not_editable')) {
+    return NextResponse.json(
+      {
+        code: 'order_not_editable',
+        error: 'This order is cancelled or returned and cannot be edited.',
+      },
+      { status: 409 }
+    );
+  }
+
   if (
     message.includes('order_financial_edit_has_payments') ||
     message.includes('order_financial_edit_after_fulfillment') ||
-    message.includes('order_terminal_not_editable') ||
     message.includes('order_item_replacement_has_historical_state') ||
     message.includes('order_item_replacement_has_accounting_metadata') ||
     message.includes('order_item_replacement_has_managed_stock') ||
@@ -111,8 +120,17 @@ function mapOrderEditError(error: { code?: string; message?: string }) {
     );
   }
 
+  if (message.includes('order_date_invalid')) {
+    return NextResponse.json(
+      {
+        code: 'order_date_invalid',
+        error: 'Order date cannot be in the future',
+      },
+      { status: 400 }
+    );
+  }
+
   if (
-    message.includes('order_date_invalid') ||
     message.includes('branch_not_found') ||
     message.includes('customer_not_found') ||
     message.includes('branch_id_invalid') ||

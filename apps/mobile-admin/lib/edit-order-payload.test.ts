@@ -258,6 +258,24 @@ describe('buildEditOrderPayload', () => {
   });
 });
 
+describe('buildEditOrderPayload order date', () => {
+  it('sends the picked calendar day alongside the instant', () => {
+    const payload = buildPayload({ orderDate: new Date(2024, 0, 5, 18, 30) });
+
+    expect(payload.transaction_date).toBe(
+      new Date(2024, 0, 5, 18, 30).toISOString()
+    );
+    expect(payload.transaction_date_day).toBe('2024-01-05');
+  });
+
+  it('omits date fields when the date is unchanged', () => {
+    const payload = buildPayload({ orderDate: undefined });
+
+    expect(payload).not.toHaveProperty('transaction_date');
+    expect(payload).not.toHaveProperty('transaction_date_day');
+  });
+});
+
 describe('resolveEditOrderDate', () => {
   it('returns the current date untouched when there is no saved order', () => {
     const currentDate = new Date('2024-01-02T10:00:00.000Z');

@@ -18,6 +18,8 @@ DECLARE
   v_final_docs record;
   v_date timestamptz;
   v_doc_day date;
+  v_doc_day_override date;
+  v_doc_day_text text;
   v_result jsonb;
   v_changed_fields text[] := ARRAY['transaction_date'];
 BEGIN
@@ -62,13 +64,35 @@ BEGIN
     EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
       RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
     END;
+    -- No lower bound by design: merchants may correct arbitrarily old
+    -- manual sales, matching update_transaction_review_details.
     IF v_date IS NULL OR NOT isfinite(v_date) OR v_date > now() THEN
       RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
     END IF;
   END IF;
 
+  -- Explicit device-local calendar day, mirroring order creation. It must
+  -- be a plausible rendering of the same instant: a device-local day
+  -- differs from the UTC day by at most one.
+  IF p_payload ? 'transaction_date_day' THEN
+    v_doc_day_text := p_payload ->> 'transaction_date_day';
+    IF jsonb_typeof(p_payload -> 'transaction_date_day') <> 'string'
+      OR v_doc_day_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+      RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
+    END IF;
+    BEGIN
+      v_doc_day_override := v_doc_day_text::date;
+    EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
+      RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
+    END;
+    IF v_date IS NULL
+      OR abs(v_doc_day_override - (v_date AT TIME ZONE 'UTC')::date) > 1 THEN
+      RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
   v_result := public.update_admin_order_without_date(
-    p_order_id, p_payload - 'transaction_date'
+    p_order_id, p_payload - 'transaction_date' - 'transaction_date_day'
   );
 
   IF v_date IS NOT NULL
@@ -81,13 +105,17 @@ BEGIN
     -- Manual-origin orders carry explicit device-local document dates that
     -- the sync trigger preserves by design, so move them with the corrected
     -- day and keep them explicit (mirroring
-    -- update_transaction_review_details). Generated dates on other orders
-    -- follow via the trigger; explicit ones stay untouched.
+    -- update_transaction_review_details). Prefer the client-sent calendar
+    -- day over re-deriving from the instant in the merchant timezone, which
+    -- can shift the day when device and merchant timezones straddle
+    -- midnight; fall back to merchant-timezone derivation for older clients.
+    -- Generated dates on other orders follow via the trigger; explicit ones
+    -- stay untouched.
     IF v_order.source IN ('manual', 'staff_entry', 'physical', 'instagram',
         'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN
-      v_doc_day := (
+      v_doc_day := COALESCE(v_doc_day_override, (
         v_date AT TIME ZONE public.manual_order_timezone(v_order.merchant_id)
-      )::date;
+      )::date);
     END IF;
 
     UPDATE public.orders

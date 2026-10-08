@@ -194,6 +194,10 @@ describe('useEditOrderController submit', () => {
       'transaction_date',
       new Date(2024, 0, 5).toISOString()
     );
+    expect(mutateAsync.mock.calls[0][0].payload).toHaveProperty(
+      'transaction_date_day',
+      '2024-01-05'
+    );
   });
 
   it('blocks submission when a customer has not been selected', async () => {

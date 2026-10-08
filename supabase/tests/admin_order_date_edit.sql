@@ -93,7 +93,8 @@ BEGIN
 
   -- Manual orders move explicit document dates with the corrected day.
   v_result := public.update_admin_order_with_transaction_discount_metadata(
-    v_manual_id, '{"transaction_date":"2024-01-02T10:00:00Z"}');
+    v_manual_id,
+    '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":"2024-01-02"}');
   IF NOT (v_result -> 'changed_fields' @>
       '["transaction_date","invoice_issue_date","tax_point_date"]'::jsonb)
     OR NOT EXISTS (SELECT 1 FROM orders WHERE id = v_manual_id
@@ -112,13 +113,29 @@ BEGIN
       AND after_snapshot ->> 'tax_point_date' = '2024-01-02')
   THEN RAISE EXCEPTION 'manual document date sync/audit failed'; END IF;
 
+  -- The explicit device day wins over merchant-timezone derivation, so a
+  -- device ahead of the merchant near midnight keeps its picked day.
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(
+    v_manual_id,
+    '{"transaction_date":"2024-01-02T11:00:00Z","transaction_date_day":"2024-01-03"}');
+  IF NOT EXISTS (SELECT 1 FROM orders WHERE id = v_manual_id
+    AND invoice_issue_date = '2024-01-03'
+    AND tax_point_date = '2024-01-03') THEN
+    RAISE EXCEPTION 'explicit document day ignored';
+  END IF;
+
   FOREACH v_bad IN ARRAY ARRAY[
     '{"transaction_date":"bad"}'::jsonb,
     '{"transaction_date":"2024-02-31T10:00:00Z"}'::jsonb,
     '{"transaction_date":"infinity"}'::jsonb,
     '{"transaction_date":null}'::jsonb,
     '{"transaction_date":123}'::jsonb,
-    '{"transaction_date":"2999-01-01T10:00:00Z"}'::jsonb
+    '{"transaction_date":"2999-01-01T10:00:00Z"}'::jsonb,
+    '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":"01/02/2024"}'::jsonb,
+    '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":"2024-02-31"}'::jsonb,
+    '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":"2024-01-05"}'::jsonb,
+    '{"transaction_date":"2024-01-02T10:00:00Z","transaction_date_day":123}'::jsonb,
+    '{"transaction_date_day":"2024-01-02"}'::jsonb
   ] LOOP
     BEGIN
       PERFORM public.update_admin_order_with_transaction_discount_metadata(v_id, v_bad);

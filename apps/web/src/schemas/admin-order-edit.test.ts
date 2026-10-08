@@ -67,6 +67,30 @@ describe('adminOrderEditSchema', () => {
     expect(adminOrderEditSchema.safeParse(validPayload).success).toBe(true);
   });
 
+  it('accepts an explicit device calendar day', () => {
+    const parsed = adminOrderEditSchema.parse({
+      ...validPayload,
+      transaction_date: '2024-01-02T10:00:00.000Z',
+      transaction_date_day: '2024-01-02',
+    });
+
+    expect(parsed.transaction_date_day).toBe('2024-01-02');
+  });
+
+  it.each([
+    '01/02/2024',
+    '2024-02-31',
+    '2024-1-2',
+    20240102,
+  ])('rejects malformed calendar days: %s', (transaction_date_day) => {
+    expect(
+      adminOrderEditSchema.safeParse({
+        ...validPayload,
+        transaction_date_day,
+      }).success
+    ).toBe(false);
+  });
+
   it('accepts legacy edit payloads that omit hidden gift wrapping', () => {
     const legacyPayload: Partial<typeof validPayload> = { ...validPayload };
     delete legacyPayload.gift_wrapping_fee;

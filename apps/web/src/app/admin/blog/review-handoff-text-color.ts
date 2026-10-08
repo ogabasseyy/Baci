@@ -7,7 +7,10 @@
 // plus any paint layer counts, an existential approximation matching
 // the viewport handling elsewhere. A bare
 // gradient utility paints nothing (unset stops default to
-// transparent), so gradients need a from/via/to stop to count.
+// transparent), so gradients need a painted from/via/to channel
+// winner to count.
+
+import { THEME_COLOR_NAMES } from './review-handoff-theme-colors';
 
 const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
 
@@ -22,50 +25,10 @@ function responsiveUtility(token: string): string | null {
 const TEXT_COLOR_PATTERN =
   /^text-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/;
 
-// Nontransparent theme color utilities: the shadcn palette from
-// tailwind.config.mjs plus the storefront tokens from the globals.css
-// @theme inline block. All resolve to solid colors (alpha comes only
-// from slash modifiers, handled below), so any of them overrides
-// inherited transparency. Keep in sync when the theme gains colors.
-const SEMANTIC_TEXT_COLOR_NAMES = new Set([
-  'foreground',
-  'background',
-  'border',
-  'input',
-  'ring',
-  'primary',
-  'primary-foreground',
-  'secondary',
-  'secondary-foreground',
-  'destructive',
-  'destructive-foreground',
-  'muted',
-  'muted-foreground',
-  'accent',
-  'accent-foreground',
-  'popover',
-  'popover-foreground',
-  'card',
-  'card-foreground',
-  'store-primary',
-  'store-primary-text',
-  'store-on-primary',
-  'store-secondary',
-  'store-secondary-text',
-  'store-accent',
-  'store-accent-text',
-  'store-background',
-  'store-background-text',
-  'store-foreground',
-  'store-border',
-  'store-rating',
-  'store-option-secondary',
-]);
-
 function isThemeTextColor(color: string): boolean {
   return (
     color.startsWith('text-') &&
-    SEMANTIC_TEXT_COLOR_NAMES.has(color.slice('text-'.length))
+    THEME_COLOR_NAMES.has(color.slice('text-'.length))
   );
 }
 
@@ -111,8 +74,7 @@ const GRADIENT_STOP_PATTERN = /^(from|via|to)-/;
 
 function isThemeBackgroundColor(color: string): boolean {
   return (
-    color.startsWith('bg-') &&
-    SEMANTIC_TEXT_COLOR_NAMES.has(color.slice('bg-'.length))
+    color.startsWith('bg-') && THEME_COLOR_NAMES.has(color.slice('bg-'.length))
   );
 }
 
@@ -204,17 +166,23 @@ function backgroundImageKind(
   return { gradient: false, paints: !isZeroAlphaModifier(modifier), rank: 1 };
 }
 
-function isGradientStop(utility: string): boolean {
-  if (!GRADIENT_STOP_PATTERN.test(utility)) return false;
+function gradientStop(
+  utility: string
+): { channel: string; kind: 'painted' | 'blank' } | null {
+  // from/via/to set separate custom properties, so each channel
+  // resolves its own alphabetically-last winner per layer (compiled
+  // order verified). Only transparent and zero-alpha stops blank a
+  // channel: current/inherit depend on unknowable context, so they
+  // stay out and assume visible, while stop positions (from-75%
+  // sets no color at all) never blank a color winner.
+  const channel = GRADIENT_STOP_PATTERN.exec(utility)?.[1];
+  if (!channel) return null;
   const [base, modifier] = splitUtilityModifier(utility);
-  if (
-    /-transparent$/.test(base) ||
-    /-current$/.test(base) ||
-    /-inherit$/.test(base)
-  ) {
-    return false;
+  if (/-current$/.test(base) || /-inherit$/.test(base)) return null;
+  if (/-transparent$/.test(base) || isZeroAlphaModifier(modifier)) {
+    return { channel, kind: 'blank' };
   }
-  return !isZeroAlphaModifier(modifier);
+  return { channel, kind: 'painted' };
 }
 
 /**
@@ -237,7 +205,10 @@ export function textColorMarkers(classes: readonly string[]): {
     LayerWinner<'solid' | 'blank'>
   >();
   const backgroundImageWinners = new Map<string, BackgroundImage>();
-  let hasGradientStops = false;
+  const gradientStopWinners = new Map<
+    string,
+    LayerWinner<'painted' | 'blank'>
+  >();
   for (const token of classes) {
     const utility = responsiveUtility(token);
     const bare = utility === null ? token : utility;
@@ -268,7 +239,13 @@ export function textColorMarkers(classes: readonly string[]): {
       )
         backgroundImageWinners.set(layer, { token: bare, ...backgroundImage });
     }
-    if (isGradientStop(bare)) hasGradientStops = true;
+    const stop = gradientStop(bare);
+    if (stop !== null) {
+      const key = `${layer}${stop.channel}`;
+      const winner = gradientStopWinners.get(key);
+      if (!winner || bare > winner.token)
+        gradientStopWinners.set(key, { token: bare, kind: stop.kind });
+    }
   }
   const opaqueColor = [...colorWinners.values()].some(
     (winner) => winner.kind === 'opaque'
@@ -282,8 +259,11 @@ export function textColorMarkers(classes: readonly string[]): {
   for (const [layer, winner] of backgroundColorWinners) {
     if (winner.kind === 'solid') paintLayers.add(layer);
   }
+  const hasPaintedStop = [...gradientStopWinners.values()].some(
+    (winner) => winner.kind === 'painted'
+  );
   for (const [layer, winner] of backgroundImageWinners) {
-    if (winner.paints && (!winner.gradient || hasGradientStops)) {
+    if (winner.paints && (!winner.gradient || hasPaintedStop)) {
       paintLayers.add(layer);
     }
   }

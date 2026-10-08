@@ -82,6 +82,7 @@ describe('hasReadableContent', () => {
     '<div class="scale-0 scale-x-100">Hidden</div>',
     '<div class="scale-[0]">Hidden</div>',
     '<div class="scale-x-0 -scale-x-100">Hidden</div>',
+    '<p class="bg-linear-to-r from-red-500 from-transparent to-transparent bg-clip-text text-transparent">Only body</p>',
     '<p class="text-black text-transparent">Only body</p>',
     '<p class="text-transparent md:text-black md:text-transparent">Only body</p>',
     '<p class="text-black/0">Only body</p>',

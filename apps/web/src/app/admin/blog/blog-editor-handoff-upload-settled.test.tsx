@@ -202,3 +202,77 @@ it('keeps a settled upload reused by the draft through an aliased URL', async ()
     expect.objectContaining({ method: 'DELETE' })
   );
 });
+
+it('deletes a retained upload when a second import discards it', async () => {
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        url: 'https://cdn.example.com/media/platform/blog/retained.webp',
+        width: 1200,
+        height: 675,
+        variants: {},
+      }),
+      { status: 200 }
+    )
+  );
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(JSON.stringify({ success: true }), { status: 200 })
+  );
+  fetchWithCsrf.mockClear();
+  vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
+    this: HTMLInputElement
+  ) {
+    fireEvent.change(this, {
+      target: { files: [new File(['image'], 'cover.png')] },
+    });
+  });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<BlogEditorClient mode="create" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
+  await waitFor(() =>
+    expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+      'https://cdn.example.com/media/platform/blog/retained.webp'
+    )
+  );
+  // First import reuses the session upload: it survives, but must stay
+  // tracked so a later import can still delete it.
+  const retainingHandoff = {
+    ...handoff,
+    featured_image: {
+      url: 'https://cdn.example.com/media/platform/blog/retained.webp',
+    },
+  };
+  fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+    target: {
+      files: [new File([JSON.stringify(retainingHandoff)], 'handoff.json')],
+    },
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
+  await act(async () => {});
+  expect(fetchWithCsrf).not.toHaveBeenCalledWith(
+    '/api/admin/blog/upload',
+    expect.objectContaining({ method: 'DELETE' })
+  );
+  // Second import drops the cover: the retained object is abandoned and
+  // must be deleted instead of leaking without a tracking record.
+  importHandoff();
+  await waitFor(() =>
+    expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+      'https://cdn.example.com/cover.webp'
+    )
+  );
+  await waitFor(() =>
+    expect(fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/admin/blog/upload',
+      expect.objectContaining({
+        body: JSON.stringify({
+          path: 'platform/blog/retained.webp',
+          variantPaths: [],
+        }),
+        method: 'DELETE',
+      })
+    )
+  );
+});

@@ -20,6 +20,38 @@ type UploadResult = {
   variants?: Record<string, string>;
 };
 
+function unreferencedUploadPaths(
+  result: UploadResult,
+  keepPaths: Set<string>
+): string[] {
+  return [result.url, ...Object.values(result.variants ?? {})]
+    .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
+    .filter((path): path is string => path !== null && !keepPaths.has(path));
+}
+
+function retainKeptUploadPaths(
+  result: UploadResult,
+  keepPaths: Set<string>
+): UploadResult | null {
+  // A result the draft partially reuses stays tracked trimmed to its
+  // kept paths, so a later import deletes only what is still
+  // abandoned instead of retrying already-deleted objects.
+  const urlPath = extractManagedBlogStoragePath(result.url, {
+    kind: 'platform',
+  });
+  const url = urlPath !== null && keepPaths.has(urlPath) ? result.url : '';
+  const variants = Object.fromEntries(
+    Object.entries(result.variants ?? {}).filter(([, variantUrl]) => {
+      const variantPath = extractManagedBlogStoragePath(variantUrl, {
+        kind: 'platform',
+      });
+      return variantPath !== null && keepPaths.has(variantPath);
+    })
+  );
+  if (url === '' && Object.keys(variants).length === 0) return null;
+  return { ...result, url, variants };
+}
+
 export function useBlogFeaturedImageUpload({
   upload,
   deleteUpload,
@@ -139,36 +171,45 @@ export function useBlogFeaturedImageUpload({
     // Settled uploads are past invalidation: when an accepted import
     // replaces the form, every tracked session result is unreferenced
     // (saves navigate away, so nothing persisted them) — except
-    // objects the incoming draft itself reuses, which must be kept.
-    // Both sides compare by storage path: the draft may reference the
-    // same object through another public URL form (Supabase public
-    // URLs vs the CDN URLs the upload returned), and the article body
-    // may embed uploads the cover does not use.
+    // objects the incoming draft itself reuses, which stay tracked
+    // for a later import instead of leaking untracked. Both sides
+    // compare by storage path: the draft may reference the same
+    // object through another public URL form (Supabase public URLs
+    // vs the CDN URLs the upload returned), and the article body may
+    // embed uploads the cover does not use. Unreferenced paths batch
+    // into one DELETE call so a long session cannot trip the shared
+    // per-minute delete budget one upload at a time.
     const tracked = settledUploadsRef.current;
-    settledUploadsRef.current = [];
     if (tracked.length === 0) return;
     const keepPaths = draftReferencedMediaPaths(draft);
+    const retained: UploadResult[] = [];
+    const droppedPaths: string[] = [];
+    const droppedResults: UploadResult[] = [];
+    for (const result of tracked) {
+      const kept = retainKeptUploadPaths(result, keepPaths);
+      if (kept !== null) retained.push(kept);
+      const unreferenced = unreferencedUploadPaths(result, keepPaths);
+      if (unreferenced.length > 0) {
+        droppedPaths.push(...unreferenced);
+        droppedResults.push(result);
+      }
+    }
+    settledUploadsRef.current = retained;
+    if (droppedPaths.length === 0) return;
+    const [path, ...variantPaths] = [...new Set(droppedPaths)];
     void (async () => {
-      for (const result of tracked) {
-        const paths = [result.url, ...Object.values(result.variants ?? {})]
-          .map((url) =>
-            extractManagedBlogStoragePath(url, { kind: 'platform' })
-          )
-          .filter(
-            (path): path is string => path !== null && !keepPaths.has(path)
-          );
-        if (paths.length === 0) continue;
-        const [path, ...variantPaths] = paths;
-        try {
-          await deleteUpload({ path, variantPaths });
-        } catch (error) {
-          toast({
-            title: 'Could not remove replaced upload',
-            description:
-              error instanceof Error ? error.message : 'Unknown error',
-            variant: 'destructive',
-          });
-        }
+      try {
+        await deleteUpload({ path, variantPaths });
+      } catch (error) {
+        // The batch is all-or-nothing: preserve the contributing
+        // results so the next import retries them instead of
+        // leaking the abandoned objects.
+        settledUploadsRef.current.push(...droppedResults);
+        toast({
+          title: 'Could not remove replaced upload',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
       }
     })();
   };

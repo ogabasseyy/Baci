@@ -84,6 +84,24 @@ describe('textColorMarkers', () => {
         'text-transparent',
       ],
     ],
+    [
+      'cross-layer painted stop',
+      ['bg-linear-to-r', 'md:from-red-500', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'via channel paints',
+      ['bg-linear-to-r', 'via-red-500', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'stop position does not blank',
+      [
+        'bg-linear-to-r',
+        'from-blue-500',
+        'from-75%',
+        'bg-clip-text',
+        'text-transparent',
+      ],
+    ],
   ])('pairs a clip with an effective background: %s', (_, classes) => {
     expect(textColorMarkers(classes).clippedBackground).toBe(true);
   });
@@ -131,6 +149,37 @@ describe('textColorMarkers', () => {
     [
       'transparent beats theme',
       ['bg-foreground', 'bg-transparent', 'bg-clip-text', 'text-transparent'],
+    ],
+    [
+      'transparent beats red stop',
+      [
+        'bg-linear-to-r',
+        'from-red-500',
+        'from-transparent',
+        'to-transparent',
+        'bg-clip-text',
+        'text-transparent',
+      ],
+    ],
+    [
+      'zero-alpha beats red stop',
+      [
+        'bg-linear-to-r',
+        'from-red-500',
+        'from-red-500/0',
+        'bg-clip-text',
+        'text-transparent',
+      ],
+    ],
+    [
+      'same-layer responsive stop conflict',
+      [
+        'bg-linear-to-r',
+        'md:from-red-500',
+        'md:from-transparent',
+        'bg-clip-text',
+        'text-transparent',
+      ],
     ],
   ])('withholds pairing without both sides: %s', (_, classes) => {
     expect(textColorMarkers(classes).clippedBackground).toBe(false);

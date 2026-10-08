@@ -46,25 +46,41 @@ export function useBlogInlineImageUpload({
   ) => {
     // Every tracked inline result is unreferenced once the import
     // discards the old body (saves navigate away, so nothing persisted
-    // them) — except objects the incoming draft itself reuses.
+    // them) — except objects the incoming draft itself reuses, which
+    // stay tracked for a later import instead of leaking untracked.
+    // Unreferenced paths batch into one DELETE call so a long session
+    // cannot trip the shared per-minute delete budget.
     const tracked = settledUploadsRef.current;
-    settledUploadsRef.current = [];
     if (tracked.length === 0) return;
     const keepPaths = draftReferencedMediaPaths(draft);
+    const retained: string[] = [];
+    const droppedPaths: string[] = [];
+    const droppedUrls: string[] = [];
+    for (const url of tracked) {
+      const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
+      if (!path) continue;
+      if (keepPaths.has(path)) retained.push(url);
+      else {
+        droppedPaths.push(path);
+        droppedUrls.push(url);
+      }
+    }
+    settledUploadsRef.current = retained;
+    if (droppedPaths.length === 0) return;
+    const [path, ...variantPaths] = [...new Set(droppedPaths)];
     void (async () => {
-      for (const url of tracked) {
-        const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
-        if (!path || keepPaths.has(path)) continue;
-        try {
-          await deleteUpload({ path, variantPaths: [] });
-        } catch (error) {
-          toast({
-            title: 'Could not remove replaced upload',
-            description:
-              error instanceof Error ? error.message : 'Unknown error',
-            variant: 'destructive',
-          });
-        }
+      try {
+        await deleteUpload({ path, variantPaths });
+      } catch (error) {
+        // The batch is all-or-nothing: preserve the contributing
+        // uploads so the next import retries them instead of
+        // leaking the abandoned objects.
+        settledUploadsRef.current.push(...droppedUrls);
+        toast({
+          title: 'Could not remove replaced upload',
+          description: error instanceof Error ? error.message : 'Unknown error',
+          variant: 'destructive',
+        });
       }
     })();
   };

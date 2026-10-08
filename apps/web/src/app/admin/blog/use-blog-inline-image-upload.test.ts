@@ -108,4 +108,85 @@ describe('useBlogInlineImageUpload', () => {
     });
     expect(deleteUpload).not.toHaveBeenCalled();
   });
+
+  it('deletes a retained upload when a second import discards it', async () => {
+    const { deleteUpload, result } = setup(async () => ({
+      url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
+    }));
+    await act(async () => {
+      await result.current.uploadInlineImage(file);
+    });
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content:
+          '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/inline-1.png">',
+      });
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: '<p>Imported body</p>',
+      });
+    });
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/inline-1.png',
+      variantPaths: [],
+    });
+  });
+
+  it('batches cleanup above the shared delete budget into one call', async () => {
+    let count = 0;
+    const { deleteUpload, result } = setup(async () => {
+      count += 1;
+      return {
+        url: `https://cdn.example.com/media/platform/blog/session-${count}.png`,
+      };
+    });
+    for (let index = 0; index < 31; index += 1) {
+      await act(async () => {
+        await result.current.uploadInlineImage(file);
+      });
+    }
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        content: '<p>Imported body</p>',
+      });
+    });
+    // The platform_blog_media_delete bucket allows 30 requests per
+    // minute shared with featured cleanup: 31 uploads must collapse
+    // into a single DELETE instead of one call per upload.
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/session-1.png',
+      variantPaths: Array.from(
+        { length: 30 },
+        (_, index) => `platform/blog/session-${index + 2}.png`
+      ),
+    });
+  });
+
+  it('preserves failed cleanup entries for the next import', async () => {
+    const { deleteUpload, result } = setup(async () => ({
+      url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
+    }));
+    deleteUpload.mockRejectedValueOnce(new Error('Delete failed'));
+    await act(async () => {
+      await result.current.uploadInlineImage(file);
+    });
+    const discard = {
+      ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+      content: '<p>Imported body</p>',
+    };
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discard);
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discard);
+    });
+    expect(deleteUpload).toHaveBeenCalledTimes(2);
+  });
 });

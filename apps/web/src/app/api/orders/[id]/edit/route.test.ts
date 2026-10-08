@@ -162,11 +162,19 @@ describe('PATCH /api/orders/[id]/edit', () => {
       },
     ],
     [
+      'order_date_in_future',
+      400,
+      {
+        code: 'order_date_in_future',
+        error: 'Order date cannot be in the future',
+      },
+    ],
+    [
       'order_date_invalid',
       400,
       {
         code: 'order_date_invalid',
-        error: 'Order date cannot be in the future',
+        error: 'Invalid order date',
       },
     ],
     ['order_item_replacement_has_historical_state', 409, undefined],

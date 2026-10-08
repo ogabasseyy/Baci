@@ -91,6 +91,20 @@ describe('adminOrderEditSchema', () => {
     ).toBe(false);
   });
 
+  it('rejects a lone calendar day without the instant', () => {
+    const parsed = adminOrderEditSchema.safeParse({
+      ...validPayload,
+      transaction_date_day: '2024-01-02',
+    });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.map((issue) => issue.message)).toContain(
+        'Order date is required when the order day is present'
+      );
+    }
+  });
+
   it('accepts legacy edit payloads that omit hidden gift wrapping', () => {
     const legacyPayload: Partial<typeof validPayload> = { ...validPayload };
     delete legacyPayload.gift_wrapping_fee;

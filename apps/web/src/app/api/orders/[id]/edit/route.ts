@@ -120,11 +120,21 @@ function mapOrderEditError(error: { code?: string; message?: string }) {
     );
   }
 
+  if (message.includes('order_date_in_future')) {
+    return NextResponse.json(
+      {
+        code: 'order_date_in_future',
+        error: 'Order date cannot be in the future',
+      },
+      { status: 400 }
+    );
+  }
+
   if (message.includes('order_date_invalid')) {
     return NextResponse.json(
       {
         code: 'order_date_invalid',
-        error: 'Order date cannot be in the future',
+        error: 'Invalid order date',
       },
       { status: 400 }
     );

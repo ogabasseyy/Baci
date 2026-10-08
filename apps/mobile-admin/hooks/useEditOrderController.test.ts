@@ -188,6 +188,29 @@ describe('useEditOrderController', () => {
     });
   });
 
+  it('prefills manual orders from the stored explicit day', () => {
+    const baseController = createBaseController();
+    useNewOrderControllerMock.mockReturnValue(baseController);
+    useUpdateOrderMock.mockReturnValue({
+      isPending: false,
+      mutateAsync: vi.fn(),
+    });
+    useOrderMock.mockReturnValue({
+      data: {
+        created_at: new Date(2024, 0, 4, 23, 30).toISOString(),
+        id: 'order-1',
+        invoice_issue_date: '2024-01-05',
+        source: 'physical',
+        transaction_date: new Date(2024, 0, 4, 23, 30).toISOString(),
+      },
+      isLoading: false,
+    });
+
+    renderHook(() => useEditOrderController());
+
+    expect(baseController.setDate).toHaveBeenCalledWith(new Date(2024, 0, 5));
+  });
+
   it('falls back to customer contact when shipping contact is missing', () => {
     const baseController = createBaseController();
     useNewOrderControllerMock.mockReturnValue(baseController);

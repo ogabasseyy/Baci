@@ -15,13 +15,19 @@ AS $$
 DECLARE
   v_actor uuid := auth.uid();
   v_order record;
+  v_source text;
   v_final_docs record;
   v_date timestamptz;
+  v_date_changed boolean := false;
   v_doc_day date;
   v_doc_day_override date;
   v_doc_day_text text;
   v_result jsonb;
   v_changed_fields text[] := ARRAY['transaction_date'];
+  v_delegated_audit_count integer := 0;
+  v_delegated_audit_id uuid;
+  v_before_dates jsonb;
+  v_after_dates jsonb;
 BEGIN
   IF v_actor IS NULL THEN
     RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
@@ -66,8 +72,11 @@ BEGIN
     END;
     -- No lower bound by design: merchants may correct arbitrarily old
     -- manual sales, matching update_transaction_review_details.
-    IF v_date IS NULL OR NOT isfinite(v_date) OR v_date > now() THEN
+    IF v_date IS NULL OR NOT isfinite(v_date) THEN
       RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
+    END IF;
+    IF v_date > now() THEN
+      RAISE EXCEPTION 'order_date_in_future' USING ERRCODE = '22023';
     END IF;
   END IF;
 
@@ -91,16 +100,27 @@ BEGIN
     END IF;
   END IF;
 
+  -- Exact-instant no-op is intentional: clients omit unchanged days, so a
+  -- sent date means the day changed; direct API callers get exact semantics.
+  v_date_changed := v_date IS NOT NULL
+    AND v_date IS DISTINCT FROM
+      COALESCE(v_order.transaction_date, v_order.created_at);
+
+  IF v_date_changed
+    AND v_order.shipping_status IN ('cancelled', 'returned') THEN
+    RAISE EXCEPTION 'order_terminal_not_editable' USING ERRCODE = '23514';
+  END IF;
+
   v_result := public.update_admin_order_without_date(
     p_order_id, p_payload - 'transaction_date' - 'transaction_date_day'
   );
 
-  IF v_date IS NOT NULL
-    AND v_date IS DISTINCT FROM COALESCE(v_order.transaction_date, v_order.created_at)
-  THEN
-    IF v_order.shipping_status IN ('cancelled', 'returned') THEN
-      RAISE EXCEPTION 'order_terminal_not_editable' USING ERRCODE = '23514';
-    END IF;
+  IF v_date_changed THEN
+    -- The same edit may change the sales channel: classify manual status
+    -- from the post-edit source, not the pre-edit snapshot.
+    SELECT o.source INTO v_source
+    FROM public.orders o
+    WHERE o.id = p_order_id;
 
     -- Manual-origin orders carry explicit device-local document dates that
     -- the sync trigger preserves by design, so move them with the corrected
@@ -111,7 +131,7 @@ BEGIN
     -- midnight; fall back to merchant-timezone derivation for older clients.
     -- Generated dates on other orders follow via the trigger; explicit ones
     -- stay untouched.
-    IF v_order.source IN ('manual', 'staff_entry', 'physical', 'instagram',
+    IF v_source IN ('manual', 'staff_entry', 'physical', 'instagram',
         'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga') THEN
       v_doc_day := COALESCE(v_doc_day_override, (
         v_date AT TIME ZONE public.manual_order_timezone(v_order.merchant_id)
@@ -125,9 +145,11 @@ BEGIN
             WHEN v_doc_day IS NOT NULL
              AND v_doc_day IS DISTINCT FROM invoice_issue_date
             THEN v_doc_day ELSE invoice_issue_date END,
+          -- Clear whenever a manual day is supplied, even when the date
+          -- value already matches: a lingering generated flag would let the
+          -- sync trigger replace the device-selected day.
           invoice_issue_date_generated = CASE
             WHEN v_doc_day IS NOT NULL
-             AND v_doc_day IS DISTINCT FROM invoice_issue_date
             THEN false ELSE invoice_issue_date_generated END,
           tax_point_date = CASE
             WHEN v_doc_day IS NOT NULL
@@ -135,39 +157,74 @@ BEGIN
             THEN v_doc_day ELSE tax_point_date END,
           tax_point_date_generated = CASE
             WHEN v_doc_day IS NOT NULL
-             AND v_doc_day IS DISTINCT FROM tax_point_date
             THEN false ELSE tax_point_date_generated END
       WHERE id = p_order_id;
 
     -- Re-read after the sync trigger so the audit captures document dates
     -- the trigger rewrote, not just this statement's explicit overrides.
-    SELECT o.invoice_issue_date, o.tax_point_date
+    SELECT o.invoice_issue_date, o.invoice_issue_date_generated,
+           o.tax_point_date, o.tax_point_date_generated
       INTO v_final_docs
     FROM public.orders o
     WHERE o.id = p_order_id;
 
-    IF v_final_docs.invoice_issue_date IS DISTINCT FROM v_order.invoice_issue_date THEN
+    IF v_final_docs.invoice_issue_date IS DISTINCT FROM v_order.invoice_issue_date
+      OR v_final_docs.invoice_issue_date_generated IS DISTINCT FROM
+        v_order.invoice_issue_date_generated THEN
       v_changed_fields := array_append(v_changed_fields, 'invoice_issue_date');
     END IF;
-    IF v_final_docs.tax_point_date IS DISTINCT FROM v_order.tax_point_date THEN
+    IF v_final_docs.tax_point_date IS DISTINCT FROM v_order.tax_point_date
+      OR v_final_docs.tax_point_date_generated IS DISTINCT FROM
+        v_order.tax_point_date_generated THEN
       v_changed_fields := array_append(v_changed_fields, 'tax_point_date');
     END IF;
 
-    INSERT INTO public.order_audit_events (
-      merchant_id, order_id, actor_user_id, action, change_category,
-      changed_fields, before_snapshot, after_snapshot, metadata
-    ) VALUES (
-      v_order.merchant_id, p_order_id, v_actor, 'order.update', 'internal',
-      v_changed_fields,
-      jsonb_build_object('transaction_date', v_order.transaction_date,
-        'effective_transaction_date', COALESCE(v_order.transaction_date, v_order.created_at),
-        'invoice_issue_date', v_order.invoice_issue_date,
-        'tax_point_date', v_order.tax_point_date),
-      jsonb_build_object('transaction_date', v_date, 'effective_transaction_date', v_date,
-        'invoice_issue_date', v_final_docs.invoice_issue_date,
-        'tax_point_date', v_final_docs.tax_point_date),
-      jsonb_build_object('change_category', 'internal', 'notify_customer', false)
-    );
+    v_before_dates := jsonb_build_object(
+      'transaction_date', v_order.transaction_date,
+      'effective_transaction_date',
+        COALESCE(v_order.transaction_date, v_order.created_at),
+      'invoice_issue_date', v_order.invoice_issue_date,
+      'invoice_issue_date_generated', v_order.invoice_issue_date_generated,
+      'tax_point_date', v_order.tax_point_date,
+      'tax_point_date_generated', v_order.tax_point_date_generated);
+    v_after_dates := jsonb_build_object(
+      'transaction_date', v_date, 'effective_transaction_date', v_date,
+      'invoice_issue_date', v_final_docs.invoice_issue_date,
+      'invoice_issue_date_generated', v_final_docs.invoice_issue_date_generated,
+      'tax_point_date', v_final_docs.tax_point_date,
+      'tax_point_date_generated', v_final_docs.tax_point_date_generated);
+
+    -- Merge into the audit event the delegated edit just wrote (same
+    -- transaction) so one save produces one audit record; fall back to a
+    -- standalone insert if the delegate wrote anything unexpected.
+    SELECT count(*)
+      INTO v_delegated_audit_count
+    FROM public.order_audit_events e
+    WHERE e.order_id = p_order_id
+      AND e.xmin = pg_current_xact_id()::xid;
+
+    IF v_delegated_audit_count = 1 THEN
+      SELECT e.id
+        INTO v_delegated_audit_id
+      FROM public.order_audit_events e
+      WHERE e.order_id = p_order_id
+        AND e.xmin = pg_current_xact_id()::xid;
+
+      UPDATE public.order_audit_events
+      SET changed_fields = changed_fields || v_changed_fields,
+          before_snapshot = before_snapshot || v_before_dates,
+          after_snapshot = after_snapshot || v_after_dates
+      WHERE id = v_delegated_audit_id;
+    ELSE
+      INSERT INTO public.order_audit_events (
+        merchant_id, order_id, actor_user_id, action, change_category,
+        changed_fields, before_snapshot, after_snapshot, metadata
+      ) VALUES (
+        v_order.merchant_id, p_order_id, v_actor, 'order.update', 'internal',
+        v_changed_fields, v_before_dates, v_after_dates,
+        jsonb_build_object('change_category', 'internal', 'notify_customer', false)
+      );
+    END IF;
     v_result := jsonb_set(v_result, '{changed_fields}',
       COALESCE(v_result -> 'changed_fields', '[]'::jsonb)
       || to_jsonb(v_changed_fields));

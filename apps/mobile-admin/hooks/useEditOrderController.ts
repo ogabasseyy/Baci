@@ -1,7 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { resolveEditOrderDate } from '@/lib/edit-order-date';
+import {
+  resolveEditOrderDate,
+  resolvePrefillDate,
+} from '@/lib/edit-order-date';
 import {
   buildEditOrderPayload,
   type EditableOrderRecord,
@@ -64,10 +67,13 @@ export function useEditOrderController() {
     const sameAsCustomer =
       shippingName === customerName && shippingPhone === customerPhone;
 
-    const savedDate = order.transaction_date ?? order.created_at;
-    if (typeof savedDate === 'string') {
-      const parsedDate = new Date(savedDate);
-      if (Number.isFinite(parsedDate.getTime())) setDate(parsedDate);
+    const prefillDate = resolvePrefillDate({
+      invoiceDay: order.invoice_issue_date,
+      savedInstant: order.transaction_date ?? order.created_at,
+      source: order.source,
+    });
+    if (prefillDate) {
+      setDate(prefillDate);
     }
 
     setCustomer({
@@ -147,6 +153,8 @@ export function useEditOrderController() {
             currentDate: baseController.date,
             hasSavedOrder: Boolean(order),
             savedCreatedAt: order?.created_at,
+            savedDay: order?.invoice_issue_date,
+            savedSource: order?.source,
             savedTransactionDate: order?.transaction_date,
           }),
           discount: baseController.discount,

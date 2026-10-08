@@ -50,6 +50,7 @@ interface EditabilityOrderState {
 export type EditableOrderRecord = Record<string, unknown> & {
   amount_paid?: number | null;
   transaction_date?: string | null;
+  invoice_issue_date?: string | null;
   created_at?: string;
   customer_email?: string | null;
   customer_id?: string | null;

@@ -177,7 +177,13 @@ export function EditOrderScreenContent({
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <NewOrderDetailsSection controller={controller} />
+          <NewOrderDetailsSection
+            controller={controller}
+            showDateField={
+              controller.order?.shipping_status !== 'cancelled' &&
+              controller.order?.shipping_status !== 'returned'
+            }
+          />
           <NewOrderChannelSection controller={controller} />
           <NewOrderItemsSection controller={controller} />
           <NewOrderNotesSection controller={controller} />

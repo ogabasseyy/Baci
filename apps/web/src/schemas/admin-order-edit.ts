@@ -73,6 +73,15 @@ export const adminOrderEditSchema = z
     tax_amount: moneySchema,
   })
   .refine(
+    (value) =>
+      value.transaction_date_day === undefined ||
+      value.transaction_date !== undefined,
+    {
+      message: 'Order date is required when the order day is present',
+      path: ['transaction_date'],
+    }
+  )
+  .refine(
     (value) => {
       if (value.gift_wrapping_fee === undefined) {
         return true;

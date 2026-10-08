@@ -115,7 +115,6 @@ describe('useEditOrderController submit', () => {
     expect(mutateAsync).toHaveBeenCalledWith({
       orderId: 'order-1',
       payload: expect.objectContaining({
-        transaction_date: '2024-01-02T10:00:00.000Z',
         branch_id: 'branch-1',
         customer: {
           email: 'ada@example.com',
@@ -134,6 +133,9 @@ describe('useEditOrderController submit', () => {
       }),
     });
     expect(setShowSuccessModal).toHaveBeenCalledWith(true);
+    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
+      'transaction_date'
+    );
   });
 
   it('omits an unchanged creation-date fallback from legacy orders', async () => {
@@ -197,6 +199,30 @@ describe('useEditOrderController submit', () => {
     expect(mutateAsync.mock.calls[0][0].payload).toHaveProperty(
       'transaction_date_day',
       '2024-01-05'
+    );
+  });
+
+  it('omits a manual day matching the stored explicit day', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    useNewOrderControllerMock.mockReturnValue(
+      createBaseController({ date: new Date(2024, 0, 5, 18, 30) })
+    );
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: {
+        id: 'order-1',
+        invoice_issue_date: '2024-01-05',
+        source: 'physical',
+        transaction_date: new Date(2024, 0, 4, 23, 30).toISOString(),
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useEditOrderController());
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty(
+      'transaction_date'
     );
   });
 

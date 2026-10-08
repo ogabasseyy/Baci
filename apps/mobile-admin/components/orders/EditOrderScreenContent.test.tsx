@@ -194,6 +194,21 @@ describe('EditOrderScreenContent', () => {
     expect(screen.getByText('Items')).toBeInTheDocument();
   });
 
+  it.each([
+    'cancelled',
+    'returned',
+  ] as const)('hides the date picker for %s orders', (shipping_status) => {
+    const controller = createController({
+      order: { id: 'order-1', shipping_status },
+    });
+
+    render(<EditOrderScreenContent controller={controller} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Select order date' })
+    ).not.toBeInTheDocument();
+  });
+
   it('disables the cancel action while submitting', () => {
     const controller = createController({ isSubmitting: true });
 

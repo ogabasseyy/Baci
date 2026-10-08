@@ -165,32 +165,36 @@ export async function fetchWalletData(
     throw walletResult.error;
   }
 
-  const [fundingAccountResult, savingsGoalsResult, savingsInterest, primaryFunding] =
-    await Promise.all([
-      supabase
-        .from('customer_wallet_payment_accounts')
-        .select('account_name, account_number, bank_name, provider')
-        .eq('merchant_id', merchantId)
-        .eq('customer_id', resolvedCustomerId)
-        .eq('provider', 'paystack')
-        .eq('status', 'active')
-        .maybeSingle(),
-      supabase
-        .from('customer_savings_goals')
-        .select(
-          'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
-        )
-        .eq('merchant_id', merchantId)
-        .eq('customer_id', resolvedCustomerId)
-        .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
-        .order('created_at', { ascending: false }),
-      // Best-effort and never throws: on any failure it resolves to an
-      // explicit unavailable marker, so the wallet still loads.
-      fetchWalletSavingsInterest(merchantId),
-      // Same contract for the primary provider lookup: it resolves
-      // alongside the database reads instead of serializing the load.
-      readPrimaryFundingAccount(merchantId),
-    ]);
+  const [
+    fundingAccountResult,
+    savingsGoalsResult,
+    savingsInterest,
+    primaryFunding,
+  ] = await Promise.all([
+    supabase
+      .from('customer_wallet_payment_accounts')
+      .select('account_name, account_number, bank_name, provider')
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', resolvedCustomerId)
+      .eq('provider', 'paystack')
+      .eq('status', 'active')
+      .maybeSingle(),
+    supabase
+      .from('customer_savings_goals')
+      .select(
+        'id, product_id, variant_id, title, product_snapshot, target_amount, current_amount, contribution_amount, contribution_frequency, source_mode, status, maturity_date, products(id, name, images, condition, price)'
+      )
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', resolvedCustomerId)
+      .in('status', [...REDEEMABLE_SAVINGS_STATUSES])
+      .order('created_at', { ascending: false }),
+    // Best-effort and never throws: on any failure it resolves to an
+    // explicit unavailable marker, so the wallet still loads.
+    fetchWalletSavingsInterest(merchantId),
+    // Same contract for the primary provider lookup: it resolves
+    // alongside the database reads instead of serializing the load.
+    readPrimaryFundingAccount(merchantId),
+  ]);
 
   if (fundingAccountResult.error) {
     throw fundingAccountResult.error;

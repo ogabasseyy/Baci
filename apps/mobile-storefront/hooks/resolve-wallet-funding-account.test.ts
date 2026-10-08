@@ -20,7 +20,7 @@ const primaryAccount = {
   accountNumber: '0987654321',
   bankName: 'Provider Bank',
   provider: 'piggyvest',
-};
+} as const;
 const read = jest.mocked(piggyvestPrimaryWalletApi.read);
 
 beforeEach(() => jest.resetAllMocks());

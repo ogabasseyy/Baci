@@ -23,8 +23,10 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
         ...input,
         secrets: [fixture.configuration.webhookSecret],
       });
+      // Family binding is covered by dedicated tests; these suites pin
+      // downstream handling with the legacy-authorized family.
       return secret
-        ? { status: 'verified' as const, secret }
+        ? { status: 'verified' as const, secret, families: ['legacy'] as const }
         : { status: 'invalid' as const };
     },
   };

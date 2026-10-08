@@ -25,10 +25,23 @@ const request = z.strictObject({
 });
 const session = z.strictObject({
   reference,
+  // Hostname-checked parsing instead of a tight path regex: the provider
+  // may add path segments, hyphens, or query strings, and rejecting a
+  // legitimate checkout URL would strand the initialization as unknown.
   authorizationUrl: z
     .string()
     .max(512)
-    .regex(/^https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+$/),
+    .refine((value) => {
+      try {
+        const parsed = new URL(value);
+        return (
+          parsed.protocol === 'https:' &&
+          parsed.hostname === 'checkout.paystack.com'
+        );
+      } catch {
+        return false;
+      }
+    }),
 });
 const intent = scope
   .extend({

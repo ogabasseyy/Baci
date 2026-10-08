@@ -70,10 +70,17 @@ export function createPrimaryWalletCardCheckoutProvider(
           reference: data?.reference,
           authorizationUrl: data?.authorization_url,
         });
+        // Correlate the access code against the checkout path's last
+        // segment: a raw split comparison breaks when the provider URL
+        // carries extra segments or a query string.
+        const checkoutCode = new URL(session.authorizationUrl).pathname
+          .split('/')
+          .filter(Boolean)
+          .at(-1);
         if (
           !response.status ||
           session.reference !== intent.reference ||
-          session.authorizationUrl.split('/').at(-1) !== data?.access_code
+          checkoutCode !== data?.access_code
         )
           throw new Error('Invalid session');
         return session;

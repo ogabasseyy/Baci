@@ -181,4 +181,34 @@ describe('goal-independent primary card collection', () => {
       'Primary card provider unavailable'
     );
   });
+  it('accepts provider checkout URL variants while correlating the access code', async () => {
+    const { provider } = setup({
+      status: true,
+      data: {
+        reference: fixture.intent.reference,
+        authorization_url:
+          'https://checkout.paystack.com/pay/fixture-123_ABC?reference=xyz',
+        access_code: 'fixture-123_ABC',
+      },
+    });
+    expect(await provider.initialize(fixture.intent)).toEqual({
+      reference: fixture.intent.reference,
+      authorizationUrl:
+        'https://checkout.paystack.com/pay/fixture-123_ABC?reference=xyz',
+    });
+  });
+  it('rejects lookalike checkout hosts even with a matching path', async () => {
+    const { provider } = setup({
+      status: true,
+      data: {
+        reference: fixture.intent.reference,
+        authorization_url:
+          'https://checkout.paystack.com.evil.example.com/fixture123',
+        access_code: 'fixture123',
+      },
+    });
+    await expect(provider.initialize(fixture.intent)).rejects.toThrow(
+      'Primary card provider unavailable'
+    );
+  });
 });

@@ -18,6 +18,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
 
 import {
   collectPiggyvestWebhookSecrets,
+  collectPiggyvestWebhookSecretsWithFamilies,
   matchPiggyvestWebhookSecret,
   verifyPiggyvestWebhookSecrets,
 } from './webhook-secret-union';
@@ -137,7 +138,11 @@ it('verifies with a retained key and reports the matched secret', async () => {
       signature,
       env: { NODE_ENV: 'test' },
     })
-  ).toEqual({ status: 'verified', secret: 'retained-secret' });
+  ).toEqual({
+    status: 'verified',
+    secret: 'retained-secret',
+    families: ['interest'],
+  });
   expect(
     verifyPiggyvestWebhookSecrets({
       rawBody,
@@ -145,4 +150,43 @@ it('verifies with a retained key and reports the matched secret', async () => {
       env: { NODE_ENV: 'test' },
     })
   ).toEqual({ status: 'invalid' });
+});
+
+it('tags each secret with the family that configured it', () => {
+  mocks.bank.mockReturnValue({ webhookSecret: 'bank-secret' });
+  mocks.interest.mockReturnValue({
+    webhookSecret: 'interest-secret',
+    retainedWebhookSecrets: ['retained-secret'],
+  });
+  expect(
+    collectPiggyvestWebhookSecretsWithFamilies({
+      NODE_ENV: 'test',
+      PIGGYVEST_SECRET_KEY: 'legacy-secret',
+    })
+  ).toEqual([
+    { secret: 'legacy-secret', family: 'legacy' },
+    { secret: 'bank-secret', family: 'bank' },
+    { secret: 'interest-secret', family: 'interest' },
+    { secret: 'retained-secret', family: 'interest' },
+  ]);
+});
+
+it('authorizes every family sharing the matched secret value', async () => {
+  const { createHmac } = await import('node:crypto');
+  mocks.bank.mockReturnValue({ webhookSecret: 'shared-secret' });
+  const rawBody = Buffer.from('{}');
+  const signature = createHmac('sha512', 'shared-secret')
+    .update(rawBody)
+    .digest('hex');
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody,
+      signature,
+      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'shared-secret' },
+    })
+  ).toEqual({
+    status: 'verified',
+    secret: 'shared-secret',
+    families: ['legacy', 'bank'],
+  });
 });

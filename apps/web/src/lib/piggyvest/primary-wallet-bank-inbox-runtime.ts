@@ -11,12 +11,12 @@ export function readPrimaryWalletBankInboxRuntime(
     env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED === 'false'
   )
     return null;
+  // Retained keys parse in both modes: the outer webhook gate and this
+  // intake read the intake runtime, so a rotation key must verify there —
+  // worker-only parsing would strand retained-signed retries as invalid.
   let retained: unknown = [];
   try {
-    if (
-      mode === 'worker' &&
-      env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS
-    )
+    if (env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS)
       retained = JSON.parse(
         env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS
       );

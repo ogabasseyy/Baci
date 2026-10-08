@@ -1,10 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
 import { getPiggyvestApiConfig } from '@/env';
-import {
-  digestRawBody,
-  recordQuarantineEvent,
-} from '@/lib/piggyvest/event-quarantine';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
 import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
@@ -24,6 +20,7 @@ import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
 } from '@/schemas/piggyvest/events';
+import { quarantineAndAck } from './quarantine-and-ack';
 
 /**
  * Provider delivery contract (17 Sep 2026, quarantine slice 18 Sep 2026):
@@ -38,7 +35,8 @@ import {
  * - No secret configured -> 503 (fail closed; nothing is accepted).
  * - Bad/missing signature -> 200 without processing (docs behavior;
  *   forged traffic must not consume the 10 retries).
- * - Authentic but unparseable/unknown/conflicting event -> quarantine
+ * - Authentic but unparseable/unknown/conflicting event, or a delivery
+ *   signed by a key family unauthorized for legacy handling -> quarantine
  *   (durable receipt of a non-retryable observation) -> 200. Retries
  *   cannot fix these, so they must not burn the 10 attempts; nothing
  *   quarantined ever touches financial state.
@@ -117,32 +115,6 @@ const correlationSchema = z.object({
   eventId: z.string().min(1).max(200).optional(),
   eventType: z.string().min(1).max(200).optional(),
 });
-
-async function quarantineAndAck(
-  rawBody: Buffer,
-  reason: 'unparseable' | 'unknown-event' | 'conflict',
-  correlation: { eventId?: string; eventType?: string },
-  detail: Record<string, unknown> | null
-): Promise<Response> {
-  try {
-    await recordQuarantineEvent(createPiggyvestIntakeServiceClient(), {
-      bodyDigest: digestRawBody(rawBody),
-      reason,
-      eventId: correlation.eventId,
-      eventType: correlation.eventType,
-      detail,
-    });
-  } catch {
-    return NextResponse.json(
-      { error: 'Event intake unavailable', code: 'PIGGYVEST_INBOX_ERROR' },
-      { status: 503, headers: noStore }
-    );
-  }
-  return NextResponse.json(
-    { received: true, quarantined: true },
-    { status: 200, headers: noStore }
-  );
-}
 
 export async function POST(request: NextRequest): Promise<Response> {
   // Bounded read (64 KiB / 5 s) before anything else: the edge proxy only
@@ -231,6 +203,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         rawBody,
         signature,
         secret: matchedSecret,
+        families: verification.families,
       });
       if (primary === 'credited' || primary === 'duplicate') {
         return NextResponse.json(
@@ -246,6 +219,18 @@ export async function POST(request: NextRequest): Promise<Response> {
           redactEventDetails(parsed.data)
         );
       }
+    }
+    // Key-family binding: only the legacy secret authorizes legacy ledger
+    // writes. A delivery signed solely by a primary family key that no
+    // specialized intake claimed is quarantined, never legacy-processed —
+    // otherwise a compromised narrow key could forge unrelated events.
+    if (!verification.families.includes('legacy')) {
+      return quarantineAndAck(
+        rawBody,
+        'key-family',
+        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
+        redactEventDetails(parsed.data)
+      );
     }
     // Processing runs even for duplicates: if the first delivery recorded
     // the inbox row but crashed before the ledger write, the redelivery

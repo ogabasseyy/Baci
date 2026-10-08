@@ -48,6 +48,22 @@ it.each([
     'Synthetic sender'
   );
 });
+it('accepts a retained bank key during rotation without queueing twice', async () => {
+  const result = await dispatchPrimaryWalletBankInboxIntake({
+    rawBody: fixture.rawBody,
+    signature: fixture.signature,
+    env: {
+      ...fixture.env,
+      PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET: 'rotated-bank-key',
+      PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: JSON.stringify([
+        fixture.config.webhookSecret,
+      ]),
+    },
+  });
+  expect(result.outcome).toBe('accepted');
+  expect(result.response?.status).toBe(200);
+  expect(mocks.enqueue).toHaveBeenCalledTimes(1);
+});
 it('allows unrelated legacy inflows only after authoritative ownership lookup says not_handled', async () => {
   mocks.enqueue.mockResolvedValue('not_handled');
   expect(

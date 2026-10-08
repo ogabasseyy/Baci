@@ -18,46 +18,73 @@ function readLegacyWebhookSecret(env: NodeJS.ProcessEnv): string | undefined {
   return env.PIGGYVEST_SECRET_KEY ?? env.PVB_SECRET_KEY;
 }
 
+export type PiggyvestWebhookKeyFamily =
+  | 'legacy'
+  | 'bank'
+  | 'custody'
+  | 'interest';
+
+export interface PiggyvestFamilySecret {
+  secret: string;
+  family: PiggyvestWebhookKeyFamily;
+}
+
 /**
- * Every webhook secret a downstream intake would accept: the legacy shared
- * secret plus each enabled primary inbox's current and retained keys.
- * The outer route must accept this union — otherwise a delivery signed
- * with a retained key is 200-ACKed as invalid and a durable signed payout
- * is silently dropped during secret rotation.
+ * Every webhook secret a downstream intake would accept, tagged with the
+ * key family that configured it. The outer route accepts this union —
+ * otherwise a delivery signed with a retained key is 200-ACKed as invalid
+ * and a durable signed payout is silently dropped during rotation — but
+ * the matched family then binds which handlers may act on the delivery.
  */
-export function collectPiggyvestWebhookSecrets(
+export function collectPiggyvestWebhookSecretsWithFamilies(
   env: NodeJS.ProcessEnv = process.env
-): string[] {
-  const readers: Array<() => WebhookSecretConfig | null> = [
-    () => readPrimaryWalletBankInboxRuntime('intake', env),
-    () => readPrimaryCardCustodyIntakeRuntime(env),
-    () => readPrimaryWalletPaidInterestInboxRuntime(env),
+): PiggyvestFamilySecret[] {
+  const readers: [
+    PiggyvestWebhookKeyFamily,
+    () => WebhookSecretConfig | null,
+  ][] = [
+    ['bank', () => readPrimaryWalletBankInboxRuntime('intake', env)],
+    ['custody', () => readPrimaryCardCustodyIntakeRuntime(env)],
+    ['interest', () => readPrimaryWalletPaidInterestInboxRuntime(env)],
   ];
-  const candidates: unknown[] = [readLegacyWebhookSecret(env)];
-  for (const read of readers) {
+  const secrets: PiggyvestFamilySecret[] = [];
+  const seen = new Set<string>();
+  const push = (candidate: unknown, family: PiggyvestWebhookKeyFamily) => {
+    if (
+      typeof candidate === 'string' &&
+      candidate.trim() &&
+      !seen.has(`${family}:${candidate}`)
+    ) {
+      seen.add(`${family}:${candidate}`);
+      secrets.push({ secret: candidate, family });
+    }
+  };
+  push(readLegacyWebhookSecret(env), 'legacy');
+  for (const [family, read] of readers) {
     try {
       const config = read();
       if (!config) continue;
-      candidates.push(config.webhookSecret);
+      push(config.webhookSecret, family);
       if (Array.isArray(config.retainedWebhookSecrets))
-        candidates.push(...config.retainedWebhookSecrets);
+        for (const retained of config.retainedWebhookSecrets)
+          push(retained, family);
     } catch {
       // Disabled or misconfigured runtimes contribute no secrets.
     }
   }
-  const secrets: string[] = [];
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    if (
-      typeof candidate === 'string' &&
-      candidate.trim() &&
-      !seen.has(candidate)
-    ) {
-      seen.add(candidate);
-      secrets.push(candidate);
-    }
-  }
   return secrets;
+}
+
+export function collectPiggyvestWebhookSecrets(
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  return [
+    ...new Set(
+      collectPiggyvestWebhookSecretsWithFamilies(env).map(
+        (candidate) => candidate.secret
+      )
+    ),
+  ];
 }
 
 /**
@@ -78,23 +105,55 @@ export function matchPiggyvestWebhookSecret(input: {
   );
 }
 
+/**
+ * Returns the matched secret with every family that configured that value.
+ * A secret shared across families authorizes each of them.
+ */
+export function matchPiggyvestWebhookSecretWithFamilies(input: {
+  rawBody: Uint8Array;
+  signature: string | null;
+  secrets: readonly PiggyvestFamilySecret[];
+}): { secret: string; families: PiggyvestWebhookKeyFamily[] } | undefined {
+  const match = input.secrets.find((candidate) =>
+    verifyPiggyvestPayloadSignature({
+      payload: input.rawBody,
+      signature: input.signature,
+      secret: candidate.secret,
+    })
+  );
+  if (!match) return undefined;
+  const families = [
+    ...new Set(
+      input.secrets
+        .filter((candidate) => candidate.secret === match.secret)
+        .map((candidate) => candidate.family)
+    ),
+  ];
+  return { secret: match.secret, families };
+}
+
 export type PiggyvestWebhookVerification =
   | { status: 'unconfigured' }
   | { status: 'invalid' }
-  | { status: 'verified'; secret: string };
+  | {
+      status: 'verified';
+      secret: string;
+      families: PiggyvestWebhookKeyFamily[];
+    };
 
 /**
  * Single entry point for the outer gate: collects every secret a
- * downstream intake trusts, then reports whether this delivery verifies.
+ * downstream intake trusts, then reports whether this delivery verifies
+ * and which key families the matched secret authorizes.
  */
 export function verifyPiggyvestWebhookSecrets(input: {
   rawBody: Uint8Array;
   signature: string | null;
   env?: NodeJS.ProcessEnv;
 }): PiggyvestWebhookVerification {
-  const secrets = collectPiggyvestWebhookSecrets(input.env);
+  const secrets = collectPiggyvestWebhookSecretsWithFamilies(input.env);
   if (secrets.length === 0) return { status: 'unconfigured' };
-  const secret = matchPiggyvestWebhookSecret({ ...input, secrets });
-  if (!secret) return { status: 'invalid' };
-  return { status: 'verified', secret };
+  const match = matchPiggyvestWebhookSecretWithFamilies({ ...input, secrets });
+  if (!match) return { status: 'invalid' };
+  return { status: 'verified', secret: match.secret, families: match.families };
 }

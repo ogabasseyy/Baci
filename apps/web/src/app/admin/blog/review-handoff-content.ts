@@ -2,15 +2,13 @@ import { decodeHTMLAttribute } from 'entities';
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
-import { matchMediaElements } from './review-handoff-media-elements';
-import { isNeverMatchingMediaQuery } from './review-handoff-media-query';
+import { groupMediaElements } from './review-handoff-media-groups';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { stripHiddenContent } from './review-handoff-strip-hidden';
 import { tagAttributes } from './review-handoff-tag-attributes';
-import { stripHtmlComments } from './strip-html-comments';
+import { hasUnrepresentableVariance } from './review-handoff-variance';
 import { stripLeadingNonRenderingText } from './strip-leading-non-rendering-text';
-import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
 
@@ -140,12 +138,6 @@ function normalizeContent(
   }
 }
 
-type MediaGroup = {
-  candidates: MediaCandidate[];
-  hasMedia: boolean;
-  imgSeen: boolean;
-};
-
 function imgHasSrcValue(tag: string): boolean {
   // The editor parses `img[src]` and drops src-less images on mount.
   return tagAttributes(tag).some(
@@ -153,112 +145,29 @@ function imgHasSrcValue(tag: string): boolean {
   );
 }
 
-// Image MIME types browsers universally render. Anything else is
-// skipped when selecting a picture resource, so it contributes no
-// candidate here either.
-const SUPPORTED_IMAGE_MIME_TYPES = new Set([
-  'image/avif',
-  'image/bmp',
-  'image/gif',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/svg+xml',
-  'image/webp',
-  'image/x-icon',
-]);
-
-function isApplicableSource(tag: string): boolean {
-  // Browsers skip sources with unsupported types. In picture context
-  // only supported image MIME types are meaningful; anything else
-  // (or an empty type) contributes no candidate. A provably
-  // never-matching media value skips the same way; any other media
-  // value is assumed applicable, since matching it requires a
-  // viewport the validator has not.
-  let applicable = true;
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name === 'type') {
-      const essence = value.split(';')[0].trim().toLowerCase();
-      if (!SUPPORTED_IMAGE_MIME_TYPES.has(essence)) applicable = false;
-    } else if (name === 'media') {
-      if (isNeverMatchingMediaQuery(value)) applicable = false;
-    }
-  }
-  return applicable;
-}
-
 function hasBrokenMediaTag(html: string): boolean {
-  // Markdown rendering preserves editorial comments while the sanitizer
-  // discards them, so strip first: a commented-out draft URL is not a
-  // rendered image and must not reject the handoff. Elements (not
-  // substrings) are matched so media-like text quoted inside another
-  // element's attribute is not mistaken for a real image. Candidates
-  // are evaluated per picture while every img still needs its own
-  // src: the editor drops src-less images on mount, so picture
-  // sources validate but never substitute for it. Standalone images
-  // form singleton groups under the same rule; pictures without
-  // media elements are inert, not broken.
-  const withoutComments = stripRawTextBlocks(stripHtmlComments(html));
-  const groups: MediaGroup[] = [];
-  const pictureStack: MediaGroup[] = [];
-  for (const match of matchMediaElements(withoutComments)) {
-    const tag = match[0];
-    if (/^<picture\b/i.test(tag)) {
-      const group: MediaGroup = {
-        candidates: [],
-        hasMedia: false,
-        imgSeen: false,
-      };
-      groups.push(group);
-      pictureStack.push(group);
-      continue;
+  // Candidates are evaluated per picture while every img still needs
+  // its own src: the editor drops src-less images on mount, so a
+  // src-less img breaks the handoff on its own whatever the picture
+  // sources supply. Pictures without media elements are inert, not broken.
+  return groupMediaElements(html).some(({ tags, hasMedia }) => {
+    if (!hasMedia) return false;
+    if (tags.some((tag) => /^<img\b/i.test(tag) && !imgHasSrcValue(tag))) {
+      return true;
     }
-    if (/^<\/picture\s*>/i.test(tag)) {
-      pictureStack.pop();
-      continue;
-    }
-    const isImg = /^<img\b/i.test(tag);
-    // An img wrapped in another element inside a picture is not
-    // associated with the picture sources, so it stands alone under
-    // the singleton rule instead of joining the picture group.
-    const pictureBound =
-      pictureStack.length > 0 && (!isImg || match.directPictureChild);
-    let group: MediaGroup;
-    if (pictureBound) {
-      group = pictureStack[pictureStack.length - 1];
-    } else {
-      group = { candidates: [], hasMedia: true, imgSeen: false };
-      groups.push(group);
-    }
-    // Only preceding applicable source siblings participate in
-    // selecting the resource for the img: sources after the group's
-    // img, and sources with inapplicable types, are ignored entirely.
-    if (isImg) {
-      // A src-less img breaks the handoff on its own: the editor
-      // drops it on mount whatever the picture sources supply.
-      if (!imgHasSrcValue(tag)) return true;
-      group.hasMedia = true;
-      group.candidates.push(...mediaTagCandidates(tag));
-      group.imgSeen = true;
-    } else if (!group.imgSeen && isApplicableSource(tag)) {
-      group.hasMedia = true;
-      group.candidates.push(...mediaTagCandidates(tag));
-    }
-  }
-  return groups.some(
-    ({ candidates, hasMedia }) =>
-      hasMedia &&
-      (candidates.length === 0 ||
-        candidates.some(
-          ({ url, valid }) => !valid || !isImportableMediaUrl(url)
-        ))
-  );
+    const candidates = tags.flatMap(mediaTagCandidates);
+    return (
+      candidates.length === 0 ||
+      candidates.some(({ url, valid }) => !valid || !isImportableMediaUrl(url))
+    );
+  });
 }
 
 /**
  * Validate handoff article content and return the HTML to store.
  * Normalizes markdown to rendered HTML, rejects JSON-shaped text,
- * unresolved placeholders, unreadable bodies, and unrenderable media.
+ * unresolved placeholders, unreadable bodies, editor-unrepresentable
+ * responsive visibility, and unrenderable media.
  */
 export function validateImportedContent(rawContent: string): string {
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(rawContent)) {
@@ -286,6 +195,13 @@ export function validateImportedContent(rawContent: string): string {
   const visible = stripHiddenContent(content);
   if (!hasReadableContent(visible)) {
     throw new Error('Article content has no readable text or images');
+  }
+  // Viewport- or theme-dependent hiding cannot survive the editor
+  // round-trip: kept content would surface where the source hides it.
+  if (hasUnrepresentableVariance(visible)) {
+    throw new Error(
+      'Article content uses responsive visibility the editor cannot preserve'
+    );
   }
   // Validate the rendered markup as well as the stored markup: the
   // sanitizer strips invalid descriptors and data: candidates, which would

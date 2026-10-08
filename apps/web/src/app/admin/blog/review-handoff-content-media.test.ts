@@ -156,22 +156,27 @@ describe('validateImportedContent media', () => {
     '<div class="max-h-0 overflow-hidden md:max-h-none">Only body</div>',
     '<div class="size-0 overflow-hidden md:size-64">Only body</div>',
     '<div class="hidden md:block lg:hidden">Only body</div>',
-  ])('counts responsive overrides of hiding utilities as readable: %s', (body) => {
-    // Each pair renders at some breakpoint: same-element responsive
-    // overrides restore display, visibility, opacity, screen-reader
-    // hiding, and text color, while visibility and color also inherit,
-    // so responsive descendants escape transparent ancestors too.
-    expect(validateImportedContent(body)).toContain('Only body');
+  ])('rejects responsive overrides of hiding utilities: %s', (body) => {
+    // Each pair renders at some breakpoint only: the editor drops the
+    // classes, so accepting would surface the content at viewports
+    // where the source hides it. Same-element overrides and responsive
+    // descendant escapes are rejected alike.
+    expect(() => validateImportedContent(body)).toThrow(
+      'responsive visibility'
+    );
   });
 
   it.each([
     '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
     '<img class="md:w-full" src="https://cdn.example.com/a.png" width="0">',
-  ])('counts images with responsive size restoration as readable: %s', (body) => {
-    // CSS beats presentational attributes, so a responsive size
-    // utility restores zeroed class tokens and zero width/height
-    // attributes alike at its breakpoint.
-    expect(validateImportedContent(body)).toContain('<img');
+  ])('rejects images with responsive size restoration: %s', (body) => {
+    // A responsive size utility restores zeroed class tokens and zero
+    // width/height attributes only at its breakpoint; the editor drops
+    // the classes, so accepting would widen exposure like any other
+    // responsive variance.
+    expect(() => validateImportedContent(body)).toThrow(
+      'responsive visibility'
+    );
   });
 
   it('counts opaque text inside a transparent ancestor as readable', () => {

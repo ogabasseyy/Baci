@@ -9,7 +9,10 @@
 // clips descendants), so terminal markers apply same-element only
 // in the ancestry walk. Visibility and text color inherit, so their
 // per-point markers also act as descendant escapes, like `visible`.
-import { BREAKPOINT_POINT_COUNT } from './review-handoff-breakpoints';
+import {
+  BREAKPOINT_POINT_COUNT,
+  type ColorScheme,
+} from './review-handoff-breakpoints';
 import { displayMarkers } from './review-handoff-display-markers';
 import { opacityMarkers } from './review-handoff-opacity-markers';
 import { scaleMarkers } from './review-handoff-scale-markers';
@@ -31,17 +34,20 @@ export type ColorAtPoint = 'opaque' | 'transparent' | null;
  * ancestry walk: a background clipped to the glyphs renders
  * transparent text like opaque.
  */
-export function showingMarkers(classes: readonly string[]): {
+export function showingMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   terminalAt: boolean[];
   visibilityAt: VisibilityAtPoint[];
   colorAt: ColorAtPoint[];
 } {
-  const display = displayMarkers(classes);
-  const opacity = opacityMarkers(classes);
-  const scale = scaleMarkers(classes);
-  const size = sizeMarkers(classes);
-  const text = textColorMarkers(classes);
-  const visibility = visibilityMarkers(classes);
+  const display = displayMarkers(classes, scheme);
+  const opacity = opacityMarkers(classes, scheme);
+  const scale = scaleMarkers(classes, scheme);
+  const size = sizeMarkers(classes, scheme);
+  const text = textColorMarkers(classes, scheme);
+  const visibility = visibilityMarkers(classes, scheme);
   const terminalAt: boolean[] = [];
   const colorAt: ColorAtPoint[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {

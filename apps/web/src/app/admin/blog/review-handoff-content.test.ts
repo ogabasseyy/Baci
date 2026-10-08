@@ -205,4 +205,40 @@ describe('validateImportedContent', () => {
     }
     expect(accepted).toBeGreaterThan(0);
   });
+
+  it('rejects responsive hiding the editor round-trip cannot preserve', () => {
+    // The strip keeps the first paragraph because it renders at md, but
+    // NovelEditor's paragraph node drops the class: the reviewer sees it
+    // at every viewport and any body edit serializes it as universally
+    // visible. Reject instead of silently widening exposure.
+    expect(() =>
+      validateImportedContent(
+        '<p class="hidden md:block">Desktop note</p><p>Visible article</p>'
+      )
+    ).toThrow('responsive visibility');
+  });
+
+  it('rejects theme-dependent hiding the editor round-trip cannot preserve', () => {
+    expect(() =>
+      validateImportedContent(
+        '<p class="hidden dark:block">Dark note</p><p>Visible article</p>'
+      )
+    ).toThrow('responsive visibility');
+  });
+
+  it('accepts uniformly hidden content the strip removes', () => {
+    expect(
+      validateImportedContent(
+        '<p class="hidden">Gone</p><p>Visible article</p>'
+      )
+    ).toBe('<p>Visible article</p>');
+  });
+
+  it('accepts responsive utilities that never hide', () => {
+    expect(
+      validateImportedContent(
+        '<p class="md:block">Desktop note</p><p>Visible article</p>'
+      )
+    ).toContain('Desktop note');
+  });
 });

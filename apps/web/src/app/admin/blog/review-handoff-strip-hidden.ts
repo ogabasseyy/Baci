@@ -13,16 +13,13 @@
 // frame with its parent's effective state in O(1), so deep valid
 // articles strip in linear time.
 import { BREAKPOINT_POINT_COUNT } from './review-handoff-breakpoints';
-import {
-  elementFrame,
-  type HidingFrame,
-  HTML_TAG_PATTERN,
-  VOID_HTML_ELEMENTS,
-} from './review-handoff-readability';
+import { elementFrame, type HidingFrame } from './review-handoff-element-frame';
+import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import type {
   ColorAtPoint,
   VisibilityAtPoint,
 } from './review-handoff-showing-markers';
+import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';
 
 type EffectiveHiding = {
   terminal: boolean[];
@@ -66,33 +63,67 @@ function hiddenEverywhere(
 
 type ElementRecord = {
   parent: number;
-  frame: HidingFrame;
+  frames: [HidingFrame, HidingFrame];
   tagName: string;
   hiddenNoColor: boolean;
   hiddenWithColor: boolean;
 };
 
+type DualEffective = {
+  light: EffectiveHiding;
+  dark: EffectiveHiding;
+};
+
+function dualEffective(
+  parent: DualEffective | null,
+  frames: [HidingFrame, HidingFrame]
+): DualEffective {
+  const top = (dual: DualEffective | null): EffectiveHiding | null =>
+    dual === null ? null : dual.light;
+  const bottom = (dual: DualEffective | null): EffectiveHiding | null =>
+    dual === null ? null : dual.dark;
+  return {
+    light: combineEffective(top(parent), frames[0]),
+    dark: combineEffective(bottom(parent), frames[1]),
+  };
+}
+
+function hiddenEverywhereBoth(
+  effective: DualEffective,
+  includeColor: boolean
+): boolean {
+  // An element drops only when hidden under both schemes: readable
+  // in either scheme is readable.
+  return (
+    hiddenEverywhere(effective.light, includeColor) &&
+    hiddenEverywhere(effective.dark, includeColor)
+  );
+}
+
 function recordElements(content: string): ElementRecord[] {
   const elements: ElementRecord[] = [];
-  const stack: { index: number; effective: EffectiveHiding }[] = [];
+  const stack: { index: number; effective: DualEffective }[] = [];
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     if (match[1] === '/') {
       stack.pop();
       continue;
     }
-    const frame = elementFrame(match[0]);
-    const effective = combineEffective(
+    const frames: [HidingFrame, HidingFrame] = [
+      elementFrame(match[0], 'light'),
+      elementFrame(match[0], 'dark'),
+    ];
+    const effective = dualEffective(
       stack.length === 0 ? null : stack[stack.length - 1].effective,
-      frame
+      frames
     );
     const tagName = match[2].toLowerCase();
     const index = elements.length;
     elements.push({
       parent: stack.length === 0 ? -1 : stack[stack.length - 1].index,
-      frame,
+      frames,
       tagName,
-      hiddenNoColor: hiddenEverywhere(effective, false),
-      hiddenWithColor: hiddenEverywhere(effective, true),
+      hiddenNoColor: hiddenEverywhereBoth(effective, false),
+      hiddenWithColor: hiddenEverywhereBoth(effective, true),
     });
     if (!VOID_HTML_ELEMENTS.has(tagName)) stack.push({ index, effective });
   }
@@ -139,14 +170,17 @@ export function stripHiddenContent(content: string): string {
     seen += 1;
   }
   const segments: string[] = [];
-  const openStack: { index: number; effective: EffectiveHiding }[] = [];
+  const openStack: { index: number; effective: DualEffective }[] = [];
   let position = 0;
   const insideDropped = () => openStack.some((open) => finalDrop[open.index]);
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     const start = match.index ?? content.length;
     const top =
       openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
-    if (!insideDropped() && (top === null || !hiddenEverywhere(top, true))) {
+    if (
+      !insideDropped() &&
+      (top === null || !hiddenEverywhereBoth(top, true))
+    ) {
       segments.push(content.slice(position, start));
     }
     position = start + match[0].length;
@@ -168,14 +202,17 @@ export function stripHiddenContent(content: string): string {
     if (!VOID_HTML_ELEMENTS.has(elements[index].tagName)) {
       openStack.push({
         index,
-        effective: combineEffective(top, elements[index].frame),
+        effective: dualEffective(top, elements[index].frames),
       });
     }
     if (!finalDrop[index] && !insideDropped()) segments.push(match[0]);
   }
   const tail =
     openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
-  if (!insideDropped() && (tail === null || !hiddenEverywhere(tail, true))) {
+  if (
+    !insideDropped() &&
+    (tail === null || !hiddenEverywhereBoth(tail, true))
+  ) {
     segments.push(content.slice(position));
   }
   return segments.join('');

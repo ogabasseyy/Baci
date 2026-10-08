@@ -8,10 +8,11 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 const SIZE_UTILITY_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
 const OVERFLOW_PATTERN = /^overflow-(?:([xy])-)?(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
@@ -117,36 +118,46 @@ function mergedAxis(
 
 function winnerIsZero(
   winners: ReadonlyMap<string, string>,
-  point: number
+  point: number,
+  scheme: ColorScheme
 ): boolean {
-  const winner = breakpointWinnerAtPoint(winners, point);
+  const winner = breakpointWinnerAtPoint(winners, point, scheme);
   return winner !== undefined && !isNonZeroUtilityValue(sizeValue(winner));
 }
 
 function axisZeroAt(
   layers: SizeLayers,
   point: number,
-  axis: 'height' | 'width'
+  axis: 'height' | 'width',
+  scheme: ColorScheme
 ): boolean {
   const minLayers = axis === 'height' ? layers.minHeight : layers.minWidth;
-  const minWinner = breakpointWinnerAtPoint(minLayers, point);
+  const minWinner = breakpointWinnerAtPoint(minLayers, point, scheme);
   if (minWinner !== undefined && isNonZeroUtilityValue(sizeValue(minWinner))) {
     return false;
   }
-  if (winnerIsZero(mergedAxis(layers, axis), point)) return true;
+  if (winnerIsZero(mergedAxis(layers, axis), point, scheme)) return true;
   const maxLayers = axis === 'height' ? layers.maxHeight : layers.maxWidth;
-  return winnerIsZero(maxLayers, point);
+  return winnerIsZero(maxLayers, point, scheme);
 }
 
-function clipsAt(layers: SizeLayers, point: number, axis: 'x' | 'y'): boolean {
+function clipsAt(
+  layers: SizeLayers,
+  point: number,
+  axis: 'x' | 'y',
+  scheme: ColorScheme
+): boolean {
   const clipLayers = axis === 'x' ? layers.clipX : layers.clipY;
-  const winner = breakpointWinnerAtPoint(clipLayers, point);
+  const winner = breakpointWinnerAtPoint(clipLayers, point, scheme);
   if (winner === undefined) return false;
   const value = OVERFLOW_PATTERN.exec(winner)?.[2] ?? '';
   return CLIP_OVERFLOW_VALUES.has(value);
 }
 
-export function sizeMarkers(classes: readonly string[]): {
+export function sizeMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   heightZeroAt: boolean[];
   widthZeroAt: boolean[];
   clipsXAt: boolean[];
@@ -158,10 +169,10 @@ export function sizeMarkers(classes: readonly string[]): {
   const clipsXAt: boolean[] = [];
   const clipsYAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    heightZeroAt.push(axisZeroAt(layers, point, 'height'));
-    widthZeroAt.push(axisZeroAt(layers, point, 'width'));
-    clipsXAt.push(clipsAt(layers, point, 'x'));
-    clipsYAt.push(clipsAt(layers, point, 'y'));
+    heightZeroAt.push(axisZeroAt(layers, point, 'height', scheme));
+    widthZeroAt.push(axisZeroAt(layers, point, 'width', scheme));
+    clipsXAt.push(clipsAt(layers, point, 'x', scheme));
+    clipsYAt.push(clipsAt(layers, point, 'y', scheme));
   }
   return { heightZeroAt, widthZeroAt, clipsXAt, clipsYAt };
 }
@@ -169,7 +180,8 @@ export function sizeMarkers(classes: readonly string[]): {
 export function imageSizeZeroAt(
   classes: readonly string[],
   widthAttrZero: boolean,
-  heightAttrZero: boolean
+  heightAttrZero: boolean,
+  scheme: ColorScheme = 'light'
 ): boolean[] {
   // Images hide on a zeroed axis alone (replaced content conforms
   // instead of overflowing). Author CSS beats presentational hints,
@@ -179,8 +191,8 @@ export function imageSizeZeroAt(
   const widthAxis = mergedAxis(layers, 'width');
   const zeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const heightWinner = breakpointWinnerAtPoint(heightAxis, point);
-    const widthWinner = breakpointWinnerAtPoint(widthAxis, point);
+    const heightWinner = breakpointWinnerAtPoint(heightAxis, point, scheme);
+    const widthWinner = breakpointWinnerAtPoint(widthAxis, point, scheme);
     const heightZero =
       heightWinner === undefined
         ? heightAttrZero
@@ -189,10 +201,12 @@ export function imageSizeZeroAt(
       widthWinner === undefined
         ? widthAttrZero
         : !isNonZeroUtilityValue(sizeValue(widthWinner));
-    const heightCapped = heightZero || winnerIsZero(layers.maxHeight, point);
-    const widthCapped = widthZero || winnerIsZero(layers.maxWidth, point);
-    const minHeight = breakpointWinnerAtPoint(layers.minHeight, point);
-    const minWidth = breakpointWinnerAtPoint(layers.minWidth, point);
+    const heightCapped =
+      heightZero || winnerIsZero(layers.maxHeight, point, scheme);
+    const widthCapped =
+      widthZero || winnerIsZero(layers.maxWidth, point, scheme);
+    const minHeight = breakpointWinnerAtPoint(layers.minHeight, point, scheme);
+    const minWidth = breakpointWinnerAtPoint(layers.minWidth, point, scheme);
     const heightFloored =
       minHeight !== undefined && isNonZeroUtilityValue(sizeValue(minHeight));
     const widthFloored =

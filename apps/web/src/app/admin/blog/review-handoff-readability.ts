@@ -1,16 +1,15 @@
-import { BREAKPOINT_POINT_COUNT } from './review-handoff-breakpoints';
-import {
-  type ColorAtPoint,
-  showingMarkers,
-  type VisibilityAtPoint,
-} from './review-handoff-showing-markers';
+import type { ColorScheme } from './review-handoff-breakpoints';
+import { elementFrame, type HidingFrame } from './review-handoff-element-frame';
+import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { imageSizeZeroAt } from './review-handoff-size-markers';
+import { subtreeHiddenAt } from './review-handoff-subtree-hidden';
 import { tagAttributes } from './review-handoff-tag-attributes';
+import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
 import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
-function imageZeroAt(tag: string): boolean[] {
+function imageZeroAt(tag: string, scheme: ColorScheme): boolean[] {
   // A zero width or height renders no pixels. Only bare zeros count:
   // the width/height attributes take plain pixel counts, so `0px` is
   // invalid and ignored by browsers (natural size, still visible).
@@ -28,136 +27,14 @@ function imageZeroAt(tag: string): boolean[] {
     if (name === 'width' && /^0+$/.test(value.trim())) widthAttrZero = true;
     if (name === 'height' && /^0+$/.test(value.trim())) heightAttrZero = true;
   }
-  return imageSizeZeroAt(classes, widthAttrZero, heightAttrZero);
-}
-
-// Same-element hiding: display:none removes the subtree, group opacity
-// and clipping apply to the whole rendered element, so no descendant
-// can reappear — but a responsive override on the same element
-// (`hidden md:block`) renders at the points it covers. `invisible`
-// and `text-transparent` are deliberately absent: visibility and color
-// inherit, so a descendant `visible` or opaque text color overrides
-// them, and both are tracked as markers below.
-function tagTerminalAt(tag: string): boolean[] {
-  // The sanitizer preserves class but strips style, so hidden subtrees
-  // arrive only as Tailwind tokens.
-  const terminalAt = new Array<boolean>(BREAKPOINT_POINT_COUNT).fill(false);
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name !== 'class') continue;
-    const markers = showingMarkers(value.split(/\s+/));
-    for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-      terminalAt[point] = terminalAt[point] || markers.terminalAt[point];
-    }
-  }
-  return terminalAt;
-}
-
-export type HidingFrame = {
-  terminalAt: boolean[];
-  visibilityAt: VisibilityAtPoint[];
-  colorAt: ColorAtPoint[];
-};
-
-function nullVisibilityAt(): VisibilityAtPoint[] {
-  return new Array<VisibilityAtPoint>(BREAKPOINT_POINT_COUNT).fill(null);
-}
-
-function nullColorAt(): ColorAtPoint[] {
-  return new Array<ColorAtPoint>(BREAKPOINT_POINT_COUNT).fill(null);
-}
-
-function elementVisibilityAt(tag: string): VisibilityAtPoint[] {
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name !== 'class') continue;
-    // A pathological element carrying both markers resolves per
-    // point to the latest applicable winner. Content shown at any
-    // point is readable.
-    return showingMarkers(value.split(/\s+/)).visibilityAt;
-  }
-  return nullVisibilityAt();
-}
-
-function elementColorAt(tag: string): ColorAtPoint[] {
-  for (const { name, value } of tagAttributes(tag)) {
-    if (name !== 'class') continue;
-    // Same-layer color conflicts resolve by generated precedence
-    // (naturally last wins), so a transparent winner beats
-    // text-black while text-white beats transparent. current/inherit
-    // winners pass through to the ancestor frames. A background
-    // clipped to the glyphs renders transparent text like opaque.
-    return showingMarkers(value.split(/\s+/)).colorAt;
-  }
-  return nullColorAt();
-}
-
-export function subtreeHiddenAt(
-  frames: readonly HidingFrame[],
-  includeColor: boolean
-): boolean[] {
-  const hiddenAt: boolean[] = [];
-  for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    if (frames.some((frame) => frame.terminalAt[point])) {
-      hiddenAt.push(true);
-      continue;
-    }
-    let hidden: boolean | null = null;
-    for (let index = frames.length - 1; index >= 0; index -= 1) {
-      const marker = frames[index].visibilityAt[point];
-      if (marker !== null) {
-        hidden = marker === 'invisible';
-        break;
-      }
-    }
-    // Transparent color hides glyphs but not decoded image pixels, so
-    // only the text path consults it. Like visibility, the nearest
-    // marker wins and an opaque descendant escapes a transparent
-    // ancestor.
-    if (hidden === null && includeColor) {
-      for (let index = frames.length - 1; index >= 0; index -= 1) {
-        const marker = frames[index].colorAt[point];
-        if (marker !== null) {
-          hidden = marker === 'transparent';
-          break;
-        }
-      }
-    }
-    hiddenAt.push(hidden ?? false);
-  }
-  return hiddenAt;
-}
-
-export const HTML_TAG_PATTERN =
-  /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
-export const VOID_HTML_ELEMENTS = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'param',
-  'source',
-  'track',
-  'wbr',
-]);
-
-export function elementFrame(tag: string): HidingFrame {
-  return {
-    terminalAt: tagTerminalAt(tag),
-    visibilityAt: elementVisibilityAt(tag),
-    colorAt: elementColorAt(tag),
-  };
+  return imageSizeZeroAt(classes, widthAttrZero, heightAttrZero, scheme);
 }
 
 function visibleAtAnyPoint(hiddenAt: readonly boolean[]): boolean {
   return hiddenAt.some((hidden) => !hidden);
 }
 
-function hasVisibleImage(content: string): boolean {
+function hasVisibleImage(content: string, scheme: ColorScheme): boolean {
   // Track ancestry during one document-order pass instead of rescanning
   // the prefix before every image: each image is evaluated against the
   // live stack the moment it is reached, keeping validation linear in
@@ -175,8 +52,8 @@ function hasVisibleImage(content: string): boolean {
     const tagName = match[2].toLowerCase();
     if (tagName === 'img') {
       const tag = match[0];
-      const zeroAt = imageZeroAt(tag);
-      frames.push(elementFrame(tag));
+      const zeroAt = imageZeroAt(tag, scheme);
+      frames.push(elementFrame(tag, scheme));
       const hiddenAt = subtreeHiddenAt(frames, false);
       frames.pop();
       if (zeroAt.some((zero, point) => !zero && !hiddenAt[point])) {
@@ -185,12 +62,12 @@ function hasVisibleImage(content: string): boolean {
       continue;
     }
     if (VOID_HTML_ELEMENTS.has(tagName)) continue;
-    frames.push(elementFrame(match[0]));
+    frames.push(elementFrame(match[0], scheme));
   }
   return false;
 }
 
-function visibleText(content: string): string {
+function visibleText(content: string, scheme: ColorScheme): string {
   // Collect text nodes outside hidden subtrees with the same ancestry
   // stack as images. Comments are stripped first: the tag pattern does
   // not match them, so their text must not leak in as visible segments.
@@ -209,7 +86,7 @@ function visibleText(content: string): string {
       continue;
     }
     if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
-    frames.push(elementFrame(match[0]));
+    frames.push(elementFrame(match[0], scheme));
   }
   if (visibleAtAnyPoint(subtreeHiddenAt(frames, true))) {
     segments.push(withoutComments.slice(position));
@@ -234,9 +111,15 @@ export function hasReadableContent(content: string): boolean {
   // nothing, so strip them before matching: a commented-out <img> must
   // neither satisfy readability itself nor donate a hidden ancestor.
   const withoutComments = stripRawTextBlocks(stripHtmlComments(content));
-  if (hasVisibleImage(withoutComments)) return true;
-  const text = stripNonRenderingText(
-    visibleText(withoutComments).replace(/&nbsp;/gi, ' ')
-  ).trim();
-  return text.length > 0;
+  // Readable in either scheme is readable: dark: layers apply only
+  // in the dark run, so content showing under one scheme survives
+  // even when hidden under the other.
+  for (const scheme of ['light', 'dark'] as const) {
+    if (hasVisibleImage(withoutComments, scheme)) return true;
+    const text = stripNonRenderingText(
+      visibleText(withoutComments, scheme).replace(/&nbsp;/gi, ' ')
+    ).trim();
+    if (text.length > 0) return true;
+  }
+  return false;
 }

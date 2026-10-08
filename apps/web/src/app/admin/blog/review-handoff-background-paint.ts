@@ -12,11 +12,12 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 import { THEME_COLOR_NAMES } from './review-handoff-theme-colors';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 const BACKGROUND_COLOR_PATTERN =
   /^bg-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/;
 const BACKGROUND_GRADIENT_PATTERN = /^bg-(?:linear|radial|conic|gradient)-/;
@@ -141,7 +142,10 @@ function gradientStop(
 
 type LayerWinner<Kind> = { token: string; kind: Kind };
 
-export function backgroundPaintAt(classes: readonly string[]): boolean[] {
+export function backgroundPaintAt(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): boolean[] {
   const colorWinners = new Map<string, LayerWinner<'solid' | 'blank'>>();
   const imageWinners = new Map<string, BackgroundImage>();
   const stopWinners = new Map<
@@ -183,8 +187,8 @@ export function backgroundPaintAt(classes: readonly string[]): boolean[] {
   }
   const paintAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const color = breakpointWinnerAtPoint(colorWinners, point);
-    const image = breakpointWinnerAtPoint(imageWinners, point);
+    const color = breakpointWinnerAtPoint(colorWinners, point, scheme);
+    const image = breakpointWinnerAtPoint(imageWinners, point, scheme);
     if (image === undefined || !image.paints) {
       paintAt.push(color?.kind === 'solid');
     } else if (!image.gradient) {
@@ -195,7 +199,8 @@ export function backgroundPaintAt(classes: readonly string[]): boolean[] {
           (channel) =>
             breakpointWinnerAtPoint(
               stopWinners.get(channel) ?? new Map(),
-              point
+              point,
+              scheme
             )?.kind === 'painted'
         )
       );

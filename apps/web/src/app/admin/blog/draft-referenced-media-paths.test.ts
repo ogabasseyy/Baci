@@ -90,6 +90,40 @@ describe('draftReferencedMediaPaths', () => {
     ).toEqual(new Set());
   });
 
+  it('ignores a picture source after the img', () => {
+    // Browsers select only sources preceding the img: a retain-after-img
+    // source is never fetched, so its session upload must not be retained.
+    expect(
+      draftReferencedMediaPaths(
+        draft({
+          content: `<picture><img src="https://cdn.example.com/fallback.png"><source srcset="${SRCSET_A}"></picture>`,
+        })
+      )
+    ).toEqual(new Set());
+  });
+
+  it('ignores a picture source with an inapplicable type', () => {
+    expect(
+      draftReferencedMediaPaths(
+        draft({
+          content: `<picture><source type="image/tiff" srcset="${SRCSET_A}"><img src="${INLINE}"></picture>`,
+        })
+      )
+    ).toEqual(new Set(['platform/blog/inline-1.png']));
+  });
+
+  it('retains an applicable picture source before the img', () => {
+    expect(
+      draftReferencedMediaPaths(
+        draft({
+          content: `<picture><source srcset="${SRCSET_A} 1x"><img src="${INLINE}"></picture>`,
+        })
+      )
+    ).toEqual(
+      new Set(['platform/blog/a-1x.webp', 'platform/blog/inline-1.png'])
+    );
+  });
+
   it('dedupes paths referenced more than once', () => {
     expect(
       draftReferencedMediaPaths(

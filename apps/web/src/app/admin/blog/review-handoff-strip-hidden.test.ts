@@ -44,7 +44,16 @@ describe('stripHiddenContent', () => {
       '<p class="invisible md:visible">Note</p>',
       '<p class="invisible md:visible">Note</p>',
     ],
+    [
+      '<div class="text-transparent"><p class="text-[#B76E79]">Only body</p></div>',
+      '<div class="text-transparent"><p class="text-[#B76E79]">Only body</p></div>',
+    ],
     ['<p>Untouched</p>', '<p>Untouched</p>'],
+    [
+      '<div class="hidden dark:block">Dark</div><p>Kept</p>',
+      '<div class="hidden dark:block">Dark</div><p>Kept</p>',
+    ],
+    ['<div class="hidden dark:hidden">Gone</div><p>Kept</p>', '<p>Kept</p>'],
   ])('strips only always-hidden subtrees: %s', (content, expected) => {
     expect(stripHiddenContent(content)).toBe(expected);
   });

@@ -11,6 +11,7 @@ describe('hasReadableContent', () => {
     '<div class="invisible"><p class="visible">Readable</p></div>',
     '<div class="text-transparent"><p class="text-black">Readable</p></div>',
     '<div class="text-transparent"><p class="text-emerald-600">Readable</p></div>',
+    '<div class="text-transparent"><p class="text-[#B76E79]">Only body</p></div>',
     '<div class="hidden md:block">Only body</div>',
     '<div class="invisible"><p class="md:visible">Readable</p></div>',
     '<div class="h-0 overflow-hidden md:h-auto">Only body</div>',
@@ -126,5 +127,26 @@ describe('hasReadableContent', () => {
     expect(
       hasReadableContent(`${hidden}<img src="https://cdn.example.com/b.png">`)
     ).toBe(true);
+  });
+
+  it('reads content shown only under dark scheme', () => {
+    // Readable in either scheme is readable: dark: compiles to a
+    // .dark selector outranking width-only rules, so evaluation
+    // runs once per scheme and unions the verdicts.
+    expect(
+      hasReadableContent('<div class="hidden dark:block">Dark</div>')
+    ).toBe(true);
+  });
+
+  it('reads content hidden only under dark scheme', () => {
+    expect(hasReadableContent('<div class="dark:hidden">Light</div>')).toBe(
+      true
+    );
+  });
+
+  it('disregards content hidden under both schemes', () => {
+    expect(
+      hasReadableContent('<div class="hidden dark:hidden">Nowhere</div>')
+    ).toBe(false);
   });
 });

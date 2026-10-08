@@ -1,10 +1,8 @@
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type { PlatformAdminBlogFormState } from './blog-types';
-import { matchMediaElements } from './review-handoff-media-elements';
+import { groupMediaElements } from './review-handoff-media-groups';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
-import { stripHtmlComments } from './strip-html-comments';
-import { stripRawTextBlocks } from './strip-raw-text-blocks';
 
 type DraftMediaFields = Pick<
   PlatformAdminBlogFormState,
@@ -23,20 +21,23 @@ export function draftReferencedMediaPaths(
     draft.featured_image_url,
     ...Object.values(draft.featured_image_variants),
   ];
-  // Comments and raw-text blocks render nothing, so references hidden
-  // inside them must not retain objects.
-  const content = stripRawTextBlocks(stripHtmlComments(draft.content));
-  for (const match of matchMediaElements(content)) {
-    for (const { name, value } of tagAttributes(match[0])) {
-      if (name === 'src') {
-        urls.push(value);
-        continue;
-      }
-      if (name === 'srcset') {
-        // A srcset URL runs to the first whitespace; descriptors,
-        // commas, and data: payloads never contain any.
-        for (const candidate of splitSrcsetCandidates(value)) {
-          urls.push(candidate.split(/\s+/)[0]);
+  // Only selectable resources retain objects: grouping applies the
+  // same picture ordering and applicability rules as media validation,
+  // so inert sources (after the img, inapplicable type/media) and
+  // references hidden in comments or raw-text blocks retain nothing.
+  for (const { tags } of groupMediaElements(draft.content)) {
+    for (const tag of tags) {
+      for (const { name, value } of tagAttributes(tag)) {
+        if (name === 'src') {
+          urls.push(value);
+          continue;
+        }
+        if (name === 'srcset') {
+          // A srcset URL runs to the first whitespace; descriptors,
+          // commas, and data: payloads never contain any.
+          for (const candidate of splitSrcsetCandidates(value)) {
+            urls.push(candidate.split(/\s+/)[0]);
+          }
         }
       }
     }

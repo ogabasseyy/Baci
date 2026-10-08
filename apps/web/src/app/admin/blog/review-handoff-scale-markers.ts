@@ -10,9 +10,10 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 const SCALE_UTILITY_PATTERN = /^(scale-x|scale-y|scale)-(.+)$/;
 const BASE_SCALE_INTEGER_PATTERN = /^\d+$/;
 const SCALE_ARBITRARY_PATTERN = /^\[(.*)\]$/;
@@ -122,7 +123,8 @@ type AxisWriter = { value: number } | { unknown: true };
 function axisWriterAt(
   winners: ReadonlyMap<string, ScaleLayer>,
   point: number,
-  axis: 'x' | 'y'
+  axis: 'x' | 'y',
+  scheme: ColorScheme
 ): AxisWriter | undefined {
   const writers = new Map<string, AxisWriter>();
   for (const [layer, winner] of winners) {
@@ -134,30 +136,34 @@ function axisWriterAt(
         writers.set(layer, { value: axisWinner.value });
     }
   }
-  return breakpointWinnerAtPoint(writers, point);
+  return breakpointWinnerAtPoint(writers, point, scheme);
 }
 
 function axisZeroAt(
   winners: ReadonlyMap<string, ScaleLayer>,
   point: number,
-  axis: 'x' | 'y'
+  axis: 'x' | 'y',
+  scheme: ColorScheme
 ): boolean {
   const declared = new Map<string, ScaleLayer>();
   for (const [layer, winner] of winners) {
     if (winner.declares) declared.set(layer, winner);
   }
-  const property = breakpointWinnerAtPoint(declared, point);
+  const property = breakpointWinnerAtPoint(declared, point, scheme);
   if (property === undefined) return false;
   if (property.none || property.staticUnknown) return false;
   if (property.statics.length > 0) {
     return Math.max(...property.statics) === 0;
   }
-  const writer = axisWriterAt(winners, point, axis);
+  const writer = axisWriterAt(winners, point, axis, scheme);
   if (writer === undefined || 'unknown' in writer) return false;
   return writer.value === 0;
 }
 
-export function scaleMarkers(classes: readonly string[]): {
+export function scaleMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   scaleXZeroAt: boolean[];
   scaleYZeroAt: boolean[];
 } {
@@ -176,8 +182,8 @@ export function scaleMarkers(classes: readonly string[]): {
   const scaleXZeroAt: boolean[] = [];
   const scaleYZeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    scaleXZeroAt.push(axisZeroAt(winners, point, 'x'));
-    scaleYZeroAt.push(axisZeroAt(winners, point, 'y'));
+    scaleXZeroAt.push(axisZeroAt(winners, point, 'x', scheme));
+    scaleYZeroAt.push(axisZeroAt(winners, point, 'y', scheme));
   }
   return { scaleXZeroAt, scaleYZeroAt };
 }

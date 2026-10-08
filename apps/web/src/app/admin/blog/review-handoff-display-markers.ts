@@ -6,9 +6,10 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 
 // Every Tailwind display utility except `hidden` itself.
 const DISPLAY_UTILITIES = new Set([
@@ -34,7 +35,10 @@ const DISPLAY_UTILITIES = new Set([
   'list-item',
 ]);
 
-export function displayMarkers(classes: readonly string[]): {
+export function displayMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   hiddenAt: boolean[];
 } {
   const winners = new Map<string, 'hidden' | 'shown'>();
@@ -49,7 +53,7 @@ export function displayMarkers(classes: readonly string[]): {
   }
   const hiddenAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    hiddenAt.push(breakpointWinnerAtPoint(winners, point) === 'hidden');
+    hiddenAt.push(breakpointWinnerAtPoint(winners, point, scheme) === 'hidden');
   }
   return { hiddenAt };
 }

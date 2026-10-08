@@ -5,10 +5,11 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 
 function responsiveUtility(token: string): string | null {
   const match = RESPONSIVE_PREFIX_PATTERN.exec(token);
@@ -17,7 +18,10 @@ function responsiveUtility(token: string): string | null {
 
 export type VisibilityAtPoint = 'visible' | 'invisible' | null;
 
-export function visibilityMarkers(classes: readonly string[]): {
+export function visibilityMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   visibleAt: VisibilityAtPoint[];
   screenReaderOnlyAt: boolean[];
 } {
@@ -41,7 +45,7 @@ export function visibilityMarkers(classes: readonly string[]): {
   const visibleAt: VisibilityAtPoint[] = [];
   const screenReaderOnlyAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const visible = breakpointWinnerAtPoint(visibleWinners, point);
+    const visible = breakpointWinnerAtPoint(visibleWinners, point, scheme);
     visibleAt.push(
       visible === undefined
         ? null
@@ -50,7 +54,7 @@ export function visibilityMarkers(classes: readonly string[]): {
           : 'invisible'
     );
     screenReaderOnlyAt.push(
-      breakpointWinnerAtPoint(screenWinners, point) === 'sr-only'
+      breakpointWinnerAtPoint(screenWinners, point, scheme) === 'sr-only'
     );
   }
   return { visibleAt, screenReaderOnlyAt };

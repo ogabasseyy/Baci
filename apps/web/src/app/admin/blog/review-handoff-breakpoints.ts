@@ -3,8 +3,16 @@
 // Stylesheet rank (Tailwind v4.3.1 compiled order, verified): base,
 // then max-* variants from widest to narrowest, then min-width
 // variants ascending. Min-width layers apply upward; max-* layers
-// apply strictly below their threshold.
+// apply strictly below their threshold. Color-scheme variants
+// evaluate as a second run: `dark:` utilities compile to `.dark`
+// selectors whose extra class outranks every width-only layer, so
+// they form a ranked layer above the width scale that applies only
+// in the dark run. Content readable in either scheme is readable.
 export const BREAKPOINT_POINT_COUNT = 6;
+
+export type ColorScheme = 'light' | 'dark';
+
+const DARK_RANK_BONUS = 100;
 
 const LAYER_RANK: Record<string, number> = {
   '': 0,
@@ -36,12 +44,32 @@ const MAX_WIDTH_CEILING: Record<string, number> = {
   'max-2xl:': 5,
 };
 
-function layerAppliesAt(layer: string, point: number): boolean {
-  if (layer === '') return true;
-  if (layer.startsWith('max-')) {
-    return point < (MAX_WIDTH_CEILING[layer] ?? 0);
+function splitScheme(layer: string): { dark: boolean; width: string } {
+  // Prefix runs like `dark:md:` or `md:dark:` carry a width floor
+  // plus the dark marker; either order means the same rule.
+  const dark = layer.includes('dark:');
+  return { dark, width: layer.replaceAll('dark:', '') };
+}
+
+function layerRank(layer: string): number {
+  const { dark, width } = splitScheme(layer);
+  const rank = LAYER_RANK[width] ?? -1;
+  if (rank === -1) return -1;
+  return dark ? rank + DARK_RANK_BONUS : rank;
+}
+
+function layerAppliesAt(
+  layer: string,
+  point: number,
+  scheme: ColorScheme
+): boolean {
+  const { dark, width } = splitScheme(layer);
+  if (dark && scheme !== 'dark') return false;
+  if (width === '') return true;
+  if (width.startsWith('max-')) {
+    return point < (MAX_WIDTH_CEILING[width] ?? 0);
   }
-  return point >= (MIN_WIDTH_FLOOR[layer] ?? Number.POSITIVE_INFINITY);
+  return point >= (MIN_WIDTH_FLOOR[width] ?? Number.POSITIVE_INFINITY);
 }
 
 /**
@@ -51,13 +79,14 @@ function layerAppliesAt(layer: string, point: number): boolean {
  */
 export function breakpointWinnerAtPoint<T>(
   winners: ReadonlyMap<string, T>,
-  point: number
+  point: number,
+  scheme: ColorScheme = 'light'
 ): T | undefined {
   let best: T | undefined;
   let bestRank = -1;
   for (const [layer, winner] of winners) {
-    const rank = LAYER_RANK[layer] ?? -1;
-    if (rank > bestRank && layerAppliesAt(layer, point)) {
+    const rank = layerRank(layer);
+    if (rank > bestRank && layerAppliesAt(layer, point, scheme)) {
       best = winner;
       bestRank = rank;
     }

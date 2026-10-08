@@ -6,10 +6,11 @@
 import {
   BREAKPOINT_POINT_COUNT,
   breakpointWinnerAtPoint,
+  type ColorScheme,
 } from './review-handoff-breakpoints';
 import { compareNaturalOrder } from './review-handoff-utility-order';
 
-const RESPONSIVE_PREFIX_PATTERN = /^(?:max-)?(?:sm|md|lg|xl|2xl):/;
+const RESPONSIVE_PREFIX_PATTERN = /^(?:(?:max-)?(?:sm|md|lg|xl|2xl):|dark:)+/;
 const OPACITY_UTILITY_PATTERN = /^opacity-(\d+(?:\.\d+)?|\[.+\])$/;
 
 function responsiveUtility(token: string): string | null {
@@ -27,7 +28,10 @@ function isNonZeroOpacityUtility(utility: string): boolean {
   return Number.isNaN(numeric) ? true : numeric !== 0;
 }
 
-export function opacityMarkers(classes: readonly string[]): {
+export function opacityMarkers(
+  classes: readonly string[],
+  scheme: ColorScheme = 'light'
+): {
   zeroAt: boolean[];
 } {
   const winners = new Map<string, string>();
@@ -43,7 +47,7 @@ export function opacityMarkers(classes: readonly string[]): {
   }
   const zeroAt: boolean[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
-    const winner = breakpointWinnerAtPoint(winners, point);
+    const winner = breakpointWinnerAtPoint(winners, point, scheme);
     zeroAt.push(winner !== undefined && !isNonZeroOpacityUtility(winner));
   }
   return { zeroAt };

@@ -518,3 +518,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 ## Round 71b (CI failures on d0e84f5cc2 — both fixed)
 - DB Replay 42P13: M9's CREATE OR REPLACE could not widen the variants RPC return type. Fixed in place (DROP FUNCTION IF EXISTS + CREATE; the pending migration never applied anywhere) and re-pinned in both sha registries. Verified over a stubbed old-signature function on scratch.
 - Module-size guard: the 2-line zod addition pushed product-schemas.ts to 301/300. Extracted variant/offer/image/number-like schemas into product-variant-schemas.ts (236 + 73 lines); barrel extended. Guard green, validation suites 96/96.
+
+## Round 72 (Codex 2 P1 on d0e84f5 — 1 fixed, 1 already-fixed; Muse 3 low — 1 fixed, 2 adjudicated)
+
+- CX-143 (P1) already fixed in 71b (2b4681e6): M9 drops the old variants-RPC signature before recreating with the widened return type; reply + resolve only.
+- CX-144 (P1) FIXED: byte-identical available-search-facets schemas consolidated into packages/shared (schema + merged vitest suite 2/2 covering both apps' cases); barrel-exported; web + native importers re-pointed; 4 app copies deleted.
+- Muse low slug oracle: repeat of the PR-disclosed item (distinct codes for operability, client collapses 404, budgets bound).
+- Muse low unknown-sort FIXED: parseSearchRefinements now returns success:false for unrecognized sort strings (absent still defaults, arrays already failed) so the page flags invalidFilters and normalizes the URL like other bad filters. All 7 callers already branch on success; native degrades to empty + flag. Test updated; 9/9.
+- Muse low snapshot-UUID catch ADJUDICATED (designed): the .catch(undefined) on match ids is deliberate documented fail-soft for persisted client state (malformed values keep the parent-basis item instead of failing readers); writers emit UUIDs only.

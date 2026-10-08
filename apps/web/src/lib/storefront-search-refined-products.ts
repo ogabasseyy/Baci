@@ -1,4 +1,5 @@
 import {
+  availableSearchFacetsSchema,
   emptySearchRefinements,
   getRefinedSearchArgs,
   hasActiveSearchRefinements,
@@ -6,7 +7,6 @@ import {
   type SearchRefinements,
 } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
-import { availableSearchFacetsSchema } from '@/schemas/available-search-facets';
 import { normalizeProduct } from './normalize-product';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
 import type { StorefrontSearchSupabase } from './storefront-search';

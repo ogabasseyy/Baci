@@ -24,10 +24,15 @@ describe('parseSearchRefinements', () => {
   ])('rejects invalid constraints instead of dropping them: %j', (input) => {
     expect(parseSearchRefinements(input).success).toBe(false);
   });
-  it('defaults unknown sort to relevance and leaves blank bounds unrestricted', () => {
-    expect(
-      parseSearchRefinements({ sort: 'rating', minPrice: '', maxPrice: ' ' })
-    ).toEqual({ success: true, data: { brands: [], sort: 'relevance' } });
+  it('rejects an unknown sort and leaves blank bounds unrestricted', () => {
+    expect(parseSearchRefinements({ sort: 'rating' })).toEqual({
+      success: false,
+      error: 'Choose a valid sort order',
+    });
+    expect(parseSearchRefinements({ minPrice: '', maxPrice: ' ' })).toEqual({
+      success: true,
+      data: { brands: [], sort: 'relevance' },
+    });
   });
   it('round-trips processor filters and rejects malformed multi-value input', () => {
     const parsed = parseSearchRefinements({ processor: 'Intel Core i7' });

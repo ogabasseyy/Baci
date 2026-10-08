@@ -1,4 +1,5 @@
 export * from './assurance-policy';
+export * from './available-search-facets';
 export * from './build-refined-search-href';
 export * from './cac-registration';
 export * from './commerce-variant-axis';

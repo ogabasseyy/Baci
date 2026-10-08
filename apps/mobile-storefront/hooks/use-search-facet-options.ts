@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import {
   type AvailableSearchFacets,
   availableSearchFacetsSchema,
-} from '@/schemas/available-search-facets';
+} from '@baci/shared/lib';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { CONSTANT_MERCHANT_ID } from './product-utils';
 
 export function useSearchFacetOptions(

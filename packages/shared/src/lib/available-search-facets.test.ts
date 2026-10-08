@@ -34,5 +34,14 @@ describe('availableSearchFacetsSchema', () => {
     expect(
       availableSearchFacetsSchema.safeParse({ ...valid, maxPrice: -1 }).success
     ).toBe(false);
+    expect(
+      availableSearchFacetsSchema.safeParse({
+        ...valid,
+        categories: [{ id: 'phones' }],
+      }).success
+    ).toBe(false);
+    expect(
+      availableSearchFacetsSchema.safeParse({ ...valid, brands: [42] }).success
+    ).toBe(false);
   });
 });

@@ -16,11 +16,19 @@ export function parseSearchRefinements(
       : Array.isArray(input.brand)
         ? input.brand
         : [input.brand];
+  if (Array.isArray(input.sort))
+    return { success: false, error: 'Choose one sort order' };
+  // An unrecognized sort fails like any other bad filter so the page
+  // flags invalidFilters and normalizes the URL, instead of silently
+  // searching as relevance while the address bar claims otherwise.
+  if (
+    input.sort != null &&
+    !SEARCH_SORT_OPTIONS.some((option) => option.value === input.sort)
+  )
+    return { success: false, error: 'Choose a valid sort order' };
   const sort = SEARCH_SORT_OPTIONS.some((option) => option.value === input.sort)
     ? input.sort
     : 'relevance';
-  if (Array.isArray(input.sort))
-    return { success: false, error: 'Choose one sort order' };
   const parsed = criteriaSchema.safeParse({
     brands: [...new Set(brands)].sort(),
     sort,

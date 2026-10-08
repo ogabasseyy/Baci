@@ -152,6 +152,26 @@ it('keeps a saved checkout instead of falling back when recovery reports unavail
     expect.stringContaining('retained')
   );
 });
+it('debounces repeat taps for one scope without blocking another account', async () => {
+  const other = {
+    ...input,
+    user: { id: '22222222-2222-4222-8222-222222222222' },
+    setIsFundPending: jest.fn(),
+    resetFundPanel: jest.fn(),
+  };
+  await Promise.all([
+    fundPrimaryWalletCard(input),
+    fundPrimaryWalletCard(input),
+    fundPrimaryWalletCard(other),
+  ]);
+  expect(mockStart).toHaveBeenCalledTimes(2);
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ userId: input.user.id })
+  );
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ userId: other.user.id })
+  );
+});
 it('resumes the stored real savings handoff only after completed restart recovery', async () => {
   const returnTo =
     '/wallet?action=savings&savingsGoalId=owned-goal&savingsAmount=1000';

@@ -279,6 +279,7 @@ export function usePaymentGatewayController() {
     authorizationUrl,
     errorMessage,
     gatewayName,
+    returnTo,
     // Alias retained for checkout back-button consumers; both paths confirm cancellation.
     handleBack: handleClose,
     handleClose,

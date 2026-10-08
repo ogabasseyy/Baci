@@ -1,7 +1,9 @@
+import { renderHook, waitFor } from '@testing-library/react-native';
 import {
   clearPiggyvestPrimaryCapabilityCache,
   getPiggyvestPrimaryCapability,
   isPrimaryWalletNotReady,
+  usePiggyvestPrimaryCapability,
 } from './piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
@@ -44,11 +46,19 @@ describe('isPrimaryWalletNotReady', () => {
 });
 
 describe('getPiggyvestPrimaryCapability', () => {
-  it('returns false without a probe for non-primary merchants', async () => {
+  it('asks the server for non-pilot merchants and honors its not-ready verdict', async () => {
+    read.mockRejectedValue(notReady('PIGGYVEST_NOT_READY'));
     await expect(
       getPiggyvestPrimaryCapability('00000000-0000-4000-8000-000000000000')
     ).resolves.toBe(false);
-    expect(read).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('enables server-driven rollout when a non-pilot merchant snapshot loads', async () => {
+    read.mockResolvedValue({ account: null });
+    await expect(
+      getPiggyvestPrimaryCapability('00000000-0000-4000-8000-000000000000')
+    ).resolves.toBe(true);
   });
 
   it('returns true when the server snapshot loads', async () => {
@@ -87,5 +97,37 @@ describe('getPiggyvestPrimaryCapability', () => {
     expect(read).toHaveBeenCalledTimes(1);
     await getPiggyvestPrimaryCapability(PRIMARY_MERCHANT);
     expect(read).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('usePiggyvestPrimaryCapability', () => {
+  const OTHER_MERCHANT = '00000000-0000-4000-8000-000000000000';
+
+  it('fails open while the pilot probe is unknown, then follows the server', async () => {
+    read.mockResolvedValue({ account: null });
+    const { result } = renderHook(() =>
+      usePiggyvestPrimaryCapability(PRIMARY_MERCHANT)
+    );
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('fails closed for non-pilot merchants until the server confirms primary', async () => {
+    read.mockResolvedValue({ account: null });
+    const { result } = renderHook(() =>
+      usePiggyvestPrimaryCapability(OTHER_MERCHANT)
+    );
+    expect(result.current).toBe(false);
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('keeps non-pilot merchants on legacy when the server reports not-ready', async () => {
+    read.mockRejectedValue(notReady('PIGGYVEST_NOT_READY'));
+    const { result } = renderHook(() =>
+      usePiggyvestPrimaryCapability(OTHER_MERCHANT)
+    );
+    expect(result.current).toBe(false);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(result.current).toBe(false);
   });
 });

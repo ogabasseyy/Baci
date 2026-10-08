@@ -196,7 +196,8 @@ function hasBrokenMediaTag(html: string): boolean {
   const withoutComments = stripHtmlComments(html);
   const groups: MediaGroup[] = [];
   const pictureStack: MediaGroup[] = [];
-  for (const [tag] of matchMediaElements(withoutComments)) {
+  for (const match of matchMediaElements(withoutComments)) {
+    const tag = match[0];
     if (/^<picture\b/i.test(tag)) {
       const group: MediaGroup = {
         candidates: [],
@@ -211,8 +212,14 @@ function hasBrokenMediaTag(html: string): boolean {
       pictureStack.pop();
       continue;
     }
+    const isImg = /^<img\b/i.test(tag);
+    // An img wrapped in another element inside a picture is not
+    // associated with the picture sources, so it stands alone under
+    // the singleton rule instead of joining the picture group.
+    const pictureBound =
+      pictureStack.length > 0 && (!isImg || match.directPictureChild);
     let group: MediaGroup;
-    if (pictureStack.length > 0) {
+    if (pictureBound) {
       group = pictureStack[pictureStack.length - 1];
     } else {
       group = { candidates: [], hasMedia: true, imgSeen: false };
@@ -221,7 +228,7 @@ function hasBrokenMediaTag(html: string): boolean {
     // Only preceding applicable source siblings participate in
     // selecting the resource for the img: sources after the group's
     // img, and sources with inapplicable types, are ignored entirely.
-    if (/^<img\b/i.test(tag)) {
+    if (isImg) {
       group.hasMedia = true;
       group.candidates.push(...mediaTagCandidates(tag));
       group.imgSeen = true;

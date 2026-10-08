@@ -129,6 +129,26 @@ describe('validateImportedContent', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('rejects a picture whose img is nested below a non-picture element', () => {
+    // The source binds as a direct child, but the browser does not
+    // associate it with the div-wrapped img, so the src-less img
+    // renders nothing and the article must be rejected.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source srcset="https://cdn.example.com/a.webp"><div><img alt=""></div></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it('accepts a nested picture img that carries its own fallback', () => {
+    // Not picture-associated, but the img still renders its own src.
+    expect(
+      validateImportedContent(
+        '<picture><source srcset="https://cdn.example.com/a.webp"><div><img src="https://cdn.example.com/a.png" alt="A"></div></picture>'
+      )
+    ).toContain('a.png');
+  });
+
   it('ignores a picture source nested below a non-picture element', () => {
     expect(() =>
       validateImportedContent(

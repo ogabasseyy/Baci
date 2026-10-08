@@ -48,6 +48,14 @@ describe('validateImportedContent media', () => {
     '<div class="max-w-0 overflow-hidden">Only body</div>',
     '<div class="h-0 overflow-y-hidden">Only body</div>',
     '<div class="w-0 overflow-x-hidden">Only body</div>',
+    '<div class="hidden md:hidden">Only body</div>',
+    '<div class="opacity-0 md:opacity-0">Only body</div>',
+    '<div class="invisible md:invisible">Only body</div>',
+    '<div class="invisible md:block">Only body</div>',
+    '<div class="hidden md:visible">Only body</div>',
+    '<div class="hidden"><p class="md:block">Only body</p></div>',
+    '<div class="opacity-0"><p class="md:opacity-100">Only body</p></div>',
+    '<div class="sr-only"><p class="md:not-sr-only">Only body</p></div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -116,6 +124,21 @@ describe('validateImportedContent media', () => {
         '<div class="invisible"><img class="visible" src="https://cdn.example.com/a.png"></div>'
       )
     ).toContain('a.png');
+  });
+
+  it.each([
+    '<div class="hidden md:block">Only body</div>',
+    '<div class="opacity-0 lg:opacity-100">Only body</div>',
+    '<div class="invisible sm:visible">Only body</div>',
+    '<div class="sr-only md:not-sr-only">Only body</div>',
+    '<div class="invisible"><p class="md:visible">Only body</p></div>',
+    '<div class="text-transparent"><p class="md:text-black">Only body</p></div>',
+  ])('counts responsive overrides of hiding utilities as readable: %s', (body) => {
+    // Each pair renders at some breakpoint: same-element responsive
+    // overrides restore display, visibility, opacity, screen-reader
+    // hiding, and text color, while visibility and color also inherit,
+    // so responsive descendants escape transparent ancestors too.
+    expect(validateImportedContent(body)).toContain('Only body');
   });
 
   it('counts opaque text inside a transparent ancestor as readable', () => {

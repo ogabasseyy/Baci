@@ -94,6 +94,21 @@ describe('matchMediaElements', () => {
     ).toEqual([]);
   });
 
+  it('flags picture-bound img elements by direct ancestry', () => {
+    // Only a direct picture child associates with the picture
+    // sources; nested and standalone images stand alone.
+    const matches = matchMediaElements(
+      '<picture><div><img alt="nested"></div><img alt="direct"></picture><img alt="standalone">'
+    );
+    expect(matches.map((match) => match.directPictureChild)).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+    ]);
+  });
+
   it('returns no matches for text without elements', () => {
     expect(matchMediaElements('a < b and c > d')).toEqual([]);
   });

@@ -25,15 +25,30 @@ const VOID_ELEMENTS = new Set([
   'wbr',
 ]);
 
+type MediaElementMatch = RegExpMatchArray & {
+  // Whether this match is an img whose parent element is a picture.
+  // Only direct picture children associate with picture sources; a
+  // nested img still renders, but as a standalone image.
+  directPictureChild: boolean;
+};
+
+function flagMatch(
+  match: RegExpMatchArray,
+  directPictureChild: boolean
+): MediaElementMatch {
+  return Object.assign(match, { directPictureChild });
+}
+
 /**
  * Match img elements, picture-bound source elements, and picture
  * open/close tags in document order. A source contributes candidates
  * only as a direct picture child, so orphan, nested, and video/audio
- * sources never match. Callers must strip HTML comments first: the
+ * sources never match; every img matches, flagged by whether its
+ * parent is a picture. Callers must strip HTML comments first: the
  * tokenizer does not recognize comment openers.
  */
-export function matchMediaElements(html: string): RegExpMatchArray[] {
-  const elements: RegExpMatchArray[] = [];
+export function matchMediaElements(html: string): MediaElementMatch[] {
+  const elements: MediaElementMatch[] = [];
   const ancestors: string[] = [];
   for (const match of html.matchAll(HTML_ELEMENT_PATTERN)) {
     const tagName = match[2].toLowerCase();
@@ -41,7 +56,7 @@ export function matchMediaElements(html: string): RegExpMatchArray[] {
       // Stray void-element closers are ignored like browsers ignore
       // them; anything else pops one open ancestor.
       if (tagName === 'picture') {
-        elements.push(match);
+        elements.push(flagMatch(match, false));
         ancestors.pop();
       } else if (!VOID_ELEMENTS.has(tagName)) {
         ancestors.pop();
@@ -49,7 +64,7 @@ export function matchMediaElements(html: string): RegExpMatchArray[] {
       continue;
     }
     if (tagName === 'picture') {
-      elements.push(match);
+      elements.push(flagMatch(match, false));
       ancestors.push(tagName);
       continue;
     }
@@ -60,7 +75,12 @@ export function matchMediaElements(html: string): RegExpMatchArray[] {
     if (tagName === 'source' && ancestors[ancestors.length - 1] !== 'picture') {
       continue;
     }
-    elements.push(match);
+    elements.push(
+      flagMatch(
+        match,
+        tagName === 'img' && ancestors[ancestors.length - 1] === 'picture'
+      )
+    );
   }
   return elements;
 }

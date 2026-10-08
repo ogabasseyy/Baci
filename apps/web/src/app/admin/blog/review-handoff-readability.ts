@@ -1,4 +1,5 @@
 import { matchMediaElements } from './review-handoff-media-elements';
+import { showingMarkers } from './review-handoff-showing-markers';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
@@ -34,32 +35,26 @@ function isZeroSizedImage(tag: string): boolean {
   return false;
 }
 
-// Non-overridable hiding: display:none removes the subtree, group
-// opacity and clipping apply to the whole rendered element, so no
-// descendant can reappear. `invisible` is deliberately absent: the
-// visibility property inherits but a descendant `visible` overrides
-// it, so visibility is tracked separately below.
-const IMAGE_HIDING_CLASS_TOKENS = new Set(['hidden', 'opacity-0', 'sr-only']);
-// text-transparent sets only `color: transparent`: it hides glyphs but not
-// decoded image pixels, and — unlike display or opacity — a descendant
-// with an opaque text color overrides it. Color is therefore tracked as
-// an overridable inherited marker (like visibility), never as terminal
-// hiding. Opaque means a concrete Tailwind v4 palette color; text-current
-// and text-inherit pass the ancestor color through, and font-size or
-// alignment utilities (text-sm, text-center) set no color at all.
-const OPAQUE_TEXT_COLOR_PATTERN =
-  /^text-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))(?:\/(?:\d+|\[[^\]]+\]))?$/;
-
-function tagHasHidingClass(tag: string, tokens: ReadonlySet<string>): boolean {
+// Same-element hiding: display:none removes the subtree, group opacity
+// and clipping apply to the whole rendered element, so no descendant
+// can reappear — but a responsive override on the same element
+// (`hidden md:block`) renders at that breakpoint. `invisible` and
+// `text-transparent` are deliberately absent: visibility and color
+// inherit, so a descendant `visible` or opaque text color overrides
+// them, and both are tracked as markers below.
+function tagHasTerminalHidingClass(tag: string): boolean {
   // The sanitizer preserves class but strips style, so hidden subtrees
   // arrive only as Tailwind tokens. Match exact tokens: `hidden` must not
-  // match `unhidden`.
+  // match `unhidden`. Each hiding utility needs its own override kind:
+  // visibility does not restore display, and display does not restore
+  // visibility.
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
-    if (classes.some((token) => tokens.has(token))) {
-      return true;
-    }
+    const markers = showingMarkers(classes);
+    if (classes.includes('hidden') && !markers.display) return true;
+    if (classes.includes('opacity-0') && !markers.opacity) return true;
+    if (classes.includes('sr-only') && !markers.notSrOnly) return true;
   }
   return false;
 }
@@ -103,19 +98,13 @@ function hasClippedZeroSizeClass(tag: string): boolean {
 }
 
 function hasVisibilityHidingClass(tag: string): boolean {
-  return (
-    tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS) ||
-    hasClippedZeroSizeClass(tag)
-  );
+  return tagHasTerminalHidingClass(tag) || hasClippedZeroSizeClass(tag);
 }
 
 function hasTextHidingClass(tag: string): boolean {
   // Transparent text color is tracked per frame as an overridable
   // marker, so the terminal text set matches the visibility set.
-  return (
-    tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS) ||
-    hasClippedZeroSizeClass(tag)
-  );
+  return tagHasTerminalHidingClass(tag) || hasClippedZeroSizeClass(tag);
 }
 
 type HidingFrame = {
@@ -129,8 +118,9 @@ function elementVisibility(tag: string): 'visible' | 'invisible' | null {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
     // A pathological element carrying both markers resolves to visible,
-    // matching the override direction.
-    if (classes.includes('visible')) return 'visible';
+    // matching the override direction. A responsive `visible` counts:
+    // content shown at any breakpoint is readable.
+    if (showingMarkers(classes).visible) return 'visible';
     if (classes.includes('invisible')) return 'invisible';
   }
   return null;
@@ -141,10 +131,9 @@ function elementColor(tag: string): 'opaque' | 'transparent' | null {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
     // A pathological element carrying both markers resolves to opaque,
-    // matching the override direction.
-    if (classes.some((token) => OPAQUE_TEXT_COLOR_PATTERN.test(token))) {
-      return 'opaque';
-    }
+    // matching the override direction. Responsive opaque colors count
+    // the same as exact ones.
+    if (showingMarkers(classes).opaqueColor) return 'opaque';
     if (classes.includes('text-transparent')) return 'transparent';
   }
   return null;
@@ -258,7 +247,9 @@ export function hasReadableContent(content: string): boolean {
   // zero-sized or CSS-hidden <img> renders no pixels either — whether the
   // hiding class sits on the image itself or on an ancestor. Terminal
   // hiding (display, opacity, clipping) wins anywhere, while inherited
-  // `invisible` yields to the nearest `visible` descendant. Text gets
+  // `invisible` yields to the nearest `visible` descendant. A hiding
+  // utility paired with a same-element responsive override (`hidden
+  // md:block`) renders at that breakpoint and is not hiding at all. Text gets
   // the same ancestry handling through visibleText, plus an overridable
   // color marker so opaque text escapes a `text-transparent` ancestor
   // (glyph-only: images under transparent text still count). Comments render

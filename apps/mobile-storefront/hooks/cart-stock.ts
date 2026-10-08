@@ -21,12 +21,14 @@ async function checkNetwork(): Promise<boolean> {
 
 function getExistingCartQuantityForStock(item: AddToCartInput): number {
   const variantId = item.variant_id ?? null;
+  const offerId = item.offer_id ?? null;
   return useCartStore
     .getState()
     .items.reduce(
       (total, cartItem) =>
         cartItem.product_id === item.product_id &&
-        (cartItem.variant_id ?? null) === variantId
+        (cartItem.variant_id ?? null) === variantId &&
+        (cartItem.offer_id ?? null) === offerId
           ? total + cartItem.quantity
           : total,
       0
@@ -50,15 +52,18 @@ export function getTotalRequestedQuantityForStock(item: AddToCartInput) {
  * @param cachedStock - Last known stock from TanStack Query cache, used as
  *   fallback when offline or on query error. If no cached value exists,
  *   stock check will fail to prevent overselling.
- * @param options.variantId - Selected option identity. A managed option
+ * @param options.variantId - Selected variant identity. A managed option
  *   validates its own effective stock instead of the parent total, so a
  *   stocked variant on a zero-stock parent stays purchasable.
+ * @param options.offerId - Selected condition-offer identity. Validated
+ *   against the offer's own effective stock; a null offer quantity
+ *   inherits the parent total, mirroring the PDP predicate.
  */
 export async function checkStock(
   productId: string,
   requestedQuantity: number,
   cachedStock?: number,
-  options?: { variantId?: string | null }
+  options?: { variantId?: string | null; offerId?: string | null }
 ): Promise<StockCheckResult> {
   const isOnline = await checkNetwork();
   if (!isOnline) {
@@ -82,7 +87,7 @@ export async function checkStock(
 
   const { data, error } = await supabase
     .from('products')
-    .select('stock_quantity, stock, manage_stock')
+    .select('stock_quantity, stock, manage_stock, merchant_id')
     .eq('id', productId)
     .single();
 
@@ -117,9 +122,22 @@ export async function checkStock(
       ? legacyQuantity
       : trackedQuantity;
 
+  // Offers exist only for non-variant products, so a variant identity
+  // always wins when both are present (defensive: callers never send both).
   const currentStock = options?.variantId
-    ? await resolveVariantEffectiveStock(options.variantId, parentStock)
-    : parentStock;
+    ? await resolveVariantEffectiveStock(
+        productId,
+        options.variantId,
+        merchantIdOf(data),
+        parentStock
+      )
+    : options?.offerId
+      ? await resolveOfferEffectiveStock(
+          productId,
+          options.offerId,
+          parentStock
+        )
+      : parentStock;
   return {
     available: currentStock >= requestedQuantity,
     currentStock,
@@ -127,38 +145,102 @@ export async function checkStock(
   };
 }
 
+function merchantIdOf(
+  data: { merchant_id?: unknown } | null | undefined
+): string | null {
+  return typeof data?.merchant_id === 'string' ? data.merchant_id : null;
+}
+
 /**
- * Option-level effective stock, mirroring the price-options CTE: a finite
- * variant quantity wins, a null one inherits the parent stock, and
- * serialized tracking bypasses the quantity check. A vanished variant
- * reports zero since the selected option cannot be fulfilled; other
+ * Variant effective stock through the shopper-safe public projection.
+ * product_variants rows are merchant-only, so the check reads
+ * get_mcp_search_product_variants (SECURITY DEFINER, anon-executable),
+ * whose effective_policy already resolves variant/parent inheritance and
+ * whose stock_quantity reports public available units for serialized
+ * rows. Unlimited tracking bypasses; strict compares exact units; other
+ * policies use the finite quantity with parent inheritance, mirroring the
+ * price-options CTE. A variant absent from the projection (vanished,
+ * unpublished, or beyond the PDP population cap) reports zero; other
  * lookup failures throw so the caller retries instead of overselling.
  */
 async function resolveVariantEffectiveStock(
+  productId: string,
   variantId: string,
+  merchantId: string | null,
   parentStock: number
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from('product_variants')
-    .select('stock_quantity, inventory_tracking_policy')
-    .eq('id', variantId)
-    .single();
-  if (error || !data) {
-    if (error?.code === 'PGRST116' || !error) {
-      log.error('Variant stock check found no such variant:', variantId);
-      return 0;
-    }
+  if (!merchantId) {
+    log.error('Variant stock check has no merchant scope:', productId);
+    throw new Error('Cannot verify stock availability. Please try again.');
+  }
+  const { data, error } = await supabase.rpc(
+    'get_mcp_search_product_variants',
+    { p_product_ids: [productId], p_merchant_id: merchantId }
+  );
+  if (error) {
     log.error('Variant stock check failed:', error);
     throw new Error('Cannot verify stock availability. Please try again.');
   }
-  if (
-    data.inventory_tracking_policy === 'serialized_only' ||
-    data.inventory_tracking_policy === 'serialized_then_unlimited'
-  ) {
+  const row = (Array.isArray(data) ? data : []).find(
+    (entry: { id?: unknown }) => entry?.id === variantId
+  ) as
+    | {
+        stock_quantity?: unknown;
+        effective_policy?: unknown;
+      }
+    | undefined;
+  if (!row) {
+    log.error('Variant stock check found no such variant:', variantId);
+    return 0;
+  }
+  if (row.effective_policy === 'serialized_then_unlimited') {
     return Number.MAX_SAFE_INTEGER;
   }
-  return typeof data.stock_quantity === 'number' &&
-    Number.isFinite(data.stock_quantity)
-    ? data.stock_quantity
+  if (row.effective_policy === 'serialized_strict') {
+    if (
+      typeof row.stock_quantity === 'number' &&
+      Number.isFinite(row.stock_quantity)
+    ) {
+      return Math.max(0, row.stock_quantity);
+    }
+    log.error('Variant stock check found no unit count:', variantId);
+    throw new Error('Cannot verify stock availability. Please try again.');
+  }
+  return typeof row.stock_quantity === 'number' &&
+    Number.isFinite(row.stock_quantity)
+    ? row.stock_quantity
+    : parentStock;
+}
+
+/**
+ * Offer effective stock through the anon-executable get_product_offers
+ * RPC (active offers only). A finite offer quantity wins; a null one
+ * inherits the parent stock, mirroring the price-options offer branch
+ * and the PDP predicate. An offer missing from the projection
+ * (vanished, inactive, or unlisted) reports zero; other lookup failures
+ * throw so the caller retries instead of overselling.
+ */
+async function resolveOfferEffectiveStock(
+  productId: string,
+  offerId: string,
+  parentStock: number
+): Promise<number> {
+  const { data, error } = await supabase.rpc('get_product_offers', {
+    p_product_id: productId,
+  });
+  if (error) {
+    log.error('Offer stock check failed:', error);
+    throw new Error('Cannot verify stock availability. Please try again.');
+  }
+  const row = (Array.isArray(data) ? data : []).find(
+    (entry: { offer_id?: unknown }) => String(entry?.offer_id ?? '') === offerId
+  ) as { stock_quantity?: unknown } | undefined;
+  if (!row) {
+    log.error('Offer stock check found no such offer:', offerId);
+    return 0;
+  }
+  return typeof row.stock_quantity === 'number' &&
+    Number.isFinite(row.stock_quantity)
+    ? row.stock_quantity
     : parentStock;
 }

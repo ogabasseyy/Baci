@@ -63,6 +63,32 @@ describe('cart-line helpers', () => {
     ).toBe(true);
   });
 
+  it('splits cart lines by condition-offer identity', () => {
+    const nonVariantBase: CartItem = { ...baseItem, variant_id: undefined };
+    const nonVariantIncoming: Omit<CartItem, 'id'> = {
+      ...incomingBaseItem,
+      variant_id: undefined,
+    };
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming, offer_id: 'offer-8' }
+      )
+    ).toBe(false);
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming, offer_id: 'offer-7' }
+      )
+    ).toBe(true);
+    expect(
+      isSameCartLine(
+        { ...nonVariantBase, offer_id: 'offer-7' },
+        { ...nonVariantIncoming }
+      )
+    ).toBe(false);
+  });
+
   it('merges existing quantity while preserving negotiated and assurance state', () => {
     expect(
       mergeExistingCartItem(

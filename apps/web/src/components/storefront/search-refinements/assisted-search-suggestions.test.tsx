@@ -20,6 +20,7 @@ import { AssistedSearchSuggestions } from './assisted-search-suggestions';
 
 const props = {
   query: 'iphone',
+  resultQuery: 'iphone',
   enabled: true,
   criteria: { brands: [], sort: 'relevance' as const },
   basePath: '/oga/search',
@@ -83,4 +84,26 @@ it('keeps conflicting proposals from navigating', () => {
   );
   expect(screen.getByRole('alert')).toHaveTextContent('conflict');
   expect(screen.queryByRole('link')).toBeNull();
+});
+
+it('resets stale filters against the committed results query', () => {
+  state.proposal = {
+    query: 'samsung',
+    explanation: 'Try Samsung phones',
+    filters: {},
+  };
+  // Draft edited from a filtered iphone result set to samsung: the
+  // proposal matches the draft, but the Apple constraint belongs to
+  // the committed iphone results and must not carry over.
+  render(
+    <AssistedSearchSuggestions
+      {...props}
+      query="samsung"
+      resultQuery="iphone"
+      criteria={{ brands: ['Apple'], sort: 'relevance' }}
+    />
+  );
+  expect(
+    screen.getByRole('link', { name: 'Apply search suggestions' })
+  ).toHaveAttribute('href', '/oga/search?q=samsung');
 });

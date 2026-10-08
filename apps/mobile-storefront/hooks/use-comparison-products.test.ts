@@ -94,6 +94,96 @@ it.each([
   expect(snapshot.searchMatch?.condition).toBe('new');
 });
 
+it('prefers the verified projection price over the hydrated option price', async () => {
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 200,
+    condition: 'New & Used',
+    variants: [{ id: 'v1', condition: 'used', price: 200 }],
+    offers: [],
+  });
+  mockRpc.mockResolvedValue({
+    data: [
+      {
+        variant_id: 'v1',
+        offer_id: null,
+        condition: 'used',
+        effective_price: 150,
+      },
+    ],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { price: 150, condition: 'used', variantId: 'v1' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() => expect(result.current.products[0].price).toBe(150));
+  expect(result.current.unavailableIds).toEqual([]);
+});
+
+it('labels a degraded exact-variant match with the verified live condition', async () => {
+  // Degraded hydration returns the parent row without the matched
+  // variant, while the price projection still verifies the exact id.
+  mockResolve.mockResolvedValue({
+    id: 'p1',
+    name: 'Phone',
+    price: 200,
+    condition: 'New & Used',
+    variants: [],
+    offers: [],
+  });
+  mockRpc.mockResolvedValue({
+    data: [
+      {
+        variant_id: 'v1',
+        offer_id: null,
+        condition: 'used',
+        effective_price: 150,
+      },
+    ],
+    error: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const { result } = renderHook(
+    () =>
+      useComparisonProducts([
+        {
+          id: 'p1',
+          name: 'Phone',
+          price: 100,
+          searchMatch: { price: 150, condition: 'used', variantId: 'v1' },
+        } as Product,
+      ]),
+    {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client }, children),
+    }
+  );
+  await waitFor(() =>
+    expect(result.current.products[0].condition).toBe('used')
+  );
+  expect(result.current.products[0].price).toBe(150);
+  expect(result.current.products[0].specifications).toEqual({});
+  expect(result.current.unavailableIds).toEqual([]);
+});
+
 it.each([
   false,
   true,

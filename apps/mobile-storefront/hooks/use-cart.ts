@@ -78,7 +78,10 @@ export function useCart() {
         item.product_id,
         totalQuantity,
         getCachedProductStock(queryClient, item.product_id),
-        { variantId: item.variant_id ?? null }
+        {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }
       );
 
       if (!stockCheck.available) {
@@ -185,7 +188,10 @@ export function useCart() {
         item.product_id,
         quantity,
         getCachedProductStock(queryClient, item.product_id),
-        { variantId: item.variant_id ?? null }
+        {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }
       );
 
       if (!stockCheck.available) {

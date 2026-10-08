@@ -126,6 +126,10 @@ export function isSameCartLine(
     return false;
   }
 
+  if ((existingItem.offer_id ?? null) !== (incomingItem.offer_id ?? null)) {
+    return false;
+  }
+
   if (existingVariantId || incomingVariantId) {
     return (
       areEquivalentCartAttributes(existingItem.color, incomingItem.color) &&

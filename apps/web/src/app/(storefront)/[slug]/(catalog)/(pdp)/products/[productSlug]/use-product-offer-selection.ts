@@ -6,16 +6,14 @@ import {
 } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { Product, ProductVariant } from '@/lib/products';
+import { getAttributeOptions } from './product-selection-attribute-options';
+import { areSelectionAttributesEqual } from './product-selection-attributes-equal';
+import type { ProductCondition } from './product-selection-condition';
+import { conditionDescriptions } from './product-selection-condition-descriptions';
+import { conditionLabels } from './product-selection-condition-labels';
 import { createProductSelectionHandlers } from './product-selection-handlers';
-import {
-  areSelectionAttributesEqual,
-  conditionDescriptions,
-  conditionLabels,
-  getAttributeOptions,
-  PLACEHOLDER_IMAGE,
-  type ProductCondition,
-  resolveSelectionPricing,
-} from './product-selection-utils';
+import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
+import { resolveSelectionPricing } from './product-selection-pricing';
 import { useProductRouteSelection } from './use-product-route-selection';
 
 /**

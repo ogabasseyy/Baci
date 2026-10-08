@@ -118,19 +118,22 @@ export function useComparisonProducts(selected: Product[]) {
               searchMatch: match
                 ? { ...match, condition: liveCondition }
                 : undefined,
-              price: option?.price ?? livePrice ?? product.price,
+              // The projection is consulted after hydration, so its price
+              // is the newer verified value: prefer it over the hydrated
+              // option price while the status claims current prices.
+              price: livePrice ?? option?.price ?? product.price,
               // A matched option price must never pair with the parent's
               // strike-through: suppress it exactly as the search card does
               // for matched items, so the table shows no false discount.
               compare_at_price: match ? undefined : product.compare_at_price,
-              // A matched base row has no option identity, but the table
-              // reads product.condition: restore the refreshed live
-              // condition, not the parent's "New & Used" aggregate label.
+              // A verified match always prefers the projection-refreshed
+              // live condition when the local option is absent: degraded
+              // hydration may verify the exact id while the option row
+              // stays missing, and the parent's "New & Used" aggregate
+              // label would mislabel the exact variant.
               condition:
                 option?.condition ??
-                (match && !(match.variantId || match.offerId)
-                  ? liveCondition
-                  : product.condition),
+                (match ? liveCondition : product.condition),
               // A degraded exact-variant match may verify identity, price,
               // and condition while the local option stays missing: the
               // parent specifications are then unverified for the matched

@@ -9,11 +9,13 @@ import { searchAssistanceRequestSchema } from '@/schemas/search-assistance';
 
 export function AssistedSearchSuggestions({
   query,
+  resultQuery,
   enabled,
   criteria,
   basePath,
 }: {
   query: string;
+  resultQuery: string;
   enabled: boolean;
   criteria: SearchRefinements;
   basePath: string;
@@ -30,10 +32,13 @@ export function AssistedSearchSuggestions({
   let proposalHref: string | null = null;
   if (assistance.proposal) {
     try {
+      // Filters reset against the committed results query, not the
+      // draft: an edited draft matching the proposal must not retain
+      // the old result set's brand/category/price constraints.
       proposalHref = buildRefinedSearchHref(
         basePath,
         assistance.proposal.query,
-        mergeAssistedRefinements(criteria, assistance.proposal, query)
+        mergeAssistedRefinements(criteria, assistance.proposal, resultQuery)
       );
     } catch {
       /* A conflicting proposal cannot replace the current filters. */

@@ -24,10 +24,8 @@ import type { Product, ProductVariant } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
-import {
-  PLACEHOLDER_IMAGE,
-  type ProductCondition,
-} from './product-selection-utils';
+import type { ProductCondition } from './product-selection-condition';
+import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
 import { useProductOfferSelection } from './use-product-offer-selection';
 
 // Lazy load heavy components to reduce initial bundle size

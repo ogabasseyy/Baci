@@ -3,6 +3,7 @@ export interface CartItem {
   product_id: string;
   slug: string;
   variant_id?: string;
+  offer_id?: string;
   variant_attributes?: Record<string, string>;
   name: string;
   brand?: string;

@@ -39,6 +39,57 @@ describe('refined product hydration', () => {
       expect.objectContaining({ query: 'iphon', merchantId: 'm1' })
     );
   });
+  it('suppresses typo recovery when refinements alone empty the results', async () => {
+    rpc.mockResolvedValueOnce({ data: [], error: null }).mockResolvedValueOnce({
+      data: [{ product_id: 'p1', total_count: 5, effective_price: 99 }],
+      error: null,
+    });
+    suggestion.mockResolvedValue('iphone');
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'iphone',
+      limit: 20,
+      refinements: { brands: [], sort: 'relevance', maxPrice: 1 },
+    });
+    expect(result.didYouMean).toBeNull();
+    expect(suggestion).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(rpc.mock.calls[1]?.[1]).toMatchObject({
+      brands_filter: [],
+      result_limit: 1,
+      result_offset: 0,
+    });
+  });
+  it('keeps typo recovery when the unrefined query is also empty', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: [], error: null });
+    suggestion.mockResolvedValue('iphone');
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'iphon',
+      limit: 20,
+      refinements: { brands: ['Apple'], sort: 'relevance' },
+    });
+    expect(result.didYouMean).toBe('iphone');
+    expect(suggestion).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'iphon', merchantId: 'm1' })
+    );
+  });
+  it('fails closed when the unrefined probe errors', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'boom' } });
+    suggestion.mockResolvedValue('iphone');
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'iphone',
+      limit: 20,
+      refinements: { brands: [], sort: 'relevance', maxPrice: 1 },
+    });
+    expect(result.didYouMean).toBeNull();
+    expect(suggestion).not.toHaveBeenCalled();
+  });
   it('displays the matching variant price in ranked order', async () => {
     rpc.mockResolvedValue({
       data: [
@@ -193,7 +244,9 @@ it('sends processor selection to global search before pagination', async () => {
     limit: 20,
     offset: 40,
   });
-  expect(rpc).toHaveBeenLastCalledWith(
+  // The empty refined page also probes the unrefined query before typo
+  // recovery, so the processor-bearing call is asserted by value.
+  expect(rpc).toHaveBeenCalledWith(
     'search_storefront_products_processor_refined',
     expect.objectContaining({
       processor_filter: 'Intel Core i7',

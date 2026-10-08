@@ -122,7 +122,14 @@ describe('useProductDetailCartActions catalog basis', () => {
           image: 'https://cdn.example.com/pixel-8.avif',
           has_variants: false,
           price: 410000,
-          offers: [{ condition: 'used', price: 320000, stock_quantity: 3 }],
+          offers: [
+            {
+              id: 'offer-7',
+              condition: 'used',
+              price: 320000,
+              stock_quantity: 3,
+            },
+          ],
         },
         offerConditionKey: 'used',
       },
@@ -135,7 +142,11 @@ describe('useProductDetailCartActions catalog basis', () => {
     });
 
     expect(addItem.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ price: 320000, catalog_price: 410000 })
+      expect.objectContaining({
+        price: 320000,
+        catalog_price: 410000,
+        offer_id: 'offer-7',
+      })
     );
   });
 
@@ -161,7 +172,7 @@ describe('useProductDetailCartActions catalog basis', () => {
     });
 
     expect(addItem.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ catalog_price: undefined })
+      expect.objectContaining({ catalog_price: undefined, offer_id: undefined })
     );
   });
 });

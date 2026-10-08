@@ -171,7 +171,7 @@ export function SearchRefinementFields({
         'brand',
         'Brand',
         <View>
-          {brands.length > 6 && (
+          {(brands.length > 6 || brandQuery !== '') && (
             <TextInput
               accessibilityLabel="Search brands"
               placeholder="Search brands"

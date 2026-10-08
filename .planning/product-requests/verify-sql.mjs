@@ -31,6 +31,7 @@ await db.exec(await fs.readFile(new URL('../../supabase/migrations/2026100821000
 // Apply distinct outcome codes so replay pins the route's SQLSTATE contract.
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008220000_storefront_product_request_outcome_codes.sql', import.meta.url), 'utf8'));
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008230000_storefront_product_request_contact_intl_prefix.sql', import.meta.url), 'utf8'));
+await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008250000_storefront_product_request_contact_zero_run.sql', import.meta.url), 'utf8'));
 const submit = (query, contact, id, slug = 'ogabassey') => db.query('SELECT public.submit_storefront_product_request($1,$2,$3,$4::uuid)', [slug, query, contact, id]);
 const id = (number) => `20000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 await db.exec('SET ROLE anon');
@@ -62,8 +63,10 @@ assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.stor
 await db.exec('SET ROLE storefront_intake');
 // The 00 international prefix folds to the same key as + and suppresses.
 await submit('iPhone 30', '00234 801 000 1111', id(35));
+// A three-zero run folds to the same key as + and suppresses.
+await submit('iPhone 30', '000234 801 000 1111', id(36));
 await db.exec('RESET ROLE');
-assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.storefront_product_requests WHERE id IN ('" + id(30) + "','" + id(31) + "','" + id(35) + "')")).rows[0].count, 1);
+assert.equal((await db.query("SELECT count(*)::integer AS count FROM public.storefront_product_requests WHERE id IN ('" + id(30) + "','" + id(31) + "','" + id(35) + "','" + id(36) + "')")).rows[0].count, 1);
 await db.exec('SET ROLE storefront_intake');
 await submit('iPhone 31', '+2348010001111', id(32));
 await submit('iPhone 32', '+234 (801) 000-1111', id(33));

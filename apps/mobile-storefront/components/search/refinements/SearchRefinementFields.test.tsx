@@ -82,6 +82,18 @@ it('filters available brands and retains selected brands', () => {
   );
   expect(view.getByLabelText('Retained')).toBeTruthy();
 });
+it('keeps the brand search visible while its query is active', () => {
+  const view = render(
+    <SearchRefinementFields {...props} focusGroup="brand" brandQuery="app" />
+  );
+  // Only two facets: the input stays because the query is nonempty, so a
+  // refetch-driven shrink cannot strand an uncleared filter.
+  expect(view.getByLabelText('Search brands')).toBeTruthy();
+  view.rerender(
+    <SearchRefinementFields {...props} focusGroup="brand" brandQuery="" />
+  );
+  expect(view.queryByLabelText('Search brands')).toBeNull();
+});
 it('merges case-variant draft brands into the facet spelling', () => {
   const setDraft = jest.fn();
   const view = render(

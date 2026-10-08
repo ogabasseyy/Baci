@@ -1,6 +1,6 @@
 import { resolveVariantDisplaySelection } from '@baci/shared/lib';
 import type { Product, ProductVariant } from '@/lib/products';
-import type { ProductCondition } from './product-selection-utils';
+import type { ProductCondition } from './product-selection-condition';
 
 export interface ProductSelectionHandlerInputs {
   offerIdParam: string | null;

@@ -1,54 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Product, ProductVariant } from '@/lib/products';
-import {
-  areSelectionAttributesEqual,
-  getAttributeOptions,
-  getValidConditionOptions,
-  resolveSelectionPricing,
-} from './product-selection-utils';
-
-describe('getAttributeOptions', () => {
-  it('collects sorted unique values per attribute key', () => {
-    const variants = [
-      {
-        id: 'v1',
-        product_id: 'p1',
-        merchant_id: 'm1',
-        stock_quantity: 5,
-        attributes: { storage: '256 GB', color: 'Blue' },
-      },
-      {
-        id: 'v2',
-        product_id: 'p1',
-        merchant_id: 'm1',
-        stock_quantity: 5,
-        attributes: { storage: '128 GB', color: 'Blue' },
-      },
-    ] as ProductVariant[];
-    expect(getAttributeOptions(variants)).toEqual([
-      { key: 'storage', values: ['128 GB', '256 GB'] },
-      { key: 'color', values: ['Blue'] },
-    ]);
-  });
-});
-
-describe('getValidConditionOptions', () => {
-  it('canonicalizes aliases and drops unknown grades', () => {
-    expect(
-      getValidConditionOptions(['uk_used', 'refurbished', 'bogus', 'NEW'])
-    ).toEqual(['used', 'open_box', 'new']);
-  });
-});
-
-describe('areSelectionAttributesEqual', () => {
-  it('compares attribute maps by entry, not identity', () => {
-    expect(areSelectionAttributesEqual({ a: '1' }, { a: '1', b: '2' })).toBe(
-      false
-    );
-    expect(areSelectionAttributesEqual({ a: '1' }, { a: '2' })).toBe(false);
-    expect(areSelectionAttributesEqual({ a: '1' }, { a: '1' })).toBe(true);
-  });
-});
+import type { Product } from '@/lib/products';
+import { resolveSelectionPricing } from './product-selection-pricing';
 
 describe('resolveSelectionPricing', () => {
   const product = {

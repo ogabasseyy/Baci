@@ -1,5 +1,7 @@
 import {
+  emptySearchRefinements,
   getRefinedSearchArgs,
+  hasActiveSearchRefinements,
   readRefinedSearchRows,
   type SearchRefinements,
 } from '@baci/shared/lib';
@@ -7,9 +9,44 @@ import { cookies } from 'next/headers';
 import { availableSearchFacetsSchema } from '@/schemas/available-search-facets';
 import { normalizeProduct } from './normalize-product';
 import { STOREFRONT_PRODUCTS_COMPACT_SELECT } from './storefront-products-select';
+import type { StorefrontSearchSupabase } from './storefront-search';
 import { findStorefrontSearchDidYouMean } from './storefront-search-did-you-mean';
 import type { StorefrontSearchProductsPage } from './storefront-search-products';
 import { createClient } from './supabase/server';
+
+async function findRefinedDidYouMean({
+  supabase,
+  rpcName,
+  merchantId,
+  query,
+  refinements,
+}: {
+  supabase: StorefrontSearchSupabase;
+  rpcName: string;
+  merchantId: string;
+  query: string;
+  refinements: SearchRefinements;
+}): Promise<string | null> {
+  // Unfiltered empties keep typo recovery: the query itself matched nothing.
+  if (!hasActiveSearchRefinements(refinements)) {
+    return findStorefrontSearchDidYouMean({ supabase, merchantId, query });
+  }
+  // The suggestion link carries only q, so offering one on a filter-only
+  // empty would silently drop the shopper's budget/brand/condition
+  // filters. Probe the unrefined query: only a query that matches
+  // nothing unrefined is a typo. An unreadable probe fails closed.
+  try {
+    const probe = await supabase.rpc(
+      rpcName,
+      getRefinedSearchArgs(merchantId, query, emptySearchRefinements(), 1, 0)
+    );
+    if (probe.error) return null;
+    if (readRefinedSearchRows(probe.data).length > 0) return null;
+  } catch {
+    return null;
+  }
+  return findStorefrontSearchDidYouMean({ supabase, merchantId, query });
+}
 
 export async function getStorefrontRefinedSearchProducts(args: {
   merchantId: string;
@@ -19,10 +56,11 @@ export async function getStorefrontRefinedSearchProducts(args: {
   refinements: SearchRefinements;
 }): Promise<StorefrontSearchProductsPage> {
   const supabase = createClient(await cookies());
+  const rpcName = args.refinements.processor
+    ? 'search_storefront_products_processor_refined'
+    : 'search_storefront_products_refined';
   const { data, error } = await supabase.rpc(
-    args.refinements.processor
-      ? 'search_storefront_products_processor_refined'
-      : 'search_storefront_products_refined',
+    rpcName,
     getRefinedSearchArgs(
       args.merchantId,
       args.query,
@@ -40,10 +78,12 @@ export async function getStorefrontRefinedSearchProducts(args: {
       products: [],
       productIds: [],
       query: args.query,
-      didYouMean: await findStorefrontSearchDidYouMean({
+      didYouMean: await findRefinedDidYouMean({
         supabase,
+        rpcName,
         merchantId: args.merchantId,
         query: args.query,
+        refinements: args.refinements,
       }),
     };
   const { data: raw, error: readError } = await supabase

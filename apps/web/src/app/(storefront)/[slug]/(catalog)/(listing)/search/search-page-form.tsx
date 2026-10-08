@@ -133,6 +133,7 @@ export function SearchPageForm({
           />
           <AssistedSearchSuggestions
             query={query}
+            resultQuery={defaultQuery}
             enabled={assistEnabled}
             criteria={refinements}
             basePath={action}

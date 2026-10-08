@@ -18,6 +18,7 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     from: jest.fn(),
+    rpc: jest.fn(),
   },
 }));
 
@@ -157,32 +158,42 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  function mockProductAndVariant(
+  function mockProductAndRpc(
     product: Record<string, unknown>,
-    variant: { data: Record<string, unknown> | null; error: unknown }
+    rowsByRpc: Record<string, unknown[] | { error: unknown }>
   ) {
     const productSingle = jest.fn().mockResolvedValue({
       data: product,
       error: null,
     });
-    const variantSingle = jest.fn().mockResolvedValue(variant);
-    (supabase.from as jest.Mock).mockImplementation((table: string) => ({
-      select: () => ({
-        eq: () => ({
-          single: table === 'product_variants' ? variantSingle : productSingle,
-        }),
-      }),
-    }));
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single: productSingle }) }),
+    });
+    (supabase.rpc as jest.Mock).mockImplementation((name: string) => {
+      const stub = rowsByRpc[name] ?? [];
+      if (!Array.isArray(stub))
+        return Promise.resolve({
+          data: null,
+          error: (stub as { error: unknown }).error,
+        });
+      return Promise.resolve({ data: stub, error: null });
+    });
   }
 
+  const parent = (overrides: Record<string, unknown> = {}) => ({
+    stock_quantity: 0,
+    stock: 0,
+    manage_stock: null,
+    merchant_id: 'merchant-1',
+    ...overrides,
+  });
+
   it('validates the variant stock instead of a zero parent total', async () => {
-    mockProductAndVariant(
-      { stock_quantity: 0, stock: 0, manage_stock: null },
-      {
-        data: { stock_quantity: 2, inventory_tracking_policy: 'tracked' },
-        error: null,
-      }
-    );
+    mockProductAndRpc(parent(), {
+      get_mcp_search_product_variants: [
+        { id: 'variant-2', stock_quantity: 2, effective_policy: 'off' },
+      ],
+    });
 
     await expect(
       checkStock('product-1', 2, undefined, { variantId: 'variant-2' })
@@ -201,10 +212,11 @@ describe('cart-stock helpers', () => {
   });
 
   it('lets a null variant quantity inherit the parent stock', async () => {
-    mockProductAndVariant(
-      { stock_quantity: 5, stock: 0, manage_stock: null },
-      { data: { stock_quantity: null }, error: null }
-    );
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_mcp_search_product_variants: [
+        { id: 'variant-9', stock_quantity: null, effective_policy: 'off' },
+      ],
+    });
 
     await expect(
       checkStock('product-1', 4, undefined, { variantId: 'variant-9' })
@@ -215,17 +227,16 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('bypasses the quantity check for serialized variants', async () => {
-    mockProductAndVariant(
-      { stock_quantity: 0, stock: 0, manage_stock: null },
-      {
-        data: {
+  it('bypasses the quantity check for unlimited serialized variants', async () => {
+    mockProductAndRpc(parent(), {
+      get_mcp_search_product_variants: [
+        {
+          id: 'variant-s',
           stock_quantity: 0,
-          inventory_tracking_policy: 'serialized_then_unlimited',
+          effective_policy: 'serialized_then_unlimited',
         },
-        error: null,
-      }
-    );
+      ],
+    });
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-s' })
@@ -236,11 +247,59 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('reports zero for a vanished variant instead of the parent total', async () => {
-    mockProductAndVariant(
-      { stock_quantity: 5, stock: 0, manage_stock: null },
-      { data: null, error: { code: 'PGRST116', message: 'No rows' } }
-    );
+  it('compares strict serialized variants against exact unit counts', async () => {
+    mockProductAndRpc(parent(), {
+      get_mcp_search_product_variants: [
+        {
+          id: 'variant-strict',
+          stock_quantity: 3,
+          effective_policy: 'serialized_strict',
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 3, undefined, { variantId: 'variant-strict' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 3,
+      requestedQuantity: 3,
+    });
+    await expect(
+      checkStock('product-1', 4, undefined, { variantId: 'variant-strict' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 3,
+      requestedQuantity: 4,
+    });
+  });
+
+  it('reports zero for a strict variant with no available units', async () => {
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_mcp_search_product_variants: [
+        {
+          id: 'variant-strict',
+          stock_quantity: 0,
+          effective_policy: 'serialized_strict',
+        },
+      ],
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-strict' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('reports zero for a variant missing from the projection', async () => {
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_mcp_search_product_variants: [
+        { id: 'variant-other', stock_quantity: 9, effective_policy: 'off' },
+      ],
+    });
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-gone' })
@@ -249,5 +308,142 @@ describe('cart-stock helpers', () => {
       currentStock: 0,
       requestedQuantity: 1,
     });
+  });
+
+  it('throws when the variant projection lookup fails', async () => {
+    mockProductAndRpc(parent(), {
+      get_mcp_search_product_variants: { error: { message: 'boom' } },
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-2' })
+    ).rejects.toThrow('Cannot verify stock availability');
+  });
+
+  it('throws for a variant check without merchant scope', async () => {
+    mockProductAndRpc({ stock_quantity: 5, manage_stock: null }, {});
+
+    await expect(
+      checkStock('product-1', 1, undefined, { variantId: 'variant-2' })
+    ).rejects.toThrow('Cannot verify stock availability');
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('validates the offer stock instead of a zero parent total', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 2 }],
+    });
+
+    await expect(
+      checkStock('product-1', 2, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 2,
+      requestedQuantity: 2,
+    });
+    await expect(
+      checkStock('product-1', 3, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+  });
+
+  it('lets a null offer quantity inherit the parent stock', async () => {
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
+    });
+
+    await expect(
+      checkStock('product-1', 4, undefined, { offerId: 'offer-7' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 5,
+      requestedQuantity: 4,
+    });
+  });
+
+  it('reports zero for an offer missing from the projection', async () => {
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {
+      get_product_offers: [{ offer_id: 'offer-other', stock_quantity: 9 }],
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { offerId: 'offer-gone' })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('throws when the offer lookup fails', async () => {
+    mockProductAndRpc(parent(), {
+      get_product_offers: { error: { message: 'boom' } },
+    });
+
+    await expect(
+      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
+    ).rejects.toThrow('Cannot verify stock availability');
+  });
+
+  it('prefers the variant identity when both option ids are present', async () => {
+    mockProductAndRpc(parent(), {
+      get_mcp_search_product_variants: [
+        { id: 'variant-2', stock_quantity: 2, effective_policy: 'off' },
+      ],
+      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 9 }],
+    });
+
+    await expect(
+      checkStock('product-1', 3, undefined, {
+        variantId: 'variant-2',
+        offerId: 'offer-7',
+      })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 3,
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts existing quantities per offer line', async () => {
+    useCartStore.setState({
+      items: [
+        {
+          id: 'line-1',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 2,
+          offer_id: 'offer-7',
+        },
+        {
+          id: 'line-2',
+          product_id: 'product-1',
+          slug: 'slug',
+          name: 'Item',
+          price: 100,
+          quantity: 4,
+          offer_id: 'offer-8',
+        },
+      ],
+      isLoading: false,
+      lineSequence: 2,
+    });
+
+    expect(
+      getTotalRequestedQuantityForStock({
+        product_id: 'product-1',
+        slug: 'slug',
+        name: 'Item',
+        price: 100,
+        quantity: 1,
+        offer_id: 'offer-7',
+      })
+    ).toBe(3);
   });
 });

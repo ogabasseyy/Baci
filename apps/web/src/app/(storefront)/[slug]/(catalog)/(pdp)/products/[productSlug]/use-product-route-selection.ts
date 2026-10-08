@@ -7,7 +7,7 @@ import {
 } from '@baci/shared/lib';
 import { useSearchParams } from 'next/navigation';
 import type { Product } from '@/lib/products';
-import { getValidConditionOptions } from './product-selection-utils';
+import { getValidConditionOptions } from './product-selection-condition';
 
 /**
  * Route-driven selection inputs for the PDP: variant attributes, condition,

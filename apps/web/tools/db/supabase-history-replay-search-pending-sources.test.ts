@@ -39,6 +39,8 @@ describe('search pending replay sources', () => {
       '20261008210000_storefront_product_request_contact_canonical.sql',
       '20261008220000_storefront_product_request_outcome_codes.sql',
       '20261008230000_storefront_product_request_contact_intl_prefix.sql',
+      '20261008240000_search_candidate_admin_visibility_predicate.sql',
+      '20261008250000_storefront_product_request_contact_zero_run.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

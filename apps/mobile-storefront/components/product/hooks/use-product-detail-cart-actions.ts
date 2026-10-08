@@ -148,6 +148,7 @@ export function useProductDetailCartActions(
       product_id: product.id,
       slug: product.slug,
       variant_id: routeData.effectiveSelectedVariantId || undefined,
+      offer_id: conditionOffer?.id ?? undefined,
       variant_attributes:
         Object.keys(variantAttrs).length > 0 ? variantAttrs : undefined,
       name: product.name,

@@ -130,7 +130,11 @@ function normalizeContent(
   }
 }
 
-type MediaGroup = { candidates: MediaCandidate[]; hasMedia: boolean };
+type MediaGroup = {
+  candidates: MediaCandidate[];
+  hasMedia: boolean;
+  imgSeen: boolean;
+};
 
 function hasBrokenMediaTag(html: string): boolean {
   // Markdown rendering preserves editorial comments while the sanitizer
@@ -147,7 +151,11 @@ function hasBrokenMediaTag(html: string): boolean {
   const pictureStack: MediaGroup[] = [];
   for (const [tag] of matchMediaElements(withoutComments)) {
     if (/^<picture\b/i.test(tag)) {
-      const group: MediaGroup = { candidates: [], hasMedia: false };
+      const group: MediaGroup = {
+        candidates: [],
+        hasMedia: false,
+        imgSeen: false,
+      };
       groups.push(group);
       pictureStack.push(group);
       continue;
@@ -160,11 +168,18 @@ function hasBrokenMediaTag(html: string): boolean {
     if (pictureStack.length > 0) {
       group = pictureStack[pictureStack.length - 1];
     } else {
-      group = { candidates: [], hasMedia: true };
+      group = { candidates: [], hasMedia: true, imgSeen: false };
       groups.push(group);
     }
     group.hasMedia = true;
-    group.candidates.push(...mediaTagCandidates(tag));
+    // Only preceding source siblings participate in selecting the
+    // resource for the img: sources after the group's img are ignored.
+    if (/^<img\b/i.test(tag)) {
+      group.candidates.push(...mediaTagCandidates(tag));
+      group.imgSeen = true;
+    } else if (!group.imgSeen) {
+      group.candidates.push(...mediaTagCandidates(tag));
+    }
   }
   return groups.some(
     ({ candidates, hasMedia }) =>

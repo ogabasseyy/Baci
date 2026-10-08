@@ -3,11 +3,31 @@ import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
 
+const ZERO_SIZE_IMAGE_CLASS_TOKENS = new Set([
+  'h-0',
+  'w-0',
+  'size-0',
+  'max-h-0',
+  'max-w-0',
+]);
+
 function isZeroSizedImage(tag: string): boolean {
   // A zero width or height renders no pixels. Only bare zeros count: the
   // width/height attributes take plain pixel counts, so `0px` is invalid
-  // and ignored by browsers (natural size, still visible).
+  // and ignored by browsers (natural size, still visible). Zero-size
+  // utilities on the image itself need no overflow rule: replaced
+  // content conforms to the zero box instead of overflowing it.
   for (const { name, value } of tagAttributes(tag)) {
+    if (name === 'class') {
+      if (
+        value
+          .split(/\s+/)
+          .some((token) => ZERO_SIZE_IMAGE_CLASS_TOKENS.has(token))
+      ) {
+        return true;
+      }
+      continue;
+    }
     if (name !== 'width' && name !== 'height') continue;
     if (/^0+$/.test(value.trim())) return true;
   }

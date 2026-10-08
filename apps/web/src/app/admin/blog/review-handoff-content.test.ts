@@ -67,6 +67,17 @@ describe('validateImportedContent', () => {
     ).toContain('<img');
   });
 
+  it('ignores a picture source placed after the img', () => {
+    // Only preceding source siblings participate in selecting the
+    // resource for the img, so this source cannot supply the src-less
+    // image and the group stays broken.
+    expect(() =>
+      validateImportedContent(
+        '<picture><img alt="A"><source srcset="https://cdn.example.com/a.webp"></picture><p>Body</p>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('ignores an orphan source element outside any picture', () => {
     // A source contributes candidates only inside picture; outside it
     // renders nothing, so its URL must not reject the handoff.

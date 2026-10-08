@@ -109,6 +109,16 @@ describe('validateImportedContent media', () => {
     ).toContain('a.png');
   });
 
+  it('disregards a zero-height image without any overflow rule', () => {
+    // A replaced image with h-0 renders zero pixels on its own: unlike
+    // container content, it needs no overflow-hidden to vanish.
+    expect(() =>
+      validateImportedContent(
+        '<img class="h-0" src="https://cdn.example.com/a.png">'
+      )
+    ).toThrow('no readable text or images');
+  });
+
   it('counts visible text alongside hidden text as readable', () => {
     expect(
       validateImportedContent(

@@ -17,6 +17,7 @@ const request = {
 
 function setup() {
   let intent = schemas.intent.parse(fixture.intent);
+  let leaseExpired = false;
   const execute = vi.fn(
     async (
       action: string,
@@ -24,8 +25,10 @@ function setup() {
     ): Promise<unknown> => {
       if (action === 'reserve' || action === 'read') return intent;
       if (action === 'claim') {
-        // Mirrors claim_initialization reclaim semantics: a stale
-        // 'initializing' claim is re-issued instead of stranding the retry.
+        // Mirrors claim_initialization lease semantics: a fresh
+        // 'initializing' claim is shared, only a stale one is re-issued.
+        if (intent.status === 'initializing' && !leaseExpired)
+          return { outcome: 'existing', intent };
         if (intent.status !== 'reserved' && intent.status !== 'initializing')
           return { outcome: 'existing', intent };
         intent = { ...intent, status: 'initializing' };
@@ -83,7 +86,14 @@ function setup() {
     execute,
     provider,
   });
-  return { execute, provider, service };
+  return {
+    execute,
+    provider,
+    service,
+    expireClaimLease: () => {
+      leaseExpired = true;
+    },
+  };
 }
 
 describe('durable goal-independent card checkout service', () => {
@@ -93,6 +103,37 @@ describe('durable goal-independent card checkout service', () => {
     expect(first.status).toBe('ready');
     expect(await service.initialize(request)).toEqual(first);
     expect(provider.initialize).toHaveBeenCalledTimes(1);
+  });
+  it('authorizes recovery by immutable IDs across a profile email change', async () => {
+    const { service, execute } = setup();
+    const changed = { ...fixture.intent, email: 'changed@example.test' };
+    execute.mockImplementationOnce(async () => changed);
+    execute.mockImplementationOnce(async () => ({
+      outcome: 'existing',
+      intent: changed,
+    }));
+    expect((await service.initialize(request)).status).toBe('reserved');
+  });
+  it('resumes the recovered unresolved operation after local storage loss', async () => {
+    const { service, provider, execute } = setup();
+    // Storage lost: same funding retried with a new key; reserve returns
+    // the existing ready operation instead of raising.
+    const recovered = schemas.intent.parse({
+      ...fixture.intent,
+      status: 'ready',
+      authorizationUrl: 'https://checkout.paystack.com/fixture123',
+    });
+    execute.mockImplementationOnce(async () => recovered);
+    execute.mockImplementationOnce(async () => ({
+      outcome: 'existing',
+      intent: recovered,
+    }));
+    const result = await service.initialize(request);
+    expect(result.status).toBe('ready');
+    expect(result.authorizationUrl).toBe(
+      'https://checkout.paystack.com/fixture123'
+    );
+    expect(provider.initialize).not.toHaveBeenCalled();
   });
   it('never reinitializes after an ambiguous provider result', async () => {
     const { service, provider } = setup();
@@ -148,8 +189,8 @@ describe('durable goal-independent card checkout service', () => {
     );
     expect(provider.verify).toHaveBeenCalledTimes(1);
   });
-  it('reinitializes through a reclaimed stale claim instead of stalling', async () => {
-    const { service, provider, execute } = setup();
+  it('shares a fresh claim and reinitializes only after the lease expires', async () => {
+    const { service, provider, execute, expireClaimLease } = setup();
     const inner = execute.getMockImplementation();
     let crashed = false;
     execute.mockImplementation(async (action, parameters) => {
@@ -162,6 +203,11 @@ describe('durable goal-independent card checkout service', () => {
       return inner?.(action, parameters);
     });
     expect((await service.initialize(request)).status).toBe('initializing');
+    // Overlapping retry within the lease shares the claim instead of
+    // replacing the token (Paystack rejects repeated references).
+    expect((await service.initialize(request)).status).toBe('initializing');
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+    expireClaimLease();
     expect((await service.initialize(request)).status).toBe('ready');
     expect(provider.initialize).toHaveBeenCalledTimes(2);
   });
@@ -191,6 +237,13 @@ describe('durable goal-independent card checkout service', () => {
       provider,
     });
     await expect(service.initialize(request)).rejects.toThrow();
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('rejects below-minimum funding before storage', async () => {
+    const { service, execute } = setup();
+    await expect(
+      service.initialize({ ...request, amountKobo: 4999 })
+    ).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
   });
 });

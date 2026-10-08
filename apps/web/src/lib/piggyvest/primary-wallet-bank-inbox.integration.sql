@@ -3,6 +3,7 @@
 \ir primary-wallet-card-custody.integration.sql
 \ir ../../../../../supabase/migrations/20261007230000_primary_bank_signed_inbox.sql
 \ir ../../../../../supabase/migrations/20261007230100_primary_bank_custody_prerequisite.sql
+\ir ../../../../../supabase/migrations/20261008091000_primary_bank_hold_specificity.sql
 \ir ../../../../../supabase/migrations/20261007230200_primary_bank_inbox_worker.sql
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,prefunded_card,piggyvest_staging FROM PUBLIC;
 CREATE ROLE baci_primary_bank_intake LOGIN VALID UNTIL '2099-01-01T00:00:00Z';
@@ -47,13 +48,41 @@ DO $$ DECLARE leased jsonb; fixture record; BEGIN
    PERFORM piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',jsonb_set(fixture.receipt,'{amountKobo}','999')));
    RAISE EXCEPTION 'signed amount changed';
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
-  IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'prerequisite' THEN RAISE EXCEPTION 'bank-before-card was not deferred'; END IF;
+  IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>(CASE WHEN fixture.label='card' THEN 'prerequisite' ELSE 'credited' END) THEN RAISE EXCEPTION 'bank/card hold attribution guessed'; END IF;
  END LOOP;
 END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN
- IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE state<>'pending' OR reason<>'prerequisite') THEN RAISE EXCEPTION 'bank prerequisite dropped'; END IF;
- IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>42 THEN RAISE EXCEPTION 'premature bank credit'; END IF;
+ IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-card' AND (state<>'pending' OR reason<>'prerequisite')) THEN RAISE EXCEPTION 'card leg prerequisite dropped'; END IF;
+ IF EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-independent' AND state<>'processed') THEN RAISE EXCEPTION 'unrelated deposit wrongly deferred'; END IF;
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='third@example.test')<>142 THEN RAISE EXCEPTION 'unrelated deposit lost'; END IF;
+END $$;
+-- Terminal card states never hold bank deposits: reconciliation_required
+-- settles nothing, so even an amount-matching deposit must credit.
+-- Fourth's operation is otherwise untouched in this chain, so it is
+-- flipped directly (no treasury capacity remains for a fresh reserve).
+UPDATE piggyvest_primary_card.operations SET state='reconciliation_required',claim_token=NULL,updated_at=clock_timestamp()
+WHERE customer_id='40000000-0000-4000-8000-000000000002';
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'terminal-hold',scope,(receipt||'{"eventId":"bank-terminal-hold","providerTransactionId":"terminal-hold-deposit","providerCustomerId":"fourth@example.test","providerWalletId":"fourth@example.test-wallet","amountKobo":25000}')::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-terminal-hold"'),'{eventData,transaction_id}','"terminal-hold-deposit"'),'{customer_id}','"fourth@example.test"'),'{eventData,customer_id}','"fourth@example.test"'),'{pvb_wallet}','"fourth@example.test-wallet"'),'{eventData,amount}','25000')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='terminal-hold';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='terminal-hold';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'terminal-hold intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='terminal-hold';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'terminal card state held bank deposit'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF (SELECT available_balance FROM public.customer_wallets wallet JOIN public.customers customer ON customer.id=wallet.customer_id WHERE customer.email='fourth@example.test')<>542 THEN RAISE EXCEPTION 'terminal-hold deposit lost'; END IF;
 END $$;
 SET SESSION AUTHORIZATION baci_primary_card_custody;
 DO $$ DECLARE fixture record; BEGIN

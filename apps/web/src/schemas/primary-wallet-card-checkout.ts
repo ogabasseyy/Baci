@@ -16,7 +16,9 @@ const scope = z.strictObject({
 const request = z.strictObject({
   merchantId: uuid,
   idempotencyKey: uuid,
-  amountKobo: z.number().int().positive().max(9999999999),
+  // Paystack rejects card charges below NGN 50 (5000 kobo); reserving less
+  // strands the operation at the ambiguous provider step.
+  amountKobo: z.number().int().min(5000).max(9999999999),
   consent: z.strictObject({
     version: z.literal('primary-wallet-card-v1'),
     oneTimeCharge: z.literal(true),

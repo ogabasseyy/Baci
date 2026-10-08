@@ -7,7 +7,8 @@ const consent = z.strictObject({
   oneTimeCharge: z.literal(true),
   saveCard: z.boolean(),
 });
-const amountKobo = z.number().int().positive().max(9999999999);
+// Paystack rejects card charges below NGN 50 (5000 kobo).
+const amountKobo = z.number().int().min(5000).max(9999999999);
 const response = z
   .object({
     operationId: z.uuid(),

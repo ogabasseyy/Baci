@@ -89,6 +89,13 @@ export function normalizeStorefrontProductVariants(
   options: {
     merchantId: string;
     productId: string;
+    /**
+     * Parent effective stock (getEffectiveStock): a null variant quantity
+     * inherits it, mirroring the price-options CTE. Mapping null to 0
+     * would show an inheriting variant as out of stock on the PDP while
+     * search sells it.
+     */
+    parentStock: number;
   }
 ): ProductVariant[] {
   return (variants || [])
@@ -109,7 +116,7 @@ export function normalizeStorefrontProductVariants(
         typeof variant.stock_quantity === 'number' &&
         Number.isFinite(variant.stock_quantity)
           ? variant.stock_quantity
-          : 0,
+          : options.parentStock,
       images: normalizeVariantImages(variant.images),
       primary_image: variant.primary_image || undefined,
       sku: variant.sku || undefined,

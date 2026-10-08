@@ -146,6 +146,7 @@ export function mapDetailedCachedProductToProduct(
     {
       merchantId: detailedProduct.merchant_id || merchantId,
       productId: detailedProduct.id,
+      parentStock: getEffectiveStock(detailedProduct),
     }
   );
   const categoryInput = {

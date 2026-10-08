@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const normalizeVariantsMock = vi.hoisted(() => vi.fn(() => []));
 vi.mock('@/lib/storefront-product-variants', () => ({
-  normalizeStorefrontProductVariants: () => [],
+  normalizeStorefrontProductVariants: normalizeVariantsMock,
 }));
 
 vi.mock('@/lib/seo-utils', () => {
@@ -41,9 +42,28 @@ vi.mock('@/lib/seo-utils', () => {
   };
 });
 
+import { normalizeStorefrontProductVariants } from '@/lib/storefront-product-variants';
 import { mapDetailedCachedProductToProduct } from './detailed-product-mapper';
 
 describe('mapDetailedCachedProductToProduct', () => {
+  it('passes parent effective stock so null variant quantities inherit', () => {
+    normalizeVariantsMock.mockClear();
+    mapDetailedCachedProductToProduct(
+      {
+        id: 'product-1',
+        merchant_id: 'merchant-1',
+        name: 'Widget',
+        stock_quantity: 6,
+        product_variants: [{ id: 'variant-1', stock_quantity: null }],
+      } as never,
+      'merchant-1'
+    );
+    expect(normalizeStorefrontProductVariants).toHaveBeenCalledWith(
+      [{ id: 'variant-1', stock_quantity: null }],
+      expect.objectContaining({ parentStock: 6 })
+    );
+  });
+
   it('defaults detailed products to manage_stock false while keeping stock', () => {
     const product = mapDetailedCachedProductToProduct(
       {

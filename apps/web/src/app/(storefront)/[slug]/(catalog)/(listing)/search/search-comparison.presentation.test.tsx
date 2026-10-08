@@ -42,7 +42,8 @@ vi.mock('./use-search-comparison-facts', () => ({
   useSearchComparisonFacts: mocks.facts,
 }));
 
-import { SearchCompareButton, SearchComparisonTray } from './search-comparison';
+import { SearchCompareButton } from './search-compare-button';
+import { SearchComparisonTray } from './search-comparison';
 
 import {
   SearchComparisonSession,

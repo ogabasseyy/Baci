@@ -437,3 +437,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low idempotency-canonical: repeat of the Round 61 adjudication (key binds payload; canonical dedup is the cross-spelling net).
 - Muse low capacity 3v4: repeat of the line-7 adjudication (intentional session-local presentation difference).
 - Muse low Origin-absent: repeat — PR's api-security.ts change is a one-line rate-limit call-site; Origin-absent behavior is pre-existing shared infra, and the intake route carries no ambient authority (line-297 CSRF adjudication).
+
+## Round 63 (Codex 1 P1 + 1 P2 on cbeb050 — both fixed)
+
+- CX-121 (P1) FIXED: search-comparison.tsx (301 lines, 2 exports) split — SearchCompareButton → search-compare-button.tsx (101 lines) + colocated test with the 3 moved button tests; tray keeps 206 lines. Consumers + presentation tests re-imported. Suites 15/15 preserved.
+- CX-122 (P2) FIXED: normalizeStorefrontProductVariants took no parent context and mapped null variant qty → 0, so inheriting variants showed out-of-stock on the PDP while search sold them (downstream ?? fallbacks in client/pricing were dead). Normalizer now takes required parentStock (getEffectiveStock at all 4 call sites: generic mapper, category resolution, 2 LCP projections) and resolves null → parent. No type changes, no consumer fallout (typecheck clean). Tests: inheritance + explicit-zero unit cases, mapper parentStock wiring test. Normalizer 13/13, PDP suites 98/98 + 17/17 + 6/6.
+- Placement note: resolving in the normalizer (vs widening ProductVariant to null) keeps all downstream number contracts intact; quick-view/grid/selection inherit the fix via effective numbers.
+- CI inventory regen + pin (comparison split moved the tree).

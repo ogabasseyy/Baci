@@ -147,6 +147,7 @@ export function getCachedProductRoutePrimaryImage(
     normalizeStorefrontProductVariants(cachedProduct.product_variants, {
       merchantId: cachedProduct.merchant_id || OGABASSEY_MERCHANT_ID,
       productId: cachedProduct.id,
+      parentStock: getEffectiveStock(cachedProduct),
     });
   const initialVariant = getInitialRouteVariant(
     cachedProduct,
@@ -180,6 +181,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     {
       merchantId: cachedProduct.merchant_id || OGABASSEY_MERCHANT_ID,
       productId: cachedProduct.id,
+      parentStock: effectiveStock,
     }
   );
   const primaryImage =

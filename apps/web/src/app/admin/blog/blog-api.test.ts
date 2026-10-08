@@ -9,6 +9,7 @@ vi.mock('@/lib/api-client', () => ({
 const originalFetch = global.fetch;
 
 import {
+  deleteBlogMediaUpload,
   getPlatformBlogPost,
   listPlatformBlogPosts,
   listPlatformBlogPostsPage,
@@ -171,5 +172,34 @@ describe('blog-api', () => {
     await expect(getPlatformBlogPost('post-1')).rejects.toThrow(
       'Failed to load post'
     );
+  });
+
+  it('deletes an abandoned upload with its variant paths', async () => {
+    mockFetchWithCsrf.mockResolvedValueOnce(jsonResponse({ success: true }));
+
+    await deleteBlogMediaUpload('platform/blog/abc123.webp', [
+      'platform/blog/abc123/landscape_16x9.webp',
+    ]);
+
+    expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+      '/api/admin/blog/upload',
+      expect.objectContaining({
+        body: JSON.stringify({
+          path: 'platform/blog/abc123.webp',
+          variantPaths: ['platform/blog/abc123/landscape_16x9.webp'],
+        }),
+        method: 'DELETE',
+      })
+    );
+  });
+
+  it('throws the route error when deleting an abandoned upload fails', async () => {
+    mockFetchWithCsrf.mockResolvedValueOnce(
+      jsonResponse({ error: 'Failed to delete file' }, 500)
+    );
+
+    await expect(
+      deleteBlogMediaUpload('platform/blog/abc123.webp', [])
+    ).rejects.toThrow('Failed to delete file');
   });
 });

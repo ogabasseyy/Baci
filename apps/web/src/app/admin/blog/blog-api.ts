@@ -153,3 +153,17 @@ export async function deletePlatformBlogPost(id: string): Promise<void> {
     throw new Error(await readErrorMessage(response, 'Failed to delete post'));
   }
 }
+
+export async function deleteBlogMediaUpload(
+  path: string,
+  variantPaths: string[]
+): Promise<void> {
+  const response = await fetchWithCsrf('/api/admin/blog/upload', {
+    body: JSON.stringify({ path, variantPaths }),
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, 'Failed to delete file'));
+  }
+}

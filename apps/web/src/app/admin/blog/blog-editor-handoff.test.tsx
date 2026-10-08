@@ -146,9 +146,12 @@ it('protects an unsaved imported article when importing again without intent', a
   expect(screen.getByLabelText('Article')).toHaveTextContent('Imported body');
 });
 
-it('keeps an imported image when an older featured upload finishes later', async () => {
+it('keeps an imported image and deletes the stale upload when an older featured upload finishes later', async () => {
   const pending = Promise.withResolvers<Response>();
   fetchWithCsrf.mockReturnValueOnce(pending.promise);
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(JSON.stringify({ success: true }), { status: 200 })
+  );
   vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
     this: HTMLInputElement
   ) {
@@ -167,10 +170,13 @@ it('keeps an imported image when an older featured upload finishes later', async
     pending.resolve(
       new Response(
         JSON.stringify({
-          url: 'https://cdn.example.com/stale.webp',
+          url: 'https://cdn.example.com/media/platform/blog/stale.webp',
           width: 1200,
           height: 675,
-          variants: {},
+          variants: {
+            landscape_16x9:
+              'https://cdn.example.com/media/platform/blog/stale/landscape_16x9.webp',
+          },
         }),
         { status: 200 }
       )
@@ -178,6 +184,18 @@ it('keeps an imported image when an older featured upload finishes later', async
   );
   expect(screen.getByLabelText('Featured image')).toHaveTextContent(
     'https://cdn.example.com/cover.webp'
+  );
+  // The route persisted the stale upload before the import invalidated
+  // it, so the discarded result is deleted instead of leaking.
+  expect(fetchWithCsrf).toHaveBeenCalledWith(
+    '/api/admin/blog/upload',
+    expect.objectContaining({
+      body: JSON.stringify({
+        path: 'platform/blog/stale.webp',
+        variantPaths: ['platform/blog/stale/landscape_16x9.webp'],
+      }),
+      method: 'DELETE',
+    })
   );
 });
 

@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import type { useToast } from '@/hooks/use-toast';
+import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type {
   PlatformAdminBlogCoverState,
   PlatformAdminBlogFormState,
@@ -20,45 +21,78 @@ type UploadResult = {
 
 export function useBlogFeaturedImageUpload({
   upload,
+  deleteUpload,
   setForm,
   toast,
   coverStashRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
+  deleteUpload: (paths: {
+    path: string;
+    variantPaths: string[];
+  }) => Promise<void>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);
+  const altEditGenerationRef = useRef(0);
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;
     setUploadingFeatured(false);
   };
 
-  const uploadFeatured = async (
-    file: File,
-    altAtUploadStart: { alt: string; altEdited: boolean }
-  ) => {
+  // The alt field reports every keystroke here so the upload can tell
+  // mid-flight typing apart from pre-upload text, even when the final
+  // value and flag converge back to what the upload started with.
+  const noteAltEdit = () => {
+    altEditGenerationRef.current += 1;
+  };
+
+  const cleanupInvalidatedUpload = async (result: UploadResult) => {
+    // The route persisted the source and variants before this generation
+    // was invalidated, so the discarded result must be deleted instead
+    // of leaking. A non-managed URL is never ours to delete.
+    const path = extractManagedBlogStoragePath(result.url, {
+      kind: 'platform',
+    });
+    if (!path) return;
+    const variantPaths = Object.values(result.variants ?? {})
+      .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
+      .filter((variantPath): variantPath is string => variantPath !== null);
+    try {
+      await deleteUpload({ path, variantPaths });
+    } catch (error) {
+      toast({
+        title: 'Could not remove abandoned upload',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const uploadFeatured = async (file: File) => {
     const generation = ++generationRef.current;
+    const altEditGeneration = altEditGenerationRef.current;
     setUploadingFeatured(true);
     try {
       const result = await upload(file);
-      if (generation !== generationRef.current) return;
+      if (generation !== generationRef.current) {
+        await cleanupInvalidatedUpload(result);
+        return;
+      }
       setForm((current) => {
         // Replacing the cover orphans the alt text just like a URL edit;
         // a first upload or same-URL re-upload keeps both text and flag.
         // Alt edits made after this generation began belong to the
-        // incoming image, so they survive even when the URL changes: the
-        // flag half catches a type-then-clear flight that converges back
-        // to the snapshot value.
+        // incoming image, so they survive even when the URL changes.
         const urlChanged =
           current.featured_image_url !== '' &&
           current.featured_image_url !== result.url;
         const altEditedDuringFlight =
-          current.featured_image_alt !== altAtUploadStart.alt ||
-          (current.featured_image_alt_edited && !altAtUploadStart.altEdited);
+          altEditGenerationRef.current !== altEditGeneration;
         let nextAlt = current.featured_image_alt;
         let nextAltEdited = current.featured_image_alt_edited;
         if (altEditedDuringFlight) {
@@ -93,5 +127,10 @@ export function useBlogFeaturedImageUpload({
     }
   };
 
-  return { uploadingFeatured, uploadFeatured, invalidateFeaturedUploads };
+  return {
+    invalidateFeaturedUploads,
+    noteAltEdit,
+    uploadFeatured,
+    uploadingFeatured,
+  };
 }

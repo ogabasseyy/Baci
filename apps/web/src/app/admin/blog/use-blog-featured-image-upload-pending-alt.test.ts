@@ -26,6 +26,7 @@ function setup(
     const [form, setForm] = useState(DEFAULT_PLATFORM_BLOG_FORM_STATE);
     const uploader = useBlogFeaturedImageUpload({
       coverStashRef,
+      deleteUpload: vi.fn().mockResolvedValue(undefined),
       setForm,
       toast,
       upload,
@@ -35,11 +36,16 @@ function setup(
   return { ...hook, coverStashRef, toast };
 }
 
-// Mirrors the editor client: the snapshot is the live form alt at click time.
-function startUpload(hook: ReturnType<typeof setup>['result'], file: File) {
-  return hook.current.uploadFeatured(file, {
-    alt: hook.current.form.featured_image_alt,
-    altEdited: hook.current.form.featured_image_alt_edited ?? false,
+// Mirrors the alt field: every keystroke updates the form and reports the
+// edit to the upload hook in the same handler.
+function typeAlt(hook: ReturnType<typeof setup>['result'], value: string) {
+  act(() => {
+    hook.current.noteAltEdit();
+    hook.current.setForm((current) => ({
+      ...current,
+      featured_image_alt: value,
+      featured_image_alt_edited: true,
+    }));
   });
 }
 
@@ -55,20 +61,40 @@ describe('useBlogFeaturedImageUpload pending alt', () => {
       })
     );
     act(() => {
-      void startUpload(result, file);
+      void result.current.uploadFeatured(file);
     });
-    act(() =>
-      result.current.setForm((current) => ({
-        ...current,
-        featured_image_alt: 'Alt for the new cover',
-        featured_image_alt_edited: true,
-      }))
-    );
+    typeAlt(result, 'Alt for the new cover');
     await act(async () => pending.resolve(uploadedImage));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe(
       'Alt for the new cover'
     );
+    expect(result.current.form.featured_image_alt_edited).toBe(true);
+  });
+
+  it('preserves already-edited alt changed and reverted during a replacement', async () => {
+    // The alt was marked edited before the upload started; the user
+    // retypes it mid-flight and returns to the snapshot text. Both the
+    // value and the flag converge, so only an edit-activity signal can
+    // still distinguish this from untouched pre-upload text.
+    const pending = Promise.withResolvers<typeof uploadedImage>();
+    const { result } = setup(() => pending.promise);
+    act(() =>
+      result.current.setForm({
+        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+        featured_image_url: 'https://cdn.example.com/old.webp',
+        featured_image_alt: 'The previous cover',
+        featured_image_alt_edited: true,
+      })
+    );
+    act(() => {
+      void result.current.uploadFeatured(file);
+    });
+    typeAlt(result, 'A mid-flight rethink');
+    typeAlt(result, 'The previous cover');
+    await act(async () => pending.resolve(uploadedImage));
+    expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
+    expect(result.current.form.featured_image_alt).toBe('The previous cover');
     expect(result.current.form.featured_image_alt_edited).toBe(true);
   });
 
@@ -86,7 +112,7 @@ describe('useBlogFeaturedImageUpload pending alt', () => {
       })
     );
     act(() => {
-      void startUpload(result, file);
+      void result.current.uploadFeatured(file);
     });
     await act(async () => pending.resolve(uploadedImage));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
@@ -107,22 +133,10 @@ describe('useBlogFeaturedImageUpload pending alt', () => {
       })
     );
     act(() => {
-      void startUpload(result, file);
+      void result.current.uploadFeatured(file);
     });
-    act(() =>
-      result.current.setForm((current) => ({
-        ...current,
-        featured_image_alt: 'A draft thought',
-        featured_image_alt_edited: true,
-      }))
-    );
-    act(() =>
-      result.current.setForm((current) => ({
-        ...current,
-        featured_image_alt: '',
-        featured_image_alt_edited: true,
-      }))
-    );
+    typeAlt(result, 'A draft thought');
+    typeAlt(result, '');
     await act(async () => pending.resolve(uploadedImage));
     expect(result.current.form.featured_image_url).toBe(uploadedImage.url);
     expect(result.current.form.featured_image_alt).toBe('');

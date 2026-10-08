@@ -26,6 +26,7 @@ function Harness() {
         form={form}
         isEditMode={false}
         onFormChange={setForm}
+        onAltEdit={() => {}}
         onContentChange={() => {}}
         onInlineImageUpload={async () => ''}
         onSubmit={() => {}}

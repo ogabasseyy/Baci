@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
+  deleteBlogMediaUpload,
   updatePlatformBlogPost,
 } from '@/app/admin/blog/blog-api';
 import { BlogEditorFields } from '@/app/admin/blog/blog-editor-fields';
@@ -171,13 +172,19 @@ export function BlogEditorClient({
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
   );
-  const { uploadingFeatured, uploadFeatured, invalidateFeaturedUploads } =
-    useBlogFeaturedImageUpload({
-      coverStashRef,
-      upload: (file) => uploadBlogMedia(file, 'featured'),
-      setForm,
-      toast,
-    });
+  const {
+    uploadingFeatured,
+    uploadFeatured,
+    invalidateFeaturedUploads,
+    noteAltEdit,
+  } = useBlogFeaturedImageUpload({
+    coverStashRef,
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    upload: (file) => uploadBlogMedia(file, 'featured'),
+    setForm,
+    toast,
+  });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({
     contentGenerationRef,
     coverStashRef,
@@ -201,10 +208,7 @@ export function BlogEditorClient({
       const file = input.files?.[0];
       if (!file) return;
 
-      void uploadFeatured(file, {
-        alt: form.featured_image_alt,
-        altEdited: form.featured_image_alt_edited ?? false,
-      });
+      void uploadFeatured(file);
     };
     input.click();
   };
@@ -265,6 +269,7 @@ export function BlogEditorClient({
         }
         form={form}
         isEditMode={isEditMode}
+        onAltEdit={noteAltEdit}
         onContentChange={(content) => {
           pendingContentEditRef.current = false;
           setForm((current) => ({ ...current, content }));

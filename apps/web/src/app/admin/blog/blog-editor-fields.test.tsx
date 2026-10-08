@@ -55,6 +55,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
   const onInlineImageUpload = vi
     .fn()
     .mockResolvedValue('https://cdn.example.com/inline.png');
+  const onAltEdit = vi.fn();
   const onSubmit = vi.fn();
   const onUploadFeatured = vi.fn();
 
@@ -63,6 +64,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
       coverStashRef={{ current: null }}
       form={currentForm}
       isEditMode={false}
+      onAltEdit={onAltEdit}
       onContentChange={onContentChange}
       onFormChange={onFormChange}
       onInlineImageUpload={onInlineImageUpload}
@@ -76,6 +78,7 @@ function renderComponent(overrides?: Partial<BlogEditorFieldsProps>) {
 
   return {
     getCurrentForm: () => currentForm,
+    onAltEdit,
     onContentChange,
     onFormChange,
     onInlineImageUpload,
@@ -129,6 +132,18 @@ describe('BlogEditorFields', () => {
     expect(ctx.getCurrentForm().title).toBe('A better title');
     expect(ctx.getCurrentForm().slug).toBe('a-better-title');
     expect(ctx.getCurrentForm().status).toBe('published');
+  });
+
+  it('reports alt keystrokes so pending uploads can preserve them', () => {
+    const ctx = renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Featured image alt text'), {
+      target: { value: 'Typed description' },
+    });
+
+    expect(ctx.onAltEdit).toHaveBeenCalledTimes(1);
+    expect(ctx.getCurrentForm().featured_image_alt).toBe('Typed description');
+    expect(ctx.getCurrentForm().featured_image_alt_edited).toBe(true);
   });
 
   it('forwards content and inline image events from BlogEditor', () => {

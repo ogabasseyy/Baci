@@ -30,6 +30,7 @@ type BlogEditorFieldsProps = {
   initialCover?: PlatformAdminBlogCoverState;
   form: PlatformAdminBlogFormState;
   isEditMode: boolean;
+  onAltEdit: () => void;
   onContentChange: (value: string) => void;
   onContentDirty?: () => void;
   onFormChange: (
@@ -51,6 +52,7 @@ export function BlogEditorFields({
   initialCover,
   form,
   isEditMode,
+  onAltEdit,
   onContentChange,
   onContentDirty,
   onFormChange,
@@ -171,13 +173,14 @@ export function BlogEditorFields({
         <Input
           id="featured-image-alt"
           value={form.featured_image_alt}
-          onChange={(event) =>
+          onChange={(event) => {
+            onAltEdit();
             setForm((current) => ({
               ...current,
               featured_image_alt: event.target.value,
               featured_image_alt_edited: true,
-            }))
-          }
+            }));
+          }}
         />
         <div>
           <Button

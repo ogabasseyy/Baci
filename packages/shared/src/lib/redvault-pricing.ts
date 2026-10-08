@@ -1,4 +1,4 @@
-import { REDVAULT_PRICING_TIERS } from '../constants/redvault-pricing';
+import { REDVAULT_PRICING } from '../constants/redvault-pricing';
 import type {
   RedvaultAuthoritativeLine,
   RedvaultItemAllocation,
@@ -225,17 +225,16 @@ export function calculateRedvaultPricing(
     ])
   );
   let discountKobo = 0;
-  const discountPercent =
-    eligibleSubtotalKobo < REDVAULT_PRICING_TIERS.thresholdKobo
-      ? REDVAULT_PRICING_TIERS.belowThresholdPercent
-      : REDVAULT_PRICING_TIERS.atOrAboveThresholdPercent;
   for (const group of groups.values()) {
     const subtotalKobo = group.reduce(
       (total, line) =>
         addSafely(total, line.lineSubtotalKobo, 'group subtotal'),
       0
     );
-    const groupDiscountKobo = roundDiscountKobo(subtotalKobo, discountPercent);
+    const groupDiscountKobo = roundDiscountKobo(
+      subtotalKobo,
+      REDVAULT_PRICING.discountPercent
+    );
     discountKobo = addSafely(discountKobo, groupDiscountKobo, 'discount');
     const unitCount = group.reduce(
       (total, line) => addSafely(total, line.quantity, 'group unit count'),

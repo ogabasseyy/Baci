@@ -6,6 +6,7 @@ import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
 import { useCheckoutDvaSession } from './use-checkout-dva-session';
 import type { useCheckoutFormSession } from './use-checkout-form-session';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
+import { useCheckoutRedvaultAvailability } from './use-checkout-redvault-availability';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 import { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
 import { useWalletFundedOrderCompletion } from './use-wallet-funded-order-completion';
@@ -42,7 +43,9 @@ export interface CheckoutPaymentExecutionOptions {
     pushSuccessRoute: Submission['navigation']['pushSuccessRoute'];
     getHref: Submission['navigation']['getHref'];
   };
-  payment: Submission['payment'];
+  // REDVAULT availability is derived inside this hook (it already holds
+  // the sanitized cart, merchant, and user), so callers do not pass it.
+  payment: Omit<Submission['payment'], 'redvaultAvailable'>;
   attempt: Pick<
     ReturnType<typeof useCheckoutAttemptSession>,
     | 'resumedOrder'
@@ -104,6 +107,23 @@ export function useCheckoutPaymentExecution({
     merchantSlug: identity.merchantSlug,
     onOrderPaid: completeWalletFundedOrder,
   });
+  // Pilot-aware REDVAULT availability, keyed on the sanitized checkout cart
+  // (not the raw cart) plus merchant and session state.
+  const { availability: redvaultAvailability } =
+    useCheckoutRedvaultAvailability({
+      cartItems: cart.checkoutCart,
+      merchantId: identity.merchantId,
+      merchantSlug: identity.merchantSlug,
+      userId: form.user?.id,
+      customerSession,
+      pilotFeeBlockers: {
+        hasAssurance: cart.checkoutCart.some(
+          (item) => item.hasAssurance === true
+        ),
+        shippingFee: delivery.session.cost,
+        giftWrappingCost: delivery.giftWrappingCost,
+      },
+    });
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {
       createAccount: form.account.createAccount,
@@ -148,7 +168,10 @@ export function useCheckoutPaymentExecution({
       setCryptoPaymentData: crypto.setCryptoPaymentData,
       walletFundedTransfer,
     },
-    payment,
+    payment: {
+      ...payment,
+      redvaultAvailable: redvaultAvailability.available,
+    },
     resumed: {
       order: attempt.resumedOrder,
       preferredGateway: attempt.preferredGateway,
@@ -164,5 +187,11 @@ export function useCheckoutPaymentExecution({
     },
   });
 
-  return { crypto, dva, handlePlaceOrder, walletFundedTransfer };
+  return {
+    crypto,
+    dva,
+    handlePlaceOrder,
+    redvaultAvailable: redvaultAvailability.available,
+    walletFundedTransfer,
+  };
 }

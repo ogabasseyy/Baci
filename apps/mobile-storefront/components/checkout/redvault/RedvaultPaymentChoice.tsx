@@ -91,9 +91,7 @@ export function RedvaultPaymentChoice({
             Pay with UBA
           </Text>
           <Text style={[styles.caption, { color: colors.textSecondary }]}>
-            10% off when the eligible pre-discount subtotal is below ₦200,000;
-            5% at ₦200,000 or more. Excluded products and fees do not count
-            toward this threshold.
+            Save 5% on eligible items only.
           </Text>
         </View>
         <View

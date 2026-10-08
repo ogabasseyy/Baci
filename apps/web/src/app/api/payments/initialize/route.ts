@@ -13,6 +13,13 @@ import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import {
+  buildRedvaultLivePilotCallbackUrl,
+  preserveRedvaultLivePilotAttempts,
+  rejectInvalidRedvaultLivePilotFunding,
+  rejectInvalidRedvaultLivePilotSnapshot,
+  rejectUnauthorizedRedvaultLivePilot,
+} from '@/lib/checkout/redvault-live-pilot-initialize-gate';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
@@ -1037,6 +1044,10 @@ export async function POST(request: NextRequest) {
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)
       : null;
+    // Latched once alongside the admission check below: the pilot gates
+    // must keep using this request's verdict even if the short expiry
+    // window ends mid-initialization.
+    let redvaultLivePilotInitialize = false;
     if (redvaultRequested) {
       if (data.gateway && data.gateway !== 'paystack') {
         return createErrorResponse(
@@ -1058,6 +1069,19 @@ export async function POST(request: NextRequest) {
           'REDVAULT payment is not available',
           'REDVAULT_UNAVAILABLE',
           409
+        );
+      }
+      redvaultLivePilotInitialize =
+        availability.reason === 'private_live_pilot';
+      const pilotAuthRejection = rejectUnauthorizedRedvaultLivePilot({
+        reason: availability.reason,
+        userId: redvaultCustomerAuth?.user?.id,
+      });
+      if (pilotAuthRejection) {
+        return createErrorResponse(
+          pilotAuthRejection.message,
+          pilotAuthRejection.code,
+          pilotAuthRejection.status
         );
       }
     }
@@ -1154,15 +1178,42 @@ export async function POST(request: NextRequest) {
         409
       );
     }
-
     // A cancelled order must never be payable. The reopen-backstop trigger keeps
     // the order cancelled even if a payment later lands, but reject here so a
-    // customer cannot start a new payment for an order they cancelled.
-    if (orderSnapshot.shipping_status === 'cancelled') {
+    // customer cannot start a new payment for an order they cancelled. Legacy
+    // rows carry both spellings in mixed case, so match the DB guards and
+    // reject either spelling case-insensitively before any pilot verification:
+    // the snapshot read is provider-free, but failing fast here keeps the
+    // decline reason a stable ORDER_NOT_PAYABLE.
+    const snapshotShippingStatus =
+      typeof orderSnapshot.shipping_status === 'string'
+        ? orderSnapshot.shipping_status.toLowerCase()
+        : '';
+    if (
+      snapshotShippingStatus === 'cancelled' ||
+      snapshotShippingStatus === 'canceled'
+    ) {
       return createErrorResponse(
         'This order has been cancelled and can no longer be paid',
         'ORDER_NOT_PAYABLE',
         409
+      );
+    }
+    const pilotSnapshotRejection = await rejectInvalidRedvaultLivePilotSnapshot(
+      {
+        redvaultRequested,
+        isLivePilot: redvaultLivePilotInitialize,
+        client: paymentDataClient,
+        orderId: data.order_id,
+        userId: redvaultCustomerAuth?.user?.id,
+        merchantId: orderSnapshot.merchant_id,
+      }
+    );
+    if (pilotSnapshotRejection) {
+      return createErrorResponse(
+        pilotSnapshotRejection.message,
+        pilotSnapshotRejection.code,
+        pilotSnapshotRejection.status
       );
     }
 
@@ -1256,6 +1307,20 @@ export async function POST(request: NextRequest) {
         }, 0)
       : 0;
 
+    const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
+      redvaultRequested,
+      isLivePilot: redvaultLivePilotInitialize,
+      walletAmountUsed,
+      savingsAmountUsed,
+    });
+    if (pilotFundingRejection) {
+      return createErrorResponse(
+        pilotFundingRejection.message,
+        pilotFundingRejection.code,
+        pilotFundingRejection.status
+      );
+    }
+
     // Fetch merchant
     const merchantResult = redvaultRequested
       ? await paymentDataClient
@@ -1315,12 +1380,30 @@ export async function POST(request: NextRequest) {
       }
 
       const fallbackClient = await createServerSupabaseClient();
+      let redirectUrl: string;
+      try {
+        redirectUrl = buildRedvaultLivePilotCallbackUrl({
+          merchantSlug: merchantWithPaystack.slug,
+          protocol,
+          rootDomain,
+        });
+      } catch {
+        return createErrorResponse(
+          'REDVAULT payment is not available',
+          'REDVAULT_UNAVAILABLE',
+          409
+        );
+      }
       const checkout = await initializeRedvaultPaystackCheckout({
         customerEmail: data.customer_email,
         fallbackClient,
         merchantId,
         orderId: data.order_id,
-        redirectUrl: `${protocol}://${merchantWithPaystack.slug}.${rootDomain}/checkout/success`,
+        preserveAttempts: preserveRedvaultLivePilotAttempts({
+          redvaultRequested,
+          isLivePilot: redvaultLivePilotInitialize,
+        }),
+        redirectUrl,
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });
 

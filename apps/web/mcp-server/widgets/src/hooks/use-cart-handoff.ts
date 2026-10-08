@@ -261,10 +261,13 @@ export function useCartHandoff() {
         return;
       // Legacy one-shot `?item_id=&qty=` handoffs replay the add on every
       // open, so Review keeps only the idempotent `guest_cart` payload and
-      // otherwise opens the bare cart.
+      // otherwise opens the bare cart. The payload is re-parsed before
+      // re-emitting so a malformed stored value opens the bare cart instead
+      // of propagating to the website.
       const guestCart = url.searchParams.get('guest_cart');
       const review = new URL('https://ogabassey.com/cart');
-      if (guestCart) review.searchParams.set('guest_cart', guestCart);
+      if (guestCart && parseHandoffLines(guestCart))
+        review.searchParams.set('guest_cart', guestCart);
       openOgabasseyUrl(review.toString());
     } catch {
       setCartError('Could not open your guest cart. Please try again.');

@@ -52,7 +52,9 @@ const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
 // most once per interval; expiry is still enforced per cart on every read,
 // and crash-temp cleanup below always runs.
 const SWEEP_INTERVAL_MS = 60 * 1000;
-let lastExpirySweepMs = 0;
+// Keyed per directory so instances over different directories (tests,
+// future multi-dir use) never suppress each other's first sweep.
+const lastExpirySweepMsByDirectory = new Map<string, number>();
 async function readStoredCart(file: string) {
   let raw: string;
   try {
@@ -84,14 +86,19 @@ export class GuestCartStore {
   /** True when the token names a live, parseable, unexpired cart. */
   async hasToken(token: string): Promise<boolean> {
     if (!/^[a-f0-9]{64}$/.test(token)) return false;
-    try {
-      const stored = storedCartSchema.parse(
-        JSON.parse(await readFile(path.join(this.directory, `${token}.json`), 'utf8'))
-      );
-      return stored.expires_at > Date.now();
-    } catch {
-      return false;
-    }
+    // Join the cart's queue so the probe cannot race a concurrent update
+    // or eviction of the same file.
+    const file = path.join(this.directory, `${token}.json`);
+    return runExclusive(file, async () => {
+      try {
+        const stored = storedCartSchema.parse(
+          JSON.parse(await readFile(file, 'utf8'))
+        );
+        return stored.expires_at > Date.now();
+      } catch {
+        return false;
+      }
+    });
   }
 
   async update(
@@ -113,7 +120,9 @@ export class GuestCartStore {
         await mkdir(this.directory, { recursive: true, mode: 0o700 });
         if (!token) {
           const sweepDue =
-            Date.now() - lastExpirySweepMs >= SWEEP_INTERVAL_MS;
+            Date.now() -
+              (lastExpirySweepMsByDirectory.get(this.directory) ?? 0) >=
+            SWEEP_INTERVAL_MS;
           const entries = await readdir(this.directory);
           for (const entry of entries) {
             if (CRASH_TEMP_PATTERN.test(entry)) {
@@ -153,7 +162,8 @@ export class GuestCartStore {
               }
             }
           }
-          if (sweepDue) lastExpirySweepMs = Date.now();
+          if (sweepDue)
+            lastExpirySweepMsByDirectory.set(this.directory, Date.now());
           let cartFiles = (await readdir(this.directory)).filter((entry) =>
             /^[a-f0-9]{64}\.json$/.test(entry)
           );

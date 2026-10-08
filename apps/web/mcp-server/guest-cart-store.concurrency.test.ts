@@ -204,3 +204,24 @@ it('refuses an unwritable cart directory with remediation instead of a raw errno
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('throttles the expiry sweep independently per directory', async () => {
+  const first = await store();
+  const secondStore = await store();
+  const deadA = path.join(first.directory, `${'a'.repeat(64)}.json`);
+  const deadB = path.join(secondStore.directory, `${'b'.repeat(64)}.json`);
+  await writeFile(deadA, JSON.stringify({ expires_at: 1, items: [] }));
+  await writeFile(deadB, JSON.stringify({ expires_at: 1, items: [] }));
+  await first.instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  await secondStore.instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  await expect(readFile(deadA, 'utf8')).rejects.toThrow();
+  await expect(readFile(deadB, 'utf8')).rejects.toThrow();
+});

@@ -35,6 +35,9 @@ export const mcpGuestCartInputSchema = z.object({
       'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
     ),
 });
+// Flat object (not a union): the installed MCP SDK only publishes and
+// validates plain-object output schemas, silently dropping unions from
+// tools/list. The refine below carries the success-branch requirement.
 export const mcpGuestCartOutputSchema = z
   .object({
     success: z.boolean(),

@@ -315,7 +315,11 @@ The single MCP writer persists carts under `~/.local/share/baci/mcp-guest-carts`
 across releases. The production Compose file mounts the stable named volume
 `ogabassey-mcp-guest-carts` at `/var/lib/baci/guest-carts`, owned by the container
 node user; do not remove this volume during normal promotion or rollback.
-Guest carts expire after seven days. Multiple MCP writer processes
+Guest carts expire after seven days. Only the changed line is revalidated on
+each call, so a stale line never blocks unrelated updates; the website
+re-checks stock at transfer. At capacity the store evicts the
+least-recently-written cart instead of failing, so one guest cannot
+permanently exhaust the shared pool. Multiple MCP writer processes
 require a shared transactional store before horizontal scaling.
 
 The website handoff contains only product IDs and quantities. The website reloads

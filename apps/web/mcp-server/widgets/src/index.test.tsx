@@ -84,7 +84,7 @@ describe('Ogabassey cart handoff widget', () => {
     expect(callTool).toHaveBeenCalledTimes(1);
     const url = new URL('https://ogabassey.com/cart');
     url.searchParams.set('guest_cart', JSON.stringify([{ product_id: products[0].id, quantity: 1 }]));
-    await act(async () => { finish?.({ structuredContent: { success: true, cart_url: url.toString(), cart_token: 'a'.repeat(64) } }); });
+    await act(async () => { finish?.({ structuredContent: { success: true, cart_url: url.toString(), cart_token: 'a'.repeat(64), items: [{ product_id: products[0].id, quantity: 1 }], expires_at: '2026-10-14T00:00:00.000Z' } }); });
     expect(screen.getByText('Phone One', { selector: '.cart-item-name' })).toBeTruthy();
     expect(openExternal).not.toHaveBeenCalled();
   });

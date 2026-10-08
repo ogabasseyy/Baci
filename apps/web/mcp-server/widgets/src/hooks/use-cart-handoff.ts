@@ -1,19 +1,21 @@
 import { useRef, useState } from 'react';
-import { mcpGuestCartOutputSchema } from '../../../../src/schemas/mcp-guest-cart';
-import { parseGuestCartHandoff } from '../../../../src/lib/guest-cart-handoff';
 import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
+import { parseCartToolOutput } from '../parse-cart-tool-output';
+import { parseHandoffLines } from '../parse-handoff-lines';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
 
-function openOgabasseyUrl(url: string, pendingTab?: Window | null): void {
+function openOgabasseyUrl(url: string, pendingTab?: Window | null): boolean {
   if (window.openai?.openExternal) {
     window.openai.openExternal({ href: url });
-  } else if (pendingTab) {
+    return true;
+  } else if (pendingTab && !pendingTab.closed) {
     pendingTab.location.href = url;
+    return true;
   } else {
-    window.open(url, '_blank');
+    return window.open(url, '_blank') !== null;
   }
 }
 
@@ -51,32 +53,48 @@ export function useCartHandoff() {
     }
     busy.current = true;
     setIsSavingCart(true);
+    // Popup blockers only honor tabs opened synchronously from the click, so
+    // reserve one before the async tool call; it is closed when the response
+    // needs no navigation.
+    const pendingTab = window.openai?.openExternal
+      ? null
+      : window.open('about:blank', '_blank');
     try {
+      // Guest quantities are absolute totals, so re-adding tops the line up
+      // instead of resetting it to one.
+      const existingQuantity =
+        widgetState?.cart.find((item) => item.product.id === product.id)
+          ?.quantity ?? 0;
       const result = await window.openai.callTool(
         'update_ogabassey_guest_cart',
         {
           product_id: product.id,
-          quantity: 1,
+          quantity: Math.min(existingQuantity + 1, 10),
           cart_token: widgetState?.cartToken,
         }
       );
       if (requestId !== handoffRequestId.current) {
+        pendingTab?.close();
         return;
       }
 
       const variantSelectionUrl = getVariantSelectionUrl(result, product.id);
       if (variantSelectionUrl) {
-        openOgabasseyUrl(variantSelectionUrl);
+        if (!openOgabasseyUrl(variantSelectionUrl, pendingTab)) {
+          setCartError(
+            'Could not open the product page. Please allow popups and try again.'
+          );
+        }
         // Option selection preserves the shopper's existing guest cart.
         return;
       }
+      pendingTab?.close();
 
-      const parsed = mcpGuestCartOutputSchema.safeParse(
+      const content = parseCartToolOutput(
         typeof result === 'object' && result !== null
           ? Reflect.get(result, 'structuredContent')
           : undefined
       );
-      const content = parsed.success ? parsed.data : undefined;
       const cartUrl = content?.success === true ? content.cart_url : undefined;
       let validatedUrl: URL | undefined;
       try {
@@ -84,7 +102,7 @@ export function useCartHandoff() {
       } catch {
         /* Invalid tool response. */
       }
-      const lines = parseGuestCartHandoff(
+      const lines = parseHandoffLines(
         validatedUrl?.searchParams.get('guest_cart') ?? null
       );
       if (
@@ -94,8 +112,7 @@ export function useCartHandoff() {
         validatedUrl.username ||
         validatedUrl.password ||
         !lines?.some((line) => line.product_id === product.id) ||
-        !content?.cart_token ||
-        !/^[a-f0-9]{64}$/.test(content.cart_token)
+        !content?.cart_token
       ) {
         setCartError(
           'This item cannot be added right now. Please choose another product.'
@@ -125,6 +142,7 @@ export function useCartHandoff() {
         cartToken: content.cart_token,
       }));
     } catch {
+      pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;
       setCartError('Could not save the guest cart. Please try again.');
     } finally {
@@ -148,15 +166,14 @@ export function useCartHandoff() {
           cart_token: widgetState.cartToken,
         }
       );
-      const parsed = mcpGuestCartOutputSchema.safeParse(
+      const content = parseCartToolOutput(
         typeof response === 'object' && response !== null
           ? Reflect.get(response, 'structuredContent')
           : undefined
       );
-      const content = parsed.success ? parsed.data : undefined;
       const url = content?.cart_url ? new URL(content.cart_url) : null;
       const raw = url?.searchParams.get('guest_cart') ?? null;
-      const remaining = raw === '[]' ? [] : parseGuestCartHandoff(raw);
+      const remaining = raw === '[]' ? [] : parseHandoffLines(raw);
       if (
         !content?.success ||
         content.cart_token !== widgetState.cartToken ||

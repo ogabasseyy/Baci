@@ -27,11 +27,14 @@ services:
       - OPENAI_AGENTIC_API_KEY=${OPENAI_AGENTIC_API_KEY}
       - OPENAI_AGENTIC_SIGNING_KEY=${OPENAI_AGENTIC_SIGNING_KEY}
       - MCP_AGENTIC_CHECKOUT_BASE_URL=${MCP_AGENTIC_CHECKOUT_BASE_URL:-https://ogabassey.com}
+      - MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts
     volumes:
       - mcp-guest-carts:/var/lib/baci/guest-carts
-    # Single writer only: guest-cart capacity/expiry admission is enforced
-    # in-process, so a second replica could over-admit. Do not scale past 1
-    # without a shared transactional store (see README "Guest cart").
+    # Single writer only: guest-cart admission is enforced in-process, and
+    # `deploy.replicas` is honored only by `docker stack deploy` (plain
+    # `docker compose up` ignores it). Deploy via stack deploy and do not
+    # scale past 1 replica without a shared transactional store (see README
+    # "Guest cart").
     deploy:
       replicas: 1
     healthcheck:

@@ -2,13 +2,11 @@ import type { useCart } from '@/hooks/cart';
 import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import type { useToast } from '@/hooks/use-toast';
 import {
-  resolveGuestQuantityToAdd,
-  rewriteCartLinkUrl,
-} from './guest-cart-handoff';
-import {
   getPrimaryProductImage,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from './product-image';
+import { resolveGuestQuantityToAdd } from './resolve-guest-quantity-to-add';
+import { rewriteCartLinkUrl } from './rewrite-cart-link-url';
 import { createClient } from './supabase/client';
 
 const QUIZ_PRIZE_PLATFORM = 'quiz_prize';
@@ -142,6 +140,10 @@ export async function fetchAndAddCartItems({
             description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
             variant: 'destructive',
           });
+          // Guest option lines stay retryable: the shopper chooses options on
+          // the PDP and the retained handoff line merges on a later visit
+          // instead of being silently consumed here.
+          if (guestQuantities) rejectedIds.push(product.id);
           continue;
         }
         const effectiveStock = Number(product.stock_quantity ?? 0);

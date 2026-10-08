@@ -30,6 +30,25 @@ it('saves only validated public products and returns a handoff without exposing 
     expect(retry).toMatchObject({ structuredContent: { items: [{ product_id: id, quantity: 2 }] } });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+it('ignores stale survivors when validating an unrelated add', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-survivor-'));
+  const survivor = '22222222-2222-4222-8222-222222222222';
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    const created = await handler?.({ product_id: survivor, quantity: 1 }) as { structuredContent: { cart_token: string } };
+    validate.mockClear();
+    validate.mockImplementation(async ({ productId }: { productId: string }) => ({ structuredContent: productId === survivor ? { success: false } : { success: true } }));
+    const result = await handler?.({ product_id: id, quantity: 1, cart_token: created.structuredContent.cart_token }) as { structuredContent: { success: boolean; items: unknown[] } };
+    expect(result.structuredContent.success).toBe(true);
+    expect(result.structuredContent.items).toEqual([{ product_id: survivor, quantity: 1 }, { product_id: id, quantity: 1 }]);
+    expect(validate.mock.calls).toHaveLength(1);
+    expect(validate.mock.calls[0][0].productId).toBe(id);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 it('passes variant selection through instead of returning a generic failure', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-selection-'));
   type Args = { product_id: string; quantity: number; cart_token?: string };

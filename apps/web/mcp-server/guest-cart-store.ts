@@ -24,6 +24,7 @@ const TTL = 7 * 24 * 60 * 60 * 1000;
 // files and no queue key with live writers, so only sweep ones old enough
 // that no in-flight write can still own them.
 const STALE_FILE_MAX_AGE_MS = 60 * 60 * 1000;
+const MAX_CART_FILES = 2000;
 const CRASH_TEMP_PATTERN = /^[a-f0-9]{64}\.json\..+\.tmp$/;
 // The new-cart expiry sweep reads and parses every cart file, so run it at
 // most once per interval; expiry is still enforced per cart on every read,
@@ -95,12 +96,39 @@ export class GuestCartStore {
             }
           }
           if (sweepDue) lastExpirySweepMs = Date.now();
-          if (
-            (await readdir(this.directory)).filter((entry) =>
-              /^[a-f0-9]{64}\.json$/.test(entry)
-            ).length >= 2000
-          )
-            throw new Error('Guest cart capacity reached');
+          const cartFiles = (await readdir(this.directory)).filter((entry) =>
+            /^[a-f0-9]{64}\.json$/.test(entry)
+          );
+          if (cartFiles.length >= MAX_CART_FILES) {
+            // One guest must not permanently exhaust the shared pool: evict
+            // the least-recently-written cart instead of failing. Idle carts
+            // may be dropped under sustained pressure; active carts survive
+            // because every write refreshes mtime.
+            const withMtime = await Promise.all(
+              cartFiles.map(async (entry) => {
+                try {
+                  const info = await stat(path.join(this.directory, entry));
+                  return { entry, mtimeMs: info.mtimeMs };
+                } catch {
+                  return { entry, mtimeMs: Number.POSITIVE_INFINITY };
+                }
+              })
+            );
+            withMtime.sort((a, b) => a.mtimeMs - b.mtimeMs);
+            let evicted = false;
+            for (const { entry } of withMtime) {
+              const candidate = path.join(this.directory, entry);
+              if (queues.has(candidate)) continue;
+              try {
+                await unlink(candidate);
+                evicted = true;
+                break;
+              } catch {
+                /* Already gone; try the next oldest. */
+              }
+            }
+            if (!evicted) throw new Error('Guest cart capacity reached');
+          }
         }
         const stored = token
           ? storedCartSchema.parse(JSON.parse(await readFile(file, 'utf8')))

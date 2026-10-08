@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/cart';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
-import { resolveGuestCartTransfer } from '@/lib/guest-cart-handoff';
+import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
 import { CartPage } from './cart-page';
 
 interface CartPageWrapperProps {

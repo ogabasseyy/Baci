@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useCartHandoff } from './use-cart-handoff';
 const product = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -15,22 +15,24 @@ const second = {
 const token = 'a'.repeat(64);
 function response(products = [product]) {
   const url = new URL('https://ogabassey.com/cart');
-  url.searchParams.set(
-    'guest_cart',
-    JSON.stringify(
-      products.map((item) => ({ product_id: item.id, quantity: 1 }))
-    )
-  );
+  const items = products.map((item) => ({ product_id: item.id, quantity: 1 }));
+  url.searchParams.set('guest_cart', JSON.stringify(items));
   return {
     structuredContent: {
       success: true,
       cart_url: url.toString(),
       cart_token: token,
+      items,
+      expires_at: '2026-10-14T00:00:00.000Z',
     },
   };
 }
+beforeEach(() => {
+  vi.stubGlobal('open', vi.fn(() => null));
+});
 afterEach(() => {
   delete window.openai;
+  vi.unstubAllGlobals();
 });
 it('saves without navigating and transfers the whole cart only on review', async () => {
   const openExternal = vi.fn();
@@ -103,6 +105,62 @@ it('retains the cart when removal fails and rejects hostile handoff destinations
   await act(async () => {
     await result.current.handleAddToCart(second);
   });
+  expect(result.current.cart).toHaveLength(1);
+});
+it('re-adds with the incremented absolute total', async () => {
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce(response());
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(callTool).toHaveBeenLastCalledWith('update_ogabassey_guest_cart', {
+    product_id: product.id,
+    quantity: 2,
+    cart_token: token,
+  });
+});
+it('navigates a synchronously-opened tab when selection is required', async () => {
+  const tab = { location: { href: '' }, closed: false, close: vi.fn() };
+  const openSpy = vi.fn(() => tab);
+  vi.stubGlobal('open', openSpy);
+  const callTool = vi.fn().mockResolvedValue({
+    structuredContent: {
+      success: false,
+      requires_variant_selection: true,
+      product_id: product.id,
+      product_url: 'https://ogabassey.com/products/phone',
+    },
+  });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
+  expect(tab.location.href).toBe('https://ogabassey.com/products/phone');
+  expect(tab.close).not.toHaveBeenCalled();
+  expect(result.current.cart).toHaveLength(0);
+});
+it('closes the reserved tab when no navigation is needed', async () => {
+  const tab = { location: { href: '' }, closed: false, close: vi.fn() };
+  vi.stubGlobal(
+    'open',
+    vi.fn(() => tab)
+  );
+  const callTool = vi.fn().mockResolvedValue(response());
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(tab.close).toHaveBeenCalledOnce();
   expect(result.current.cart).toHaveLength(1);
 });
 it('does not silently select variants and preserves the existing guest cart', async () => {

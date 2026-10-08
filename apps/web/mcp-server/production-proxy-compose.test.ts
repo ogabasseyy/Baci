@@ -23,6 +23,9 @@ describe('production MCP proxy configuration', () => {
     const compose = readFileSync(join(directory, 'docker-compose.yml'), 'utf8');
 
     expect(compose).toContain('replicas: 1');
+    expect(compose).toContain(
+      'MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts'
+    );
   });
 
   it('passes the configured GIG quote deadline into the production container', () => {

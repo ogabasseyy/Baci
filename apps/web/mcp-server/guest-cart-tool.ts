@@ -58,36 +58,33 @@ export function registerGuestCartTool(
         const cart = await options.store.update(
           args.cart_token,
           args,
-          async (items) => {
-            // Full-cart validation is intentional: the handoff must never
-            // carry stale lines. A stale survivor therefore blocks unrelated
-            // adds until removed, and removals skip validation as the escape
-            // hatch so a frozen cart can always be drained. The website
-            // re-checks stock at transfer, so this cannot oversell.
+          async () => {
+            // Only the changed line is validated: a stale survivor must not
+            // freeze unrelated adds. Stale lines stay visible in the chat
+            // cart and the website re-checks stock at transfer, so handoff
+            // can only carry lines the catalog still honors.
             if (args.quantity === 0) return;
-            for (const item of items) {
-              const result = await prepareCartHandoff({
-                supabase: options.supabase,
-                merchantId,
-                productId: item.product_id,
-                quantity: item.quantity,
-                formatPrice: options.formatPrice,
-              });
-              const handoff = result.structuredContent;
-              if (handoff?.success !== true) {
-                if (
-                  handoff?.requires_variant_selection === true &&
-                  typeof handoff?.product_url === 'string'
-                ) {
-                  throw new VariantSelectionRequired(
-                    item.product_id,
-                    handoff.product_url
-                  );
-                }
-                throw new Error(
-                  'A product is unavailable or requires option selection'
+            const result = await prepareCartHandoff({
+              supabase: options.supabase,
+              merchantId,
+              productId: args.product_id,
+              quantity: args.quantity,
+              formatPrice: options.formatPrice,
+            });
+            const handoff = result.structuredContent;
+            if (handoff?.success !== true) {
+              if (
+                handoff?.requires_variant_selection === true &&
+                typeof handoff?.product_url === 'string'
+              ) {
+                throw new VariantSelectionRequired(
+                  args.product_id,
+                  handoff.product_url
                 );
               }
+              throw new Error(
+                'A product is unavailable or requires option selection'
+              );
             }
           }
         );

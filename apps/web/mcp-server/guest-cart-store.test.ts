@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -195,6 +202,33 @@ it('reclaims stale corrupt cart files while preserving fresh ones', async () => 
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('evicts the least-recently-written cart at capacity', async () => {
+  const { directory, instance } = await store();
+  const tokens = Array.from({ length: 2000 }, (_, index) =>
+    index.toString(16).padStart(64, '0')
+  );
+  const payload = JSON.stringify({
+    expires_at: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    items: [],
+  });
+  for (const token of tokens)
+    await writeFile(path.join(directory, `${token}.json`), payload);
+  const oldest = path.join(directory, `${tokens[0]}.json`);
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  await utimes(oldest, old, old);
+  const cart = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
+  await expect(readFile(oldest, 'utf8')).rejects.toThrow();
+  const remaining = (await readdir(directory)).filter((entry) =>
+    entry.endsWith('.json')
+  );
+  expect(remaining).toHaveLength(2000);
 });
 
 it('does not count unrelated files against guest cart capacity', async () => {

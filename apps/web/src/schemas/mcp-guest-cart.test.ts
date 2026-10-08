@@ -134,6 +134,12 @@ describe('mcpGuestCartOutputSchema', () => {
     ).toBe(false);
   });
 
+  it('rejects a non-boolean success discriminator', () => {
+    expect(mcpGuestCartOutputSchema.safeParse({ success: 'yes' }).success).toBe(
+      false
+    );
+  });
+
   it('parses a variant-selection payload', () => {
     const result = mcpGuestCartOutputSchema.safeParse({
       success: false,

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { getCustomerSavingsFeatureSettings } from '@/app/api/storefront/customer/savings/shared';
+import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/customer/savings/customer-savings-feature-settings';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -59,7 +59,7 @@ async function handle(
         },
         { status: 409 }
       );
-    const features = await getCustomerSavingsFeatureSettings({
+    const features = await getPrimaryCustomerSavingsFeatureSettings({
       supabase: auth.supabase,
       merchantId: identity.merchantId,
       customerId: identity.customerId,

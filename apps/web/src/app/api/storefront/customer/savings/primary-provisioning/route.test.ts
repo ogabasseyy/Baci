@@ -24,9 +24,12 @@ vi.mock('@/lib/piggyvest/primary-savings-provisioning-runtime', () => ({
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
 }));
-vi.mock('@/app/api/storefront/customer/savings/shared', () => ({
-  getCustomerSavingsFeatureSettings: mocks.features,
-}));
+vi.mock(
+  '@/app/api/storefront/customer/savings/customer-savings-feature-settings',
+  () => ({
+    getPrimaryCustomerSavingsFeatureSettings: mocks.features,
+  })
+);
 const body = {
   merchantId: provisioningFixture.scope.merchantId,
   goalId: provisioningFixture.goalId,

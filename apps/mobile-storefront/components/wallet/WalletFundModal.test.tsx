@@ -58,6 +58,45 @@ describe('WalletFundModal', () => {
     expect(screen.queryByText('Primary setup panel')).toBeNull();
     expect(screen.getByText('Add Money')).toBeOnTheScreen();
   });
+  it('shows primary setup while a legacy account is retained pending onboarding', () => {
+    mockUseCapability.mockReturnValue(true);
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        fundingAccount={{
+          accountName: 'Synthetic User',
+          accountNumber: '9000000001',
+          bankName: 'Synthetic Bank',
+          provider: 'paystack',
+        }}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        showFundPanel
+      />
+    );
+    expect(screen.getByText('Primary setup panel')).toBeOnTheScreen();
+  });
+  it('shows the fund panel once the primary account is provisioned', () => {
+    mockUseCapability.mockReturnValue(true);
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        fundingAccount={{
+          accountName: 'Synthetic User',
+          accountNumber: '9000000002',
+          bankName: 'PiggyVest',
+          provider: 'piggyvest',
+        }}
+        merchantId="6b5cb8a4-5575-456c-b936-8cdfae30db74"
+        showFundPanel
+      />
+    );
+    expect(screen.queryByText('Primary setup panel')).toBeNull();
+    expect(screen.getByText('Add Money')).toBeOnTheScreen();
+  });
   it('shows savings return guidance when funding an existing plan', () => {
     const props = createWalletContentProps();
     render(

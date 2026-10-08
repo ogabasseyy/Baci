@@ -27,6 +27,20 @@ it('uses the existing hosted callback boundary to request authoritative primary 
   expect(confirm).toHaveBeenCalledTimes(1);
   expect(mockCrypto).not.toHaveBeenCalled();
 });
+it('ignores raw success messages when no server confirmer is wired', async () => {
+  mockCrypto.mockClear();
+  // Defense in depth alongside the production-wiring case: even if a
+  // primary handler were created without the server-checkout confirmer,
+  // raw WebView success claims credit nothing and clear nothing.
+  const { handler, clearCart, setSuccessStatus } = createHandler({
+    paymentKind: 'primary_wallet_card',
+  });
+  await sendMessage(handler, { type: 'payment_success' });
+  await sendMessage(handler, { type: 'success' });
+  expect(mockCrypto).not.toHaveBeenCalled();
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(setSuccessStatus).not.toHaveBeenCalled();
+});
 it('routes raw success messages through server confirmation only under production wiring', async () => {
   mockCrypto.mockClear();
   const confirm = jest.fn();

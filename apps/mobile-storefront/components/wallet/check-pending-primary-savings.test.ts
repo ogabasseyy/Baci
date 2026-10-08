@@ -51,3 +51,17 @@ it('preserves retry identity when status is unavailable', async () => {
   expect(props.clearAmount).not.toHaveBeenCalled();
   expect(props.setPending).toHaveBeenLastCalledWith(false);
 });
+it('releases the operation on authoritative not-found so the next tap re-submits', async () => {
+  const props = input();
+  mockCheck.mockRejectedValue(
+    Object.assign(new Error('not found'), { code: 'CONTRIBUTION_NOT_FOUND' })
+  );
+  await checkPendingPrimarySavings(props);
+  expect(props.clearOperation).toHaveBeenCalledTimes(1);
+  expect(props.clearAmount).not.toHaveBeenCalled();
+  expect(props.setPending).toHaveBeenLastCalledWith(false);
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Contribution not received',
+    expect.stringContaining('try again')
+  );
+});

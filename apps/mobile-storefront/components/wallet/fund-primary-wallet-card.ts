@@ -157,9 +157,16 @@ export async function fundPrimaryWalletCard(
       );
   } catch (error) {
     // Unconfigured primary is the caller's cue to run the legacy top-up,
-    // but only when no saved operation exists: a found checkout may
-    // already have charged the card, so keep it and surface the failure.
-    if (!pending && isPrimaryWalletNotReady(error)) throw error;
+    // but only when nothing is retained: a found checkout may already have
+    // charged the card, so keep it and surface the failure. Re-read on
+    // not-ready because the request drops its own null-operation
+    // placeholder, which must not block fallback either.
+    if (isPrimaryWalletNotReady(error)) {
+      const retained = await client
+        .readPending({ merchantId, userId })
+        .catch(() => pending);
+      if (!retained) throw error;
+    }
     Alert.alert(
       'Card funding could not be confirmed',
       'Any pending operation is retained. Check again before attempting another charge.'

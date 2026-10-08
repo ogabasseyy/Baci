@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/provision-immediate-notification-completion-hmac",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-blog-media-tombstones",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {

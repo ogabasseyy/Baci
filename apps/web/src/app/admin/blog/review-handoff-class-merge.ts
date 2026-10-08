@@ -5,13 +5,13 @@ const CLASS_ATTRIBUTE_PATTERN =
   /\sclass=(?:"([^"]*)"|'([^']*)'|([^\s>]*?))(\s|\/?>)/i;
 
 /**
- * Append the `hidden` marker to a tag's class list, preserving its
+ * Append a hiding utility to a tag's class list, preserving its
  * quote style. The browser keeps the first of duplicate class
  * attributes and ignores the rest, so an existing value — quoted
  * or bare — is rewritten in place instead of appending a second
  * attribute the parser would discard.
  */
-export function addHiddenClass(tag: string): string {
+export function addUtilityClass(tag: string, utility: string): string {
   const merged = tag.replace(
     CLASS_ATTRIBUTE_PATTERN,
     (
@@ -22,11 +22,11 @@ export function addHiddenClass(tag: string): string {
       tail: string
     ) =>
       doubleQuoted !== undefined
-        ? ` class="${doubleQuoted} hidden"${tail}`
+        ? ` class="${doubleQuoted} ${utility}"${tail}`
         : singleQuoted !== undefined
-          ? ` class='${singleQuoted} hidden'${tail}`
-          : ` class="${unquoted ?? ''} hidden"${tail}`
+          ? ` class='${singleQuoted} ${utility}'${tail}`
+          : ` class="${unquoted ?? ''} ${utility}"${tail}`
   );
   if (merged !== tag) return merged;
-  return tag.replace(/\s*(\/?)>$/, ' class="hidden"$1>');
+  return tag.replace(/\s*(\/?)>$/, ` class="${utility}"$1>`);
 }

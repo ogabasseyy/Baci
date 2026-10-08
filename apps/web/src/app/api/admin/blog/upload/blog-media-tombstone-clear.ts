@@ -1,0 +1,56 @@
+import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
+import type { createClient } from '@/lib/supabase/server';
+import type { BlogPostMediaRow } from './blog-media-reference-scan';
+import { BLOG_MEDIA_TOMBSTONE_TABLE } from './blog-media-tombstone-constants';
+
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+const URL_PATTERN = /https?:\/\/[^\s"'<>]+/g;
+
+function rowMediaPaths(row: BlogPostMediaRow): string[] {
+  const texts: unknown[] = [
+    row.content,
+    row.excerpt,
+    row.featured_image_url,
+    row.author_image_url,
+  ];
+  if (typeof row.featured_image_variants === 'string') {
+    texts.push(row.featured_image_variants);
+  } else if (row.featured_image_variants) {
+    texts.push(JSON.stringify(row.featured_image_variants));
+  }
+  const paths = new Set<string>();
+  for (const text of texts) {
+    if (typeof text !== 'string') continue;
+    for (const url of text.match(URL_PATTERN) ?? []) {
+      const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
+      if (path !== null) paths.add(path);
+    }
+  }
+  return [...paths];
+}
+
+/**
+ * Resurrect tombstones a saved payload references. Clearing is
+ * best-effort: the save already committed, and any tombstone missed
+ * here is rechecked against persisted references at sweep time, so a
+ * transient failure delays cleanup instead of breaking media.
+ */
+export async function clearBlogMediaTombstonesForRow(
+  supabase: ServerSupabaseClient,
+  row: BlogPostMediaRow
+): Promise<void> {
+  const paths = rowMediaPaths(row);
+  if (paths.length === 0) return;
+  try {
+    const { error } = await supabase
+      .from(BLOG_MEDIA_TOMBSTONE_TABLE)
+      .delete()
+      .in('path', paths);
+    if (error) {
+      console.error('Failed to clear blog media tombstones', { error, paths });
+    }
+  } catch (error) {
+    console.error('Failed to clear blog media tombstones', { error, paths });
+  }
+}

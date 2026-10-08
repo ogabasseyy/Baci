@@ -26,8 +26,14 @@ function createSupabase(
   existingPost: Record<string, unknown> = {}
 ) {
   const updates: Record<string, unknown>[] = [];
+  const cleared: string[][] = [];
   const query = {
+    delete: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn((_column: string, paths: string[]) => {
+      cleared.push(paths);
+      return Promise.resolve({ error: null });
+    }),
     is: vi.fn(),
     select: vi.fn(),
     single: vi
@@ -59,7 +65,8 @@ function createSupabase(
   query.eq.mockReturnValue(query);
   query.is.mockReturnValue(query);
   query.select.mockReturnValue(query);
-  return { from: vi.fn(() => query), updates };
+  query.delete.mockReturnValue(query);
+  return { cleared, from: vi.fn(() => query), updates };
 }
 
 describe('updatePlatformBlogPost', () => {
@@ -96,6 +103,28 @@ describe('updatePlatformBlogPost', () => {
 
     expect(response.status).toBe(400);
     expect(mocks.createClient).not.toHaveBeenCalled();
+  });
+
+  it('resurrects tombstones referenced by the updated payload', async () => {
+    const supabase = createSupabase({
+      data: {
+        content:
+          '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/shared.webp">',
+        id: 'post-1',
+        slug: 'new-slug',
+      },
+      error: null,
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(
+      request({ title: 'Updated title' }),
+      { params: Promise.resolve({ id: 'post-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.from).toHaveBeenCalledWith('blog_media_delete_tombstones');
+    expect(supabase.cleared).toEqual([['platform/blog/shared.webp']]);
   });
 
   it('forces platform ownership and revalidates both changed slugs', async () => {

@@ -815,6 +815,21 @@ export type Database = {
           },
         ];
       };
+      blog_media_delete_tombstones: {
+        Row: {
+          created_at: string;
+          path: string;
+        };
+        Insert: {
+          created_at?: string;
+          path: string;
+        };
+        Update: {
+          created_at?: string;
+          path?: string;
+        };
+        Relationships: [];
+      };
       blog_post_products: {
         Row: {
           blog_post_id: string;

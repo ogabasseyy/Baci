@@ -1,4 +1,4 @@
-import { addHiddenClass } from './review-handoff-class-merge';
+import { addUtilityClass } from './review-handoff-class-merge';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { tagAttributes } from './review-handoff-tag-attributes';
 
@@ -61,6 +61,6 @@ export function convertHiddenAttributes(html: string): string {
     if (closing) return tag;
     if (!hasHiddenAttribute(tag)) return tag;
     if (hasBareDisplayUtility(tag)) return tag;
-    return addHiddenClass(tag);
+    return addUtilityClass(tag, 'hidden');
   });
 }

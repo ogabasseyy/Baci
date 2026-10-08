@@ -14,6 +14,7 @@ import {
   type ColorScheme,
 } from './review-handoff-breakpoints';
 import { displayMarkers } from './review-handoff-display-markers';
+import { stripImportantModifier } from './review-handoff-important';
 import { opacityMarkers } from './review-handoff-opacity-markers';
 import { scaleMarkers } from './review-handoff-scale-markers';
 import { sizeMarkers } from './review-handoff-size-markers';
@@ -42,12 +43,13 @@ export function showingMarkers(
   visibilityAt: VisibilityAtPoint[];
   colorAt: ColorAtPoint[];
 } {
-  const display = displayMarkers(classes, scheme);
-  const opacity = opacityMarkers(classes, scheme);
-  const scale = scaleMarkers(classes, scheme);
-  const size = sizeMarkers(classes, scheme);
-  const text = textColorMarkers(classes, scheme);
-  const visibility = visibilityMarkers(classes, scheme);
+  const bare = classes.map(stripImportantModifier);
+  const display = displayMarkers(bare, scheme);
+  const opacity = opacityMarkers(bare, scheme);
+  const scale = scaleMarkers(bare, scheme);
+  const size = sizeMarkers(bare, scheme);
+  const text = textColorMarkers(bare, scheme);
+  const visibility = visibilityMarkers(bare, scheme);
   const terminalAt: boolean[] = [];
   const colorAt: ColorAtPoint[] = [];
   for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {

@@ -2,6 +2,7 @@ import type { ColorScheme } from './review-handoff-breakpoints';
 import { elementFrame } from './review-handoff-element-frame';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { imageSizeZeroAt } from './review-handoff-image-size';
+import { stripImportantModifier } from './review-handoff-important';
 import { HidingStack } from './review-handoff-subtree-hidden';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';
@@ -129,7 +130,7 @@ function wrapsUnsupportedVariant(token: string): boolean {
   // Colons inside arbitrary values (`supports-[a:b]:hidden`) split
   // into extra segments, but any unrecognized segment still rejects:
   // only fully-known variant stacks defer to the width model.
-  const segments = token.split(':');
+  const segments = stripImportantModifier(token).split(':');
   if (segments.length < 2) return false;
   if (!isChannelUtility(segments[segments.length - 1])) return false;
   return segments.slice(0, -1).some((variant) => !isKnownVariant(variant));

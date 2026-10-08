@@ -10,6 +10,7 @@ import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
 import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
+import { tombstoneBlogMediaPaths } from './blog-media-tombstone-write';
 import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
@@ -257,13 +258,15 @@ export async function DELETE(request: NextRequest) {
   }
   const { deletable, skipped } = filtered;
   if (deletable.length === 0) {
-    return NextResponse.json({ skipped, success: true });
+    return NextResponse.json({ skipped, success: true, tombstoned: [] });
   }
 
-  const { error } = await supabase.storage.from('media').remove(deletable);
-  if (error) {
-    console.error('Platform blog media delete failed', {
-      error,
+  // Stage the deletion instead of removing: a concurrent save can
+  // resurrect a tombstone its payload references before the sweep's
+  // grace window expires.
+  const staged = await tombstoneBlogMediaPaths(supabase, deletable);
+  if (!staged) {
+    console.error('Platform blog media tombstone staging failed', {
       paths: deletable,
     });
     return NextResponse.json(
@@ -273,5 +276,5 @@ export async function DELETE(request: NextRequest) {
   }
 
   revalidatePlatformBlog();
-  return NextResponse.json({ skipped, success: true });
+  return NextResponse.json({ skipped, success: true, tombstoned: deletable });
 }

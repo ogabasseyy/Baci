@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { clearBlogMediaTombstonesForRow } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -261,6 +262,16 @@ export async function updatePlatformBlogPost(
     if (previousSlug && previousSlug !== nextSlug) {
       revalidatePlatformBlog(previousSlug);
     }
+
+    // A concurrent tab may have tombstoned an upload this payload
+    // reuses; resurrect its references before the sweep can remove them.
+    await clearBlogMediaTombstonesForRow(supabase, {
+      author_image_url: data.author_image_url,
+      content: data.content,
+      excerpt: data.excerpt,
+      featured_image_url: data.featured_image_url,
+      featured_image_variants: data.featured_image_variants,
+    });
 
     revalidatePlatformBlog(data.slug);
     return NextResponse.json(data);

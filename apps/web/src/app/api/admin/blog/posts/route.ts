@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { clearBlogMediaTombstonesForRow } from '@/app/api/admin/blog/upload/blog-media-tombstone-clear';
 import {
   validateBlogDiscoverImageReadiness,
   validateBlogImageVariantIntegrity,
@@ -212,6 +213,16 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // A concurrent tab may have tombstoned an upload this payload
+    // reuses; resurrect its references before the sweep can remove them.
+    await clearBlogMediaTombstonesForRow(supabase, {
+      author_image_url: postData.author_image_url ?? null,
+      content: postData.content,
+      excerpt: postData.excerpt ?? null,
+      featured_image_url: postData.featured_image_url ?? null,
+      featured_image_variants: postData.featured_image_variants ?? null,
+    });
 
     revalidatePlatformBlog(data.slug);
     return NextResponse.json(data, { status: 201 });

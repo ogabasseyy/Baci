@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it } from '@jest/globals';
 import {
   mockFetchWithTimeout,
   mockGetSession,
@@ -6,16 +6,73 @@ import {
 
 const { createWalletFundingAccount, getWalletFundingAccount } =
   require('@/lib/wallet-funding-account') as typeof import('@/lib/wallet-funding-account');
+const { clearPiggyvestPrimaryCapabilityCache } =
+  require('@/lib/piggyvest-primary-capability') as typeof import('@/lib/piggyvest-primary-capability');
 
 describe('wallet funding account api client', () => {
-  it('does not dispatch a Paystack creation for the PiggyVest primary merchant', async () => {
+  beforeEach(() => {
+    clearPiggyvestPrimaryCapabilityCache();
+  });
+  it('requires BVN only after the server confirms primary is available', async () => {
     mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'pending', account: null }),
+    });
     await expect(
       createWalletFundingAccount({
         merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
       })
     ).rejects.toThrow('No bank account was created');
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(
+      mockFetchWithTimeout.mock.calls.some(
+        ([, options]) =>
+          typeof options === 'object' &&
+          options !== null &&
+          (options as { method?: string }).method === 'POST'
+      )
+    ).toBe(false);
+  });
+  it('creates the legacy DVA when primary is unconfigured, even without BVN', async () => {
+    mockFetchWithTimeout.mockClear();
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({
+          error: 'Wallet access is temporarily unavailable.',
+          code: 'PIGGYVEST_NOT_READY',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          account: {
+            accountName: 'Ogabassey/Jane Doe',
+            accountNumber: '1234567890',
+            bankName: 'Titan Paystack',
+            provider: 'paystack',
+          },
+          requiresConsent: false,
+        }),
+      });
+    await expect(
+      createWalletFundingAccount({
+        merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    ).resolves.toMatchObject({
+      account: { accountNumber: '1234567890', provider: 'paystack' },
+    });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/api/storefront/customer/wallet/funding-account'
+      ),
+      expect.objectContaining({ method: 'POST' })
+    );
   });
   it('falls back to the legacy funding account when primary is unconfigured', async () => {
     mockFetchWithTimeout.mockClear();

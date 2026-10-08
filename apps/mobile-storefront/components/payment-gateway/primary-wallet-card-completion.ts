@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { useAuthStore } from '@/stores/auth-store';
 import type { beginWalletTopUpCompletion } from './payment-gateway-completions';
@@ -24,12 +23,18 @@ export function beginPrimaryWalletCardCompletion(
       | 'recovery_unconfirmed' = 'recovery_unconfirmed';
     try {
       const userId = useAuthStore.getState().user?.id;
+      // Recovery authority is the scoped persisted operation plus the
+      // callback reference plus server status — deliberately not the
+      // volatile capability cache. The cache is empty after an app
+      // restart, so gating here would reject a valid server-enabled
+      // non-pilot recovery (and its retries) before the persisted
+      // operation could be verified. Merchants without primary simply
+      // have no persisted operation, so recover() rejects the same way.
       if (
         !userId ||
         !input.merchantId ||
         !input.reference ||
-        input.gateway !== 'paystack' ||
-        !isPiggyvestPrimaryMerchant(input.merchantId)
+        input.gateway !== 'paystack'
       ) {
         failureCause = 'incomplete_details';
         throw new Error('Primary card funding details are incomplete.');

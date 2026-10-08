@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import {
   clearPiggyvestPrimaryCapabilityCache,
   getPiggyvestPrimaryCapability,
@@ -6,7 +6,10 @@ import {
   rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
 } from './piggyvest-primary-capability';
-import { readObservedPiggyvestPrimaryCapability } from './piggyvest-primary-capability-cache';
+import {
+  NEGATIVE_CAPABILITY_TTL_MS,
+  readObservedPiggyvestPrimaryCapability,
+} from './piggyvest-primary-capability-cache';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 jest.mock('./piggyvest-primary-wallet', () => ({
@@ -184,5 +187,26 @@ describe('usePiggyvestPrimaryCapability', () => {
     expect(result.current).toBe(false);
     await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
     expect(result.current).toBe(false);
+  });
+
+  it('reprobes a mounted screen after the negative verdict expires', async () => {
+    jest.useFakeTimers();
+    try {
+      read.mockRejectedValueOnce(notReady('PIGGYVEST_NOT_READY'));
+      const { result } = renderHook(() =>
+        usePiggyvestPrimaryCapability(OTHER_MERCHANT)
+      );
+      await act(async () => {});
+      expect(result.current).toBe(false);
+      expect(read).toHaveBeenCalledTimes(1);
+      read.mockResolvedValue({ account: null });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(NEGATIVE_CAPABILITY_TTL_MS);
+      });
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(result.current).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

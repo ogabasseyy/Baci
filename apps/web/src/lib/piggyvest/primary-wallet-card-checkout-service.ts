@@ -1,7 +1,10 @@
 import 'server-only';
 import { primaryWalletCardCheckoutSchemas as schemas } from '@/schemas/primary-wallet-card-checkout';
 import type { createPrimaryWalletCardCheckoutExecutor } from './primary-wallet-card-checkout-executor';
-import type { createPrimaryWalletCardCheckoutProvider } from './primary-wallet-card-checkout-provider';
+import {
+  type createPrimaryWalletCardCheckoutProvider,
+  isPrimaryCardDuplicateReference,
+} from './primary-wallet-card-checkout-provider';
 
 export function createPrimaryWalletCardCheckoutService(input: {
   settings: unknown;
@@ -69,6 +72,51 @@ export function createPrimaryWalletCardCheckoutService(input: {
       throw new Error('Primary card identity unavailable');
     return intent;
   };
+  // Re-runs the initialization sequence for a stale uninitialized claim.
+  // Returns null when the lease is still held so status polling continues;
+  // otherwise the caller's stale verdict is replaced by a fresh one.
+  const reenterInitialization = async (operationId: string) => {
+    const claim = schemas.claim.parse(
+      await input.execute('claim', [storageScope, operationId])
+    );
+    if (claim.outcome !== 'claimed') return null;
+    const reclaimed = select(claim.intent);
+    if (reclaimed.operationId !== operationId)
+      throw new Error('Primary card identity unavailable');
+    active();
+    let session: ReturnType<typeof schemas.session.parse> | null = null;
+    try {
+      session = schemas.session.parse(
+        await input.provider.initialize(reclaimed)
+      );
+      if (session.reference !== reclaimed.reference) session = null;
+    } catch (error) {
+      // A duplicate reference proves Paystack holds a session under our
+      // reference, but no checkout URL was ever recorded or delivered
+      // (only 'ready' exposes one), so no customer can pay it. Abandon
+      // the orphaned operation — releasing treasury — so the customer
+      // starts fresh instead of polling a dead reference forever. Any
+      // other failure stays ambiguous and records init_unknown below.
+      if (isPrimaryCardDuplicateReference(error)) {
+        active();
+        schemas.acknowledgement.parse(
+          await input.execute('abandonment', [storageScope, operationId])
+        );
+        return publicState(await read(operationId));
+      }
+      session = null;
+    }
+    active();
+    schemas.initializationAcknowledgement.parse(
+      await input.execute('initialize', [
+        storageScope,
+        operationId,
+        claim.token,
+        session ? JSON.stringify(session) : null,
+      ])
+    );
+    return publicState(await read(operationId));
+  };
   return {
     async initialize(body: unknown) {
       active();
@@ -104,7 +152,21 @@ export function createPrimaryWalletCardCheckoutService(input: {
           await input.provider.initialize(claim.intent)
         );
         if (session.reference !== intent.reference) session = null;
-      } catch {
+      } catch (error) {
+        // Same orphan rule as status re-entry: the claim above proves we
+        // hold the lease, so a duplicate reference means a session exists
+        // whose checkout URL was never recorded or delivered. Abandon
+        // rather than pinning the retry to init_unknown.
+        if (isPrimaryCardDuplicateReference(error)) {
+          active();
+          schemas.acknowledgement.parse(
+            await input.execute('abandonment', [
+              storageScope,
+              intent.operationId,
+            ])
+          );
+          return publicState(await read(intent.operationId));
+        }
         session = null;
       }
       schemas.initializationAcknowledgement.parse(
@@ -132,6 +194,18 @@ export function createPrimaryWalletCardCheckoutService(input: {
         ].includes(intent.status)
       )
         return publicState(intent);
+      // A claim whose holder died before recording strands status polling:
+      // the provider reference may never have been created, yet status
+      // only verifies it. Re-enter initialization once the claim lease
+      // expires (claim returns 'claimed'); a live holder yields
+      // 'existing' and polling continues below.
+      if (
+        intent.status === 'initializing' ||
+        intent.status === 'init_unknown'
+      ) {
+        const reentered = await reenterInitialization(operationId);
+        if (reentered) return reentered;
+      }
       const verification = await input.provider.verify(intent);
       active();
       if (verification.outcome === 'pending') return publicState(intent);

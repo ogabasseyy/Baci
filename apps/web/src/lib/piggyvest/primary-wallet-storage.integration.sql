@@ -8,9 +8,13 @@ CREATE TABLE public.customers(id uuid PRIMARY KEY, merchant_id uuid REFERENCES p
 \ir ../../../../../supabase/migrations/20261007140000_piggyvest_primary_wallet_onboarding.sql
 \ir ../../../../../supabase/migrations/20261007141000_piggyvest_primary_wallet_mapping_read.sql
 \ir ../../../../../supabase/migrations/20261008090200_piggyvest_primary_onboarding_reclaim.sql
+\ir ../../../../../supabase/migrations/20261008091400_piggyvest_primary_onboarding_dispatched_lease.sql
 INSERT INTO public.merchants VALUES ('00000000-0000-4000-8000-000000000001');
 INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000003');
 INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000000a');
+INSERT INTO public.customers VALUES ('00000000-0000-4000-8000-00000000000b', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-00000000000c');
+CREATE TABLE public.stale_dispatch_fixture(intent_id uuid, claim_token uuid);
+GRANT SELECT, INSERT ON public.stale_dispatch_fixture TO primary_fixture;
 INSERT INTO piggyvest_primary.integrations VALUES ('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', 'fixture-business', 'staging', 'primary_fixture', true);
 GRANT piggyvest_primary_provisioner TO primary_fixture;
 SET SESSION AUTHORIZATION primary_fixture;
@@ -48,6 +52,39 @@ BEGIN
     RAISE EXCEPTION 'ownership mismatch accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+END $$;
+RESET SESSION AUTHORIZATION;
+-- A dispatch whose holder died before recording must be reclaimable once
+-- the lease expires, while a fresh dispatch still shares one provider
+-- call. Row aging runs as the bootstrap role: the worker has no direct
+-- table access by design.
+SET SESSION AUTHORIZATION primary_fixture;
+DO $$
+DECLARE
+  scope3 jsonb := '{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-00000000000b","userId":"00000000-0000-4000-8000-00000000000c","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}';
+  stale jsonb;
+BEGIN
+  stale := piggyvest_primary.claim_onboarding(scope3, repeat('e',64));
+  IF stale->>'status' <> 'claimed' THEN RAISE EXCEPTION 'stale setup claim failed'; END IF;
+  IF piggyvest_primary.claim_onboarding(scope3, repeat('e',64))->>'status' <> 'pending' THEN RAISE EXCEPTION 'fresh dispatch reclaimed'; END IF;
+  INSERT INTO public.stale_dispatch_fixture(intent_id, claim_token) VALUES ((stale->>'intentId')::uuid, (stale->>'claimToken')::uuid);
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.onboarding_intents SET updated_at = pg_catalog.clock_timestamp() - interval '6 minutes'
+  WHERE customer_id = '00000000-0000-4000-8000-00000000000b';
+SET SESSION AUTHORIZATION primary_fixture;
+DO $$
+DECLARE
+  scope3 jsonb := '{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-00000000000b","userId":"00000000-0000-4000-8000-00000000000c","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}';
+  stale_token uuid := (SELECT claim_token FROM public.stale_dispatch_fixture LIMIT 1);
+  revived jsonb;
+BEGIN
+  revived := piggyvest_primary.claim_onboarding(scope3, repeat('e',64));
+  IF revived->>'status' <> 'claimed' OR revived->>'reclaimed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'stale dispatch stranded'; END IF;
+  IF (revived->>'claimToken')::uuid = stale_token THEN RAISE EXCEPTION 'stale dispatch token reused'; END IF;
+  IF piggyvest_primary.record_onboarding(scope3, (revived->>'intentId')::uuid, stale_token, 'customer', 'wallet') THEN RAISE EXCEPTION 'superseded dispatch token accepted'; END IF;
+  IF NOT piggyvest_primary.record_onboarding(scope3, (revived->>'intentId')::uuid, (revived->>'claimToken')::uuid, 'revived-customer', 'revived-wallet') THEN RAISE EXCEPTION 'revived record failed'; END IF;
+  IF piggyvest_primary.read_onboarding(scope3) <> '{"providerCustomerId":"revived-customer","providerWalletId":"revived-wallet"}'::jsonb THEN RAISE EXCEPTION 'revived mapping unreadable'; END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
 DO $$ BEGIN

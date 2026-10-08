@@ -3,10 +3,7 @@ import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
 import { readPrimaryWalletRuntime } from './primary-wallet-runtime';
 
-export function readPrimaryWalletSavingsRuntime(
-  env: NodeJS.ProcessEnv = process.env
-) {
-  if (env.PIGGYVEST_PRIMARY_SAVINGS_ENABLED !== 'true') return null;
+function readPrimaryWalletSavingsCore(env: NodeJS.ProcessEnv) {
   const primary = readPrimaryWalletRuntime(env);
   if (!primary) throw new Error('Primary savings configuration unavailable');
   const configuration = piggyvestPrimarySavingsRuntimeSchema.parse({
@@ -18,6 +15,14 @@ export function readPrimaryWalletSavingsRuntime(
       password: env.PIGGYVEST_PRIMARY_AUTHORIZER_DB_PASSWORD,
     },
   });
+  return { primary, configuration };
+}
+
+export function readPrimaryWalletSavingsRuntime(
+  env: NodeJS.ProcessEnv = process.env
+) {
+  if (env.PIGGYVEST_PRIMARY_SAVINGS_ENABLED !== 'true') return null;
+  const { primary, configuration } = readPrimaryWalletSavingsCore(env);
   return {
     configuration,
     reconciliationConfiguration: piggyvestPrimaryInflowRuntimeSchema.parse({
@@ -32,5 +37,23 @@ export function readPrimaryWalletSavingsRuntime(
     merchantId: primary.onboarding.merchantId,
     businessId: primary.onboarding.businessId,
     providerToken: primary.providerToken,
+  };
+}
+
+/**
+ * Recovery-only savings configuration: durable pending lookups must run
+ * even when the savings runtime is disabled, so a restart can never
+ * mistake "runtime off" for "no outstanding operation" and reroute a new
+ * legacy contribution alongside an already-submitted primary transfer.
+ * Never used to reserve or dispatch — those stay behind the enabled flag.
+ */
+export function readPrimaryWalletSavingsRecoveryRuntime(
+  env: NodeJS.ProcessEnv = process.env
+) {
+  const { primary, configuration } = readPrimaryWalletSavingsCore(env);
+  return {
+    configuration,
+    merchantId: primary.onboarding.merchantId,
+    businessId: primary.onboarding.businessId,
   };
 }

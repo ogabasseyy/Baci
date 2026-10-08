@@ -1,4 +1,8 @@
 \ir ../../../../../supabase/migrations/20261008091300_primary_card_treasury_release.sql
+-- Mirror production version order: the checkout chain already applies the
+-- stale-init superset, so re-apply it after the treasury base to keep the
+-- chain's terminal function versions identical to a migrated database.
+\ir ../../../../../supabase/migrations/20261008091500_primary_card_stale_init_reentry.sql
 BEGIN;
 INSERT INTO prefunded_card.treasury_snapshots VALUES('90000000-0000-4000-8000-000000000002','stale-local',2,now()-interval '16 minutes',980000,'fixture_verifier',now());
 SET SESSION AUTHORIZATION baci_primary_card_transfer;

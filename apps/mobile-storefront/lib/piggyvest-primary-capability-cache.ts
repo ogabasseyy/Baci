@@ -16,7 +16,7 @@
  * path falls back to the working legacy flow on NOT_READY. A negative
  * verdict expires after 60s so newly-ready merchants are picked up.
  */
-const NEGATIVE_CAPABILITY_TTL_MS = 60_000;
+export const NEGATIVE_CAPABILITY_TTL_MS = 60_000;
 const capabilityCache = new Map<
   string,
   { available: boolean; observedAt: number }

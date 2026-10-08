@@ -9,6 +9,50 @@ function object(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+export const PRIMARY_CARD_DUPLICATE_REFERENCE_CODE =
+  'PRIMARY_CARD_DUPLICATE_REFERENCE';
+
+export function isPrimaryCardDuplicateReference(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === PRIMARY_CARD_DUPLICATE_REFERENCE_CODE
+  );
+}
+
+function duplicateReferenceError(): Error {
+  return Object.assign(new Error('Primary card duplicate reference'), {
+    code: PRIMARY_CARD_DUPLICATE_REFERENCE_CODE,
+  });
+}
+
+// Paystack answers a repeated initialize reference with HTTP 400
+// {"status": false, "message": "Duplicate Transaction Reference"}: the
+// reference is a permanent per-integration uniqueness constraint, not an
+// idempotency key, so a duplicate proves a session already exists under
+// our reference. Match the 400 framing plus both keywords so an
+// unrelated validation message can never read as an orphan proof; any
+// other failure stays transport-uncertain.
+function isDuplicateReferenceMessage(message: unknown): boolean {
+  if (typeof message !== 'string') return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes('duplicate') && normalized.includes('reference');
+}
+
+function isDuplicateReferenceRejection(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { httpStatus, responseBody } = error as {
+    httpStatus?: unknown;
+    responseBody?: unknown;
+  };
+  if (httpStatus !== 400) return false;
+  return isDuplicateReferenceMessage(object(responseBody)?.message);
+}
+
+function isDuplicateReferenceBody(response: unknown): boolean {
+  return isDuplicateReferenceMessage(object(response)?.message);
+}
+
 export function createPrimaryWalletCardCheckoutProvider(
   settings: unknown,
   fetchImplementation: typeof fetch,
@@ -51,8 +95,9 @@ export function createPrimaryWalletCardCheckoutProvider(
     async initialize(input: unknown) {
       try {
         const intent = select(input);
-        const response = responses.initialize.parse(
-          await request('/transaction/initialize', {
+        let raw: unknown;
+        try {
+          raw = await request('/transaction/initialize', {
             method: 'POST',
             body: JSON.stringify({
               amount: String(intent.amountKobo),
@@ -63,8 +108,15 @@ export function createPrimaryWalletCardCheckoutProvider(
               callback_url: config.callbackUrl,
               metadata: metadataFor(intent),
             }),
-          })
-        );
+          });
+        } catch (error) {
+          if (isDuplicateReferenceRejection(error))
+            throw duplicateReferenceError();
+          throw error;
+        }
+        const response = responses.initialize.parse(raw);
+        if (!response.status && isDuplicateReferenceBody(response))
+          throw duplicateReferenceError();
         const data = object(response.data);
         const session = schemas.session.parse({
           reference: data?.reference,
@@ -84,7 +136,8 @@ export function createPrimaryWalletCardCheckoutProvider(
         )
           throw new Error('Invalid session');
         return session;
-      } catch {
+      } catch (error) {
+        if (isPrimaryCardDuplicateReference(error)) throw error;
         throw new Error('Primary card provider unavailable');
       }
     },

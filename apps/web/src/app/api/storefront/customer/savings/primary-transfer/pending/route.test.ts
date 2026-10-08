@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/piggyvest/primary-wallet-savings-runtime', () => ({
-  readPrimaryWalletSavingsRuntime: mocks.runtime,
+  readPrimaryWalletSavingsRecoveryRuntime: mocks.runtime,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
@@ -68,4 +68,26 @@ it('returns a friendly unavailable state without leaking storage errors', async 
   const response = await GET(request());
   expect(response.status).toBe(503);
   expect(JSON.stringify(await response.json())).not.toContain('private');
+});
+it('reports not-ready without consulting storage for a foreign merchant', async () => {
+  mocks.runtime.mockReturnValue({
+    merchantId: '99999999-9999-4999-8999-999999999999',
+    businessId: 'business',
+    configuration: { integrationId: 'integration', environment: 'staging' },
+  });
+  const response = await GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'SAVINGS_NOT_READY' });
+  expect(mocks.recover).not.toHaveBeenCalled();
+});
+it('fails closed when the recovery configuration is unavailable', async () => {
+  mocks.runtime.mockImplementation(() => {
+    throw new Error('Primary savings configuration unavailable');
+  });
+  const response = await GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({
+    code: 'SAVINGS_UNAVAILABLE',
+  });
+  expect(mocks.recover).not.toHaveBeenCalled();
 });

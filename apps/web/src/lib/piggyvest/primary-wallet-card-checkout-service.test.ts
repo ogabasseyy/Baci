@@ -26,10 +26,18 @@ function setup() {
       if (action === 'reserve' || action === 'read') return intent;
       if (action === 'claim') {
         // Mirrors claim_initialization lease semantics: a fresh
-        // 'initializing' claim is shared, only a stale one is re-issued.
-        if (intent.status === 'initializing' && !leaseExpired)
+        // 'initializing'/'init_unknown' claim is shared, only a stale one
+        // is re-issued (resetting to 'initializing' for a fresh recording).
+        if (
+          !leaseExpired &&
+          (intent.status === 'initializing' || intent.status === 'init_unknown')
+        )
           return { outcome: 'existing', intent };
-        if (intent.status !== 'reserved' && intent.status !== 'initializing')
+        if (
+          intent.status !== 'reserved' &&
+          intent.status !== 'initializing' &&
+          intent.status !== 'init_unknown'
+        )
           return { outcome: 'existing', intent };
         intent = { ...intent, status: 'initializing' };
         return {
@@ -210,6 +218,56 @@ describe('durable goal-independent card checkout service', () => {
     expireClaimLease();
     expect((await service.initialize(request)).status).toBe('ready');
     expect(provider.initialize).toHaveBeenCalledTimes(2);
+  });
+  it('re-enters initialization from status once a stale claim expires', async () => {
+    const { service, provider, expireClaimLease } = setup();
+    provider.initialize.mockRejectedValueOnce(
+      new Error('private provider error')
+    );
+    expect((await service.initialize(request)).status).toBe('init_unknown');
+    // Fresh lease: status keeps verifying instead of reinitializing.
+    provider.verify.mockResolvedValue({ outcome: 'pending' });
+    expect((await service.status(fixture.intent.operationId)).status).toBe(
+      'init_unknown'
+    );
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+    expect(provider.verify).toHaveBeenCalledTimes(1);
+    expireClaimLease();
+    expect((await service.status(fixture.intent.operationId)).status).toBe(
+      'ready'
+    );
+    expect(provider.initialize).toHaveBeenCalledTimes(2);
+  });
+  it('abandons an orphaned session when re-entry proves a duplicate reference', async () => {
+    const { service, provider, expireClaimLease } = setup();
+    provider.initialize.mockRejectedValueOnce(
+      new Error('private provider error')
+    );
+    expect((await service.initialize(request)).status).toBe('init_unknown');
+    expireClaimLease();
+    provider.initialize.mockRejectedValueOnce(
+      Object.assign(new Error('Primary card duplicate reference'), {
+        code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
+      })
+    );
+    expect((await service.status(fixture.intent.operationId)).status).toBe(
+      'abandoned'
+    );
+    expect(provider.verify).not.toHaveBeenCalled();
+  });
+  it('abandons from initialize when a reclaimed retry proves a duplicate reference', async () => {
+    const { service, provider, expireClaimLease } = setup();
+    provider.initialize.mockRejectedValueOnce(
+      new Error('private provider error')
+    );
+    expect((await service.initialize(request)).status).toBe('init_unknown');
+    expireClaimLease();
+    provider.initialize.mockRejectedValueOnce(
+      Object.assign(new Error('Primary card duplicate reference'), {
+        code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
+      })
+    );
+    expect((await service.initialize(request)).status).toBe('abandoned');
   });
   it('rejects a foreign scope returned by storage before provider initialization', async () => {
     const { service, execute, provider } = setup();

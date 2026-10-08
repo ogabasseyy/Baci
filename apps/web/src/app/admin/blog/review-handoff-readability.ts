@@ -62,6 +62,8 @@ function tagHasTerminalHidingClass(tag: string): boolean {
     if (classes.includes('hidden') && !markers.display) return true;
     if (classes.includes('opacity-0') && !markers.opacity) return true;
     if (classes.includes('sr-only') && !markers.notSrOnly) return true;
+    if (markers.scaleXZero && !markers.scaleXRestored) return true;
+    if (markers.scaleYZero && !markers.scaleYRestored) return true;
   }
   return false;
 }
@@ -141,12 +143,13 @@ function elementVisibility(tag: string): 'visible' | 'invisible' | null {
 function elementColor(tag: string): 'opaque' | 'transparent' | null {
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'class') continue;
-    const classes = value.split(/\s+/);
-    // A pathological element carrying both markers resolves to opaque,
-    // matching the override direction. Responsive opaque colors count
-    // the same as exact ones.
-    if (showingMarkers(classes).opaqueColor) return 'opaque';
-    if (classes.includes('text-transparent')) return 'transparent';
+    const markers = showingMarkers(value.split(/\s+/));
+    // Same-layer color conflicts resolve by generated precedence
+    // (alphabetically last wins), so a transparent winner beats
+    // text-black while text-white beats transparent. current/inherit
+    // winners pass through to the ancestor frames.
+    if (markers.opaqueColor) return 'opaque';
+    if (markers.transparentColor) return 'transparent';
   }
   return null;
 }

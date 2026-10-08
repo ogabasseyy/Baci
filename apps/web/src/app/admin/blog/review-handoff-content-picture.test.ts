@@ -73,6 +73,16 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('ignores a picture source with an impossible mixed-unit range', () => {
+    // 1in is 96px, so no viewport satisfies both bounds and the
+    // src-less img renders nothing.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source media="(1in <= width <= 10px)" srcset="https://cdn.example.com/a.webp"><img alt=""></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('accepts a device-dependent media query with an img fallback', () => {
     // Viewport-dependent queries cannot be evaluated without a
     // device, so they stay applicable; the img fallback supplies a

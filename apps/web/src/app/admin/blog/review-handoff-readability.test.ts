@@ -18,10 +18,18 @@ describe('hasReadableContent', () => {
     '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
     '<div class="text-transparent"><p class="text-foreground">Readable</p></div>',
     '<div class="hidden md:block lg:hidden">Readable</div>',
+    '<p class="text-white text-transparent">Only body</p>',
+    '<p class="text-black md:text-transparent">Only body</p>',
+    '<p class="md:text-transparent">Only body</p>',
+    '<p class="text-black text-inherit">Only body</p>',
     '<img width="0" class="w-auto" src="https://cdn.example.com/a.png">',
     '<img height="0" class="h-auto" src="https://cdn.example.com/a.png">',
     '<img width="0" height="0" class="size-auto" src="https://cdn.example.com/a.png">',
     '<img width="0" class="min-w-full" src="https://cdn.example.com/a.png">',
+    '<div class="scale-x-0 md:scale-x-100">Only body</div>',
+    '<div class="scale-y-0 md:scale-y-50">Only body</div>',
+    '<div class="scale-x-0 md:scale-none">Only body</div>',
+    '<img class="scale-0 md:scale-100" src="https://cdn.example.com/a.png">',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });
@@ -51,6 +59,14 @@ describe('hasReadableContent', () => {
     '<div class="hidden md:block md:hidden">Hidden</div>',
     '<img width="0" class="max-w-full" src="https://cdn.example.com/a.png">',
     '<img width="0" class="h-auto" src="https://cdn.example.com/a.png">',
+    '<div class="scale-x-0">Only body</div>',
+    '<div class="scale-0">Only body</div>',
+    '<img class="scale-y-0" src="https://cdn.example.com/a.png">',
+    '<div class="scale-x-0"><img src="https://cdn.example.com/a.png"></div>',
+    '<div class="scale-x-0 md:scale-y-100">Hidden</div>',
+    '<p class="text-black text-transparent">Only body</p>',
+    '<p class="text-transparent md:text-black md:text-transparent">Only body</p>',
+    '<p class="text-black/0">Only body</p>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

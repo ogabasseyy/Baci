@@ -29,6 +29,12 @@ it.each([
   '(max-width: -1px) or (max-height: -1px)',
   'not (min-width: -1px)',
   '((max-width: -1px))',
+  '(1in <= width <= 10px)',
+  '(10px >= width >= 1in)',
+  '(100px < width < 1in)',
+  '(1in < width < 96px)',
+  '(2.54cm <= width <= 95px)',
+  '(72pt <= height <= 50px)',
 ])('detects a never-matching media value: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(true);
 });
@@ -58,6 +64,11 @@ it.each([
   '(orientation: landscape)',
   '(max-width: -1px) or (color)',
   'not (max-width: -1px)',
+  '(96px <= width <= 1in)',
+  '(10px <= width <= 1in)',
+  '(1in <= width <= 200px)',
+  '(50vw <= width <= 100px)',
+  '(10em <= width <= 5px)',
 ])('keeps a possibly-matching media value applicable: %s', (value) => {
   expect(isNeverMatchingMediaQuery(value)).toBe(false);
 });

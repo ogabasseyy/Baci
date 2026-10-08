@@ -2,13 +2,31 @@
 // negative, so an exact or max comparison against a negative length
 // never matches while a min comparison against one always matches.
 const MEDIA_LENGTH_PATTERN = /^(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*([a-z%]*)$/i;
+// CSS absolute lengths in px per unit. Relative units (em, rem, vw,
+// %) depend on fonts or the viewport, so they cannot be compared
+// here and stay applicable.
+const MEDIA_ABSOLUTE_LENGTH_TO_PX = new Map([
+  ['px', 1],
+  ['in', 96],
+  ['cm', 96 / 2.54],
+  ['mm', 96 / 25.4],
+  ['q', 96 / 25.4 / 4],
+  ['pt', 96 / 72],
+  ['pc', 16],
+]);
+
 function parseMediaLength(value: string): number | null {
-  // calc(), keywords, and unitless nonzero lengths are unevaluatable
-  // here and stay applicable; unitless zero is a valid zero.
+  // calc(), keywords, relative units, and unitless nonzero lengths
+  // are unevaluatable here and stay applicable; unitless zero is a
+  // valid zero. Absolute lengths normalize to px so mixed-unit
+  // bounds like `1in` and `10px` compare correctly.
   const match = MEDIA_LENGTH_PATTERN.exec(value.trim());
   if (!match) return null;
-  if (match[2] === '' && Number(match[1]) !== 0) return null;
-  return Number(match[1]);
+  const numeric = Number(match[1]);
+  if (match[2] === '') return numeric === 0 ? 0 : null;
+  const factor = MEDIA_ABSOLUTE_LENGTH_TO_PX.get(match[2].toLowerCase());
+  if (factor === undefined) return null;
+  return numeric * factor;
 }
 
 type MediaBound =
@@ -84,9 +102,14 @@ function evaluateDimensionBounds(
   const lower = effective('lower');
   const upper = effective('upper');
   if (lower && upper) {
-    if (lower.value !== upper.value) {
-      if (lower.value > upper.value) return 'false';
-    } else if (!lower.inclusive || !upper.inclusive) {
+    // Unit conversion is floating point: a sub-nanopixel gap is
+    // conversion noise, not a satisfiable viewport interval, so it
+    // compares as equal and exclusivity decides.
+    const gap = lower.value - upper.value;
+    const tolerance = 1e-9 * Math.max(1, Math.abs(lower.value));
+    if (Math.abs(gap) < tolerance) {
+      if (!lower.inclusive || !upper.inclusive) return 'false';
+    } else if (gap > 0) {
       return 'false';
     }
   }

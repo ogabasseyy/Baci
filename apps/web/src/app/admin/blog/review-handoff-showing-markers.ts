@@ -90,6 +90,7 @@ function isThemeTextColor(color: string): boolean {
 }
 
 const SIZE_UTILITY_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
+const SCALE_UTILITY_PATTERN = /^(scale-x|scale-y|scale)-(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
 
 function responsiveUtility(token: string): string | null {
@@ -97,9 +98,10 @@ function responsiveUtility(token: string): string | null {
   return match ? token.slice(match[0].length) : null;
 }
 
-function isNonZeroSizeValue(value: string): boolean {
+function isNonZeroUtilityValue(value: string): boolean {
   // Only an exact zero (bare, arbitrary, or with a unit) keeps the
-  // axis zeroed: px, fractions, auto, and full all restore it.
+  // axis zeroed: px, fractions, auto, full, and scale factors all
+  // restore it. Unevaluatable values (var()) assume visible.
   const raw = value.replace(/^\[|\]$/g, '');
   return !ZERO_SIZE_VALUE_PATTERN.test(raw);
 }
@@ -132,17 +134,26 @@ function isOpaqueColorUtility(utility: string): boolean {
   return Number.isNaN(numeric) ? true : numeric !== 0;
 }
 
-function isOpaqueTextColor(token: string): boolean {
-  if (isOpaqueColorUtility(token)) return true;
-  const utility = responsiveUtility(token);
-  return utility !== null && isOpaqueColorUtility(utility);
+type TextColorKind = 'opaque' | 'transparent' | 'passthrough';
+
+function textColorKind(utility: string): TextColorKind | null {
+  // Non-colors (font-size, alignment, unknown text-*) return null;
+  // current/inherit pass the ancestor through.
+  const slash = utility.lastIndexOf('/');
+  const color = slash === -1 ? utility : utility.slice(0, slash);
+  if (color === 'text-transparent') return 'transparent';
+  if (color === 'text-current' || color === 'text-inherit')
+    return 'passthrough';
+  if (!TEXT_COLOR_PATTERN.test(color) && !isThemeTextColor(color)) return null;
+  return isOpaqueColorUtility(utility) ? 'opaque' : 'transparent';
 }
 
 /**
  * Showing markers for one element's class list: display, opacity, and
  * screen-reader restoration (same-element overrides only) plus
- * visibility and opaque text color (inherited, so also descendant
- * escapes). Exact tokens and responsive variants both count. Size
+ * visibility and text color (inherited, so also descendant escapes).
+ * Conflicting colors resolve per layer (alphabetically last wins per
+ * Tailwind v4.3.1 compiled order); responsive layers ascend. Size
  * restoration is tracked per constraint kind: used height is
  * min(max(h, min-h), max-h), so max-h-0 still caps after md:h-auto.
  * Base (non-responsive) size utilities restore zero width/height
@@ -150,6 +161,9 @@ function isOpaqueTextColor(token: string): boolean {
  * presentational hints, while utility-vs-utility conflicts depend on
  * stylesheet order, so class-token zeros still need a responsive
  * override. A base max cap restores nothing: it cannot raise a zero.
+ * Zero-scale transforms collapse all painted pixels on their axis
+ * (no clipping needed: the transform scales overflow too), so a
+ * zeroed axis hides unless a responsive scale restores it.
  */
 export function showingMarkers(classes: readonly string[]): {
   display: boolean;
@@ -157,28 +171,40 @@ export function showingMarkers(classes: readonly string[]): {
   opacity: boolean;
   notSrOnly: boolean;
   opaqueColor: boolean;
+  transparentColor: boolean;
   heightRestored: boolean;
   maxHeightRestored: boolean;
   widthRestored: boolean;
   maxWidthRestored: boolean;
   baseHeightRestored: boolean;
   baseWidthRestored: boolean;
+  scaleXZero: boolean;
+  scaleYZero: boolean;
+  scaleXRestored: boolean;
+  scaleYRestored: boolean;
 } {
   let visible = false;
   let opacity = false;
   let notSrOnly = false;
-  let opaqueColor = false;
   let heightRestored = false;
   let maxHeightRestored = false;
   let widthRestored = false;
   let maxWidthRestored = false;
   let baseHeightRestored = false;
   let baseWidthRestored = false;
+  let scaleXZero = false;
+  let scaleYZero = false;
+  let scaleXRestored = false;
+  let scaleYRestored = false;
   // Display resolves per breakpoint: Tailwind emits `hidden` after the
   // showing display utilities, so `md:hidden` beats `md:block` at md
   // while other breakpoints decide independently.
   const displayShowing = new Set<string>();
   const displayHidden = new Set<string>();
+  const colorWinners = new Map<
+    string,
+    { token: string; kind: TextColorKind }
+  >();
   for (const token of classes) {
     const utility = responsiveUtility(token);
     if (utility !== null) {
@@ -189,10 +215,17 @@ export function showingMarkers(classes: readonly string[]): {
     if (token === 'visible' || utility === 'visible') visible = true;
     if (utility !== null && isNonZeroOpacityUtility(utility)) opacity = true;
     if (token === 'not-sr-only' || utility === 'not-sr-only') notSrOnly = true;
-    if (isOpaqueTextColor(token)) opaqueColor = true;
+    const colorUtility = utility === null ? token : utility;
+    const colorKind = textColorKind(colorUtility);
+    if (colorKind !== null) {
+      const layer = token.slice(0, token.length - colorUtility.length);
+      const winner = colorWinners.get(layer);
+      if (!winner || colorUtility > winner.token)
+        colorWinners.set(layer, { token: colorUtility, kind: colorKind });
+    }
     const sizeTarget = utility === null ? token : utility;
     const size = SIZE_UTILITY_PATTERN.exec(sizeTarget);
-    if (size !== null && isNonZeroSizeValue(size[2])) {
+    if (size !== null && isNonZeroUtilityValue(size[2])) {
       const property = size[1];
       const restoresHeight =
         property === 'h' || property === 'size' || property === 'min-h';
@@ -208,21 +241,58 @@ export function showingMarkers(classes: readonly string[]): {
         if (property === 'max-w') maxWidthRestored = true;
       }
     }
+    if (utility !== null && utility === 'scale-none') {
+      scaleXRestored = true;
+      scaleYRestored = true;
+    }
+    const scaleTarget = utility === null ? token : utility;
+    const scale = SCALE_UTILITY_PATTERN.exec(scaleTarget);
+    if (scale !== null) {
+      const property = scale[1];
+      const affectsX = property === 'scale-x' || property === 'scale';
+      const affectsY = property === 'scale-y' || property === 'scale';
+      if (utility === null) {
+        // A base scale-none does not restore a base zero: same-layer
+        // utility order is unproven, like size tokens.
+        if (!isNonZeroUtilityValue(scale[2])) {
+          if (affectsX) scaleXZero = true;
+          if (affectsY) scaleYZero = true;
+        }
+      } else if (isNonZeroUtilityValue(scale[2])) {
+        if (affectsX) scaleXRestored = true;
+        if (affectsY) scaleYRestored = true;
+      }
+    }
   }
   const display = [...displayShowing].some(
     (breakpoint) => !displayHidden.has(breakpoint)
   );
+  // An opaque winner anywhere renders at its layer; transparency needs
+  // a transparent base winner with transparent-or-absent winners above.
+  const opaqueColor = [...colorWinners.values()].some(
+    (winner) => winner.kind === 'opaque'
+  );
+  const transparentColor =
+    colorWinners.get('')?.kind === 'transparent' &&
+    [...colorWinners].every(
+      ([layer, winner]) => layer === '' || winner.kind === 'transparent'
+    );
   return {
     display,
     visible,
     opacity,
     notSrOnly,
     opaqueColor,
+    transparentColor,
     heightRestored,
     maxHeightRestored,
     widthRestored,
     maxWidthRestored,
     baseHeightRestored,
     baseWidthRestored,
+    scaleXZero,
+    scaleYZero,
+    scaleXRestored,
+    scaleYRestored,
   };
 }

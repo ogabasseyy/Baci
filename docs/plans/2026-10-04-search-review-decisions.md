@@ -444,3 +444,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-122 (P2) FIXED: normalizeStorefrontProductVariants took no parent context and mapped null variant qty → 0, so inheriting variants showed out-of-stock on the PDP while search sold them (downstream ?? fallbacks in client/pricing were dead). Normalizer now takes required parentStock (getEffectiveStock at all 4 call sites: generic mapper, category resolution, 2 LCP projections) and resolves null → parent. No type changes, no consumer fallout (typecheck clean). Tests: inheritance + explicit-zero unit cases, mapper parentStock wiring test. Normalizer 13/13, PDP suites 98/98 + 17/17 + 6/6.
 - Placement note: resolving in the normalizer (vs widening ProductVariant to null) keeps all downstream number contracts intact; quick-view/grid/selection inherit the fix via effective numbers.
 - CI inventory regen + pin (comparison split moved the tree).
+
+## Round 64 (Muse 1 high + 1 med + 3 low on a78069b — 2 fixed, 3 adjudicated; Codex pending)
+
+- Muse high stale-gates FIXED (docs): PR body still claimed the six native fixture errors, replay/inventory failures, pending CI, and draft status from implementation. Refreshed to verified truth (all typechecks green locally + CI per head, DB Replay green on recent heads, hooks pass, no gates disabled); kept genuinely-open items (no full-diff CodeRabbit review, device QA pending).
+- Muse low deep-imports FIXED: 4 relative shared imports (use-cart 2, provider 2 — one pair mine from Round 55) → '@baci/shared/lib'. Suites 26/26, pin holds.
+- Muse low contact-rotation: PR-disclosed repeat.
+- Muse low early-adds ADJUDICATED non-issue: storefront mount passes merchantSlug synchronously (shell snapshot route data) so state/ref init with the slug; bare mounts are non-storefront surfaces where opt-in is correct. No pre-hydration divergence on the storefront add path.
+- Muse med comparison-namespace ADJUDICATED (pre-existing): v2-comparison-scope.tsx untouched by this PR; current callers pass merchant.id. Required-prop hardening is a follow-up.

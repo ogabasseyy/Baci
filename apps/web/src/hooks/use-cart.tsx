@@ -1,5 +1,6 @@
 'use client';
 
+import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
@@ -20,15 +21,14 @@ import {
   createCartHash,
   validateStorefrontCart,
 } from '@/hooks/cart/storefront-cart-validation';
-import { resolveAddedLineAssurance } from '../../../../packages/shared/src/lib/assurance-policy';
 
 // Re-exported so existing importers keep working; the helper lives in ./cart/cart-persistence.
 export { clearCartStorage } from '@/hooks/cart/cart-persistence';
 
+import { resolveDefaultVariantSelection } from '@baci/shared/lib';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveDefaultVariantSelection } from '../../../../packages/shared/src/lib/product-default-variant';
 
 interface CartProviderProps {
   children: ReactNode;

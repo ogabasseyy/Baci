@@ -1,12 +1,14 @@
 'use client';
 
+import {
+  resolveAddedLineAssurance,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveAddedLineAssurance } from '../../../../../packages/shared/src/lib/assurance-policy';
-import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
 import { CartContext } from './cart-context';
 import {
   DEFAULT_ASSURANCE_RATE,

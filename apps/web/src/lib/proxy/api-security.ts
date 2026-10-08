@@ -72,7 +72,7 @@ export async function runApiSecurityStage(
       isAuthenticatedInternalRequest(request);
     const rateLimitResult = isExemptInternalCall
       ? null
-      : await checkRateLimit(request);
+      : await checkRateLimit(request, apiRateLimitPathname);
     if (rateLimitResult && !rateLimitResult.allowed) {
       return createRateLimitResponse(
         rateLimitResult.limit,

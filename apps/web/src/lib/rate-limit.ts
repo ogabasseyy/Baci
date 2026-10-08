@@ -155,9 +155,15 @@ function checkMemoryRateLimit(
 // Main entry point (async — uses Redis when available, memory fallback)
 // ---------------------------------------------------------------------------
 
-export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
+export function checkRateLimit(
+  request: NextRequest,
+  pathnameOverride?: string
+): Promise<RateLimitResult> {
   const identifier = getClientIdentifier(request);
-  const pathname = request.nextUrl.pathname;
+  // Alias-shaped API paths (e.g. /old-slug/api/...) must be bucketed by
+  // their normalized endpoint pathname: the raw path matches no endpoint
+  // pattern and would silently fall back to the generic 50/min default.
+  const pathname = pathnameOverride ?? request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
 
   return applyRateLimit(identifier, pattern, config);

@@ -83,8 +83,39 @@ describe('API security stage', () => {
       request,
       getApiSecurityContext('/api/search/submissions', 'ogabassey.com', 'POST')
     );
-    expect(checkRateLimit).toHaveBeenCalledWith(request);
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      request,
+      '/api/search/submissions'
+    );
     expect(response?.status).toBe(429);
+  });
+
+  it('buckets alias-shaped intake paths by their normalized endpoint', async () => {
+    const { checkRateLimit } = await import('@/lib/rate-limit');
+    const request = new NextRequest(
+      'https://usebaci.com/old-slug/api/storefront/product-requests',
+      {
+        method: 'POST',
+        headers: {
+          origin: 'https://usebaci.com',
+          'content-type': 'application/json',
+        },
+      }
+    );
+    // A retired alias must receive the endpoint 10/hour budget, not the
+    // generic 50/min default the raw path would select.
+    await runApiSecurityStage(
+      request,
+      getApiSecurityContext(
+        '/old-slug/api/storefront/product-requests',
+        'usebaci.com',
+        'POST'
+      )
+    );
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      request,
+      '/api/storefront/product-requests'
+    );
   });
 
   it('blocks unsafe cross-origin mutations before a route handles them', async () => {

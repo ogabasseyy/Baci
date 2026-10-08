@@ -9,6 +9,9 @@ jest.mock('@/lib/config', () => ({
     get MERCHANT_SLUG() {
       return mockMerchantSlug.current;
     },
+    get ENABLE_SMART_CART_PRO() {
+      return true;
+    },
   },
 }));
 

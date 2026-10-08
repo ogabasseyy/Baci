@@ -107,6 +107,21 @@ describe('quiz route rate limits', () => {
     expect(blocked.remaining).toBe(0);
   });
 
+  it('buckets an alias-shaped path by the normalized override pathname', async () => {
+    const request = new NextRequest(
+      'http://localhost:3000/old-slug/api/storefront/product-requests'
+    );
+    // The raw alias path matches no endpoint pattern (generic default);
+    // the proxy passes the normalized endpoint pathname instead.
+    await expect(checkRateLimit(request)).resolves.toMatchObject({
+      limit: 50,
+    });
+    __resetRateLimitStoreForTesting();
+    await expect(
+      checkRateLimit(request, '/api/storefront/product-requests')
+    ).resolves.toMatchObject({ limit: 10 });
+  });
+
   it('does not apply a quiz limit to unrelated routes (default fall-through)', async () => {
     const result = await checkRateLimit(
       new NextRequest('http://localhost:3000/api/unknown')

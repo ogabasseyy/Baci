@@ -2,11 +2,11 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
-import { CONFIG } from '@/lib/config';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
+import { resolveNativeAssuranceDefault } from './cart-assurance-policy';
 import {
   createCartLineId,
   isSameCartLine,
@@ -96,16 +96,9 @@ export const useCartStore = create<CartState>()(
               ...state.items,
               {
                 ...itemToAdd,
-                // Default-on assurance is Ogabassey-scoped, mirroring web
-                // (StorefrontCartProvider). CONFIG.MERCHANT_SLUG is the
-                // fully-resolved build identity (config.ts defaults
-                // unconfigured builds to Ogabassey, as do requests and
-                // repairs); anything else stays opt-in. Web's
-                // enableSmartCartPro gate is a bare (always-true) prop in
-                // production, so this matches web's effective behavior.
+                // Ogabassey-scoped Smart Cart Pro default (see policy).
                 hasAssurance:
-                  itemToAdd.hasAssurance ??
-                  CONFIG.MERCHANT_SLUG === 'ogabassey',
+                  itemToAdd.hasAssurance ?? resolveNativeAssuranceDefault(),
                 id: createCartLineId(itemToAdd, lineSequence),
               },
             ];

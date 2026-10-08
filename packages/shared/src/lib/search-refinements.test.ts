@@ -76,6 +76,23 @@ describe('search refinements', () => {
         minRating: 0,
       })
     ).toBe(false);
+    // Same for a zero minimum price: it cannot exclude any valid price,
+    // so it must not suppress the product-request action on zero-result
+    // pages. A zero maximum still excludes everything and stays active.
+    expect(
+      hasActiveSearchRefinements({
+        brands: [],
+        sort: 'relevance',
+        minPrice: 0,
+      })
+    ).toBe(false);
+    expect(
+      hasActiveSearchRefinements({
+        brands: [],
+        sort: 'relevance',
+        minPrice: 100,
+      })
+    ).toBe(true);
   });
   it('preserves same normalized query refinements and resets a different query', () => {
     const current = {

@@ -4,10 +4,16 @@ import { syncStorage } from '../lib/storage';
 const mockMerchantSlug: { current: string } = {
   current: 'ogabassey',
 };
+const mockSmartCartPro: { current: boolean } = {
+  current: true,
+};
 jest.mock('@/lib/config', () => ({
   CONFIG: {
     get MERCHANT_SLUG() {
       return mockMerchantSlug.current;
+    },
+    get ENABLE_SMART_CART_PRO() {
+      return mockSmartCartPro.current;
     },
   },
 }));
@@ -122,6 +128,22 @@ describe('cart-store', () => {
       expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
     } finally {
       mockMerchantSlug.current = 'ogabassey';
+    }
+  });
+
+  it('keeps assurance opt-in when Smart Cart Pro is disabled', () => {
+    mockSmartCartPro.current = false;
+    try {
+      useCartStore.getState().addItem({
+        product_id: 'gated-phone',
+        slug: 'gated-phone',
+        name: 'Phone',
+        price: 100000,
+        quantity: 1,
+      });
+      expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+    } finally {
+      mockSmartCartPro.current = true;
     }
   });
 });

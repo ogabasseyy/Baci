@@ -21,6 +21,22 @@ export async function runExclusive<T>(
   }
 }
 
+export interface CartFileIdentity {
+  mtimeMs: number;
+  ino: number;
+}
+
+// Identity comparison for the eviction callback below: a preceding update
+// installs a new inode, so an equal-mtime file is still recognized as
+// fresh. Timestamp comparison alone misfires on coarse-resolution
+// filesystems where the replacement keeps the snapshot mtime.
+export function didCartFileChange(
+  snapshot: CartFileIdentity,
+  current: CartFileIdentity
+): boolean {
+  return current.ino !== snapshot.ino || current.mtimeMs !== snapshot.mtimeMs;
+}
+
 const MAX_CART_FILES = 2000;
 // Crash temporaries (`<cart>.json.<uuid>.tmp`) share no pattern with cart
 // files and no queue key with live writers, so only sweep ones old enough
@@ -106,6 +122,15 @@ export async function admitGuestCartWrite(
       // of check-then-act: a concurrent update between the check and the
       // unlink could otherwise lose a live cart.
       const beforeMs = Date.now();
+      // Identity, not just the clock: on a coarse-resolution filesystem a
+      // racing update can keep a mtime at or below the snapshot, so the new
+      // inode is what proves the file was rewritten with fresh expiry.
+      let beforeIno: number | null = null;
+      try {
+        beforeIno = (await stat(candidate)).ino;
+      } catch {
+        /* Vanished; the queued callback below observes the same. */
+      }
       await runExclusive(candidate, async () => {
         let existing: z.infer<typeof storedCartSchema>;
         try {
@@ -118,7 +143,9 @@ export async function admitGuestCartWrite(
         }
         if (existing.expires_at > Date.now()) return;
         try {
-          if ((await stat(candidate)).mtimeMs > beforeMs) return;
+          const info = await stat(candidate);
+          if (info.mtimeMs > beforeMs) return;
+          if (beforeIno !== null && info.ino !== beforeIno) return;
         } catch {
           return;
         }
@@ -134,33 +161,33 @@ export async function admitGuestCartWrite(
     // least-recently-written cart instead of failing. Idle carts may be
     // dropped under sustained pressure; active carts survive because every
     // write refreshes mtime.
-    const withMtime = (
+    const withIdentity = (
       await Promise.all(
         cartFiles.map(async (entry) => {
           try {
             const info = await stat(path.join(directory, entry));
-            return { entry, mtimeMs: info.mtimeMs };
+            return { entry, mtimeMs: info.mtimeMs, ino: info.ino };
           } catch {
             return null;
           }
         })
       )
     ).filter(
-      (found): found is { entry: string; mtimeMs: number } =>
+      (found): found is { entry: string; mtimeMs: number; ino: number } =>
         found !== null
     );
-    withMtime.sort((a, b) => a.mtimeMs - b.mtimeMs);
+    withIdentity.sort((a, b) => a.mtimeMs - b.mtimeMs);
     let evicted = false;
-    for (const { entry, mtimeMs } of withMtime) {
+    for (const { entry, mtimeMs, ino } of withIdentity) {
       const candidate = path.join(directory, entry);
       // Join the cart's own queue so eviction runs strictly before or after
-      // any in-flight update instead of racing it, then re-check mtime: a
-      // preceding update refreshes it, so a newer file is skipped in favor
-      // of the next oldest.
+      // any in-flight update instead of racing it, then re-check identity:
+      // a preceding update installs a new inode, so an equal-mtime file is
+      // still recognized as fresh and skipped in favor of the next oldest.
       const done = await runExclusive(candidate, async () => {
         try {
           const info = await stat(candidate);
-          if (info.mtimeMs > mtimeMs) return false;
+          if (didCartFileChange({ mtimeMs, ino }, info)) return false;
           await unlink(candidate);
           return true;
         } catch {

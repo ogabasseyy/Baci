@@ -12,20 +12,27 @@ import {
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
+import {
+  directoryNotWritableError,
+  isPermissionError,
+  refuseSecondWriter,
+} from './guest-cart-writer-lock-errors';
 
 // Cross-process single-writer guard: the in-memory queues only serialize
 // operations within one process, so the cart directory itself carries an
-// exclusive lock. Claims are atomic (`wx`); heartbeats keep a live
-// holder's claim fresh, and takeovers verify the moved generation after
-// renaming it aside, restoring a fresh claim that landed mid-takeover
-// instead of stealing it, so simultaneous stale claimants elect exactly
-// one owner.
+// exclusive lock. Claims are atomic (`wx`); heartbeats renew only the exact
+// file identity captured at claim time, and takeovers verify the moved
+// generation after renaming it aside, restoring a fresh claim that landed
+// mid-takeover instead of stealing it, so simultaneous stale claimants
+// elect exactly one owner.
 const WRITER_LOCK_FILE = '.writer.lock';
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
 interface OwnedLock {
   lockPath: string;
   content: string;
+  dev: number;
+  ino: number;
   heartbeat: NodeJS.Timeout;
 }
 const heldWriterLocks = new Map<string, OwnedLock>();
@@ -38,42 +45,17 @@ function readLockContent(lockPath: string): string | null {
   }
 }
 
-function isPermissionError(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException)?.code;
-  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
-}
-
-// A named volume mounted over the image directory does not inherit the
-// image-layer chown when the volume predates it (or was created root-owned),
-// so refuse with remediation instead of a raw errno: every guest-cart call
-// would otherwise fail at runtime with a generic error.
-function directoryNotWritableError(target: string, cause: unknown): Error {
-  const uid =
-    typeof process.getuid === 'function' ? process.getuid() : 'unknown';
-  const detail =
-    cause instanceof Error ? cause.message : 'unknown filesystem error';
-  return new Error(
-    `Guest-cart directory is not writable: ${target} (server uid ${uid}, ${detail}). ` +
-      `Make the cart volume writable by the server user, e.g. chown the mounted directory to uid ${uid}.`
-  );
-}
-
-function refuseSecondWriter(lockPath: string, directory: string): never {
-  // Fail closed with an actionable record: the refusal crashes the process
-  // at startup, so log the lock path and both PIDs for the ops alert trail
-  // (e.g. an accidental `--scale 2` under plain compose).
-  let holder = 'unknown';
+// Ownership binds the claim content to the file identity captured at claim
+// time: a takeover installs a new inode, so even a same-content replacement
+// is detected and never refreshed.
+function ownsWriterLock(lockPath: string, owned: OwnedLock): boolean {
   try {
-    holder = readFileSync(lockPath, 'utf8');
+    const identity = statSync(lockPath);
+    if (identity.dev !== owned.dev || identity.ino !== owned.ino) return false;
+    return readLockContent(lockPath) === owned.content;
   } catch {
-    /* Fall through with an unknown holder. */
+    return false;
   }
-  console.error(
-    `[guest-cart] refusing second writer for ${lockPath} (held by ${holder}, claimant pid ${process.pid})`
-  );
-  throw new Error(
-    `Another MCP writer owns ${directory}; refusing to start a second guest-cart writer.`
-  );
 }
 
 export function acquireWriterLock(directory: string): void {
@@ -236,23 +218,31 @@ export function acquireWriterLock(directory: string): void {
       throw claimError;
     }
   }
+  // Our claim is installed and fresh, so no other writer can have replaced
+  // it yet: capture its identity for generation-bound renewal below.
+  const { dev, ino } = statSync(lockPath);
   const owned: OwnedLock = {
     lockPath,
     content,
+    dev,
+    ino,
     heartbeat: undefined as unknown as NodeJS.Timeout,
   };
   heldWriterLocks.set(key, owned);
+  const failClosed = () => {
+    clearInterval(owned.heartbeat);
+    heldWriterLocks.delete(key);
+    console.error(
+      `[guest-cart] writer lock for ${lockPath} was taken over; exiting instead of writing without the single-writer guarantee.`
+    );
+    process.exit(1);
+  };
   owned.heartbeat = setInterval(() => {
     // A process suspended past the stale window must not refresh a lock
     // another process took over while it slept: verify ownership first,
     // and fail closed when the lock no longer carries our claim.
-    if (readLockContent(lockPath) !== owned.content) {
-      clearInterval(owned.heartbeat);
-      heldWriterLocks.delete(key);
-      console.error(
-        `[guest-cart] writer lock for ${lockPath} was taken over; exiting instead of writing without the single-writer guarantee.`
-      );
-      process.exit(1);
+    if (!ownsWriterLock(lockPath, owned)) {
+      failClosed();
       return;
     }
     try {
@@ -261,6 +251,11 @@ export function acquireWriterLock(directory: string): void {
     } catch {
       /* Lock lost; takeover is another writer's decision now. */
     }
+    // A claimant may have installed a fresh claim between the ownership
+    // read and the refresh, so our utimes may have landed on their file:
+    // re-verify and exit immediately instead of serving writes without
+    // the guarantee until the next tick.
+    if (!ownsWriterLock(lockPath, owned)) failClosed();
   }, WRITER_HEARTBEAT_INTERVAL_MS);
   owned.heartbeat.unref();
 }

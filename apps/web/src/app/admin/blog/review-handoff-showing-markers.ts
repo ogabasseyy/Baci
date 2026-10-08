@@ -57,20 +57,16 @@ function isNonZeroUtilityValue(value: string): boolean {
 }
 
 function scaleArbitraryNumber(value: string): number | null {
-  // Axis arbitraries sort numerically in the cascade ([9%] < [50%] <
-  // [100%], verified against Tailwind v4.3.1 output). var() and
-  // multi-component values cannot be ordered or evaluated, so they
-  // return null and assume visible.
+  // Arbitraries sort numerically ([9%] < [50%] < [100%], verified);
+  // var() and multi-component values assume visible.
   const inner = SCALE_ARBITRARY_PATTERN.exec(value)?.[1].replace(/%$/, '');
   if (inner === undefined || !/^-?\d+(\.\d+)?$/.test(inner)) return null;
   return Number(inner);
 }
 
-function noteAxisScale(
-  winner: { group: number; value: number },
-  group: number,
-  value: number
-): void {
+type AxisWinner = { group: number; value: number };
+
+function noteAxisScale(winner: AxisWinner, group: number, value: number): void {
   if (
     group > winner.group ||
     (group === winner.group && value > winner.value)
@@ -117,6 +113,7 @@ export function showingMarkers(classes: readonly string[]): {
   display: boolean;
   visible: boolean;
   opacity: boolean;
+  opacityZero: boolean;
   notSrOnly: boolean;
   opaqueColor: boolean;
   transparentColor: boolean;
@@ -253,25 +250,27 @@ export function showingMarkers(classes: readonly string[]): {
       }
     }
   }
-  const display = [...displayShowing].some(
-    (breakpoint) => !displayHidden.has(breakpoint)
-  );
+  const display = [...displayShowing].some((bp) => !displayHidden.has(bp));
   const opacity = [...opacityWinners.values()].some(isNonZeroOpacityUtility);
+  // A zero base winner hides unless some layer restores opacity.
+  const baseOpacity = opacityWinners.get('');
+  const baseZero =
+    baseOpacity !== undefined && !isNonZeroOpacityUtility(baseOpacity);
+  const opacityZero = baseZero && !opacity;
   // The last bare scale-[...] static beats every var rule and
   // scale-none beats it; otherwise each axis takes its own cascade
   // winner, and unevaluatable values assume visible.
   const staticWinner =
     baseStaticScales.length === 0 ? null : Math.max(...baseStaticScales);
+  const scaleLive = !baseScaleNone && !baseStaticUnknown;
   const scaleXZero =
-    !baseScaleNone &&
-    !baseStaticUnknown &&
+    scaleLive &&
     !scaleXUnknown &&
     (staticWinner !== null
       ? staticWinner === 0
       : scaleXWinner.group !== -1 && scaleXWinner.value === 0);
   const scaleYZero =
-    !baseScaleNone &&
-    !baseStaticUnknown &&
+    scaleLive &&
     !scaleYUnknown &&
     (staticWinner !== null
       ? staticWinner === 0
@@ -280,6 +279,7 @@ export function showingMarkers(classes: readonly string[]): {
     display,
     visible,
     opacity,
+    opacityZero,
     notSrOnly,
     opaqueColor: textColor.opaqueColor,
     transparentColor: textColor.transparentColor,

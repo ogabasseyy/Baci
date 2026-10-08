@@ -59,7 +59,7 @@ function tagHasTerminalHidingClass(tag: string): boolean {
     const classes = value.split(/\s+/);
     const markers = showingMarkers(classes);
     if (classes.includes('hidden') && !markers.display) return true;
-    if (classes.includes('opacity-0') && !markers.opacity) return true;
+    if (markers.opacityZero) return true;
     if (classes.includes('sr-only') && !markers.notSrOnly) return true;
     if (markers.scaleXZero && !markers.scaleXRestored) return true;
     if (markers.scaleYZero && !markers.scaleYRestored) return true;

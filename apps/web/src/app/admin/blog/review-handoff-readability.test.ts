@@ -32,6 +32,8 @@ describe('hasReadableContent', () => {
     '<div class="opacity-0 md:opacity-0 md:opacity-100">Only body</div>',
     '<img class="opacity-0 opacity-50" src="https://cdn.example.com/a.png">',
     '<div class="opacity-100 md:opacity-0">Only body</div>',
+    '<div class="md:opacity-0">Only body</div>',
+    '<div class="opacity-[0] md:opacity-100">Only body</div>',
     '<div class="scale-x-0 scale-x-100">Only body</div>',
     '<div class="scale-x-100 scale-x-0">Only body</div>',
     '<div class="scale-x-0 scale-none">Only body</div>',
@@ -96,6 +98,8 @@ describe('hasReadableContent', () => {
     '<img class="max-h-0 h-screen" src="https://cdn.example.com/a.png">',
     '<div class="opacity-0">Only body</div>',
     '<div class="opacity-0 opacity-[0]">Only body</div>',
+    '<div class="opacity-[0]">Only body</div>',
+    '<img class="opacity-[0]" src="https://cdn.example.com/a.png">',
     '<div class="opacity-0 md:opacity-0">Only body</div>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);

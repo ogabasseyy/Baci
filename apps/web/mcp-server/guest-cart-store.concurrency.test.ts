@@ -131,3 +131,60 @@ it('does not count unrelated files against guest cart capacity', async () => {
   );
   expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
 });
+
+it('slides cart expiry forward on every successful update', async () => {
+  const { instance } = await store();
+  const first = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    const second = await instance.update(
+      first.cart_token,
+      { product_id: id, quantity: 2 },
+      async () => {}
+    );
+    expect(new Date(second.expires_at).getTime()).toBe(
+      Date.now() + 7 * 24 * 60 * 60 * 1000
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('reclaims expired carts before evicting live ones at capacity', async () => {
+  const { directory, instance } = await store();
+  const live = Array.from({ length: 1999 }, (_, index) =>
+    (index + 1).toString(16).padStart(64, '0')
+  );
+  const livePayload = JSON.stringify({
+    expires_at: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    items: [],
+  });
+  for (const token of live)
+    await writeFile(path.join(directory, `${token}.json`), livePayload);
+  const dead = '0'.repeat(64);
+  await writeFile(
+    path.join(directory, `${dead}.json`),
+    JSON.stringify({ expires_at: 1, items: [] })
+  );
+  const cart = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
+  await expect(
+    readFile(path.join(directory, `${dead}.json`), 'utf8')
+  ).rejects.toThrow();
+  await expect(
+    readFile(path.join(directory, `${cart.cart_token}.json`), 'utf8')
+  ).resolves.toContain(id);
+  const remaining = (await readdir(directory)).filter((entry) =>
+    entry.endsWith('.json')
+  );
+  expect(remaining).toHaveLength(2000);
+});

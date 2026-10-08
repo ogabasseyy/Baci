@@ -154,9 +154,29 @@ export class GuestCartStore {
             }
           }
           if (sweepDue) lastExpirySweepMs = Date.now();
-          const cartFiles = (await readdir(this.directory)).filter((entry) =>
+          let cartFiles = (await readdir(this.directory)).filter((entry) =>
             /^[a-f0-9]{64}\.json$/.test(entry)
           );
+          if (cartFiles.length >= MAX_CART_FILES) {
+            // The throttled sweep above may have been skipped, and expired
+            // carts must never force eviction of live ones: reclaim them now
+            // and recount before falling back to LRU eviction.
+            for (const entry of cartFiles) {
+              const candidate = path.join(this.directory, entry);
+              if (queues.has(candidate)) continue;
+              try {
+                const existing = storedCartSchema.parse(
+                  JSON.parse(await readFile(candidate, 'utf8'))
+                );
+                if (existing.expires_at <= Date.now()) await unlink(candidate);
+              } catch {
+                /* Corrupt files stay for the guarded janitor. */
+              }
+            }
+            cartFiles = (await readdir(this.directory)).filter((entry) =>
+              /^[a-f0-9]{64}\.json$/.test(entry)
+            );
+          }
           if (cartFiles.length >= MAX_CART_FILES) {
             // One guest must not permanently exhaust the shared pool: evict
             // the least-recently-written cart instead of failing. Idle carts
@@ -220,6 +240,9 @@ export class GuestCartStore {
         ];
         if (items.length > 20) throw new Error('Guest cart is full');
         await validate(items);
+        // Sliding expiry: a successful write extends the cart seven days so
+        // active conversations never expire mid-use; idle carts still die.
+        stored = { ...stored, expires_at: Date.now() + TTL };
         const temporary = `${file}.${randomUUID()}.tmp`;
         try {
           await writeFile(temporary, JSON.stringify({ ...stored, items }), {

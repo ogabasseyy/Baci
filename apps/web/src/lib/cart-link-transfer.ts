@@ -122,6 +122,11 @@ export async function fetchAndAddCartItems({
     // Add each product to cart
     let addedCount = 0;
     let firstAddedProductName: string | null = null;
+    // Additive-only transfer keeps website lines that already exceed the
+    // handoff target; the shopper gets one signal instead of silent skips.
+    // (Chat removals are indistinguishable from website-side adds, so only
+    // the provable target-below-existing case is flagged.)
+    let keptHigherQuantity = false;
     const rejectedIds: string[] = [...missingIds];
     for (const product of activeProducts) {
       const resolvedImage =
@@ -156,11 +161,14 @@ export async function fetchAndAddCartItems({
         const existingIndex = findMergingCartLineIndex(cart, productForCart);
         const existingQuantity =
           existingIndex >= 0 ? cart[existingIndex].quantity : 0;
+        const guestTarget = guestQuantities?.get(product.id);
         const quantityToAdd = resolveGuestQuantityToAdd(
-          guestQuantities?.get(product.id),
+          guestTarget,
           existingQuantity,
           quantity
         );
+        if (guestTarget !== undefined && guestTarget < existingQuantity)
+          keptHigherQuantity = true;
         if (quantityToAdd === 0) continue;
         if (
           !hasQuizPrizeVoucher &&
@@ -200,6 +208,14 @@ export async function fetchAndAddCartItems({
           addedCount === 1
             ? `${firstAddedProductName} has been added to your cart.`
             : `${addedCount} products have been added to your cart.`,
+      });
+    }
+
+    if (keptHigherQuantity) {
+      toast({
+        title: 'Kept your cart quantities',
+        description:
+          'Your cart already had higher quantities for some items, so those were kept instead of the chat amounts.',
       });
     }
 

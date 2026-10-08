@@ -2,6 +2,7 @@ import {
   closeSync,
   mkdirSync,
   openSync,
+  readFileSync,
   realpathSync,
   statSync,
   unlinkSync,
@@ -46,10 +47,23 @@ export function acquireWriterLock(directory: string): void {
     } catch {
       stale = true;
     }
-    if (!stale)
+    if (!stale) {
+      // Fail closed with an actionable record: the refusal crashes the
+      // process at startup, so log the lock path and both PIDs for the ops
+      // alert trail (e.g. an accidental `--scale 2` under plain compose).
+      let holder = 'unknown';
+      try {
+        holder = readFileSync(lockPath, 'utf8');
+      } catch {
+        /* Fall through with an unknown holder. */
+      }
+      console.error(
+        `[guest-cart] refusing second writer for ${lockPath} (held by ${holder}, claimant pid ${process.pid})`
+      );
       throw new Error(
         `Another MCP writer owns ${directory}; refusing to start a second guest-cart writer.`
       );
+    }
     try {
       unlinkSync(lockPath);
     } catch {

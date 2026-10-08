@@ -163,3 +163,23 @@ it('retains stock-rejected lines for retry', async () => {
     { product_id: added, quantity: 1 },
   ]);
 });
+
+it('signals when the website cart keeps higher quantities than the chat cart', async () => {
+  setupProductsQuery({
+    data: [{ id: added, name: 'Phone', status: 'active', images: [] }],
+    error: null,
+  });
+  const options = setupOptions({
+    itemIds: added,
+    guestQuantities: new Map([[added, 2]]),
+    cart: [
+      { id: added, quantity: 5 },
+    ] as unknown as FetchAndAddCartItemsOptions['cart'],
+  });
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).not.toHaveBeenCalled();
+  expect(options.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Kept your cart quantities' })
+  );
+});

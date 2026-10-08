@@ -1,7 +1,10 @@
 import { createStorefrontCustomerApiClient } from '@/lib/storefront-customer-api-client';
 import { WalletFundingAccountResponseSchema } from '@/schemas/wallet-funding-account';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
-import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
+import {
+  getPiggyvestPrimaryCapability,
+  isPrimaryWalletNotReady,
+} from './piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 export type { WalletFundingAccount } from '@/schemas/wallet-funding-account';
@@ -78,18 +81,23 @@ export async function createWalletFundingAccount({
   consent?: boolean;
 }) {
   if (isPiggyvestPrimaryMerchant(merchantId)) {
-    if (!bvn || consent !== true)
-      throw new Error(
-        'Your BVN and consent are required for PiggyVest wallet setup. No bank account was created.'
-      );
-    try {
-      return await piggyvestPrimaryWalletApi.create({
-        merchantId: merchantId ?? '',
-        bvn,
-        consent,
-      });
-    } catch (error) {
-      if (!isPrimaryWalletNotReady(error)) throw error;
+    // Defer the BVN demand until primary is confirmed: when the server is
+    // unconfigured, callers without BVN must still reach the legacy DVA
+    // creation below instead of failing the preflight.
+    if (await getPiggyvestPrimaryCapability(merchantId ?? '')) {
+      if (!bvn || consent !== true)
+        throw new Error(
+          'Your BVN and consent are required for PiggyVest wallet setup. No bank account was created.'
+        );
+      try {
+        return await piggyvestPrimaryWalletApi.create({
+          merchantId: merchantId ?? '',
+          bvn,
+          consent,
+        });
+      } catch (error) {
+        if (!isPrimaryWalletNotReady(error)) throw error;
+      }
     }
   }
   const data = await walletFundingApiClient.fetchJson({

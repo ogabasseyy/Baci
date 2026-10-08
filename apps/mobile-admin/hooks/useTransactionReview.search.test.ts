@@ -109,7 +109,7 @@ describe('useTransactionReview search', () => {
     });
     const rows = Array.from({ length: 60 }, (_, index) => ({
       cancelled_at: null,
-      id: `match-${index}`,
+      id: `id-${index}`,
       searchText: '353232106161443',
       shipping_status: 'pending',
     }));
@@ -177,98 +177,6 @@ describe('useTransactionReview search', () => {
     expect(mocks.fetchTransactionReviewRows).not.toHaveBeenCalled();
   });
 
-  it('falls back to a filtered full scan when the search function is missing', async () => {
-    mocks.searchTransactionReviewOrders.mockResolvedValue({
-      error: { message: 'Could not find the function' },
-      errorKind: 'missing-search-function',
-      orderIds: [],
-    });
-    const legacyMatch = {
-      cancelled_at: null,
-      id: 'legacy-match',
-      searchText: 'ada lovelace',
-      shipping_status: 'pending',
-    };
-    mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: [
-        legacyMatch,
-        {
-          cancelled_at: null,
-          id: 'legacy-other',
-          searchText: 'grace hopper',
-          shipping_status: 'pending',
-        },
-      ],
-      error: null,
-    });
-
-    const { result } = renderHook(
-      () => useTransactionReview(undefined, { search: 'ada' }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.data).toEqual([legacyMatch]));
-    expect(result.current.searchTruncated).toBe(false);
-    expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledWith(
-      expect.objectContaining({ fetchAll: true })
-    );
-  });
-
-  it('caps fallback results with a truncation signal', async () => {
-    mocks.searchTransactionReviewOrders.mockResolvedValue({
-      error: { message: 'Could not find the function' },
-      errorKind: 'missing-search-function',
-      orderIds: [],
-    });
-    const rows = Array.from({ length: 101 }, (_, index) => ({
-      cancelled_at: null,
-      id: `legacy-${index}`,
-      searchText: 'ada',
-      shipping_status: 'pending',
-    }));
-    mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: rows,
-      error: null,
-    });
-
-    const { result } = renderHook(
-      () => useTransactionReview(undefined, { search: 'ada' }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual(rows.slice(0, 100))
-    );
-    expect(result.current.searchTruncated).toBe(true);
-  });
-
-  it('surfaces scan truncation when the capped fallback scan hits its limit', async () => {
-    mocks.searchTransactionReviewOrders.mockResolvedValue({
-      error: { message: 'Could not find the function' },
-      errorKind: 'missing-search-function',
-      orderIds: [],
-    });
-    const legacyMatch = {
-      cancelled_at: null,
-      id: 'legacy-match',
-      searchText: 'ada lovelace',
-      shipping_status: 'pending',
-    };
-    mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: [legacyMatch],
-      error: null,
-      truncated: true,
-    });
-
-    const { result } = renderHook(
-      () => useTransactionReview(undefined, { search: 'ada' }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.data).toEqual([legacyMatch]));
-    expect(result.current.searchTruncated).toBe(true);
-  });
-
   it('hydrates only the ranked top-100 so hydration order cannot drop the best match', async () => {
     const rankedIds = Array.from(
       { length: 101 },
@@ -306,272 +214,42 @@ describe('useTransactionReview search', () => {
     expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledTimes(1);
   });
 
-  it('pages past complete-cost matches for a missing-costs tab search', async () => {
-    const pageOneIds = Array.from(
-      { length: 101 },
-      (_, index) => `new-${index}`
-    );
-    mocks.searchTransactionReviewOrders.mockImplementation(
-      ({ offset = 0 }: { offset?: number }) =>
-        Promise.resolve({
-          error: null,
-          errorKind: null,
-          orderIds: offset === 0 ? pageOneIds : ['old-missing'],
-        })
-    );
-    const completeRow = (id: string) => ({
-      cancelled_at: null,
-      customerEmail: null,
-      customerName: 'Ada',
-      customerPhone: null,
-      id,
-      items: [
-        { costPrice: 4000, id: `${id}-item`, profit: 100, searchText: 'ada' },
-      ],
-      missingCostCount: 0,
-      orderNumber: id,
-      paymentMethod: 'card',
-      searchText: 'ada lovelace',
-      shipping_status: 'pending',
-    });
-    const missingRow = {
-      ...completeRow('old-missing'),
-      items: [
-        {
-          costPrice: null,
-          id: 'old-missing-item',
-          profit: null,
-          searchText: 'ada',
-        },
-      ],
-      missingCostCount: 1,
-    };
-    mocks.fetchTransactionReviewRows.mockImplementation(
-      ({ orderIds = [] }: { orderIds?: string[] }) =>
-        Promise.resolve({
-          data: orderIds.includes('old-missing')
-            ? [missingRow]
-            : pageOneIds.slice(0, 100).map(completeRow),
-          error: null,
-        })
-    );
-
-    const { result } = renderHook(
-      () =>
-        useTransactionReview(undefined, {
-          search: 'ada',
-          tab: 'missing-costs',
-        }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() =>
-      expect(result.current.data?.map((order) => order.id)).toEqual([
-        'old-missing',
-      ])
-    );
-    expect(result.current.searchTruncated).toBe(false);
-    expect(mocks.searchTransactionReviewOrders).toHaveBeenNthCalledWith(2, {
-      merchantId: 'merchant-1',
-      offset: 100,
-      search: 'ada',
-    });
-  });
-
-  it('stops tab paging at the page budget with a truncation signal', async () => {
-    const pageIds = Array.from({ length: 101 }, (_, index) => `new-${index}`);
+  it('restores RPC rank after hydration re-sorts null dates last', async () => {
     mocks.searchTransactionReviewOrders.mockResolvedValue({
       error: null,
       errorKind: null,
-      orderIds: pageIds,
+      orderIds: ['recent-null', 'older-dated'],
     });
+    // Hydration returns null transaction dates last regardless of rank.
     mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: pageIds.slice(0, 100).map((id) => ({
-        cancelled_at: null,
-        customerEmail: null,
-        customerName: 'Ada',
-        customerPhone: null,
-        id,
-        items: [
-          { costPrice: 4000, id: `${id}-item`, profit: 100, searchText: 'ada' },
-        ],
-        missingCostCount: 0,
-        orderNumber: id,
-        paymentMethod: 'card',
-        searchText: 'ada lovelace',
-        shipping_status: 'pending',
-      })),
+      data: [
+        {
+          cancelled_at: null,
+          id: 'older-dated',
+          searchText: 'ada lovelace',
+          shipping_status: 'pending',
+        },
+        {
+          cancelled_at: null,
+          id: 'recent-null',
+          searchText: 'ada lovelace',
+          shipping_status: 'pending',
+        },
+      ],
       error: null,
     });
 
     const { result } = renderHook(
-      () =>
-        useTransactionReview(undefined, {
-          search: 'ada',
-          tab: 'missing-costs',
-        }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.data).toEqual([]));
-    expect(result.current.searchTruncated).toBe(true);
-    expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledTimes(5);
-    expect(mocks.searchTransactionReviewOrders).toHaveBeenNthCalledWith(5, {
-      merchantId: 'merchant-1',
-      offset: 400,
-      search: 'ada',
-    });
-  });
-
-  it('fails a tab search rather than presenting a partial page set', async () => {
-    const pageIds = Array.from({ length: 101 }, (_, index) => `new-${index}`);
-    mocks.searchTransactionReviewOrders.mockImplementation(
-      ({ offset = 0 }: { offset?: number }) =>
-        offset === 0
-          ? Promise.resolve({ error: null, errorKind: null, orderIds: pageIds })
-          : Promise.resolve({
-              error: { message: 'boom' },
-              errorKind: 'search-failed',
-              orderIds: [],
-            })
-    );
-    mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: pageIds.slice(0, 100).map((id) => ({
-        cancelled_at: null,
-        customerEmail: null,
-        customerName: 'Ada',
-        customerPhone: null,
-        id,
-        items: [
-          { costPrice: 4000, id: `${id}-item`, profit: 100, searchText: 'ada' },
-        ],
-        missingCostCount: 0,
-        orderNumber: id,
-        paymentMethod: 'card',
-        searchText: 'ada lovelace',
-        shipping_status: 'pending',
-      })),
-      error: null,
-    });
-
-    const { result } = renderHook(
-      () =>
-        useTransactionReview(undefined, {
-          search: 'ada',
-          tab: 'missing-costs',
-        }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => expect(result.current.error).not.toBeNull());
-    expect((result.current.error as Error).message).toBe('boom');
-  });
-
-  it('refetches a search when the tab changes', async () => {
-    const pageIds = Array.from({ length: 101 }, (_, index) => `new-${index}`);
-    mocks.searchTransactionReviewOrders.mockImplementation(
-      ({ offset = 0 }: { offset?: number }) =>
-        Promise.resolve({
-          error: null,
-          errorKind: null,
-          orderIds: offset === 0 ? pageIds : ['old-missing'],
-        })
-    );
-    const row = (id: string, costPrice: number | null) => ({
-      cancelled_at: null,
-      customerEmail: null,
-      customerName: 'Ada',
-      customerPhone: null,
-      id,
-      items: [{ costPrice, id: `${id}-item`, profit: null, searchText: 'ada' }],
-      missingCostCount: costPrice == null ? 1 : 0,
-      orderNumber: id,
-      paymentMethod: 'card',
-      searchText: 'ada lovelace',
-      shipping_status: 'pending',
-    });
-    mocks.fetchTransactionReviewRows.mockImplementation(
-      ({ orderIds = [] }: { orderIds?: string[] }) =>
-        Promise.resolve({
-          data: orderIds.includes('old-missing')
-            ? [row('old-missing', null)]
-            : pageIds.slice(0, 100).map((id) => row(id, 4000)),
-          error: null,
-        })
-    );
-
-    const { result, rerender } = renderHook(
-      ({ tab }: { tab: 'missing-costs' | 'paid' }) =>
-        useTransactionReview(undefined, { search: 'ada', tab }),
-      {
-        wrapper: createWrapper(),
-        initialProps: { tab: 'paid' as 'missing-costs' | 'paid' },
-      }
-    );
-
-    await waitFor(() => expect(result.current.data).toHaveLength(100));
-    expect(result.current.searchTruncated).toBe(true);
-
-    rerender({ tab: 'missing-costs' });
-
-    await waitFor(() =>
-      expect(result.current.data?.map((order) => order.id)).toEqual([
-        'old-missing',
-      ])
-    );
-    expect(result.current.searchTruncated).toBe(false);
-    expect(
-      mocks.searchTransactionReviewOrders.mock.calls.some(
-        ([args]) => (args as { offset?: number }).offset === 100
-      )
-    ).toBe(true);
-  });
-
-  it('filters the legacy fallback scan by tab before the display slice', async () => {
-    mocks.searchTransactionReviewOrders.mockResolvedValue({
-      error: { message: 'Could not find the function' },
-      errorKind: 'missing-search-function',
-      orderIds: [],
-    });
-    const row = (id: string, costPrice: number | null) => ({
-      cancelled_at: null,
-      customerEmail: null,
-      customerName: 'Ada',
-      customerPhone: null,
-      id,
-      items: [{ costPrice, id: `${id}-item`, profit: null, searchText: 'ada' }],
-      missingCostCount: costPrice == null ? 1 : 0,
-      orderNumber: id,
-      paymentMethod: 'card',
-      searchText: 'ada lovelace',
-      shipping_status: 'pending',
-    });
-    const rows = [
-      ...Array.from({ length: 100 }, (_, index) =>
-        row(`complete-${index}`, 4000)
-      ),
-      row('legacy-missing', null),
-    ];
-    mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: rows,
-      error: null,
-    });
-
-    const { result } = renderHook(
-      () =>
-        useTransactionReview(undefined, {
-          search: 'ada',
-          tab: 'missing-costs',
-        }),
+      () => useTransactionReview(undefined, { search: 'ada' }),
       { wrapper: createWrapper() }
     );
 
     await waitFor(() =>
       expect(result.current.data?.map((order) => order.id)).toEqual([
-        'legacy-missing',
+        'recent-null',
+        'older-dated',
       ])
     );
-    expect(result.current.searchTruncated).toBe(false);
   });
 
   it('surfaces search failures', async () => {

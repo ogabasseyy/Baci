@@ -1135,7 +1135,7 @@ describe('TransactionsScreen', () => {
 
     expect(
       screen.getByText(
-        'Showing the first 100 matches. Refine your search to narrow results.'
+        'Showing 1 match (partial results). Refine your search to narrow results.'
       )
     ).toBeInTheDocument();
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();

@@ -131,7 +131,7 @@ export function useUpdateTransactionCostPrice() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transaction-review'] });
       queryClient.invalidateQueries({
-        queryKey: ['monthly-transaction-count'],
+        queryKey: ['monthly-transaction-count', merchant?.id],
       });
       queryClient.invalidateQueries({ queryKey: ['analytics-overview'] });
       queryClient.invalidateQueries({ queryKey: ['analytics-detail'] });

@@ -139,25 +139,31 @@ export function useTransactionReview(
 // candidates before stopping with a truncation notice.
 const TRANSACTION_REVIEW_TAB_SEARCH_MAX_PAGES = 5;
 
-async function hydrateRefineSearchIds(
-  merchantId: string,
-  search: string,
-  orderIds: string[]
-) {
+async function hydrateSearchIds(merchantId: string, orderIds: string[]) {
   // Hydrate only the ranked top-100: hydration re-sorts by transaction date
   // with nulls last, so hydrating the peek row would let the display slice
   // drop a recent null-date match in favor of an older dated one. The peek
   // row exists only to detect truncation.
+  const pageIds = orderIds.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT);
   const { data, error } = await fetchTransactionReviewWithFallbacks({
     merchantId,
-    orderIds: orderIds.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
+    orderIds: pageIds,
   });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return filterTransactionOrders(mapTransactionReviewData(data), search);
+  // Restore RPC rank: hydration sorts null transaction dates last, which
+  // would otherwise sink a recent null-date match below older dated rows
+  // in search results. Refinement and tab filters preserve this order.
+  const hydratedById = new Map(
+    mapTransactionReviewData(data).map((order) => [order.id, order])
+  );
+  return pageIds.flatMap((orderId) => {
+    const order = hydratedById.get(orderId);
+    return order ? [order] : [];
+  });
 }
 
 async function searchTransactionReview(
@@ -186,17 +192,18 @@ async function searchTransactionReview(
         throw new Error(error.message);
       }
 
-      const refined = filterTransactionOrders(
-        mapTransactionReviewData(data),
+      const mapped = mapTransactionReviewData(data);
+      // The capped scan is fully in memory, so the tab filter applies
+      // before refinement and the display slice here (unlike the
+      // single-page RPC path, where the server cap binds first and the tab
+      // pages for the rest). Refinement judges visible items only, matching
+      // the paged path.
+      const orders = filterTransactionOrders(
+        tab === 'missing-costs'
+          ? filterOrdersForTransactionTab(mapped, 'missing-costs')
+          : mapped,
         search
       );
-      // The capped scan is fully in memory, so the tab filter applies
-      // before the display slice here (unlike the single-page RPC path,
-      // where the server cap binds first and the tab pages for the rest).
-      const orders =
-        tab === 'missing-costs'
-          ? filterOrdersForTransactionTab(refined, 'missing-costs')
-          : refined;
 
       return {
         orders: orders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT),
@@ -216,10 +223,9 @@ async function searchTransactionReview(
     // The truncation signal comes from the pre-refinement id count:
     // refinement can only shrink the set, so post-refinement length would
     // hide capped results.
-    const orders = await hydrateRefineSearchIds(
-      merchantId,
-      search,
-      firstPage.orderIds
+    const orders = filterTransactionOrders(
+      await hydrateSearchIds(merchantId, firstPage.orderIds),
+      search
     );
 
     return {
@@ -245,9 +251,17 @@ async function searchTransactionReview(
       return { orders: accumulated, searchTruncated: false };
     }
 
-    const pageOrders = filterOrdersForTransactionTab(
-      await hydrateRefineSearchIds(merchantId, search, orderIds),
-      'missing-costs'
+    // Tab before refinement: refinement must judge the missing-cost items
+    // the tab keeps, not items the tab is about to strip. Otherwise a mixed
+    // order (matching complete-cost item, non-matching missing-cost item)
+    // would consume cap space and then vanish in the screen's final search
+    // filter, hiding older genuine matches.
+    const pageOrders = filterTransactionOrders(
+      filterOrdersForTransactionTab(
+        await hydrateSearchIds(merchantId, orderIds),
+        'missing-costs'
+      ),
+      search
     );
     for (const order of pageOrders) {
       if (accumulated.length >= TRANSACTION_REVIEW_SEARCH_LIMIT) {

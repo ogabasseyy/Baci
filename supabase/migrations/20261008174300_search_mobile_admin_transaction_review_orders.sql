@@ -56,9 +56,13 @@ COMMENT ON FUNCTION public.transaction_review_jsonb_search_values(jsonb) IS
 REVOKE ALL ON FUNCTION public.transaction_review_jsonb_search_values(jsonb)
   FROM PUBLIC, anon, authenticated;
 
--- Dropped first because the signature gains p_offset below.
+-- Dropped first (both the pre-offset signature and this one) so the file
+-- stays re-runnable while the signature evolves pre-merge.
 DROP FUNCTION IF EXISTS public.search_mobile_admin_transaction_review_orders(
   uuid, text[], integer
+);
+DROP FUNCTION IF EXISTS public.search_mobile_admin_transaction_review_orders(
+  uuid, text[], integer, integer
 );
 
 CREATE FUNCTION public.search_mobile_admin_transaction_review_orders(
@@ -106,7 +110,9 @@ BEGIN
   -- Normalize defensively: blank terms would match every row under ILIKE, so
   -- drop them; cap term count and length to bound planning cost. The client
   -- splitter mirrors these caps exactly, so they bind only for direct RPC
-  -- callers.
+  -- callers. Accepted edge: past the cap, the client's JS sort and this
+  -- ORDER BY (database collation) can select different subsets for
+  -- non-ASCII terms; ASCII parity is exact.
   SELECT COALESCE(array_agg(term ORDER BY term), '{}')
   INTO v_terms
   FROM (
@@ -214,12 +220,20 @@ BEGIN
               WHERE search_value ILIKE search_patterns.pattern ESCAPE '\'
             )
           )
-          OR to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
   $query$;
 
+  -- The client search text carries only the effective date
+  -- (transaction_date ?? created_at): matching created_at as a separate
+  -- alternative would fill the cap with orders whose displayed date
+  -- differs, only for client refinement to drop them. Schemas with the
+  -- column match the same effective date instead.
   IF v_has_transaction_date THEN
     v_sql := v_sql || $query$
-          OR to_char(o.transaction_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
+          OR to_char(COALESCE(o.transaction_date, o.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
+    $query$;
+  ELSE
+    v_sql := v_sql || $query$
+          OR to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
     $query$;
   END IF;
 
@@ -267,6 +281,12 @@ BEGIN
                   SELECT 1
                   FROM public.products AS p
                   WHERE p.id = oi.product_id
+                    -- Same-merchant catalog text only: without this, another
+                    -- merchant's SKU/metadata would satisfy the match for
+                    -- this merchant's order through a cross-merchant
+                    -- product_id reference. Both columns are NOT NULL since
+                    -- the baseline, so no catalog probe is needed.
+                    AND p.merchant_id = $1
                     AND (
                       p.sku ILIKE search_patterns.pattern ESCAPE '\'
   $query$;
@@ -295,6 +315,7 @@ BEGIN
                   SELECT 1
                   FROM public.product_variants AS v
                   WHERE v.id = oi.variant_id
+                    AND v.merchant_id = $1
                     AND (
                       v.sku ILIKE search_patterns.pattern ESCAPE '\'
                       OR v.condition ILIKE search_patterns.pattern ESCAPE '\'

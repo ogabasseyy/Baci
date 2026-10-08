@@ -277,6 +277,11 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_DISCOVERY_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_PENDING_SOURCES,
   ...EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
+    sha256: 'e3a991d8b33a173d80ee3f825ae1c108ce9ba66bab33e5a72f88c9439c31e090',
+  },
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

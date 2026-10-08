@@ -146,7 +146,49 @@ describe('TransactionListState', () => {
 
     expect(
       screen.getByText(
-        'Showing the first 100 matches. Refine your search to narrow results.'
+        'Showing 100 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('names the displayed count when refinement shrinks truncated results', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={60}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 60 matches (partial results). Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('uses the singular when one truncated match is displayed', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={1}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing 1 match (partial results). Refine your search to narrow results.'
       )
     ).toBeInTheDocument();
   });

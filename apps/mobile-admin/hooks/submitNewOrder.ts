@@ -244,7 +244,9 @@ export async function submitNewOrder({
     queryClient.invalidateQueries({ queryKey: ['orders'] });
     queryClient.invalidateQueries({ queryKey: ['order-counts'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-    queryClient.invalidateQueries({ queryKey: ['monthly-transaction-count'] });
+    queryClient.invalidateQueries({
+      queryKey: ['monthly-transaction-count', merchantId],
+    });
 
     setLastOrderId(createdOrder.id);
     setShowSuccessModal(true);

@@ -2,7 +2,6 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { styles } from '@/components/transactions/transactions.styles';
 import type { ThemeColors } from '@/constants/theme';
-import { TRANSACTION_REVIEW_SEARCH_LIMIT } from '@/lib/search-transaction-review-orders';
 
 interface TransactionListStateProps {
   colors: ThemeColors;
@@ -92,10 +91,13 @@ export function TransactionListState({
   }
 
   if (searchTruncated) {
+    // Name the displayed count, not the cap: refinement and tab paging can
+    // shrink 101 candidates to a handful of visible rows.
+    const matchNoun = visibleOrderCount === 1 ? 'match' : 'matches';
     return (
       <View style={styles.stateContainer}>
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-          {`Showing the first ${TRANSACTION_REVIEW_SEARCH_LIMIT} matches. Refine your search to narrow results.`}
+          {`Showing ${visibleOrderCount} ${matchNoun} (partial results). Refine your search to narrow results.`}
         </Text>
       </View>
     );

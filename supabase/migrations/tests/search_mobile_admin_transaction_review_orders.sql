@@ -120,6 +120,29 @@ INSERT INTO public.product_variants (
   '{"color": "black"}'::jsonb
 );
 
+-- Cross-merchant catalog references: merchant B's product/variant text must
+-- never satisfy a match for merchant A's order, even when referenced.
+INSERT INTO public.products (id, merchant_id, name, price, sku) VALUES (
+  '10000000-0000-4000-8000-000000000002',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'Foreign Phone',
+  700,
+  'XMERCHANT-SKU-7'
+);
+
+INSERT INTO public.product_variants (
+  id, product_id, merchant_id, sku, condition
+) VALUES (
+  '20000000-0000-4000-8000-000000000002',
+  '10000000-0000-4000-8000-000000000002',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'XMERCHANT-VAR-7',
+  'new'
+);
+
+-- The cross-merchant item insert lives with the order-item seeds below,
+-- after the referenced order exists.
+
 -- Target order: paid, visible, IMEI in ITEM fulfillment_data.
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, customer_email, customer_phone,
@@ -151,6 +174,19 @@ INSERT INTO public.order_items (
   1,
   '{"inventoryUnits": [{"imei": "353232106161443", "serial": "SN-999"}]}'::jsonb,
   '20000000-0000-4000-8000-000000000001'
+);
+
+-- Cross-merchant catalog reference (see product seeds above).
+INSERT INTO public.order_items (
+  id, order_id, product_id, name, price, quantity, variant_id
+) VALUES (
+  'd0000000-0000-4000-8000-000000000002',
+  'c0000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  'Foreign Reference',
+  1.00,
+  1,
+  '20000000-0000-4000-8000-000000000002'
 );
 
 -- Per-unit IMEI/supplier persisted only in the unit-cost ledger.
@@ -417,6 +453,26 @@ BEGIN
   INTO v_ids
   FROM public.search_mobile_admin_transaction_review_orders(
     v_merchant_id,
+    ARRAY['xmerchant-sku-7']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'cross-merchant product text must not match: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['xmerchant-var-7']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'cross-merchant variant text must not match: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
     ARRAY['355555550000001']
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
@@ -494,6 +550,30 @@ BEGIN
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
     RAISE EXCEPTION 'date search failed: %', v_ids;
+  END IF;
+
+  -- ORD-1007 was created Oct 7 but backdated to Sep 15: the client only
+  -- carries the effective date, so a creation-date search must not match
+  -- while the effective-date search must.
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['2026-10-07']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'creation date must not match when backdated: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['2026-09-15']
+  );
+  IF v_ids IS DISTINCT FROM
+    ARRAY['c0000000-0000-4000-8000-000000000007'::uuid] THEN
+    RAISE EXCEPTION 'effective date search failed: %', v_ids;
   END IF;
 
   SELECT array_agg(order_id)

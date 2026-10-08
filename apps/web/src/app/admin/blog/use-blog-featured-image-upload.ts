@@ -83,7 +83,6 @@ export function useBlogFeaturedImageUpload({
   setForm,
   toast,
   coverStashRef,
-  formRef,
   savedFormRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
@@ -94,7 +93,6 @@ export function useBlogFeaturedImageUpload({
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
-  formRef: RefObject<PlatformAdminBlogFormState>;
   savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
@@ -110,17 +108,19 @@ export function useBlogFeaturedImageUpload({
   // deleted while a later import could still reuse it, since an
   // aborted fetch cannot recall a DELETE the server already ran.
   // The flush covers settled and staged results alike (an upload
-  // discarded without any import never stages), minus the live
-  // form and the last saved payload: manual edits after the last
-  // import can re-embed a staged path, and edits made while a
-  // save is in flight must not delete media the submitted payload
-  // contains. A failed flush leaks silently — there is no session
-  // left to retry in, and a leak is safer than deleting live
-  // media.
-  useEffect(
-    () => () => {
+  // discarded without any import never stages), minus the last
+  // saved payload. A failed flush leaks silently — there is no
+  // session left to retry in, and a leak is safer than deleting
+  // live media.
+  useEffect(() => {
+    mountedRef.current = true; // StrictMode replays setup after cleanup.
+    return () => {
       mountedRef.current = false;
-      const keepPaths = draftReferencedMediaPaths(formRef.current);
+      // Teardown leaves the page, so only the last server-confirmed
+      // payload earns retention: live-form references are unpersisted
+      // by definition here, and keeping them would orphan
+      // upload-then-Back media.
+      const keepPaths = new Set<string>();
       const saved = savedFormRef.current;
       if (saved !== null) {
         for (const path of draftReferencedMediaPaths(saved)) {
@@ -151,9 +151,8 @@ export function useBlogFeaturedImageUpload({
         }
       };
       void send();
-    },
-    [formRef, savedFormRef]
-  );
+    };
+  }, [savedFormRef]);
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;
@@ -195,9 +194,8 @@ export function useBlogFeaturedImageUpload({
     setUploadingFeatured(true);
     try {
       const result = await upload(file);
-      // A result arriving after teardown was never inserted anywhere,
-      // so it deletes like an invalidated generation instead of
-      // tracking into a dead ref.
+      // A post-teardown result deletes like an invalidated generation
+      // instead of tracking into a dead ref.
       if (!mountedRef.current || generation !== generationRef.current) {
         await cleanupInvalidatedUpload(result);
         return;

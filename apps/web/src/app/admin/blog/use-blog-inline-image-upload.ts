@@ -14,7 +14,6 @@ import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 export function useBlogInlineImageUpload({
   upload,
   deleteUpload,
-  formRef,
   savedFormRef,
 }: {
   upload: (file: File) => Promise<{ url: string }>;
@@ -22,7 +21,6 @@ export function useBlogInlineImageUpload({
     path: string;
     variantPaths: string[];
   }) => Promise<void>;
-  formRef: RefObject<PlatformAdminBlogFormState>;
   savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
 }) {
   const [pendingInlineUploads, setPendingInlineUploads] = useState(0);
@@ -50,12 +48,17 @@ export function useBlogInlineImageUpload({
   // since an aborted fetch cannot recall a DELETE the server
   // already ran. The flush covers settled and staged uploads alike
   // (an upload discarded without any import never stages), minus
-  // the live form and the last saved payload; a failed flush leaks
-  // silently — there is no session left to retry in.
-  useEffect(
-    () => () => {
+  // the last saved payload; a failed flush leaks silently — there
+  // is no session left to retry in.
+  useEffect(() => {
+    mountedRef.current = true; // StrictMode replays setup after cleanup.
+    return () => {
       mountedRef.current = false;
-      const keepPaths = draftReferencedMediaPaths(formRef.current);
+      // Teardown leaves the page, so only the last server-confirmed
+      // payload earns retention: live-form references are unpersisted
+      // by definition here, and keeping them would orphan
+      // upload-then-Back media.
+      const keepPaths = new Set<string>();
       const saved = savedFormRef.current;
       if (saved !== null) {
         for (const path of draftReferencedMediaPaths(saved)) {
@@ -85,9 +88,8 @@ export function useBlogInlineImageUpload({
         }
       };
       void send();
-    },
-    [formRef, savedFormRef]
-  );
+    };
+  }, [savedFormRef]);
 
   const uploadInlineImage = (file: File) => {
     setPendingInlineUploads((count) => count + 1);

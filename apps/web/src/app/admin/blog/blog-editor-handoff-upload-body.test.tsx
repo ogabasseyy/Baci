@@ -140,7 +140,7 @@ it('deletes a settled inline upload when an accepted import replaces it', async 
   );
 });
 
-it('retains a settled upload embedded in the imported article body', async () => {
+it('deletes an imported-then-abandoned upload and its orphaned variant', async () => {
   fetchWithCsrf.mockResolvedValueOnce(
     new Response(
       JSON.stringify({
@@ -174,8 +174,10 @@ it('retains a settled upload embedded in the imported article body', async () =>
       'https://cdn.example.com/media/platform/blog/embedded.webp'
     )
   );
-  // The draft uses a different cover but embeds the uploaded source in
-  // its body: the source must be retained, the orphaned variant deleted.
+  // The draft uses a different cover but embeds the uploaded source
+  // in its body. Nothing is saved, so teardown deletes the revived
+  // source together with the orphaned variant: only the last saved
+  // payload earns retention.
   const embeddedHandoff = {
     ...handoff,
     content_html:
@@ -201,8 +203,8 @@ it('retains a settled upload embedded in the imported article body', async () =>
     '/api/admin/blog/upload',
     expect.objectContaining({
       body: JSON.stringify({
-        path: 'platform/blog/embedded/landscape_16x9.webp',
-        variantPaths: [],
+        path: 'platform/blog/embedded.webp',
+        variantPaths: ['platform/blog/embedded/landscape_16x9.webp'],
       }),
       method: 'DELETE',
     })

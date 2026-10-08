@@ -45,6 +45,17 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('rejects responsive picture sources the editor cannot preserve', () => {
+    // Tiptap has no picture or source nodes: the first body edit
+    // serializes only the fallback img, silently losing the mobile
+    // asset the browser would have selected.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source media="(max-width: 600px)" srcset="https://cdn.example.com/mobile.webp"><img src="https://cdn.example.com/fallback.png"></picture>'
+      )
+    ).toThrow('picture sources');
+  });
+
   it('treats an APNG picture source as applicable', () => {
     // Browsers select image/apng (the app advertises it in its Accept
     // header), so a broken APNG candidate rejects like any applicable
@@ -116,15 +127,15 @@ describe('validateImportedContent picture', () => {
     ).toContain('a.png');
   });
 
-  it('accepts a device-dependent media query with an img fallback', () => {
-    // Viewport-dependent queries cannot be evaluated without a
-    // device, so they stay applicable; the img fallback supplies a
-    // candidate either way.
-    expect(
+  it('rejects a device-dependent picture source', () => {
+    // Viewport-dependent queries stay applicable, and the editor has
+    // no source node: the first body edit would drop the asset the
+    // browser selected.
+    expect(() =>
       validateImportedContent(
         '<picture><source media="(min-width: 800px)" srcset="https://cdn.example.com/a.webp"><img src="https://cdn.example.com/a.png" alt="A"></picture>'
       )
-    ).toContain('<img');
+    ).toThrow('picture sources');
   });
 
   it('ignores a picture source placed after the img', () => {
@@ -148,13 +159,15 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
-  it('accepts a nested picture img that carries its own fallback', () => {
-    // Not picture-associated, but the img still renders its own src.
-    expect(
+  it('rejects a picture source when the img nests elsewhere', () => {
+    // The nested img renders its own src, but the grouped source is
+    // still picture markup the editor cannot represent, so it rejects
+    // like any selectable source.
+    expect(() =>
       validateImportedContent(
         '<picture><source srcset="https://cdn.example.com/a.webp"><div><img src="https://cdn.example.com/a.png" alt="A"></div></picture>'
       )
-    ).toContain('a.png');
+    ).toThrow('picture sources');
   });
 
   it('ignores a picture source nested below a non-picture element', () => {
@@ -177,24 +190,24 @@ describe('validateImportedContent picture', () => {
     ).toContain('Body');
   });
 
-  it('accepts a picture source followed by an unmatched end tag', () => {
-    // Browsers ignore the stray `</div>` and sanitization normalizes
-    // the markup; picture ancestry precision is pinned at the matcher
-    // unit level while the valid group passes here.
-    expect(
+  it('rejects a picture source followed by an unmatched end tag', () => {
+    // Browsers ignore the stray `</div>`, so the source stays grouped
+    // and selectable — and the editor still cannot preserve it.
+    expect(() =>
       validateImportedContent(
         '<picture><source srcset="https://cdn.example.com/a.webp"></div><img src="https://cdn.example.com/a.png" alt=""></picture>'
       )
-    ).toContain('<img');
+    ).toThrow('picture sources');
   });
 
-  it('accepts a responsive picture with a usable source and img src', () => {
-    // The happy path under the editor contract: an applicable source
-    // plus the required src fallback passes on both layers.
-    expect(
+  it('rejects a responsive picture with a usable source and img src', () => {
+    // Applicable source plus src fallback passes media validation,
+    // but the editor serializes only the fallback after any body
+    // edit, silently losing the responsive asset.
+    expect(() =>
       validateImportedContent(
         '<picture><source media="(min-width: 800px)" srcset="https://cdn.example.com/a.webp"><img src="https://cdn.example.com/a.png" alt="A"></picture>'
       )
-    ).toContain('a.png');
+    ).toThrow('picture sources');
   });
 });

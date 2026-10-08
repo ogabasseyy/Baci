@@ -16,7 +16,6 @@ function setup(
 ) {
   const deleteUpload = vi.fn(async () => {});
   const toast = vi.fn();
-  const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
   const savedFormRef = {
     current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
   };
@@ -25,7 +24,6 @@ function setup(
     const uploader = useBlogFeaturedImageUpload({
       coverStashRef: { current: null },
       deleteUpload,
-      formRef,
       savedFormRef,
       setForm,
       toast,
@@ -33,7 +31,7 @@ function setup(
     });
     return { ...uploader, form };
   });
-  return { ...hook, deleteUpload, formRef, savedFormRef, toast };
+  return { ...hook, deleteUpload, savedFormRef, toast };
 }
 
 const discardDraft = {

@@ -16,7 +16,6 @@ function setup(
 ) {
   const deleteUpload = vi.fn(async () => {});
   const toast = vi.fn();
-  const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
   const savedFormRef = {
     current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
   };
@@ -25,7 +24,6 @@ function setup(
     const uploader = useBlogFeaturedImageUpload({
       coverStashRef: { current: null },
       deleteUpload,
-      formRef,
       savedFormRef,
       setForm,
       toast,
@@ -33,7 +31,7 @@ function setup(
     });
     return { ...uploader, form };
   });
-  return { ...hook, deleteUpload, formRef, savedFormRef, toast };
+  return { ...hook, deleteUpload, savedFormRef, toast };
 }
 
 const discardDraft = {
@@ -42,9 +40,9 @@ const discardDraft = {
 };
 
 describe('useBlogFeaturedImageUpload cleanup', () => {
-  it('defers deletion until unmount and cancels on reuse', async () => {
+  it('defers deletion until unmount, then deletes unsaved reuses', async () => {
     const reused = 'https://cdn.example.com/media/platform/blog/cover.webp';
-    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: reused,
     }));
     await act(async () => {
@@ -64,13 +62,16 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     await act(async () => {
       result.current.cleanupSettledSessionUploads(reuseDraft);
     });
-    // The accepted import applies its draft to the live form, which
-    // the unmount flush consults.
-    formRef.current = reuseDraft;
+    // The reuse revives the result, but the draft was never saved, so
+    // teardown deletes it instead of retaining live-form references.
     await act(async () => {
       unmount();
     });
-    expect(deleteUpload).not.toHaveBeenCalled();
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/cover.webp',
+      variantPaths: [],
+    });
   });
 
   it('flushes a re-dropped upload after a reuse cancels it', async () => {
@@ -106,9 +107,9 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     });
   });
 
-  it('excludes live-form keeps from the unmount flush', async () => {
+  it('deletes manually re-embedded uploads without a save', async () => {
     const reused = 'https://cdn.example.com/media/platform/blog/cover.webp';
-    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: reused,
     }));
     await act(async () => {
@@ -117,16 +118,17 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     await act(async () => {
       result.current.cleanupSettledSessionUploads(discardDraft);
     });
-    // Manual edits after the last import can re-embed a staged path,
-    // so the flush consults the live form rather than the draft.
-    formRef.current = {
-      ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-      featured_image_url: reused,
-    };
+    // Manual edits after the last import re-embed the staged path, but
+    // the form is abandoned without saving: only the last saved
+    // payload earns retention, so teardown deletes it.
     await act(async () => {
       unmount();
     });
-    expect(deleteUpload).not.toHaveBeenCalled();
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/cover.webp',
+      variantPaths: [],
+    });
   });
 
   it('ignores unmount flush failures', async () => {
@@ -148,15 +150,12 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
     expect(deleteUpload).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps media the saved payload contains despite later live edits', async () => {
-    // Deferred-save race: a staged upload is re-embedded, Create is
-    // clicked, and the URL is removed before the request completes.
-    // The server saves the submitted payload, so the flush must
-    // consult that snapshot — not the newer live form.
+  it('keeps media the saved payload contains', async () => {
+    // The server saved the submitted payload, so teardown retains it.
     const reused = 'https://cdn.example.com/media/platform/blog/cover.webp';
-    const { deleteUpload, formRef, result, savedFormRef, unmount } = setup(
-      async () => ({ url: reused })
-    );
+    const { deleteUpload, result, savedFormRef, unmount } = setup(async () => ({
+      url: reused,
+    }));
     await act(async () => {
       await result.current.uploadFeatured(file);
     });
@@ -168,7 +167,6 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
       content: '<p>Imported body</p>',
       featured_image_url: reused,
     };
-    formRef.current = discardDraft;
     await act(async () => {
       unmount();
     });

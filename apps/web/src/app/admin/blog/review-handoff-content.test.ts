@@ -27,12 +27,12 @@ describe('validateImportedContent', () => {
     );
   });
 
-  it('accepts picture content with an accompanying image', () => {
-    expect(
+  it('rejects picture content with a selectable source', () => {
+    expect(() =>
       validateImportedContent(
         '<picture><source srcset="https://cdn.example.com/image.webp" type="image/webp"><img src="https://cdn.example.com/image.png" alt="Image"></picture>'
       )
-    ).toContain('<img');
+    ).toThrow('picture sources');
   });
 
   it('accepts an image-only article with secure media', () => {
@@ -257,5 +257,14 @@ describe('validateImportedContent', () => {
     expect(
       validateImportedContent('<h2 id="setup">Setup</h2><p>Body</p>')
     ).toContain('Body');
+  });
+
+  it('strips HTML-hidden subtrees before sanitization drops the attribute', () => {
+    // The sanitizer removes the unsupported hidden attribute, so the
+    // deliberately hidden note would surface in the review editor and
+    // publish unless converted to a hiding class first.
+    expect(
+      validateImportedContent('<p hidden>Draft note</p><p>Visible article</p>')
+    ).toBe('<p>Visible article</p>');
   });
 });

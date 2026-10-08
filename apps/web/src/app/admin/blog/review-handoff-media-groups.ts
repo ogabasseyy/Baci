@@ -97,5 +97,5 @@ export function groupMediaElements(html: string): MediaCandidateGroup[] {
       group.tags.push(tag);
     }
   }
-  return groups;
+  return groups.map(({ tags, hasMedia }) => ({ tags, hasMedia }));
 }

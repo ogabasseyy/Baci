@@ -2,6 +2,7 @@ import { decodeHTMLAttribute } from 'entities';
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasReadableContent } from './review-handoff-readability';
@@ -178,6 +179,16 @@ function hasDroppedAnchorTarget(html: string): boolean {
   return [...fragments].some((target) => ids.has(target));
 }
 
+function hasSelectablePictureSource(html: string): boolean {
+  // Tiptap has no picture or source nodes, so the first body edit
+  // serializes only the fallback img: an actively selected source is
+  // silently lost. Inert sources (post-img, inapplicable) never
+  // rendered anyway, so only selectable ones reject.
+  return groupMediaElements(html).some(({ tags }) =>
+    tags.some((tag) => /^<source\b/i.test(tag))
+  );
+}
+
 function hasBrokenMediaTag(html: string): boolean {
   // Candidates are evaluated per picture while every img still needs
   // its own src: the editor drops src-less images on mount, so a
@@ -203,19 +214,23 @@ function hasBrokenMediaTag(html: string): boolean {
  * responsive visibility, and unrenderable media.
  */
 export function validateImportedContent(rawContent: string): string {
-  if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(rawContent)) {
+  // The sanitizer drops the unsupported hidden attribute, so convert
+  // HTML-hidden elements to hiding classes before anything else: the
+  // uniform strip then removes them instead of surfacing them.
+  const unhidden = convertHiddenAttributes(rawContent);
+  if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
-  const sanitizedRaw = sanitizeHtml(rawContent);
+  const sanitizedRaw = sanitizeHtml(unhidden);
   // The JSON-shape guard runs pre-conversion: markdown rendering wraps text
   // in <p> tags (and escapes quotes), which would otherwise smuggle JSON past
   // the structured-content check.
-  if (isJsonShapedText(rawContent) || isJsonShapedText(sanitizedRaw)) {
+  if (isJsonShapedText(unhidden) || isJsonShapedText(sanitizedRaw)) {
     throw new Error(
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
   }
-  const { content, rendered } = normalizeContent(rawContent, sanitizedRaw);
+  const { content, rendered } = normalizeContent(unhidden, sanitizedRaw);
   if (!content.trim()) {
     throw new Error('Article content is empty after sanitization');
   }
@@ -249,6 +264,13 @@ export function validateImportedContent(rawContent: string): string {
   // rejects loudly instead of silently persisting a crippled image.
   if (hasBrokenMediaTag(rendered) || hasBrokenMediaTag(visible)) {
     throw new Error('Imported inline images must use HTTPS URLs');
+  }
+  // Actively selected picture sources cannot survive the editor
+  // round-trip: the first body edit keeps only the fallback img.
+  if (hasSelectablePictureSource(visible)) {
+    throw new Error(
+      'Article content has responsive picture sources the editor cannot preserve'
+    );
   }
   return visible;
 }

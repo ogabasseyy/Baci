@@ -4,7 +4,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
   deleteBlogMediaUpload,
@@ -139,15 +139,9 @@ export function BlogEditorClient({
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
   );
-  // Live form for the unmount delete flush: manual edits after the
-  // last import can re-embed a staged path, so the flush consults
-  // the current form rather than the last cleanup draft.
-  const formRef = useRef(form);
-  useEffect(() => {
-    formRef.current = form;
-  });
-  // Last payload the server confirmed: edits made while a save is
-  // in flight must not delete media the submitted payload contains.
+  // Last payload the server confirmed: the unmount delete flush
+  // retains only this, since live-form references are unpersisted by
+  // definition once the page is left.
   const savedFormRef = useRef<PlatformAdminBlogFormState | null>(null);
   const {
     uploadingFeatured,
@@ -159,7 +153,6 @@ export function BlogEditorClient({
     coverStashRef,
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
-    formRef,
     savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'featured'),
     setForm,
@@ -172,7 +165,6 @@ export function BlogEditorClient({
   } = useBlogInlineImageUpload({
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
-    formRef,
     savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });

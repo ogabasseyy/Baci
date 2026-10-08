@@ -19,14 +19,13 @@ function reuseDraft(url: string) {
 
 function setup(upload: (file: File) => Promise<{ url: string }>) {
   const deleteUpload = vi.fn(async () => {});
-  const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
   const savedFormRef = {
     current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
   };
   const hook = renderHook(() =>
-    useBlogInlineImageUpload({ deleteUpload, formRef, savedFormRef, upload })
+    useBlogInlineImageUpload({ deleteUpload, savedFormRef, upload })
   );
-  return { ...hook, deleteUpload, formRef, savedFormRef };
+  return { ...hook, deleteUpload, savedFormRef };
 }
 
 describe('useBlogInlineImageUpload', () => {
@@ -48,8 +47,8 @@ describe('useBlogInlineImageUpload', () => {
     });
   });
 
-  it('retains settled uploads embedded in the draft body', async () => {
-    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+  it('deletes revived uploads when the reusing draft is never saved', async () => {
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
     }));
     await act(async () => {
@@ -62,11 +61,14 @@ describe('useBlogInlineImageUpload', () => {
       result.current.cleanupSettledInlineUploads(reuse);
     });
     expect(deleteUpload).not.toHaveBeenCalled();
-    // The accepted import applies its draft to the live form, which
-    // the unmount flush consults.
-    formRef.current = reuse;
+    // The reuse revives the upload into tracking, but nothing was
+    // saved: abandoning the form deletes it on teardown.
     await act(async () => unmount());
-    expect(deleteUpload).not.toHaveBeenCalled();
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/inline-1.png',
+      variantPaths: [],
+    });
   });
 
   it('deletes a retained upload when a second import discards it', async () => {
@@ -124,9 +126,9 @@ describe('useBlogInlineImageUpload', () => {
     });
   });
 
-  it('defers deletion until unmount and cancels on reuse', async () => {
+  it('defers deletion until unmount, then deletes unsaved reuses', async () => {
     const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
-    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: reused,
     }));
     await act(async () => {
@@ -142,11 +144,14 @@ describe('useBlogInlineImageUpload', () => {
     await act(async () => {
       result.current.cleanupSettledInlineUploads(reuse);
     });
-    // The accepted import applies its draft to the live form, which
-    // the unmount flush consults.
-    formRef.current = reuse;
+    // The reuse revives the upload, but the draft was never saved, so
+    // teardown deletes it instead of retaining live-form references.
     await act(async () => unmount());
-    expect(deleteUpload).not.toHaveBeenCalled();
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/inline-1.png',
+      variantPaths: [],
+    });
   });
 
   it('flushes a re-dropped upload after a reuse cancels it', async () => {
@@ -176,9 +181,9 @@ describe('useBlogInlineImageUpload', () => {
     });
   });
 
-  it('excludes live-form keeps from the unmount flush', async () => {
+  it('deletes manually re-embedded uploads without a save', async () => {
     const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
-    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: reused,
     }));
     await act(async () => {
@@ -187,22 +192,23 @@ describe('useBlogInlineImageUpload', () => {
     await act(async () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
-    // Manual edits after the last import can re-embed a staged path,
-    // so the flush consults the live form rather than the draft.
-    formRef.current = reuseDraft(reused);
+    // Manual edits after the last import re-embed the staged path, but
+    // the form is abandoned without saving: only the last saved
+    // payload earns retention, so teardown deletes it.
     await act(async () => unmount());
-    expect(deleteUpload).not.toHaveBeenCalled();
+    expect(deleteUpload).toHaveBeenCalledTimes(1);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/inline-1.png',
+      variantPaths: [],
+    });
   });
 
-  it('keeps media the saved payload contains despite later live edits', async () => {
-    // Deferred-save race: a staged upload is re-embedded, Create is
-    // clicked, and the URL is removed before the request completes.
-    // The server saves the submitted payload, so the flush must
-    // consult that snapshot — not the newer live form.
+  it('keeps media the saved payload contains', async () => {
+    // The server saved the submitted payload, so teardown retains it.
     const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
-    const { deleteUpload, formRef, result, savedFormRef, unmount } = setup(
-      async () => ({ url: reused })
-    );
+    const { deleteUpload, result, savedFormRef, unmount } = setup(async () => ({
+      url: reused,
+    }));
     await act(async () => {
       await result.current.uploadInlineImage(file);
     });
@@ -210,7 +216,6 @@ describe('useBlogInlineImageUpload', () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
     savedFormRef.current = reuseDraft(reused);
-    formRef.current = discardDraft;
     await act(async () => unmount());
     expect(deleteUpload).not.toHaveBeenCalled();
   });

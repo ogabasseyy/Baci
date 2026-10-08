@@ -117,7 +117,7 @@ it('deletes a settled session upload when an accepted import replaces it', async
     });
   });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
-  render(<BlogEditorClient mode="create" />);
+  const { unmount } = render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
   await waitFor(() =>
     expect(screen.getByLabelText('Featured image')).toHaveTextContent(
@@ -132,8 +132,9 @@ it('deletes a settled session upload when an accepted import replaces it', async
     'https://cdn.example.com/cover.webp'
   );
   // The settled upload is no longer pending, so invalidation alone
-  // would leave its persisted objects behind: the import deletes the
-  // replaced session upload instead of leaking it.
+  // would leave its persisted objects behind: the staged delete
+  // flushes on unmount instead of leaking it.
+  unmount();
   await waitFor(() =>
     expect(fetchWithCsrf).toHaveBeenCalledWith(
       '/api/admin/blog/upload',
@@ -227,7 +228,7 @@ it('deletes a retained upload when a second import discards it', async () => {
     });
   });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
-  render(<BlogEditorClient mode="create" />);
+  const { unmount } = render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
   await waitFor(() =>
     expect(screen.getByLabelText('Featured image')).toHaveTextContent(
@@ -263,6 +264,7 @@ it('deletes a retained upload when a second import discards it', async () => {
       'https://cdn.example.com/cover.webp'
     )
   );
+  unmount();
   await waitFor(() =>
     expect(fetchWithCsrf).toHaveBeenCalledWith(
       '/api/admin/blog/upload',

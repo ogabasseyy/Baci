@@ -52,7 +52,7 @@ function tagTerminalAt(tag: string): boolean[] {
   return terminalAt;
 }
 
-type HidingFrame = {
+export type HidingFrame = {
   terminalAt: boolean[];
   visibilityAt: VisibilityAtPoint[];
   colorAt: ColorAtPoint[];
@@ -90,7 +90,7 @@ function elementColorAt(tag: string): ColorAtPoint[] {
   return nullColorAt();
 }
 
-function subtreeHiddenAt(
+export function subtreeHiddenAt(
   frames: readonly HidingFrame[],
   includeColor: boolean
 ): boolean[] {
@@ -126,9 +126,9 @@ function subtreeHiddenAt(
   return hiddenAt;
 }
 
-const HTML_TAG_PATTERN =
+export const HTML_TAG_PATTERN =
   /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b(?:[^>"']|"[^"]*"|'[^']*')*>/g;
-const VOID_HTML_ELEMENTS = new Set([
+export const VOID_HTML_ELEMENTS = new Set([
   'area',
   'base',
   'br',
@@ -145,7 +145,7 @@ const VOID_HTML_ELEMENTS = new Set([
   'wbr',
 ]);
 
-function elementFrame(tag: string): HidingFrame {
+export function elementFrame(tag: string): HidingFrame {
   return {
     terminalAt: tagTerminalAt(tag),
     visibilityAt: elementVisibilityAt(tag),
@@ -214,43 +214,6 @@ function visibleText(content: string): string {
   if (visibleAtAnyPoint(subtreeHiddenAt(frames, true))) {
     segments.push(withoutComments.slice(position));
   }
-  return segments.join('');
-}
-
-function isAllTerminal(tag: string): boolean {
-  return tagTerminalAt(tag).every(Boolean);
-}
-
-export function stripHiddenContent(content: string): string {
-  // Remove subtrees hidden at every evaluation point: an element
-  // whose own terminal markers (or an ancestor's) hide all points
-  // can never render, and the editor drops input classes — so kept
-  // markup would surface on mount. Visibility/color hiding stays:
-  // descendants escape with visible/opaque winners, which needs
-  // subtree lookahead this single pass cannot prove.
-  const segments: string[] = [];
-  const dropStack: boolean[] = [];
-  let position = 0;
-  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    const index = match.index ?? content.length;
-    if (!dropStack.some(Boolean)) {
-      segments.push(content.slice(position, index));
-    }
-    position = index + match[0].length;
-    if (match[1] === '/') {
-      const dropped = dropStack.pop();
-      if (!dropped && !dropStack.some(Boolean)) segments.push(match[0]);
-      continue;
-    }
-    const dropped = dropStack.some(Boolean) || isAllTerminal(match[0]);
-    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) {
-      if (!dropped) segments.push(match[0]);
-      continue;
-    }
-    dropStack.push(dropped);
-    if (!dropped) segments.push(match[0]);
-  }
-  if (!dropStack.some(Boolean)) segments.push(content.slice(position));
   return segments.join('');
 }
 

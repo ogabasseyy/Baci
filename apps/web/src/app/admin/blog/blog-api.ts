@@ -156,13 +156,11 @@ export async function deletePlatformBlogPost(id: string): Promise<void> {
 
 export async function deleteBlogMediaUpload(
   path: string,
-  variantPaths: string[],
-  options?: { signal?: AbortSignal }
+  variantPaths: string[]
 ): Promise<void> {
   const response = await fetchWithCsrf('/api/admin/blog/upload', {
     body: JSON.stringify({ path, variantPaths }),
     method: 'DELETE',
-    signal: options?.signal ?? undefined,
   });
 
   if (!response.ok) {

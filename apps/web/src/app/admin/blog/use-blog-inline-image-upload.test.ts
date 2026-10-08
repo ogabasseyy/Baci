@@ -5,19 +5,25 @@ import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
 
 const file = new File(['image'], 'inline.png');
 
+const discardDraft = {
+  ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+  content: '<p>Imported body</p>',
+};
+
+function reuseDraft(url: string) {
+  return {
+    ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
+    content: `<p>Body</p><img src="${url}">`,
+  };
+}
+
 function setup(upload: (file: File) => Promise<{ url: string }>) {
-  const deleteUpload = vi.fn(
-    async (_request: {
-      path: string;
-      variantPaths: string[];
-      signal: AbortSignal;
-    }): Promise<void> => {}
-  );
-  const toast = vi.fn();
+  const deleteUpload = vi.fn(async () => {});
+  const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
   const hook = renderHook(() =>
-    useBlogInlineImageUpload({ deleteUpload, toast, upload })
+    useBlogInlineImageUpload({ deleteUpload, formRef, upload })
   );
-  return { ...hook, deleteUpload, toast };
+  return { ...hook, deleteUpload, formRef };
 }
 
 describe('useBlogInlineImageUpload', () => {
@@ -80,27 +86,27 @@ describe('useBlogInlineImageUpload', () => {
   });
 
   it('deletes settled uploads the draft does not reference', async () => {
-    const { deleteUpload, result } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
     }));
     await act(async () => {
       await result.current.uploadInlineImage(file);
     });
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: '<p>Imported body</p>',
-      });
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+    await act(async () => {
+      unmount();
     });
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
-      signal: expect.any(AbortSignal),
     });
   });
 
   it('retains settled uploads embedded in the draft body', async () => {
-    const { deleteUpload, result } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
     }));
     await act(async () => {
@@ -112,12 +118,16 @@ describe('useBlogInlineImageUpload', () => {
         content:
           '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/inline-1.png">',
       });
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+    await act(async () => {
+      unmount();
     });
     expect(deleteUpload).not.toHaveBeenCalled();
   });
 
   it('deletes a retained upload when a second import discards it', async () => {
-    const { deleteUpload, result } = setup(async () => ({
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
     }));
     await act(async () => {
@@ -132,21 +142,21 @@ describe('useBlogInlineImageUpload', () => {
     });
     expect(deleteUpload).not.toHaveBeenCalled();
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: '<p>Imported body</p>',
-      });
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+    await act(async () => {
+      unmount();
     });
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
-      signal: expect.any(AbortSignal),
     });
   });
 
   it('batches cleanup above the shared delete budget into one call', async () => {
     let count = 0;
-    const { deleteUpload, result } = setup(async () => {
+    const { deleteUpload, result, unmount } = setup(async () => {
       count += 1;
       return {
         url: `https://cdn.example.com/media/platform/blog/session-${count}.png`,
@@ -158,10 +168,11 @@ describe('useBlogInlineImageUpload', () => {
       });
     }
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: '<p>Imported body</p>',
-      });
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+    await act(async () => {
+      unmount();
     });
     // The platform_blog_media_delete bucket allows 30 requests per
     // minute shared with featured cleanup: 31 uploads must collapse
@@ -173,79 +184,101 @@ describe('useBlogInlineImageUpload', () => {
         { length: 30 },
         (_, index) => `platform/blog/session-${index + 2}.png`
       ),
-      signal: expect.any(AbortSignal),
     });
   });
 
-  it('aborts an in-flight delete when the next import reuses the upload', async () => {
+  it('defers deletion until unmount and cancels on reuse', async () => {
     const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
-    const { deleteUpload, result } = setup(async () => ({ url: reused }));
+    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+      url: reused,
+    }));
     await act(async () => {
       await result.current.uploadInlineImage(file);
     });
-    const pending = Promise.withResolvers<void>();
-    deleteUpload.mockReturnValueOnce(pending.promise);
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: '<p>Imported body</p>',
-      });
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    // Nothing is dispatched while a later import could reuse it: an
+    // aborted fetch cannot recall a DELETE the server already ran.
+    expect(deleteUpload).not.toHaveBeenCalled();
+    const reuse = reuseDraft(reused);
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(reuse);
+    });
+    // The accepted import applies its draft to the live form, which
+    // the unmount flush consults.
+    formRef.current = reuse;
+    await act(async () => {
+      unmount();
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+  });
+
+  it('flushes a re-dropped upload after a reuse cancels it', async () => {
+    const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
+    const { deleteUpload, result, unmount } = setup(async () => ({
+      url: reused,
+    }));
+    await act(async () => {
+      await result.current.uploadInlineImage(file);
+    });
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(reuseDraft(reused));
+    });
+    // A later import that drops the reused upload stages it again,
+    // and the unmount flush deletes it then.
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    await act(async () => {
+      unmount();
     });
     expect(deleteUpload).toHaveBeenCalledTimes(1);
-    const signal = deleteUpload.mock.calls[0]?.[0].signal as
-      | AbortSignal
-      | undefined;
-    expect(signal).toBeInstanceOf(AbortSignal);
-    // Second import reuses the upload while its delete is in flight:
-    // the batch is aborted before it can remove active-draft media.
-    await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: `<p>Body</p><img src="${reused}">`,
-      });
-    });
-    expect(signal?.aborted).toBe(true);
-    expect(deleteUpload).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      pending.reject(
-        Object.assign(new Error('Aborted'), { name: 'AbortError' })
-      );
-    });
-    // The aborted upload stays tracked: a later import that drops it
-    // deletes it then.
-    await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content: '<p>Imported body</p>',
-      });
-    });
-    expect(deleteUpload).toHaveBeenCalledTimes(2);
-    expect(deleteUpload).toHaveBeenLastCalledWith({
+    expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
-      signal: expect.any(AbortSignal),
     });
   });
 
-  it('preserves failed cleanup entries for the next import', async () => {
-    const { deleteUpload, result } = setup(async () => ({
+  it('excludes live-form keeps from the unmount flush', async () => {
+    const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
+    const { deleteUpload, formRef, result, unmount } = setup(async () => ({
+      url: reused,
+    }));
+    await act(async () => {
+      await result.current.uploadInlineImage(file);
+    });
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    // Manual edits after the last import can re-embed a staged path,
+    // so the flush consults the live form rather than the draft.
+    formRef.current = reuseDraft(reused);
+    await act(async () => {
+      unmount();
+    });
+    expect(deleteUpload).not.toHaveBeenCalled();
+  });
+
+  it('ignores unmount flush failures', async () => {
+    const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',
     }));
     deleteUpload.mockRejectedValueOnce(new Error('Delete failed'));
     await act(async () => {
       await result.current.uploadInlineImage(file);
     });
-    const discard = {
-      ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-      content: '<p>Imported body</p>',
-    };
     await act(async () => {
-      result.current.cleanupSettledInlineUploads(discard);
+      result.current.cleanupSettledInlineUploads(discardDraft);
     });
+    await act(async () => {
+      unmount();
+    });
+    // No session is left to retry in: the failure leaks silently
+    // instead of throwing out of the unmount.
     expect(deleteUpload).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      result.current.cleanupSettledInlineUploads(discard);
-    });
-    expect(deleteUpload).toHaveBeenCalledTimes(2);
   });
 });

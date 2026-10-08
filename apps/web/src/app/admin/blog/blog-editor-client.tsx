@@ -4,7 +4,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
   deleteBlogMediaUpload,
@@ -133,6 +133,13 @@ export function BlogEditorClient({
   const [form, setForm] = useState<PlatformAdminBlogFormState>(
     toFormState(initialPost)
   );
+  // Live form for the unmount delete flush: manual edits after the
+  // last import can re-embed a staged path, so the flush consults
+  // the current form rather than the last cleanup draft.
+  const formRef = useRef(form);
+  useEffect(() => {
+    formRef.current = form;
+  });
   const {
     uploadingFeatured,
     uploadFeatured,
@@ -141,8 +148,9 @@ export function BlogEditorClient({
     noteAltEdit,
   } = useBlogFeaturedImageUpload({
     coverStashRef,
-    deleteUpload: ({ path, variantPaths, signal }) =>
-      deleteBlogMediaUpload(path, variantPaths, { signal }),
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    formRef,
     upload: (file) => uploadBlogMedia(file, 'featured'),
     setForm,
     toast,
@@ -152,9 +160,9 @@ export function BlogEditorClient({
     inlineUploadsPending,
     uploadInlineImage,
   } = useBlogInlineImageUpload({
-    deleteUpload: ({ path, variantPaths, signal }) =>
-      deleteBlogMediaUpload(path, variantPaths, { signal }),
-    toast,
+    deleteUpload: ({ path, variantPaths }) =>
+      deleteBlogMediaUpload(path, variantPaths),
+    formRef,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({

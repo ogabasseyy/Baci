@@ -4,11 +4,9 @@ import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { matchMediaElements } from './review-handoff-media-elements';
 import { isNeverMatchingMediaQuery } from './review-handoff-media-query';
-import {
-  hasReadableContent,
-  stripHiddenContent,
-} from './review-handoff-readability';
+import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
+import { stripHiddenContent } from './review-handoff-strip-hidden';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripLeadingNonRenderingText } from './strip-leading-non-rendering-text';

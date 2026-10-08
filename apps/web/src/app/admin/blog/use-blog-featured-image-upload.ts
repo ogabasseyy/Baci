@@ -2,6 +2,7 @@ import {
   type Dispatch,
   type RefObject,
   type SetStateAction,
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -58,25 +59,51 @@ export function useBlogFeaturedImageUpload({
   setForm,
   toast,
   coverStashRef,
+  formRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
-  deleteUpload: (request: {
+  deleteUpload: (paths: {
     path: string;
     variantPaths: string[];
-    signal: AbortSignal;
   }) => Promise<void>;
   setForm: Dispatch<SetStateAction<PlatformAdminBlogFormState>>;
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
+  formRef: RefObject<PlatformAdminBlogFormState>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);
   const altEditGenerationRef = useRef(0);
   const settledUploadsRef = useRef<UploadResult[]>([]);
-  const inflightBatchRef = useRef<{
-    controller: AbortController;
-    paths: Set<string>;
-  } | null>(null);
+  const pendingDeletesRef = useRef<UploadResult[]>([]);
+  const deleteUploadRef = useRef(deleteUpload);
+  deleteUploadRef.current = deleteUpload;
+
+  // Deferred dispatch: cleanups only stage results — nothing is
+  // deleted while a later import could still reuse it, since an
+  // aborted fetch cannot recall a DELETE the server already ran.
+  // The staged results flush once, on unmount (saves navigate
+  // away), minus whatever the live form references: manual edits
+  // after the last import can re-embed a staged path. A failed
+  // flush leaks silently — there is no session left to retry in,
+  // and a leak is safer than deleting live media.
+  useEffect(
+    () => () => {
+      const keepPaths = draftReferencedMediaPaths(formRef.current);
+      const paths = new Set<string>();
+      for (const result of pendingDeletesRef.current) {
+        for (const path of unreferencedUploadPaths(result, keepPaths)) {
+          paths.add(path);
+        }
+      }
+      if (paths.size === 0) return;
+      const [path, ...variantPaths] = [...paths];
+      void deleteUploadRef.current({ path, variantPaths }).catch(() => {
+        // Intentionally silent: no session is left to retry in.
+      });
+    },
+    [formRef]
+  );
 
   const invalidateFeaturedUploads = () => {
     generationRef.current += 1;
@@ -102,11 +129,7 @@ export function useBlogFeaturedImageUpload({
       .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
       .filter((variantPath): variantPath is string => variantPath !== null);
     try {
-      await deleteUpload({
-        path,
-        variantPaths,
-        signal: new AbortController().signal,
-      });
+      await deleteUpload({ path, variantPaths });
     } catch (error) {
       toast({
         title: 'Could not remove abandoned upload',
@@ -189,62 +212,24 @@ export function useBlogFeaturedImageUpload({
     // into one DELETE call so a long session cannot trip the shared
     // per-minute delete budget one upload at a time.
     const keepPaths = draftReferencedMediaPaths(draft);
-    // A new import that reuses a path the in-flight batch is deleting
-    // aborts it first: the batch would otherwise remove active-draft
-    // media. The aborted entries stay tracked through the batch's
-    // catch, so a later import that drops them deletes them then.
-    const inflight = inflightBatchRef.current;
-    if (inflight && [...inflight.paths].some((path) => keepPaths.has(path))) {
-      inflight.controller.abort();
-      inflightBatchRef.current = null;
-    }
+    // A reuse revives staged results back into tracking, trimmed
+    // to their kept paths; staged originals stay put, since the
+    // flush filters by live keeps and never double-deletes.
     const tracked = settledUploadsRef.current;
+    for (const result of pendingDeletesRef.current) {
+      const kept = retainKeptUploadPaths(result, keepPaths);
+      if (kept !== null) tracked.push(kept);
+    }
     if (tracked.length === 0) return;
     const retained: UploadResult[] = [];
-    const droppedPaths: string[] = [];
-    const droppedResults: UploadResult[] = [];
     for (const result of tracked) {
       const kept = retainKeptUploadPaths(result, keepPaths);
       if (kept !== null) retained.push(kept);
-      const unreferenced = unreferencedUploadPaths(result, keepPaths);
-      if (unreferenced.length > 0) {
-        droppedPaths.push(...unreferenced);
-        droppedResults.push(result);
+      if (unreferencedUploadPaths(result, keepPaths).length > 0) {
+        pendingDeletesRef.current.push(result);
       }
     }
     settledUploadsRef.current = retained;
-    if (droppedPaths.length === 0) return;
-    const [path, ...variantPaths] = [...new Set(droppedPaths)];
-    const controller = new AbortController();
-    const batch = {
-      controller,
-      paths: new Set([path, ...variantPaths]),
-    };
-    inflightBatchRef.current = batch;
-    void (async () => {
-      try {
-        await deleteUpload({ path, variantPaths, signal: controller.signal });
-      } catch (error) {
-        // The batch is all-or-nothing: preserve the contributing
-        // results so the next import retries them instead of
-        // leaking the abandoned objects. An abort is intentional —
-        // the next import reuses the paths — so it stays silent.
-        settledUploadsRef.current.push(...droppedResults);
-        const aborted = error instanceof Error && error.name === 'AbortError';
-        if (!aborted) {
-          toast({
-            title: 'Could not remove replaced upload',
-            description:
-              error instanceof Error ? error.message : 'Unknown error',
-            variant: 'destructive',
-          });
-        }
-      } finally {
-        if (inflightBatchRef.current === batch) {
-          inflightBatchRef.current = null;
-        }
-      }
-    })();
   };
 
   return {

@@ -114,7 +114,7 @@ it('deletes a settled inline upload when an accepted import replaces it', async 
     new Response(JSON.stringify({ success: true }), { status: 200 })
   );
   fetchWithCsrf.mockClear();
-  render(<BlogEditorClient mode="create" />);
+  const { unmount } = render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload inline' }));
   await waitFor(() => expect(fetchWithCsrf).toHaveBeenCalled());
   await act(async () => {});
@@ -124,7 +124,8 @@ it('deletes a settled inline upload when an accepted import replaces it', async 
   );
   // The inline upload settled before the import, so pending guards no
   // longer cover it: the discarded body strands the persisted file
-  // unless the import deletes it.
+  // unless the staged delete flushes on unmount.
+  unmount();
   await waitFor(() =>
     expect(fetchWithCsrf).toHaveBeenCalledWith(
       '/api/admin/blog/upload',
@@ -166,7 +167,7 @@ it('retains a settled upload embedded in the imported article body', async () =>
     });
   });
   vi.spyOn(window, 'confirm').mockReturnValue(true);
-  render(<BlogEditorClient mode="create" />);
+  const { unmount } = render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
   await waitFor(() =>
     expect(screen.getByLabelText('Featured image')).toHaveTextContent(
@@ -188,6 +189,7 @@ it('retains a settled upload embedded in the imported article body', async () =>
   await waitFor(() =>
     expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
   );
+  unmount();
   await waitFor(() =>
     expect(
       fetchWithCsrf.mock.calls.filter(
@@ -224,6 +226,28 @@ it('drops hidden paragraphs from the imported article', async () => {
   );
   // The editor drops input classes, so a concealed paragraph would
   // surface on mount: the import removes hidden content instead.
+  expect(screen.getByLabelText('Article')).toHaveTextContent('Visible article');
+  expect(screen.getByLabelText('Article')).not.toHaveTextContent('Draft note');
+});
+
+it.each([
+  ['invisible'],
+  ['text-transparent'],
+])('drops %s paragraphs from the imported article', async (concealed) => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<BlogEditorClient mode="create" />);
+  const concealedHandoff = {
+    ...handoff,
+    content_html: `<p class="${concealed}">Draft note</p><p>Visible article</p>`,
+  };
+  fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+    target: {
+      files: [new File([JSON.stringify(concealedHandoff)], 'handoff.json')],
+    },
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
+  );
   expect(screen.getByLabelText('Article')).toHaveTextContent('Visible article');
   expect(screen.getByLabelText('Article')).not.toHaveTextContent('Draft note');
 });

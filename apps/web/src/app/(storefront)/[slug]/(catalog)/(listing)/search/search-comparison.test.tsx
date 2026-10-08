@@ -294,3 +294,41 @@ it('keeps a saved base match from adopting re-filtered live option ids', () => {
   expect(href).not.toContain('variant_id=');
   expect(href).not.toContain('offer_id=');
 });
+
+it('suppresses parent specs for variant matches and keeps them otherwise', () => {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one' },
+    {
+      id: '2',
+      name: 'Two',
+      slug: 'two',
+      matchVariantId: 'variant-128',
+    },
+  ];
+  mocks.facts.mockReturnValue({
+    products: [
+      {
+        id: '1',
+        name: 'One',
+        slug: 'one',
+        price: 200,
+        product_key_specs: { storage: '256 GB' },
+      },
+      {
+        id: '2',
+        name: 'Two',
+        slug: 'two',
+        price: 300,
+        product_key_specs: { storage: '256 GB' },
+      },
+    ],
+    pending: false,
+    error: false,
+  });
+  render(<SearchComparisonTray products={[]} pathPrefix="" merchantId="m1" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  // The plain entry shows refreshed parent specs; the variant-matched
+  // entry renders Unknown instead of unverified parent values.
+  expect(screen.getByText('storage: 256 GB')).toBeTruthy();
+  expect(screen.getByText('storage: Unknown')).toBeTruthy();
+});

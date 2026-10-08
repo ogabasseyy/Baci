@@ -109,6 +109,38 @@ describe('cart-stock helpers', () => {
     });
   });
 
+  it('falls back to legacy stock when stock_quantity is zero', async () => {
+    const single = jest.fn().mockResolvedValue({
+      data: { stock_quantity: 0, stock: 5, manage_stock: null },
+      error: null,
+    });
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single }) }),
+    });
+
+    await expect(checkStock('product-1', 2)).resolves.toEqual({
+      available: true,
+      currentStock: 5,
+      requestedQuantity: 2,
+    });
+  });
+
+  it('prefers stock_quantity over legacy stock when positive', async () => {
+    const single = jest.fn().mockResolvedValue({
+      data: { stock_quantity: 3, stock: 5, manage_stock: null },
+      error: null,
+    });
+    (supabase.from as jest.Mock).mockReturnValue({
+      select: () => ({ eq: () => ({ single }) }),
+    });
+
+    await expect(checkStock('product-1', 2)).resolves.toEqual({
+      available: true,
+      currentStock: 3,
+      requestedQuantity: 2,
+    });
+  });
+
   it('bypasses stock checks only for explicitly unmanaged products', async () => {
     const single = jest.fn().mockResolvedValue({
       data: { stock_quantity: 0, manage_stock: false },

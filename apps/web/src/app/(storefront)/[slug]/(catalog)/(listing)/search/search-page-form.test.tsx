@@ -82,18 +82,20 @@ it('shows catalog suggestions beside the focused input and hides them on blur', 
   expect(screen.queryByRole('link', { name: 'Used iphone' })).toBeNull();
 });
 
-it('keeps the requested red outline specific to Ogabassey', () => {
-  const props = {
-    action: '/search',
-    pathPrefix: '',
-    defaultQuery: 'phone',
-    currency: 'NGN',
-  };
-  const { rerender } = render(<SearchPageForm {...props} />);
-  expect(screen.getByRole('searchbox')).toHaveClass('border-store-primary');
-  rerender(<SearchPageForm {...props} redOutline />);
+it('themes the search outline from the merchant palette', () => {
+  // The outline follows the per-merchant primary token (Ogabassey's brand
+  // red included) instead of a fixed Tailwind red, so dark themes and
+  // palette changes keep a correctly branded, legible field.
+  render(
+    <SearchPageForm
+      action="/search"
+      pathPrefix=""
+      defaultQuery="phone"
+      currency="NGN"
+    />
+  );
   expect(screen.getByRole('searchbox')).toHaveClass(
-    'border-red-600',
-    'focus:border-red-600'
+    'border-store-primary',
+    'focus:border-store-primary'
   );
 });

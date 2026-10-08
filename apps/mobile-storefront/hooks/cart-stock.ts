@@ -78,7 +78,7 @@ export async function checkStock(
 
   const { data, error } = await supabase
     .from('products')
-    .select('stock_quantity, manage_stock')
+    .select('stock_quantity, stock, manage_stock')
     .eq('id', productId)
     .single();
 
@@ -104,7 +104,14 @@ export async function checkStock(
     };
   }
 
-  const currentStock = data?.stock_quantity ?? 0;
+  // Mirror the refined-search/PDP effective-stock fallback: a zero
+  // stock_quantity with a positive legacy stock column still sells.
+  const trackedQuantity = data?.stock_quantity ?? 0;
+  const legacyQuantity = data?.stock ?? 0;
+  const currentStock =
+    trackedQuantity === 0 && legacyQuantity > 0
+      ? legacyQuantity
+      : trackedQuantity;
   return {
     available: currentStock >= requestedQuantity,
     currentStock,

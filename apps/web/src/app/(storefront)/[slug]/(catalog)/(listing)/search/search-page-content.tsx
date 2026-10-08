@@ -163,7 +163,6 @@ export async function SearchPageContent({
                   process.env.STOREFRONT_SEARCH_ASSIST_ENABLED === 'true' &&
                   merchant.slug === getConfiguredAgenticMerchantSlug()
                 }
-                redOutline={merchant.slug === 'ogabassey'}
                 refinements={refinements}
                 suggestionProducts={
                   !searchFailed && merchant.slug === 'ogabassey'

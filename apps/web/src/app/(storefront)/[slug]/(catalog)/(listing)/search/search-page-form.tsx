@@ -25,7 +25,6 @@ interface SearchPageFormProps {
   currency: string;
   refinements?: SearchRefinements;
   suggestionProducts?: SearchSuggestionProduct[];
-  redOutline?: boolean;
   assistEnabled?: boolean;
 }
 
@@ -36,7 +35,6 @@ export function SearchPageForm({
   currency,
   refinements,
   suggestionProducts = [],
-  redOutline = false,
   assistEnabled = false,
 }: SearchPageFormProps) {
   const draft = useSearchQueryDraft();
@@ -114,7 +112,7 @@ export function SearchPageForm({
             setQuery(event.target.value);
             setError(null);
           }}
-          className={`min-w-0 flex-1 rounded-xl border-2 ${redOutline ? 'border-red-600 focus:border-red-600' : 'border-store-primary focus:border-store-primary'} bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:outline-hidden`}
+          className="min-w-0 flex-1 rounded-xl border-2 border-store-primary bg-store-background px-4 py-2.5 text-sm text-store-background-text placeholder:text-store-background-text/40 focus:border-store-primary focus:outline-hidden"
         />
         <button
           type="submit"

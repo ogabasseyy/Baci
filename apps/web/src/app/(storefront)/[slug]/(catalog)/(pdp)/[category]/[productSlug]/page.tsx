@@ -60,6 +60,7 @@ import {
   getCachedProductRoutePrimaryImage,
 } from './category-product-lcp-projection';
 import { buildCategoryProductMetadata } from './category-product-metadata';
+import { serializeRedirectSearchParams } from './category-product-redirect-query';
 import {
   type CategoryProductRouteControl,
   getProductRouteControl,
@@ -197,17 +198,7 @@ function getRedirectTargetPath(
   const productPath = getProductUrl(product);
   const base = `${getCategoryProductBasePath(storeSlug)}${productPath}`;
   if (!searchParams) return base as `/${string}`;
-  // Canonical redirects fix the path only: carry the query string so a
-  // saved match selection (variant/offer/base-match) survives. Array
-  // values append individually; undefined values are dropped.
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams)) {
-    if (value === undefined) continue;
-    for (const entry of Array.isArray(value) ? value : [value]) {
-      query.append(key, entry);
-    }
-  }
-  const serialized = query.toString();
+  const serialized = serializeRedirectSearchParams(searchParams);
   return (serialized ? `${base}?${serialized}` : base) as `/${string}`;
 }
 

@@ -130,16 +130,33 @@ export function SearchComparisonTray({
   const rows = buildComparisonRows(
     compareItems.map((snapshot) => {
       const product = current.get(String(snapshot.id));
+      // Exact-variant matches carry parent-basis specs the refresh never
+      // verifies (a 128 GB match must not show the parent's 256 GB), so
+      // suppress them and let the cells render Unknown, mirroring the
+      // native comparison flow. Offer and base matches keep parent specs.
+      // The compared basis is authoritative, matching the PDP-link logic
+      // below: snapshot metadata wins, live matches serve legacy rows.
+      const snapshotHasMatchMetadata = Boolean(
+        snapshot.matchVariantId ||
+          snapshot.matchOfferId ||
+          snapshot.matchCondition
+      );
+      const specVariantId = snapshotHasMatchMetadata
+        ? snapshot.matchVariantId
+        : matches.get(String(snapshot.id))?.variantId;
+      const hasVariantMatch = Boolean(specVariantId);
       return {
         id: String(snapshot.id),
-        specifications: Object.fromEntries(
-          Object.entries(product?.product_key_specs ?? {})
-            .filter(
-              ([, value]) =>
-                typeof value === 'string' || typeof value === 'number'
-            )
-            .map(([key, value]) => [key, String(value)])
-        ),
+        specifications: hasVariantMatch
+          ? {}
+          : Object.fromEntries(
+              Object.entries(product?.product_key_specs ?? {})
+                .filter(
+                  ([, value]) =>
+                    typeof value === 'string' || typeof value === 'number'
+                )
+                .map(([key, value]) => [key, String(value)])
+            ),
       };
     })
   );

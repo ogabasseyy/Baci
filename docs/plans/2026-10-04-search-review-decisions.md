@@ -414,3 +414,12 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-115 (P2) FIXED: migration 20261008200000 adds a 129-capped non-anchor variant count <= 128 to the parent CTE (32fdad8d…), mirroring the snapshot's variants_truncated predicate. Zero options → candidates/facets/compare-refresh all treat the product as unavailable (verified: candidates requires matched IS NOT NULL; compare hook maps empty to unavailable). Probe: 129 → 0 rows, 128 + 50 anchors → 128.
 - CX-116 (P2) FIXED: migration 20261008210000 adds normalize_request_contact_key (email → lowercase, else digits) and uses it in 24h dedup + per-contact budget (6b2e3ec6…); stored spelling untouched. Probe: key mapping exact, punctuation-variant dedup, 3-across-spellings then reject, email case retained. verify-sql.mjs extended with the same probes (delivered 5 → 8) and now also applies M3 (needed is_platform_admin stub column).
 - All 3 registered in the 3 registries; registry + inventory tests green. PR body manifest updated to 26.
+
+## Round 60 (Codex 3 P1 + 1 P2 on 890ba99 — all fixed; Muse clean)
+
+- CX-117 (P1) FIXED: native cart-stock check selected only stock_quantity, so legacy rows (NULL manage_stock, qty 0, positive stock) rolled back add-to-cart while search/PDP sold them. Now selects stock and applies the same effective-stock fallback. Tests: fallback + precedence (7/7).
+- CX-118 (P1) FIXED: redirect query serialization extracted from the category PDP page into category-product-redirect-query.ts (+ 4-case colocated test); page 787 → 778 lines. Page suite still 86/86.
+- CX-119 (P2) FIXED: web comparison tray suppresses parent key_specs for variant matches (snapshot-authoritative basis, legacy live fallback), mirroring native; cells render Unknown. Offer/base matches keep specs. Tray test added.
+- CX-120 (P1) FIXED: redOutline (Ogabassey brand red) replaced by the per-merchant border-store-primary token; prop removed from form + caller, test rewritten to the themed contract.
+- Muse on 890ba99: no highs; 2 lows both adjudicated repeats (AI assist tenant spend is dev-gated; intake rotation PR-disclosed).
+- CI inventory regen + pin (page extraction moved the tree).

@@ -62,12 +62,18 @@ export class GuestCartStore {
     // or eviction of the same file.
     const file = path.join(this.directory, `${token}.json`);
     return runExclusive(file, async () => {
+      let raw: string;
       try {
-        const stored = storedCartSchema.parse(
-          JSON.parse(await readFile(file, 'utf8'))
-        );
-        return stored.expires_at > Date.now();
+        raw = await readFile(file, 'utf8');
       } catch {
+        return false;
+      }
+      try {
+        return storedCartSchema.parse(JSON.parse(raw)).expires_at > Date.now();
+      } catch {
+        // Unusable bytes would pin a capacity slot until the hourly
+        // janitor; reclaim them like a read does.
+        await unlink(file).catch(() => undefined);
         return false;
       }
     });
@@ -94,6 +100,13 @@ export class GuestCartStore {
     };
     const file = path.join(this.directory, `${cartToken}.json`);
     const queueKey = token ? file : this.directory;
+    if (!token) {
+      // A new cart starts empty, so its merged lines are known without
+      // I/O: validate before queueing so a slow catalog lookup never
+      // stalls other creators behind the shared directory lock. Rejected
+      // lines still never reach eviction, which stays inside the queue.
+      await validate([guestCartLineSchema.parse(normalizedLine)]);
+    }
     return runExclusive(queueKey, async () => {
         await mkdir(this.directory, { recursive: true, mode: 0o700 });
         let stored: z.infer<typeof storedCartSchema>;
@@ -116,9 +129,11 @@ export class GuestCartStore {
             : [guestCartLineSchema.parse(normalizedLine)]),
         ];
         if (items.length > 20) throw new Error('Guest cart is full');
-        // Validate before any eviction: a rejected line must never cost
-        // another shopper's live cart.
-        await validate(items);
+        // Token-bound updates merge with the stored cart under its own
+        // per-file queue, so they validate here; creations validated
+        // above, before queueing. Either way a rejected line never
+        // reaches eviction to cost another shopper's live cart.
+        if (token) await validate(items);
         await admitGuestCartWrite(this.directory, !token);
         if (token && items.length === 0) {
           // The last line was removed: delete the file instead of persisting

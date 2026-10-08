@@ -50,6 +50,9 @@ it('reports token liveness for live, expired, corrupt, and unknown carts', async
   const corruptToken = 'f'.repeat(64);
   await writeFile(path.join(directory, `${corruptToken}.json`), 'not-json');
   await expect(instance.hasToken(corruptToken)).resolves.toBe(false);
+  await expect(
+    readFile(path.join(directory, `${corruptToken}.json`), 'utf8')
+  ).rejects.toThrow();
 });
 
 it('serializes eviction with in-flight updates instead of racing them', async () => {
@@ -264,4 +267,27 @@ it('deletes the cart file when the last line is removed', async () => {
       async () => {}
     )
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
+});
+
+it('validates creations without holding the global creation lock', async () => {
+  const { instance } = await store();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const slow = instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    () => gate
+  );
+  const fast = await instance.update(
+    undefined,
+    { product_id: other, quantity: 1 },
+    async () => {}
+  );
+  expect(fast.items).toEqual([{ product_id: other, quantity: 1 }]);
+  release();
+  await expect(slow).resolves.toMatchObject({
+    items: [{ product_id: id, quantity: 1 }],
+  });
 });

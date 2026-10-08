@@ -105,3 +105,16 @@ it('caps anonymous cart creation per caller while token updates stay unlimited',
     expect(update.structuredContent.items).toEqual([{ product_id: id, quantity: 2 }]);
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
+it('passes product unavailability through instead of returning a generic failure', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-unavailable-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: false, product_unavailable: true } });
+    const result = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ success: false, product_unavailable: true, product_id: id });
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -62,14 +62,15 @@ export async function recoverExpiredAdd(
     // same incomplete recovery, same failure instead of a partial merge.
     if (content?.cart_expired === true)
       throw new Error('Guest cart recovery did not complete; retry the add.');
-    // Only an explicit variant-selection failure is skippable: the product
-    // genuinely cannot be restored without option selection. Every other
+    // Only explicitly unrestorable lines are skippable: variant selection
+    // needs option choices and a dead product is gone. Every other
     // failure shape (full cart, transient merchant/catalog/filesystem
     // error, unexpected token) is generic, so abort and preserve local
     // state instead of merging a partial cart.
     if (
       content?.success === false &&
-      content.requires_variant_selection === true
+      (content.requires_variant_selection === true ||
+        content.product_unavailable === true)
     )
       continue;
     throw new Error('Guest cart recovery did not complete; retry the add.');

@@ -74,6 +74,28 @@ it('rejects when a replay fails generically instead of dropping the line', async
   expect(callTool).toHaveBeenCalledTimes(2);
 });
 
+it('skips unavailable survivors and resolves with the last good replay', async () => {
+  const dead = {
+    structuredContent: {
+      success: false,
+      product_unavailable: true,
+      product_id: second.id,
+    },
+  };
+  const third = { ...second, id: '33333333-3333-4333-8333-333333333333' };
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(success(fresh, [product.id]))
+    .mockResolvedValueOnce(dead)
+    .mockResolvedValueOnce(success(fresh, [product.id, third.id]));
+  const result = await recoverExpiredAdd(callTool, product.id, 1, [
+    { product: second, quantity: 1 },
+    { product: third, quantity: 1 },
+  ]);
+  expect(result).toEqual(success(fresh, [product.id, third.id]));
+  expect(callTool).toHaveBeenCalledTimes(3);
+});
+
 it('skips stale survivors and resolves with the last good replay', async () => {
   const stale = {
     structuredContent: {

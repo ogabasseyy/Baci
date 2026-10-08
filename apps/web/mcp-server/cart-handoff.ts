@@ -49,6 +49,12 @@ export async function prepareCartHandoff({
     };
   }
 
+  // A missing row arrives as PGRST116; any other query failure is
+  // transient and must stay untyped so callers fail closed instead of
+  // treating it as a dead product.
+  let transient =
+    Boolean(productError) &&
+    (productError as { code?: string }).code !== 'PGRST116';
   let unavailable = Boolean(productError || !product);
   if (product?.manage_stock === true) {
     let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&
@@ -60,6 +66,7 @@ export async function prepareCartHandoff({
         .eq('merchant_id', merchantId)
         .eq('product_id', productId)
         .eq('status', 'active');
+      if (offersError) transient = true;
       optionAvailable ||= !offersError && Boolean(offers?.some((offer) => Number(offer.stock_quantity ?? 0) >= quantity));
     }
     if (product.has_variants === true) {
@@ -67,6 +74,7 @@ export async function prepareCartHandoff({
         'get_storefront_product_variants',
         { p_product_ids: [productId] }
       );
+      if (variantsError) transient = true;
       optionAvailable ||= !variantsError && Array.isArray(variants) &&
         variants.some((variant) =>
           variant.product_id === productId &&
@@ -84,7 +92,9 @@ export async function prepareCartHandoff({
   if (unavailable || !product) {
     return guardCartHandoffResult({
       content: [{ type: 'text', text: 'This product is not currently available to add to cart.' }],
-      structuredContent: { success: false },
+      structuredContent: transient
+        ? { success: false }
+        : { success: false, product_unavailable: true },
     });
   }
 

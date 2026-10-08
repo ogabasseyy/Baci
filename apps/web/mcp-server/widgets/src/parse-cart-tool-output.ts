@@ -6,6 +6,7 @@ export interface CartToolOutput {
   quota_exceeded?: true;
   retry_after_seconds?: number;
   requires_variant_selection?: true;
+  product_unavailable?: true;
 }
 
 const CART_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -40,6 +41,7 @@ export function parseCartToolOutput(value: unknown): CartToolOutput | undefined 
       failure.retry_after_seconds = Math.floor(value.retry_after_seconds);
     if (value.requires_variant_selection === true)
       failure.requires_variant_selection = true;
+    if (value.product_unavailable === true) failure.product_unavailable = true;
     return failure;
   }
   const { cart_token, cart_url } = value;

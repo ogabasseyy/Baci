@@ -92,6 +92,7 @@ export const mcpToolOutputSchemas = {
       .optional()
       .describe('Opening this URL adds the item on Ogabassey.'),
     requires_variant_selection: z.literal(true).optional(),
+    product_unavailable: z.literal(true).optional(),
     product_url: z.string().optional(),
     message: z.string().optional(),
   }),

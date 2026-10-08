@@ -56,6 +56,12 @@ describe('parseCartToolOutput', () => {
     ).toEqual({ success: false, requires_variant_selection: true });
   });
 
+  it('preserves the unavailable-product flag for replay triage', () => {
+    expect(
+      parseCartToolOutput({ success: false, product_unavailable: true })
+    ).toEqual({ success: false, product_unavailable: true });
+  });
+
   it('rejects non-record and non-boolean payloads', () => {
     for (const value of [null, undefined, 'bad', 42, [], { success: 'yes' }])
       expect(parseCartToolOutput(value)).toBeUndefined();

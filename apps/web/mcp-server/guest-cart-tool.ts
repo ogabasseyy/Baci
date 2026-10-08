@@ -22,6 +22,13 @@ class VariantSelectionRequired extends Error {
   }
 }
 
+class ProductUnavailable extends Error {
+  constructor(readonly productId: string) {
+    super('Product unavailable');
+    this.name = 'ProductUnavailable';
+  }
+}
+
 export function registerGuestCartTool(
   server: McpServer,
   options: {
@@ -110,6 +117,9 @@ export function registerGuestCartTool(
                   handoff.product_url
                 );
               }
+              if (handoff?.product_unavailable === true) {
+                throw new ProductUnavailable(args.product_id);
+              }
               throw new Error(
                 'A product is unavailable or requires option selection'
               );
@@ -164,6 +174,24 @@ export function registerGuestCartTool(
               requires_variant_selection: true,
               product_id: error.productId,
               product_url: error.productUrl,
+            },
+          };
+        }
+        // A dead product is typed (not a tool error) so expired-cart
+        // recovery can skip that survivor instead of aborting the whole
+        // replay; transient failures stay generic and abort instead.
+        if (error instanceof ProductUnavailable) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'This product is no longer available and was removed from the guest cart.',
+              },
+            ],
+            structuredContent: {
+              success: false,
+              product_unavailable: true,
+              product_id: error.productId,
             },
           };
         }

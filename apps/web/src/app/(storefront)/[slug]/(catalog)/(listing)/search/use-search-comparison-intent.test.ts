@@ -17,7 +17,7 @@ describe('useSearchComparisonIntent', () => {
 
   it('activates within a session', () => {
     const wrapper = ({ children }: { children: ReactNode }) =>
-      createElement(SearchComparisonSession, { scope: 'iphone' }, children);
+      createElement(SearchComparisonSession, { scope: 'iphone', children });
     const { result } = renderHook(() => useSearchComparisonIntent(), {
       wrapper,
     });

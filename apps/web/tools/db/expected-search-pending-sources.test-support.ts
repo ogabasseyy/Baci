@@ -74,4 +74,9 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008090000_search_processor_filter_bounds.sql',
     sha256: 'c30fbf34615df3d224b68d5451dd214fe62bfa98d34265dd9f4a65c0e2caf864',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008100000_search_candidate_query_length_first.sql',
+    sha256: 'ef1241eb3477524a659d5104b6871a2ded344c8d69633f130d77ed6fc8278b97',
+  },
 ] as const;

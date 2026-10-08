@@ -6,10 +6,16 @@ jest.mock('@/lib/piggyvest-primary-savings-recovery', () => ({
   recoverPiggyvestPrimarySavings: (...args: unknown[]) => mockRecover(...args),
 }));
 const mockUseCapability = jest.fn();
-jest.mock('@/lib/piggyvest-primary-capability', () => ({
-  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
-    mockUseCapability(...args),
-}));
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return {
+    ...actual,
+    usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockUseCapability(...args),
+  };
+});
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const input = () => ({
   merchantId,
@@ -69,6 +75,29 @@ it('ignores a previous goal response after switching goals', async () => {
   );
   expect(props.operationRef.current).toBeNull();
   expect(props.setAmount).not.toHaveBeenCalled();
+});
+it('allows legacy contribution when savings is off and no operation is bound', async () => {
+  mockRecover.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  const props = input();
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  expect(result.current.error).toBe(false);
+  expect(props.operationRef.current).toBeNull();
+});
+it('keeps blocking when savings is unreachable while an operation is bound', async () => {
+  const props = input();
+  mockRecover.mockImplementationOnce(async () => {
+    props.operationRef.current = 'existing-operation';
+    throw Object.assign(new Error('unavailable'), {
+      code: 'SAVINGS_NOT_READY',
+    });
+  });
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.ready).toBe(false);
+  expect(props.operationRef.current).toBe('existing-operation');
 });
 it('stays ready without recovering when the server reports unconfigured', async () => {
   mockUseCapability.mockReturnValue(false);

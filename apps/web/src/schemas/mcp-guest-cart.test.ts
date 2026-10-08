@@ -179,6 +179,19 @@ describe('mcpGuestCartOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('parses an emptied-cart payload without stripping its flag', () => {
+    const result = mcpGuestCartOutputSchema.safeParse({
+      success: true,
+      cart_token: 'a'.repeat(64),
+      items: [],
+      expires_at: new Date().toISOString(),
+      cart_url: 'https://ogabassey.com/cart',
+      cart_emptied: true,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({ cart_emptied: true });
+  });
+
   it('parses an unavailable-product payload without stripping its flag', () => {
     const result = mcpGuestCartOutputSchema.safeParse({
       success: false,

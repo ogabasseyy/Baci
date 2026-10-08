@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {
+  GuestCartStorageUnavailableError,
   directoryNotWritableError,
   isPermissionError,
   refuseSecondWriter,
@@ -86,7 +87,7 @@ export function acquireWriterLock(directory: string): void {
       throw error;
     }
     if (mode & 0o077)
-      throw new Error(
+      throw new GuestCartStorageUnavailableError(
         `Guest-cart directory ${directory} is accessible by other users (mode ${mode.toString(8)}); restrict it to owner-only access (chmod 700 ${directory}).`
       );
   }

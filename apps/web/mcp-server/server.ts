@@ -17,7 +17,7 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { prepareCartHandoff } from './cart-handoff';
-import { GuestCartStore } from './guest-cart-store';
+import { createGuestCartStoreOrDegraded } from './guest-cart-store';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { createGracefulShutdown } from './server-shutdown';
@@ -80,7 +80,7 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
-const guestCartStore = new GuestCartStore(path.resolve(process.env.MCP_GUEST_CART_DIRECTORY || path.join(homedir(), '.local/share/baci/mcp-guest-carts')));
+const guestCartStore = createGuestCartStoreOrDegraded(path.resolve(process.env.MCP_GUEST_CART_DIRECTORY || path.join(homedir(), '.local/share/baci/mcp-guest-carts')));
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;

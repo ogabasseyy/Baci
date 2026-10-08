@@ -9,6 +9,17 @@ export function isPermissionError(error: unknown): boolean {
   return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
 }
 
+// Typed storage-config failures (unwritable directory, wrong mode): the
+// server degrades the guest-cart tool on these while keeping catalog tools
+// up. A second-writer refusal is NOT one of these — that deployment bug
+// still crashes the process.
+export class GuestCartStorageUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GuestCartStorageUnavailableError';
+  }
+}
+
 // A named volume mounted over the image directory does not inherit the
 // image-layer chown when the volume predates it (or was created root-owned),
 // so refuse with remediation instead of a raw errno: every guest-cart call
@@ -16,12 +27,12 @@ export function isPermissionError(error: unknown): boolean {
 export function directoryNotWritableError(
   target: string,
   cause: unknown
-): Error {
+): GuestCartStorageUnavailableError {
   const uid =
     typeof process.getuid === 'function' ? process.getuid() : 'unknown';
   const detail =
     cause instanceof Error ? cause.message : 'unknown filesystem error';
-  return new Error(
+  return new GuestCartStorageUnavailableError(
     `Guest-cart directory is not writable: ${target} (server uid ${uid}, ${detail}). ` +
       `Make the cart volume writable by the server user, e.g. chown the mounted directory to uid ${uid}.`
   );

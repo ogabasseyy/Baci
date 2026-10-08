@@ -19,7 +19,7 @@ export const guestCartHandoffSchema = z
   );
 
 export const MCP_GUEST_CART_DESCRIPTION =
-  'Save a simple product in a persistent Ogabassey guest cart without signing in. Supply the cart_token returned previously to continue the same cart. Use quantity 0 to remove a product. quantity is the desired total for this product, not an increment, so retries with the same cart token are safe. Products requiring options must be selected on the website. Open cart_url to transfer all items to the website for guest checkout; account creation is optional there. Guest carts expire seven days after the last update.';
+  'Save a simple product in a persistent Ogabassey guest cart without signing in. Supply the cart_token returned previously to continue the same cart. Use quantity 0 to remove a product. quantity is the desired total for this product, not an increment, so retries with the same cart token are safe. Products requiring options must be selected on the website. Open cart_url to transfer all items to the website for guest checkout; account creation is optional there. Guest carts expire seven days after the last update. A response reporting cart_emptied retires its token: drop it and omit cart_token on the next call to start a new cart. Website transfer only adds items; it never removes lines or decreases website quantities, so decreases made here never shrink an already-transferred website cart.';
 export const mcpGuestCartInputSchema = z
   .object({
     product_id: z
@@ -61,6 +61,7 @@ export const mcpGuestCartOutputSchema = z
     requires_variant_selection: z.literal(true).optional(),
     product_unavailable: z.literal(true).optional(),
     cart_expired: z.literal(true).optional(),
+    cart_emptied: z.literal(true).optional(),
     quota_exceeded: z.literal(true).optional(),
     retry_after_seconds: z.number().int().min(0).optional(),
     product_id: z.string().uuid().optional(),

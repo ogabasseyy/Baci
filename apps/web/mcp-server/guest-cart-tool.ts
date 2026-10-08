@@ -10,7 +10,11 @@ import {
   consumeGuestCartCreation,
   peekGuestCartCreation,
 } from './guest-cart-creation-quota';
-import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
+import {
+  GuestCartExpiredError,
+  type GuestCartStoreLike,
+} from './guest-cart-store';
+import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
 
 class VariantSelectionRequired extends Error {
   constructor(
@@ -32,7 +36,7 @@ class ProductUnavailable extends Error {
 export function registerGuestCartTool(
   server: McpServer,
   options: {
-    store: GuestCartStore;
+    store: GuestCartStoreLike;
     supabase: SupabaseClient;
     getMerchantId: () => Promise<string | null>;
     formatPrice: (price: number) => string;
@@ -109,9 +113,15 @@ export function registerGuestCartTool(
         }
         const merchantId = await options.getMerchantId();
         if (!merchantId) throw new Error('Store unavailable');
+        // UUID text is case-insensitive but the variants check compares
+        // exact strings, so canonicalize before validation the way the
+        // store does before persistence: an uppercase ID must select
+        // options like its lowercase twin instead of missing every
+        // variant and reporting the product unavailable.
+        const productId = args.product_id.toLowerCase();
         const cart = await options.store.update(
           args.cart_token,
-          args,
+          { ...args, product_id: productId },
           async () => {
             // Only the changed line is validated: a stale survivor must not
             // freeze unrelated adds. Stale lines stay visible in the chat
@@ -121,7 +131,7 @@ export function registerGuestCartTool(
             const result = await prepareCartHandoff({
               supabase: options.supabase,
               merchantId,
-              productId: args.product_id,
+              productId,
               quantity: args.quantity,
               formatPrice: options.formatPrice,
             });
@@ -132,12 +142,12 @@ export function registerGuestCartTool(
                 typeof handoff?.product_url === 'string'
               ) {
                 throw new VariantSelectionRequired(
-                  args.product_id,
+                  productId,
                   handoff.product_url
                 );
               }
               if (handoff?.product_unavailable === true) {
-                throw new ProductUnavailable(args.product_id);
+                throw new ProductUnavailable(productId);
               }
               throw new Error(
                 'A product is unavailable or requires option selection'
@@ -215,6 +225,21 @@ export function registerGuestCartTool(
               product_unavailable: true,
               product_id: error.productId,
             },
+          };
+        }
+        // Cart storage is misconfigured, so the server registered this tool
+        // degraded to keep catalog tools up: say the outage plainly instead
+        // of sending the model chasing product availability.
+        if (error instanceof GuestCartStorageUnavailableError) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: 'Ogabassey guest carts are temporarily unavailable. Catalog search and product pages still work; try the guest cart again later.',
+              },
+            ],
+            structuredContent: { success: false },
           };
         }
         return {

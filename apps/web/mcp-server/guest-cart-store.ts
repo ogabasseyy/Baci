@@ -18,6 +18,7 @@ import {
   runExclusive,
 } from './guest-cart-admission';
 import { acquireWriterLock } from './guest-cart-writer-lock';
+import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
 
 export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
 export class GuestCartExpiredError extends Error {
@@ -46,6 +47,37 @@ async function readStoredCart(file: string) {
     // the caller recovers, and reclaim the capacity slot it would pin.
     await unlink(file).catch(() => undefined);
     throw new GuestCartExpiredError();
+  }
+}
+
+/** Minimal store surface the guest-cart tool needs, satisfied by the file store and the degraded stub below. */
+export interface GuestCartStoreLike {
+  update: GuestCartStore['update'];
+  hasToken: GuestCartStore['hasToken'];
+}
+
+/**
+ * Builds the file store, or a stub that fails every call when cart storage
+ * is misconfigured (unwritable directory, wrong mode): catalog tools stay up
+ * while guest-cart calls report the outage. A second-writer refusal is a
+ * deployment bug, not misconfiguration, so it still throws and crashes.
+ */
+export function createGuestCartStoreOrDegraded(
+  directory: string
+): GuestCartStoreLike {
+  try {
+    return new GuestCartStore(directory);
+  } catch (error) {
+    if (!(error instanceof GuestCartStorageUnavailableError)) throw error;
+    console.error(
+      `[guest-cart] cart storage unavailable, guest carts degraded: ${error.message}`
+    );
+    return {
+      update: async () => {
+        throw error;
+      },
+      hasToken: async () => false,
+    };
   }
 }
 
@@ -141,12 +173,14 @@ export class GuestCartStore {
         if (token && items.length === 0) {
           // The last line was removed: delete the file instead of persisting
           // an empty cart, so emptied carts stop pinning capacity slots. The
-          // token dangles; its next use reports expired and recovers.
+          // token is retired: clients must drop it (its next use reports
+          // expired), so say so explicitly instead of returning it bare.
           await unlink(file).catch(() => undefined);
           return {
             cart_token: token,
             items,
             expires_at: new Date().toISOString(),
+            cart_emptied: true,
           };
         }
         // Sliding expiry: a successful write extends the cart seven days so

@@ -8,6 +8,7 @@ import { registerGuestCartTool } from './guest-cart-tool';
 import { GUEST_CART_QUOTA_MAX_CREATIONS as MAX_QUOTA } from './guest-cart-creation-quota';
 import { GuestCartStore } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
+import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
 const validate = vi.hoisted(() => vi.fn());
 vi.mock('./cart-handoff', () => ({ prepareCartHandoff: validate }));
 const id = '11111111-1111-4111-8111-111111111111';
@@ -147,10 +148,49 @@ it('advertises the bare cart page when the last line is removed', async () => {
     registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
     validate.mockResolvedValue({ structuredContent: { success: true } });
     const created = await handler?.({ product_id: id, quantity: 1 }) as { structuredContent: { cart_token: string } };
-    const emptied = await handler?.({ product_id: id, quantity: 0, cart_token: created.structuredContent.cart_token }) as { structuredContent: { success: boolean; cart_url: string } };
+    const emptied = await handler?.({ product_id: id, quantity: 0, cart_token: created.structuredContent.cart_token }) as { structuredContent: { success: boolean; cart_url: string; cart_emptied: boolean; items: unknown[] } };
     expect(emptied.structuredContent.success).toBe(true);
     expect(emptied.structuredContent.cart_url).toBe('https://ogabassey.com/cart');
+    expect(emptied.structuredContent.cart_emptied).toBe(true);
+    expect(emptied.structuredContent.items).toEqual([]);
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});
+it('canonicalizes product IDs before availability validation', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-canon-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    validate.mockClear();
+    const upper = id.toUpperCase();
+    const result = await handler?.({ product_id: upper, quantity: 1 }) as { structuredContent: { success: boolean; items: unknown[] } };
+    expect(result.structuredContent.success).toBe(true);
+    expect(result.structuredContent.items).toEqual([{ product_id: id, quantity: 1 }]);
+    expect(validate.mock.calls).toHaveLength(1);
+    expect(validate.mock.calls[0][0].productId).toBe(id);
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});
+it('reports degraded storage plainly instead of a generic failure', async () => {
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  registerGuestCartTool({ registerTool } as unknown as McpServer, {
+    store: {
+      update: async () => { throw new GuestCartStorageUnavailableError('Guest-cart directory is not writable: /x'); },
+      hasToken: async () => false,
+    },
+    supabase: {} as SupabaseClient,
+    getMerchantId: async () => 'merchant',
+    formatPrice: String,
+  });
+  validate.mockResolvedValue({ structuredContent: { success: true } });
+  const result = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toEqual({ success: false });
+  expect(JSON.stringify(result)).toContain('temporarily unavailable');
+  expect(JSON.stringify(result)).not.toContain('product availability');
 });
 it('rejects cross-field violations before quota or database work', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-shape-'));

@@ -89,6 +89,28 @@ describe('initializeRedvaultPaystackCheckout', () => {
     });
   });
 
+  it('passes preserveAttempts through to the checkout initializer', async () => {
+    mocks.createAttemptClient.mockReturnValue({ reserve: vi.fn() });
+    mocks.initializeCheckout.mockResolvedValue({
+      authorizationUrl: null,
+      status: 'pending_reconciliation',
+    });
+
+    await initializeRedvaultPaystackCheckout({
+      customerEmail: 'customer@example.test',
+      fallbackClient: { rpc: vi.fn() } as never,
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      preserveAttempts: true,
+      redirectUrl: 'https://shop.example.test/checkout/success',
+      userId: null,
+    });
+
+    expect(mocks.initializeCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ preserveAttempts: true, orderId: 'order-1' })
+    );
+  });
+
   it('collects the frozen GIGL retention in the split charge', async () => {
     mocks.createAttemptClient.mockReturnValue({ reserve: vi.fn() });
     mocks.initializeCheckout.mockImplementation(async ({ provider }) =>

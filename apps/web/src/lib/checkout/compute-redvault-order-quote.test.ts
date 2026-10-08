@@ -37,10 +37,10 @@ const input = {
 };
 describe('computeRedvaultOrderQuote', () => {
   it.each([
-    [199999.99, 2000000],
+    [199999.99, 1000000],
     [200000, 1000000],
     [200000.01, 1000000],
-  ])('uses authoritative eligible price %s to select the tier', async (price, discount) => {
+  ])('applies fixed 5%% using authoritative eligible price %s', async (price, discount) => {
     const quote = await computeRedvaultOrderQuote({
       ...input,
       supabase: client({ price }) as never,
@@ -55,12 +55,22 @@ describe('computeRedvaultOrderQuote', () => {
       ...input,
       supabase: client() as never,
     });
-    expect(quote.discountKobo).toBe(1000000);
+    expect(quote.discountKobo).toBe(500000);
     expect(quote.lines[0]).toMatchObject({
       condition: 'new',
       unitPriceKobo: 10000000,
       vatRateBp: 750,
     });
+  });
+  it('quotes an eligible NGN 100 item at exactly 500 kobo discount', async () => {
+    const quote = await computeRedvaultOrderQuote({
+      ...input,
+      supabase: client({ price: 100 }) as never,
+    });
+
+    expect(quote.eligibleSubtotalKobo).toBe(10_000);
+    expect(quote.discountKobo).toBe(500);
+    expect(quote.lines[0].unitDiscountsKobo).toEqual([500]);
   });
   it('trims catalog brand and name to match snapshot binding', async () => {
     const quote = await computeRedvaultOrderQuote({

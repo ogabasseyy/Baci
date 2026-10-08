@@ -65,6 +65,31 @@ it('maps a volume that becomes unwritable at runtime to a typed storage outage',
     await chmod(directory, 0o755);
   }
 });
+it('fails removal instead of retiring a cart whose file cannot be deleted', async () => {
+  // Root bypasses permission bits, so the probe is meaningless there.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
+  const { directory, instance } = await store();
+  const created = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  try {
+    await chmod(directory, 0o555);
+    // The directory rejects the deletion: the removal must surface the
+    // storage outage, not report cart_emptied with a live stale file
+    // behind the retired token.
+    await expect(
+      instance.update(
+        created.cart_token,
+        { product_id: id, quantity: 0 },
+        async () => {}
+      )
+    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
+  } finally {
+    await chmod(directory, 0o755);
+  }
+});
 it('rejects a 21st line with a typed full-cart error', async () => {
   const { instance } = await store();
   const line = (index: number) => ({

@@ -12,12 +12,14 @@ import { recoverCartAdd } from '../recover-expired-add';
 import { buildReviewCartUrl } from '../review-cart-url';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
+import { useCartSyncNotice } from './use-cart-sync-notice';
 import { useWidgetState } from './use-widget-state';
 
 export function useCartHandoff() {
   const [widgetState, setWidgetState] =
     useWidgetState<WidgetState>(createDefaultState);
   const [cartError, setCartError] = useState<string | null>(null);
+  const { cartNotice, syncCartNotice } = useCartSyncNotice();
   const handoffRequestId = useRef(0);
   const busy = useRef(false);
   const [isSavingCart, setIsSavingCart] = useState(false);
@@ -177,6 +179,7 @@ export function useCartHandoff() {
         cartUrl,
         cartToken: content.cart_token,
       }));
+      syncCartNotice(lines, widgetState?.cart ?? [], product.id);
     } catch {
       pendingTab?.close();
       if (requestId !== handoffRequestId.current) return;
@@ -263,6 +266,7 @@ export function useCartHandoff() {
         cartToken:
           remaining.length === 0 ? undefined : previous?.cartToken,
       }));
+      syncCartNotice(remaining, widgetState?.cart ?? [], productId);
     } catch {
       setCartError('Could not remove this item. Please try again.');
     } finally {
@@ -284,6 +288,7 @@ export function useCartHandoff() {
   return {
     cart,
     cartError,
+    cartNotice,
     isSavingCart,
     handleAddToCart,
     handleRemoveItem,

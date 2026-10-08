@@ -163,4 +163,40 @@ describe('Ogabassey cart handoff widget', () => {
     expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com/products/phone-one' });
     expect(screen.getByText('Phone Two', { selector: '.cart-item-name' })).toBeTruthy();
   });
+
+  it('surfaces cart lines added outside the widget instead of hiding them', async () => {
+    const url = new URL('https://ogabassey.com/cart');
+    url.searchParams.set(
+      'guest_cart',
+      JSON.stringify([
+        { product_id: products[0].id, quantity: 1 },
+        { product_id: products[1].id, quantity: 1 },
+      ])
+    );
+    window.openai = {
+      toolOutput: { products },
+      setWidgetState: vi.fn(),
+      callTool: vi.fn().mockResolvedValue({
+        structuredContent: {
+          success: true,
+          cart_url: url.toString(),
+          cart_token: 'a'.repeat(64),
+          items: [
+            { product_id: products[0].id, quantity: 1 },
+            { product_id: products[1].id, quantity: 1 },
+          ],
+          expires_at: '2026-10-14T00:00:00.000Z',
+        },
+      }),
+    };
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Add to cart' })[0]);
+    });
+
+    expect(screen.getByText(/another chat/)).toBeTruthy();
+    expect(screen.getByText('Phone One', { selector: '.cart-item-name' })).toBeTruthy();
+    expect(screen.queryByText('Phone Two', { selector: '.cart-item-name' })).toBeNull();
+  });
 });

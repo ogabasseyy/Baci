@@ -222,7 +222,15 @@ export class GuestCartStore {
           // an empty cart, so emptied carts stop pinning capacity slots. The
           // token is retired: clients must drop it (its next use reports
           // expired), so say so explicitly instead of returning it bare.
-          await unlink(file).catch(() => undefined);
+          // Only a missing file is benign (already reclaimed): any other
+          // deletion failure must surface as a storage outage, not success
+          // with a live stale cart behind the retired token.
+          try {
+            await unlink(file);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT')
+              throw guestCartWriteError(file, error);
+          }
           return {
             cart_token: token,
             items,

@@ -30,7 +30,9 @@ export function registerCartLinkTools(
         };
       }
 
-      return prepareCartHandoff({
+      // Await (not bare-return) so a handoff rejection lands in the
+      // catch below instead of escaping as a thrown tool error.
+      return await prepareCartHandoff({
         supabase: options.supabase,
         merchantId,
         productId: args.product_id,

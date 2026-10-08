@@ -31,7 +31,7 @@ export function App() {
             ? 'No verified match was found among the checked products. Other products may match.'
             : 'No verified products match this search.'
           : toolOutput.message || 'View the tool response in the conversation.';
-  const { cart, cartError, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
+  const { cart, cartError, cartNotice, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
     useCartHandoff();
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export function App() {
     const observer = new ResizeObserver(reportHeight);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [displayMode, toolOutput, cart, cartError]);
+  }, [displayMode, toolOutput, cart, cartError, cartNotice]);
 
   return (
     <div
@@ -127,6 +127,11 @@ export function App() {
       {cartError && (
         <p role="alert" className="cart-error">
           {cartError}
+        </p>
+      )}
+      {cartNotice && (
+        <p role="status" className="coverage-notice">
+          {cartNotice}
         </p>
       )}
 

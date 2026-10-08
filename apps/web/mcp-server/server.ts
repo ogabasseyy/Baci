@@ -84,6 +84,12 @@ const OGABASSEY_SLUG = 'ogabassey';
 // Preserve GIG authentication and station caches across stateless MCP requests.
 const gigl = new GiglProvider();
 const guestCartStore = createGuestCartStoreOrDegraded(path.resolve(process.env.MCP_GUEST_CART_DIRECTORY || path.join(homedir(), '.local/share/baci/mcp-guest-carts')));
+// Fallible startup validation (required env, public origin) runs below and
+// exits without the graceful path: release the freshly claimed lock on any
+// exit so a corrected restart never waits out the 30s stale window. The
+// release is idempotent (entries are deleted), so the graceful shutdown
+// below stays the primary path and this only covers early exits.
+process.on('exit', releaseWriterLocks);
 const PORT = Number(process.env.MCP_PORT ?? 8787);
 const MCP_PATH = '/mcp';
 const MCP_PUBLIC_ORIGIN = new URL(process.env.MCP_PUBLIC_ORIGIN?.trim() || 'https://mcp.ogabassey.com').origin;

@@ -145,10 +145,11 @@ export async function fetchAndAddCartItems({
             description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,
             variant: 'destructive',
           });
-          // Guest option lines stay retryable: the shopper chooses options on
-          // the PDP and the retained handoff line merges on a later visit
-          // instead of being silently consumed here.
-          if (guestQuantities) rejectedIds.push(product.id);
+          // Option lines stay retryable on both the guest_cart and legacy
+          // item_id paths: the shopper chooses options on the PDP and the
+          // retained handoff line merges on a later visit instead of being
+          // silently consumed here.
+          rejectedIds.push(product.id);
           continue;
         }
         const effectiveStock = Number(product.stock_quantity ?? 0);

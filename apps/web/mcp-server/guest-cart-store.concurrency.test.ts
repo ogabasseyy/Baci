@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdtemp,
   readFile,
   readdir,
@@ -187,4 +188,19 @@ it('reclaims expired carts before evicting live ones at capacity', async () => {
     entry.endsWith('.json')
   );
   expect(remaining).toHaveLength(2000);
+});
+
+it('refuses an unwritable cart directory with remediation instead of a raw errno', async () => {
+  // Root bypasses permission bits, so the probe is meaningless there.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-lock-perms-'));
+  try {
+    await chmod(directory, 0o555);
+    expect(() => new GuestCartStore(directory)).toThrow(
+      /not writable.*chown the mounted directory/
+    );
+  } finally {
+    await chmod(directory, 0o755);
+    await rm(directory, { recursive: true, force: true });
+  }
 });

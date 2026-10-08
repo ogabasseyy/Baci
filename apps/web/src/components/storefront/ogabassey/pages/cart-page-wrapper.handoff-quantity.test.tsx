@@ -217,7 +217,7 @@ describe('CartPageWrapper', () => {
   });
 
   it.each(['has_variants', 'has_condition_offers'])(
-    'rejects direct Google Shopping handoff for %s products', async (optionFlag) => {
+    'rejects but retains direct Google Shopping handoff for %s products', async (optionFlag) => {
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams('item_id=55555555-5555-4555-8555-555555555555&qty=1') as ReturnType<typeof useSearchParams>
       );
@@ -233,13 +233,17 @@ describe('CartPageWrapper', () => {
         expect.objectContaining({ title: 'Choose product options', variant: 'destructive' })
       ));
       expect(addToCart).not.toHaveBeenCalled();
-      await waitFor(() => expect(window.location.search).toBe(''));
+      // The option line stays retryable like its guest_cart counterpart
+      // instead of being silently consumed.
+      await waitFor(() => expect(window.location.search).toBe(
+        '?item_id=55555555-5555-4555-8555-555555555555&qty=1'
+      ));
       unmount();
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams(window.location.search) as ReturnType<typeof useSearchParams>
       );
       render(<CartPageWrapper merchantId="merchant-1" />);
-      expect(mockToast).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(2));
     }
   );
 

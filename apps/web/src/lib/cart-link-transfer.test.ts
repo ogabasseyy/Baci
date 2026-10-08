@@ -183,3 +183,26 @@ it('signals when the website cart keeps higher quantities than the chat cart', a
     expect.objectContaining({ title: 'Kept your cart quantities' })
   );
 });
+
+it('retains variant lines as retryable on the legacy item_id path', async () => {
+  setupProductsQuery({
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        has_variants: true,
+      },
+    ],
+    error: null,
+  });
+  const options = setupOptions({ itemIds: added });
+  window.history.pushState({}, '', `/cart?item_id=${added}&qty=1`);
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).not.toHaveBeenCalled();
+  expect(new URLSearchParams(window.location.search).get('item_id')).toBe(
+    added
+  );
+});

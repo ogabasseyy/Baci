@@ -323,6 +323,10 @@ The single MCP writer persists carts under `~/.local/share/baci/mcp-guest-carts`
 across releases. The production Compose file mounts the stable named volume
 `ogabassey-mcp-guest-carts` at `/var/lib/baci/guest-carts`, owned by the container
 node user; do not remove this volume during normal promotion or rollback.
+A fresh named volume inherits the image's node ownership, but a volume that
+predates the image layer (or was created root-owned) stays root-owned: if the
+server refuses to start with "Guest-cart directory is not writable", chown the
+mounted directory to the container node uid (1000) and restart.
 Guest carts expire seven days after the last update, so active conversations
 never expire mid-use; idle carts are reclaimed. Only the changed line is revalidated on
 each call, so a stale line never blocks unrelated updates; the website

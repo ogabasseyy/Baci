@@ -21,13 +21,46 @@ const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
 const heldWriterLocks = new Set<string>();
 
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+}
+
+// A named volume mounted over the image directory does not inherit the
+// image-layer chown when the volume predates it (or was created root-owned),
+// so refuse with remediation instead of a raw errno: every guest-cart call
+// would otherwise fail at runtime with a generic error.
+function directoryNotWritableError(target: string, cause: unknown): Error {
+  const uid =
+    typeof process.getuid === 'function' ? process.getuid() : 'unknown';
+  const detail =
+    cause instanceof Error ? cause.message : 'unknown filesystem error';
+  return new Error(
+    `Guest-cart directory is not writable: ${target} (server uid ${uid}, ${detail}). ` +
+      `Make the cart volume writable by the server user, e.g. chown the mounted directory to uid ${uid}.`
+  );
+}
+
 export function acquireWriterLock(directory: string): void {
-  mkdirSync(directory, { recursive: true });
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch (error) {
+    if (isPermissionError(error))
+      throw directoryNotWritableError(directory, error);
+    throw error;
+  }
   const key = realpathSync(directory);
   if (heldWriterLocks.has(key)) return;
   const lockPath = path.join(directory, WRITER_LOCK_FILE);
   const claim = () => {
-    const fd = openSync(lockPath, 'wx', 0o600);
+    let fd: number;
+    try {
+      fd = openSync(lockPath, 'wx', 0o600);
+    } catch (error) {
+      if (isPermissionError(error))
+        throw directoryNotWritableError(lockPath, error);
+      throw error;
+    }
     try {
       writeSync(
         fd,

@@ -185,14 +185,63 @@ $$;
 DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
+  blocked_order jsonb;
+  blocked_quote jsonb;
+  caught text;
+BEGIN
+  -- Disabled, never-bound policy WITHOUT the staging flag (unconfigured
+  -- production shape): the pilot account's order must fail closed at
+  -- binding instead of passing through.
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  blocked_order := jsonb_set(
+    jsonb_set(fixture.order_input, '{items,0,product_id}', to_jsonb(fixture.ordinary_product_id::text)),
+    '{checkout_idempotency_key}', '"redvault-private-pilot-full-schema-staging-disabled-negative"'
+  );
+  blocked_quote := jsonb_set(
+    jsonb_set(fixture.quote, '{lines,0,productId}', to_jsonb(fixture.ordinary_product_id::text)),
+    '{groups,0,productId}', to_jsonb(fixture.ordinary_product_id::text)
+  );
+  PERFORM pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
+    'sub', '70261bce-d358-45a4-9ede-8b9d71fb3bd9',
+    'role', 'authenticated',
+    'storefront_redvault_customer_email', 'redvault-pilot-full-schema@example.test',
+    'storefront_order_context', 'route',
+    'storefront_order_merchant_id', '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+  )::text, true);
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    PERFORM public.create_storefront_redvault_order(
+      blocked_order, blocked_quote,
+      public.redvault_private_pilot_test_route_proof(blocked_order, blocked_quote)
+    );
+    RAISE EXCEPTION 'unstaged disabled pilot order unexpectedly succeeded';
+  EXCEPTION WHEN OTHERS THEN
+    caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_order_binding_mismatch' THEN
+    RAISE EXCEPTION 'unstaged disabled pilot order wrong result:%', COALESCE(caught, 'accepted');
+  END IF;
+  RESET ROLE;
+END;
+$$;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
   staging_order jsonb;
   staging_quote jsonb;
   created record;
   reserved record;
 BEGIN
-  -- Disabled, never-bound policy (staging_test_mode shape): the pilot
-  -- account's ordinary order must pass binding and reserve through the
-  -- normal path instead of raising pilot errors by identity alone.
+  -- Disabled, never-bound policy WITH the staging flag (staging_test_mode
+  -- shape): the pilot account's ordinary order must pass binding and
+  -- reserve through the normal path instead of raising pilot errors by
+  -- identity alone.
+  PERFORM private.enable_uba_redvault_staging_passthrough();
+  IF NOT EXISTS (
+    SELECT 1 FROM private.uba_redvault_live_pilot_policy
+    WHERE singleton AND staging_test_mode IS TRUE
+  ) THEN RAISE EXCEPTION 'staging flag was not enabled'; END IF;
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
   staging_order := jsonb_set(
     jsonb_set(fixture.order_input, '{items,0,product_id}', to_jsonb(fixture.ordinary_product_id::text)),
@@ -233,6 +282,11 @@ BEGIN
     RAISE EXCEPTION 'staging_passthrough_reservation_unexpected';
   END IF;
   RESET ROLE;
+  PERFORM private.disable_uba_redvault_staging_passthrough();
+  IF NOT EXISTS (
+    SELECT 1 FROM private.uba_redvault_live_pilot_policy
+    WHERE singleton AND staging_test_mode IS FALSE
+  ) THEN RAISE EXCEPTION 'staging flag was not disabled'; END IF;
 END;
 $$;
 

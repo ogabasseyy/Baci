@@ -67,6 +67,13 @@ export interface StorefrontCustomerSession {
   /** Derived convenience flag — false while `loading`. */
   isAuthenticated: boolean;
   /**
+   * Resolved Supabase account id from the auth subscription (seeded by its
+   * INITIAL_SESSION replay, cleared on sign-out). Null for guests and before
+   * the first auth event. Lets consumers tell account switches apart from
+   * same-user token refreshes, which reuse the same id.
+   */
+  accountId: string | null;
+  /**
    * Resolves with the authoritative signed-in value, awaiting the in-flight
    * session fetch when the status is still `loading`. Callers on the real-money
    * checkout path MUST await this before choosing wallet-funded vs legacy DVA so
@@ -99,6 +106,7 @@ export function useStorefrontCustomerSession(
     merchantSlug ? 'loading' : 'guest'
   );
   const [revision, setRevision] = useState(0);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const revisionRef = useRef(0);
   // Latest in-flight (or settled) resolution promise. A checkout submit that
   // fires before the session resolves awaits THIS instead of racing the initial
@@ -147,7 +155,10 @@ export function useStorefrontCustomerSession(
     const supabase = createClient();
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // INITIAL_SESSION is the subscribe-time replay: it seeds the account
+      // identity (possibly null) without a duplicate session fetch.
+      setAccountId(session?.user?.id ?? null);
       if (event === 'INITIAL_SESSION') {
         return;
       }
@@ -166,6 +177,7 @@ export function useStorefrontCustomerSession(
     status,
     revision,
     isAuthenticated: status === 'authenticated',
+    accountId,
     waitForResolvedAuthenticated,
   };
 }

@@ -249,4 +249,28 @@ describe('useCheckoutPaymentExecution', () => {
     expect(submission?.payment.redvaultAvailable).toBe(true);
     expect(result.current.redvaultAvailable).toBe(true);
   });
+
+  it('passes pilot fee blockers from assurance, shipping, and gift state', () => {
+    const options = createOptions();
+    options.cart.checkoutCart = [
+      { id: 'line-1', quantity: 1, hasAssurance: true },
+    ] as never;
+    options.delivery = {
+      session: { quotes: { selected: { price: 1500 } } },
+      giftWrappingCost: 500,
+    } as never;
+
+    renderHook(() => useCheckoutPaymentExecution(options));
+    const hook = vi.mocked(useCheckoutRedvaultAvailability);
+
+    expect(hook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pilotFeeBlockers: {
+          hasAssurance: true,
+          shippingFee: 1500,
+          giftWrappingCost: 500,
+        },
+      })
+    );
+  });
 });

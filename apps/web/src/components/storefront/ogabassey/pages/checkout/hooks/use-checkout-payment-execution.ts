@@ -115,6 +115,13 @@ export function useCheckoutPaymentExecution({
       merchantId: identity.merchantId,
       merchantSlug: identity.merchantSlug,
       userId: form.user?.id,
+      pilotFeeBlockers: {
+        hasAssurance: cart.checkoutCart.some(
+          (item) => item.hasAssurance === true
+        ),
+        shippingFee: delivery.session.quotes.selected?.price ?? 0,
+        giftWrappingCost: delivery.giftWrappingCost,
+      },
     });
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {

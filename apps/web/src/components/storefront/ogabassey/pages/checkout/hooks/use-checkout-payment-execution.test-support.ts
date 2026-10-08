@@ -72,7 +72,10 @@ export function createOptions(
       clearCart: vi.fn(),
       removeFromCart: vi.fn(),
     },
-    delivery: {} as unknown as CheckoutPaymentExecutionOptions['delivery'],
+    delivery: {
+      session: { quotes: { selected: undefined } },
+      giftWrappingCost: 0,
+    } as unknown as CheckoutPaymentExecutionOptions['delivery'],
     merchant: null,
     navigation: {
       flow: {

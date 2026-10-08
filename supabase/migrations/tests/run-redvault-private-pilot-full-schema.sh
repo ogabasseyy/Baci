@@ -26,6 +26,7 @@ preserve_binding="$root/supabase/migrations/20261006190000_uba_redvault_pilot_pr
 preserved_shipment_savings="$root/supabase/migrations/20261006190100_uba_redvault_pilot_preserved_binding_shipment_savings.sql"
 staging_passthrough="$root/supabase/migrations/20261006190200_uba_redvault_pilot_disabled_policy_staging_passthrough.sql"
 item_fulfillment="$root/supabase/migrations/20261006190300_uba_redvault_pilot_item_fulfillment_guard.sql"
+db_staging_mode="$root/supabase/migrations/20261006190400_uba_redvault_pilot_db_staging_mode.sql"
 test_sql="$root/supabase/migrations/tests/redvault-private-pilot-full-schema.sql"
 
 if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != true ]; then
@@ -55,6 +56,6 @@ SQL
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey IMMEDIATE;\n'
   cat "$activation_lock"
   printf 'SET CONSTRAINTS private.uba_redvault_live_pilot_policy_reserved_attempt_id_fkey DEFERRED;\n'
-  cat "$reserve_lock_order" "$savings_and_expiry" "$preserve_binding" "$preserved_shipment_savings" "$staging_passthrough" "$item_fulfillment"
+  cat "$reserve_lock_order" "$savings_and_expiry" "$preserve_binding" "$preserved_shipment_savings" "$staging_passthrough" "$item_fulfillment" "$db_staging_mode"
   sed '1{/^BEGIN;$/d;}' "$test_sql"
 } | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres

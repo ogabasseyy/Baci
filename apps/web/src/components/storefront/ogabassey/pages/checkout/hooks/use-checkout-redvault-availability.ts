@@ -14,11 +14,17 @@ export function useCheckoutRedvaultAvailability({
   merchantId,
   merchantSlug,
   userId,
+  pilotFeeBlockers,
 }: {
   cartItems: readonly CheckoutCartItem[];
   merchantId?: string | null;
   merchantSlug?: string;
   userId?: string | null;
+  pilotFeeBlockers?: {
+    hasAssurance: boolean;
+    shippingFee: number;
+    giftWrappingCost: number;
+  };
 }) {
   const storefrontCustomerSession = useStorefrontCustomerSession(merchantSlug);
   const pilotCartProductId =
@@ -30,15 +36,29 @@ export function useCheckoutRedvaultAvailability({
   const cartFingerprint = cartItems
     .map(({ id, quantity, variantId }) => `${id}:${quantity}:${variantId ?? ''}`)
     .join('|');
+  // The preserved identity keys on the resolved storefront account, not just
+  // the (possibly absent) auth-context user: this route mounts no AuthProvider,
+  // so without the session account id a sign-out or account switch would keep
+  // serving the previous account's positive result while revalidating.
   const availability = useRedvaultPaymentAvailability(
     merchantId,
     pilotCartProductId,
     `${userId ?? ''}:${storefrontCustomerSession.status}:${storefrontCustomerSession.revision}:${cartFingerprint}`,
-    `${userId ?? ''}:${cartFingerprint}`
+    `${userId ?? ''}:${storefrontCustomerSession.accountId ?? ''}:${cartFingerprint}`
   );
+  // The live pilot requires zero fees, but general REDVAULT does not: hide
+  // the method only when the resolved reason is the pilot and a fee applies.
+  // Toggling a fee re-renders into (or out of) this override immediately.
+  const pilotFeeBlocked =
+    availability.reason === 'private_live_pilot' &&
+    (pilotFeeBlockers?.hasAssurance === true ||
+      (pilotFeeBlockers?.shippingFee ?? 0) > 0 ||
+      (pilotFeeBlockers?.giftWrappingCost ?? 0) > 0);
 
   return {
-    availability,
+    availability: pilotFeeBlocked
+      ? { available: false, reason: 'unavailable' }
+      : availability,
     waitForResolvedAuthenticated:
       storefrontCustomerSession.waitForResolvedAuthenticated,
   };

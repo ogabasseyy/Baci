@@ -21,6 +21,7 @@ describe('useCheckoutRedvaultAvailability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseCustomerSession.mockReturnValue({
+      accountId: 'customer',
       revision: 4,
       status: 'authenticated',
       waitForResolvedAuthenticated,
@@ -46,7 +47,7 @@ describe('useCheckoutRedvaultAvailability', () => {
       'merchant',
       '11111111-1111-4111-8111-111111111111',
       'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:',
-      'customer:11111111-1111-4111-8111-111111111111:1:'
+      'customer:customer:11111111-1111-4111-8111-111111111111:1:'
     );
     expect(result.current.availability.available).toBe(true);
     expect(result.current.waitForResolvedAuthenticated).toBe(
@@ -58,6 +59,7 @@ describe('useCheckoutRedvaultAvailability', () => {
     const { rerender } = renderHook(
       ({ revision }: { revision: number }) => {
         mockUseCustomerSession.mockReturnValue({
+          accountId: 'customer',
           revision,
           status: 'authenticated',
           waitForResolvedAuthenticated,
@@ -83,8 +85,90 @@ describe('useCheckoutRedvaultAvailability', () => {
     expect(updatedKey).not.toBe(firstKey);
     // Same-user session churn refetches but keeps the stable identity, so
     // the last result stays served while revalidating.
-    expect(firstIdentity).toBe(':pilot-product:1:');
+    expect(firstIdentity).toBe(':customer:pilot-product:1:');
     expect(updatedIdentity).toBe(firstIdentity);
+  });
+
+  it('changes the stable identity when the session account changes', () => {
+    const { rerender } = renderHook(
+      ({ accountId }: { accountId: string | null }) => {
+        mockUseCustomerSession.mockReturnValue({
+          accountId,
+          revision: 8,
+          status: 'authenticated',
+          waitForResolvedAuthenticated,
+        });
+        return useCheckoutRedvaultAvailability({
+          cartItems: [{ id: 'pilot-product', quantity: 1 }],
+          merchantId: 'merchant',
+          merchantSlug: 'store',
+          userId: null,
+        });
+      },
+      { initialProps: { accountId: 'customer' as string | null } }
+    );
+
+    const firstIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
+    rerender({ accountId: null });
+    const updatedIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
+
+    expect(firstIdentity).toBe(':customer:pilot-product:1:');
+    expect(updatedIdentity).toBe('::pilot-product:1:');
+  });
+
+  it.each([
+    ['assurance', { hasAssurance: true, shippingFee: 0, giftWrappingCost: 0 }],
+    ['shipping', { hasAssurance: false, shippingFee: 1500, giftWrappingCost: 0 }],
+    ['gift wrapping', { hasAssurance: false, shippingFee: 0, giftWrappingCost: 500 }],
+  ])('hides a pilot result when %s applies', (_label, pilotFeeBlockers) => {
+    const { result } = renderHook(() =>
+      useCheckoutRedvaultAvailability({
+        cartItems: [{ id: 'pilot-product', quantity: 1 }],
+        merchantId: 'merchant',
+        merchantSlug: 'store',
+        pilotFeeBlockers,
+      })
+    );
+
+    expect(result.current.availability).toEqual({
+      available: false,
+      reason: 'unavailable',
+    });
+  });
+
+  it('keeps pilot results without fees and non-pilot results with fees', () => {
+    const pilotCart = [{ id: 'pilot-product', quantity: 1 }];
+    const fees = { hasAssurance: true, shippingFee: 1500, giftWrappingCost: 500 };
+
+    const pilot = renderHook(() =>
+      useCheckoutRedvaultAvailability({
+        cartItems: pilotCart,
+        merchantId: 'merchant',
+        merchantSlug: 'store',
+        pilotFeeBlockers: { hasAssurance: false, shippingFee: 0, giftWrappingCost: 0 },
+      })
+    );
+    expect(pilot.result.current.availability).toEqual({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+
+    mockUseAvailability.mockReturnValue({
+      available: true,
+      reason: 'staging_test_mode',
+    });
+    const staged = renderHook(() =>
+      useCheckoutRedvaultAvailability({
+        cartItems: pilotCart,
+        merchantId: 'merchant',
+        merchantSlug: 'store',
+        pilotFeeBlockers: fees,
+      })
+    );
+    expect(staged.result.current.availability).toEqual({
+      available: true,
+      reason: 'staging_test_mode',
+    });
   });
 
   it('omits product eligibility for multi-line, quantity-many, and variant carts', () => {

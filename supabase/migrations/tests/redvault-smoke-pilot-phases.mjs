@@ -227,6 +227,7 @@ export function runSmokePilotPhases({ migrations, sql }) {
     '20261006190100_uba_redvault_pilot_preserved_binding_shipment_savings.sql',
     '20261006190200_uba_redvault_pilot_disabled_policy_staging_passthrough.sql',
     '20261006190300_uba_redvault_pilot_item_fulfillment_guard.sql',
+    '20261006190400_uba_redvault_pilot_db_staging_mode.sql',
   ]) {
     sql(readFileSync(resolve(migrations, part), 'utf8'));
   }
@@ -262,6 +263,25 @@ export function runSmokePilotPhases({ migrations, sql }) {
     END IF;
     IF strpos(pg_get_functiondef('private.reject_redvault_item_mutation()'::regprocedure), 'uba_redvault_live_pilot_policy') = 0 THEN
       RAISE EXCEPTION 'pilot_item_fulfillment_carveout_missing';
+    END IF;
+    PERFORM private.enable_uba_redvault_staging_passthrough();
+    IF NOT EXISTS (
+      SELECT 1 FROM private.uba_redvault_live_pilot_policy
+      WHERE singleton AND staging_test_mode IS TRUE
+    ) THEN RAISE EXCEPTION 'pilot_staging_enable_missing'; END IF;
+    PERFORM private.disable_uba_redvault_staging_passthrough();
+    IF NOT EXISTS (
+      SELECT 1 FROM private.uba_redvault_live_pilot_policy
+      WHERE singleton AND staging_test_mode IS FALSE
+    ) THEN RAISE EXCEPTION 'pilot_staging_disable_missing'; END IF;
+    IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_order()'::regprocedure), 'staging_test_mode') = 0 THEN
+      RAISE EXCEPTION 'pilot_binding_staging_mode_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.assert_uba_redvault_private_pilot_active(uuid)'::regprocedure), 'staging_test_mode') = 0 THEN
+      RAISE EXCEPTION 'pilot_assert_staging_mode_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_attempt()'::regprocedure), 'staging_test_mode') = 0 THEN
+      RAISE EXCEPTION 'pilot_attempt_staging_mode_missing';
     END IF;
   END $$;`);
   process.stdout.write(

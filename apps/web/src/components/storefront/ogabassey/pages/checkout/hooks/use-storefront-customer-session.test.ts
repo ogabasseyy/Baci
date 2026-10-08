@@ -3,7 +3,10 @@ import type { AuthChangeEvent } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useStorefrontCustomerSession } from './use-storefront-customer-session';
 
-type AuthChangeHandler = (event: AuthChangeEvent) => void;
+type AuthChangeHandler = (
+  event: AuthChangeEvent,
+  session?: { user?: { id?: string } | null } | null
+) => void;
 
 // Captured `onAuthStateChange` handler so tests can emit the storefront login
 // signal (Supabase auth transition) deterministically — no timers, no polling.
@@ -21,8 +24,11 @@ vi.mock('@/lib/supabase/client', () => ({
   })),
 }));
 
-function emitAuthChange(event: AuthChangeEvent) {
-  authChangeHandler?.(event);
+function emitAuthChange(
+  event: AuthChangeEvent,
+  session?: { user?: { id?: string } | null } | null
+) {
+  authChangeHandler?.(event, session);
 }
 
 function stubFetch(response: { body: unknown; ok?: boolean }) {
@@ -306,6 +312,46 @@ describe('useStorefrontCustomerSession', () => {
       await expect(
         result.current.waitForResolvedAuthenticated()
       ).resolves.toBe(false);
+    });
+  });
+
+  describe('accountId', () => {
+    it('starts null, seeds from INITIAL_SESSION, and survives token refresh', async () => {
+      stubFetch({ body: { authenticated: true } });
+
+      const { result } = renderHook(() =>
+        useStorefrontCustomerSession('test-store')
+      );
+
+      expect(result.current.accountId).toBeNull();
+      act(() => {
+        emitAuthChange('INITIAL_SESSION', { user: { id: 'user-1' } });
+      });
+      expect(result.current.accountId).toBe('user-1');
+      act(() => {
+        emitAuthChange('TOKEN_REFRESHED', { user: { id: 'user-1' } });
+      });
+      expect(result.current.accountId).toBe('user-1');
+    });
+
+    it('tracks account switches and clears on sign-out', async () => {
+      stubFetch({ body: { authenticated: true } });
+
+      const { result } = renderHook(() =>
+        useStorefrontCustomerSession('test-store')
+      );
+
+      act(() => {
+        emitAuthChange('INITIAL_SESSION', { user: { id: 'user-1' } });
+      });
+      act(() => {
+        emitAuthChange('SIGNED_IN', { user: { id: 'user-2' } });
+      });
+      expect(result.current.accountId).toBe('user-2');
+      act(() => {
+        emitAuthChange('SIGNED_OUT', null);
+      });
+      expect(result.current.accountId).toBeNull();
     });
   });
 });

@@ -364,6 +364,12 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-103 (P2) FIXED: migration 20261008180000 excludes same-condition offers via a normalize_condition_for_match helper mirroring the TS normalizer. Probe: cheap same-condition + uk_used-alias offers dropped, different-condition kept, helper mapping exact. Registered (sha 2ed3088c…).
 - Follow-up noted: the established native comparison-refresh projection still emits same-condition offers — needs its own review (separate function/consumers, out of this finding's scope).
 
+## Round 53 (Muse 1 med + 2 low on 26fb9be936 — 1 fixed, 2 adjudicated; Codex pending)
+
+- Muse med intake-rotation: PR-disclosed repeat.
+- Muse LOW randomUUID FIXED: request ids now use createProductRequestId (randomUUID → getRandomValues v4 → Math.random v4), always emitting server-valid UUIDs. Regression test simulates undefined randomUUID and asserts v4 shape + sent status. The throw-recovery test still passes (throw path unchanged).
+- Muse low assist-budget: dev-gated (lines 24-28) + explicit flag; ceiling tightening is a pre-enablement product decision.
+
 - Muse low intake-oracle: repeat (accepted public-slug signal).
 - Muse med intake-rotation: PR-disclosed repeat.
 - Muse low assurance-disclosure: repeat — checkout quote itemization + invoice line (Round 42) and the rehydration opt-out test already answer both asks.

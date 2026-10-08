@@ -4,6 +4,37 @@ import {
   submitProductRequest,
 } from '@baci/shared/lib';
 import { useRef, useState } from 'react';
+
+/**
+ * Request idempotency id that survives non-secure contexts: randomUUID
+ * needs a secure context, but getRandomValues does not, and the server
+ * requires a valid v4 UUID either way.
+ */
+function createProductRequestId(): string {
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.randomUUID === 'function'
+  ) {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (
+    typeof crypto !== 'undefined' &&
+    typeof crypto.getRandomValues === 'function'
+  ) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 export function ProductRequest({
   query,
   merchantSlug,
@@ -25,12 +56,11 @@ export function ProductRequest({
     setPending(true);
     setError('');
     try {
-      // Id creation runs inside the guarded region: crypto.randomUUID is
-      // unavailable in non-secure contexts, and a throw here must clear
-      // pending via finally rather than wedge the form.
+      // Id creation runs inside the guarded region: a throw here must
+      // clear pending via finally rather than wedge the form.
       const key = JSON.stringify([product.trim(), contact.trim()]);
       if (key !== request.current.key)
-        request.current = { key, id: crypto.randomUUID() };
+        request.current = { key, id: createProductRequestId() };
       await submitProductRequest('/api/storefront/product-requests', {
         query: product,
         contact,

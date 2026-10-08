@@ -83,6 +83,37 @@ it('recovers when id generation throws instead of wedging pending', async () => 
     randomUUID.mockRestore();
   }
 });
+it('falls back to getRandomValues ids in non-secure contexts', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const descriptor = Object.getOwnPropertyDescriptor(crypto, 'randomUUID');
+  Object.defineProperty(crypto, 'randomUUID', {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    render(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Request this product' })
+    );
+    fireEvent.change(screen.getByLabelText('Email or phone number'), {
+      target: { value: 'shopper@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('Request sent')
+    );
+    expect(submitProductRequest).toHaveBeenCalledWith(
+      '/api/storefront/product-requests',
+      expect.objectContaining({
+        requestId: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+        ),
+      })
+    );
+  } finally {
+    if (descriptor) Object.defineProperty(crypto, 'randomUUID', descriptor);
+  }
+});
 it('shows a retry signal instead of a validation error on idempotency conflict', async () => {
   vi.mocked(submitProductRequest).mockRejectedValue(
     new ProductRequestSubmitError(409, 'conflict')

@@ -206,6 +206,22 @@ it('retains the operation through network error and recovers status from the act
   expect(mockClearCart).not.toHaveBeenCalled();
 });
 
+it('shows the quotable operation reference on the pending view', async () => {
+  mockFetchJson.mockResolvedValue({ ...response, status: 'custody_pending' });
+  render(<PaymentGatewayScreen />);
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  );
+  await waitFor(() =>
+    expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
+  );
+  expect(
+    screen.getByText(
+      'Reference: pvb-first-primary-22222222-2222-4222-8222-222222222222'
+    )
+  ).toBeOnTheScreen();
+});
+
 it('shows the processing indicator while the primary server check runs', async () => {
   let release!: (value: unknown) => void;
   const gate = new Promise((resolve) => {

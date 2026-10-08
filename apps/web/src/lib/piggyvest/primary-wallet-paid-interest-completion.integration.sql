@@ -68,6 +68,8 @@ SELECT integration_id,pg_temp.goal_id(20),id,'backfill-principal-goal',true FROM
 \if :{?without_primary_completion}
 \else
 \ir ../../../../../supabase/migrations/20261007181000_piggyvest_primary_paid_interest_completion.sql
+\ir ../../../../../supabase/migrations/20261008090000_piggyvest_primary_savings_reservation_customer.sql
+\ir ../../../../../supabase/migrations/20261008090300_piggyvest_primary_savings_reservation_capacity.sql
 \endif
 \if :{?without_primary_capacity}
 ALTER FUNCTION piggyvest_primary.reserve_savings(jsonb,jsonb) RENAME TO reserve_savings_capacity_wrapper_unused;
@@ -129,8 +131,12 @@ SELECT pg_temp.assert_true(piggyvest_primary.manage_savings(pg_temp.primary_scop
 SELECT pg_temp.assert_true(piggyvest_primary.reserve_savings(pg_temp.primary_scope(),jsonb_build_object(
   'goalId',pg_temp.goal_id(11),'operationId',pg_temp.goal_id(201),'amountKobo',2300))->>'status'='pending',
   'Exact remaining reservation replay does not debit or dispatch twice');
-SELECT pg_temp.assert_true(piggyvest_primary.reserve_savings(pg_temp.primary_scope(),jsonb_build_object(
-  'goalId',pg_temp.goal_id(12),'operationId',pg_temp.goal_id(202),'amountKobo',3000))->>'status'='claimed','Pre-payout transfer reserved');
+DO $$ DECLARE receipt jsonb; BEGIN
+  receipt:=piggyvest_primary.reserve_savings(pg_temp.primary_scope(),jsonb_build_object(
+    'goalId',pg_temp.goal_id(12),'operationId',pg_temp.goal_id(202),'amountKobo',3000));
+  IF receipt->>'status'<>'claimed' THEN RAISE EXCEPTION 'Pre-payout transfer reserved'; END IF;
+  IF receipt->'reservation'->>'providerCustomerId' IS DISTINCT FROM 'customer' THEN RAISE EXCEPTION 'reservation customer missing'; END IF;
+END $$;
 SELECT pg_temp.assert_true(piggyvest_primary.manage_savings(pg_temp.primary_scope(),pg_temp.goal_id(202),'dispatch'),'Pre-payout transfer dispatched');
 RESET SESSION AUTHORIZATION;
 SELECT pg_temp.assert_true((SELECT status='active' AND current_amount=100 FROM public.customer_savings_goals WHERE id=pg_temp.goal_id(11)),

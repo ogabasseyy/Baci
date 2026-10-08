@@ -133,4 +133,25 @@ describe('useCart - Validation', () => {
       quantity: 3,
     });
   });
+
+  it.each([
+    {
+      label: 'both identifiers',
+      options: { quizAwardId: 'award-1', quizVoucherToken: 'token-1' },
+    },
+    { label: 'award id only', options: { quizAwardId: 'award-2' } },
+    { label: 'token only', options: { quizVoucherToken: 'token-3' } },
+  ])('opts out voucher lines ($label) like native OR semantics', async ({
+    options,
+  }) => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <CartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </CartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct, 1, options));
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+  });
 });

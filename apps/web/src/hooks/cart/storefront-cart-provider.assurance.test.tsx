@@ -193,4 +193,21 @@ describe('StorefrontCartProvider', () => {
     );
     expect(result.current.cart[1].hasAssurance).toBe(true);
   });
+
+  it.each([
+    { label: 'award id only', options: { quizAwardId: 'award-3' } },
+    { label: 'token only', options: { quizVoucherToken: 'token-4' } },
+  ])('opts out single-identifier voucher lines ($label) like native OR semantics', async ({
+    options,
+  }) => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct, 1, options));
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+  });
 });

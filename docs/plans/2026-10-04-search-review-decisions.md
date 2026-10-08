@@ -399,3 +399,8 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 - CX-109 (P1) ALREADY FIXED: cart-store.ts extraction landed in eb21dfb22e (stores/cart-assurance-default.ts, 297 lines, guard green) before this review arrived. Reply + resolve only.
 - CX-110 (P2) FIXED: readValidStoredComparisonItems now dedupes hydrated rows by product id (first row wins) and slices to the newest COMPARISON_TRAY_CAPACITY entries, mirroring the live oldest-first eviction; the add path uses the same constant. New hydration test pins 6 stored rows (1 dup) → 4 newest unique. Provider suites 15/15; web lint/typecheck green; inventory pin untouched (1/1).
+- Rebase onto 9de815ba81 (behind-base hook): 6 inventory-refresh commits conflicted, all inventory-only → took new-main side and regenerated once via sanctioned CLI (568 rows, sha 3363cfa2…) + pin. (--source-sha takes the branch head, matching prior rounds.)
+
+## Round 58 (Muse 2 high on fa10389263 — both fixed; Codex pending)
+
+- Muse high voucher-AND (use-cart.tsx + provider) FIXED: all 4 assurance handoff sites used Boolean(quizAwardId && quizVoucherToken), so single-identifier voucher lines defaulted assurance ON on web while native (OR) forced opt-out. Changed to ||. Checkout pricing (build-order-items, sanitizer) intentionally keeps AND — widening the fee opt-out is fail-closed, while zeroing prices on partial ids would be a revenue decision; single-id lines now get no fee but full price (safe on both axes). Regression tests in both assurance suites (both/award-only/token-only → OFF); negative control: the 2 new provider tests fail on the && code. Suites 16/16 + use-cart 10/10; pin 1/1.

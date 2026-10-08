@@ -404,7 +404,7 @@ export function StorefrontCartProvider({
               smartCartProEnabled: enableSmartCartPro,
               merchantSlug: merchantSlugRef.current,
               hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId &&
+                normalizedOptions?.quizAwardId ||
                   normalizedOptions?.quizVoucherToken
               ),
             }
@@ -441,7 +441,7 @@ export function StorefrontCartProvider({
                 smartCartProEnabled: enableSmartCartPro,
                 merchantSlug: merchantSlugRef.current,
                 hasQuizVoucher: Boolean(
-                  normalizedOptions?.quizAwardId &&
+                  normalizedOptions?.quizAwardId ||
                     normalizedOptions?.quizVoucherToken
                 ),
               }

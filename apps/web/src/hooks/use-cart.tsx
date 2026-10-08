@@ -418,7 +418,7 @@ export const CartProvider = ({
               smartCartProEnabled: enableSmartCartPro,
               merchantSlug,
               hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId &&
+                normalizedOptions?.quizAwardId ||
                   normalizedOptions?.quizVoucherToken
               ),
             }
@@ -455,7 +455,7 @@ export const CartProvider = ({
               smartCartProEnabled: enableSmartCartPro,
               merchantSlug,
               hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId &&
+                normalizedOptions?.quizAwardId ||
                   normalizedOptions?.quizVoucherToken
               ),
             }

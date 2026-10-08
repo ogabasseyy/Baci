@@ -1,3 +1,42 @@
+-- Take the per-order payment advisory lock before the outermost admin-edit
+-- wrapper locks the order row, matching the lock order used by payment
+-- refresh and webhook RPCs (advisory, then row). Lives in this same
+-- migration as the date wrapper so no intermediate state ever exposes the
+-- inverted call chain.
+ALTER FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb)
+  RENAME TO update_admin_order_with_transaction_discount_metadata_without_payment_lock;
+REVOKE ALL ON FUNCTION public.update_admin_order_with_transaction_discount_metadata_without_payment_lock(uuid, jsonb)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.update_admin_order_with_transaction_discount_metadata(
+  p_order_id uuid,
+  p_payload jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0)
+  );
+
+  RETURN public.update_admin_order_with_transaction_discount_metadata_without_payment_lock(
+    p_order_id,
+    p_payload
+  );
+END;
+$$;
+
+ALTER FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb)
+  FROM PUBLIC, anon, service_role;
+GRANT EXECUTE ON FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb)
+  TO authenticated;
+
+COMMENT ON FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb)
+  IS 'Takes the per-order payment advisory lock, then applies an admin order edit with negotiated discount cleanup.';
+
 -- Keep date corrections atomic with the existing authorized, audited edit flow.
 ALTER FUNCTION public.update_admin_order(uuid, jsonb)
   RENAME TO update_admin_order_without_date;
@@ -18,12 +57,13 @@ DECLARE
   v_source text;
   v_final_docs record;
   v_date timestamptz;
-  v_date_changed boolean := false;
+  v_instant_changed boolean := false;
+  v_day_changed boolean := false;
   v_doc_day date;
   v_doc_day_override date;
   v_doc_day_text text;
   v_result jsonb;
-  v_changed_fields text[] := ARRAY['transaction_date'];
+  v_changed_fields text[] := ARRAY[]::text[];
   v_delegated_audit_count integer := 0;
   v_delegated_audit_id uuid;
   v_before_dates jsonb;
@@ -33,9 +73,8 @@ BEGIN
     RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
   END IF;
 
-  -- Match the lock order used by payment refresh and webhook RPCs: take the
-  -- per-order payment advisory lock before the order row, so a date
-  -- correction racing a payment path cannot deadlock.
+  -- Re-entrant with the outermost wrapper: harmless when the edit entered
+  -- through it, and keeps the payment lock order for direct callers.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0)
   );
@@ -75,6 +114,10 @@ BEGIN
     IF v_date IS NULL OR NOT isfinite(v_date) THEN
       RAISE EXCEPTION 'order_date_invalid' USING ERRCODE = '22023';
     END IF;
+    -- Instant-based future check is intentionally stricter than the
+    -- review path's merchant-day comparison: backdates target past dates,
+    -- mobile always sends local midnight, and direct API callers get exact
+    -- fail-closed semantics.
     IF v_date > now() THEN
       RAISE EXCEPTION 'order_date_in_future' USING ERRCODE = '22023';
     END IF;
@@ -101,12 +144,14 @@ BEGIN
   END IF;
 
   -- Exact-instant no-op is intentional: clients omit unchanged days, so a
-  -- sent date means the day changed; direct API callers get exact semantics.
-  v_date_changed := v_date IS NOT NULL
+  -- sent date normally means the day changed; direct API callers get exact
+  -- semantics. A differing explicit day also counts when the instant
+  -- happens to match, so cross-timezone day corrections are honored.
+  v_instant_changed := v_date IS NOT NULL
     AND v_date IS DISTINCT FROM
       COALESCE(v_order.transaction_date, v_order.created_at);
 
-  IF v_date_changed
+  IF (v_instant_changed OR v_doc_day_override IS NOT NULL)
     AND v_order.shipping_status IN ('cancelled', 'returned') THEN
     RAISE EXCEPTION 'order_terminal_not_editable' USING ERRCODE = '23514';
   END IF;
@@ -115,13 +160,25 @@ BEGIN
     p_order_id, p_payload - 'transaction_date' - 'transaction_date_day'
   );
 
-  IF v_date_changed THEN
-    -- The same edit may change the sales channel: classify manual status
-    -- from the post-edit source, not the pre-edit snapshot.
-    SELECT o.source INTO v_source
-    FROM public.orders o
-    WHERE o.id = p_order_id;
+  -- The same edit may change the sales channel: classify manual status
+  -- from the post-edit source, not the pre-edit snapshot.
+  SELECT o.source INTO v_source
+  FROM public.orders o
+  WHERE o.id = p_order_id;
 
+  IF v_source IN ('manual', 'staff_entry', 'physical', 'instagram',
+      'whatsapp', 'facebook', 'tiktok', 'jumia', 'jiji', 'konga')
+    AND v_doc_day_override IS NOT NULL
+    AND (
+      v_doc_day_override IS DISTINCT FROM v_order.invoice_issue_date
+      OR v_doc_day_override IS DISTINCT FROM v_order.tax_point_date
+      OR v_order.invoice_issue_date_generated IS DISTINCT FROM false
+      OR v_order.tax_point_date_generated IS DISTINCT FROM false
+    ) THEN
+    v_day_changed := true;
+  END IF;
+
+  IF v_instant_changed OR v_day_changed THEN
     -- Manual-origin orders carry explicit device-local document dates that
     -- the sync trigger preserves by design, so move them with the corrected
     -- day and keep them explicit (mirroring
@@ -139,7 +196,8 @@ BEGIN
     END IF;
 
     UPDATE public.orders
-      SET transaction_date = v_date,
+      SET transaction_date = CASE
+            WHEN v_instant_changed THEN v_date ELSE transaction_date END,
           updated_at = now(),
           invoice_issue_date = CASE
             WHEN v_doc_day IS NOT NULL
@@ -168,6 +226,9 @@ BEGIN
     FROM public.orders o
     WHERE o.id = p_order_id;
 
+    IF v_instant_changed THEN
+      v_changed_fields := array_append(v_changed_fields, 'transaction_date');
+    END IF;
     IF v_final_docs.invoice_issue_date IS DISTINCT FROM v_order.invoice_issue_date
       OR v_final_docs.invoice_issue_date_generated IS DISTINCT FROM
         v_order.invoice_issue_date_generated THEN
@@ -188,7 +249,10 @@ BEGIN
       'tax_point_date', v_order.tax_point_date,
       'tax_point_date_generated', v_order.tax_point_date_generated);
     v_after_dates := jsonb_build_object(
-      'transaction_date', v_date, 'effective_transaction_date', v_date,
+      'transaction_date', CASE WHEN v_instant_changed
+        THEN v_date ELSE v_order.transaction_date END,
+      'effective_transaction_date', CASE WHEN v_instant_changed
+        THEN v_date ELSE COALESCE(v_order.transaction_date, v_order.created_at) END,
       'invoice_issue_date', v_final_docs.invoice_issue_date,
       'invoice_issue_date_generated', v_final_docs.invoice_issue_date_generated,
       'tax_point_date', v_final_docs.tax_point_date,

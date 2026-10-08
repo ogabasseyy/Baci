@@ -125,6 +125,27 @@ BEGIN
 END;
 $$;
 
+-- A differing explicit day is honored even when the instant matches, so
+-- cross-timezone day corrections are not silently dropped.
+DO $$
+DECLARE
+  v_flag_id uuid := '66666666-6666-4666-8666-666666666666';
+BEGIN
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(
+    v_flag_id,
+    '{"transaction_date":"2024-01-02T11:00:00Z","transaction_date_day":"2024-01-03"}');
+  IF NOT EXISTS (SELECT 1 FROM orders WHERE id = v_flag_id
+    AND transaction_date = '2024-01-02T11:00:00Z'
+    AND invoice_issue_date = '2024-01-03'
+    AND tax_point_date = '2024-01-03')
+    OR NOT EXISTS (SELECT 1 FROM order_audit_events
+      WHERE order_id = v_flag_id
+      AND changed_fields @> ARRAY['invoice_issue_date','tax_point_date']
+      AND NOT (changed_fields @> ARRAY['transaction_date']))
+  THEN RAISE EXCEPTION 'day-only correction dropped'; END IF;
+END;
+$$;
+
 -- Manual classification follows the post-edit channel: an online order
 -- moved to physical in the same edit syncs its document dates.
 DO $$

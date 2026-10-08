@@ -130,6 +130,9 @@ export function useUpdateOrder() {
       queryClient.invalidateQueries({
         queryKey: ['order-counts', merchant?.id],
       });
+      queryClient.invalidateQueries({
+        queryKey: ['transaction-review', merchant?.id],
+      });
     },
   });
 }

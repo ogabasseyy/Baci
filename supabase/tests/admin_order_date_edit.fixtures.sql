@@ -54,7 +54,6 @@ $$;
 \ir ../migrations/20260825151500_lock_admin_order_edit_before_dva_refresh.sql
 \ir ../migrations/20260827110002_atomic_admin_order_transaction_discount_cleanup.sql
 \ir ../migrations/20261008103000_allow_admin_order_date_edit.sql
-\ir ../migrations/20261008185403_acquire_payment_lock_before_admin_order_edit.sql
 INSERT INTO merchants VALUES (
   '11111111-1111-4111-8111-111111111111',
   '22222222-2222-4222-8222-222222222222'

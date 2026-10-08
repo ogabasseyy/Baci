@@ -33,7 +33,8 @@ export function useCheckoutRedvaultAvailability({
   const availability = useRedvaultPaymentAvailability(
     merchantId,
     pilotCartProductId,
-    `${userId ?? ''}:${storefrontCustomerSession.status}:${storefrontCustomerSession.revision}:${cartFingerprint}`
+    `${userId ?? ''}:${storefrontCustomerSession.status}:${storefrontCustomerSession.revision}:${cartFingerprint}`,
+    `${userId ?? ''}:${cartFingerprint}`
   );
 
   return {

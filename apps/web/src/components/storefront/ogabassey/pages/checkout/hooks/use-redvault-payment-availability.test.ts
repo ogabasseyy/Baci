@@ -79,6 +79,83 @@ describe('REDVAULT availability', () => {
     });
     await waitFor(() => expect(result.current.available).toBe(true));
   });
+  it('keeps the last result while the same identity revalidates after a session refresh', async () => {
+    let resolveSecondRequest: ((response: Response) => void) | undefined;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSecondRequest = resolve;
+          })
+      );
+    vi.stubGlobal('fetch', request);
+    const { result, rerender } = renderHook(
+      ({ revision }: { revision: number }) =>
+        useRedvaultPaymentAvailability(
+          merchant,
+          product,
+          `user-1:loading:${revision}`,
+          'user-1:cart-fingerprint'
+        ),
+      { initialProps: { revision: 1 } }
+    );
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    // Same-user TOKEN_REFRESHED churn: new request key, same identity.
+    rerender({ revision: 2 });
+    expect(result.current).toEqual({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+
+    await act(async () => {
+      resolveSecondRequest?.(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      );
+    });
+    await waitFor(() => expect(result.current.available).toBe(true));
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('fails closed while a changed identity revalidates', async () => {
+    let resolveSecondRequest: ((response: Response) => void) | undefined;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSecondRequest = resolve;
+          })
+      );
+    vi.stubGlobal('fetch', request);
+    const { result, rerender } = renderHook(
+      ({ user }: { user: string }) =>
+        useRedvaultPaymentAvailability(
+          merchant,
+          product,
+          `${user}:authenticated:1`,
+          `${user}:cart-fingerprint`
+        ),
+      { initialProps: { user: 'user-1' } }
+    );
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    rerender({ user: 'user-2' });
+    expect(result.current.available).toBe(false);
+
+    await act(async () => {
+      resolveSecondRequest?.(
+        Response.json({ available: true, reason: 'private_live_pilot' })
+      );
+    });
+    await waitFor(() => expect(result.current.available).toBe(true));
+  });
   it.each([
     'network',
     'http',

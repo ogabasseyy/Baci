@@ -45,7 +45,8 @@ describe('useCheckoutRedvaultAvailability', () => {
     expect(mockUseAvailability).toHaveBeenCalledWith(
       'merchant',
       '11111111-1111-4111-8111-111111111111',
-      'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:'
+      'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:',
+      'customer:11111111-1111-4111-8111-111111111111:1:'
     );
     expect(result.current.availability.available).toBe(true);
     expect(result.current.waitForResolvedAuthenticated).toBe(
@@ -72,12 +73,18 @@ describe('useCheckoutRedvaultAvailability', () => {
     );
 
     const firstKey = mockUseAvailability.mock.calls.at(-1)?.[2];
+    const firstIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
     rerender({ revision: 9 });
     const updatedKey = mockUseAvailability.mock.calls.at(-1)?.[2];
+    const updatedIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
 
     expect(firstKey).toBe(':authenticated:8:pilot-product:1:');
     expect(updatedKey).toBe(':authenticated:9:pilot-product:1:');
     expect(updatedKey).not.toBe(firstKey);
+    // Same-user session churn refetches but keeps the stable identity, so
+    // the last result stays served while revalidating.
+    expect(firstIdentity).toBe(':pilot-product:1:');
+    expect(updatedIdentity).toBe(firstIdentity);
   });
 
   it('omits product eligibility for multi-line, quantity-many, and variant carts', () => {

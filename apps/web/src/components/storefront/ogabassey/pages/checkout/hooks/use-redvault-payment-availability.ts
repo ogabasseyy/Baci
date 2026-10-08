@@ -8,14 +8,27 @@ type AvailabilityResponse = { available: boolean; reason: string };
 export function useRedvaultPaymentAvailability(
   merchantId?: string | null,
   productId?: string | null,
-  authKey?: string | null
+  authKey?: string | null,
+  sessionIndependentKey?: string | null
 ) {
   const requestKey = `${merchantId ?? ''}:${productId ?? ''}:${authKey ?? ''}`;
+  // Identity excludes routine session churn (status/revision): while a
+  // refetch for the SAME identity is in flight, keep serving the last
+  // resolved value instead of flashing unavailable (which clears an
+  // already-selected method). Identity changes (account, cart, merchant,
+  // product) still fail closed until the fresh result lands. Without an
+  // explicit identity the hook stays strict, as before.
+  const identityKey =
+    sessionIndependentKey == null
+      ? requestKey
+      : `${merchantId ?? ''}:${productId ?? ''}:${sessionIndependentKey}`;
   const [availability, setAvailability] = useState<{
     key: string;
+    identity: string;
     value: AvailabilityResponse;
   }>({
     key: '',
+    identity: '',
     value: { available: false, reason: 'unavailable' },
   });
 
@@ -23,11 +36,13 @@ export function useRedvaultPaymentAvailability(
     if (merchantId !== OGABASSEY_MERCHANT_ID) {
       setAvailability({
         key: requestKey,
+        identity: identityKey,
         value: { available: false, reason: 'merchant_unavailable' },
       });
       return;
     }
 
+    const fetchIdentity = identityKey;
     const controller = new AbortController();
     const query = new URLSearchParams({ merchant_id: merchantId });
     if (productId) query.set('product_id', productId);
@@ -51,24 +66,37 @@ export function useRedvaultPaymentAvailability(
       })
       .then((result) => {
         if (!controller.signal.aborted) {
-          setAvailability({ key: requestKey, value: result });
+          setAvailability({
+            key: requestKey,
+            identity: fetchIdentity,
+            value: result,
+          });
         }
       })
       .catch(() => {
         if (!controller.signal.aborted) {
           setAvailability({
             key: requestKey,
+            identity: fetchIdentity,
             value: { available: false, reason: 'unavailable' },
           });
         }
       });
 
     return () => controller.abort();
-  }, [merchantId, productId, authKey, requestKey]);
+  }, [merchantId, productId, authKey, requestKey, identityKey]);
 
-  return merchantId === OGABASSEY_MERCHANT_ID
-    ? availability.key === requestKey
-      ? availability.value
-      : { available: false, reason: 'unavailable' }
-    : { available: false, reason: 'merchant_unavailable' };
+  if (merchantId !== OGABASSEY_MERCHANT_ID) {
+    return { available: false, reason: 'merchant_unavailable' };
+  }
+  if (availability.key === requestKey) {
+    return availability.value;
+  }
+  if (
+    availability.identity !== '' &&
+    availability.identity === identityKey
+  ) {
+    return availability.value;
+  }
+  return { available: false, reason: 'unavailable' };
 }

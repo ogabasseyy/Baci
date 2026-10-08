@@ -50,6 +50,17 @@ describe('refined-search-rpc', () => {
     });
   });
 
+  it('dedupes brands by facet identity (trimmed, case-insensitive)', () => {
+    expect(
+      getRefinedSearchArgs(
+        'm1',
+        'phone',
+        { brands: ['apple', 'Apple', ' Samsung ', 'SAMSUNG'], sort: 'relevance' },
+        20
+      )
+    ).toMatchObject({ brands_filter: [' Samsung ', 'apple'] });
+  });
+
   it('defaults the offset to zero and nulls every unset filter', () => {
     expect(
       getRefinedSearchArgs('m1', 'phone', { brands: [], sort: 'relevance' }, 20)

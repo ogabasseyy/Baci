@@ -1,4 +1,7 @@
-import type { SearchRefinements } from './search-refinements';
+import {
+  deduplicateFacetChoices,
+  type SearchRefinements,
+} from './search-refinements';
 
 // Matches SQL's 100 pages at the storefront's 20-row page size.
 export const REFINED_SEARCH_MAX_OFFSET = 1980;
@@ -22,7 +25,9 @@ export function getRefinedSearchArgs(
     ...(criteria.processor ? { processor_filter: criteria.processor } : {}),
     search_query: query,
     merchant_id_param: merchantId,
-    brands_filter: [...new Set(criteria.brands)].sort(),
+    // SQL matches lower(btrim()) so dedupe on facet identity: brand=Apple
+    // beside brand=apple is one facet, first spelling wins.
+    brands_filter: deduplicateFacetChoices(criteria.brands).sort(),
     category_id_filter: criteria.categoryId ?? null,
     condition_filter: criteria.condition ?? null,
     min_price_filter: criteria.minPrice ?? null,

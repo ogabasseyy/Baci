@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { join, sep } from 'node:path';
 
 // Only these committed synthetic fixtures may exist in a non-lab public
 // tree. Staged merchant originals and generations must never enter one.
@@ -22,6 +22,23 @@ function directoryExists(path: string): boolean {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     throw error;
+  }
+}
+
+function assertConfinedEntry(root: string, name: string): void {
+  const entry = join(root, name);
+  const stat = lstatSync(entry);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(
+      `lab public pilot tree entry "${name}" is not a confined directory`
+    );
+  }
+  const realRoot = realpathSync(root);
+  const realEntry = realpathSync(entry);
+  if (realEntry !== realRoot && !realEntry.startsWith(`${realRoot}${sep}`)) {
+    throw new Error(
+      `lab public pilot tree entry "${name}" escapes the pilot root`
+    );
   }
 }
 
@@ -91,7 +108,12 @@ export function assertPilotPublicAssets(
     }
     // Lab staging is generation directories (content-derived 64-hex ids)
     // plus the originals set; anything else is refused even in lab mode.
+    // The name alone never suffices: a stale or planted symlink with a
+    // managed name would otherwise pass the guard and expose its
+    // external target through the static /__pilot/... namespace, so
+    // every accepted entry is lstat + realpath confined beneath root.
     if (labEnabled && (name === 'originals' || /^[0-9a-f]{64}$/.test(name))) {
+      assertConfinedEntry(root, name);
       continue;
     }
     throw new Error(

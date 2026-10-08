@@ -1,6 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseCliArgs } from './cli-args.mjs';
+import { MAX_INVENTORY_BYTES } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 import {
   buildEncoderIdentity,
   currentRecipeId,
@@ -85,7 +87,19 @@ export async function buildQualitySheet({
   outputRoot,
   slots,
 }) {
-  const records = JSON.parse(await readFile(inventoryPath, 'utf8'));
+  // Bounded before parsing: a corrupt or swapped-in giant file must
+  // reject on size instead of exhausting the inspection process ahead
+  // of the 20-job cap below.
+  const { bytes, truncated } = await readUpToBytes(
+    inventoryPath,
+    MAX_INVENTORY_BYTES
+  );
+  if (truncated) {
+    throw new PilotSheetError(
+      `inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
+    );
+  }
+  const records = JSON.parse(bytes.toString('utf8'));
   if (!Array.isArray(records) || records.length === 0) {
     throw new PilotSheetError('inventory is empty');
   }

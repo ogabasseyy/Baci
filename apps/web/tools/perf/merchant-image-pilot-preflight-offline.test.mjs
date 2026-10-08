@@ -620,6 +620,30 @@ describe('preflight offline gate', () => {
     }
   });
 
+  it('rejects oversized inventory and acceptance files before parsing', async () => {
+    // A corrupt or swapped-in giant file rejects on size instead of
+    // exhausting the gate ahead of the 20-record cap and shape checks.
+    const bulky = Buffer.alloc(1024 * 1024 + 1, 120);
+    const overInventory = await setupOffline();
+    await writeFile(overInventory.inventoryPath, bulky);
+    const inventoryReport = await runOfflinePreflight(
+      offlineOptions(overInventory)
+    );
+    expect(inventoryReport.ok).toBe(false);
+    expect(inventoryReport.failures.join('\n')).toMatch(
+      /inventory-parse.*byte budget/
+    );
+    const overAcceptances = await setupOffline();
+    await writeFile(overAcceptances.acceptancesPath, bulky);
+    const acceptancesReport = await runOfflinePreflight(
+      offlineOptions(overAcceptances)
+    );
+    expect(acceptancesReport.ok).toBe(false);
+    expect(acceptancesReport.failures.join('\n')).toMatch(
+      /acceptances-parse.*byte budget/
+    );
+  });
+
   it('rejects input snapshots that escape via symlink', async () => {
     // Lexical containment passes `linkdir/evil.png`; only realpath sees the
     // link target outside the input root.

@@ -2,6 +2,7 @@
 // then per-binding stages (input, acceptance, manifest, tiers, staged).
 // Bindings that pass every stage land in `accepted` for the served gate.
 import {
+  MAX_INVENTORY_BYTES,
   MAX_JOBS,
   RECIPE_ID,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
@@ -23,7 +24,7 @@ import {
 import {
   fail,
   pass,
-  readJson,
+  readBoundedJson,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
 export async function runOfflinePreflight(options) {
@@ -48,8 +49,11 @@ export async function runOfflinePreflight(options) {
   pass(checks, 'recipe-pin');
   let inventory;
   let acceptances;
+  // Bounded before parsing: a corrupt or swapped-in giant file must
+  // reject on size instead of exhausting the gate ahead of the
+  // 20-record cap and shape checks below.
   try {
-    inventory = await readJson(options.inventory);
+    inventory = await readBoundedJson(options.inventory, MAX_INVENTORY_BYTES);
   } catch (error) {
     fail(
       checks,
@@ -60,7 +64,10 @@ export async function runOfflinePreflight(options) {
     return { accepted, checks, failures, ok: false };
   }
   try {
-    acceptances = await readJson(options.acceptances);
+    acceptances = await readBoundedJson(
+      options.acceptances,
+      MAX_INVENTORY_BYTES
+    );
   } catch (error) {
     fail(
       checks,

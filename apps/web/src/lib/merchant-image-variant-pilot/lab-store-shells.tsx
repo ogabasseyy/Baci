@@ -5,7 +5,8 @@ import { StorefrontProductCard } from '@/components/storefront/product-card';
 import type { Product } from '@/lib/products';
 import type { PilotLabArm } from './lab-arm';
 import { LabStorefrontProductCard, labProductFixture } from './lab-card-clone';
-import { LabHeaderLogo, LabStoreHeader } from './lab-header-clone';
+import { LabHeaderLogo } from './lab-header-logo';
+import { LabStoreHeader } from './lab-store-header';
 import type { ProjectedPilotImage } from './next-image-adapter';
 
 // Lab-only client shells for the per-store pages. Server components cannot

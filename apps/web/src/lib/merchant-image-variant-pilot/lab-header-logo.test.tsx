@@ -1,12 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeaderLogo } from '@/components/storefront/blocks/header-logo';
-import {
-  LabHeaderLogo,
-  LabHeaderLogoFallback,
-  LabStoreHeader,
-} from './lab-header-clone';
+import { LabHeaderLogo } from './lab-header-logo';
+import { LabHeaderLogoFallback } from './lab-header-logo-fallback';
 import type { ApprovedPilotTier } from './lab-index';
+import { LabStoreHeader } from './lab-store-header';
 import {
   type PilotImageSlot,
   projectControlNextImage,

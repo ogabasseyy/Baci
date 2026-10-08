@@ -89,17 +89,33 @@ test('release unlinks only its own claim', async () => {
   assert.equal(await readFile(path, 'utf8'), successor);
 });
 
-test('corrupt claims steal only past the grace window', async () => {
-  const fresh = await setupRoot();
-  await mkdir(join(fresh, 'locks'), { recursive: true });
-  await writeFile(lockPath(fresh), '{partial-write');
-  // Fresh garbage may be a holder mid-write: refuse, never unlink.
-  await assert.rejects(acquireEncoderLock(fresh), /encoder lock/);
-  const aged = await setupRoot();
-  await mkdir(join(aged, 'locks'), { recursive: true });
-  await writeFile(lockPath(aged), '{partial-write');
-  const ancient = new Date(Date.now() - 60_000);
-  await utimes(lockPath(aged), ancient, ancient);
-  const lock = await acquireEncoderLock(aged);
+test('corrupt claims fail closed at any age, never steal by age', async () => {
+  // Publication is atomic (link-or-EEXIST), so a corrupt lock file can
+  // never be a holder mid-write — only external tampering. Age is not
+  // proof of abandonment: both fresh and ancient garbage fail closed
+  // for the operator instead of unlinking a possibly live creator.
+  for (const ageMs of [0, 3_600_000]) {
+    const outputRoot = await setupRoot();
+    await mkdir(join(outputRoot, 'locks'), { recursive: true });
+    await writeFile(lockPath(outputRoot), '{partial-write');
+    const stamp = new Date(Date.now() - ageMs);
+    await utimes(lockPath(outputRoot), stamp, stamp);
+    await assert.rejects(
+      acquireEncoderLock(outputRoot),
+      /encoder-lock-corrupt|is corrupt/
+    );
+  }
+});
+
+test('crashed claim temps never block acquisition', async () => {
+  const outputRoot = await setupRoot();
+  await mkdir(join(outputRoot, 'locks'), { recursive: true });
+  const orphan = join(outputRoot, 'locks', 'claim-99999999-deadbeef.tmp');
+  await writeFile(orphan, JSON.stringify({ pid: 99999999 }));
+  const ancient = new Date(Date.now() - 7_200_000);
+  await utimes(orphan, ancient, ancient);
+  const lock = await acquireEncoderLock(outputRoot);
   await lock.release();
+  // The sweep reaps the stale temp best-effort.
+  await assert.rejects(readFile(orphan), /ENOENT/);
 });

@@ -191,4 +191,21 @@ describe('preflight served agreement', () => {
     );
     expect(assertServedAgreement(foreign, { arm: 'pilot' })).toEqual([]);
   });
+
+  it('rejects a marked preload laundered through a non-hero binding', () => {
+    // The logo section is bound but mounts no hero picture: an extra
+    // marked preload using its valid binding ID must still fail as an
+    // orphan — only a section that mounts the paired hero picture can
+    // consume a hero preload.
+    const html = labHtml({
+      arm: 'pilot',
+      generationId: 'e'.repeat(64),
+      tiers: unitTiers,
+    });
+    const laundered = `<link rel="preload" as="image" href="/__pilot/logo.avif" imageSrcSet="/__pilot/logo.avif 48w" imageSizes="40px" media="(max-width: 768px)" fetchPriority="high" type="image/avif" data-pilot-lab-preload="pilot" data-pilot-lab-binding="${MERCHANT}/logo-a"/>`;
+    const contaminated = String(html).replace('</main>', `${laundered}</main>`);
+    expect(
+      assertServedAgreement(contaminated, { arm: 'pilot' }).join('\n')
+    ).toMatch(/pairs with no mounted hero section/);
+  });
 });

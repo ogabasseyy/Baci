@@ -61,6 +61,20 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, true)).not.toThrow();
   });
+  it.each([
+    'originals',
+    'c'.repeat(64),
+  ])('rejects a symlinked %s entry even when lab is enabled', (entry) => {
+    const dir = root();
+    const outside = join(dir, 'outside');
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, 'secret.txt'), 'not yours');
+    mkdirSync(join(dir, '__pilot'), { recursive: true });
+    symlinkSync(outside, join(dir, '__pilot', entry));
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /not a confined directory/
+    );
+  });
   it('requires the fillers directory and exact set when lab is enabled', () => {
     const staged = root();
     mkdirSync(join(staged, '__pilot', 'originals'), { recursive: true });

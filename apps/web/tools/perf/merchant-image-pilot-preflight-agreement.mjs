@@ -25,6 +25,20 @@ export function assertServedAgreement(html, { arm }) {
     (section) => section.binding != null && !section.status
   );
   const docLinks = extractLabPreloads(html).filter((link) => link.arm === arm);
+  // Hero pictures per section, shared by the orphan check and the pairing
+  // loop: only hero-kind pictures (lab slides, gallery and original
+  // heroes) can consume a hero preload — product-card and header-logo
+  // sections never carry one.
+  const heroPicturesBySection = new Map(
+    heroSections.map((section) => [
+      section,
+      sectionPictures(section.html).filter((picture) =>
+        ['hero-slide', 'gallery-hero', 'original-hero'].includes(
+          pictureKind(picture)
+        )
+      ),
+    ])
+  );
   // Orphan rejection: every marked preload (data-pilot-lab-binding set)
   // must be consumed by exactly one mounted hero section. The loop below
   // only validates links selected by existing sections, so without this
@@ -32,14 +46,16 @@ export function assertServedAgreement(html, { arm }) {
   // verification unexamined and contaminate the comparison with an
   // unnecessary download. Unmarked links (fonts, third-party hints)
   // are out of scope: only lab-marked links carry the pairing identity.
-  // A marked link counts as consumed when a hero section claims its
-  // binding even before picture pairing — a picture-less section already
-  // fails at mount-coverage, so the orphan verdict stays single-sourced.
-  const claimedBindings = new Set(
-    heroSections.map((section) => section.binding)
+  // A binding counts as consumed only when its section actually mounts
+  // the paired hero picture — a bare binding claim from a card or logo
+  // section must not launder an extra preload for that binding.
+  const consumedBindings = new Set(
+    [...heroPicturesBySection]
+      .filter(([, pictures]) => pictures.length > 0)
+      .map(([section]) => section.binding)
   );
   for (const link of docLinks) {
-    if (link.binding == null || claimedBindings.has(link.binding)) {
+    if (link.binding == null || consumedBindings.has(link.binding)) {
       continue;
     }
     failures.push(
@@ -47,11 +63,7 @@ export function assertServedAgreement(html, { arm }) {
     );
   }
   for (const section of heroSections) {
-    const pictures = sectionPictures(section.html).filter((picture) =>
-      ['hero-slide', 'gallery-hero', 'original-hero'].includes(
-        pictureKind(picture)
-      )
-    );
+    const pictures = heroPicturesBySection.get(section) ?? [];
     if (pictures.length === 0) {
       // No mounted hero picture: mount-coverage owns the absence verdict.
       continue;

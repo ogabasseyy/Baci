@@ -53,6 +53,23 @@ async function setupPilot(
   return { base, inputRoot, inventoryPath, outputRoot };
 }
 
+test('rejects an oversized inventory before parsing', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  // A corrupt or swapped-in giant file rejects on size instead of
+  // exhausting the inspection process ahead of the 20-job cap.
+  await writeFile(inventoryPath, Buffer.alloc(1024 * 1024 + 1, 120));
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath,
+        outputRoot,
+        slots: { 'header-logo': { cssWidth: 40 } },
+      }),
+    /exceeds 1048576/
+  );
+});
+
 test('builds a side-by-side sheet from verified files', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const html = await buildQualitySheet({

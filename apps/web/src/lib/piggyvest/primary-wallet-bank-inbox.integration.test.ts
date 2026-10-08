@@ -5,6 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
+const fixture = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'primary-wallet-bank-inbox.integration.sql'
+);
+
 it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
   'retains signed bank-before-custody receipts and replays aliases versus genuine bank deposits exactly once in isolated PostgreSQL',
   () => {
@@ -47,12 +52,7 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
           '-v',
           'ON_ERROR_STOP=1',
           '-f',
-          fileURLToPath(
-            new URL(
-              './primary-wallet-bank-inbox.integration.sql',
-              import.meta.url
-            )
-          ),
+          fixture,
         ],
         options
       );

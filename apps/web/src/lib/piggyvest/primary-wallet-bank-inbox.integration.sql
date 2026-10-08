@@ -159,3 +159,26 @@ SET SESSION AUTHORIZATION baci_primary_bank_worker;
 DO $$ BEGIN IF piggyvest_primary.bank_role_safe(true) THEN RAISE EXCEPTION 'missing required RPC accepted'; END IF; END $$;
 RESET SESSION AUTHORIZATION;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.process_bank_inbox(uuid,text,jsonb,jsonb) TO primary_bank_inbox_worker;
+INSERT INTO pg_temp.bank_fixture(label,scope,receipt,raw_hex)
+ SELECT 'prerequisite-cap',scope,receipt||'{"eventId":"bank-prerequisite-cap","providerTransactionId":"prerequisite-cap-deposit"}'::jsonb,
+ encode(convert_to(jsonb_set(jsonb_set(convert_from(decode(raw_hex,'hex'),'UTF8')::jsonb,'{eventId}','"bank-prerequisite-cap"'),'{eventData,transaction_id}','"prerequisite-cap-deposit"')::text,'UTF8'),'hex')
+ FROM pg_temp.bank_fixture WHERE label='bank';
+UPDATE pg_temp.bank_fixture SET receipt=jsonb_set(receipt,'{bodyDigest}',to_jsonb(encode(sha256(decode(raw_hex,'hex')),'hex'))) WHERE label='prerequisite-cap';
+SET SESSION AUTHORIZATION baci_primary_bank_intake;
+DO $$ DECLARE fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='prerequisite-cap';
+ IF piggyvest_primary.enqueue_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('rawHex',fixture.raw_hex,'signature',repeat('a',128)))<>'accepted' THEN RAISE EXCEPTION 'prerequisite-cap intake failed'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary.bank_signed_inbox SET attempts=50,state='pending',reason='prerequisite',claim_token=NULL,lease_until=NULL,available_at=clock_timestamp()-interval '1 second' WHERE event_id='bank-prerequisite-cap';
+SET SESSION AUTHORIZATION baci_primary_bank_worker;
+DO $$ DECLARE leased jsonb; fixture record; BEGIN
+ SELECT * INTO fixture FROM pg_temp.bank_fixture WHERE label='prerequisite-cap';
+ leased:=piggyvest_primary.claim_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,'{"batchSize":1}')->0;
+ IF leased IS NULL OR leased->>'eventId'<>'bank-prerequisite-cap' THEN RAISE EXCEPTION 'prerequisite receipt blocked by attempt cap'; END IF;
+ IF piggyvest_primary.process_bank_inbox('10000000-0000-4000-8000-000000000004','staging',fixture.scope,jsonb_build_object('eventId',leased->'eventId','token',leased->'token','receipt',fixture.receipt))<>'credited' THEN RAISE EXCEPTION 'prerequisite-cap deposit lost'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM piggyvest_primary.bank_signed_inbox WHERE event_id='bank-prerequisite-cap' AND state='processed') THEN RAISE EXCEPTION 'prerequisite-cap receipt not processed'; END IF;
+END $$;

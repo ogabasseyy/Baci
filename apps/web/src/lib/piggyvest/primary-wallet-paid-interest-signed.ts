@@ -11,6 +11,7 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
   rawBody: Uint8Array;
   signature: string | null;
   configuration: unknown;
+  involved: (selection: Selection) => Promise<boolean>;
   resolveCrosswalk: (selection: Selection) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   apply: (proof: Proof) => Promise<unknown>;
@@ -52,6 +53,7 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
     envelopeDestinationWalletId: event.pvb_destination_wallet,
   });
   try {
+    if (!(await input.involved(selection))) return 'not_handled';
     const crosswalkValue = await input.resolveCrosswalk(selection);
     if (crosswalkValue === null) return 'prerequisite';
     const crosswalk = schemas.crosswalk.parse(crosswalkValue);

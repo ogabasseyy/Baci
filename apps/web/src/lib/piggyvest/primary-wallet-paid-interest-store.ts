@@ -14,7 +14,10 @@ const verify = `SELECT current_database() AS database_name, SESSION_USER AS logi
 export function createPrimaryWalletPaidInterestStore(configuration: unknown) {
   const config = schemas.runtime.parse(configuration);
   async function execute(
-    kind: 'read_paid_interest_crosswalk' | 'apply_paid_interest',
+    kind:
+      | 'read_paid_interest_crosswalk'
+      | 'apply_paid_interest'
+      | 'paid_interest_event_involved',
     selection: unknown
   ) {
     const value = JSON.stringify(selection);
@@ -64,6 +67,13 @@ export function createPrimaryWalletPaidInterestStore(configuration: unknown) {
     }
   }
   return {
+    async involved(selection: z.infer<typeof schemas.selection>) {
+      const value = await execute(
+        'paid_interest_event_involved',
+        schemas.selection.parse(selection)
+      );
+      return value === true;
+    },
     async resolveCrosswalk(selection: z.infer<typeof schemas.selection>) {
       const value = await execute(
         'read_paid_interest_crosswalk',

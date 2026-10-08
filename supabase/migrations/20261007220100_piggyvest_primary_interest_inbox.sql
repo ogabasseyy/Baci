@@ -58,6 +58,22 @@ CREATE TRIGGER primary_interest_inbox_conflicts_immutable BEFORE UPDATE OR DELET
 CREATE TRIGGER primary_interest_inbox_observations_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON piggyvest_primary.paid_interest_inbox_observations
   FOR EACH STATEMENT EXECUTE FUNCTION piggyvest_savings_ledger.immutable();
 
+CREATE FUNCTION piggyvest_primary.paid_interest_event_involved(p_integration uuid,p_environment text,p_selection jsonb)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  PERFORM piggyvest_primary.assert_paid_interest_worker(p_integration,p_environment);
+  IF jsonb_typeof(p_selection) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'invalid interest selection' USING ERRCODE='22023'; END IF;
+  IF (SELECT count(*) FROM jsonb_object_keys(p_selection))<>5
+    OR NOT p_selection ?& ARRAY['webhookCustomerId','sourceWalletId','accruedWalletId','destinationWalletId','envelopeDestinationWalletId'] THEN
+    RAISE EXCEPTION 'invalid interest selection' USING ERRCODE='22023';
+  END IF;
+  RETURN EXISTS(SELECT 1 FROM piggyvest_primary.paid_interest_crosswalks mapping
+    WHERE mapping.integration_id=p_integration
+      AND (mapping.webhook_customer_id=p_selection->>'webhookCustomerId'
+        OR mapping.source_wallet_id=p_selection->>'sourceWalletId'
+        OR mapping.accrued_wallet_id=p_selection->>'accruedWalletId'
+        OR mapping.destination_wallet_id=p_selection->>'destinationWalletId'));
+END $$;
 CREATE FUNCTION piggyvest_primary.enqueue_paid_interest_inbox(p_integration uuid,p_environment text,p_command jsonb)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE payload bytea; envelope jsonb; fingerprint text; stored piggyvest_primary.paid_interest_inbox%ROWTYPE;
@@ -76,6 +92,11 @@ BEGIN
     OR jsonb_typeof(envelope->'eventId') IS DISTINCT FROM 'string' OR octet_length(envelope->>'eventId') NOT BETWEEN 1 AND 512 THEN
     RAISE EXCEPTION 'invalid interest envelope' USING ERRCODE='22023';
   END IF;
+  IF NOT piggyvest_primary.paid_interest_event_involved(p_integration,p_environment,
+    jsonb_build_object('webhookCustomerId',envelope->'customer_id','sourceWalletId',envelope->'pvb_wallet',
+      'accruedWalletId',envelope->'pvb_accrued_interest_wallet',
+      'destinationWalletId',envelope->'eventData'->'destination_wallet',
+      'envelopeDestinationWalletId',envelope->'pvb_destination_wallet')) THEN RETURN 'not_handled'; END IF;
   fingerprint:=encode(sha256(payload),'hex');
   INSERT INTO piggyvest_primary.paid_interest_inbox(integration_id,event_id,payload,signature,body_digest)
     VALUES(p_integration,envelope->>'eventId',payload,p_command->>'signature',fingerprint) ON CONFLICT DO NOTHING;
@@ -88,7 +109,8 @@ BEGIN
     WHERE integration_id=p_integration AND event_id=envelope->>'eventId';
   RETURN 'quarantined';
 END $$;
-REVOKE ALL ON FUNCTION piggyvest_primary.guard_interest_inbox_identity(),piggyvest_primary.enqueue_paid_interest_inbox(uuid,text,jsonb)
-  FROM PUBLIC,anon,authenticated,service_role;
-GRANT EXECUTE ON FUNCTION piggyvest_primary.enqueue_paid_interest_inbox(uuid,text,jsonb) TO piggyvest_primary_evidence;
+REVOKE ALL ON FUNCTION piggyvest_primary.guard_interest_inbox_identity(),piggyvest_primary.paid_interest_event_involved(uuid,text,jsonb),
+  piggyvest_primary.enqueue_paid_interest_inbox(uuid,text,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.paid_interest_event_involved(uuid,text,jsonb),
+  piggyvest_primary.enqueue_paid_interest_inbox(uuid,text,jsonb) TO piggyvest_primary_evidence;
 COMMIT;

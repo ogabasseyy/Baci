@@ -72,5 +72,11 @@ export const primaryWalletPaidInterestSchemas = {
         value.grossKobo - value.taxKobo === value.netKobo &&
         value.amountKobo === value.netKobo
     ),
-  outcome: z.enum(['credited', 'duplicate', 'conflict', 'prerequisite']),
+  outcome: z.enum([
+    'credited',
+    'duplicate',
+    'conflict',
+    'prerequisite',
+    'not_handled',
+  ]),
 };

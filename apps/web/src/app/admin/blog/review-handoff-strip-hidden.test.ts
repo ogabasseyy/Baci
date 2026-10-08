@@ -58,6 +58,26 @@ describe('stripHiddenContent', () => {
     expect(stripHiddenContent(content)).toBe(expected);
   });
 
+  it('keeps source elements despite their own hiding classes', () => {
+    // CSS display utilities on a source element do not participate in
+    // the browser's picture resource-selection algorithm, so the
+    // source stays selectable and must survive the strip.
+    const picture =
+      '<picture><source class="hidden" srcset="https://cdn.example.com/mobile.webp"><img src="https://cdn.example.com/fallback.png"></picture>';
+    expect(stripHiddenContent(picture)).toBe(picture);
+  });
+
+  it('rebuilds deeply nested markup in linear time', { timeout: 15000 }, () => {
+    // The rebuild must reuse the propagated drop flags instead of
+    // re-scanning the open stack per tag.
+    const depth = 80000;
+    const open = '<div>'.repeat(depth);
+    const close = '</div>'.repeat(depth);
+    expect(stripHiddenContent(`${open}Deep article${close}`)).toBe(
+      `${open}Deep article${close}`
+    );
+  });
+
   it('strips hidden leaves in deeply nested markup', () => {
     // Hiddenness must propagate down the stack in one traversal:
     // rebuilding the ancestor chain per element turns deep valid

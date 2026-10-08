@@ -4,7 +4,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { type RefObject, useRef, useState } from 'react';
 import {
   createPlatformBlogPost,
   deleteBlogMediaUpload,
@@ -37,7 +37,7 @@ type SubmitBlogPostArgs = {
   isEditMode: boolean;
   postId?: string;
   initialPost?: PlatformAdminBlogPostDetail | null;
-  onSaved: (payload: PlatformAdminBlogFormState) => void;
+  savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
   setSaving: (saving: boolean) => void;
   toast: ReturnType<typeof useToast>['toast'];
   router: ReturnType<typeof useRouter>;
@@ -50,7 +50,7 @@ async function submitBlogPost({
   isEditMode,
   postId,
   initialPost,
-  onSaved,
+  savedFormRef,
   setSaving,
   toast,
   router,
@@ -66,19 +66,31 @@ async function submitBlogPost({
       slug: form.slug.trim() || generateSlug(form.title.trim()),
     };
 
-    if (isEditMode) {
-      if (!postId) {
-        throw new Error('Missing post id for edit mode');
+    // Snapshot the submitted payload (frozen before the request, so
+    // edits made while saving cannot shrink it) and protect it while
+    // the mutation is in flight: leaving the page before the request
+    // resolves must retain what the server is about to persist.
+    const previousSaved = savedFormRef.current;
+    savedFormRef.current = payload;
+    try {
+      if (isEditMode) {
+        if (!postId) {
+          throw new Error('Missing post id for edit mode');
+        }
+        await updatePlatformBlogPost(postId, payload, initialPost);
+      } else {
+        await createPlatformBlogPost(payload);
       }
-      await updatePlatformBlogPost(postId, payload, initialPost);
-    } else {
-      await createPlatformBlogPost(payload);
+    } catch (error) {
+      // A failed save restores the previous snapshot (when no later
+      // save replaced it) so teardown deletes the abandoned draft
+      // instead of leaking it as falsely persisted.
+      if (savedFormRef.current === payload) {
+        savedFormRef.current = previousSaved;
+      }
+      throw error;
     }
 
-    // Snapshot the submitted payload (frozen before the request, so
-    // edits made while saving cannot shrink it): the unmount delete
-    // flush retains what the server persisted.
-    onSaved(payload);
     toast({ title: isEditMode ? 'Post updated' : 'Post created' });
     router.push('/admin/blog');
     router.refresh();
@@ -205,9 +217,7 @@ export function BlogEditorClient({
       isEditMode,
       postId,
       initialPost,
-      onSaved: (payload) => {
-        savedFormRef.current = payload;
-      },
+      savedFormRef,
       setSaving,
       toast,
       router,

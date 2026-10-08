@@ -35,4 +35,16 @@ describe('convertHiddenAttributes', () => {
   ])('ignores hidden lookalikes: %s', (html) => {
     expect(convertHiddenAttributes(html)).toBe(html);
   });
+
+  it('merges hidden into an unquoted class without a duplicate attribute', () => {
+    // The browser keeps the first of duplicate class attributes, so an
+    // appended second class would silently drop the hiding marker.
+    const converted = convertHiddenAttributes(
+      '<p hidden class=note>Draft note</p><p>Visible article</p>'
+    );
+    expect(converted).toBe(
+      '<p hidden class="note hidden">Draft note</p><p>Visible article</p>'
+    );
+    expect(converted.match(/class=/g)).toHaveLength(1);
+  });
 });

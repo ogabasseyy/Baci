@@ -271,6 +271,9 @@ export function createSanitizeHtmlOptions(
         'fetchpriority',
       ],
       source: ['srcset', 'type', 'media', 'sizes'],
+      // Tiptap's OrderedList round-trips non-default start values, so
+      // stripping them would silently renumber imported lists.
+      ol: ['start'],
     },
     transformTags,
     exclusiveFilter,

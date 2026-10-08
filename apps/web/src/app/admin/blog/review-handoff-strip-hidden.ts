@@ -88,6 +88,17 @@ function dualEffective(
   };
 }
 
+function visibleDualEffective(): DualEffective {
+  // A parentless source element: nothing above it can hide it, and
+  // its own frame never applies (see recordElements).
+  const visible = (): EffectiveHiding => ({
+    color: new Array<ColorAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
+    terminal: new Array<boolean>(BREAKPOINT_POINT_COUNT).fill(false),
+    visibility: new Array<VisibilityAtPoint>(BREAKPOINT_POINT_COUNT).fill(null),
+  });
+  return { dark: visible(), light: visible() };
+}
+
 function hiddenEverywhereBoth(
   effective: DualEffective,
   includeColor: boolean
@@ -112,18 +123,24 @@ function recordElements(content: string): ElementRecord[] {
       elementFrame(match[0], 'light'),
       elementFrame(match[0], 'dark'),
     ];
-    const effective = dualEffective(
-      stack.length === 0 ? null : stack[stack.length - 1].effective,
-      frames
-    );
     const tagName = match[2].toLowerCase();
+    const parentEffective =
+      stack.length === 0 ? null : stack[stack.length - 1].effective;
+    const effective = dualEffective(parentEffective, frames);
+    // Source classes never participate in picture resource selection,
+    // so a source drops only with a hiding ancestor — never for its
+    // own hiding classes, which select nothing away.
+    const selfEffective =
+      tagName === 'source'
+        ? (parentEffective ?? visibleDualEffective())
+        : effective;
     const index = elements.length;
     elements.push({
       parent: stack.length === 0 ? -1 : stack[stack.length - 1].index,
       frames,
       tagName,
-      hiddenNoColor: hiddenEverywhereBoth(effective, false),
-      hiddenWithColor: hiddenEverywhereBoth(effective, true),
+      hiddenNoColor: hiddenEverywhereBoth(selfEffective, false),
+      hiddenWithColor: hiddenEverywhereBoth(selfEffective, true),
     });
     if (!VOID_HTML_ELEMENTS.has(tagName)) stack.push({ index, effective });
   }
@@ -172,7 +189,11 @@ export function stripHiddenContent(content: string): string {
   const segments: string[] = [];
   const openStack: { index: number; effective: DualEffective }[] = [];
   let position = 0;
-  const insideDropped = () => openStack.some((open) => finalDrop[open.index]);
+  // Drop flags propagate from parent to child, so any dropped open
+  // element implies a dropped innermost one: check the top instead of
+  // re-scanning the stack per tag.
+  const insideDropped = () =>
+    openStack.length > 0 && finalDrop[openStack[openStack.length - 1].index];
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     const start = match.index ?? content.length;
     const top =

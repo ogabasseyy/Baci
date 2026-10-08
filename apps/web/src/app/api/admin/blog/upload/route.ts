@@ -9,10 +9,10 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { createClient } from '@/lib/supabase/server';
+import { filterBlogMediaPathsWithoutPersistedReferences } from './blog-media-reference-scan';
 import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
-  filterBlogMediaPathsWithoutPersistedReferences,
   getAllowedTypesForPurpose,
   MAX_FILE_SIZE,
   MIME_TO_EXTENSION,

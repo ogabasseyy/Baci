@@ -50,7 +50,21 @@ type PostsQueryResult = {
 function postsQuery(result: PostsQueryResult) {
   return {
     select: () => ({
-      eq: () => ({ is: () => ({ limit: () => Promise.resolve(result) }) }),
+      eq: () => ({
+        is: () => ({
+          order: () => ({
+            range: (from: number, to: number) =>
+              Promise.resolve(
+                result.error
+                  ? result
+                  : {
+                      data: (result.data ?? []).slice(from, to + 1),
+                      error: null,
+                    }
+              ),
+          }),
+        }),
+      }),
     }),
   };
 }

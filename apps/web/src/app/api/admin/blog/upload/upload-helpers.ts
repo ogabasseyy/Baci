@@ -1,9 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { BlogFeaturedImageError } from '@/lib/blog-featured-image-variants';
-import type { createClient } from '@/lib/supabase/server';
-
-type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 import {
   buildBlogMediaCdnUrl,
@@ -195,78 +192,4 @@ export async function parseDeleteBodyFromRequest(request: NextRequest) {
       response: NextResponse.json({ error: 'Malformed JSON' }, { status: 400 }),
     };
   }
-}
-
-export type BlogPostMediaRow = {
-  content?: string | null;
-  excerpt?: string | null;
-  featured_image_url?: string | null;
-  featured_image_variants?: unknown;
-  author_image_url?: string | null;
-};
-
-/**
- * Whether a persisted platform post embeds a storage path. Variant maps
- * serialize before matching; every other media-carrying column compares
- * directly, since stored URLs always contain the raw storage path.
- */
-export function blogPostRowReferencesPath(
-  row: BlogPostMediaRow,
-  path: string
-): boolean {
-  const fields: unknown[] = [
-    row.content,
-    row.excerpt,
-    row.featured_image_url,
-    row.author_image_url,
-  ];
-  if (typeof row.featured_image_variants === 'string') {
-    fields.push(row.featured_image_variants);
-  } else if (row.featured_image_variants) {
-    fields.push(JSON.stringify(row.featured_image_variants));
-  }
-  return fields.some(
-    (field) => typeof field === 'string' && field.includes(path)
-  );
-}
-
-const BLOG_MEDIA_REFERENCE_SCAN_LIMIT = 5000;
-
-/**
- * Split candidate delete paths by persisted references. A session that
- * abandons an upload cannot know another tab already saved its URL, so
- * deletion stays conditional on no persisted platform post referencing
- * each path. Returns null when the reference scan itself fails so the
- * route fails closed instead of deleting blind.
- */
-export async function filterBlogMediaPathsWithoutPersistedReferences(
-  supabase: ServerSupabaseClient,
-  paths: string[]
-): Promise<{ deletable: string[]; skipped: string[] } | null> {
-  let references: {
-    data: BlogPostMediaRow[] | null;
-    error: { message: string } | null;
-  };
-  try {
-    references = await supabase
-      .from('blog_posts')
-      .select(
-        'content, excerpt, featured_image_url, featured_image_variants, author_image_url'
-      )
-      .eq('is_platform_post', true)
-      .is('merchant_id', null)
-      .limit(BLOG_MEDIA_REFERENCE_SCAN_LIMIT);
-  } catch {
-    return null;
-  }
-  if (references.error) return null;
-  const rows = references.data ?? [];
-  return {
-    deletable: paths.filter(
-      (path) => !rows.some((row) => blogPostRowReferencesPath(row, path))
-    ),
-    skipped: paths.filter((path) =>
-      rows.some((row) => blogPostRowReferencesPath(row, path))
-    ),
-  };
 }

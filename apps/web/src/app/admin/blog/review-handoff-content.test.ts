@@ -267,4 +267,32 @@ describe('validateImportedContent', () => {
       validateImportedContent('<p hidden>Draft note</p><p>Visible article</p>')
     ).toBe('<p>Visible article</p>');
   });
+
+  it('strips style-hidden subtrees before sanitization drops the style', () => {
+    // The sanitizer allowlist removes style before the strip runs, so a
+    // display:none note would surface unless converted first.
+    expect(
+      validateImportedContent(
+        '<p style="display:none">Draft note</p><p>Visible article</p>'
+      )
+    ).toBe('<p>Visible article</p>');
+  });
+
+  it('leaves hidden-looking tags inside fenced code samples verbatim', () => {
+    // Conversion must not rewrite literal tags in markdown code: the
+    // sample documents hidden usage instead of hiding anything.
+    const stored = validateImportedContent(
+      '```html\n<p hidden>Example</p>\n```\n\nVisible article'
+    );
+    expect(stored).toContain('&lt;p hidden&gt;');
+    expect(stored).not.toContain('hidden&quot;');
+  });
+
+  it('preserves non-default ordered-list start values', () => {
+    expect(
+      validateImportedContent(
+        '<ol start="5"><li>Step five</li><li>Step six</li></ol>'
+      )
+    ).toContain('start="5"');
+  });
 });

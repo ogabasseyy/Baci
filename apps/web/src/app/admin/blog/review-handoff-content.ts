@@ -4,6 +4,7 @@ import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
 import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
+import { convertHiddenInlineStyles } from './review-handoff-inline-styles';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
@@ -109,19 +110,17 @@ function normalizeContent(
   sanitizedRaw: string
 ): { content: string; rendered: string } {
   try {
+    // Parse first, convert after: marked escapes fenced samples so
+    // conversion cannot rewrite documented literal tags.
     const rendered = marked.parse(rawContent, { async: false }) as string;
     // Store what the editor displays: BlogEditor renders non-JSON content
     // through marked, so persisting raw markdown would publish literal syntax
-    // the reviewer never saw. HTML and plain text render to identical text
-    // and sanitize as before. Rendering first also preserves markdown code
+    // the reviewer never saw. Rendering first also preserves markdown code
     // examples: sanitizing the raw source would delete disallowed HTML inside
     // fenced blocks before marked can escape it as code.
-    // Indented code blocks render to text-identical HTML (<pre> adds no text),
-    // so text comparison alone would store raw markdown that the renderer
-    // displays as plain text instead of the code block the editor shows.
-    // GFM bare-URL autolinks are the same trap: rendering adds an <a> the
-    // text comparison cannot see, so the stored copy must be the rendered
-    // output or the published page loses a link the reviewer saw.
+    // Indented code blocks and GFM bare-URL autolinks render to markup a
+    // text comparison cannot see (<pre> adds no text; the <a> is new), so
+    // the stored copy must be the rendered output when either appears.
     // Count, not presence: raw input may already hold an anchor while
     // rendering adds another for a bare URL on the same line.
     const countAnchors = (html: string) => html.match(/<a[\s>]/gi)?.length ?? 0;
@@ -134,7 +133,10 @@ function normalizeContent(
     ) {
       return { content: sanitizedRaw, rendered };
     }
-    return { content: sanitizeHtml(rendered), rendered };
+    const converted = convertHiddenInlineStyles(
+      convertHiddenAttributes(rendered)
+    );
+    return { content: sanitizeHtml(converted), rendered };
   } catch {
     return { content: sanitizedRaw, rendered: sanitizedRaw };
   }
@@ -229,10 +231,10 @@ function hasBrokenMediaTag(html: string): boolean {
  * responsive visibility, and unrenderable media.
  */
 export function validateImportedContent(rawContent: string): string {
-  // The sanitizer drops the unsupported hidden attribute, so convert
-  // HTML-hidden elements to hiding classes before anything else: the
-  // uniform strip then removes them instead of surfacing them.
-  const unhidden = convertHiddenAttributes(rawContent);
+  // Convert hidden attributes and styles to hiding classes pre-sanitize.
+  const unhidden = convertHiddenInlineStyles(
+    convertHiddenAttributes(rawContent)
+  );
   if (INLINE_IMAGE_PLACEHOLDER_PATTERN.test(unhidden)) {
     throw new Error('The article has unresolved inline image placeholders');
   }
@@ -245,7 +247,7 @@ export function validateImportedContent(rawContent: string): string {
       'Article content must be HTML, not JSON-shaped text. Wrap literal JSON examples in HTML.'
     );
   }
-  const { content, rendered } = normalizeContent(unhidden, sanitizedRaw);
+  const { content, rendered } = normalizeContent(rawContent, sanitizedRaw);
   if (!content.trim()) {
     throw new Error('Article content is empty after sanitization');
   }

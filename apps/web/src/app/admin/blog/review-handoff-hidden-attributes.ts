@@ -1,3 +1,4 @@
+import { addHiddenClass } from './review-handoff-class-merge';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { tagAttributes } from './review-handoff-tag-attributes';
 
@@ -49,15 +50,6 @@ function hasBareDisplayUtility(tag: string): boolean {
   return false;
 }
 
-function withHiddenClass(tag: string): string {
-  const classified = tag.replace(
-    /\sclass=(["'])(.*?)\1/i,
-    ' class=$1$2 hidden$1'
-  );
-  if (classified !== tag) return classified;
-  return tag.replace(/\s*(\/?)>$/, ' class="hidden"$1>');
-}
-
 /**
  * Rewrite HTML-hidden elements to hiding classes before the sanitizer
  * drops the unsupported attribute. Converted markup flows through the
@@ -69,6 +61,6 @@ export function convertHiddenAttributes(html: string): string {
     if (closing) return tag;
     if (!hasHiddenAttribute(tag)) return tag;
     if (hasBareDisplayUtility(tag)) return tag;
-    return withHiddenClass(tag);
+    return addHiddenClass(tag);
   });
 }

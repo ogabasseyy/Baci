@@ -70,4 +70,15 @@ describe('sanitize HTML config', () => {
       '<a href="https://example.com" rel="noopener noreferrer">Source</a>'
     );
   });
+
+  it('preserves ordered-list start values the editor can keep', () => {
+    // Tiptap's OrderedList parses start and re-emits non-default
+    // values, so stripping it here would silently renumber imports.
+    const sanitized = sanitizeLib(
+      '<ol start="5"><li>Step five</li><li>Step six</li></ol>',
+      createSanitizeHtmlOptions()
+    );
+
+    expect(sanitized).toContain('start="5"');
+  });
 });

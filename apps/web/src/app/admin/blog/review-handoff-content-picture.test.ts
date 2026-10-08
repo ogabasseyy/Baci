@@ -210,4 +210,16 @@ describe('validateImportedContent picture', () => {
       )
     ).toThrow('picture sources');
   });
+
+  it('rejects a source the strip would hide via CSS classes', () => {
+    // Display utilities on a source element do not participate in the
+    // picture resource-selection algorithm: the browser still selects
+    // the mobile asset, so stripping it would silently lose media the
+    // editor cannot preserve.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source class="hidden" srcset="https://cdn.example.com/mobile.webp"><img src="https://cdn.example.com/fallback.png"></picture>'
+      )
+    ).toThrow('picture sources');
+  });
 });

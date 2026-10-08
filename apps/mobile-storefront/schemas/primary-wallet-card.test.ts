@@ -30,6 +30,29 @@ it('requires exact operation/reference correlation and a provider-selected ready
     }).success
   ).toBe(false);
 });
+it('accepts provider checkout URL variants but rejects lookalike hosts', () => {
+  const ready = { ...response, status: 'ready' };
+  for (const authorizationUrl of [
+    'https://checkout.paystack.com/Synthetic123',
+    'https://checkout.paystack.com/pay/abc-123_XYZ',
+    'https://checkout.paystack.com/abc123?reference=xyz&amount=1000',
+  ]) {
+    expect(
+      schemas.response.safeParse({ ...ready, authorizationUrl }).success
+    ).toBe(true);
+  }
+  for (const authorizationUrl of [
+    'http://checkout.paystack.com/Synthetic123',
+    'https://checkout.paystack.com.evil.example.com/Synthetic123',
+    'https://checkout.paystack.com@evil.example.com/',
+    'https://evil.example.com/checkout.paystack.com/x',
+    'not a url',
+  ]) {
+    expect(
+      schemas.response.safeParse({ ...ready, authorizationUrl }).success
+    ).toBe(false);
+  }
+});
 it('requires explicit versioned financial consent and rejects arbitrary metadata', () => {
   expect(
     schemas.consent.safeParse({

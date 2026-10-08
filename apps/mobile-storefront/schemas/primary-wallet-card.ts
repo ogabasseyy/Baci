@@ -25,7 +25,20 @@ const response = z
     ]),
     authorizationUrl: z
       .string()
-      .regex(/^https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+$/)
+      .refine((value) => {
+        // Hostname-checked parsing instead of a tight path regex: the
+        // provider may add path segments, hyphens, or query strings, and
+        // rejecting a legitimate checkout URL would strand the shopper.
+        try {
+          const parsed = new URL(value);
+          return (
+            parsed.protocol === 'https:' &&
+            parsed.hostname === 'checkout.paystack.com'
+          );
+        } catch {
+          return false;
+        }
+      })
       .optional(),
   })
   .refine(

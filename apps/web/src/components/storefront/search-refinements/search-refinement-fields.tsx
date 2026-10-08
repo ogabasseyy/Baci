@@ -1,7 +1,7 @@
 'use client';
 import type { SearchRefinements } from '@baci/shared/lib';
 import { deduplicateFacetChoices, isSameFacetChoice } from '@baci/shared/lib';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getSearchCurrencyFormatter } from './search-currency';
 import type { RefinementDraft } from './search-refinement-draft';
 import { RefinementGroup } from './search-refinement-group';
@@ -31,6 +31,11 @@ export function SearchRefinementFields({
       .formatToParts(0)
       .find((part) => part.type === 'currency')?.value ?? currency;
   const [expanded, setExpanded] = useState(focusGroup ?? '');
+  // The sheet stays mounted across quick-filter pills: follow the
+  // requested group instead of keeping the first expansion.
+  useEffect(() => {
+    setExpanded(focusGroup ?? '');
+  }, [focusGroup]);
   const [brandQuery, setBrandQuery] = useState('');
   // Facet spellings first so draft values resolve to the returned
   // spelling; the SQL filter folds case, so the choices must too.

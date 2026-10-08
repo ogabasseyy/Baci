@@ -1,7 +1,7 @@
 import type { SearchRefinements } from '@baci/shared/lib';
 import { deduplicateFacetChoices, isSameFacetChoice } from '@baci/shared/lib';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { type ReactNode, type RefObject, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { styles } from './search-refinement-styles';
@@ -51,6 +51,11 @@ export function SearchRefinementFields({
   action,
 }: Props) {
   const [expanded, setExpanded] = useState(focusGroup);
+  // The sheet stays mounted across quick-filter pills: follow the
+  // requested group instead of keeping the first expansion.
+  useEffect(() => {
+    setExpanded(focusGroup);
+  }, [focusGroup]);
   const labelStyle = { color: colors.text };
   // Facet spellings first so draft values resolve to the returned
   // spelling; the SQL filter folds case, so the choices must too.

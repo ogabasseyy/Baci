@@ -29,21 +29,21 @@ export function CartAssuranceRow({
           onChange={() => onToggle?.(cartItemId)}
           className="peer sr-only"
         />
-        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600" />
+        <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
       </div>
       <div className="flex flex-col">
-        <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-          <ShieldCheck size={12} className="text-red-600" />
+        <span className="text-xs font-bold text-store-background-text flex items-center gap-1.5">
+          <ShieldCheck size={12} className="text-store-primary" />
           Ogabassey Assurance
         </span>
-        <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+        <p className="text-[10px] text-store-background-text/55 leading-tight mt-0.5">
           {hasAssurance ? (
             <>
               Covers{' '}
-              <span className="font-bold text-gray-700">
+              <span className="font-bold text-store-background-text">
                 Screen & Liquid Damage
               </span>
-              <span className="ml-1 text-red-600 font-bold">
+              <span className="ml-1 text-store-primary font-bold">
                 +₦{assuranceCost.toLocaleString()}
               </span>
             </>

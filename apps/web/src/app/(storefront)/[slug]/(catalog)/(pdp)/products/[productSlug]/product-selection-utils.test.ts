@@ -133,4 +133,21 @@ describe('resolveSelectionPricing', () => {
       isOutOfStock: true,
     });
   });
+
+  it('inherits parent stock for a null-quantity selected offer', () => {
+    expect(
+      resolveSelectionPricing({
+        product,
+        selectedOffer: { price: 80, stock_quantity: null },
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      })
+    ).toEqual({
+      currentPrice: 80,
+      currentCompareAtPrice: 120,
+      currentStock: 10,
+      isOutOfStock: false,
+    });
+  });
 });

@@ -131,8 +131,13 @@ export function resolveSelectionPricing({
             }
           : selectedOffer
             ? {
-                stock: selectedOffer.stock_quantity ?? 0,
-                stock_quantity: selectedOffer.stock_quantity ?? 0,
+                // A null offer quantity inherits parent stock (mirroring
+                // the variants branch and the price-options CTE): the
+                // offer is purchasable, not out of stock.
+                stock:
+                  selectedOffer.stock_quantity ?? product.stock ?? undefined,
+                stock_quantity:
+                  selectedOffer.stock_quantity ?? product.stock ?? undefined,
               }
             : product
       )

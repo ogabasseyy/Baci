@@ -136,3 +136,16 @@ it('surfaces a deactivated draft category instead of selecting all categories', 
   expect(retained).toBeTruthy();
   expect(retained.props.accessibilityState.selected).toBe(true);
 });
+it('follows the requested group when the quick-filter target changes', () => {
+  const view = render(<SearchRefinementFields {...props} focusGroup="price" />);
+  expect(
+    view.getByLabelText('Price options').props.accessibilityState.expanded
+  ).toBe(true);
+  view.rerender(<SearchRefinementFields {...props} focusGroup="brand" />);
+  expect(
+    view.getByLabelText('Price options').props.accessibilityState.expanded
+  ).toBe(false);
+  expect(
+    view.getByLabelText('Brand options').props.accessibilityState.expanded
+  ).toBe(true);
+});

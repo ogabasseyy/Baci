@@ -352,6 +352,18 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 
 ## Round 50 (Muse 1 med + 2 low on 05c0a29326 — all adjudicated; Codex pending)
 
+## Round 51 (Muse 1 med on 589879eb51 — verified with evidence; Codex pending)
+
+- Muse med chain-replay VERIFIED: applied 08150000→08160000→08170000 in order on a clean scratch PG with ON_ERROR_STOP — all apply; final pg_get_functiondef of all four functions carries every appended fix. All three are signature-identical CREATE OR REPLACE, inherently order-safe; search-pending registry pins each sha (replay test green).
+
+## Round 52 (Codex 1 P1 + 3 P2 on 589879eb51 — all fixed)
+
+- CX-100 (P2) FIXED: web resolveSelectionPricing offer branch inherits parent stock on null (was ?? 0 → false out-of-stock), mirroring the variants branch + CTE. Test pins null offer qty + parent 10 → stock 10.
+- CX-101 (P2) FIXED: web + native refinement fields sync expanded to focusGroup via effect (sheet stays mounted across pills). Rerender tests both sides flip aria-expanded/accessibilityState.
+- CX-102 (P1) FIXED: assurance row rethemed to storefront tokens (primary/background-text/border), mirroring the sibling toggle in cart-page-line-item exactly. No class assertions in tests.
+- CX-103 (P2) FIXED: migration 20261008180000 excludes same-condition offers via a normalize_condition_for_match helper mirroring the TS normalizer. Probe: cheap same-condition + uk_used-alias offers dropped, different-condition kept, helper mapping exact. Registered (sha 2ed3088c…).
+- Follow-up noted: the established native comparison-refresh projection still emits same-condition offers — needs its own review (separate function/consumers, out of this finding's scope).
+
 - Muse low intake-oracle: repeat (accepted public-slug signal).
 - Muse med intake-rotation: PR-disclosed repeat.
 - Muse low assurance-disclosure: repeat — checkout quote itemization + invoice line (Round 42) and the rehydration opt-out test already answer both asks.

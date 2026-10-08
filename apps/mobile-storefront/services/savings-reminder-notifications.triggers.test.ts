@@ -34,6 +34,14 @@ jest.mock('@/stores/auth-store', () => ({
     }),
   },
 }));
+// Goal reconciliation is covered in the retention suite; here it resolves no
+// goals so every record is kept (and the API-client graph stays unloaded).
+jest.mock('@/lib/customer-savings', () => ({
+  listSavingsGoals: jest.fn(async () => ({
+    goals: [],
+    summary: { activeGoalCount: 0, savingsBalance: 0 },
+  })),
+}));
 
 const {
   activateDueSavingsReminderNotification,

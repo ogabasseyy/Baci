@@ -11,7 +11,7 @@ interface TransactionsSummaryProps {
   onTabChange: (tab: TransactionReviewTab) => void;
   summary: {
     missingCosts: number;
-    transactions: number;
+    transactions: number | string;
   };
 }
 

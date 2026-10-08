@@ -4,22 +4,28 @@ const mocks = vi.hoisted(() => ({
   eq: vi.fn(),
   from: vi.fn(),
   gte: vi.fn(),
+  gt: vi.fn(),
   is: vi.fn(),
   limit: vi.fn(),
   lte: vi.fn(),
   or: vi.fn(),
   order: vi.fn(),
+  range: vi.fn(),
+  returns: vi.fn(),
   select: vi.fn(),
 }));
 
 const query = {
   eq: mocks.eq,
   gte: mocks.gte,
+  gt: mocks.gt,
   is: mocks.is,
   limit: mocks.limit,
   lte: mocks.lte,
   or: mocks.or,
   order: mocks.order,
+  range: mocks.range,
+  returns: mocks.returns,
   select: mocks.select,
 };
 
@@ -36,8 +42,11 @@ beforeEach(() => {
   mocks.order.mockReturnValue(query);
   mocks.or.mockReturnValue(query);
   mocks.gte.mockReturnValue(query);
+  mocks.gt.mockReturnValue(query);
   mocks.lte.mockReturnValue(query);
-  mocks.limit.mockResolvedValue({ data: [], error: null });
+  mocks.limit.mockReturnValue({ returns: mocks.returns });
+  mocks.range.mockReturnValue({ returns: mocks.returns });
+  mocks.returns.mockResolvedValue({ data: [], error: null });
 });
 
 describe('fetchTransactionReviewRows', () => {
@@ -76,4 +85,105 @@ describe('fetchTransactionReviewRows', () => {
       'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)'
     );
   });
+});
+
+it('searches an older IMEI beyond the first database page', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  const { mapTransactionOrderRows, filterTransactionOrders } = await import(
+    './transaction-review'
+  );
+  const row = {
+    id: 'older-order',
+    created_at: '2025-01-01T00:00:00Z',
+    customer_email: null,
+    customer_name: 'Older customer',
+    customer_phone: null,
+    fulfillment_details: { imei: '354066782325743' },
+    order_items: [],
+    order_number: 'OLD-1',
+    payment_method: 'card',
+    total: 100,
+  };
+  mocks.returns
+    .mockResolvedValueOnce({
+      data: Array.from({ length: 200 }, (_, index) => ({
+        ...row,
+        id: `a-${String(index).padStart(3, '0')}`,
+        fulfillment_details: null,
+      })),
+      error: null,
+    })
+    .mockResolvedValueOnce({ data: [row], error: null });
+
+  const result = await fetchTransactionReviewRows({
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    fetchAll: true,
+    selectStatement: 'id, fulfillment_details',
+  });
+  expect(result.data).toHaveLength(201);
+  const matches = filterTransactionOrders(
+    mapTransactionOrderRows(result.data ?? []),
+    '354066782325743'
+  );
+  expect(matches.map((order) => order.id)).toEqual(['older-order']);
+  expect(mocks.gt).toHaveBeenCalledWith('id', 'a-199');
+  expect(mocks.eq).toHaveBeenCalledWith('payment_status', 'paid');
+  expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+});
+
+it('returns an error rather than incomplete searchable history when a later page fails', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  const error = { message: 'Network error' };
+  mocks.returns
+    .mockResolvedValueOnce({
+      data: Array.from({ length: 200 }, () => ({ id: 'row' })),
+      error: null,
+    })
+    .mockResolvedValueOnce({ data: null, error });
+  const result = await fetchTransactionReviewRows({
+    includeCancelledAt: true,
+    includeTransactionDate: false,
+    merchantId: 'merchant-1',
+    fetchAll: true,
+    selectStatement: 'id',
+  });
+  expect(result.error).toEqual(error);
+  expect(result.data).toBeNull();
+});
+
+it('keeps ordinary browsing bounded to the recent window', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  await fetchTransactionReviewRows({
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    selectStatement: 'id',
+  });
+  expect(mocks.limit).toHaveBeenCalledWith(40);
+});
+
+it('applies both month boundaries and cancellation visibility in a single logical filter', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  await fetchTransactionReviewRows({
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    selectStatement: 'id',
+    startDateFilter: 'transaction_date.gte.2026-10-01',
+    endDateFilter: 'transaction_date.lte.2026-10-08',
+  });
+  expect(mocks.or).toHaveBeenCalledTimes(1);
+  expect(mocks.or).toHaveBeenCalledWith(
+    'and(or(shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)),or(transaction_date.gte.2026-10-01),or(transaction_date.lte.2026-10-08))'
+  );
 });

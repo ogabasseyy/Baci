@@ -32,6 +32,7 @@ export async function fetchFullTransactionReviewRows(
   }: FullFallbackDependencies
 ) {
   const {
+    fetchAll,
     endDateFilter,
     endDateIso,
     merchantId,
@@ -39,6 +40,7 @@ export async function fetchFullTransactionReviewRows(
     startDateIso,
   } = query;
   const baseOptions = {
+    ...(fetchAll ? { fetchAll } : {}),
     endDateFilter,
     endDateIso,
     includeCancelledAt: true,

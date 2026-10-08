@@ -17,6 +17,7 @@ import { TransactionsSummary } from '@/components/transactions/TransactionsSumma
 import { styles } from '@/components/transactions/transactions.styles';
 import { useAnalyticsOverview } from '@/hooks/useAnalyticsOverview';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useCurrentDate } from '@/hooks/useCurrentDate';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEditor';
 import { useTransactionReview } from '@/hooks/useTransactionReview';
@@ -56,7 +57,7 @@ export default function TransactionsScreen() {
           startDate: parsedStartDate,
         }
       : undefined;
-  const currentMonthAnchor = new Date();
+  const currentMonthAnchor = useCurrentDate();
   const profitRange = resolveAnalyticsDateRange(
     'this_month',
     currentMonthAnchor.getFullYear(),
@@ -66,28 +67,53 @@ export default function TransactionsScreen() {
   );
   const { data: profitAnalytics, error: profitError } =
     useAnalyticsOverview(profitRange);
+  const [activeTab, setActiveTab] = useState<TransactionReviewTab>('paid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const searching = Boolean(searchQuery.trim());
+  const monthlyReview = useTransactionReview(profitRange, {
+    fetchAll: true,
+    exactDates: true,
+  });
   const {
     data: orders = [],
     isLoading,
     isRefetching,
     error,
     refetch,
-  } = useTransactionReview(range);
+  } = useTransactionReview(searching ? undefined : range, {
+    fetchAll: searching,
+  });
   const isRetrying = isLoading || isRefetching;
-  const [activeTab, setActiveTab] = useState<TransactionReviewTab>('paid');
-  const [searchQuery, setSearchQuery] = useState('');
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
     formatCurrency,
   });
 
-  const summary = orders.reduce(
-    (acc, order) => ({
-      missingCosts: acc.missingCosts + order.missingCostCount,
-      transactions: acc.transactions + 1,
-    }),
-    { missingCosts: 0, transactions: 0 }
-  );
+  const monthStart = new Date(
+    currentMonthAnchor.getFullYear(),
+    currentMonthAnchor.getMonth(),
+    1
+  ).getTime();
+  const nextMonthStart = new Date(
+    currentMonthAnchor.getFullYear(),
+    currentMonthAnchor.getMonth() + 1,
+    1
+  ).getTime();
+  const monthlyCount = (monthlyReview.data ?? []).filter((order) => {
+    const timestamp = new Date(order.createdAt).getTime();
+    return timestamp >= monthStart && timestamp < nextMonthStart;
+  }).length;
+  const summary = {
+    missingCosts: orders.reduce(
+      (count, order) => count + order.missingCostCount,
+      0
+    ),
+    transactions: monthlyReview.error
+      ? 'Unavailable'
+      : monthlyReview.data
+        ? monthlyCount
+        : '--',
+  };
   const estimatedProfitThisMonthLabel = profitError
     ? 'Unavailable'
     : profitAnalytics
@@ -229,6 +255,7 @@ export default function TransactionsScreen() {
             isRetrying={isRetrying}
             onRetry={() => {
               void refetch();
+              void monthlyReview.refetch();
             }}
             visibleOrderCount={visibleOrders.length}
           />

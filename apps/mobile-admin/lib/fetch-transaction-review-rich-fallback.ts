@@ -17,6 +17,7 @@ import { TRANSACTION_REVIEW_SELECTORS } from './transaction-review-selectors';
 /** Reads cost-rich rows before compatibility/base fallbacks. */
 export async function fetchRichTransactionReviewRows(
   {
+    fetchAll,
     endDateFilter,
     endDateIso,
     merchantId,
@@ -26,6 +27,7 @@ export async function fetchRichTransactionReviewRows(
   { onMissingSchemaColumn }: TransactionReviewFallbackCallbacks = {}
 ) {
   const legacyQuery = {
+    ...(fetchAll ? { fetchAll } : {}),
     endDateFilter,
     endDateIso,
     merchantId,

@@ -85,4 +85,40 @@ describe('useTransactionReview', () => {
       },
     ]);
   });
+  it('preserves local-midnight instants and complete pagination through schema fallbacks', async () => {
+    mocks.fetchTransactionReviewRows
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: 'PGRST204',
+          message:
+            "Could not find the 'order_item_unit_costs' relationship in the schema cache",
+        },
+      })
+      .mockResolvedValue({ data: [], error: null });
+    const { result } = renderHook(
+      () =>
+        useTransactionReview(
+          {
+            startDate: new Date('2026-09-30T23:00:00.000Z'),
+            endDate: new Date('2026-10-08T22:59:59.999Z'),
+          },
+          { exactDates: true, fetchAll: true }
+        ),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.fetchTransactionReviewRows.mock.calls.length).toBeGreaterThan(
+      1
+    );
+    for (const [options] of mocks.fetchTransactionReviewRows.mock.calls) {
+      expect(options).toEqual(
+        expect.objectContaining({
+          startDateIso: '2026-09-30T23:00:00.000Z',
+          endDateIso: '2026-10-08T22:59:59.999Z',
+          fetchAll: true,
+        })
+      );
+    }
+  });
 });

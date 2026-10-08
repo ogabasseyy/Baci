@@ -21,47 +21,61 @@ export type { TransactionReviewItem, TransactionReviewOrder };
 export const TRANSACTION_REVIEW_LEGACY_SELECT =
   TRANSACTION_REVIEW_SELECTORS.legacy;
 
-export function useTransactionReview(range?: TransactionReviewRange) {
+export function useTransactionReview(
+  range?: TransactionReviewRange,
+  options: { fetchAll?: boolean; exactDates?: boolean } = {}
+) {
   const { merchant } = useMerchant();
-  const startDateIso = range?.startDate
-    ? new Date(
-        Date.UTC(
-          range.startDate.getUTCFullYear(),
-          range.startDate.getUTCMonth(),
-          range.startDate.getUTCDate(),
-          0,
-          0,
-          0,
-          0
-        )
-      ).toISOString()
-    : undefined;
-  const endDateIso = range?.endDate
-    ? new Date(
-        Date.UTC(
-          range.endDate.getUTCFullYear(),
-          range.endDate.getUTCMonth(),
-          range.endDate.getUTCDate(),
-          23,
-          59,
-          59,
-          999
-        )
-      ).toISOString()
-    : undefined;
+  const startDateIso = options.exactDates
+    ? range?.startDate?.toISOString()
+    : range?.startDate
+      ? new Date(
+          Date.UTC(
+            range.startDate.getUTCFullYear(),
+            range.startDate.getUTCMonth(),
+            range.startDate.getUTCDate(),
+            0,
+            0,
+            0,
+            0
+          )
+        ).toISOString()
+      : undefined;
+  const endDateIso = options.exactDates
+    ? range?.endDate?.toISOString()
+    : range?.endDate
+      ? new Date(
+          Date.UTC(
+            range.endDate.getUTCFullYear(),
+            range.endDate.getUTCMonth(),
+            range.endDate.getUTCDate(),
+            23,
+            59,
+            59,
+            999
+          )
+        ).toISOString()
+      : undefined;
   const { endDateFilter, startDateFilter } = buildTransactionReviewRangeFilters(
     startDateIso,
     endDateIso
   );
 
   return useQuery<TransactionReviewOrder[]>({
-    queryKey: ['transaction-review', merchant?.id, startDateIso, endDateIso],
+    queryKey: [
+      'transaction-review',
+      merchant?.id,
+      startDateIso,
+      endDateIso,
+      Boolean(options.fetchAll),
+    ],
     queryFn: async () => {
       if (!merchant?.id) {
         throw new Error('Merchant context is not ready');
       }
 
       const { data, error } = await fetchTransactionReviewWithFallbacks({
+        fetchAll: options.fetchAll,
         endDateFilter,
         endDateIso,
         merchantId: merchant.id,

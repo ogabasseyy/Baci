@@ -18,6 +18,7 @@ export async function runBaseTransactionReviewQuery(
   taxAmountFallback?: TaxAmountFallback
 ) {
   const options: TransactionReviewQueryOptions = {
+    ...(query.fetchAll ? { fetchAll: true } : {}),
     endDateIso: query.endDateIso,
     includeCancelledAt,
     includeTransactionDate: false,

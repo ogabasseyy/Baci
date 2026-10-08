@@ -46,6 +46,32 @@ export async function GET(request: NextRequest) {
         { headers: NO_STORE_HEADERS }
       );
     }
+    // Activation validates the dedicated-product shape (NGN 100, no
+    // variants) only once; recheck the live catalog row here so a
+    // repriced or variant-enabled product stops being offered. Any
+    // lookup failure fails closed.
+    const shapeLookup = auth.supabase
+      ? await auth.supabase
+          .from('products')
+          .select('price, has_variants')
+          .eq('id', policy.productId)
+          .maybeSingle()
+      : { data: null, error: { message: 'unavailable' } };
+    const shape = shapeLookup.data as {
+      price: number | string | null;
+      has_variants: boolean | null;
+    } | null;
+    if (
+      shapeLookup.error ||
+      !shape ||
+      Number(shape.price) !== 100 ||
+      shape.has_variants !== false
+    ) {
+      return NextResponse.json(
+        { available: false, reason: 'unavailable' },
+        { headers: NO_STORE_HEADERS }
+      );
+    }
     // Expose the pilot expiry so checkout clients can stop retaining a
     // positive result (and revalidate) once the short pilot window ends.
     return NextResponse.json(

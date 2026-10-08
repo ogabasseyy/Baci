@@ -23,6 +23,13 @@ import { GET } from './route';
 
 const OGABASSEY_MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
+function stubSupabaseShape(shape: { data: unknown; error: unknown }) {
+  const maybeSingle = vi.fn().mockResolvedValue(shape);
+  const eq = vi.fn().mockReturnValue({ maybeSingle });
+  const select = vi.fn().mockReturnValue({ eq });
+  return { from: vi.fn().mockReturnValue({ select }), maybeSingle, eq };
+}
+
 describe('GET /api/payments/redvault/availability', () => {
   beforeEach(() => {
     routeMocks.getRedvaultPaymentAvailability.mockReset();
@@ -89,8 +96,13 @@ describe('GET /api/payments/redvault/availability', () => {
       productId,
       expiresAt: 1_789_000_000_000,
     });
+    const supabase = stubSupabaseShape({
+      data: { price: 100, has_variants: false },
+      error: null,
+    });
     routeMocks.authenticateApiRequest.mockResolvedValue({
       user: { id: routeMocks.pilotUserId },
+      supabase,
     });
     const response = await GET(
       new NextRequest(
@@ -101,6 +113,65 @@ describe('GET /api/payments/redvault/availability', () => {
       available: true,
       reason: 'private_live_pilot',
       expiresAt: 1_789_000_000_000,
+    });
+    expect(supabase.from).toHaveBeenCalledWith('products');
+    expect(supabase.eq).toHaveBeenCalledWith('id', productId);
+  });
+
+  it.each([
+    ['repriced product', { price: 150, has_variants: false }],
+    ['variant-enabled product', { price: 100, has_variants: true }],
+    ['missing product row', null],
+  ])('hides the pilot for a %s', async (_label, data) => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({
+      productId,
+      expiresAt: 1_789_000_000_000,
+    });
+    routeMocks.authenticateApiRequest.mockResolvedValue({
+      user: { id: routeMocks.pilotUserId },
+      supabase: stubSupabaseShape({ data, error: null }),
+    });
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/payments/redvault/availability?merchant_id=${OGABASSEY_MERCHANT_ID}&product_id=${productId}`
+      )
+    );
+    await expect(response.json()).resolves.toEqual({
+      available: false,
+      reason: 'unavailable',
+    });
+  });
+
+  it('hides the pilot when the catalog lookup fails', async () => {
+    const productId = '11111111-1111-4111-8111-111111111111';
+    routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({
+      productId,
+      expiresAt: 1_789_000_000_000,
+    });
+    routeMocks.authenticateApiRequest.mockResolvedValue({
+      user: { id: routeMocks.pilotUserId },
+      supabase: stubSupabaseShape({
+        data: null,
+        error: { message: 'offline' },
+      }),
+    });
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/payments/redvault/availability?merchant_id=${OGABASSEY_MERCHANT_ID}&product_id=${productId}`
+      )
+    );
+    await expect(response.json()).resolves.toEqual({
+      available: false,
+      reason: 'unavailable',
     });
   });
 

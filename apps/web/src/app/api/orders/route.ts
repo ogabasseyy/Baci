@@ -28,7 +28,7 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
-import { validateRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot';
+import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
@@ -1579,38 +1579,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (
-      redvaultRequested &&
-      redvaultQuote &&
-      getRedvaultPaymentAvailability().reason === 'private_live_pilot'
-    ) {
-      if (
-        !validateRedvaultLivePilotOrder({
-          userId: resolvedUserId,
-          merchantId: merchant_id,
-          currency: merchantResolvedCurrency,
-          items: redvaultQuote.lines,
-          subtotalKobo: redvaultQuote.productSubtotalKobo,
-          discountKobo: redvaultQuote.discountKobo,
-          shippingFee: shippingFeeValue,
-          assuranceAmount: orderItemsPayload.reduce(
-            (sum, item) => sum + item.assurance_fee,
-            0
-          ),
-          wrappingFee: giftWrappingFeeValue,
-          walletAmount: Number(use_wallet_credit ? wallet_amount : 0),
-          savingsAmount: Number(use_savings_credit ? savings_amount : 0),
-          taxAmountKobo: Math.round(orderTaxAmount * 100),
-        })
-      ) {
-        return NextResponse.json(
-          {
-            code: 'REDVAULT_PILOT_UNAVAILABLE',
-            error: 'REDVAULT is unavailable',
-          },
-          { status: 409, headers: { 'Cache-Control': 'no-store' } }
-        );
-      }
+    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
+      redvaultRequested,
+      redvaultQuote,
+      userId: resolvedUserId,
+      merchantId: merchant_id,
+      currency: merchantResolvedCurrency,
+      shippingFee: shippingFeeValue,
+      wrappingFee: giftWrappingFeeValue,
+      orderItems: orderItemsPayload,
+      useWalletCredit: use_wallet_credit,
+      walletAmount: wallet_amount,
+      useSavingsCredit: use_savings_credit,
+      savingsAmount: savings_amount,
+      taxAmount: orderTaxAmount,
+    });
+    if (pilotOrderRejection) {
+      return pilotOrderRejection;
     }
 
     // Canonical server-verified pre-discount subtotal. Computed lazily (at

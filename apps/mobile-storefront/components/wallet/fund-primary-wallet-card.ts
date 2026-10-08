@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
 import {
   getPiggyvestPrimaryCapability,
   isPrimaryWalletNotReady,
@@ -99,7 +100,9 @@ export async function fundPrimaryWalletCard(
         'Your wallet funding is confirmed. Refresh your wallet balance.'
       );
       input.resetFundPanel();
-      if (result.returnTo) router.replace(result.returnTo);
+      // Re-sanitize at the navigation boundary: the saved handoff was
+      // validated at write time, but storage is outside our trust.
+      if (result.returnTo) router.replace(getWalletReturnHref(result.returnTo));
     } else
       Alert.alert(
         'Card funding pending',

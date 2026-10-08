@@ -74,6 +74,20 @@ describe('WalletFundModal', () => {
     expect(props.onResetFund).toHaveBeenCalledTimes(1);
   });
 
+  it('shows savings return guidance for a parameterized primary handoff', () => {
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        fundReturnTo="/wallet?action=savings&savingsGoalId=owned-goal&savingsAmount=1000"
+        showFundPanel
+      />
+    );
+
+    expect(screen.getByText(/return to this savings plan/i)).toBeOnTheScreen();
+  });
+
   it('does not show a funding panel when it is closed', () => {
     const props = createWalletContentProps();
     render(

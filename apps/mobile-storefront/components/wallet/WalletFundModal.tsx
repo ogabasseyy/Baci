@@ -3,6 +3,7 @@ import { ModalSheet } from '@/components/ui/ModalSheet';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
+import { isWalletSavingsReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
@@ -103,7 +104,7 @@ export function WalletFundModal({
               onCreateFundingAccount={onCreateFundingAccount}
               onResetFund={onResetFund}
               onSubmitPhone={onSubmitPhone}
-              returnToSavings={fundReturnTo === '/wallet?action=savings'}
+              returnToSavings={isWalletSavingsReturnHref(fundReturnTo)}
             />
           )}
         </ScrollView>

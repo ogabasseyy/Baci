@@ -5,12 +5,14 @@ export function PrimaryWalletCardPendingView({
   colors,
   statusError,
   message,
+  operationReference,
   onCheck,
   onBack,
 }: {
   colors: typeof Colors.light;
   statusError: boolean;
   message: string | null;
+  operationReference?: string;
   onCheck: () => void;
   onBack: () => void;
 }) {
@@ -27,6 +29,15 @@ export function PrimaryWalletCardPendingView({
           : (message ??
             'We are waiting for funding confirmation. Money appears in your wallet once confirmed. Your operation is saved. Do not pay again.')}
       </Text>
+      {operationReference ? (
+        <Text
+          accessibilityLabel={`Funding operation reference ${operationReference}`}
+          selectable
+          style={{ color: colors.textSecondary }}
+        >
+          Reference: {operationReference}
+        </Text>
+      ) : null}
       <Pressable accessibilityRole="button" onPress={onCheck}>
         <Text style={{ color: colors.primary }}>Check funding status</Text>
       </Pressable>

@@ -430,3 +430,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low RPC error mapping FIXED: migration 20261008220000 gives intake outcomes distinct codes (23505 conflict, P0001 unavailable; 54000/22023 unchanged, messages unchanged); route maps on SQLSTATE only. Route tests refixtured (5/5); verify-sql.mjs applies M4 and pins both codes; scratch probe green. Registered (9e96115c…). PR body → 27.
 - Muse low idempotency-canonical ADJUDICATED (intended): same requestId + different payload raising conflict is textbook idempotency (the key binds the payload; retries reuse the identical payload). Cross-spelling repeats are covered by the canonical 24h dedup net, not the id branch.
 - Muse med assurance disclosure: repeat (both PDPs route through the itemized cart toggle; pre-add copy is a product follow-up).
+
+## Round 62 (Muse 4 low on f88fa83 — all adjudicated repeats; Codex + CI pending)
+
+- Muse low intake-budget: PR-disclosed repeat (distributed callers vs 50/hr merchant budget; 54000 merchantSlug log signal exists for alerting).
+- Muse low idempotency-canonical: repeat of the Round 61 adjudication (key binds payload; canonical dedup is the cross-spelling net).
+- Muse low capacity 3v4: repeat of the line-7 adjudication (intentional session-local presentation difference).
+- Muse low Origin-absent: repeat — PR's api-security.ts change is a one-line rate-limit call-site; Origin-absent behavior is pre-existing shared infra, and the intake route carries no ambient authority (line-297 CSRF adjudication).

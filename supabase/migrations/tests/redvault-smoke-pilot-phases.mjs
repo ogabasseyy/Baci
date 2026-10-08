@@ -228,6 +228,7 @@ export function runSmokePilotPhases({ migrations, sql }) {
     '20261006190200_uba_redvault_pilot_disabled_policy_staging_passthrough.sql',
     '20261006190300_uba_redvault_pilot_item_fulfillment_guard.sql',
     '20261006190400_uba_redvault_pilot_db_staging_mode.sql',
+    '20261006190500_uba_redvault_pilot_bound_product_immutable.sql',
   ]) {
     sql(readFileSync(resolve(migrations, part), 'utf8'));
   }
@@ -282,6 +283,9 @@ export function runSmokePilotPhases({ migrations, sql }) {
     END IF;
     IF strpos(pg_get_functiondef('private.enforce_uba_redvault_private_pilot_attempt()'::regprocedure), 'staging_test_mode') = 0 THEN
       RAISE EXCEPTION 'pilot_attempt_staging_mode_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.configure_uba_redvault_live_pilot(boolean,uuid,timestamptz)'::regprocedure), 'redvault_pilot_bound_product_immutable') = 0 THEN
+      RAISE EXCEPTION 'pilot_bound_product_immutability_missing';
     END IF;
   END $$;`);
   process.stdout.write(

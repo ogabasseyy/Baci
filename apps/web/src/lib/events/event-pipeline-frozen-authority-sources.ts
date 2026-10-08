@@ -31,8 +31,11 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for derived pilot tax totals: the route now passes
   // server-computed tax kobo into the pilot validator; notification and
   // payment authority are unchanged.
+  // Re-pinned after extracting the pilot order gate into
+  // redvault-live-pilot-order-gate.ts; the route is now a thin call
+  // site and inherited authority is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '48d36a84bc10d6e7029b118c10e0a23e68e7b8ed5f98932f076ab5283f7dfc5e',
+    'c98d41fedc8db869226a43c924f57bef0fc6efb9ee7cec98705452506485a90a',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

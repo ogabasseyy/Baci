@@ -13,12 +13,13 @@ import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { getRedvaultCallbackUrl } from '@/lib/checkout/redvault-callback-url';
-import { REDVAULT_PILOT_USER_ID } from '@/lib/checkout/redvault-live-pilot';
 import {
-  verifyRedvaultLivePilotFunding,
-  verifyRedvaultLivePilotSnapshot,
-} from '@/lib/checkout/redvault-live-pilot-verification';
+  buildRedvaultLivePilotCallbackUrl,
+  preserveRedvaultLivePilotAttempts,
+  rejectInvalidRedvaultLivePilotFunding,
+  rejectInvalidRedvaultLivePilotSnapshot,
+  rejectUnauthorizedRedvaultLivePilot,
+} from '@/lib/checkout/redvault-live-pilot-initialize-gate';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
@@ -1066,14 +1067,15 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      if (
-        availability.reason === 'private_live_pilot' &&
-        redvaultCustomerAuth?.user?.id !== REDVAULT_PILOT_USER_ID
-      ) {
+      const pilotAuthRejection = rejectUnauthorizedRedvaultLivePilot({
+        reason: availability.reason,
+        userId: redvaultCustomerAuth?.user?.id,
+      });
+      if (pilotAuthRejection) {
         return createErrorResponse(
-          'REDVAULT payment is not available',
-          'REDVAULT_UNAVAILABLE',
-          409
+          pilotAuthRejection.message,
+          pilotAuthRejection.code,
+          pilotAuthRejection.status
         );
       }
     }
@@ -1191,23 +1193,21 @@ export async function POST(request: NextRequest) {
         409
       );
     }
-    if (
-      redvaultRequested &&
-      getRedvaultPaymentAvailability().reason === 'private_live_pilot'
-    ) {
-      const pilotSnapshot = await verifyRedvaultLivePilotSnapshot({
+    const pilotSnapshotRejection = await rejectInvalidRedvaultLivePilotSnapshot(
+      {
+        redvaultRequested,
         client: paymentDataClient,
         orderId: data.order_id,
         userId: redvaultCustomerAuth?.user?.id,
         merchantId: orderSnapshot.merchant_id,
-      });
-      if (!pilotSnapshot.ok) {
-        return createErrorResponse(
-          pilotSnapshot.rejection.message,
-          pilotSnapshot.rejection.code,
-          pilotSnapshot.rejection.status
-        );
       }
+    );
+    if (pilotSnapshotRejection) {
+      return createErrorResponse(
+        pilotSnapshotRejection.message,
+        pilotSnapshotRejection.code,
+        pilotSnapshotRejection.status
+      );
     }
 
     // Validate order total: Number(null) => 0, Number(undefined) => NaN
@@ -1300,21 +1300,17 @@ export async function POST(request: NextRequest) {
         }, 0)
       : 0;
 
-    if (
-      redvaultRequested &&
-      getRedvaultPaymentAvailability().reason === 'private_live_pilot'
-    ) {
-      const pilotFunding = verifyRedvaultLivePilotFunding({
-        walletAmountUsed,
-        savingsAmountUsed,
-      });
-      if (!pilotFunding.ok) {
-        return createErrorResponse(
-          pilotFunding.rejection.message,
-          pilotFunding.rejection.code,
-          pilotFunding.rejection.status
-        );
-      }
+    const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
+      redvaultRequested,
+      walletAmountUsed,
+      savingsAmountUsed,
+    });
+    if (pilotFundingRejection) {
+      return createErrorResponse(
+        pilotFundingRejection.message,
+        pilotFundingRejection.code,
+        pilotFundingRejection.status
+      );
     }
 
     // Fetch merchant
@@ -1378,19 +1374,10 @@ export async function POST(request: NextRequest) {
       const fallbackClient = await createServerSupabaseClient();
       let redirectUrl: string;
       try {
-        redirectUrl = getRedvaultCallbackUrl({
+        redirectUrl = buildRedvaultLivePilotCallbackUrl({
           merchantSlug: merchantWithPaystack.slug,
           protocol,
           rootDomain,
-          runtimeEnv: process.env.BACI_RUNTIME_ENV,
-          vercelEnv: process.env.VERCEL_ENV,
-          vercelUrl: process.env.VERCEL_URL,
-          localBaseUrl:
-            process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          localAllowedHosts: (process.env.REDVAULT_LOCAL_CALLBACK_HOSTS ?? '')
-            .split(',')
-            .map((host) => host.trim())
-            .filter((host) => host.length > 0),
         });
       } catch {
         return createErrorResponse(
@@ -1404,9 +1391,7 @@ export async function POST(request: NextRequest) {
         fallbackClient,
         merchantId,
         orderId: data.order_id,
-        preserveAttempts:
-          redvaultRequested &&
-          getRedvaultPaymentAvailability().reason === 'private_live_pilot',
+        preserveAttempts: preserveRedvaultLivePilotAttempts(redvaultRequested),
         redirectUrl,
         userId: redvaultCustomerAuth?.user?.id ?? null,
       });

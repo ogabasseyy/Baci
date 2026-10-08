@@ -9,6 +9,34 @@ SELECT private.configure_uba_redvault_live_pilot(
   true, (SELECT product_id FROM redvault_private_pilot_case), pg_catalog.now() + interval '1 hour'
 );
 
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
+  rotated uuid;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  -- With no pilot-user applications yet, rotating the binding stays
+  -- allowed; switch away and back so the suite continues on the fixture.
+  INSERT INTO public.products(
+    id, merchant_id, brand, name, price, condition, vat_category_code, vat_rate,
+    has_variants, taxable, manage_stock, stock_quantity, stock, status
+  )
+  VALUES (
+    extensions.gen_random_uuid(), '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fixture',
+    'REDVAULT rotation probe product', 100, 'new', 'S', 0, false, false, false, 1, 1, 'active'
+  )
+  RETURNING id INTO rotated;
+  PERFORM private.configure_uba_redvault_live_pilot(true, rotated, pg_catalog.now() + interval '1 hour');
+  IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = rotated) THEN
+    RAISE EXCEPTION 'pilot_applicationless_rotation_rejected';
+  END IF;
+  PERFORM private.configure_uba_redvault_live_pilot(true, fixture.product_id, pg_catalog.now() + interval '1 hour');
+  IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = fixture.product_id) THEN
+    RAISE EXCEPTION 'pilot_rotation_restore_rejected';
+  END IF;
+END;
+$$;
+
 SELECT pg_catalog.set_config('request.jwt.claims', jsonb_build_object(
   'sub', '70261bce-d358-45a4-9ede-8b9d71fb3bd9',
   'role', 'authenticated',
@@ -100,6 +128,42 @@ BEGIN
   END IF;
 END;
 $$;
+
+RESET ROLE;
+
+DO $$
+DECLARE
+  fixture redvault_private_pilot_case%ROWTYPE;
+  rotated uuid;
+  caught text;
+BEGIN
+  SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
+  -- The pilot user has an application but no reservation yet: rotating to
+  -- a different product must fail so the used test product stays
+  -- quarantined, and the failed rotation must leave the policy untouched.
+  INSERT INTO public.products(
+    id, merchant_id, brand, name, price, condition, vat_category_code, vat_rate,
+    has_variants, taxable, manage_stock, stock_quantity, stock, status
+  )
+  VALUES (
+    extensions.gen_random_uuid(), '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fixture',
+    'REDVAULT rotation probe product', 100, 'new', 'S', 0, false, false, false, 1, 1, 'active'
+  )
+  RETURNING id INTO rotated;
+  BEGIN
+    PERFORM private.configure_uba_redvault_live_pilot(true, rotated, pg_catalog.now() + interval '1 hour');
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_bound_product_immutable' THEN
+    RAISE EXCEPTION 'pilot_product_rotation_wrong_result:%', COALESCE(caught, 'accepted');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = fixture.product_id) THEN
+    RAISE EXCEPTION 'pilot_failed_rotation_changed_policy';
+  END IF;
+END;
+$$;
+
+SET LOCAL ROLE authenticated;
 
 DO $$
 DECLARE

@@ -329,3 +329,12 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-95 (P1) FIXED: migration 20261008150000 restores the published-or-platform-admin predicate (established form from the option projection/MCP search) in refined candidates + price_options; all public refined RPCs delegate to these two, so the family is covered. Registered (sha bf179aa2…); scratch probe on the real file gives 1/1/0/1 on both functions.
 - Muse med intake-rotation: PR-disclosed repeat. Muse med assurance-disclosure: code correct per Muse; fee itemized (Round 42 evidence) + opt-out persistence pinned (native rehydration/merge test, web merge tests) + toggles tested both sides.
 - Muse low facet-throw: sole caller catches immediately to empty-facets + facetError; 'keeps results available when filters fail' regression test exists. Muse low intake-PII: informational, by design.
+
+## Round 48 (Muse 3 med + 2 low on b77f7a27d7 — 1 fixed, 4 adjudicated; CI 2 failures fixed; Codex pending)
+
+- Muse MED zero-price-default FIXED: unavailableIds is now required (no [] default) on CompareTable + CompareView; the full chain (compare screen → view → table) already passes explicitly and the zero-price regression test exists. TS now rejects a forgotten prop at compile time.
+- Muse med assurance-totals ADJUDICATED with correction: Ogabassey lines defaulted true since before the gate (a2812d1279: `?? slug === 'ogabassey'`); the gate (`&& true`) changed no existing caller behavior. The opt-out contract Muse cites governs merge/undefined semantics (Round 42 verified falsy on all paths), not the add default — and it is preserved.
+- Muse med platform-admin-visibility ADJUDICATED: exemption matches 5+ established projections byte-for-byte in predicate form (option projection, MCP search, serialized inventory, PDP snapshots); membership is managed via a dedicated RPC + audited. No new trust assumption vs the established paths CX-95 demanded parity with; column-level RLS hardening is a platform-wide follow-up.
+- Muse low intake-oracle + low pagination-total: repeats (public-slug acceptance; line-187 documented contract).
+- CI Quality Gate - Test FIXED: redirects test asserted the old string-form canonical replace; updated to the CX-94 object form (8/8). Invalid-selection reset assertion unchanged (still bare).
+- CI shard 4 FIXED: inventory snapshot regenerated via sanctioned CLI + pin update (proxy/route sources moved).

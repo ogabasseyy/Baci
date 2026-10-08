@@ -17,7 +17,9 @@ interface CompareViewProps {
   onOpenProduct: (product: Product) => void;
   onRemoveProduct: (productId: string) => void;
   products: Product[];
-  unavailableIds?: string[];
+  // Required (see CompareTable): the hook ids must flow explicitly so a
+  // forgotten prop can never render a fallback zero as a real price.
+  unavailableIds: string[];
 }
 
 export function CompareView({
@@ -30,7 +32,7 @@ export function CompareView({
   onOpenProduct,
   onRemoveProduct,
   products,
-  unavailableIds = [],
+  unavailableIds,
 }: CompareViewProps) {
   if (products.length === 0) {
     return (

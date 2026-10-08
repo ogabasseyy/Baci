@@ -17,7 +17,10 @@ interface CompareTableProps {
   onOpenProduct: (product: Product) => void;
   onRemoveProduct: (productId: string) => void;
   products: Product[];
-  unavailableIds?: string[];
+  // Required: refresh-failure fallbacks synthesize price: 0, so a caller
+  // must pass the hook ids explicitly — a silent [] default would render
+  // a false zero price.
+  unavailableIds: string[];
 }
 
 function LabelCell({
@@ -56,7 +59,7 @@ export function CompareTable({
   onOpenProduct,
   onRemoveProduct,
   products,
-  unavailableIds = [],
+  unavailableIds,
 }: CompareTableProps) {
   return (
     <ScrollView

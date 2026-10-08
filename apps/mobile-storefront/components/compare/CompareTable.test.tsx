@@ -42,6 +42,7 @@ function createProps() {
     onOpenProduct: jest.fn(),
     onRemoveProduct: jest.fn(),
     products: [phone],
+    unavailableIds: [] as string[],
   };
 }
 

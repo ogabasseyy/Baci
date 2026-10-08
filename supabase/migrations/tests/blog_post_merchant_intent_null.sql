@@ -12,6 +12,12 @@
 
 BEGIN;
 
+-- Merchant writes fire the canonical audit trigger, which rejects actorless
+-- callers (28000), so the fixtures run under the service actor like the
+-- other SQL checks that seed merchants.
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
 DO $$
 DECLARE
   merchant_row_id uuid := '99999999-9999-9999-9999-999999999999';

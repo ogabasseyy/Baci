@@ -30,9 +30,7 @@ import { POST } from './route';
 
 const rawBody = JSON.stringify(paidInterestFixture.event);
 function request(valid = true, secret = 'fixture-secret') {
-  const signature = createHmac('sha512', secret)
-    .update(rawBody)
-    .digest('hex');
+  const signature = createHmac('sha512', secret).update(rawBody).digest('hex');
   return new NextRequest('https://example.test/api/webhooks/piggyvest', {
     method: 'POST',
     body: rawBody,

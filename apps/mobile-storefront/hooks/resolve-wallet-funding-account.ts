@@ -20,8 +20,7 @@ export type SettledPrimaryFundingAccount =
 export async function readPrimaryFundingAccount(
   merchantId: string
 ): Promise<SettledPrimaryFundingAccount> {
-  if (!isPiggyvestPrimaryMerchant(merchantId))
-    return { status: 'unavailable' };
+  if (!isPiggyvestPrimaryMerchant(merchantId)) return { status: 'unavailable' };
   try {
     const { account } = await piggyvestPrimaryWalletApi.read(merchantId);
     return { status: 'ready', account };

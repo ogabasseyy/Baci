@@ -14,13 +14,13 @@ import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-infl
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
-import { collectPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
 import {
   type RecordPiggyvestEventInput,
   recordPiggyvestEvent,
 } from '@/lib/piggyvest/webhook-inbox';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
+import { collectPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
 import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,

@@ -55,10 +55,7 @@ export function usePrimarySavingsRecovery({
         // Savings runtime positively off with no outstanding operation:
         // allow the contribution path, which falls back to legacy savings.
         // A bound operation or any ambiguous failure keeps blocking.
-        if (
-          isPrimaryWalletNotReady(error) &&
-          operationRef.current === null
-        ) {
+        if (isPrimaryWalletNotReady(error) && operationRef.current === null) {
           setState({ key, revision, ready: true, error: false });
           return;
         }

@@ -16,12 +16,9 @@ vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
 vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
   readPrimaryCardCustodyIntakeRuntime: mocks.custody,
 }));
-vi.mock(
-  '@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime',
-  () => ({
-    readPrimaryWalletPaidInterestInboxRuntime: mocks.interest,
-  })
-);
+vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
+  readPrimaryWalletPaidInterestInboxRuntime: mocks.interest,
+}));
 
 import { collectPiggyvestWebhookSecrets } from './webhook-secret-union';
 

@@ -65,17 +65,20 @@ function generatedCodexVariantBinds(
   const variantDir = variantPath.slice(0, variantPath.lastIndexOf('/'));
   if (sourceDir !== variantDir) return false;
   // Variant filenames carry the key either bare (<key>.<ext>) or
-  // slug-suffixed (<slug>-<key>.<ext>); only the latter pins a base,
-  // and it must equal the source filename stem.
+  // slug-suffixed (<slug>-<key>.<ext>, <slug>_<key>.<ext>); only the
+  // latter pins a base, and it must equal the source filename stem.
   const variantFile = variantPath
     .slice(variantPath.lastIndexOf('/') + 1)
     .toLowerCase();
-  const keySuffix = `-${variantKey.toLowerCase()}`;
+  const key = variantKey.toLowerCase();
   const dot = variantFile.lastIndexOf('.');
   const stem = dot > 0 ? variantFile.slice(0, dot) : variantFile;
-  if (stem === variantKey.toLowerCase()) return true;
-  if (!stem.endsWith(keySuffix)) return false;
-  const base = stem.slice(0, stem.length - keySuffix.length);
+  if (stem === key) return true;
+  const suffix = ['-', '_'].find((separator) =>
+    stem.endsWith(`${separator}${key}`)
+  );
+  if (!suffix) return false;
+  const base = stem.slice(0, stem.length - key.length - suffix.length);
   const sourceFile = sourcePath
     .slice(sourcePath.lastIndexOf('/') + 1)
     .toLowerCase();

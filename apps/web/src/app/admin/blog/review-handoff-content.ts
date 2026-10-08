@@ -2,6 +2,7 @@ import { decodeHTMLAttribute } from 'entities';
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
 import { groupMediaElements } from './review-handoff-media-groups';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
@@ -145,6 +146,38 @@ function imgHasSrcValue(tag: string): boolean {
   );
 }
 
+function fragmentTarget(href: string): string | null {
+  if (!href.startsWith('#') || href.length < 2) return null;
+  const raw = href.slice(1);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function hasDroppedAnchorTarget(html: string): boolean {
+  // StarterKit parses no id attribute, so the first editor update drops
+  // every element id while the link mark keeps href="#...": an in-page
+  // link whose target exists at import is broken at publish. Ids no
+  // link targets are harmless; fragments with no matching id were
+  // already broken before import and stay out of this check.
+  const ids = new Set<string>();
+  const fragments = new Set<string>();
+  for (const match of html.matchAll(HTML_TAG_PATTERN)) {
+    if (match[1] === '/') continue;
+    for (const { name, value } of tagAttributes(match[0])) {
+      if (name === 'id') {
+        if (value) ids.add(value);
+      } else if (name === 'href') {
+        const target = fragmentTarget(value);
+        if (target !== null) fragments.add(target);
+      }
+    }
+  }
+  return [...fragments].some((target) => ids.has(target));
+}
+
 function hasBrokenMediaTag(html: string): boolean {
   // Candidates are evaluated per picture while every img still needs
   // its own src: the editor drops src-less images on mount, so a
@@ -201,6 +234,13 @@ export function validateImportedContent(rawContent: string): string {
   if (hasUnrepresentableVariance(visible)) {
     throw new Error(
       'Article content uses responsive visibility the editor cannot preserve'
+    );
+  }
+  // Element ids cannot survive the editor round-trip either: the first
+  // update drops them while keeping in-page links, breaking the targets.
+  if (hasDroppedAnchorTarget(visible)) {
+    throw new Error(
+      'Article content has in-page links to ids the editor cannot preserve'
     );
   }
   // Validate the rendered markup as well as the stored markup: the

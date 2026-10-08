@@ -264,4 +264,29 @@ describe('useBlogFeaturedImageUpload cleanup', () => {
       variantPaths: ['platform/blog/cover/landscape_16x9.webp'],
     });
   });
+
+  it('deletes a featured upload that settles after unmount', async () => {
+    // The unmount flush snapshotted empty refs, so the late result can
+    // never be tracked: delete the persisted source on arrival instead
+    // of stranding it.
+    const pending = Promise.withResolvers<{ url: string }>();
+    const { deleteUpload, result, unmount } = setup(() => pending.promise);
+    act(() => {
+      void result.current.uploadFeatured(file);
+    });
+    await act(async () => {
+      unmount();
+    });
+    const late = 'https://cdn.example.com/media/platform/blog/late-cover.webp';
+    await act(async () => {
+      pending.resolve({ url: late });
+    });
+    await vi.waitFor(() => {
+      expect(deleteUpload).toHaveBeenCalledTimes(1);
+    });
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/late-cover.webp',
+      variantPaths: [],
+    });
+  });
 });

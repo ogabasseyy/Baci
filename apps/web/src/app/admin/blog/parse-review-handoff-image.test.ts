@@ -192,6 +192,20 @@ describe('parseReviewHandoff featured image', () => {
     ).toEqual({ landscape_16x9: variant });
   });
 
+  it('keeps an underscore-suffixed generated variant', () => {
+    const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/core-assets/blog/codex/article-a/galaxy-a_landscape_16x9.jpg`;
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/core-assets/blog/codex/article-a/galaxy-a.jpg`,
+          variants: { landscape_16x9: variant },
+        },
+      }).featured_image_variants
+    ).toEqual({ landscape_16x9: variant });
+  });
+
   it('drops a managed variant filed under another map key', () => {
     // Same upload token, but the path holds the square asset: keeping
     // it under the landscape key would display the wrong crop on

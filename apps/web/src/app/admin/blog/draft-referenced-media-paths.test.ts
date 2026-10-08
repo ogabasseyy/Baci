@@ -112,6 +112,18 @@ describe('draftReferencedMediaPaths', () => {
     ).toEqual(new Set(['platform/blog/inline-1.png']));
   });
 
+  it('retains an APNG picture source before the img', () => {
+    expect(
+      draftReferencedMediaPaths(
+        draft({
+          content: `<picture><source type="image/apng" srcset="${SRCSET_A}"><img src="${INLINE}"></picture>`,
+        })
+      )
+    ).toEqual(
+      new Set(['platform/blog/a-1x.webp', 'platform/blog/inline-1.png'])
+    );
+  });
+
   it('retains an applicable picture source before the img', () => {
     expect(
       draftReferencedMediaPaths(

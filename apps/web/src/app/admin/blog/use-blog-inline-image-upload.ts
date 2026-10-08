@@ -28,8 +28,22 @@ export function useBlogInlineImageUpload({
   const [pendingInlineUploads, setPendingInlineUploads] = useState(0);
   const settledUploadsRef = useRef<string[]>([]);
   const pendingDeletesRef = useRef<string[]>([]);
+  const mountedRef = useRef(true);
   const deleteUploadRef = useRef(deleteUpload);
   deleteUploadRef.current = deleteUpload;
+
+  const deleteLateUpload = async (url: string) => {
+    // A result arriving after teardown was never inserted anywhere, so
+    // the persisted object is deleted instead of tracked into a dead
+    // ref. A non-managed URL is never ours to delete.
+    const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
+    if (!path) return;
+    try {
+      await deleteUploadRef.current({ path, variantPaths: [] });
+    } catch {
+      // Intentionally silent: no session is left to retry in.
+    }
+  };
 
   // Deferred dispatch, mirroring the featured hook: cleanups stage
   // uploads and a reuse revives them before anything is dispatched,
@@ -40,6 +54,7 @@ export function useBlogInlineImageUpload({
   // silently — there is no session left to retry in.
   useEffect(
     () => () => {
+      mountedRef.current = false;
       const keepPaths = draftReferencedMediaPaths(formRef.current);
       const saved = savedFormRef.current;
       if (saved !== null) {
@@ -81,7 +96,8 @@ export function useBlogInlineImageUpload({
         setPendingInlineUploads((count) => count - 1);
       })
       .then((result) => {
-        settledUploadsRef.current.push(result.url);
+        if (!mountedRef.current) void deleteLateUpload(result.url);
+        else settledUploadsRef.current.push(result.url);
         return result.url;
       });
   };

@@ -44,6 +44,7 @@ describe('getTrustedCdnSourcePath', () => {
   it.each([
     `${trustedOrigin}/image/`,
     `${trustedOrigin}/image/format=auto`,
+    `${trustedOrigin}/image//core-assets/blog/codex/run/cover.jpg`,
     'https://evil.example.com/media/a.png',
     'http://cdn.example.com/media/a.png',
     'not a url',

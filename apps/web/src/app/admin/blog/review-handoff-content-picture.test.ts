@@ -45,6 +45,17 @@ describe('validateImportedContent picture', () => {
     ).toThrow('must use HTTPS URLs');
   });
 
+  it('treats an APNG picture source as applicable', () => {
+    // Browsers select image/apng (the app advertises it in its Accept
+    // header), so a broken APNG candidate rejects like any applicable
+    // source instead of being ignored.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source type="image/apng" srcset="http://example.com/old.apng"><img src="https://cdn.example.com/a.png" alt="A"></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('ignores a picture source with an always-false media query', () => {
     // Browsers never match `not all`, so the skipped source
     // contributes no candidate and the img fallback carries the group.

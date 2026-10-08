@@ -75,4 +75,33 @@ describe('useBlogInlineImageUpload pending', () => {
     );
     expect(result.current.inlineUploadsPending).toBe(false);
   });
+
+  it('deletes an upload that settles after unmount', async () => {
+    // Save, Back-link, or any teardown while pending: the unmount
+    // flush already snapshotted empty refs, so the late result must be
+    // deleted on arrival instead of tracked into a dead ref.
+    const pending = Promise.withResolvers<{ url: string }>();
+    const { deleteUpload, result, unmount } = setup(() => pending.promise);
+    let url: string | undefined;
+    act(() => {
+      void result.current
+        .uploadInlineImage(file)
+        .then((resolved) => (url = resolved));
+    });
+    await act(async () => {
+      unmount();
+    });
+    const late = 'https://cdn.example.com/media/platform/blog/late.png';
+    await act(async () => {
+      pending.resolve({ url: late });
+    });
+    await vi.waitFor(() => {
+      expect(deleteUpload).toHaveBeenCalledTimes(1);
+    });
+    expect(url).toBe(late);
+    expect(deleteUpload).toHaveBeenCalledWith({
+      path: 'platform/blog/late.png',
+      variantPaths: [],
+    });
+  });
 });

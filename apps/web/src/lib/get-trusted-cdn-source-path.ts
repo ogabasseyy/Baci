@@ -20,7 +20,10 @@ export function getTrustedCdnSourcePath(raw: string): string | null {
   if (path.startsWith('/image/')) {
     const rest = path.slice('/image/'.length);
     const slash = rest.indexOf('/');
-    if (slash === -1) return null;
+    // An empty transform segment (`/image//...`) is malformed: the
+    // social-image projection treats it as unusable, so no source
+    // path is decoded from it.
+    if (slash <= 0) return null;
     path = rest.slice(slash);
   }
   try {

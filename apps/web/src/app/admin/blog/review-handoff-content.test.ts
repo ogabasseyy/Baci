@@ -241,4 +241,21 @@ describe('validateImportedContent', () => {
       )
     ).toContain('Desktop note');
   });
+
+  it('rejects in-page links to ids the editor cannot preserve', () => {
+    // Sanitization retains the id and the link survives import, but
+    // StarterKit parses no id attribute: the first editor update drops
+    // id="setup" while keeping href="#setup", breaking the link.
+    expect(() =>
+      validateImportedContent(
+        '<p><a href="#setup">Setup</a></p><h2 id="setup">Setup</h2><p>Body</p>'
+      )
+    ).toThrow('in-page links');
+  });
+
+  it('accepts ids no in-page link targets', () => {
+    expect(
+      validateImportedContent('<h2 id="setup">Setup</h2><p>Body</p>')
+    ).toContain('Body');
+  });
 });

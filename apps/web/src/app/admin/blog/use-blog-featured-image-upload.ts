@@ -98,6 +98,7 @@ export function useBlogFeaturedImageUpload({
   savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
+  const mountedRef = useRef(true);
   const generationRef = useRef(0);
   const altEditGenerationRef = useRef(0);
   const settledUploadsRef = useRef<UploadResult[]>([]);
@@ -118,6 +119,7 @@ export function useBlogFeaturedImageUpload({
   // media.
   useEffect(
     () => () => {
+      mountedRef.current = false;
       const keepPaths = draftReferencedMediaPaths(formRef.current);
       const saved = savedFormRef.current;
       if (saved !== null) {
@@ -193,7 +195,10 @@ export function useBlogFeaturedImageUpload({
     setUploadingFeatured(true);
     try {
       const result = await upload(file);
-      if (generation !== generationRef.current) {
+      // A result arriving after teardown was never inserted anywhere,
+      // so it deletes like an invalidated generation instead of
+      // tracking into a dead ref.
+      if (!mountedRef.current || generation !== generationRef.current) {
         await cleanupInvalidatedUpload(result);
         return;
       }

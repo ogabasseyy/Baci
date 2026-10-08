@@ -18,6 +18,7 @@ export type MediaCandidateGroup = {
 // skipped when selecting a picture resource, so it contributes no
 // candidate here either.
 const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  'image/apng',
   'image/avif',
   'image/bmp',
   'image/gif',

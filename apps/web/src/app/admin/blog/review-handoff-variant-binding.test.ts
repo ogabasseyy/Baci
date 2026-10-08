@@ -44,6 +44,13 @@ describe('variantBindsToSource', () => {
       true,
     ],
     [
+      'same-article generated variant with underscore suffix',
+      `${ORIGIN}/core-assets/blog/codex/article-a/galaxy-a_landscape_16x9.jpg`,
+      'landscape_16x9',
+      codexSource,
+      true,
+    ],
+    [
       'other-article generated variant',
       `${ORIGIN}/core-assets/blog/codex/article-b/galaxy-b-landscape_16x9.jpg`,
       'landscape_16x9',

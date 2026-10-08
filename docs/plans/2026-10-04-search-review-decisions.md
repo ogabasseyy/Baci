@@ -404,3 +404,13 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 ## Round 58 (Muse 2 high on fa10389263 — both fixed; Codex pending)
 
 - Muse high voucher-AND (use-cart.tsx + provider) FIXED: all 4 assurance handoff sites used Boolean(quizAwardId && quizVoucherToken), so single-identifier voucher lines defaulted assurance ON on web while native (OR) forced opt-out. Changed to ||. Checkout pricing (build-order-items, sanitizer) intentionally keeps AND — widening the fee opt-out is fail-closed, while zeroing prices on partial ids would be a revenue decision; single-id lines now get no fee but full price (safe on both axes). Regression tests in both assurance suites (both/award-only/token-only → OFF); negative control: the 2 new provider tests fail on the && code. Suites 16/16 + use-cart 10/10; pin 1/1.
+
+## Round 59 (Codex 2 P1 + 3 P2 + 1 low on eb21dfb — all fixed)
+
+- CX-111 (low) FIXED: verify-sql.mjs applied only the pre-restriction intake migration and drove submits as service_role. Now applies 20261004170500, drives intake as storefront_intake, and pins service_role denied. Replay green.
+- CX-112 (P1) FIXED: nativeAssurancePolicy moved to stores/cart-assurance-config.ts; cart-assurance-default.ts keeps the single resolveNativeAddedLineAssurance export. Store at 295 lines.
+- CX-113 (P1) FIXED: colocated cart-assurance-default.test.ts (config gate + voucher matrix, 8 cases) and cart-assurance-config.test.ts (passthrough, 2 cases). Native cart suites 26/26.
+- CX-114 (P2) FIXED: migration 20261008190000 bounds the offers CTE to ORDER BY condition, id LIMIT 16, mirroring the PDP snapshot window (d6272745…). Probe: 16 windowed @100, 17th-row @50 hidden, same-condition/base intact.
+- CX-115 (P2) FIXED: migration 20261008200000 adds a 129-capped non-anchor variant count <= 128 to the parent CTE (32fdad8d…), mirroring the snapshot's variants_truncated predicate. Zero options → candidates/facets/compare-refresh all treat the product as unavailable (verified: candidates requires matched IS NOT NULL; compare hook maps empty to unavailable). Probe: 129 → 0 rows, 128 + 50 anchors → 128.
+- CX-116 (P2) FIXED: migration 20261008210000 adds normalize_request_contact_key (email → lowercase, else digits) and uses it in 24h dedup + per-contact budget (6b2e3ec6…); stored spelling untouched. Probe: key mapping exact, punctuation-variant dedup, 3-across-spellings then reject, email case retained. verify-sql.mjs extended with the same probes (delivered 5 → 8) and now also applies M3 (needed is_platform_admin stub column).
+- All 3 registered in the 3 registries; registry + inventory tests green. PR body manifest updated to 26.

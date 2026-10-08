@@ -6,10 +6,8 @@ import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
-import {
-  nativeAssurancePolicy,
-  resolveNativeAddedLineAssurance,
-} from './cart-assurance-default';
+import { nativeAssurancePolicy } from './cart-assurance-config';
+import { resolveNativeAddedLineAssurance } from './cart-assurance-default';
 import {
   createCartLineId,
   isSameCartLine,

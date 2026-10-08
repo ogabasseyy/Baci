@@ -48,14 +48,17 @@ export async function GET(request: NextRequest) {
       );
     }
     // Activation validates the dedicated-product shape (NGN 100, no
-    // variants, inventory tracking off, REDVAULT-eligible brand) only
-    // once; recheck the live catalog row here so a repriced,
-    // variant-enabled, newly tracked, or renamed-to-ineligible product
-    // stops being offered. Any lookup failure fails closed.
+    // variants, inventory tracking off, active status, REDVAULT-eligible
+    // brand) only once; recheck the live catalog row here so a repriced,
+    // variant-enabled, newly tracked, deactivated, or
+    // renamed-to-ineligible product stops being offered. Any lookup
+    // failure fails closed.
     const shapeLookup = auth.supabase
       ? await auth.supabase
           .from('products')
-          .select('price, has_variants, inventory_tracking_policy, brand, name')
+          .select(
+            'price, has_variants, inventory_tracking_policy, brand, name, status'
+          )
           .eq('id', policy.productId)
           .maybeSingle()
       : { data: null, error: { message: 'unavailable' } };
@@ -65,6 +68,7 @@ export async function GET(request: NextRequest) {
       inventory_tracking_policy: string | null;
       brand: string | null;
       name: string | null;
+      status: string | null;
     } | null;
     if (
       shapeLookup.error ||
@@ -72,6 +76,7 @@ export async function GET(request: NextRequest) {
       Number(shape.price) !== 100 ||
       shape.has_variants !== false ||
       shape.inventory_tracking_policy !== 'off' ||
+      shape.status !== 'active' ||
       !isRedvaultEligibleProduct({ brand: shape.brand, name: shape.name })
     ) {
       return NextResponse.json(

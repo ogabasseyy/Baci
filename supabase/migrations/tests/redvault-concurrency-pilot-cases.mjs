@@ -30,12 +30,13 @@ export async function runConcurrencyPilotCases({
     '20261006190600_uba_redvault_pilot_reenable_and_tracking_guard.sql',
     '20261006190700_uba_redvault_pilot_product_eligibility_guard.sql',
     '20261006190800_uba_redvault_pilot_atomic_activation_publish.sql',
+    '20261006190900_uba_redvault_pilot_require_active_product.sql',
   ]) {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }
   sql(`
-    INSERT INTO public.products(id,merchant_id,name,price) VALUES
-      ('5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a','6b5cb8a4-5575-456c-b936-8cdfae30db74','Pilot activation race product',100);
+    INSERT INTO public.products(id,merchant_id,name,price,status) VALUES
+      ('5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a','6b5cb8a4-5575-456c-b936-8cdfae30db74','Pilot activation race product',100,'active');
     INSERT INTO public.orders(id,merchant_id,customer_email,payment_method,payment_status,subtotal,discount_amount,total,currency)
     VALUES ('5b5b5b5b-5b5b-4b5b-8b5b-5b5b5b5b5b5b','6b5cb8a4-5575-456c-b936-8cdfae30db74','race@example.test','paystack','unpaid',100,0,100,'NGN');
   `);
@@ -61,8 +62,8 @@ export async function runConcurrencyPilotCases({
     );
   }
   sql(`
-    INSERT INTO public.products(id,merchant_id,name,price) VALUES
-      ('55555555-5555-4555-8555-555555555555','6b5cb8a4-5575-456c-b936-8cdfae30db74','Dedicated pilot product',100);
+    INSERT INTO public.products(id,merchant_id,name,price,status) VALUES
+      ('55555555-5555-4555-8555-555555555555','6b5cb8a4-5575-456c-b936-8cdfae30db74','Dedicated pilot product',100,'active');
     SELECT private.configure_uba_redvault_live_pilot(true,'55555555-5555-4555-8555-555555555555',pg_catalog.now()+interval '1 hour');
     DO $$ BEGIN
       BEGIN

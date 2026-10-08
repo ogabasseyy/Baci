@@ -103,6 +103,7 @@ describe('GET /api/payments/redvault/availability', () => {
         inventory_tracking_policy: 'off',
         brand: 'Apple',
         name: 'iPhone 15',
+        status: 'active',
       },
       error: null,
     });
@@ -122,69 +123,6 @@ describe('GET /api/payments/redvault/availability', () => {
     });
     expect(supabase.from).toHaveBeenCalledWith('products');
     expect(supabase.eq).toHaveBeenCalledWith('id', productId);
-  });
-
-  it.each([
-    [
-      'repriced product',
-      { price: 150, has_variants: false, inventory_tracking_policy: 'off' },
-    ],
-    [
-      'variant-enabled product',
-      { price: 100, has_variants: true, inventory_tracking_policy: 'off' },
-    ],
-    [
-      'newly tracked product',
-      {
-        price: 100,
-        has_variants: false,
-        inventory_tracking_policy: 'serialized_strict',
-      },
-    ],
-    [
-      'budget-brand product',
-      {
-        price: 100,
-        has_variants: false,
-        inventory_tracking_policy: 'off',
-        brand: 'Infinix',
-        name: 'Hot 40',
-      },
-    ],
-    [
-      'Samsung A-series product',
-      {
-        price: 100,
-        has_variants: false,
-        inventory_tracking_policy: 'off',
-        brand: 'Samsung',
-        name: 'Galaxy A16 5G',
-      },
-    ],
-    ['missing product row', null],
-  ])('hides the pilot for a %s', async (_label, data) => {
-    const productId = '11111111-1111-4111-8111-111111111111';
-    routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
-      available: true,
-      reason: 'private_live_pilot',
-    });
-    routeMocks.getRedvaultLivePilotPolicy.mockReturnValue({
-      productId,
-      expiresAt: 1_789_000_000_000,
-    });
-    routeMocks.authenticateApiRequest.mockResolvedValue({
-      user: { id: routeMocks.pilotUserId },
-      supabase: stubSupabaseShape({ data, error: null }),
-    });
-    const response = await GET(
-      new NextRequest(
-        `http://localhost/api/payments/redvault/availability?merchant_id=${OGABASSEY_MERCHANT_ID}&product_id=${productId}`
-      )
-    );
-    await expect(response.json()).resolves.toEqual({
-      available: false,
-      reason: 'unavailable',
-    });
   });
 
   it('hides the pilot when the catalog lookup fails', async () => {

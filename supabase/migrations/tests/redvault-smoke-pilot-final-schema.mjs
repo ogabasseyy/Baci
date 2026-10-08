@@ -15,6 +15,7 @@ export function runSmokePilotFinalSchema({ migrations, sql }) {
     '20261006190600_uba_redvault_pilot_reenable_and_tracking_guard.sql',
     '20261006190700_uba_redvault_pilot_product_eligibility_guard.sql',
     '20261006190800_uba_redvault_pilot_atomic_activation_publish.sql',
+    '20261006190900_uba_redvault_pilot_require_active_product.sql',
   ]) {
     sql(readFileSync(resolve(migrations, part), 'utf8'));
   }
@@ -81,6 +82,9 @@ export function runSmokePilotFinalSchema({ migrations, sql }) {
     END IF;
     IF strpos(pg_get_functiondef('private.configure_uba_redvault_live_pilot(boolean,uuid,timestamptz)'::regprocedure), 'redvault_pilot_product_changed_during_activation') = 0 THEN
       RAISE EXCEPTION 'pilot_activation_atomic_publish_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.configure_uba_redvault_live_pilot(boolean,uuid,timestamptz)'::regprocedure), 'redvault_pilot_product_not_active') = 0 THEN
+      RAISE EXCEPTION 'pilot_activation_active_product_missing';
     END IF;
     IF private.is_uba_redvault_negotiable_product('Infinix', 'Hot 40')
       OR private.is_uba_redvault_negotiable_product('Samsung', 'Galaxy A16 5G')

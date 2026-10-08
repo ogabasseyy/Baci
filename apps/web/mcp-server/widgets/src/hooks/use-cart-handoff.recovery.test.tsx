@@ -81,7 +81,7 @@ it('retries a stale token once and replays survivors into the fresh cart', async
     { product, quantity: 1 },
   ]);
 });
-it('drops only the stale survivor when its replay fails', async () => {
+it('drops only the variant-selection survivor when its replay cannot restore it', async () => {
   const fresh = 'b'.repeat(64);
   const callTool = vi
     .fn()
@@ -89,7 +89,14 @@ it('drops only the stale survivor when its replay fails', async () => {
     .mockResolvedValueOnce(response([product, second]))
     .mockResolvedValueOnce(expiredResponse())
     .mockResolvedValueOnce(response([product], fresh))
-    .mockResolvedValueOnce({ structuredContent: { success: false } });
+    .mockResolvedValueOnce({
+      structuredContent: {
+        success: false,
+        requires_variant_selection: true,
+        product_id: second.id,
+        product_url: 'https://ogabassey.com/products/camera',
+      },
+    });
   window.openai = { callTool, setWidgetState: vi.fn() };
   const { result } = renderHook(() => useCartHandoff());
   await act(async () => {

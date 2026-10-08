@@ -15,9 +15,10 @@ import path from 'node:path';
 
 // Cross-process single-writer guard: the in-memory queues only serialize
 // operations within one process, so the cart directory itself carries an
-// exclusive lock. Claims are atomic (`wx`); heartbeats distinguish a live
-// holder from a crashed one. Suspended (not crashed) holders can briefly
-// overlap a takeover, which is no worse than today's unguarded behavior.
+// exclusive lock. Claims are atomic (`wx`); heartbeats keep a live
+// holder's claim fresh, and takeovers additionally require the recorded
+// holder pid to be dead, so a stale timestamp alone can never elect two
+// owners when a fresh claim lands mid-takeover.
 const WRITER_LOCK_FILE = '.writer.lock';
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
@@ -33,6 +34,29 @@ function readLockContent(lockPath: string): string | null {
     return readFileSync(lockPath, 'utf8');
   } catch {
     return null;
+  }
+}
+
+function readHolderPid(lockPath: string): number | null {
+  try {
+    const pid = (JSON.parse(readFileSync(lockPath, 'utf8')) as { pid?: unknown })
+      ?.pid;
+    return typeof pid === 'number' && Number.isInteger(pid) && pid > 0
+      ? pid
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM means a live process we may not signal; any other failure
+    // (ESRCH, out-of-range pid) means no such process exists.
+    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
   }
 }
 
@@ -139,9 +163,16 @@ export function acquireWriterLock(directory: string): void {
       stale = true;
     }
     if (!stale) refuseSecondWriter(lockPath, directory);
-    // Atomic takeover: rename moves the stale lock aside in one step, so at
-    // most one racing process wins it. An unconditional unlink here could
-    // delete another process's fresh claim made after our staleness check.
+    // Liveness gate: only a dead holder's lock may be taken over. Moving
+    // the lock aside on staleness alone could steal a fresh claim written
+    // after our check and elect two owners; a live (possibly suspended)
+    // holder keeps its lock, and an unreadable holder fails closed.
+    const holderPid = readHolderPid(lockPath);
+    if (holderPid === null || isPidAlive(holderPid))
+      refuseSecondWriter(lockPath, directory);
+    // Dead holder: rename moves the stale lock aside in one step, and the
+    // exclusive re-claim below still decides between simultaneous
+    // takeovers, so exactly one process wins.
     const staleSidePath = `${lockPath}.stale-${process.pid}`;
     let renamed = false;
     try {

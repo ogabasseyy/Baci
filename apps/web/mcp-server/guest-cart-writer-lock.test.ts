@@ -59,10 +59,22 @@ it('refuses a second writer while a live lock is held', async () => {
 it('takes over a stale writer lock', async () => {
   const root = await directory('guest-lock-stale-');
   const lock = path.join(root, '.writer.lock');
-  await writeFile(lock, '{}');
+  await writeFile(lock, JSON.stringify({ pid: 99999999 }));
   const old = new Date(Date.now() - 60_000);
   await utimes(lock, old, old);
   expect(() => acquireWriterLock(root)).not.toThrow();
+  await expect(readFile(lock, 'utf8')).resolves.toContain(
+    `"pid":${process.pid}`
+  );
+});
+
+it('refuses a stale lock whose holder is still alive', async () => {
+  const root = await directory('guest-lock-suspended-');
+  const lock = path.join(root, '.writer.lock');
+  await writeFile(lock, JSON.stringify({ pid: process.pid }));
+  const old = new Date(Date.now() - 60_000);
+  await utimes(lock, old, old);
+  expect(() => acquireWriterLock(root)).toThrow(/Another MCP writer owns/);
   await expect(readFile(lock, 'utf8')).resolves.toContain(
     `"pid":${process.pid}`
   );
@@ -153,12 +165,9 @@ it('restricts a pre-existing world-readable directory to owner-only', async () =
   expect((await stat(root)).mode & 0o777).toBe(0o700);
 });
 
-it('elects exactly one owner when two processes race a stale lock', async () => {
+it('elects exactly one owner when two processes race for a fresh lock', async () => {
   const root = await directory('guest-lock-race-');
   const lock = path.join(root, '.writer.lock');
-  await writeFile(lock, '{}');
-  const old = new Date(Date.now() - 60_000);
-  await utimes(lock, old, old);
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.dirname(path.dirname(path.dirname(moduleDir)));
   const tsxExecutable = path.join(
@@ -167,6 +176,8 @@ it('elects exactly one owner when two processes race a stale lock', async () => 
     '.bin',
     process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
   );
+  // The winner stays alive past the race: after a real exit any takeover
+  // is legitimate, so exiting racers cannot assert single ownership.
   const childScript = path.join(root, 'claim-child.mts');
   await writeFile(
     childScript,
@@ -174,6 +185,7 @@ it('elects exactly one owner when two processes race a stale lock', async () => 
 try {
   acquireWriterLock(process.argv[2]);
   console.log('owner:' + process.pid);
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 } catch {
   console.log('refused');
 }`

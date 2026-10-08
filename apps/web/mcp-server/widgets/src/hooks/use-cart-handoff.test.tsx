@@ -182,3 +182,22 @@ it('does not silently select variants and preserves the existing guest cart', as
     href: 'https://ogabassey.com/products/phone?variantId=v1',
   });
 });
+
+it('reports quota exhaustion with the retry wait instead of a product error', async () => {
+  const callTool = vi.fn().mockResolvedValueOnce({
+    structuredContent: {
+      success: false,
+      quota_exceeded: true,
+      retry_after_seconds: 1800,
+    },
+  });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(result.current.cart).toHaveLength(0);
+  expect(result.current.cartError).toBe(
+    'Too many guest carts were created from this address. Try again in about 30 minutes.'
+  );
+});

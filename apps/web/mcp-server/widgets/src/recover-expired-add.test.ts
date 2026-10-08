@@ -61,8 +61,28 @@ it('returns the retry result untouched when it fails or selects variants', async
   expect(callTool).toHaveBeenCalledTimes(1);
 });
 
+it('rejects when a replay fails generically instead of dropping the line', async () => {
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(success(fresh, [product.id]))
+    .mockResolvedValueOnce({ structuredContent: { success: false } });
+  await expect(
+    recoverExpiredAdd(callTool, product.id, 1, [
+      { product: second, quantity: 1 },
+    ])
+  ).rejects.toThrow(/did not complete/);
+  expect(callTool).toHaveBeenCalledTimes(2);
+});
+
 it('skips stale survivors and resolves with the last good replay', async () => {
-  const stale = { structuredContent: { success: false } };
+  const stale = {
+    structuredContent: {
+      success: false,
+      requires_variant_selection: true,
+      product_id: second.id,
+      product_url: 'https://ogabassey.com/products/camera',
+    },
+  };
   const third = { ...second, id: '33333333-3333-4333-8333-333333333333' };
   const callTool = vi
     .fn()

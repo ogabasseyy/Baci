@@ -3,6 +3,9 @@ export interface CartToolOutput {
   cart_token?: string;
   cart_url?: string;
   cart_expired?: true;
+  quota_exceeded?: true;
+  retry_after_seconds?: number;
+  requires_variant_selection?: true;
 }
 
 const CART_TOKEN_PATTERN = /^[a-f0-9]{64}$/;
@@ -25,10 +28,20 @@ export function readStructuredContent(response: unknown): unknown {
  */
 export function parseCartToolOutput(value: unknown): CartToolOutput | undefined {
   if (!isRecord(value) || typeof value.success !== 'boolean') return undefined;
-  if (value.success === false)
-    return value.cart_expired === true
-      ? { success: false, cart_expired: true as const }
-      : { success: false };
+  if (value.success === false) {
+    const failure: CartToolOutput = { success: false };
+    if (value.cart_expired === true) failure.cart_expired = true;
+    if (value.quota_exceeded === true) failure.quota_exceeded = true;
+    if (
+      typeof value.retry_after_seconds === 'number' &&
+      Number.isFinite(value.retry_after_seconds) &&
+      value.retry_after_seconds >= 0
+    )
+      failure.retry_after_seconds = Math.floor(value.retry_after_seconds);
+    if (value.requires_variant_selection === true)
+      failure.requires_variant_selection = true;
+    return failure;
+  }
   const { cart_token, cart_url } = value;
   if (typeof cart_token !== 'string' || !CART_TOKEN_PATTERN.test(cart_token))
     return undefined;

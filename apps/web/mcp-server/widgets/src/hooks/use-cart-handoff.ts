@@ -125,6 +125,21 @@ export function useCartHandoff() {
       pendingTab?.close();
 
       const content = parseCartToolOutput(readStructuredContent(result));
+      // Anonymous creation is throttled per address: choosing another
+      // product cannot help, so say when the budget resets instead.
+      if (content?.quota_exceeded === true) {
+        const retrySeconds = content.retry_after_seconds;
+        const minutes =
+          typeof retrySeconds === 'number' && retrySeconds > 0
+            ? Math.max(1, Math.ceil(retrySeconds / 60))
+            : null;
+        setCartError(
+          minutes === null
+            ? 'Too many guest carts were created from this address. Try again later.'
+            : `Too many guest carts were created from this address. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`
+        );
+        return;
+      }
       const cartUrl = content?.success === true ? content.cart_url : undefined;
       let validatedUrl: URL | undefined;
       try {

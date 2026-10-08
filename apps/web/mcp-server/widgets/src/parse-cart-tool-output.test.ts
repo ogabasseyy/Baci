@@ -26,6 +26,36 @@ describe('parseCartToolOutput', () => {
     });
   });
 
+  it('preserves quota-denial fields with a validated retry hint', () => {
+    expect(
+      parseCartToolOutput({
+        success: false,
+        quota_exceeded: true,
+        retry_after_seconds: 1800,
+      })
+    ).toEqual({
+      success: false,
+      quota_exceeded: true,
+      retry_after_seconds: 1800,
+    });
+    expect(
+      parseCartToolOutput({
+        success: false,
+        quota_exceeded: true,
+        retry_after_seconds: 'soon',
+      })
+    ).toEqual({ success: false, quota_exceeded: true });
+    expect(
+      parseCartToolOutput({ success: false, quota_exceeded: 1 })
+    ).toEqual({ success: false });
+  });
+
+  it('preserves the variant-selection flag for replay triage', () => {
+    expect(
+      parseCartToolOutput({ success: false, requires_variant_selection: true })
+    ).toEqual({ success: false, requires_variant_selection: true });
+  });
+
   it('rejects non-record and non-boolean payloads', () => {
     for (const value of [null, undefined, 'bad', 42, [], { success: 'yes' }])
       expect(parseCartToolOutput(value)).toBeUndefined();

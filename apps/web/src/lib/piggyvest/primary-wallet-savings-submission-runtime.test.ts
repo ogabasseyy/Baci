@@ -8,6 +8,7 @@ vi.mock('./primary-wallet-savings-reconciliation-runtime', () => ({
 
 const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
+  adoptPending: vi.fn(),
   claimDispatch: vi.fn(),
   cancelBeforeDispatch: vi.fn(),
   retrieve: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('./primary-wallet-savings-executor', () => ({
 vi.mock('./primary-wallet-savings-store', () => ({
   createPrimaryWalletSavingsStore: () => ({
     reserve: mocks.reserve,
+    adoptPending: mocks.adoptPending,
     claimDispatch: mocks.claimDispatch,
     cancelBeforeDispatch: mocks.cancelBeforeDispatch,
   }),
@@ -55,6 +57,7 @@ const request = {
 beforeEach(() => {
   reconciliation.mockResolvedValue({ status: 'pending' });
   vi.clearAllMocks();
+  mocks.adoptPending.mockResolvedValue({ status: 'existing' });
   mocks.claimDispatch.mockResolvedValue(true);
   mocks.reserve.mockResolvedValue({
     status: 'claimed',

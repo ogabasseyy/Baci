@@ -18,6 +18,8 @@ const reservation = {
 function ports() {
   return {
     reserve: vi.fn().mockResolvedValue({ status: 'claimed', reservation }),
+    adoptPending: vi.fn().mockResolvedValue({ status: 'existing' }),
+    lookupTransfer: vi.fn().mockResolvedValue('absent'),
     retrieveWallet: vi.fn(async (id: string) => ({
       id,
       api_customer_id: 'source-customer',
@@ -38,6 +40,112 @@ it('does not submit again when a durable reservation is already pending', async 
   expect(
     await submitPrimaryWalletSavingsTransfer(request, dependencies)
   ).toEqual({ status: 'pending' });
+  expect(dependencies.adoptPending).toHaveBeenCalledWith(request.operationId);
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
+it.each([
+  'confirmed',
+  'insufficient',
+  'conflict',
+] as const)('returns %s without adopting the stored operation', async (status) => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status });
+  expect(dependencies.adoptPending).not.toHaveBeenCalled();
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
+it('drives an adopted reservation through claim and transfer', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'adopted',
+    reservation,
+  });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pending' });
+  expect(dependencies.lookupTransfer).not.toHaveBeenCalled();
+  expect(dependencies.claimDispatch).toHaveBeenCalledWith(request.operationId);
+  expect(dependencies.transfer).toHaveBeenCalledWith(reservation);
+});
+it('resubmits a reclaimed dispatch only after proving the reference absent', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation,
+  });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pending' });
+  expect(dependencies.lookupTransfer).toHaveBeenCalledWith(reservation);
+  expect(dependencies.claimDispatch).not.toHaveBeenCalled();
+  expect(dependencies.transfer).toHaveBeenCalledWith(reservation);
+});
+it.each([
+  'submitted',
+  'uncertain',
+] as const)('never resubmits a reclaimed dispatch observed as %s', async (observed) => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation,
+  });
+  dependencies.lookupTransfer.mockResolvedValue(observed);
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pending' });
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+  expect(dependencies.cancelBeforeDispatch).not.toHaveBeenCalled();
+});
+it('treats a failed reclaim lookup as uncertain without resubmitting', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation,
+  });
+  dependencies.lookupTransfer.mockRejectedValue(new Error('private lookup'));
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pending' });
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
+it('holds a reclaimed dispatch pending when wallets no longer verify', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'reclaimed',
+    reservation,
+  });
+  dependencies.retrieveWallet.mockResolvedValue({
+    id: 'source',
+    api_customer_id: 'source-customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 0,
+  });
+  expect(
+    await submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).toEqual({ status: 'pending' });
+  // Already dispatched: no cancel path exists, so hold for reconcile.
+  expect(dependencies.cancelBeforeDispatch).not.toHaveBeenCalled();
+  expect(dependencies.transfer).not.toHaveBeenCalled();
+});
+it('never accepts a substituted adoption from storage', async () => {
+  const dependencies = ports();
+  dependencies.reserve.mockResolvedValue({ status: 'pending' });
+  dependencies.adoptPending.mockResolvedValue({
+    status: 'adopted',
+    reservation: { ...reservation, amountKobo: 20000 },
+  });
+  await expect(
+    submitPrimaryWalletSavingsTransfer(request, dependencies)
+  ).rejects.toThrow('ownership unavailable');
   expect(dependencies.transfer).not.toHaveBeenCalled();
 });
 it('does not treat provider acceptance as a completed savings contribution', async () => {

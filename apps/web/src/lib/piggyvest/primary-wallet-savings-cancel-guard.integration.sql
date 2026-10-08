@@ -99,3 +99,70 @@ DO $$ BEGIN
   IF (SELECT count(*) FROM public.customer_savings_events WHERE goal_id='00000000-0000-4000-8000-00000000000d')<>1 THEN RAISE EXCEPTION 'guard cancel unevented'; END IF;
   IF NOT has_function_privilege('authenticated','public.cancel_customer_savings_goal_future_debits(uuid,uuid,uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'cancel grant lost'; END IF;
 END $$;
+-- Swap guard: a retarget recomputes target/completion from the
+-- pre-settlement balance, so swapping under a pending transfer either
+-- fails settlement capacity (stranding provider funds) or lands funds on
+-- a target the customer no longer sees.
+ALTER TABLE public.customer_savings_goals ADD COLUMN product_id uuid;
+ALTER TABLE public.customer_savings_goals ADD COLUMN variant_id uuid;
+ALTER TABLE public.customer_savings_goals ADD COLUMN title text;
+ALTER TABLE public.customer_savings_goals ADD COLUMN product_snapshot jsonb;
+ALTER TABLE public.customer_savings_goals ADD COLUMN completed_at timestamptz;
+CREATE TABLE public.products(id uuid PRIMARY KEY,merchant_id uuid,status text);
+CREATE TABLE public.product_variants(id uuid PRIMARY KEY,product_id uuid,merchant_id uuid);
+INSERT INTO public.products VALUES('00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000001','active');
+INSERT INTO public.product_variants VALUES('00000000-0000-4000-8000-000000000021','00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000001');
+INSERT INTO public.customer_savings_goals VALUES('00000000-0000-4000-8000-000000000022','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',200,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
+  SELECT integration_id,'00000000-0000-4000-8000-000000000022',id,'destination-swap',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
+\ir ../../../../../supabase/migrations/20260611120000_swap_customer_savings_goal_device.sql
+SET SESSION AUTHORIZATION primary_authorizer_fixture;
+DO $$
+DECLARE
+  scope jsonb := '{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}';
+  request jsonb := '{"goalId":"00000000-0000-4000-8000-000000000022","operationId":"00000000-0000-4000-8000-000000000023","amountKobo":2000}';
+  outcome record;
+BEGIN
+  IF piggyvest_primary.reserve_savings(scope,request)->>'status'<>'claimed' THEN RAISE EXCEPTION 'swap reservation failed'; END IF;
+  IF NOT piggyvest_primary.manage_savings(scope,'00000000-0000-4000-8000-000000000023','dispatch') THEN RAISE EXCEPTION 'swap dispatch failed'; END IF;
+  SELECT * INTO outcome FROM public.swap_customer_savings_goal_device(
+    '00000000-0000-4000-8000-000000000022','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000021',
+    'Swapped device','{}',200);
+  IF outcome.success IS DISTINCT FROM true THEN RAISE EXCEPTION 'baseline swap diverged'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+\ir ../../../../../supabase/migrations/20261008092100_piggyvest_primary_savings_swap_guard.sql
+SET SESSION AUTHORIZATION primary_authorizer_fixture;
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.swap_customer_savings_goal_device(
+      '00000000-0000-4000-8000-000000000022','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000021',
+      'Swapped device','{}',200);
+    RAISE EXCEPTION 'dispatched transfer swappable';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%savings_goal_not_swappable_pending_transfer%' THEN RAISE; END IF;
+  END;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION primary_evidence_fixture;
+DO $$
+DECLARE
+  proof jsonb := '{"operationId":"00000000-0000-4000-8000-000000000023","providerTransactionId":"failed-swap","reference":"pvb-save-00000000-0000-4000-8000-000000000023","amountKobo":2000,"sourceWalletId":"wallet","destinationWalletId":"destination-swap","businessId":"fixture-business"}';
+  integration uuid := '00000000-0000-4000-8000-000000000004';
+  outcome record;
+BEGIN
+  IF piggyvest_primary.release_failed_savings(integration,'staging',proof)<>'released' THEN RAISE EXCEPTION 'swap release failed'; END IF;
+  SELECT * INTO outcome FROM public.swap_customer_savings_goal_device(
+    '00000000-0000-4000-8000-000000000022','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+    '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000021',
+    'Swapped device','{}',200);
+  IF outcome.success IS DISTINCT FROM true THEN RAISE EXCEPTION 'post-release swap blocked'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  IF (SELECT target_amount FROM public.customer_savings_goals WHERE id='00000000-0000-4000-8000-000000000022')<>200 THEN RAISE EXCEPTION 'swap target not applied'; END IF;
+  IF (SELECT count(*) FROM public.customer_savings_events WHERE goal_id='00000000-0000-4000-8000-000000000022' AND event_type='device_swapped')<>2 THEN RAISE EXCEPTION 'swap history wrong'; END IF;
+  IF NOT has_function_privilege('authenticated','public.swap_customer_savings_goal_device(uuid,uuid,uuid,uuid,uuid,uuid,text,jsonb,numeric)','EXECUTE') THEN RAISE EXCEPTION 'swap grant lost'; END IF;
+END $$;

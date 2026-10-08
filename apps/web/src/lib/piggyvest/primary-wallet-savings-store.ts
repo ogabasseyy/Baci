@@ -56,6 +56,20 @@ export function createPrimaryWalletSavingsStore(input: {
     async claimDispatch(operationId: string) {
       return await manage(operationId, 'dispatch');
     },
+    async adoptPending(operationId: string) {
+      const parsed = schemas.request.shape.operationId.parse(operationId);
+      const result = await input.execute(
+        'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result',
+        [scope, parsed]
+      );
+      const rows = schemas.adoptionRows.parse(result.rows);
+      const adoption = rows[0].result;
+      if (adoption.status === 'existing') return adoption;
+      return {
+        status: adoption.status,
+        reservation: schemas.reserved.parse(adoption.reservation),
+      };
+    },
     async cancelBeforeDispatch(operationId: string) {
       if (!(await manage(operationId, 'cancel')))
         throw new Error('Savings hold could not be released');

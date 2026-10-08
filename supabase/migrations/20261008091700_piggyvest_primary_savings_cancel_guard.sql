@@ -67,8 +67,8 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
-    FROM piggyvest_primary.savings_operations
-    WHERE goal_id = p_goal_id AND state IN ('reserved', 'dispatched')
+    FROM piggyvest_primary.savings_operations pending
+    WHERE pending.goal_id = p_goal_id AND pending.state IN ('reserved', 'dispatched')
   ) THEN
     RAISE EXCEPTION 'savings_goal_not_cancellable_pending_transfer'
       USING ERRCODE = 'P0001';

@@ -1,7 +1,10 @@
 import { SavingsPlanFundingResponseSchema } from '@/schemas/customer-savings';
 import { PrimarySavingsPlanFundingSchemas as schemas } from '@/schemas/primary-savings-plan-funding';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
-import { rollbackObservedCapabilityOnNotReady } from './piggyvest-primary-capability';
+import {
+  getPiggyvestPrimaryCapability,
+  rollbackObservedCapabilityOnNotReady,
+} from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 type Selection = {
@@ -46,11 +49,22 @@ async function primaryFunding(input: Selection, interestAccepted?: boolean) {
   return SavingsPlanFundingResponseSchema.parse(response);
 }
 
+async function resolvePrimaryRail(merchantId?: string | null) {
+  // Pilot and previously observed merchants skip the probe; every other
+  // identified merchant probes first so a cold start at a rolled-out
+  // merchant routes to primary instead of silently falling back to
+  // legacy. An ambiguous probe failure rejects (never legacy-fallbacks)
+  // so funding never misroutes on an ambiguous error.
+  if (isPiggyvestPrimaryMerchant(merchantId)) return true;
+  if (!merchantId) return false;
+  return await getPiggyvestPrimaryCapability(merchantId);
+}
+
 export const customerSavingsPlanFunding = {
   async provision(
     input: Selection & { bvn: string; enableInterestAccrual?: boolean }
   ) {
-    if (isPiggyvestPrimaryMerchant(input.merchantId)) {
+    if (await resolvePrimaryRail(input.merchantId)) {
       try {
         return await primaryFunding(
           input,
@@ -79,7 +93,7 @@ export const customerSavingsPlanFunding = {
     );
   },
   async recover(input: Selection) {
-    if (isPiggyvestPrimaryMerchant(input.merchantId)) {
+    if (await resolvePrimaryRail(input.merchantId)) {
       try {
         return await primaryFunding(input);
       } catch (error) {

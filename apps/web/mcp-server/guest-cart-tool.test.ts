@@ -8,7 +8,10 @@ import { registerGuestCartTool } from './guest-cart-tool';
 import { GUEST_CART_QUOTA_MAX_CREATIONS as MAX_QUOTA } from './guest-cart-creation-quota';
 import { GuestCartStore } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
-import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
+import {
+  GuestCartStorageUnavailableError,
+  guestCartWriteError,
+} from './guest-cart-writer-lock-errors';
 const validate = vi.hoisted(() => vi.fn());
 vi.mock('./cart-handoff', () => ({ prepareCartHandoff: validate }));
 const id = '11111111-1111-4111-8111-111111111111';
@@ -210,7 +213,41 @@ it('reports degraded storage plainly instead of a generic failure', async () => 
   expect(result.isError).toBe(true);
   expect(result.structuredContent).toEqual({ success: false });
   expect(JSON.stringify(result)).toContain('temporarily unavailable');
+  expect(JSON.stringify(result)).not.toContain('/x');
   expect(JSON.stringify(result)).not.toContain('product availability');
+});
+it('logs storage outages with the token-free errno for ops', async () => {
+  const errorSpy = vi
+    .spyOn(console, 'error')
+    .mockImplementation(() => undefined);
+  try {
+    type Args = { product_id: string; quantity: number; cart_token?: string };
+    let handler: ((args: Args) => Promise<unknown>) | undefined;
+    const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+    // The message embeds a token-bearing path, which must never reach logs.
+    const token = 't'.repeat(64);
+    registerGuestCartTool({ registerTool } as unknown as McpServer, {
+      store: {
+        update: async () => { throw guestCartWriteError(`/carts/${token}.json`, Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })); },
+        hasToken: async () => false,
+      },
+      supabase: {} as SupabaseClient,
+      getMerchantId: async () => 'merchant',
+      formatPrice: String,
+    });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    await handler?.({ product_id: id, quantity: 1 });
+    expect(errorSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'guest-cart',
+        event: 'storage_unavailable',
+        code: 'ENOSPC',
+      })
+    );
+    expect(errorSpy.mock.calls.map(String).join('\n')).not.toContain(token);
+  } finally {
+    errorSpy.mockRestore();
+  }
 });
 it('removes lines without a merchant lookup during catalog outages', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-removal-'));

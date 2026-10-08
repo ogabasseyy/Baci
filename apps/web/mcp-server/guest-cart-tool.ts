@@ -258,6 +258,16 @@ export function registerGuestCartTool(
         // degraded to keep catalog tools up: say the outage plainly instead
         // of sending the model chasing product availability.
         if (error instanceof GuestCartStorageUnavailableError) {
+          // Storage outages are otherwise silent at the call site: log the
+          // token-free errno for the ops alert trail (messages embed file
+          // paths that may carry token filenames).
+          console.error(
+            JSON.stringify({
+              type: 'guest-cart',
+              event: 'storage_unavailable',
+              code: error.code ?? 'unknown',
+            })
+          );
           return {
             isError: true,
             content: [

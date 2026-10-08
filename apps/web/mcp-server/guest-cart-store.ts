@@ -75,13 +75,16 @@ export interface GuestCartStoreLike {
   /** Present only on the degraded stub, so /health can report the outage. */
   degraded?: boolean;
   degradedReason?: string;
+  /** Token-free errno of the latest failed store write, cleared by the next success. */
+  lastStorageErrorCode?: string | null;
 }
 
 /**
  * /health fragment for guest-cart storage: degraded (with the startup
- * failure reason) when the factory fell back to the stub, ok otherwise.
- * Callers keep the overall probe green either way — catalog tools stay up
- * by design — so ops get a signal without a restart loop.
+ * failure reason) when the factory fell back to the stub, degraded (with
+ * the latest write errno) when a healthy-at-startup volume later failed,
+ * ok otherwise. Callers keep the overall probe green either way — catalog
+ * tools stay up by design — so ops get a signal without a restart loop.
  */
 export function describeGuestCartStoreHealth(store: GuestCartStoreLike): {
   guestCarts: 'ok' | 'degraded';
@@ -89,6 +92,11 @@ export function describeGuestCartStoreHealth(store: GuestCartStoreLike): {
 } {
   if (store.degraded === true)
     return { guestCarts: 'degraded', guestCartsReason: store.degradedReason };
+  if (store.lastStorageErrorCode != null)
+    return {
+      guestCarts: 'degraded',
+      guestCartsReason: `guest cart write failed (${store.lastStorageErrorCode})`,
+    };
   return { guestCarts: 'ok' };
 }
 
@@ -121,6 +129,9 @@ export function createGuestCartStoreOrDegraded(
 
 /** Opaque guest capability, never an account identity. One writer process owns this directory. */
 export class GuestCartStore {
+  /** Token-free errno of the latest failed write; /health degrades until a write succeeds. */
+  lastStorageErrorCode: string | null = null;
+
   constructor(private readonly directory: string) {
     acquireWriterLock(directory);
   }
@@ -180,85 +191,98 @@ export class GuestCartStore {
       // transfer, so a line that went stale is dropped there.
       await validate([guestCartLineSchema.parse(normalizedLine)]);
     }
-    return runExclusive(queueKey, async () => {
-        // A volume that becomes unwritable at runtime (remount, chmod,
-        // read-only root) must surface the typed storage outage the tool
-        // already handles, not a generic save failure.
-        try {
-          await mkdir(this.directory, { recursive: true, mode: 0o700 });
-        } catch (error) {
-          if (isStorageWriteError(error))
-            throw guestCartWriteError(this.directory, error);
-          throw error;
-        }
-        let stored: z.infer<typeof storedCartSchema>;
-        if (!token) {
-          stored = { expires_at: Date.now() + TTL, items: [] };
-        } else {
-          stored = await readStoredCart(file);
-          if (stored.expires_at <= Date.now()) {
-            await unlink(file).catch(() => undefined);
-            throw new GuestCartExpiredError();
-          }
-        }
-        // Absolute quantities make a lost-response retry safe without incrementing twice.
-        const items = [
-          ...stored.items.filter(
-            (item) => item.product_id !== normalizedLine.product_id
-          ),
-          ...(normalizedLine.quantity === 0
-            ? []
-            : [guestCartLineSchema.parse(normalizedLine)]),
-        ];
-        if (items.length > 20) throw new GuestCartFullError();
-        // Token-bound updates merge with the stored cart under its own
-        // per-file queue, so they validate here; creations validated
-        // above, before queueing. Either way a rejected line never
-        // reaches eviction to cost another shopper's live cart.
-        if (token) await validate(items);
-        await admitGuestCartWrite(this.directory, !token);
-        if (token && items.length === 0) {
-          // The last line was removed: delete the file instead of persisting
-          // an empty cart, so emptied carts stop pinning capacity slots. The
-          // token is retired: clients must drop it (its next use reports
-          // expired), so say so explicitly instead of returning it bare.
-          // Only a missing file is benign (already reclaimed): any other
-          // deletion failure must surface as a storage outage, not success
-          // with a live stale cart behind the retired token.
+    // Record runtime storage failures for /health (cleared by the next
+    // success) so a volume that fails after a healthy startup cannot keep
+    // the probe green through a complete guest-cart outage. Only the
+    // token-free errno is recorded: outage messages embed file paths that
+    // carry token filenames.
+    try {
+      const result = await runExclusive(queueKey, async () => {
+          // A volume that becomes unwritable at runtime (remount, chmod,
+          // read-only root) must surface the typed storage outage the tool
+          // already handles, not a generic save failure.
           try {
-            await unlink(file);
+            await mkdir(this.directory, { recursive: true, mode: 0o700 });
           } catch (error) {
-            if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT')
+            if (isStorageWriteError(error))
+              throw guestCartWriteError(this.directory, error);
+            throw error;
+          }
+          let stored: z.infer<typeof storedCartSchema>;
+          if (!token) {
+            stored = { expires_at: Date.now() + TTL, items: [] };
+          } else {
+            stored = await readStoredCart(file);
+            if (stored.expires_at <= Date.now()) {
+              await unlink(file).catch(() => undefined);
+              throw new GuestCartExpiredError();
+            }
+          }
+          // Absolute quantities make a lost-response retry safe without incrementing twice.
+          const items = [
+            ...stored.items.filter(
+              (item) => item.product_id !== normalizedLine.product_id
+            ),
+            ...(normalizedLine.quantity === 0
+              ? []
+              : [guestCartLineSchema.parse(normalizedLine)]),
+          ];
+          if (items.length > 20) throw new GuestCartFullError();
+          // Token-bound updates merge with the stored cart under its own
+          // per-file queue, so they validate here; creations validated
+          // above, before queueing. Either way a rejected line never
+          // reaches eviction to cost another shopper's live cart.
+          if (token) await validate(items);
+          await admitGuestCartWrite(this.directory, !token);
+          if (token && items.length === 0) {
+            // The last line was removed: delete the file instead of persisting
+            // an empty cart, so emptied carts stop pinning capacity slots. The
+            // token is retired: clients must drop it (its next use reports
+            // expired), so say so explicitly instead of returning it bare.
+            // Only a missing file is benign (already reclaimed): any other
+            // deletion failure must surface as a storage outage, not success
+            // with a live stale cart behind the retired token.
+            try {
+              await unlink(file);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT')
+                throw guestCartWriteError(file, error);
+            }
+            return {
+              cart_token: token,
+              items,
+              expires_at: new Date().toISOString(),
+              cart_emptied: true,
+            };
+          }
+          // Sliding expiry: a successful write extends the cart seven days so
+          // active conversations never expire mid-use; idle carts still die.
+          stored = { ...stored, expires_at: Date.now() + TTL };
+          const temporary = `${file}.${randomUUID()}.tmp`;
+          try {
+            await writeFile(temporary, JSON.stringify({ ...stored, items }), {
+              mode: 0o600,
+            });
+            await rename(temporary, file);
+          } catch (error) {
+            if (isStorageWriteError(error))
               throw guestCartWriteError(file, error);
+            throw error;
+          } finally {
+            await unlink(temporary).catch(() => undefined);
           }
           return {
-            cart_token: token,
+            cart_token: cartToken,
             items,
-            expires_at: new Date().toISOString(),
-            cart_emptied: true,
+            expires_at: new Date(stored.expires_at).toISOString(),
           };
-        }
-        // Sliding expiry: a successful write extends the cart seven days so
-        // active conversations never expire mid-use; idle carts still die.
-        stored = { ...stored, expires_at: Date.now() + TTL };
-        const temporary = `${file}.${randomUUID()}.tmp`;
-        try {
-          await writeFile(temporary, JSON.stringify({ ...stored, items }), {
-            mode: 0o600,
-          });
-          await rename(temporary, file);
-        } catch (error) {
-          if (isStorageWriteError(error))
-            throw guestCartWriteError(file, error);
-          throw error;
-        } finally {
-          await unlink(temporary).catch(() => undefined);
-        }
-        return {
-          cart_token: cartToken,
-          items,
-          expires_at: new Date(stored.expires_at).toISOString(),
-        };
-      });
+        });
+      this.lastStorageErrorCode = null;
+      return result;
+    } catch (error) {
+      if (error instanceof GuestCartStorageUnavailableError)
+        this.lastStorageErrorCode = error.code ?? 'unknown';
+      throw error;
+    }
   }
 }

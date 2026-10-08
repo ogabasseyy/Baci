@@ -26,7 +26,8 @@ export function guestCartWriteError(
   const detail =
     cause instanceof Error ? cause.message : 'unknown filesystem error';
   return new GuestCartStorageUnavailableError(
-    `Guest-cart write failed: ${target} (${detail}). The cart volume may be unwritable or full.`
+    `Guest-cart write failed: ${target} (${detail}). The cart volume may be unwritable or full.`,
+    (cause as NodeJS.ErrnoException)?.code
   );
 }
 
@@ -35,9 +36,13 @@ export function guestCartWriteError(
 // up. A second-writer refusal is NOT one of these — that deployment bug
 // still crashes the process.
 export class GuestCartStorageUnavailableError extends Error {
-  constructor(message: string) {
+  // Token-free errno for health/logs: messages embed file paths that may
+  // carry token filenames, so only the code is safe to surface.
+  readonly code?: string;
+  constructor(message: string, code?: string) {
     super(message);
     this.name = 'GuestCartStorageUnavailableError';
+    this.code = code;
   }
 }
 
@@ -55,7 +60,8 @@ export function directoryNotWritableError(
     cause instanceof Error ? cause.message : 'unknown filesystem error';
   return new GuestCartStorageUnavailableError(
     `Guest-cart directory is not writable: ${target} (server uid ${uid}, ${detail}). ` +
-      `Make the cart volume writable by the server user, e.g. chown the mounted directory to uid ${uid}.`
+      `Make the cart volume writable by the server user, e.g. chown the mounted directory to uid ${uid}.`,
+    (cause as NodeJS.ErrnoException)?.code
   );
 }
 

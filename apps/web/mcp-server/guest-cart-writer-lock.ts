@@ -3,15 +3,18 @@ import {
   closeSync,
   mkdirSync,
   openSync,
-  readFileSync,
   realpathSync,
   renameSync,
   statSync,
   unlinkSync,
-  utimesSync,
   writeSync,
 } from 'node:fs';
 import path from 'node:path';
+import {
+  type OwnedLock,
+  readLockContent,
+  startWriterHeartbeat,
+} from './guest-cart-writer-heartbeat';
 import {
   GuestCartStorageUnavailableError,
   directoryNotWritableError,
@@ -29,37 +32,8 @@ import {
 // mid-takeover instead of stealing it, so simultaneous stale claimants
 // elect exactly one owner.
 const WRITER_LOCK_FILE = '.writer.lock';
-const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
-interface OwnedLock {
-  lockPath: string;
-  content: string;
-  dev: number;
-  ino: number;
-  heartbeat: NodeJS.Timeout;
-}
 const heldWriterLocks = new Map<string, OwnedLock>();
-
-function readLockContent(lockPath: string): string | null {
-  try {
-    return readFileSync(lockPath, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-// Ownership binds the claim content to the file identity captured at claim
-// time: a takeover installs a new inode, so even a same-content replacement
-// is detected and never refreshed.
-function ownsWriterLock(lockPath: string, owned: OwnedLock): boolean {
-  try {
-    const identity = statSync(lockPath);
-    if (identity.dev !== owned.dev || identity.ino !== owned.ino) return false;
-    return readLockContent(lockPath) === owned.content;
-  } catch {
-    return false;
-  }
-}
 
 export function acquireWriterLock(directory: string): void {
   try {
@@ -69,6 +43,10 @@ export function acquireWriterLock(directory: string): void {
   } catch (error) {
     if (isPermissionError(error))
       throw directoryNotWritableError(directory, error);
+    // Creating the directory allocates storage too: a full volume must
+    // degrade guest carts, not crash startup.
+    if (isStorageWriteError(error))
+      throw guestCartWriteError(directory, error);
     throw error;
   }
   // Creation mode does not affect pre-existing directories (a restored or
@@ -107,6 +85,11 @@ export function acquireWriterLock(directory: string): void {
     } catch (error) {
       if (isPermissionError(error))
         throw directoryNotWritableError(lockPath, error);
+      // Creating the claim allocates storage: a volume already at its
+      // block, inode, or quota limit throws ENOSPC/EDQUOT here, before
+      // any descriptor exists for the write path to map.
+      if (isStorageWriteError(error))
+        throw guestCartWriteError(lockPath, error);
       throw error;
     }
     try {
@@ -245,41 +228,7 @@ export function acquireWriterLock(directory: string): void {
     heartbeat: undefined as unknown as NodeJS.Timeout,
   };
   heldWriterLocks.set(key, owned);
-  const failClosed = () => {
-    clearInterval(owned.heartbeat);
-    heldWriterLocks.delete(key);
-    console.error(
-      `[guest-cart] writer lock for ${lockPath} was taken over; exiting instead of writing without the single-writer guarantee.`
-    );
-    process.exit(1);
-  };
-  owned.heartbeat = setInterval(() => {
-    // A process suspended past the stale window must not refresh a lock
-    // another process took over while it slept: verify ownership first,
-    // and fail closed when the lock no longer carries our claim.
-    if (!ownsWriterLock(lockPath, owned)) {
-      failClosed();
-      return;
-    }
-    try {
-      const now = new Date();
-      utimesSync(lockPath, now, now);
-    } catch {
-      // Ownership verified above, yet the refresh failed (read-only
-      // remount, metadata I/O fault): the mtime will go stale and invite
-      // takeover while this process keeps writing. A stale-but-serving
-      // writer violates the guarantee exactly like a displaced one, so
-      // fail closed instead of serving until the next tick notices.
-      failClosed();
-      return;
-    }
-    // A claimant may have installed a fresh claim between the ownership
-    // read and the refresh, so our utimes may have landed on their file:
-    // re-verify and exit immediately instead of serving writes without
-    // the guarantee until the next tick.
-    if (!ownsWriterLock(lockPath, owned)) failClosed();
-  }, WRITER_HEARTBEAT_INTERVAL_MS);
-  owned.heartbeat.unref();
+  startWriterHeartbeat(lockPath, owned, () => heldWriterLocks.delete(key));
 }
 
 /**

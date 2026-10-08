@@ -14,6 +14,7 @@ import {
   GuestCartExpiredError,
   GuestCartFullError,
   GuestCartStore,
+  describeGuestCartStoreHealth,
 } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
@@ -89,6 +90,37 @@ it('fails removal instead of retiring a cart whose file cannot be deleted', asyn
   } finally {
     await chmod(directory, 0o755);
   }
+});
+it('degrades health on a failed write and recovers on the next success', async () => {
+  // Root bypasses permission bits, so the probe is meaningless there.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
+  const { directory, instance } = await store();
+  expect(describeGuestCartStoreHealth(instance)).toEqual({
+    guestCarts: 'ok',
+  });
+  try {
+    await chmod(directory, 0o555);
+    await expect(
+      instance.update(undefined, { product_id: id, quantity: 1 }, async () => {})
+    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
+    // A volume that fails after a healthy startup must flip the signal:
+    // the reason carries only the token-free errno, never the outage
+    // message (file paths embed token filenames).
+    const degraded = describeGuestCartStoreHealth(instance);
+    expect(degraded.guestCarts).toBe('degraded');
+    expect(degraded.guestCartsReason).toMatch(/EACCES|EPERM|EROFS/);
+    expect(degraded.guestCartsReason).not.toContain(id);
+  } finally {
+    await chmod(directory, 0o755);
+  }
+  await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  expect(describeGuestCartStoreHealth(instance)).toEqual({
+    guestCarts: 'ok',
+  });
 });
 it('rejects a 21st line with a typed full-cart error', async () => {
   const { instance } = await store();

@@ -149,6 +149,20 @@ export function useEditOrderController() {
       return;
     }
 
+    const orderDate = resolveEditOrderDate({
+      currentDate: baseController.date,
+      hasSavedOrder: Boolean(order),
+      savedCreatedAt: order?.created_at,
+      savedDay: order?.invoice_issue_date,
+      savedSource: order?.source,
+      savedTransactionDate: order?.transaction_date,
+    });
+
+    if (orderDate && orderDate.getTime() > Date.now()) {
+      Alert.alert('Invalid date', 'Order date cannot be in the future.');
+      return;
+    }
+
     try {
       await updateOrderMutation.mutateAsync({
         orderId,
@@ -158,14 +172,7 @@ export function useEditOrderController() {
             ? order.customer_id !== baseController.customer.id
             : false,
           deliveryInfo: baseController.deliveryInfo,
-          orderDate: resolveEditOrderDate({
-            currentDate: baseController.date,
-            hasSavedOrder: Boolean(order),
-            savedCreatedAt: order?.created_at,
-            savedDay: order?.invoice_issue_date,
-            savedSource: order?.source,
-            savedTransactionDate: order?.transaction_date,
-          }),
+          orderDate,
           discount: baseController.discount,
           notes: baseController.notes,
           notifyCustomer,

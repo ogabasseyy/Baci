@@ -2,8 +2,8 @@
 -- wrapper locks the order row (advisory, then row, like payment paths).
 -- Lives here so no intermediate state ever exposes the inverted chain.
 ALTER FUNCTION public.update_admin_order_with_transaction_discount_metadata(uuid, jsonb)
-  RENAME TO update_admin_order_with_transaction_discount_metadata_without_payment_lock;
-REVOKE ALL ON FUNCTION public.update_admin_order_with_transaction_discount_metadata_without_payment_lock(uuid, jsonb)
+  RENAME TO update_admin_order_txn_discount_metadata_no_payment_lock;
+REVOKE ALL ON FUNCTION public.update_admin_order_txn_discount_metadata_no_payment_lock(uuid, jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.update_admin_order_with_transaction_discount_metadata(
@@ -19,7 +19,7 @@ BEGIN
     pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0)
   );
 
-  RETURN public.update_admin_order_with_transaction_discount_metadata_without_payment_lock(
+  RETURN public.update_admin_order_txn_discount_metadata_no_payment_lock(
     p_order_id,
     p_payload
   );
@@ -62,8 +62,8 @@ DECLARE
   v_doc_day_override date;
   v_result jsonb;
   v_changed_fields text[] := ARRAY[]::text[];
-  v_delegated_audit_count integer := 0;
-  v_delegated_audit_id uuid;
+  v_prior_audit_ids uuid[] := '{}'::uuid[];
+  v_new_audit_ids uuid[];
   v_before_dates jsonb;
   v_after_dates jsonb;
 BEGIN
@@ -149,6 +149,13 @@ BEGIN
     AND v_order.shipping_status IN ('cancelled', 'returned') THEN
     RAISE EXCEPTION 'order_terminal_not_editable' USING ERRCODE = '23514';
   END IF;
+
+  -- Snapshot audit rows that predate the delegated call so the merge
+  -- below only targets the row the delegated edit wrote.
+  SELECT COALESCE(array_agg(e.id), '{}'::uuid[]) INTO v_prior_audit_ids
+  FROM public.order_audit_events e
+  WHERE e.order_id = p_order_id AND e.created_at = now()
+    AND e.action = 'order.update' AND e.actor_user_id = v_actor;
 
   v_result := public.update_admin_order_without_date(
     p_order_id, p_payload - 'transaction_date' - 'transaction_date_day'
@@ -245,26 +252,24 @@ BEGIN
       'tax_point_date', v_final_docs.tax_point_date,
       'tax_point_date_generated', v_final_docs.tax_point_date_generated);
 
-    -- Merge into the delegated audit event from this transaction, matched
-    -- by creation timestamp; fall back to a standalone insert. xmin cannot
-    -- scope this match: the replace RPC runs inside a savepoint
-    -- subtransaction, so its audit row carries a subtransaction xid.
-    SELECT count(*) INTO v_delegated_audit_count
+    -- Merge into the delegated audit row: match by creation timestamp
+    -- (stable within a transaction) plus action and actor, excluding rows
+    -- that predated the delegated call. xmin cannot scope this match: the
+    -- replace RPC runs inside a savepoint subtransaction, so its audit row
+    -- carries a subtransaction xid. Anything but exactly one new row falls
+    -- back to a standalone insert.
+    SELECT array_agg(e.id) INTO v_new_audit_ids
     FROM public.order_audit_events e
-    WHERE e.order_id = p_order_id
-      AND e.created_at = now();
+    WHERE e.order_id = p_order_id AND e.created_at = now()
+      AND e.action = 'order.update' AND e.actor_user_id = v_actor
+      AND NOT (e.id = ANY (v_prior_audit_ids));
 
-    IF v_delegated_audit_count = 1 THEN
-      SELECT e.id INTO v_delegated_audit_id
-      FROM public.order_audit_events e
-      WHERE e.order_id = p_order_id
-        AND e.created_at = now();
-
+    IF COALESCE(array_length(v_new_audit_ids, 1), 0) = 1 THEN
       UPDATE public.order_audit_events
       SET changed_fields = changed_fields || v_changed_fields,
           before_snapshot = before_snapshot || v_before_dates,
           after_snapshot = after_snapshot || v_after_dates
-      WHERE id = v_delegated_audit_id;
+      WHERE id = v_new_audit_ids[1];
     ELSE
       INSERT INTO public.order_audit_events (
         merchant_id, order_id, actor_user_id, action, change_category,

@@ -120,9 +120,44 @@ BEGIN
     RAISE EXCEPTION 'outer wrapper not callable';
   END IF;
   IF has_function_privilege('authenticated',
-    'public.update_admin_order_with_transaction_discount_metadata_without_payment_lock(uuid,jsonb)',
+    'public.update_admin_order_txn_discount_metadata_no_payment_lock(uuid,jsonb)',
     'EXECUTE') THEN
     RAISE EXCEPTION 'lock inner wrapper callable';
+  END IF;
+END;
+$$;
+
+-- Pre-existing audit rows are excluded from the merge: the date fields land
+-- on the delegated row, not the earlier event.
+SET test.actor = '22222222-2222-4222-8222-222222222222';
+DO $$
+DECLARE
+  v_id uuid := '99999999-9999-4999-8999-999999999999';
+  v_prior uuid;
+BEGIN
+  INSERT INTO orders VALUES (
+    v_id, '11111111-1111-4111-8111-111111111111',
+    'online_store', '2024-05-01T10:00:00Z', '2024-05-01T10:00:00Z', NULL, 'pending',
+    NULL, NULL, NULL, NULL, NULL
+  );
+  INSERT INTO order_audit_events (
+    merchant_id, order_id, actor_user_id, action, change_category,
+    changed_fields, before_snapshot, after_snapshot, metadata
+  ) VALUES (
+    '11111111-1111-4111-8111-111111111111', v_id,
+    '22222222-2222-4222-8222-222222222222', 'order.update', 'customer_visible',
+    ARRAY['customer_name'], '{}'::jsonb, '{}'::jsonb, '{}'::jsonb
+  ) RETURNING id INTO v_prior;
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(v_id,
+    '{"transaction_date":"2024-01-02T10:00:00Z"}');
+  IF NOT EXISTS (SELECT 1 FROM order_audit_events
+    WHERE order_id = v_id AND id <> v_prior
+    AND changed_fields @> ARRAY['transaction_date']) THEN
+    RAISE EXCEPTION 'date fields merged into prior event';
+  END IF;
+  IF EXISTS (SELECT 1 FROM order_audit_events WHERE id = v_prior
+    AND changed_fields @> ARRAY['transaction_date']) THEN
+    RAISE EXCEPTION 'prior event polluted by merge';
   END IF;
 END;
 $$;

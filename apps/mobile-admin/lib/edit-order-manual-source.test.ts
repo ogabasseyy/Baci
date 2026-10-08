@@ -5,6 +5,23 @@ import { isManualOrderSource } from './edit-order-manual-source';
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../..');
 
+function readManualSourcesFromMobile(): string[] {
+  const ts = readFileSync(
+    path.join(
+      REPOSITORY_ROOT,
+      'apps/mobile-admin/lib/edit-order-manual-source.ts'
+    ),
+    'utf8'
+  );
+  const setBody = ts.match(/new Set\(\[([\s\S]*?)\]\)/);
+
+  if (!setBody) {
+    throw new Error('No manual-source set found in mobile util');
+  }
+
+  return [...setBody[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]);
+}
+
 function readManualSourcesFromMigration(relativePath: string): string[] {
   const sql = readFileSync(path.join(REPOSITORY_ROOT, relativePath), 'utf8');
   const lists = [...sql.matchAll(/\bIN\s*\(([^)]*)\)/gs)].map(
@@ -29,6 +46,10 @@ describe('edit-order manual sources', () => {
     );
 
     expect([...editSources].sort()).toEqual([...reviewSources].sort());
+
+    // Both directions: an addition or omission on either side fails.
+    const mobileSources = readManualSourcesFromMobile();
+    expect([...mobileSources].sort()).toEqual([...editSources].sort());
 
     for (const source of editSources) {
       expect(isManualOrderSource(source)).toBe(true);

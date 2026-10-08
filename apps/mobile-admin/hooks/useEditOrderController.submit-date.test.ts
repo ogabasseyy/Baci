@@ -162,6 +162,31 @@ describe('useEditOrderController submit date', () => {
     );
   });
 
+  it('blocks a future pick inline before submit', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    useNewOrderControllerMock.mockReturnValue(
+      createBaseController({ date: tomorrow })
+    );
+    useUpdateOrderMock.mockReturnValue({ isPending: false, mutateAsync });
+    useOrderMock.mockReturnValue({
+      data: {
+        id: 'order-1',
+        transaction_date: new Date(2024, 0, 2, 10, 0).toISOString(),
+      },
+      isLoading: false,
+    });
+    const { result } = renderHook(() => useEditOrderController());
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+    expect(alertMock).toHaveBeenCalledWith(
+      'Invalid date',
+      'Order date cannot be in the future.'
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
   it('omits a manual day matching the stored explicit day', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     useNewOrderControllerMock.mockReturnValue(

@@ -2,7 +2,7 @@
 \ir primary-wallet-paid-interest-completion.integration.sql
 ALTER TABLE public.customers ADD COLUMN deleted_at timestamptz;
 ALTER TABLE public.customer_savings_goals ADD COLUMN title text NOT NULL DEFAULT 'Fixture device';
-\ir ../../../../../supabase/migrations/20260925130000_customer_savings_engagement_storage.sql
+\ir ../../../../../supabase/migrations/20260925130050_customer_savings_engagement_storage.sql
 \ir ../../../../../supabase/migrations/20260925130100_customer_savings_engagement_events.sql
 \if :{?without_primary_notifications}
 \else

@@ -104,4 +104,14 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
       'supabase/migrations/20261008150000_search_platform_admin_visibility.sql',
     sha256: 'bf179aa2e39c9d483d35531b32b955460107fd4352e750aa74b185e1a6f7ba9d',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008160000_search_price_options_offer_parent_stock.sql',
+    sha256: 'b00e8573ebb956a1efc19209c9f6884354a53f4140db1d713f01fe488cde7e47',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008170000_storefront_product_request_platform_admin.sql',
+    sha256: 'c4822a102f733534a05d54c145c05a0e0aae889fa0228188efa889f9673fd55b',
+  },
 ] as const;

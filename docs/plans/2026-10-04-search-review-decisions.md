@@ -338,3 +338,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low intake-oracle + low pagination-total: repeats (public-slug acceptance; line-187 documented contract).
 - CI Quality Gate - Test FIXED: redirects test asserted the old string-form canonical replace; updated to the CX-94 object form (8/8). Invalid-selection reset assertion unchanged (still bare).
 - CI shard 4 FIXED: inventory snapshot regenerated via sanctioned CLI + pin update (proxy/route sources moved).
+
+## Round 49 (Muse 3 med + 1 low on 59776f8b63 — all adjudicated; Codex 4 P2 — all fixed)
+
+- Muse med intake-rotation: PR-disclosed repeat (CAPTCHA/verified-contact is the documented follow-up).
+- Muse med assurance-consent: logic confirmed correct by Muse; residual is device/browser visual verification — already an open product decision (device QA).
+- Muse low comparison-key: pre-existing by-design identity (one row per product, documented in-store); re-keying by variant/offer is a feature change out of scope.
+- Muse med gates-incomplete: no code defect; cites the stale PR description for old failures — CI on the current head is the live gate being awaited.
+- CX-96 (P2) FIXED: migration 20261008160000 mirrors the variants-branch parent-stock fallback into the offers branch (NULL offer qty + stocked parent now surfaces). Scratch probe: stocked→1 row, empty→0. Registered (sha b00e8573…).
+- CX-97 (P2) FIXED: brand chips dedupe by trimmed-lowercase identity (first spelling wins) and dismissal removes all equivalents. Existing test updated (it pinned the duplicate behavior).
+- CX-98 (P2) FIXED (regression from the M3 constraint): SearchCompareButton persists normalizeCanonicalProductCondition (uk_used→used; total function, ''→undefined) so the schema keeps the marker. Single writer verified. Test pins uk_used→used.
+- CX-99 (P2) FIXED: migration 20261008170000 applies published-or-platform-admin to the intake merchant lookup (grants preserved by OR REPLACE). Scratch: pub+admin accepted, unknown/dark rejected. Registered (sha c4822a10…).

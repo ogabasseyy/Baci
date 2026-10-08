@@ -166,6 +166,28 @@ it('carries the card match basis into the comparison snapshot', () => {
     })
   );
 });
+
+it('persists a canonical condition for raw match aliases', () => {
+  render(
+    <SearchCompareButton
+      product={
+        {
+          id: '6',
+          name: 'Product 6',
+          slug: 'p6',
+          price: 60,
+          searchMatch: { productId: '6', total: 1, condition: 'uk_used' },
+        } as NormalizedProduct
+      }
+      price="₦60"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: '+ Add to comparison' }));
+  // uk_used normalizes to used so the snapshot schema keeps the marker.
+  expect(mocks.add).toHaveBeenCalledWith(
+    expect.objectContaining({ matchCondition: 'used' })
+  );
+});
 it('refreshes selected identities from other pages and displays real facts', () => {
   mocks.state.compareItems = [
     { id: '1', name: 'One', slug: 'one' },

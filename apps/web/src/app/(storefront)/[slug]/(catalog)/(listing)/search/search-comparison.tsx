@@ -57,7 +57,13 @@ export function SearchCompareButton({
             condition: product.condition as Product['condition'],
             matchVariantId: product.searchMatch?.variantId,
             matchOfferId: product.searchMatch?.offerId,
-            matchCondition: product.searchMatch?.condition,
+            // Persist the canonical condition: raw match aliases (uk_used)
+            // would be dropped by the snapshot schema, losing the
+            // match_base marker for off-page items after hydration.
+            matchCondition:
+              normalizeCanonicalProductCondition(
+                product.searchMatch?.condition
+              ) || undefined,
           });
           setNotice(
             replaced ? `Replaced ${replaced.name} in your comparison.` : ''

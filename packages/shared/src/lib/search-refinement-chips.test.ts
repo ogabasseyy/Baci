@@ -2,18 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { getSearchRefinementChips } from './search-refinement-chips';
 
 describe('applied search filters', () => {
-  it('removes one exact brand while retaining price and sort', () => {
+  it('dedupes case-equivalent brands into one chip that clears all', () => {
     const chips = getSearchRefinementChips(
-      { brands: [' Apple ', 'Apple'], maxPrice: 0, sort: 'newest' },
+      { brands: ['apple', ' Apple ', 'Samsung'], maxPrice: 0, sort: 'newest' },
       []
     );
     expect(chips.map((chip) => chip.key)).toEqual([
-      'brand: Apple ',
-      'brand:Apple',
+      'brand:apple',
+      'brand:samsung',
       'price',
     ]);
+    expect(chips[0].label).toBe('apple');
     expect(chips[0].next).toEqual({
-      brands: ['Apple'],
+      brands: ['Samsung'],
       maxPrice: 0,
       sort: 'newest',
     });

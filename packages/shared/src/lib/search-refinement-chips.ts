@@ -9,14 +9,26 @@ export function getSearchRefinementChips(
   categories: { id: string; name: string }[],
   formatPrice: (price: number) => string = (price) => `₦${price}`
 ): SearchRefinementChip[] {
-  const chips: SearchRefinementChip[] = criteria.brands.map((brand) => ({
-    key: `brand:${brand}`,
-    label: brand.trim(),
-    next: {
-      ...criteria,
-      brands: criteria.brands.filter((value) => value !== brand),
-    },
-  }));
+  // SQL and the checkbox UI treat brands as trimmed case-insensitive
+  // facets, so chip identities dedupe the same way: one chip per
+  // equivalent set, whose dismissal removes every equivalent spelling.
+  const chips: SearchRefinementChip[] = [];
+  const seenBrandIdentities = new Set<string>();
+  for (const brand of criteria.brands) {
+    const identity = brand.trim().toLowerCase();
+    if (seenBrandIdentities.has(identity)) continue;
+    seenBrandIdentities.add(identity);
+    chips.push({
+      key: `brand:${identity}`,
+      label: brand.trim(),
+      next: {
+        ...criteria,
+        brands: criteria.brands.filter(
+          (value) => value.trim().toLowerCase() !== identity
+        ),
+      },
+    });
+  }
   if (criteria.categoryId)
     chips.push({
       key: 'category',

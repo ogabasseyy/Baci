@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onRequestError, register } from './instrumentation';
 
 const registerOTelMock = vi.hoisted(() => vi.fn());
+const initializeLabRuntimeMock = vi.hoisted(() => vi.fn());
+const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
+vi.mock('@/config/pilot-public-assets', () => ({
+  assertPilotPublicAssets: assertPilotPublicAssetsMock,
+}));
+vi.mock('@/app/pilot-lab/lab-route', () => ({
+  initializeLabRuntime: initializeLabRuntimeMock,
+}));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
 const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
@@ -26,10 +34,36 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
   vi.stubEnv('NEXT_OTEL_FETCH_DISABLED', '0');
 });
 
 describe('instrumentation register', () => {
+  it('rejects non-lab startup with staged public assets before registering services', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    assertPilotPublicAssetsMock.mockImplementationOnce(() => {
+      throw new Error('staged merchant pilot assets');
+    });
+    await expect(register()).rejects.toThrow('staged merchant pilot assets');
+    expect(registerOTelMock).not.toHaveBeenCalled();
+    expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
+  });
+  it('awaits pilot startup validation and rejects boot on invalid staged inputs', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    initializeLabRuntimeMock.mockRejectedValueOnce(
+      new Error('invalid staged inputs')
+    );
+    await expect(register()).rejects.toThrow('invalid staged inputs');
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+
+  it('initializes the enabled pilot before completing registration', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    await register();
+    expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
+  });
   it('registers Vercel OpenTelemetry in the Node.js runtime', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('VERCEL_ENV', 'preview');

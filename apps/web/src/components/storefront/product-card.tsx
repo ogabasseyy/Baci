@@ -27,6 +27,8 @@ interface StorefrontProductCardProps {
   onQuickView: (product: Product) => void;
   basePath?: string;
   priority?: boolean;
+  // Lab-only href suffix (?arm=...); production callers omit it.
+  hrefSuffix?: string;
 }
 
 /**
@@ -42,6 +44,7 @@ export function StorefrontProductCard({
   onQuickView,
   basePath = '',
   priority = false,
+  hrefSuffix = '',
 }: StorefrontProductCardProps) {
   const { formatCurrency } = useCurrency();
 
@@ -120,7 +123,7 @@ export function StorefrontProductCard({
     >
       <div className="relative group/image">
         <Link
-          href={getStorefrontProductHref(product, basePath)}
+          href={getStorefrontProductHref(product, basePath, hrefSuffix)}
           className="block"
         >
           <ProductCardImage

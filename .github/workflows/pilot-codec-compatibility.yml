@@ -1,0 +1,109 @@
+name: Pilot codec compatibility (opt-in)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pilot-codec-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-no-avif-fixture:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check'))
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - name: Install isolated pinned fixture runtime
+        shell: pwsh
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'pilot-codec-runtime'
+          New-Item -ItemType Directory -Force $runtime | Out-Null
+          Copy-Item .github/fixtures/pilot-codec/package.json $runtime
+          Copy-Item .github/fixtures/pilot-codec/pnpm-lock.yaml $runtime
+          pnpm --dir $runtime install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --dir $runtime exec playwright install webkit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove native no-AVIF, WebP fallback and intact hydration
+        env:
+          PILOT_CODEC_RUNTIME: ${{ runner.temp }}/pilot-codec-runtime
+          PILOT_CODEC_OUTPUT: ${{ runner.temp }}/pilot-codec-evidence
+        run: node apps/web/tools/perf/merchant-image-pilot-codec-smoke.mjs
+      - name: Retain synthetic fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pilot-codec-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pilot-codec-evidence
+          retention-days: 7
+          # A compatibility gate with zero retained evidence is a failure,
+          # not a pass: fail when the smoke script produced nothing.
+          if-no-files-found: error
+
+  # Change detection for the transformer suite: the label gate alone
+  # would let transformer-area PRs merge untested whenever the label is
+  # absent, so transformer code changes run the suite with no label.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      transformer: ${{ steps.diff.outputs.transformer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/${{ github.base_ref }}"
+          if git diff --name-only "$base...HEAD" -- 'infra/cdn-transformer/**' | grep -q .; then
+            echo 'transformer=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'transformer=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  # The transformer package lives outside the pnpm workspace (infra-only),
+  # so no root turbo gate can discover its suite: without this job the
+  # encoder/acceptance tests run nowhere in CI.
+  transformer-tests:
+    needs: changes
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'pilot-codec-check') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'pilot-codec-check')) ||
+      needs.changes.outputs.transformer == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - name: Install transformer dependencies
+        run: pnpm --dir infra/cdn-transformer install --frozen-lockfile
+      - name: Run transformer checks and tests
+        run: pnpm --dir infra/cdn-transformer check

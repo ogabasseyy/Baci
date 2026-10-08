@@ -1,0 +1,28 @@
+# Standalone pilot workspace for baci-cdn-transformer.
+# Scoped to this package only; the repo root workspace membership is unchanged.
+# Mirrors the applicable safeguards from the root dependency policy
+# (release-age minimum, trust policy, strict dependency-build handling with a
+# reviewed sharp-only build allowance, and the sharp security pin). Root
+# React-Native/Expo linker, hoisting, network, unrelated override, patch, and
+# trust-exclusion settings are intentionally NOT inherited here.
+packages:
+  - '.'
+
+minimumReleaseAge: 1440
+
+# Refuse trust-signal downgrades; trustLockfile keeps already-locked entries
+# installable.
+trustPolicy: no-downgrade
+trustLockfile: true
+
+strictDepBuilds: true
+# Reviewed build allowlist for the actual standalone graph: sharp's native
+# installation is explicitly allowed. Do not add entries without review.
+allowBuilds:
+  sharp: true
+
+overrides:
+  # Pin to 0.35.4 to mitigate GHSA-f88m-g3jw-g9cj plus the libheif
+  # GHSA-g89c-p67h-r497 / GHSA-2jg2-4ch7-h545, and retain the corrected
+  # TypeScript export map (mirrors the root security override).
+  sharp: 0.35.4

@@ -1,0 +1,254 @@
+import { createHash } from 'node:crypto';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
+import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { RECIPE_BYTE_CEILINGS } from '@/schemas/merchant-image-variant-pilot-tiers';
+import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
+
+// Shared lab-roots builder for the pilot-lab route tests (gallery + store
+// pages). Stages a gitignored input root (inventory.json + source bytes),
+// an output root (generation dirs with manifests + acceptances.json), and
+// a staged public dir. `accepted` assets get acceptances; `unreviewed`
+// assets are staged on disk but never reviewed (the reported
+// not-optimized path). All hashes are computed over the staged bytes, so
+// the lab-config verifier exercises its real hash checks. Fixtures run the
+// same pre-start staging step operators run (request-time loads are
+// read-only), with the lab flag save/restored around it.
+
+export interface LabTestAsset {
+  assetId: string;
+  ladder: readonly number[];
+  merchantId: string;
+  role: 'hero' | 'logo' | 'product';
+  slot: string;
+  url: string;
+}
+
+export interface LabTestRoots {
+  generationIds: Record<string, string>;
+  inputRoot: string;
+  outputRoot: string;
+  publicDir: string;
+}
+
+const here = dirname(fileURLToPath(import.meta.url));
+const GENERATOR_FIXTURES = join(
+  here,
+  '..',
+  '..',
+  '..',
+  '..',
+  '..',
+  'infra',
+  'cdn-transformer',
+  'pilot',
+  'fixtures'
+);
+
+function sha256(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+export async function setupLabRoots(input: {
+  accepted: readonly LabTestAsset[];
+  unreviewed?: readonly LabTestAsset[];
+}): Promise<LabTestRoots> {
+  const base = await mkdtemp(join(tmpdir(), 'pilot-route-'));
+  const inputRoot = join(base, 'input');
+  const outputRoot = join(base, 'output');
+  const publicDir = join(base, 'public');
+  await mkdir(inputRoot, { recursive: true });
+  await mkdir(publicDir, { recursive: true });
+  // 2000x500 source: every role ladder fits without upscaling (the
+  // manifest contract rejects upscaled claims), and the 4:1 aspect keeps
+  // rung heights exact.
+  const payload = await readFile(join(GENERATOR_FIXTURES, 'wide-2000x500.png'));
+
+  async function addAsset(asset: LabTestAsset): Promise<{
+    generationId: string;
+    record: Record<string, unknown>;
+    tierHashes: string[];
+    tierQualities: number[];
+  }> {
+    const sourcePath = `${asset.assetId}.png`;
+    await copyFile(
+      join(GENERATOR_FIXTURES, 'wide-2000x500.png'),
+      join(inputRoot, sourcePath)
+    );
+    const snapshot = await readFile(join(inputRoot, sourcePath));
+    const sourceSha = sha256(snapshot);
+    // The bound recipe output for this fixture job: buildLabIndex
+    // recomputes it and rejects renamed directories, so fixtures use
+    // real ids (returned to callers for URL assertions).
+    const generationId = labGenerationIdFor({
+      assetId: asset.assetId,
+      encoderIdentity: {
+        libvipsVersion: '8.18.6',
+        name: 'sharp',
+        sharpVersion: '0.35.4',
+      },
+      merchantId: asset.merchantId,
+      recipeId: PILOT_RECIPE_ID,
+      role: asset.role,
+      sourceSha256: sourceSha,
+    });
+    const generationDir = join(outputRoot, 'generations', generationId);
+    await mkdir(generationDir, { recursive: true });
+    const tiers = [];
+    for (const requestedWidth of asset.ladder) {
+      for (const format of ['avif', 'webp'] as const) {
+        // Synthetic tiers reuse the source payload, so truncate to the
+        // rung's recipe byte ceiling: real encoders emit rung-sized
+        // outputs, never full-source bytes at every rung. A rung without
+        // a ceiling truncates to 1 byte and still fails schema validation
+        // loudly ('no recipe ceiling') instead of passing silently.
+        const ceiling =
+          RECIPE_BYTE_CEILINGS[asset.role]?.[requestedWidth]?.[format] ?? 0;
+        const bytes = Buffer.concat([
+          payload,
+          Buffer.from(`${asset.assetId}${requestedWidth}${format}`),
+        ]).subarray(0, Math.max(1, ceiling));
+        const hash = sha256(bytes);
+        const fileName = `${hash}.${format}`;
+        await writeFile(join(generationDir, fileName), bytes);
+        const width = Math.min(requestedWidth, 2000);
+        tiers.push({
+          actualWidth: width,
+          bytes: bytes.length,
+          contentType: `image/${format}`,
+          // png source: capped rungs generate, larger rungs take the
+          // explicit over-source exception.
+          delivery:
+            bytes.length <= snapshot.length
+              ? 'generated'
+              : 'generated-over-source',
+          format,
+          height: Math.round((500 * width) / 2000),
+          path: fileName,
+          quality: 70,
+          requestedWidth,
+          sha256: hash,
+          width,
+        });
+      }
+    }
+    await writeFile(
+      join(generationDir, 'manifest.json'),
+      JSON.stringify({
+        assetId: asset.assetId,
+        createdAt: '2026-10-01T20:00:00.000Z',
+        encoder: {
+          libvipsVersion: '8.18.6',
+          name: 'sharp',
+          sharpVersion: '0.35.4',
+        },
+        merchantId: asset.merchantId,
+        policyVersion: 1,
+        recipeId: PILOT_RECIPE_ID,
+        role: asset.role,
+        schemaVersion: 1,
+        source: {
+          bytes: snapshot.length,
+          format: 'png',
+          orientedHeight: 500,
+          orientedWidth: 2000,
+          sha256: sourceSha,
+        },
+        tiers,
+      })
+    );
+    return {
+      generationId,
+      record: {
+        assetId: asset.assetId,
+        capturedAt: '2026-10-01T20:00:00.000Z',
+        contentType: 'image/png',
+        height: 500,
+        merchantId: asset.merchantId,
+        role: asset.role,
+        schemaVersion: 1,
+        sha256: sourceSha,
+        size: snapshot.length,
+        slot: asset.slot,
+        sourcePath,
+        url: asset.url,
+        width: 2000,
+      },
+      tierHashes: tiers.map((tier) => tier.sha256),
+      tierQualities: tiers.map((tier) => tier.quality),
+    };
+  }
+
+  const records: Record<string, unknown>[] = [];
+  const acceptances: Record<string, unknown>[] = [];
+  const generationIds: Record<string, string> = {};
+  for (const asset of input.accepted) {
+    const { generationId, record, tierHashes, tierQualities } =
+      await addAsset(asset);
+    records.push(record);
+    generationIds[asset.assetId] = generationId;
+    acceptances.push({
+      assetId: record.assetId,
+      generationId,
+      merchantId: asset.merchantId,
+      note: 'Lab review: fixture acceptance.',
+      outputHashes: tierHashes,
+      qualities: tierQualities,
+      originalUrl: asset.url,
+      recipeId: PILOT_RECIPE_ID,
+      reviewedAt: '2026-10-01T21:00:00.000Z',
+      reviewer: 'pilot-owner',
+      schemaVersion: 1,
+      sourceSha256: record.sha256,
+      verdict: 'accepted',
+    });
+  }
+  for (const asset of (input.unreviewed ?? []) as readonly LabTestAsset[]) {
+    const { record } = await addAsset(asset);
+    records.push(record);
+  }
+  await writeFile(join(inputRoot, 'inventory.json'), JSON.stringify(records));
+  await writeFile(
+    join(outputRoot, 'acceptances.json'),
+    JSON.stringify(acceptances)
+  );
+  const flagWas = process.env.BACI_IMAGE_PILOT_LAB;
+  process.env.BACI_IMAGE_PILOT_LAB = '1';
+  try {
+    const inventoryText = await readFile(
+      join(inputRoot, 'inventory.json'),
+      'utf8'
+    );
+    const acceptancesText = await readFile(
+      join(outputRoot, 'acceptances.json'),
+      'utf8'
+    );
+    await loadLabConfig(
+      {
+        acceptances: parseRawAcceptances(JSON.parse(acceptancesText)),
+        inputRoot,
+        inventoryRecords: parseRawInventoryRecords(JSON.parse(inventoryText)),
+        outputRoot,
+        publicDir,
+      },
+      { stage: true }
+    );
+  } finally {
+    if (flagWas === undefined) {
+      delete process.env.BACI_IMAGE_PILOT_LAB;
+    } else {
+      process.env.BACI_IMAGE_PILOT_LAB = flagWas;
+    }
+  }
+  return { generationIds, inputRoot, outputRoot, publicDir };
+}

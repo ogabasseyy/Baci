@@ -1,0 +1,258 @@
+// Durable generation storage for the merchant image pilot: atomic
+// fsync-then-rename commits plus reuse. Verified loads live in
+// manifest-store-load.mjs (re-exported here); schemas, identity, and
+// parsing stay in manifest.mjs.
+import { createHash } from 'node:crypto';
+import {
+  rename as fsRename,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import { join } from 'node:path';
+import { removeOwnedStaging } from './disk-guards.mjs';
+import { generationIdFor } from './generation-identity.mjs';
+import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
+import { generationDir, loadGeneration } from './manifest-store-load.mjs';
+
+export { loadGeneration };
+
+async function defaultFsync(path) {
+  const handle = await open(path, 'r');
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+// fsync failure classification: only "operation not supported" signals
+// downgrade the durability label. Anything else (ENOSPC, EIO, ...) means
+// the bytes may never have reached stable storage and must abort rather
+// than publish a potentially non-durable or corrupted result.
+function isUnsupportedSyncError(error) {
+  return error?.code === 'ENOSYS' || error?.code === 'EINVAL';
+}
+
+export async function commitGeneration({
+  deps = {},
+  files,
+  generationId,
+  job,
+  manifest,
+  outputRoot,
+  stagingDir,
+}) {
+  const rename = deps.rename ?? fsRename;
+  const fsyncFile = deps.fsyncFile ?? defaultFsync;
+  const fsyncDir = deps.fsyncDir ?? defaultFsync;
+  const assertDeadline = deps.assertDeadline ?? (() => undefined);
+  const removeStaging = deps.removeOwnedStaging ?? removeOwnedStaging;
+  const parsed = parsePilotManifest(manifest);
+  if (!parsed.ok) {
+    throw new PilotManifestError('manifest-invalid', parsed.issues.join('; '));
+  }
+  const valid = parsed.manifest;
+  if (
+    valid.merchantId !== job.merchantId ||
+    valid.assetId !== job.assetId ||
+    valid.role !== job.role ||
+    valid.source.sha256 !== job.expectedSha256
+  ) {
+    throw new PilotManifestError(
+      'manifest-mismatch',
+      'manifest does not match the validated job'
+    );
+  }
+  // Every manifest tier needs a staged file with identical bytes.
+  const stagedByName = new Map(files.map((file) => [file.name, file.from]));
+  const uniquePaths = [...new Set(valid.tiers.map((tier) => tier.path))];
+  for (const name of uniquePaths) {
+    const from = stagedByName.get(name);
+    if (!from) {
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `missing staged file: ${name}`
+      );
+    }
+    const tier = valid.tiers.find((entry) => entry.path === name);
+    const bytes = await readFile(from).catch(() => {
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `cannot read staged file: ${name}`
+      );
+    });
+    if (
+      bytes.length !== tier.bytes ||
+      createHash('sha256').update(bytes).digest('hex') !== tier.sha256
+    ) {
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `staged bytes differ: ${name}`
+      );
+    }
+  }
+  const expectedId = generationIdFor({
+    encoderIdentity: valid.encoder,
+    job,
+    recipeId: valid.recipeId,
+    sourceSha256: job.expectedSha256,
+  });
+  if (expectedId !== generationId) {
+    throw new PilotManifestError(
+      'generation-misbound',
+      'generation id does not match the requested identity'
+    );
+  }
+  const dir = generationDir(outputRoot, generationId);
+  const exists = await lstat(dir)
+    .then(() => true)
+    .catch(() => false);
+  if (exists) {
+    // Never overwrite: reuse only after full validation AND a complete
+    // identity comparison with the requested generation.
+    const loaded = await loadGeneration(outputRoot, generationId);
+    const sameEncoder =
+      loaded.manifest.encoder.name === valid.encoder.name &&
+      loaded.manifest.encoder.sharpVersion === valid.encoder.sharpVersion &&
+      loaded.manifest.encoder.libvipsVersion === valid.encoder.libvipsVersion;
+    if (
+      loaded.manifest.merchantId !== valid.merchantId ||
+      loaded.manifest.assetId !== valid.assetId ||
+      loaded.manifest.role !== valid.role ||
+      loaded.manifest.source.sha256 !== valid.source.sha256 ||
+      loaded.manifest.recipeId !== valid.recipeId ||
+      !sameEncoder
+    ) {
+      throw new PilotManifestError(
+        'generation-misbound',
+        'existing generation identity does not match the requested generation'
+      );
+    }
+    // Byte-identity before reuse: the id pins sharp/libvips versions but
+    // not codec builds or architecture, so a generation directory reused
+    // or copied from another machine can hold different lossy bytes under
+    // the same id. The job reports the freshly encoded tiers, so reusing
+    // mismatched retained bytes would certify output the gate never saw.
+    // Both manifests are zod-normalized, so the serialized ladders
+    // compare canonically. Mismatch fails closed: clear the foreign
+    // generation directory and re-run on one encoder build.
+    if (
+      JSON.stringify(loaded.manifest.tiers) !== JSON.stringify(valid.tiers)
+    ) {
+      throw new PilotManifestError(
+        'generation-misbound',
+        'existing generation bytes differ from the requested generation'
+      );
+    }
+    // A failed reuse-path removal must surface: the caller skips its own
+    // removal for reused generations, so a swallowed error would strand a
+    // complete staging directory on every reuse until the disk floor stops
+    // the pipeline. Returned (not thrown): the generation is published and
+    // reusable, so the caller records a warning and retries cleanup.
+    let stagingCleanupError = null;
+    try {
+      await removeStaging(outputRoot, stagingDir);
+    } catch (error) {
+      stagingCleanupError =
+        `reuse-path staging cleanup failed (${error?.code ?? 'unknown'}): ` +
+        `${error instanceof Error ? error.message : String(error)}`.slice(
+          0,
+          200
+        ) +
+        `; generation ${generationId} is published and reusable`;
+    }
+    // Reuse reports the publish-time verdict, never an assumed 'synced':
+    // a generation published where fsync is unsupported must not gain
+    // power-loss durability by being read later.
+    return {
+      durability: await readPersistedDurability(dir),
+      path: dir,
+      reused: true,
+      ...(stagingCleanupError ? { stagingCleanupError } : {}),
+    };
+  }
+  const commitDir = join(stagingDir, 'commit');
+  await (deps.mkdir ?? mkdir)(commitDir, { recursive: true });
+  for (const name of uniquePaths) {
+    await rename(stagedByName.get(name), join(commitDir, name));
+  }
+  await writeFile(
+    join(commitDir, 'manifest.json'),
+    `${JSON.stringify(valid, null, 2)}\n`
+  );
+  let durability = 'synced';
+  try {
+    for (const name of [...uniquePaths, 'manifest.json']) {
+      await fsyncFile(join(commitDir, name));
+    }
+    await fsyncDir(commitDir);
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      throw new PilotManifestError(
+        'sync-failed',
+        `pre-commit fsync failed (${error?.code ?? 'unknown'}); refusing to publish`
+      );
+    }
+    // Atomic visibility still holds via rename; power-loss durability is
+    // honestly reported instead of claimed on this filesystem.
+    durability = 'sync-unsupported';
+  }
+  await (deps.mkdir ?? mkdir)(join(outputRoot, 'generations'), {
+    recursive: true,
+  });
+  // Recheck the job deadline immediately before the visibility rename:
+  // verification and the fsync loop above can consume the remaining
+  // budget, and publishing an overdue generation (then reporting the job
+  // failed) would leave reusable output the gate never approved.
+  assertDeadline();
+  await rename(commitDir, dir);
+  try {
+    await fsyncDir(join(outputRoot, 'generations'));
+  } catch (error) {
+    if (!isUnsupportedSyncError(error)) {
+      // The rename is visible but may not be durable: unpublish so the
+      // failure leaves no reusable output, then report failed. A
+      // concurrent reuse reader fails loudly (fail-closed) and retries.
+      await rm(dir, { force: true, recursive: true }).catch(() => undefined);
+      throw new PilotManifestError(
+        'sync-failed',
+        `post-commit directory fsync failed (${error?.code ?? 'unknown'}); unpublished`
+      );
+    }
+    durability = 'sync-unsupported';
+  }
+  // Persist the publish-time verdict beside the manifest so reuse reports
+  // what publish proved. Best-effort and post-visibility: the durability
+  // value is only final after the renames above, and a lost sidecar must
+  // degrade reuse reports to 'unknown' — never fail an already-published
+  // job or print a false 'synced'.
+  await writeFile(
+    join(dir, 'durability.json'),
+    JSON.stringify({ durability })
+  ).catch(() => undefined);
+  return { durability, path: dir, reused: false };
+}
+
+async function readPersistedDurability(dir) {
+  try {
+    const parsed = JSON.parse(
+      await readFile(join(dir, 'durability.json'), 'utf8')
+    );
+    if (
+      parsed?.durability === 'synced' ||
+      parsed?.durability === 'sync-unsupported'
+    ) {
+      return parsed.durability;
+    }
+  } catch {
+    // Missing or corrupt provenance (pre-sidecar generations, operator
+    // deletion, torn write) fails honest: durability is unknown, not
+    // 'synced'. This is advisory reporting only — reuse validation still
+    // runs through loadGeneration plus the identity comparison above.
+  }
+  return 'unknown';
+}

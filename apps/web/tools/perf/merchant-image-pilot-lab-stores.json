@@ -1,0 +1,47 @@
+[
+  {
+    "merchantId": "de968340-de02-4aa8-95f9-9d5f7d2b1f20",
+    "slug": "omnimart",
+    "storeName": "Omnimart",
+    "slots": ["header-logo", "product-card"],
+    "uncoveredSlots": [
+      {
+        "consumer": "heroComponent.render (builder/hero-component.tsx, CSS backgroundImage)",
+        "reason": "no frozen hero-banner snapshot in the pilot sample",
+        "slotId": "hero-banner"
+      }
+    ]
+  },
+  {
+    "merchantId": "ce33cde7-fb48-4a6e-9742-e8ed4e2d137f",
+    "slug": "squishyland",
+    "storeName": "SquishyLand",
+    "slots": ["product-card"],
+    "uncoveredSlots": [
+      {
+        "consumer": "heroComponent.render (builder/hero-component.tsx, CSS backgroundImage)",
+        "reason": "no frozen hero-banner snapshot in the pilot sample",
+        "slotId": "hero-banner"
+      },
+      {
+        "consumer": "HeaderLogo (storefront/blocks/header-logo.tsx, shared file)",
+        "reason": "null on the live site: no header image to freeze (plan §4 out-of-coverage, reported not counted)",
+        "slotId": "header-logo"
+      }
+    ]
+  },
+  {
+    "merchantId": "da7e7edf-a84f-4cdb-8a51-52d8722e7f6f",
+    "slug": "zorvexa",
+    "storeName": "Zorvexa",
+    "slots": ["header-logo", "product-card"],
+    "uncoveredSlots": []
+  },
+  {
+    "merchantId": "6b5cb8a4-5575-456c-b936-8cdfae30db74",
+    "slug": "ogabassey",
+    "storeName": "OgaBassey",
+    "slots": ["mobile-hero-slide-0"],
+    "uncoveredSlots": []
+  }
+]

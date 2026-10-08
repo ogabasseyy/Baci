@@ -21,6 +21,21 @@ function input() {
   };
 }
 describe('primary export webhook intake dispatcher without crosswalk delivery or financial adapter', () => {
+  it.each([
+    undefined,
+    'false',
+  ])('does not intercept canonical legacy outflows with flag %s and no primary ownership configuration', async (enabled) => {
+    const result = await dispatchPrimaryCardSignedCustodyIntake({
+      ...input(),
+      environment: {
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: enabled,
+        PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined,
+      },
+    });
+    expect(result).toEqual({ outcome: 'disabled', response: null });
+    expect(execute).not.toHaveBeenCalled();
+  });
   it('does not infer unrelated ownership when explicitly disabled but canonical scope configuration is missing', async () => {
     const result = await dispatchPrimaryCardSignedCustodyIntake({
       ...input(),

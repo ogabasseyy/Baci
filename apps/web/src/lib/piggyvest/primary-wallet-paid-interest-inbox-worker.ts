@@ -70,7 +70,15 @@ export async function drainPrimaryWalletPaidInterestInbox(input: {
               rawBody,
               signature: claim.signature,
             });
-            outcome = dispatched === 'disabled' ? 'prerequisite' : dispatched;
+            // Enqueue already gates on crosswalk involvement, so a decline here
+            // means the crosswalk vanished mid-flight: quarantine for
+            // operator review rather than silently dropping the payout.
+            outcome =
+              dispatched === 'disabled'
+                ? 'prerequisite'
+                : dispatched === 'not_handled'
+                  ? 'conflict'
+                  : dispatched;
           }
         }
       }

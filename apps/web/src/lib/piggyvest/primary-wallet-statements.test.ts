@@ -13,7 +13,9 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
 
   it('keeps every statement fully parameterized', () => {
     for (const statement of Object.values(PRIMARY_WALLET_STATEMENTS)) {
-      expect(statement).toMatch(/^SELECT piggyvest_primary\.\w+\(.*\) AS result$/);
+      expect(statement).toMatch(
+        /^SELECT piggyvest_primary\.\w+\(.*\) AS result$/
+      );
       expect(statement).not.toMatch(/'\s*\+|\+.*'|\$\{/);
     }
   });

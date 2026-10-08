@@ -32,7 +32,9 @@ export async function getPrimaryCustomerSavingsFeatureSettings({
     throw error;
   }
 
-  const row = (Array.isArray(data) ? data[0] : null) as FeatureSettingsRow | null;
+  const row = (
+    Array.isArray(data) ? data[0] : null
+  ) as FeatureSettingsRow | null;
   const settings = row ?? {};
   return {
     autoDebitEnabled:

@@ -22,7 +22,7 @@ export function verifyPrimaryWalletSavingsProof(
     actual.third_party_reference !== expected.reference ||
     actual.source_wallet !== expected.sourceWalletId ||
     actual.destination_wallet !== expected.destinationWalletId ||
-    actual.customer_id !== expected.businessId ||
+    actual.customer_id !== expected.providerCustomerId ||
     (actual.business_id !== undefined &&
       actual.business_id !== expected.businessId) ||
     (actual.currency !== undefined && actual.currency !== 'NGN')

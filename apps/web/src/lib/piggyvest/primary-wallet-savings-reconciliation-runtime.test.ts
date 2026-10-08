@@ -30,6 +30,7 @@ const reservation = {
   destinationWalletId: 'destination',
   reference: 'reference',
   businessId: 'business',
+  providerCustomerId: 'source-customer',
 };
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,7 +66,7 @@ it.each([
           third_party_reference: 'reference',
           amount: 2000,
           fee: 0,
-          customer_id: 'business',
+          customer_id: 'source-customer',
           source_wallet: 'source',
           destination_wallet: 'destination',
         },

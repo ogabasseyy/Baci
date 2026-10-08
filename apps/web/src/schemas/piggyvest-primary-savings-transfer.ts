@@ -49,6 +49,7 @@ export const piggyvestPrimarySavingsTransferSchemas = {
     destinationWalletId: piggyvestProviderIdSchema,
     reference: z.string().min(1).max(200),
     businessId: piggyvestProviderIdSchema,
+    providerCustomerId: piggyvestProviderIdSchema,
   }),
   wallet: z.object({
     id: piggyvestProviderIdSchema,

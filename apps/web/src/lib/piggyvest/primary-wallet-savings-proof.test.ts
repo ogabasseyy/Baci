@@ -9,6 +9,7 @@ const reservation = {
   destinationWalletId: 'savings-wallet',
   reference: 'pvb-save-operation',
   businessId: 'business',
+  providerCustomerId: 'source-customer',
 };
 const response = {
   status: true,
@@ -20,7 +21,7 @@ const response = {
     third_party_reference: reservation.reference,
     amount: 10000,
     fee: 0,
-    customer_id: 'business',
+    customer_id: 'source-customer',
     source_wallet: 'source-wallet',
     destination_wallet: 'savings-wallet',
   },
@@ -45,7 +46,8 @@ describe('primary wallet savings settlement proof', () => {
     { source_wallet: 'another-wallet' },
     { destination_wallet: 'another-goal' },
     { third_party_reference: 'another-operation' },
-    { customer_id: 'another-business' },
+    { customer_id: 'another-customer' },
+    { customer_id: 'business' },
     { fee: 1 },
     { currency: 'USD' },
     { business_id: 'another-business' },

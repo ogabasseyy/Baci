@@ -12,6 +12,7 @@ const reservation = {
   sourceWalletId: 'source',
   destinationWalletId: 'destination',
   businessId: 'business',
+  providerCustomerId: 'source-customer',
   reference: 'stable-reference',
 };
 function ports() {

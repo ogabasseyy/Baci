@@ -142,6 +142,25 @@ describe('parseReviewHandoff featured image', () => {
     ).toEqual({});
   });
 
+  it('drops a generated variant that cannot bind to a managed source', () => {
+    // The variant is a trusted generated-Codex image from another
+    // article: valid on its own, but its provenance cannot bind to the
+    // managed source token, so keeping it would display an unrelated
+    // image in responsive layouts.
+    expect(
+      parseReviewHandoff({
+        ...validHandoff,
+        featured_image: {
+          ...validHandoff.featured_image,
+          url: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa.jpg`,
+          variants: {
+            landscape_16x9: `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/image/format=auto/core-assets/blog/codex/20260528T192812Z-codex-repair_support/samsung-screen-repair-what-to-check-before-you-book-landscape_16x9.jpg`,
+          },
+        },
+      }).featured_image_variants
+    ).toEqual({});
+  });
+
   it('keeps a managed variant sharing the source upload token', () => {
     const variant = `${DEFAULT_BLOG_MEDIA_CDN_ORIGIN}/media/platform/blog/aaaa/landscape_16x9.webp`;
     expect(

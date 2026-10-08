@@ -63,15 +63,17 @@ function variantBindsToSource(
   sourceManaged: boolean,
   sourceToken: string | null
 ): boolean {
-  // A foreign source has no token to bind to, and codex-exempt
-  // (non-managed) variants keep their exemption. A managed source with
-  // an unparseable token fails closed: its variants cannot prove they
-  // belong to it.
+  // A foreign source has no token to bind to, so its variants keep
+  // existing handling. A managed source binds only managed variants:
+  // a codex-exempt (non-managed) variant cannot prove it belongs to
+  // this upload, so it is dropped rather than displaying another
+  // article's image. A managed source with an unparseable token fails
+  // closed for the same reason.
   if (!sourceManaged) return true;
   const variantPath = extractManagedBlogStoragePath(variantUrl, {
     kind: 'platform',
   });
-  if (!variantPath) return true;
+  if (!variantPath) return false;
   return (
     sourceToken !== null && managedUploadToken(variantPath) === sourceToken
   );

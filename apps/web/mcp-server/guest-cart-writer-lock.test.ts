@@ -3,6 +3,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   utimes,
   writeFile,
 } from 'node:fs/promises';
@@ -22,6 +23,9 @@ async function directory(prefix: string) {
 }
 afterEach(async () => {
   vi.useRealTimers();
+  // Release locks before deleting their directories: an armed heartbeat
+  // observing a missing lock file would fail closed with process.exit.
+  releaseWriterLocks();
   await Promise.all(
     directories
       .splice(0)
@@ -127,4 +131,14 @@ it('releases owned locks on shutdown and spares taken-over ones', async () => {
   await expect(
     readFile(path.join(first, '.writer.lock'), 'utf8')
   ).resolves.toContain(`"pid":${process.pid}`);
+});
+
+it('creates the cart directory with owner-only permissions', async () => {
+  const root = path.join(
+    await directory('guest-lock-mode-'),
+    'nested',
+    'carts'
+  );
+  acquireWriterLock(root);
+  expect((await stat(root)).mode & 0o777).toBe(0o700);
 });

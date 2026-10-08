@@ -67,6 +67,15 @@ describe('guestCartHandoffSchema', () => {
       ]).success
     ).toBe(false);
   });
+
+  it('rejects duplicates that differ only by case', () => {
+    expect(
+      guestCartHandoffSchema.safeParse([
+        { product_id: id.toUpperCase(), quantity: 1 },
+        { product_id: id, quantity: 2 },
+      ]).success
+    ).toBe(false);
+  });
 });
 
 describe('mcpGuestCartInputSchema', () => {

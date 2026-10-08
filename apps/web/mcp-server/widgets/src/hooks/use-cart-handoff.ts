@@ -67,6 +67,11 @@ export function useCartHandoff() {
     try {
       // Guest quantities are absolute totals, so re-adding tops the line up
       // instead of resetting it to one.
+      // Last-wins absolute quantities: the add target derives from local
+      // widget state, so a stale view (e.g. a concurrent direct tool call)
+      // can shrink the server line. Accepted: idempotent retries need
+      // absolute totals, and the additive-only website transfer takes the
+      // higher side, so the website cart never moves backward.
       const existingQuantity =
         widgetState?.cart.find((item) => item.product.id === product.id)
           ?.quantity ?? 0;

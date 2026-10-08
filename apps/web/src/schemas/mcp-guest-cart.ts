@@ -10,7 +10,8 @@ export const guestCartHandoffSchema = z
   .max(20)
   .refine(
     (items) =>
-      new Set(items.map((item) => item.product_id)).size === items.length
+      new Set(items.map((item) => item.product_id.toLowerCase())).size ===
+      items.length
   );
 
 export const MCP_GUEST_CART_DESCRIPTION =

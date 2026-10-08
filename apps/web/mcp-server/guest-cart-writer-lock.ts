@@ -56,7 +56,9 @@ function directoryNotWritableError(target: string, cause: unknown): Error {
 
 export function acquireWriterLock(directory: string): void {
   try {
-    mkdirSync(directory, { recursive: true });
+    // Cart filenames are the Bearer [REDACTED] tokens: match the store's 0700 so other
+    // local users cannot enumerate live carts through the fallback directory.
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
   } catch (error) {
     if (isPermissionError(error))
       throw directoryNotWritableError(directory, error);

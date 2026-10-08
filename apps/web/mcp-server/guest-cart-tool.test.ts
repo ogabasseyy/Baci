@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { GuestCartStore } from './guest-cart-store';
+import { releaseWriterLocks } from './guest-cart-writer-lock';
 const validate = vi.hoisted(() => vi.fn());
 vi.mock('./cart-handoff', () => ({ prepareCartHandoff: validate }));
 const id = '11111111-1111-4111-8111-111111111111';
@@ -28,7 +29,7 @@ it('saves only validated public products and returns a handoff without exposing 
     validate.mockResolvedValue({ structuredContent: { success: true } });
     const retry = await handler?.({ product_id: id, quantity: 2, cart_token: result.structuredContent.cart_token });
     expect(retry).toMatchObject({ structuredContent: { items: [{ product_id: id, quantity: 2 }] } });
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
 it('ignores stale survivors when validating an unrelated add', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-survivor-'));
@@ -47,7 +48,7 @@ it('ignores stale survivors when validating an unrelated add', async () => {
     expect(result.structuredContent.items).toEqual([{ product_id: survivor, quantity: 1 }, { product_id: id, quantity: 1 }]);
     expect(validate.mock.calls).toHaveLength(1);
     expect(validate.mock.calls[0][0].productId).toBe(id);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
 it('passes variant selection through instead of returning a generic failure', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-selection-'));
@@ -60,7 +61,7 @@ it('passes variant selection through instead of returning a generic failure', as
     const result = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toMatchObject({ success: false, requires_variant_selection: true, product_id: id, product_url: 'https://ogabassey.com/products/slug' });
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
 it('returns a recoverable flag when the token names a dead cart', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-expired-'));
@@ -74,5 +75,5 @@ it('returns a recoverable flag when the token names a dead cart', async () => {
     expect(result.isError).toBeUndefined();
     expect(result.structuredContent).toEqual({ success: false, cart_expired: true });
     expect(validate).not.toHaveBeenCalled();
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });

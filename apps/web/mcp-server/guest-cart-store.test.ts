@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
+import { releaseWriterLocks } from './guest-cart-writer-lock';
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const directories: string[] = [];
@@ -20,6 +21,9 @@ async function store() {
 }
 afterEach(async () => {
   vi.useRealTimers();
+  // Release locks before deleting their directories: an armed heartbeat
+  // observing a missing lock file would fail closed with process.exit.
+  releaseWriterLocks();
   await Promise.all(
     directories
       .splice(0)

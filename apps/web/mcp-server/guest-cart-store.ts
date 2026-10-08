@@ -205,15 +205,28 @@ export class GuestCartStore {
             // and recount before falling back to LRU eviction.
             for (const entry of cartFiles) {
               const candidate = path.join(this.directory, entry);
-              if (queues.has(candidate)) continue;
-              try {
-                const existing = storedCartSchema.parse(
-                  JSON.parse(await readFile(candidate, 'utf8'))
-                );
-                if (existing.expires_at <= Date.now()) await unlink(candidate);
-              } catch {
-                /* Corrupt files stay for the guarded janitor. */
-              }
+              // Join the candidate's queue (like the eviction loop below)
+              // instead of check-then-act: a concurrent update between the
+              // check and the unlink could otherwise lose a live cart.
+              const beforeMs = Date.now();
+              await runExclusive(candidate, async () => {
+                let existing: z.infer<typeof storedCartSchema>;
+                try {
+                  existing = storedCartSchema.parse(
+                    JSON.parse(await readFile(candidate, 'utf8'))
+                  );
+                } catch {
+                  // Corrupt files stay for the guarded janitor.
+                  return;
+                }
+                if (existing.expires_at > Date.now()) return;
+                try {
+                  if ((await stat(candidate)).mtimeMs > beforeMs) return;
+                } catch {
+                  return;
+                }
+                await unlink(candidate).catch(() => undefined);
+              });
             }
             cartFiles = (await readdir(this.directory)).filter((entry) =>
               /^[a-f0-9]{64}\.json$/.test(entry)

@@ -150,4 +150,31 @@ describe('assertSnapshotMatchesSource', () => {
       )
     ).rejects.toThrow(/4x6.*claims 6x4/);
   });
+
+  it('rejects animated bytes like the generator does', async () => {
+    // Classic 1x1 GIF with its frame block spliced twice: sharp reports
+    // pages 2. The pilot certifies stills only, so animation fails before
+    // any source-fact comparison.
+    const frame = Buffer.from(
+      'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+      'base64'
+    );
+    const animated = Buffer.concat([
+      frame.subarray(0, frame.length - 1),
+      frame.subarray(19, frame.length - 1),
+      frame.subarray(frame.length - 1),
+    ]);
+    await expect(
+      assertSnapshotMatchesSource(
+        animated,
+        {
+          bytes: animated.length,
+          format: 'gif',
+          orientedHeight: 1,
+          orientedWidth: 1,
+        },
+        'merchant/slot'
+      )
+    ).rejects.toThrow(/animated/);
+  });
 });

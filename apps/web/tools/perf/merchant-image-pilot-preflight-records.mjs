@@ -23,6 +23,7 @@ export function sameAcceptance(left, right) {
     left.verdict === right.verdict &&
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
+    left.originalUrl === right.originalUrl &&
     left.outputHashes.length === right.outputHashes.length &&
     left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
   );
@@ -165,6 +166,7 @@ export function validAcceptanceShape(record) {
     text(record.recipeId, 64) &&
     (record.verdict === 'accepted' || record.verdict === 'rejected') &&
     HEX64.test(record.sourceSha256 ?? '') &&
+    isHttpUrl(record.originalUrl) &&
     Array.isArray(record.outputHashes) &&
     record.outputHashes.length > 0 &&
     record.outputHashes.length <= 24 &&

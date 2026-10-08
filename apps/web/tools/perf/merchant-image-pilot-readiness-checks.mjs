@@ -252,9 +252,18 @@ export function surfaceProblems(
     problems.push('control requested no staged original');
   }
   for (const mount of expectedMounts) {
-    const slot = (g.slots ?? []).find(
+    // First-match lookup would let a duplicate section alter layout or
+    // issue extra requests while the valid twin satisfies the verdict.
+    const matches = (g.slots ?? []).filter(
       (entry) => entry.binding === mount.binding
     );
+    if (matches.length > 1) {
+      problems.push(
+        `slot "${mount.slotId}" renders ${matches.length} sections for one binding (duplicate mount)`
+      );
+      continue;
+    }
+    const slot = matches[0] ?? null;
     problems.push(
       ...slotMountProblems(slot, mount, {
         arm,

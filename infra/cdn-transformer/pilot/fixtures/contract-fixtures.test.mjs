@@ -37,6 +37,7 @@ test('generator accepts the shared valid contract pair', async () => {
   assert.deepEqual(
     matchAcceptance({
       acceptance: fixtures.validAcceptance,
+      binding: { originalUrl: fixtures.validAcceptance.originalUrl },
       manifest: fixtures.validManifest,
     }),
     { ok: true }
@@ -98,6 +99,7 @@ test('corpus pins the invalid-manifest key set (no silent case loss)', async () 
     'reorderedTiers',
     'sourceExtraField',
     'sourceFormatGif',
+    'sourcePixelsTooMany',
     'tierBytesZero',
     'tierExtraField',
     'tooManyTiers',
@@ -116,6 +118,7 @@ test('generator rejects every shared invalid acceptance and matcher drift', asyn
   for (const [label, candidate] of Object.entries(fixtures.matcherRejections)) {
     const result = matchAcceptance({
       acceptance: candidate,
+      binding: { originalUrl: fixtures.validAcceptance.originalUrl },
       manifest: fixtures.validManifest,
     });
     assert.equal(result.ok, false, label);

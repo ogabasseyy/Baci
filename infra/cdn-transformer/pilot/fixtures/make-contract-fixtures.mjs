@@ -57,6 +57,7 @@ const fixtures = {
   },
   invalidAcceptanceSchemas: {
     badHash: { ...acceptance, outputHashes: ['not-a-hash'] },
+    badOriginalUrl: { ...acceptance, originalUrl: 'not-a-url' },
     badVerdict: { ...acceptance, verdict: 'maybe' },
     emptyHashes: { ...acceptance, outputHashes: [] },
     longNote: { ...acceptance, note: 'x'.repeat(501) },
@@ -143,6 +144,16 @@ const fixtures = {
       ...manifest,
       source: { ...manifest.source, format: 'gif' },
     },
+    // 100 MP passes both axis ceilings but exceeds the 40 MP decoded
+    // limit the generator enforces: no suite may certify it.
+    sourcePixelsTooMany: {
+      ...manifest,
+      source: {
+        ...manifest.source,
+        orientedHeight: 10000,
+        orientedWidth: 10000,
+      },
+    },
     tierBytesZero: {
       ...manifest,
       tiers: logoTiers().map((tier, index) =>
@@ -200,6 +211,10 @@ const fixtures = {
     },
     changedRecipe: { ...acceptance, recipeId: 'pilot-r1-other' },
     changedSource: { ...acceptance, sourceSha256: 'd'.repeat(64) },
+    changedUrl: {
+      ...acceptance,
+      originalUrl: 'https://cdn.example.com/media/logo-retargeted.png',
+    },
     rejectedVerdict: { ...acceptance, verdict: 'rejected' },
   },
   validAcceptance: acceptance,

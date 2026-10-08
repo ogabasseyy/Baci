@@ -33,6 +33,28 @@ describe('preflight served mount coverage', () => {
     void fixture;
   });
 
+  it('fails duplicate sections for one expected binding', () => {
+    const mount = {
+      assetId: 'card-a',
+      binding: `${MERCHANT}/card-a`,
+      generationId: 'c'.repeat(64),
+      merchantId: MERCHANT,
+      role: 'product',
+      slotId: 'product-card',
+      stagedOriginal: `/__pilot/originals/${MERCHANT}-card-a.png`,
+    };
+    const section = `<section data-pilot-lab-slot="product-card" data-pilot-lab-binding="${MERCHANT}/card-a"><picture data-pilot-lab-picture="pilot"></picture></section>`;
+    const html = `<main data-pilot-lab-arm="pilot">${section}${section}</main>`;
+    const result = assertServedMountCoverage(html, {
+      arm: 'pilot',
+      expectedMounts: [mount],
+      origin: 'http://localhost:3129',
+      surface: 'store',
+    });
+    expect(result.failures.join('\n')).toMatch(/duplicate mount/);
+    expect(result.mounted).toEqual([]);
+  });
+
   it('reports binding-less uncovered-consumer markers without failing coverage', () => {
     // Plan §3 CSS heroes render status-only sections (no binding): mount
     // coverage skips them (nothing expected), but the reported rows name

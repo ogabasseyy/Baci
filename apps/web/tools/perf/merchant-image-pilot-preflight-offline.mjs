@@ -9,11 +9,9 @@ import {
   checkBindingAcceptance,
   checkBindingInput,
 } from './merchant-image-pilot-preflight-offline-input.mjs';
-import {
-  checkBindingManifest,
-  checkBindingStaged,
-  checkBindingTiers,
-} from './merchant-image-pilot-preflight-offline-output.mjs';
+import { checkBindingManifest } from './merchant-image-pilot-preflight-offline-manifest.mjs';
+import { checkBindingStaged } from './merchant-image-pilot-preflight-offline-staged.mjs';
+import { checkBindingTiers } from './merchant-image-pilot-preflight-offline-tiers.mjs';
 import {
   acceptanceKey,
   sameAcceptance,

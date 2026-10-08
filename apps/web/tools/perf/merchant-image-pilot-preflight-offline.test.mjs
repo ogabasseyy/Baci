@@ -181,6 +181,7 @@ async function setupOfflineAssets(assets) {
         merchantId: entry.merchantId,
         note: 'Lab review: fixture acceptance.',
         outputHashes: entry.tiers.map((tier) => tier.sha256),
+        originalUrl: entry.record.url,
         recipeId: RECIPE,
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',
@@ -286,6 +287,16 @@ describe('preflight offline gate', () => {
     const report = await runOfflinePreflight(offlineOptions(fixture));
     expect(report.ok).toBe(false);
     expect(report.failures.join('\n')).toMatch(/not the recipe output/);
+  });
+
+  it('rejects a retargeted inventory URL the acceptance never reviewed', async () => {
+    const fixture = await setupOffline();
+    const records = JSON.parse(await readFile(fixture.inventoryPath, 'utf8'));
+    records[0].url = 'https://cdn.example.com/media/logo-retargeted.png';
+    await writeFile(fixture.inventoryPath, JSON.stringify(records));
+    const report = await runOfflinePreflight(offlineOptions(fixture));
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(/original URL changed/);
   });
 
   it('rejects tampered staged bytes', async () => {
@@ -602,6 +613,7 @@ describe('preflight offline gate', () => {
         merchantId: MERCHANT,
         note: 'n',
         outputHashes: fixture.tiers.map((tier) => tier.sha256),
+        originalUrl: 'https://cdn.example.com/media/logo-a.png',
         recipeId: RECIPE,
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',

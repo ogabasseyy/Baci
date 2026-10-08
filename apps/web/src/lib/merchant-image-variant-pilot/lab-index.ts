@@ -89,6 +89,7 @@ function sameAcceptance(
     left.verdict === right.verdict &&
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
+    left.originalUrl === right.originalUrl &&
     left.outputHashes.length === right.outputHashes.length &&
     left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
   );
@@ -236,6 +237,7 @@ export async function buildLabIndex(input: {
     }
     const matched = matchPilotAcceptance({
       acceptance: record,
+      binding,
       manifest: parsedManifest,
     });
     if (!matched.ok) {

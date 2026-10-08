@@ -70,6 +70,7 @@ export async function assertPreCommitGuards({
 
 export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot }) {
   const releaseClaimFn = deps?.releaseClaim ?? releaseClaim;
+  const removeStagingFn = deps?.removeOwnedStaging ?? removeOwnedStaging;
   const startedAt = Date.now();
   const deadlineMs = startedAt + JOB_TIMEOUT_MS;
   // Memory accounting: parent RSS sampled at checkpoints, plus the max
@@ -210,7 +211,10 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
     }
     await assertPreCommitGuards({ deadlineMs, minFreeBytes, outputRoot });
     const committed = await commitGeneration({
-      deps: { assertDeadline: () => assertJobDeadline(deadlineMs, 'commit') },
+      deps: {
+        assertDeadline: () => assertJobDeadline(deadlineMs, 'commit'),
+        removeOwnedStaging: removeStagingFn,
+      },
       files,
       generationId,
       job,
@@ -228,17 +232,24 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
     // claim-release or staging-removal failure is recorded as a warning
     // (the operator clears the stranded claim via recovery) while the job
     // still reports the true published outcome.
-    let cleanupWarning = null;
+    // A reuse-path removal failure inside commitGeneration seeds the
+    // warning and gets exactly one retry here: transient misses reclaim
+    // without operator action, persistent ones keep the warning.
+    let cleanupWarning = committed.stagingCleanupError ?? null;
     try {
       await releaseClaimFn(outputRoot, job, claim.runToken);
       if (!committed.reused) {
-        await removeOwnedStaging(outputRoot, stagingDir);
+        await removeStagingFn(outputRoot, stagingDir);
+      } else if (cleanupWarning) {
+        await removeStagingFn(outputRoot, stagingDir);
+        cleanupWarning = null;
       }
     } catch (error) {
-      cleanupWarning =
+      const fresh =
         `post-commit cleanup failed (${error?.code ?? 'unknown'}): ` +
         `${error instanceof Error ? error.message : String(error)}`.slice(0, 200) +
         `; generation ${generationId} is published and reusable`;
+      cleanupWarning = cleanupWarning ? `${cleanupWarning}; ${fresh}` : fresh;
     }
     stagingDir = null;
     const peakWorkerRssBytes = takePeakWorkerRssBytes();
@@ -269,7 +280,7 @@ export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot })
   } catch (error) {
     sampleRss();
     if (stagingDir) {
-      await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
+      await removeStagingFn(outputRoot, stagingDir).catch(() => {});
     }
     await releaseClaimFn(outputRoot, job, runToken).catch(() => {});
     const peakWorkerRssBytes = takePeakWorkerRssBytes();

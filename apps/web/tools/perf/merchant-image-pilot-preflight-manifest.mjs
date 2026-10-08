@@ -6,6 +6,7 @@
 import {
   ACCEPTED_INPUT_FORMATS,
   BUDGETS,
+  MAX_DECODED_PIXELS,
   RECIPE_ID,
 } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
@@ -119,6 +120,15 @@ export function assertManifestContract(manifest, { recipeId, role }) {
     }
     if (!isIntIn(source.orientedWidth, 1, 16384)) {
       issues.push('source orientedWidth out of range');
+    }
+    // Decoded-pixel ceiling, mirroring the generator: axes can pass
+    // while the area describes an input the generator would refuse.
+    if (
+      isIntIn(source.orientedWidth, 1, 16384) &&
+      isIntIn(source.orientedHeight, 1, 16384) &&
+      source.orientedWidth * source.orientedHeight > MAX_DECODED_PIXELS
+    ) {
+      issues.push('source decoded pixels exceed the generator limit');
     }
     if (!HEX64.test(source.sha256 ?? '')) {
       issues.push('source sha256 must be 64 hex chars');

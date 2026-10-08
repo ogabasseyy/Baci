@@ -10,6 +10,22 @@ export const PILOT_SCHEMA_VERSION = 1;
 export const PILOT_POLICY_VERSION = 1;
 export const PILOT_RECIPE_ID = 'pilot-r2-a1323f0dc00f1ecb';
 export const PILOT_MAX_JOBS = 20;
+// Mirror of MAX_DECODED_PIXELS in
+// infra/cdn-transformer/pilot/constants.mjs. Pinned by the shared
+// contract fixtures (sourcePixelsTooMany must fail on both sides) and
+// lab-decode-limits.test.mjs.
+export const PILOT_MAX_DECODED_PIXELS = 40_000_000;
+// Mirror of the channel ceiling in assertAcceptedMetadata
+// (encode-worker.mjs) and SHARP_LIMITS (constants.mjs): lab verification
+// decodes under the same limits as the generator.
+// Pinned by lab-decode-limits.test.mjs.
+export const PILOT_MAX_DECODE_CHANNELS = 5;
+export const PILOT_SHARP_LIMITS = {
+  failOn: 'warning',
+  limitInputChannels: 5,
+  limitInputPixels: 40_000_000,
+  unlimited: false,
+} as const;
 
 export const PILOT_TIERS = {
   hero: [384, 768, 1280],
@@ -121,6 +137,18 @@ export const pilotManifestSchema = z
   })
   .strict()
   .superRefine((manifest, context) => {
+    // Decoded-pixel ceiling (mirrors the generator's
+    // assertAcceptedMetadata and SHARP_LIMITS): each axis can pass while
+    // the area describes an input the generator would refuse to encode.
+    if (
+      manifest.source.orientedWidth * manifest.source.orientedHeight >
+      PILOT_MAX_DECODED_PIXELS
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'source decoded pixels exceed the generator limit',
+      });
+    }
     const expected = new Set<string>();
     for (const width of PILOT_TIERS[manifest.role] ?? []) {
       for (const format of ['avif', 'webp'] as const) {
@@ -187,6 +215,10 @@ export const pilotAcceptanceSchema = z
     // ascending, avif before webp): matchPilotAcceptance compares
     // positionally, so each hash pins one rung's format, width, and bytes.
     outputHashes: z.array(z.string().regex(SHA256_PATTERN)).min(1).max(24),
+    // The exact original URL the reviewer approved: a retargeted binding
+    // (same merchant/asset/hash, new URL) must not activate an old
+    // acceptance, per the frozen-binding contract.
+    originalUrl: z.url({ protocol: /^https?$/ }),
     recipeId: z.string().min(1).max(64),
     reviewedAt: z.iso.datetime({ offset: true }),
     reviewer: z.string().min(1).max(128),
@@ -254,9 +286,10 @@ export function parsePilotInventoryBinding(
 
 export function matchPilotAcceptance(input: {
   acceptance: PilotAcceptance;
+  binding: PilotInventoryBinding;
   manifest: PilotManifest;
 }): { ok: true } | { ok: false; reason: string } {
-  const { acceptance, manifest } = input;
+  const { acceptance, binding, manifest } = input;
   if (acceptance.verdict !== 'accepted') {
     return { ok: false, reason: 'visual verdict is not accepted' };
   }
@@ -268,6 +301,9 @@ export function matchPilotAcceptance(input: {
   }
   if (acceptance.sourceSha256 !== manifest.source.sha256) {
     return { ok: false, reason: 'source bytes changed' };
+  }
+  if (acceptance.originalUrl !== binding.originalUrl) {
+    return { ok: false, reason: 'original URL changed' };
   }
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };

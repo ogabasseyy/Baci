@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ACCEPTED_INPUT_FORMATS,
   BUDGETS,
+  MAX_DECODED_PIXELS,
   PILOT_POLICY_VERSION,
   PILOT_SCHEMA_VERSION,
   RECIPE_ID,
@@ -103,6 +104,18 @@ export const PilotManifestSchema = z
   })
   .strict()
   .superRefine((manifest, context) => {
+    // Decoded-pixel ceiling (mirrors the generator's assertAcceptedMetadata
+    // and SHARP_LIMITS): each axis can pass while the area describes an
+    // input the generator would refuse to encode.
+    if (
+      manifest.source.orientedWidth * manifest.source.orientedHeight >
+      MAX_DECODED_PIXELS
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'source decoded pixels exceed the generator limit',
+      });
+    }
     const expected = new Set();
     for (const width of TIERS[manifest.role] ?? []) {
       for (const format of ['avif', 'webp']) {

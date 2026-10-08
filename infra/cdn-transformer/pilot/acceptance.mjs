@@ -10,6 +10,22 @@ export const PilotAcceptanceSchema = z
     // Tier sha256 in canonical manifest tier order (requestedWidth
     // ascending, avif before webp): matchAcceptance compares positionally.
     outputHashes: z.array(z.string().regex(/^[0-9a-f]{64}$/)).min(1).max(24),
+    // Mirror of the web acceptance originalUrl: the exact URL the reviewer
+    // approved. Zod v3 has no protocol option, so http(s) is refined.
+    originalUrl: z
+      .string()
+      .url()
+      .refine(
+        (value) => {
+          try {
+            const protocol = new URL(value).protocol;
+            return protocol === 'http:' || protocol === 'https:';
+          } catch {
+            return false;
+          }
+        },
+        { message: 'original URL must use http(s)' }
+      ),
     recipeId: z.string().min(1).max(64),
     reviewedAt: z.string().datetime({ offset: true }),
     reviewer: z.string().min(1).max(128),
@@ -33,7 +49,7 @@ export function parsePilotAcceptance(value) {
 // A changed source, recipe, merchant, asset, or encoded byte invalidates the
 // acceptance. Only a matching `accepted` record permits lab use; anything
 // else leaves the original control active.
-export function matchAcceptance({ acceptance, manifest }) {
+export function matchAcceptance({ acceptance, binding, manifest }) {
   if (acceptance.verdict !== 'accepted') {
     return { ok: false, reason: 'visual verdict is not accepted' };
   }
@@ -45,6 +61,9 @@ export function matchAcceptance({ acceptance, manifest }) {
   }
   if (acceptance.sourceSha256 !== manifest.source?.sha256) {
     return { ok: false, reason: 'source bytes changed' };
+  }
+  if (acceptance.originalUrl !== binding?.originalUrl) {
+    return { ok: false, reason: 'original URL changed' };
   }
   if (acceptance.recipeId !== manifest.recipeId) {
     return { ok: false, reason: 'recipe changed' };

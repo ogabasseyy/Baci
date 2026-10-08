@@ -178,6 +178,7 @@ async function setupOfflineAssets(assets) {
         merchantId: entry.merchantId,
         note: 'Lab review: fixture acceptance.',
         outputHashes: entry.tiers.map((tier) => tier.sha256),
+        originalUrl: entry.record.url,
         recipeId: RECIPE,
         reviewedAt: '2026-10-01T21:00:00.000Z',
         reviewer: 'pilot-owner',

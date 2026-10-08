@@ -72,6 +72,9 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     expect(
       matchPilotAcceptance({
         acceptance: fixtures.validAcceptance,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+        } as never,
         manifest: fixtures.validManifest,
       })
     ).toEqual({ ok: true });
@@ -93,14 +96,17 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
       ...fixtures.validAcceptance,
       outputHashes: fixtures.validManifest.tiers.map(() => shared),
     };
+    const binding = {
+      originalUrl: fixtures.validAcceptance.originalUrl,
+    } as never;
     expect(
-      matchPilotAcceptance({ acceptance: record, manifest: deduped })
+      matchPilotAcceptance({ acceptance: record, binding, manifest: deduped })
     ).toEqual({
       ok: true,
     });
     const short = { ...fixtures.validAcceptance, outputHashes: [shared] };
     expect(
-      matchPilotAcceptance({ acceptance: short, manifest: deduped }).ok
+      matchPilotAcceptance({ acceptance: short, binding, manifest: deduped }).ok
     ).toBe(false);
   });
 
@@ -117,9 +123,25 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     expect(
       matchPilotAcceptance({
         acceptance: fixtures.validAcceptance,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+        } as never,
         manifest: swapped,
       })
     ).toEqual({ ok: false, reason: 'encoded output bytes changed' });
+  });
+
+  it('rejects a retargeted original URL with everything else unchanged', async () => {
+    const fixtures = await loadFixtures();
+    expect(
+      matchPilotAcceptance({
+        acceptance: fixtures.matcherRejections.changedUrl,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+        } as never,
+        manifest: fixtures.validManifest,
+      })
+    ).toEqual({ ok: false, reason: 'original URL changed' });
   });
 
   it('rejects every shared invalid acceptance schema', async () => {
@@ -138,6 +160,9 @@ describe('parsePilotAcceptance and matchPilotAcceptance', () => {
     )) {
       const result = matchPilotAcceptance({
         acceptance: candidate as never,
+        binding: {
+          originalUrl: fixtures.validAcceptance.originalUrl,
+        } as never,
         manifest: fixtures.validManifest,
       });
       expect(result.ok, label).toBe(false);

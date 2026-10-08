@@ -1,4 +1,9 @@
 import sharp from 'sharp';
+import {
+  PILOT_MAX_DECODE_CHANNELS,
+  PILOT_MAX_DECODED_PIXELS,
+  PILOT_SHARP_LIMITS,
+} from '@/schemas/merchant-image-variant-pilot';
 import type { PilotBindingStatus } from './lab-index';
 
 type SourceFacts = NonNullable<PilotBindingStatus['source']>;
@@ -24,7 +29,7 @@ function normalizeFormat(metadata: {
 // instead of a not-optimized row) but the filename must come from the
 // bytes themselves, never from an unaccepted claim.
 export async function snapshotFormat(snapshot: Buffer): Promise<string> {
-  const metadata = await sharp(snapshot).metadata();
+  const metadata = await sharp(snapshot, { ...PILOT_SHARP_LIMITS }).metadata();
   return normalizeFormat(metadata).toLowerCase();
 }
 
@@ -39,7 +44,23 @@ export async function assertSnapshotMatchesSource(
   source: SourceFacts,
   label: string
 ): Promise<void> {
-  const metadata = await sharp(snapshot).metadata();
+  // Same decoder limits as the generator: a manifest whose hash matches
+  // but whose bytes are animated, over-channeled, or beyond the decoded
+  // pixel ceiling must fail before anything certifies those facts.
+  const metadata = await sharp(snapshot, { ...PILOT_SHARP_LIMITS }).metadata();
+  if ((metadata.pages ?? 1) > 1) {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" is animated but the pilot certifies stills only`
+    );
+  }
+  if (
+    metadata.channels !== undefined &&
+    metadata.channels > PILOT_MAX_DECODE_CHANNELS
+  ) {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" has too many channels`
+    );
+  }
   const decodedFormat = normalizeFormat(metadata).toLowerCase();
   if (decodedFormat !== source.format.toLowerCase()) {
     throw new Error(
@@ -53,6 +74,11 @@ export async function assertSnapshotMatchesSource(
   if (typeof width !== 'number' || typeof height !== 'number') {
     throw new Error(
       `merchant image pilot: snapshot for "${label}" has no decodable dimensions`
+    );
+  }
+  if (width * height > PILOT_MAX_DECODED_PIXELS) {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" decodes to ${width}x${height}, beyond the generator pixel limit`
     );
   }
   if (

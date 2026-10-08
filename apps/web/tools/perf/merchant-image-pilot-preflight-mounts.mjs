@@ -257,6 +257,19 @@ export function assertServedMountCoverage(
       .filter((section) => section.binding)
       .map((section) => [section.binding, section])
   );
+  // A Map keeps only the last section per binding: without a duplicate
+  // count, one valid mount could satisfy coverage while a twin section
+  // alters layout or issues extra image requests unvalidated.
+  const bindingCounts = new Map();
+  for (const section of sections) {
+    if (!section.binding) {
+      continue;
+    }
+    bindingCounts.set(
+      section.binding,
+      (bindingCounts.get(section.binding) ?? 0) + 1
+    );
+  }
   for (const section of sections) {
     if (section.status) {
       reported.push({
@@ -278,6 +291,13 @@ export function assertServedMountCoverage(
     if (section.status) {
       failures.push(
         `${name}: expected ${mount.slotId} mount renders only "${section.status}"`
+      );
+      continue;
+    }
+    const rendered = bindingCounts.get(mount.binding) ?? 0;
+    if (rendered > 1) {
+      failures.push(
+        `${name}: expected ${mount.slotId} mount renders ${rendered} sections for one binding (duplicate mount)`
       );
       continue;
     }

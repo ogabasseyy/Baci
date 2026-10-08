@@ -37,7 +37,9 @@
 //   preflight-manifest.mjs      manifest contract mirror
 //   preflight-offline.mjs       offline gate orchestration
 //   preflight-offline-input.mjs input + acceptance stages
-//   preflight-offline-output.mjs manifest + tiers + staged stages
+//   preflight-offline-manifest.mjs manifest stage
+//   preflight-offline-tiers.mjs    committed tier stage
+//   preflight-offline-staged.mjs   staged bytes stage
 //   preflight-html.mjs          served-HTML extraction + URL helpers
 //   preflight-agreement.mjs     preload/picture owner agreement
 //   preflight-mounts.mjs        mount coverage by role kind

@@ -92,6 +92,7 @@ export async function commitGeneration({
   const fsyncFile = deps.fsyncFile ?? defaultFsync;
   const fsyncDir = deps.fsyncDir ?? defaultFsync;
   const assertDeadline = deps.assertDeadline ?? (() => {});
+  const removeStaging = deps.removeOwnedStaging ?? removeOwnedStaging;
   const parsed = parsePilotManifest(manifest);
   if (!parsed.ok) {
     throw new PilotManifestError('manifest-invalid', parsed.issues.join('; '));
@@ -161,7 +162,20 @@ export async function commitGeneration({
         'existing generation identity does not match the requested generation'
       );
     }
-    await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
+    // A failed reuse-path removal must surface: the caller skips its own
+    // removal for reused generations, so a swallowed error would strand a
+    // complete staging directory on every reuse until the disk floor stops
+    // the pipeline. Returned (not thrown): the generation is published and
+    // reusable, so the caller records a warning and retries cleanup.
+    let stagingCleanupError = null;
+    try {
+      await removeStaging(outputRoot, stagingDir);
+    } catch (error) {
+      stagingCleanupError =
+        `reuse-path staging cleanup failed (${error?.code ?? 'unknown'}): ` +
+        `${error instanceof Error ? error.message : String(error)}`.slice(0, 200) +
+        `; generation ${generationId} is published and reusable`;
+    }
     // Reuse reports the publish-time verdict, never an assumed 'synced':
     // a generation published where fsync is unsupported must not gain
     // power-loss durability by being read later.
@@ -169,6 +183,7 @@ export async function commitGeneration({
       durability: await readPersistedDurability(dir),
       path: dir,
       reused: true,
+      ...(stagingCleanupError ? { stagingCleanupError } : {}),
     };
   }
   const commitDir = join(stagingDir, 'commit');

@@ -22,6 +22,7 @@ describe('acceptanceKey', () => {
 describe('sameAcceptance', () => {
   const base = {
     generationId: 'c'.repeat(64),
+    originalUrl: 'https://cdn.example.com/media/logo-a.png',
     outputHashes: ['a'.repeat(64), 'b'.repeat(64)],
     recipeId: 'pilot/r1',
     sourceSha256: 'd'.repeat(64),
@@ -39,6 +40,13 @@ describe('sameAcceptance', () => {
     expect(sameAcceptance(base, { ...base, verdict: 'rejected' })).toBe(false);
     expect(
       sameAcceptance(base, { ...base, outputHashes: ['a'.repeat(64)] })
+    ).toBe(false);
+    // A retargeted review is a conflicting record, not the same approval.
+    expect(
+      sameAcceptance(base, {
+        ...base,
+        originalUrl: 'https://cdn.example.com/media/logo-b.png',
+      })
     ).toBe(false);
   });
 });
@@ -150,6 +158,7 @@ describe('validAcceptanceShape', () => {
     generationId: 'c'.repeat(64),
     merchantId: MERCHANT,
     note: 'looks right',
+    originalUrl: 'https://cdn.example.com/media/logo-a.png',
     outputHashes: ['e'.repeat(64)],
     recipeId: 'pilot/r1',
     reviewedAt: '2026-10-01T10:00:00Z',
@@ -175,6 +184,8 @@ describe('validAcceptanceShape', () => {
       { ...good, reviewedAt: '2026-10-01' },
       { ...good, schemaVersion: 2 },
       { ...good, generationId: 'short' },
+      { ...good, originalUrl: 'ftp://cdn.example.com/media/logo-a.png' },
+      { ...good, originalUrl: 'not-a-url' },
       null,
       [],
     ]) {

@@ -44,6 +44,7 @@ function acceptance(overrides = {}) {
     merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
     note: 'Text legible at 96/192/384; brand blue preserved; edges clean.',
     outputHashes: tierHashes(),
+    originalUrl: 'https://cdn.example.com/media/logo-1.png',
     recipeId: RECIPE,
     reviewedAt: '2026-10-01T21:00:00.000Z',
     reviewer: 'pilot-owner',
@@ -81,10 +82,18 @@ test('parsePilotAcceptance rejects malformed records strictly', () => {
     parsePilotAcceptance(acceptance({ reviewer: '' })).ok,
     false
   );
+  assert.equal(
+    parsePilotAcceptance(acceptance({ originalUrl: 'not-a-url' })).ok,
+    false
+  );
+  assert.equal(
+    parsePilotAcceptance(acceptance({ originalUrl: 'ftp://cdn.example.com/x.png' })).ok,
+    false
+  );
 });
 
 test('matchAcceptance binds every identity and output hash', () => {
-  assert.deepEqual(matchAcceptance({ acceptance: acceptance(), manifest: manifest() }), {
+  assert.deepEqual(matchAcceptance({ acceptance: acceptance(), binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: manifest() }), {
     ok: true,
   });
 });
@@ -95,9 +104,9 @@ test('matchAcceptance binds capped rungs positionally, not as a set', () => {
   // lists one hash per tier position so each rung stays bound.
   deduped.tiers = deduped.tiers.map((tier) => ({ ...tier, sha256: tierHashes()[0] }));
   const record = acceptance({ outputHashes: Array(6).fill(tierHashes()[0]) });
-  assert.deepEqual(matchAcceptance({ acceptance: record, manifest: deduped }), { ok: true });
+  assert.deepEqual(matchAcceptance({ acceptance: record, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: deduped }), { ok: true });
   const short = acceptance({ outputHashes: [tierHashes()[0]] });
-  const result = matchAcceptance({ acceptance: short, manifest: deduped });
+  const result = matchAcceptance({ acceptance: short, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: deduped });
   assert.equal(result.ok, false);
 });
 
@@ -117,9 +126,10 @@ test('matchAcceptance invalidates on any drift or rejection', () => {
     // Same hash set, wrong rungs: positional binding rejects the swap.
     ['swapped tier hashes', acceptance(), swapped],
     ['reordered record hashes', acceptance({ outputHashes: [...tierHashes()].reverse() }), manifest()],
+    ['retargeted original URL', acceptance({ originalUrl: 'https://cdn.example.com/media/logo-2.png' }), manifest()],
   ];
   for (const [label, record, manifestValue] of cases) {
-    const result = matchAcceptance({ acceptance: record, manifest: manifestValue });
+    const result = matchAcceptance({ acceptance: record, binding: { originalUrl: 'https://cdn.example.com/media/logo-1.png' }, manifest: manifestValue });
     assert.equal(result.ok, false, label);
     assert.ok(result.reason.length > 0, label);
   }

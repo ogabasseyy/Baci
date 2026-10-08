@@ -200,6 +200,7 @@ export async function setupLabRoots(input: {
       merchantId: asset.merchantId,
       note: 'Lab review: fixture acceptance.',
       outputHashes: tierHashes,
+      originalUrl: asset.url,
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',

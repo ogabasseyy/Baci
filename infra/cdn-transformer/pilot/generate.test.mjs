@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MIN_FREE_BYTES } from './constants.mjs';
+import { removeOwnedStaging as realRemoveOwnedStaging } from './disk-guards.mjs';
 import { runJob } from './generate-job.mjs';
 import { readInventoryJobs } from './job-schema.mjs';
 import { loadGeneration } from './manifest-store.mjs';
@@ -274,4 +275,68 @@ test('a post-commit claim-release failure still reports the published job ok', a
   assert.match(result.cleanupWarning, /published and reusable/);
   // The generation really is durable: exactly one committed directory.
   assert.equal((await readdir(join(outputRoot, 'generations'))).length, 1);
+});
+
+test('a transient reuse-path cleanup failure retries without stranding staging', async () => {
+  const { inputRoot, outputRoot } = await setup();
+  const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+  const inventoryPath = await writeInventory(inputRoot, records);
+  const [job] = await readInventoryJobs(inventoryPath);
+  await mkdir(outputRoot, { recursive: true });
+  let calls = 0;
+  const flakyRemove = async (...args) => {
+    calls += 1;
+    // Call 1 is the fresh-path removal (must succeed); call 2 is the
+    // reuse-path attempt inside commitGeneration (fails transiently);
+    // call 3 is the job-level retry (reclaims).
+    if (calls === 2) {
+      throw Object.assign(new Error('staging busy'), { code: 'EBUSY' });
+    }
+    return realRemoveOwnedStaging(...args);
+  };
+  const first = await runJob({
+    deps: { removeOwnedStaging: flakyRemove },
+    inputRoot,
+    job,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(first.status, 'ok');
+  assert.equal(first.reused, false);
+  const second = await runJob({
+    deps: { removeOwnedStaging: flakyRemove },
+    inputRoot,
+    job,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(second.status, 'ok');
+  assert.equal(second.reused, true);
+  assert.equal(second.cleanupWarning, undefined);
+  assert.equal(calls, 3);
+});
+
+test('a persistent reuse-path cleanup failure warns instead of stranding silently', async () => {
+  const { inputRoot, outputRoot } = await setup();
+  const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+  const inventoryPath = await writeInventory(inputRoot, records);
+  const [job] = await readInventoryJobs(inventoryPath);
+  await mkdir(outputRoot, { recursive: true });
+  const first = await runJob({ inputRoot, job, minFreeBytes: 0, outputRoot });
+  assert.equal(first.status, 'ok');
+  const second = await runJob({
+    deps: {
+      removeOwnedStaging: async () => {
+        throw Object.assign(new Error('staging busy'), { code: 'EBUSY' });
+      },
+    },
+    inputRoot,
+    job,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(second.status, 'ok');
+  assert.equal(second.reused, true);
+  assert.match(second.cleanupWarning, /reuse-path staging cleanup failed/);
+  assert.match(second.cleanupWarning, /post-commit cleanup failed/);
 });

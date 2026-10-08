@@ -77,6 +77,26 @@ describe('merchant-image-pilot-readiness surfaces', () => {
         surface: 'grid',
       })
     ).toEqual(['slot "header-logo" has no visible box']);
+    // A twin section for the same binding fails even though the first
+    // match is perfect: first-match lookup would otherwise let the
+    // duplicate alter layout or fetch unvalidated.
+    const duped = {
+      ...collected,
+      geometry: {
+        ...collected.geometry,
+        slots: [goodSlot, { ...goodSlot }, cardSlot],
+      },
+    };
+    expect(
+      surfaceProblems(duped, {
+        arm: 'pilot',
+        expectedFit: 'cover',
+        expectedMounts: [mount, card],
+        surface: 'grid',
+      })
+    ).toEqual([
+      'slot "header-logo" renders 2 sections for one binding (duplicate mount)',
+    ]);
   });
 
   it('requires WebP selection on the no-avif profile', () => {

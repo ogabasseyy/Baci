@@ -154,6 +154,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -190,6 +191,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Reviewed',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -202,6 +204,36 @@ describe('buildLabIndex', () => {
       outputRoot: lab.outputRoot,
     });
     expect(statuses[0]?.status).not.toBe('accepted');
+    expect(Object.keys(index.entries)).toHaveLength(0);
+  });
+
+  it('rejects a retargeted original URL with everything else unchanged', async () => {
+    const retargeted = lab.bindings.map((binding) => ({
+      ...binding,
+      originalUrl: 'https://cdn.example.com/media/logo-retargeted.png',
+    }));
+    const { index, statuses } = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'Reviewed',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: retargeted,
+      outputRoot: lab.outputRoot,
+    });
+    expect(statuses[0]?.status).toBe('acceptance-mismatch');
+    expect(statuses[0]?.detail).toMatch(/original URL changed/);
     expect(Object.keys(index.entries)).toHaveLength(0);
   });
 
@@ -221,6 +253,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: guardedTiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -262,6 +295,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: undelivered.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -297,6 +331,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: violating.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -320,6 +355,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'Lab review: legible, colors preserved.',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -370,6 +406,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: tampered.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -391,6 +428,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
@@ -459,6 +497,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -487,6 +526,7 @@ describe('buildLabIndex', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',
@@ -510,6 +550,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
@@ -550,6 +591,7 @@ describe('buildLabIndex', () => {
       merchantId: MERCHANT,
       note: 'n',
       outputHashes: lab.tiers.map((tier) => tier.sha256),
+      originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
@@ -573,6 +615,7 @@ describe('buildLabIndex', () => {
       generationId: GENERATION_ID,
       merchantId: MERCHANT,
       note: 'n',
+      originalUrl: 'https://cdn.example.com/media/logo.png',
       recipeId: PILOT_RECIPE_ID,
       reviewedAt: '2026-10-01T21:00:00.000Z',
       reviewer: 'pilot-owner',
@@ -621,6 +664,7 @@ describe('lookupPilotTiers and selectPilotTier', () => {
           merchantId: MERCHANT,
           note: 'n',
           outputHashes: lab.tiers.map((tier) => tier.sha256),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
           recipeId: PILOT_RECIPE_ID,
           reviewedAt: '2026-10-01T21:00:00.000Z',
           reviewer: 'pilot-owner',

@@ -263,6 +263,80 @@ test('commitGeneration reuses validated generations and never overwrites', async
   await assert.rejects(() => loadGeneration(first.root, generationId), /hash mismatch/);
 });
 
+test('commitGeneration surfaces reuse-path staging cleanup failures', async () => {
+  const first = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const recipeId = 'pilot-r1-0123456789abcdef';
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId,
+    sourceSha256: first.expectedSha256,
+  });
+  const manifestFor = (ladder) =>
+    validManifest({
+      encoder: encoderIdentity,
+      source: {
+        bytes: 85,
+        format: 'png',
+        orientedHeight: ladder.source.orientedHeight,
+        orientedWidth: ladder.source.orientedWidth,
+        sha256: first.expectedSha256,
+      },
+      tiers: ladder.tiers.map((tier) => ({
+        actualWidth: tier.actualWidth,
+        bytes: tier.bytes,
+        contentType: tier.contentType,
+        format: tier.format,
+        height: tier.height,
+        path: outputFileName(tier.sha256, tier.format),
+        quality: tier.quality,
+        requestedWidth: tier.requestedWidth,
+        sha256: tier.sha256,
+        width: tier.width,
+      })),
+    });
+  const filesFor = (ladder) =>
+    ladder.tiers
+      .filter(
+        (tier, index, all) =>
+          all.findIndex((other) => other.path === tier.path) === index
+      )
+      .map((tier) => ({
+        from: tier.path,
+        name: outputFileName(tier.sha256, tier.format),
+      }));
+  const boundJob = { ...JOB, expectedSha256: first.expectedSha256 };
+  await commitGeneration({
+    files: filesFor(first.ladder),
+    generationId,
+    job: boundJob,
+    manifest: manifestFor(first.ladder),
+    outputRoot: first.root,
+    stagingDir: first.stagingDir,
+  });
+  // The second commit reuses the published generation; its staging
+  // removal fails transiently. The error must surface (not strand a
+  // directory on every reuse) while reuse still reports success.
+  const second = await realLadderStaging();
+  const reused = await commitGeneration({
+    deps: {
+      removeOwnedStaging: async () => {
+        throw Object.assign(new Error('staging busy'), { code: 'EBUSY' });
+      },
+    },
+    files: filesFor(second.ladder),
+    generationId,
+    job: boundJob,
+    manifest: manifestFor(second.ladder),
+    outputRoot: first.root,
+    stagingDir: second.stagingDir,
+  });
+  assert.equal(reused.reused, true);
+  assert.match(reused.stagingCleanupError, /EBUSY/);
+  assert.match(reused.stagingCleanupError, /published and reusable/);
+});
+
 test('commitGeneration degrades honestly on sync failure and fails safe on rename failure', async () => {
   const staged = await realLadderStaging();
   const encoderIdentity = buildEncoderIdentity();

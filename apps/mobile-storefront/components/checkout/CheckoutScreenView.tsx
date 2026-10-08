@@ -114,6 +114,7 @@ export function CheckoutScreenView({
     deliveryFee,
     isAuthenticated,
     items,
+    userId: user?.id,
     merchantId: merchant?.id || CHECKOUT_MERCHANT_ID,
     merchantSlug: CHECKOUT_MERCHANT_SLUG,
     step,

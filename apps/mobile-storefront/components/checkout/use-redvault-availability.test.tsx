@@ -242,4 +242,31 @@ describe('useRedvaultAvailability', () => {
     await act(async () => undefined);
     expect(result.current).toBe(true);
   });
+
+  it('hides a stale positive when the auth user changes without a customer row', async () => {
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string }) =>
+        useRedvaultAvailability({
+          customerId: undefined,
+          isAuthenticated: true,
+          items,
+          merchantId,
+          userId,
+        }),
+      { initialProps: { userId: 'user-a' } }
+    );
+
+    await act(async () => undefined);
+    expect(result.current).toBe(true);
+
+    mockGetAvailability.mockReturnValue(
+      new Promise<{ available: boolean; reason: string }>(() => undefined)
+    );
+    rerender({ userId: 'user-b' });
+    expect(result.current).toBe(false);
+    expect(mockGetAvailability).toHaveBeenLastCalledWith(
+      merchantId,
+      'product-1'
+    );
+  });
 });

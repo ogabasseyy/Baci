@@ -35,6 +35,7 @@ interface UseCheckoutPaymentControllerParams {
   merchantSlug: string;
   step: CheckoutStep;
   subtotal: number;
+  userId?: string;
 }
 
 export function useCheckoutPaymentController({
@@ -48,6 +49,7 @@ export function useCheckoutPaymentController({
   merchantSlug,
   step,
   subtotal,
+  userId,
 }: UseCheckoutPaymentControllerParams) {
   const { data: paymentSettings } = useMerchantPaymentSettings();
   const enabledPaymentMethods = getEnabledPaymentMethods(paymentSettings);
@@ -63,6 +65,7 @@ export function useCheckoutPaymentController({
     isAuthenticated,
     items,
     merchantId,
+    userId,
   });
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([

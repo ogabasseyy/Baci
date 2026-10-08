@@ -180,6 +180,37 @@ describe('useCheckoutPaymentController selection', () => {
     );
   });
 
+  it('refetches availability when the auth user changes without a customer row', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          deliveryFee: 0,
+          isAuthenticated: true,
+          items,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+          userId,
+        }),
+      { initialProps: { userId: 'user-a' } }
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+
+    rerender({ userId: 'user-b' });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'product-1'
+    );
+  });
+
   it('fails closed when availability rejects', async () => {
     mockGetRedvaultPaymentAvailability.mockRejectedValueOnce(
       new Error('offline')

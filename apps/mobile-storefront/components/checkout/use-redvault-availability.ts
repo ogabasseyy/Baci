@@ -11,6 +11,7 @@ export function useRedvaultAvailability({
   isAuthenticated,
   items,
   merchantId,
+  userId,
 }: {
   assuranceFee?: number;
   customerId?: string | null;
@@ -18,6 +19,11 @@ export function useRedvaultAvailability({
   isAuthenticated: boolean;
   items: CartItems;
   merchantId: string;
+  // Supabase auth user id. The customer profile id is undefined until the
+  // customer row hydrates, so keying on it alone would serve one
+  // customer-less account's positive result to the next account after a
+  // switch; the auth id is present for every authenticated session.
+  userId?: string | null;
 }) {
   const pilotCartProductId =
     items.length === 1 && items[0]?.quantity === 1 && !items[0]?.variant_id
@@ -53,7 +59,7 @@ export function useRedvaultAvailability({
       item.negotiationStatus === 'accepted' ||
       (item.negotiatedPrice != null && item.negotiatedPrice !== item.price)
   );
-  const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${cartFingerprint}`;
+  const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${userId ?? ''}:${cartFingerprint}`;
   const [availability, setAvailability] = useState<{
     requestKey: string;
     available: boolean;

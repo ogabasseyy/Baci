@@ -8,6 +8,49 @@
 -- client-side refinement over hydrated rows stays exact while only matching
 -- records transfer.
 
+-- All scalar string/number leaves of a JSONB document, mirroring the
+-- client collectStrings matcher (object keys and structure never match).
+CREATE OR REPLACE FUNCTION public.transaction_review_jsonb_search_values(
+  data jsonb
+)
+RETURNS SETOF text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+  WITH RECURSIVE walk(value) AS (
+    SELECT data AS value
+    UNION ALL
+    SELECT elem.value
+    FROM walk
+    CROSS JOIN LATERAL (
+      SELECT value FROM pg_catalog.jsonb_each(walk.value)
+      WHERE pg_catalog.jsonb_typeof(walk.value) = 'object'
+      UNION ALL
+      SELECT value FROM pg_catalog.jsonb_array_elements(walk.value)
+      WHERE pg_catalog.jsonb_typeof(walk.value) = 'array'
+    ) AS elem
+    WHERE pg_catalog.jsonb_typeof(walk.value) IN ('object', 'array')
+  )
+  SELECT
+    CASE
+      WHEN pg_catalog.jsonb_typeof(walk.value) = 'string'
+        THEN walk.value #>> '{}'
+      ELSE walk.value::text
+    END
+  FROM walk
+  WHERE pg_catalog.jsonb_typeof(walk.value) IN ('string', 'number');
+$$;
+
+ALTER FUNCTION public.transaction_review_jsonb_search_values(jsonb)
+  OWNER TO postgres;
+
+COMMENT ON FUNCTION public.transaction_review_jsonb_search_values(jsonb) IS
+  'Returns JSONB scalar leaves for transaction-review search; keys never match.';
+
+REVOKE ALL ON FUNCTION public.transaction_review_jsonb_search_values(jsonb)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.search_mobile_admin_transaction_review_orders(
   p_merchant_id uuid,
   p_terms text[],
@@ -30,6 +73,7 @@ DECLARE
   v_has_product_metadata boolean := false;
   v_has_product_variants boolean := false;
   v_has_unit_costs boolean := false;
+  v_order_by text := 'o.created_at DESC, o.id DESC';
   v_sql text;
 BEGIN
   IF p_merchant_id IS NULL THEN
@@ -52,6 +96,7 @@ BEGIN
     SELECT DISTINCT left(btrim(term), 60) AS term
     FROM unnest(p_terms) AS term
     WHERE btrim(term) <> ''
+    ORDER BY term
     LIMIT 10
   ) AS distinct_terms;
 
@@ -137,15 +182,23 @@ BEGIN
           OR o.customer_email ILIKE search_patterns.pattern ESCAPE '\'
           OR o.customer_phone ILIKE search_patterns.pattern ESCAPE '\'
           OR o.payment_method ILIKE search_patterns.pattern ESCAPE '\'
-          OR o.total::text ILIKE search_patterns.pattern ESCAPE '\'
-          OR o.fulfillment_details::text ILIKE search_patterns.pattern ESCAPE '\'
-          OR o.created_at::text ILIKE search_patterns.pattern ESCAPE '\'
+          OR (
+            CASE
+              WHEN o.total::text LIKE '%.%'
+                THEN rtrim(rtrim(o.total::text, '0'), '.')
+              ELSE o.total::text
+            END
+          ) ILIKE search_patterns.pattern ESCAPE '\'
+          OR EXISTS (
+            SELECT 1
+            FROM public.transaction_review_jsonb_search_values(o.fulfillment_details) AS search_value
+            WHERE search_value ILIKE search_patterns.pattern ESCAPE '\'
+          )
           OR to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
   $query$;
 
   IF v_has_transaction_date THEN
     v_sql := v_sql || $query$
-          OR o.transaction_date::text ILIKE search_patterns.pattern ESCAPE '\'
           OR to_char(o.transaction_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ILIKE search_patterns.pattern ESCAPE '\'
     $query$;
   END IF;
@@ -158,10 +211,20 @@ BEGIN
               AND (
                 oi.id::text ILIKE search_patterns.pattern ESCAPE '\'
                 OR oi.name ILIKE search_patterns.pattern ESCAPE '\'
-                OR oi.price::text ILIKE search_patterns.pattern ESCAPE '\'
+                OR (
+                  CASE
+                    WHEN oi.price::text LIKE '%.%'
+                      THEN rtrim(rtrim(oi.price::text, '0'), '.')
+                    ELSE oi.price::text
+                  END
+                ) ILIKE search_patterns.pattern ESCAPE '\'
                 OR oi.quantity::text ILIKE search_patterns.pattern ESCAPE '\'
                 OR oi.product_id::text ILIKE search_patterns.pattern ESCAPE '\'
-                OR oi.fulfillment_data::text ILIKE search_patterns.pattern ESCAPE '\'
+                OR EXISTS (
+                  SELECT 1
+                  FROM public.transaction_review_jsonb_search_values(oi.fulfillment_data) AS search_value
+                  WHERE search_value ILIKE search_patterns.pattern ESCAPE '\'
+                )
   $query$;
 
   IF v_has_item_variant_id THEN
@@ -187,7 +250,11 @@ BEGIN
 
   IF v_has_product_metadata THEN
     v_sql := v_sql || $query$
-                      OR p.metadata::text ILIKE search_patterns.pattern ESCAPE '\'
+                      OR EXISTS (
+                        SELECT 1
+                        FROM public.transaction_review_jsonb_search_values(p.metadata) AS search_value
+                        WHERE search_value ILIKE search_patterns.pattern ESCAPE '\'
+                      )
     $query$;
   END IF;
 
@@ -205,7 +272,11 @@ BEGIN
                     AND (
                       v.sku ILIKE search_patterns.pattern ESCAPE '\'
                       OR v.condition ILIKE search_patterns.pattern ESCAPE '\'
-                      OR v.attributes::text ILIKE search_patterns.pattern ESCAPE '\'
+                      OR EXISTS (
+                        SELECT 1
+                        FROM public.transaction_review_jsonb_search_values(v.attributes) AS search_value
+                        WHERE search_value ILIKE search_patterns.pattern ESCAPE '\'
+                      )
                     )
                 )
     $query$;
@@ -226,12 +297,19 @@ BEGIN
     $query$;
   END IF;
 
+  -- Rank candidates in hydrated list order so capped results match display.
+  IF v_has_transaction_date THEN
+    v_order_by :=
+      'o.transaction_date DESC NULLS LAST, o.created_at DESC, o.id DESC';
+  END IF;
+
   v_sql := v_sql || $query$
               )
           )
         ) IS NOT TRUE
       )
-    ORDER BY o.created_at DESC, o.id DESC
+    ORDER BY
+  $query$ || v_order_by || $query$
     LIMIT $3
   $query$;
 

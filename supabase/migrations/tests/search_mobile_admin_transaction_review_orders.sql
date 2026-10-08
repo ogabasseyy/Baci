@@ -171,7 +171,7 @@ INSERT INTO public.order_item_unit_costs (
 -- Order-level IMEI in fulfillment_details.
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, shipping_status, payment_status,
-  total, fulfillment_details, created_at
+  total, fulfillment_details, created_at, transaction_date
 ) VALUES (
   'c0000000-0000-4000-8000-000000000002',
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -181,7 +181,24 @@ INSERT INTO public.orders (
   'paid',
   250.00,
   '{"imei": "354066782325743"}'::jsonb,
+  '2026-10-06T10:00:00Z',
   '2026-10-06T10:00:00Z'
+);
+
+-- Newly created but backdated order: ranking follows transaction date.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at, transaction_date
+) VALUES (
+  'c0000000-0000-4000-8000-000000000007',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1007',
+  'Back Dated',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-07T12:00:00Z',
+  '2026-09-15T12:00:00Z'
 );
 
 -- Unpaid order: must never match.
@@ -357,6 +374,19 @@ BEGIN
   INTO v_ids
   FROM public.search_mobile_admin_transaction_review_orders(
     v_merchant_id,
+    ARRAY[
+      'ord-1001', 'ada', 'lovelace', 'paystack', 'fragile', 'phone', 'acme',
+      'black', 'sn-999', '353232106161443', '355555550000001', 'zzz-no-match'
+    ]
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'over-cap term search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
     ARRAY['35323210616144_']
   );
   IF v_ids IS NOT NULL THEN
@@ -412,6 +442,47 @@ BEGIN
   );
   IF v_ids IS DISTINCT FROM ARRAY[v_order_imei_order_id] THEN
     RAISE EXCEPTION 'limit did not return the most recent match: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['ORD-100'],
+    1
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_order_imei_order_id] THEN
+    RAISE EXCEPTION 'limit did not rank by transaction date: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['inventoryunits']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'JSON keys must never match: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['500']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'numeric search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['500.00']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'numeric formatting must match client text: %', v_ids;
   END IF;
 
   BEGIN

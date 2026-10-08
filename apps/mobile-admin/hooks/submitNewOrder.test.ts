@@ -213,7 +213,10 @@ describe('submitNewOrder', () => {
       variant_name: null,
     });
 
-    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(3);
+    expect(mocks.invalidateQueries).toHaveBeenCalledTimes(4);
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count'],
+    });
     expect(setLastOrderId).toHaveBeenCalledWith('order-1');
     expect(setShowSuccessModal).toHaveBeenCalledWith(true);
     expect(setIsSubmitting).toHaveBeenCalledWith(true);

@@ -70,6 +70,7 @@ export default function TransactionsScreen() {
   } = useTransactionReview(searching ? undefined : range, {
     search: searching ? debouncedSearchQuery : undefined,
   });
+  const { data: rangeOrders = [] } = useTransactionReview(range);
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
@@ -77,7 +78,7 @@ export default function TransactionsScreen() {
   });
 
   const summary = {
-    missingCosts: orders.reduce(
+    missingCosts: rangeOrders.reduce(
       (count, order) => count + order.missingCostCount,
       0
     ),
@@ -94,7 +95,7 @@ export default function TransactionsScreen() {
   const tabFilteredOrders = filterOrdersForTransactionTab(orders, activeTab);
   const searchFilteredOrders = filterTransactionOrders(
     tabFilteredOrders,
-    searchQuery
+    searching ? debouncedSearchQuery : searchQuery
   );
   const searchTruncated =
     searching && searchFilteredOrders.length > TRANSACTION_REVIEW_SEARCH_LIMIT;

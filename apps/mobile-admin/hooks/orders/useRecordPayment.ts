@@ -243,6 +243,9 @@ export function useRecordPayment() {
         queryKey: ['order-counts', merchant?.id],
       });
       queryClient.invalidateQueries({
+        queryKey: ['monthly-transaction-count', merchant?.id],
+      });
+      queryClient.invalidateQueries({
         queryKey: ['dashboard-stats', merchant?.id],
       });
     },

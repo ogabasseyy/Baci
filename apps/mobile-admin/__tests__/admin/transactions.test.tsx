@@ -1116,6 +1116,19 @@ describe('TransactionsScreen', () => {
     expect(screen.queryByText('Edit ORD-MANY-100')).not.toBeInTheDocument();
   });
 
+  it('refines with the debounced query while searching', () => {
+    mocks.useDebounce.mockImplementation(() => 'Efosa');
+
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: 'Galaxy' },
+    });
+
+    expect(screen.queryByText('Edit ORD-1')).not.toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-2')).toBeInTheDocument();
+  });
+
   it('shows no-matching when a server search returns nothing', () => {
     mocks.useTransactionReview.mockReturnValue({
       data: [],
@@ -1133,6 +1146,26 @@ describe('TransactionsScreen', () => {
 
     expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
     expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument();
+  });
+
+  it('keeps the missing-costs summary on the browsing list while searching', () => {
+    mocks.useTransactionReview.mockImplementation((_range, options) => ({
+      data: options?.search ? [sampleOrders[0]] : sampleOrders,
+      error: null,
+      isLoading: false,
+      isRefetching: false,
+      refetch: vi.fn(),
+    }));
+
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: '353232106161443' },
+    });
+
+    expect(screen.getByText('1 missing costs')).toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
+    expect(screen.queryByText('Edit ORD-2')).not.toBeInTheDocument();
   });
 
   it('shows the monthly count without loading monthly rows', () => {

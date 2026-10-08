@@ -150,6 +150,32 @@ describe('useRedvaultAvailability', () => {
     expect(staged.current).toBe(true);
   });
 
+  it('hides a repriced basket pending refresh', async () => {
+    const { result, rerender } = renderHook(
+      ({ unitPrice }: { unitPrice: number }) =>
+        useRedvaultAvailability({
+          customerId: 'customer-a',
+          isAuthenticated: true,
+          items: [{ ...item, price: unitPrice }],
+          merchantId,
+        }),
+      { initialProps: { unitPrice: 10_000 } }
+    );
+
+    await act(async () => undefined);
+    expect(result.current).toBe(true);
+
+    mockGetAvailability.mockReturnValue(
+      new Promise<{ available: boolean; reason: string }>(() => undefined)
+    );
+    rerender({ unitPrice: 12_000 });
+    expect(result.current).toBe(false);
+    expect(mockGetAvailability).toHaveBeenLastCalledWith(
+      merchantId,
+      'product-1'
+    );
+  });
+
   it('revalidates and hides once the pilot expiry passes', async () => {
     jest.useFakeTimers();
     try {

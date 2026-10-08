@@ -23,10 +23,14 @@ export function useRedvaultAvailability({
     items.length === 1 && items[0]?.quantity === 1 && !items[0]?.variant_id
       ? items[0].product_id
       : undefined;
+  // The fingerprint includes the unit price so a repriced basket hides
+  // the method pending refresh instead of retaining a stale positive
+  // until the server rejects. Fee combinations without a client-side
+  // value at this layer (gift wrapping, wallet/savings) stay server-gated.
   const cartFingerprint = items
     .map(
-      ({ id, product_id, quantity, variant_id }) =>
-        `${id}:${product_id}:${quantity}:${variant_id ?? ''}`
+      ({ id, product_id, price, quantity, variant_id }) =>
+        `${id}:${product_id}:${quantity}:${variant_id ?? ''}:${price ?? ''}`
     )
     .join('|');
   const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${cartFingerprint}`;

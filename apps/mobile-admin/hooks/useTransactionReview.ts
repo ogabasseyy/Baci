@@ -5,6 +5,7 @@ import { filterExcludedTransactionReviewRows } from '@/lib/filter-excluded-trans
 import { searchTransactionReviewOrders } from '@/lib/search-transaction-review-orders';
 import {
   buildTransactionReviewRangeFilters,
+  filterTransactionOrders,
   mapTransactionOrderRows,
   type TransactionReviewItem,
   type TransactionReviewOrder,
@@ -117,7 +118,9 @@ async function searchTransactionReview(merchantId: string, search: string) {
 
   if (searchResult.error) {
     // Databases that predate the search RPC keep working through the
-    // unbounded client-side scan until the migration lands.
+    // client-side scan until the migration lands. The scan stays complete so
+    // older matches are not silently dropped on unmigrated databases; the
+    // screen additionally caps displayed search results.
     if (searchResult.errorKind === 'missing-search-function') {
       const { data, error } = await fetchTransactionReviewWithFallbacks({
         fetchAll: true,
@@ -128,7 +131,7 @@ async function searchTransactionReview(merchantId: string, search: string) {
         throw new Error(error.message);
       }
 
-      return mapTransactionReviewData(data);
+      return filterTransactionOrders(mapTransactionReviewData(data), search);
     }
 
     throw new Error(searchResult.error.message);
@@ -147,5 +150,7 @@ async function searchTransactionReview(merchantId: string, search: string) {
     throw new Error(error.message);
   }
 
-  return mapTransactionReviewData(data);
+  // The RPC predicate set is a superset of the client matcher; refine here so
+  // hook consumers always see exact multi-term matches.
+  return filterTransactionOrders(mapTransactionReviewData(data), search);
 }

@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { splitTransactionSearchTerms } from './transaction-review';
 import type { TransactionReviewQueryError } from './transaction-review-fallback-types';
 
-const TRANSACTION_REVIEW_SEARCH_LIMIT = 100;
+export const TRANSACTION_REVIEW_SEARCH_LIMIT = 100;
 
 export type TransactionReviewSearchErrorKind =
   | 'missing-search-function'
@@ -40,10 +40,12 @@ export async function searchTransactionReviewOrders({
     return { error: null, errorKind: null, orderIds: [] };
   }
 
+  // Fetch one extra id so callers can tell a complete result from a
+  // truncated one without a second count query.
   const { data, error } = await supabase.rpc(
     'search_mobile_admin_transaction_review_orders',
     {
-      p_limit: TRANSACTION_REVIEW_SEARCH_LIMIT,
+      p_limit: TRANSACTION_REVIEW_SEARCH_LIMIT + 1,
       p_merchant_id: merchantId,
       p_terms: terms,
     }

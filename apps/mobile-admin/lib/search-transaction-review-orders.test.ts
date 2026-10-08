@@ -30,7 +30,7 @@ describe('searchTransactionReviewOrders', () => {
     expect(mocks.rpc).toHaveBeenCalledWith(
       'search_mobile_admin_transaction_review_orders',
       {
-        p_limit: 100,
+        p_limit: 101,
         p_merchant_id: 'merchant-1',
         p_terms: ['353232106161443', 'ada'],
       }

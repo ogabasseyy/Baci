@@ -58,6 +58,10 @@ vi.mock('@/components/transactions/transactions.styles', () => ({
   ),
 }));
 
+vi.mock('@/lib/search-transaction-review-orders', () => ({
+  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
+}));
+
 describe('TransactionListState', () => {
   it('renders a retryable error state', () => {
     const onRetry = vi.fn();
@@ -106,5 +110,26 @@ describe('TransactionListState', () => {
     );
 
     expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
+  });
+
+  it('discloses truncated search results', () => {
+    render(
+      <TransactionListState
+        colors={LIGHT_COLORS}
+        error={null}
+        hasOrders={true}
+        isLoading={false}
+        isRetrying={false}
+        onRetry={vi.fn()}
+        searchTruncated={true}
+        visibleOrderCount={100}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Showing the first 100 matches. Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
   });
 });

@@ -154,6 +154,10 @@ vi.mock('@/hooks/useUpdateTransactionCostPrice', () => ({
   useUpdateTransactionCostPrice: mocks.useUpdateTransactionCostPrice,
 }));
 
+vi.mock('@/lib/search-transaction-review-orders', () => ({
+  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
+}));
+
 function Text({ children }: { children?: React.ReactNode }) {
   return <span>{children}</span>;
 }
@@ -1081,6 +1085,35 @@ describe('TransactionsScreen', () => {
       search: '353232106161443',
     });
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
+  });
+
+  it('caps displayed search results and discloses truncation', () => {
+    const manyOrders = Array.from({ length: 101 }, (_, index) => ({
+      ...sampleOrders[0],
+      id: `order-many-${index}`,
+      orderNumber: `ORD-MANY-${index}`,
+    }));
+    mocks.useTransactionReview.mockReturnValue({
+      data: manyOrders,
+      error: null,
+      isLoading: false,
+      isRefetching: false,
+      refetch: vi.fn(),
+    });
+
+    render(<TransactionsScreen />);
+
+    fireEvent.change(screen.getByLabelText('Search transactions'), {
+      target: { value: '353232106161443' },
+    });
+
+    expect(
+      screen.getByText(
+        'Showing the first 100 matches. Refine your search to narrow results.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Edit ORD-MANY-0')).toBeInTheDocument();
+    expect(screen.queryByText('Edit ORD-MANY-100')).not.toBeInTheDocument();
   });
 
   it('shows the monthly count without loading monthly rows', () => {

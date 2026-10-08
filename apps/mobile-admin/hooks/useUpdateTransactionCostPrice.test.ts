@@ -125,6 +125,9 @@ describe('useUpdateTransactionCostPrice', () => {
       queryKey: ['transaction-review'],
     });
     expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count'],
+    });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['products'],
     });
   });

@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { styles } from '@/components/transactions/transactions.styles';
 import type { ThemeColors } from '@/constants/theme';
+import { TRANSACTION_REVIEW_SEARCH_LIMIT } from '@/lib/search-transaction-review-orders';
 
 interface TransactionListStateProps {
   colors: ThemeColors;
@@ -10,6 +11,7 @@ interface TransactionListStateProps {
   isLoading: boolean;
   isRetrying: boolean;
   onRetry: () => void;
+  searchTruncated?: boolean;
   visibleOrderCount: number;
 }
 
@@ -20,6 +22,7 @@ export function TransactionListState({
   isLoading,
   isRetrying,
   onRetry,
+  searchTruncated,
   visibleOrderCount,
 }: TransactionListStateProps) {
   if (isLoading && !hasOrders) {
@@ -81,6 +84,16 @@ export function TransactionListState({
         <Ionicons name="search-outline" size={32} color={colors.textMuted} />
         <Text style={[styles.stateText, { color: colors.textSecondary }]}>
           No matching transactions.
+        </Text>
+      </View>
+    );
+  }
+
+  if (searchTruncated) {
+    return (
+      <View style={styles.stateContainer}>
+        <Text style={[styles.stateText, { color: colors.textSecondary }]}>
+          {`Showing the first ${TRANSACTION_REVIEW_SEARCH_LIMIT} matches. Refine your search to narrow results.`}
         </Text>
       </View>
     );

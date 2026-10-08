@@ -22,10 +22,15 @@ vi.mock('@/lib/search-transaction-review-orders', () => ({
   searchTransactionReviewOrders: mocks.searchTransactionReviewOrders,
 }));
 
-vi.mock('@/lib/transaction-review', () => ({
-  buildTransactionReviewRangeFilters: () => ({}),
-  mapTransactionOrderRows: mocks.mapTransactionOrderRows,
-}));
+vi.mock('@/lib/transaction-review', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/transaction-review')>();
+  return {
+    buildTransactionReviewRangeFilters: () => ({}),
+    filterTransactionOrders: actual.filterTransactionOrders,
+    mapTransactionOrderRows: mocks.mapTransactionOrderRows,
+  };
+});
 
 import { useTransactionReview } from './useTransactionReview';
 
@@ -160,8 +165,22 @@ describe('useTransactionReview', () => {
       errorKind: null,
       orderIds: ['match-1', 'match-2'],
     });
+    const rows = [
+      {
+        cancelled_at: null,
+        id: 'match-1',
+        searchText: 'ord-1 353232106161443',
+        shipping_status: 'pending',
+      },
+      {
+        cancelled_at: null,
+        id: 'match-2',
+        searchText: 'ord-2 353232106161443',
+        shipping_status: 'pending',
+      },
+    ];
     mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: [{ id: 'match-1' }, { id: 'match-2' }],
+      data: rows,
       error: null,
     });
 
@@ -170,12 +189,7 @@ describe('useTransactionReview', () => {
       { wrapper: createWrapper() }
     );
 
-    await waitFor(() =>
-      expect(result.current.data).toEqual([
-        { id: 'match-1' },
-        { id: 'match-2' },
-      ])
-    );
+    await waitFor(() => expect(result.current.data).toEqual(rows));
     expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
       search: '353232106161443',
@@ -183,6 +197,39 @@ describe('useTransactionReview', () => {
     expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledWith(
       expect.objectContaining({ orderIds: ['match-1', 'match-2'] })
     );
+  });
+
+  it('refines RPC candidates to exact multi-term matches', async () => {
+    mocks.searchTransactionReviewOrders.mockResolvedValue({
+      error: null,
+      errorKind: null,
+      orderIds: ['match-1', 'partial-1'],
+    });
+    const fullMatch = {
+      cancelled_at: null,
+      id: 'match-1',
+      searchText: 'ada 353232106161443',
+      shipping_status: 'pending',
+    };
+    mocks.fetchTransactionReviewRows.mockResolvedValue({
+      data: [
+        fullMatch,
+        {
+          cancelled_at: null,
+          id: 'partial-1',
+          searchText: 'grace 353232106161443',
+          shipping_status: 'pending',
+        },
+      ],
+      error: null,
+    });
+
+    const { result } = renderHook(
+      () => useTransactionReview(undefined, { search: 'ada 353232106161443' }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.data).toEqual([fullMatch]));
   });
 
   it('returns no orders without hydrating when nothing matches', async () => {
@@ -202,14 +249,28 @@ describe('useTransactionReview', () => {
     expect(mocks.fetchTransactionReviewRows).not.toHaveBeenCalled();
   });
 
-  it('falls back to a full scan when the search function is missing', async () => {
+  it('falls back to a filtered full scan when the search function is missing', async () => {
     mocks.searchTransactionReviewOrders.mockResolvedValue({
       error: { message: 'Could not find the function' },
       errorKind: 'missing-search-function',
       orderIds: [],
     });
+    const legacyMatch = {
+      cancelled_at: null,
+      id: 'legacy-match',
+      searchText: 'ada lovelace',
+      shipping_status: 'pending',
+    };
     mocks.fetchTransactionReviewRows.mockResolvedValue({
-      data: [{ id: 'legacy-match' }],
+      data: [
+        legacyMatch,
+        {
+          cancelled_at: null,
+          id: 'legacy-other',
+          searchText: 'grace hopper',
+          shipping_status: 'pending',
+        },
+      ],
       error: null,
     });
 
@@ -218,9 +279,7 @@ describe('useTransactionReview', () => {
       { wrapper: createWrapper() }
     );
 
-    await waitFor(() =>
-      expect(result.current.data).toEqual([{ id: 'legacy-match' }])
-    );
+    await waitFor(() => expect(result.current.data).toEqual([legacyMatch]));
     expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledWith(
       expect.objectContaining({ fetchAll: true })
     );

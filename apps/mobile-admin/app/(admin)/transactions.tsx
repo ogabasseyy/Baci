@@ -25,6 +25,7 @@ import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEd
 import { useTransactionReview } from '@/hooks/useTransactionReview';
 import { resolveAnalyticsDateRange } from '@/lib/analytics-period';
 import { parseTransactionReviewRangeParams } from '@/lib/parse-transaction-review-range-params';
+import { TRANSACTION_REVIEW_SEARCH_LIMIT } from '@/lib/search-transaction-review-orders';
 import {
   filterOrdersForTransactionTab,
   filterTransactionOrders,
@@ -91,7 +92,15 @@ export default function TransactionsScreen() {
       : '--';
 
   const tabFilteredOrders = filterOrdersForTransactionTab(orders, activeTab);
-  const visibleOrders = filterTransactionOrders(tabFilteredOrders, searchQuery);
+  const searchFilteredOrders = filterTransactionOrders(
+    tabFilteredOrders,
+    searchQuery
+  );
+  const searchTruncated =
+    searching && searchFilteredOrders.length > TRANSACTION_REVIEW_SEARCH_LIMIT;
+  const visibleOrders = searchTruncated
+    ? searchFilteredOrders.slice(0, TRANSACTION_REVIEW_SEARCH_LIMIT)
+    : searchFilteredOrders;
   const unmatchedItemCount = visibleOrders.reduce(
     (count, order) =>
       count +
@@ -227,6 +236,7 @@ export default function TransactionsScreen() {
               void refetch();
               void monthlyCountQuery.refetch();
             }}
+            searchTruncated={searchTruncated}
             visibleOrderCount={visibleOrders.length}
           />
 

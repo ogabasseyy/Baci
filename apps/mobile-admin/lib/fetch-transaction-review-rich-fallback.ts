@@ -1,6 +1,7 @@
 import { fetchFullTransactionReviewRows } from './fetch-transaction-review-full-fallback';
 import { isMissingSchemaColumn } from './is-missing-transaction-review-schema-column';
 import { isTransactionReviewSchemaCacheError } from './is-transaction-review-schema-cache-error';
+import { resolveTransactionReviewFallbackRetry } from './resolve-transaction-review-fallback-retry';
 import { runLegacyTransactionReviewQuery } from './run-legacy-transaction-review-query';
 import { runTransactionReviewQueryWithTaxFallback } from './run-transaction-review-query-with-tax-fallback';
 import {
@@ -93,106 +94,13 @@ export async function fetchRichTransactionReviewRows(
       );
     let result = await runQuery();
     while (true) {
-      let shouldRetry = false;
-      if (
-        !unavailableSchemaColumns.has('order_item_unit_costs') &&
-        isMissingSchemaColumn(result.error, 'order_item_unit_costs')
-      ) {
-        markUnavailableSchemaColumn('order_item_unit_costs');
-        onMissingSchemaColumn?.('order_item_unit_costs');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('quiz_award_id') &&
-        isMissingSchemaColumn(result.error, 'quiz_award_id')
-      ) {
-        markUnavailableSchemaColumn('quiz_award_id');
-        onMissingSchemaColumn?.('quiz_award_id');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('quiz_award_amount') &&
-        isMissingSchemaColumn(result.error, 'quiz_award_amount')
-      ) {
-        markUnavailableSchemaColumn('quiz_award_amount');
-        onMissingSchemaColumn?.('quiz_award_amount');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('line_id') &&
-        isMissingSchemaColumn(result.error, 'line_id')
-      ) {
-        markUnavailableSchemaColumn('line_id');
-        onMissingSchemaColumn?.('line_id');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('ad_tracking') &&
-        isMissingSchemaColumn(result.error, 'ad_tracking')
-      ) {
-        markUnavailableSchemaColumn('ad_tracking');
-        onMissingSchemaColumn?.('ad_tracking');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('cancelled_at') &&
-        isMissingSchemaColumn(result.error, 'cancelled_at')
-      ) {
-        markUnavailableSchemaColumn('cancelled_at');
-        onMissingSchemaColumn?.('cancelled_at');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('variant_attributes') &&
-        isMissingSchemaColumn(result.error, 'variant_attributes')
-      ) {
-        markUnavailableSchemaColumn('variant_attributes');
-        onMissingSchemaColumn?.('variant_attributes');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('variant_id') &&
-        isMissingSchemaColumn(result.error, 'variant_id')
-      ) {
-        markUnavailableSchemaColumn('variant_id');
-        onMissingSchemaColumn?.('variant_id');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('product_match_status') &&
-        isMissingSchemaColumn(result.error, 'product_match_status')
-      ) {
-        markUnavailableSchemaColumn('product_match_status');
-        onMissingSchemaColumn?.('product_match_status');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('discount_code_id') &&
-        isMissingSchemaColumn(result.error, 'discount_code_id') &&
-        (stage.includes('VariantAttributes') ||
-          stage === 'LegacyNoProductMatchStatus' ||
-          unavailableSchemaColumns.has('order_item_unit_costs'))
-      ) {
-        markUnavailableSchemaColumn('discount_code_id');
-        onMissingSchemaColumn?.('discount_code_id');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('discount_amount') &&
-        isMissingSchemaColumn(result.error, 'discount_amount')
-      ) {
-        markUnavailableSchemaColumn('discount_amount');
-        onMissingSchemaColumn?.('discount_amount');
-        shouldRetry = true;
-      }
-      if (
-        !unavailableSchemaColumns.has('transaction_date') &&
-        isMissingSchemaColumn(result.error, 'transaction_date')
-      ) {
-        markUnavailableSchemaColumn('transaction_date');
-        onMissingSchemaColumn?.('transaction_date');
-        shouldRetry = true;
-      }
+      const shouldRetry = resolveTransactionReviewFallbackRetry({
+        error: result.error,
+        markUnavailableSchemaColumn,
+        onMissingSchemaColumn,
+        stage,
+        unavailableSchemaColumns,
+      });
       if (!shouldRetry) {
         break;
       }

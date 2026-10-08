@@ -260,6 +260,23 @@ describe('validateImportedContent media', () => {
     expect(content).not.toContain('![');
   });
 
+  it('ignores duplicate media attributes after the first', () => {
+    // HTML parsers (and the sanitizer) keep the first occurrence of a
+    // repeated attribute: the effective src is valid, so the ignored
+    // duplicate must not reject the handoff — while a first http src
+    // still rejects even when a later duplicate is valid.
+    expect(
+      validateImportedContent(
+        '<p>Body</p><img src="https://cdn.example.com/a.png" src="http://example.com/ignored.png">'
+      )
+    ).toContain('a.png');
+    expect(() =>
+      validateImportedContent(
+        '<p>Body</p><img src="http://example.com/first.png" src="https://cdn.example.com/a.png">'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
   it('rejects a srcset-only img without an src fallback', () => {
     // The editor parses `img[src]` and drops this image on mount, so
     // the import requires `src` even though the srcset alone could

@@ -23,4 +23,12 @@ describe('tagAttributes', () => {
   it('returns no entries for bare tags', () => {
     expect(tagAttributes('<div>')).toEqual([]);
   });
+
+  it('keeps the first occurrence of duplicate attributes', () => {
+    expect(
+      tagAttributes(
+        '<img src="https://cdn.example.com/a.png" src="http://example.com/ignored.png">'
+      )
+    ).toEqual([{ name: 'src', value: 'https://cdn.example.com/a.png' }]);
+  });
 });

@@ -67,6 +67,16 @@ describe('showingMarkers', () => {
     [['md:scale-none'], { scaleXRestored: true, scaleYRestored: true }],
     [['md:scale-x-0'], { scaleXRestored: false }],
     [['scale-none'], { scaleXRestored: false, scaleYRestored: false }],
+    [['scale-x-0', 'scale-x-100'], { scaleXZero: false }],
+    [['scale-0', 'scale-x-100'], { scaleXZero: false, scaleYZero: true }],
+    [['scale-x-0', 'scale-none'], { scaleXZero: false }],
+    [['scale-[0]'], { scaleXZero: true, scaleYZero: true }],
+    [['scale-[0]', 'scale-none'], { scaleXZero: false, scaleYZero: false }],
+    [['scale-x-100', 'scale-[0]'], { scaleXZero: true, scaleYZero: true }],
+    [['scale-x-0', '-scale-x-100'], { scaleXZero: true }],
+    [['scale-x-[0]', 'scale-x-100'], { scaleXZero: true }],
+    [['scale-y-0', 'scale-100'], { scaleXZero: false, scaleYZero: true }],
+    [['scale-x-[var(--x)]'], { scaleXZero: false }],
   ])('tracks display, visibility, size, and scale markers: %s', (classes, expected) => {
     expect(showingMarkers(classes)).toMatchObject(expected);
   });

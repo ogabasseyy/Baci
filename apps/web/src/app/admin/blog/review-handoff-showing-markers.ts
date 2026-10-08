@@ -40,6 +40,8 @@ const DISPLAY_UTILITIES = new Set([
 const SIZE_UTILITY_PATTERN = /^(size|max-h|max-w|min-h|min-w|h|w)-(.+)$/;
 const SCALE_UTILITY_PATTERN = /^(scale-x|scale-y|scale)-(.+)$/;
 const ZERO_SIZE_VALUE_PATTERN = /^0([a-z%]+)?$/i;
+const BASE_SCALE_INTEGER_PATTERN = /^\d+$/;
+const SCALE_ARBITRARY_PATTERN = /^\[(.*)\]$/;
 
 function responsiveUtility(token: string): string | null {
   const match = RESPONSIVE_PREFIX_PATTERN.exec(token);
@@ -52,6 +54,30 @@ function isNonZeroUtilityValue(value: string): boolean {
   // restore it. Unevaluatable values (var()) assume visible.
   const raw = value.replace(/^\[|\]$/g, '');
   return !ZERO_SIZE_VALUE_PATTERN.test(raw);
+}
+
+function scaleArbitraryNumber(value: string): number | null {
+  // Axis arbitraries sort numerically in the cascade ([9%] < [50%] <
+  // [100%], verified against Tailwind v4.3.1 output). var() and
+  // multi-component values cannot be ordered or evaluated, so they
+  // return null and assume visible.
+  const inner = SCALE_ARBITRARY_PATTERN.exec(value)?.[1].replace(/%$/, '');
+  if (inner === undefined || !/^-?\d+(\.\d+)?$/.test(inner)) return null;
+  return Number(inner);
+}
+
+function noteAxisScale(
+  winner: { group: number; value: number },
+  group: number,
+  value: number
+): void {
+  if (
+    group > winner.group ||
+    (group === winner.group && value > winner.value)
+  ) {
+    winner.group = group;
+    winner.value = value;
+  }
 }
 
 const OPACITY_UTILITY_PATTERN = /^opacity-(\d+(?:\.\d+)?|\[.+\])$/;
@@ -82,7 +108,10 @@ function isNonZeroOpacityUtility(utility: string): boolean {
  * override. A base max cap restores nothing: it cannot raise a zero.
  * Zero-scale transforms collapse all painted pixels on their axis
  * (no clipping needed: the transform scales overflow too), so a
- * zeroed axis hides unless a responsive scale restores it.
+ * zeroed axis hides unless a responsive scale restores it. Base
+ * scale conflicts resolve by generated cascade order (Tailwind
+ * v4.3.1): bare numerics < axis numerics < axis arbitraries per
+ * axis, a bare scale-[...] static next, scale-none last.
  */
 export function showingMarkers(classes: readonly string[]): {
   display: boolean;
@@ -111,8 +140,13 @@ export function showingMarkers(classes: readonly string[]): {
   let maxWidthRestored = false;
   let baseHeightRestored = false;
   let baseWidthRestored = false;
-  let scaleXZero = false;
-  let scaleYZero = false;
+  let baseScaleNone = false;
+  const baseStaticScales: number[] = [];
+  let baseStaticUnknown = false;
+  const scaleXWinner = { group: -1, value: 0 };
+  const scaleYWinner = { group: -1, value: 0 };
+  let scaleXUnknown = false;
+  let scaleYUnknown = false;
   let scaleXRestored = false;
   let scaleYRestored = false;
   // Display resolves per breakpoint: Tailwind emits `hidden` after the
@@ -169,23 +203,50 @@ export function showingMarkers(classes: readonly string[]): {
         }
       }
     }
+    if (token === 'scale-none') baseScaleNone = true;
     if (utility !== null && utility === 'scale-none') {
       scaleXRestored = true;
       scaleYRestored = true;
     }
     const scaleTarget = utility === null ? token : utility;
-    const scale = SCALE_UTILITY_PATTERN.exec(scaleTarget);
-    if (scale !== null) {
+    const negatedScale = scaleTarget.startsWith('-');
+    const scaleToken = negatedScale ? scaleTarget.slice(1) : scaleTarget;
+    const scale = SCALE_UTILITY_PATTERN.exec(scaleToken);
+    if (
+      scale !== null &&
+      (!negatedScale || BASE_SCALE_INTEGER_PATTERN.test(scale[2]))
+    ) {
       const property = scale[1];
       const affectsX = property === 'scale-x' || property === 'scale';
       const affectsY = property === 'scale-y' || property === 'scale';
       if (utility === null) {
-        // A base scale-none does not restore a base zero: same-layer
-        // utility order is unproven, like size tokens.
-        if (!isNonZeroUtilityValue(scale[2])) {
-          if (affectsX) scaleXZero = true;
-          if (affectsY) scaleYZero = true;
+        const rawValue = scale[2];
+        if (property === 'scale' && rawValue.startsWith('[')) {
+          const staticValue = scaleArbitraryNumber(rawValue);
+          if (staticValue === null) baseStaticUnknown = true;
+          else baseStaticScales.push(staticValue);
+        } else if (BASE_SCALE_INTEGER_PATTERN.test(rawValue)) {
+          const numericValue = (negatedScale ? -1 : 1) * Number(rawValue);
+          if (property === 'scale') {
+            noteAxisScale(scaleXWinner, 0, numericValue);
+            noteAxisScale(scaleYWinner, 0, numericValue);
+          } else if (affectsX) {
+            noteAxisScale(scaleXWinner, 1, numericValue);
+          } else {
+            noteAxisScale(scaleYWinner, 1, numericValue);
+          }
+        } else if (rawValue.startsWith('[')) {
+          const axisValue = scaleArbitraryNumber(rawValue);
+          if (axisValue === null) {
+            if (affectsX) scaleXUnknown = true;
+            else scaleYUnknown = true;
+          } else if (affectsX) {
+            noteAxisScale(scaleXWinner, 2, axisValue);
+          } else {
+            noteAxisScale(scaleYWinner, 2, axisValue);
+          }
         }
+        // Anything else (scale-3d, scale-foo) generates no rule.
       } else if (isNonZeroUtilityValue(scale[2])) {
         if (affectsX) scaleXRestored = true;
         if (affectsY) scaleYRestored = true;
@@ -196,6 +257,25 @@ export function showingMarkers(classes: readonly string[]): {
     (breakpoint) => !displayHidden.has(breakpoint)
   );
   const opacity = [...opacityWinners.values()].some(isNonZeroOpacityUtility);
+  // The last bare scale-[...] static beats every var rule and
+  // scale-none beats it; otherwise each axis takes its own cascade
+  // winner, and unevaluatable values assume visible.
+  const staticWinner =
+    baseStaticScales.length === 0 ? null : Math.max(...baseStaticScales);
+  const scaleXZero =
+    !baseScaleNone &&
+    !baseStaticUnknown &&
+    !scaleXUnknown &&
+    (staticWinner !== null
+      ? staticWinner === 0
+      : scaleXWinner.group !== -1 && scaleXWinner.value === 0);
+  const scaleYZero =
+    !baseScaleNone &&
+    !baseStaticUnknown &&
+    !scaleYUnknown &&
+    (staticWinner !== null
+      ? staticWinner === 0
+      : scaleYWinner.group !== -1 && scaleYWinner.value === 0);
   return {
     display,
     visible,

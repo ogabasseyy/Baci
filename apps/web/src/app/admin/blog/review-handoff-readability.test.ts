@@ -32,6 +32,10 @@ describe('hasReadableContent', () => {
     '<div class="opacity-0 md:opacity-0 md:opacity-100">Only body</div>',
     '<img class="opacity-0 opacity-50" src="https://cdn.example.com/a.png">',
     '<div class="opacity-100 md:opacity-0">Only body</div>',
+    '<div class="scale-x-0 scale-x-100">Only body</div>',
+    '<div class="scale-x-100 scale-x-0">Only body</div>',
+    '<div class="scale-x-0 scale-none">Only body</div>',
+    '<div class="scale-0 scale-none">Only body</div>',
     '<img width="0" class="w-auto" src="https://cdn.example.com/a.png">',
     '<img height="0" class="h-auto" src="https://cdn.example.com/a.png">',
     '<img width="0" height="0" class="size-auto" src="https://cdn.example.com/a.png">',
@@ -74,6 +78,10 @@ describe('hasReadableContent', () => {
     '<img class="scale-y-0" src="https://cdn.example.com/a.png">',
     '<div class="scale-x-0"><img src="https://cdn.example.com/a.png"></div>',
     '<div class="scale-x-0 md:scale-y-100">Hidden</div>',
+    '<div class="scale-x-0 scale-x-[0]">Hidden</div>',
+    '<div class="scale-0 scale-x-100">Hidden</div>',
+    '<div class="scale-[0]">Hidden</div>',
+    '<div class="scale-x-0 -scale-x-100">Hidden</div>',
     '<p class="text-black text-transparent">Only body</p>',
     '<p class="text-transparent md:text-black md:text-transparent">Only body</p>',
     '<p class="text-black/0">Only body</p>',
@@ -90,5 +98,27 @@ describe('hasReadableContent', () => {
     '<div class="opacity-0 md:opacity-0">Only body</div>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
+  });
+
+  it('finds readable text after many images under a hidden ancestor', () => {
+    // Ancestry is tracked in one document-order pass: hundreds of
+    // hidden images must not rescan the article prefix each time.
+    const images = '<img src="https://cdn.example.com/a.png">'.repeat(500);
+    expect(
+      hasReadableContent(`<div class="hidden">${images}</div><p>Tail</p>`)
+    ).toBe(true);
+    expect(hasReadableContent(`<div class="hidden">${images}</div>`)).toBe(
+      false
+    );
+  });
+
+  it('finds a visible image after many hidden sibling images', () => {
+    const hidden =
+      '<div class="hidden"><img src="https://cdn.example.com/a.png"></div>'.repeat(
+        200
+      );
+    expect(
+      hasReadableContent(`${hidden}<img src="https://cdn.example.com/b.png">`)
+    ).toBe(true);
   });
 });

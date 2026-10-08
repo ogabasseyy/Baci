@@ -1,4 +1,3 @@
-import { matchMediaElements } from './review-handoff-media-elements';
 import { showingMarkers } from './review-handoff-showing-markers';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
@@ -196,35 +195,44 @@ const VOID_HTML_ELEMENTS = new Set([
   'wbr',
 ]);
 
-function hasHiddenAncestor(
-  content: string,
-  tag: string,
-  tagIndex: number
-): boolean {
-  // The sanitizer re-serializes balanced markup, so a stack over the tags
-  // preceding the image mirrors its live DOM ancestry. The image's own
-  // frame joins the evaluation so a `visible` image escapes an
-  // `invisible` ancestor, while terminal hiding anywhere still wins.
+function hasVisibleImage(content: string): boolean {
+  // Track ancestry during one document-order pass instead of rescanning
+  // the prefix before every image: each image is evaluated against the
+  // live stack the moment it is reached, keeping validation linear in
+  // article size. The stack discipline matches visibleText exactly, so
+  // verdicts are unchanged — only the quadratic rescan is gone. The
+  // image's own frame joins the evaluation so a `visible` image
+  // escapes an `invisible` ancestor, while terminal hiding anywhere
+  // still wins.
   const frames: HidingFrame[] = [];
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-    if ((match.index ?? content.length) >= tagIndex) break;
     if (match[1] === '/') {
       frames.pop();
       continue;
     }
-    if (VOID_HTML_ELEMENTS.has(match[2].toLowerCase())) continue;
+    const tagName = match[2].toLowerCase();
+    if (tagName === 'img') {
+      const tag = match[0];
+      if (!isZeroSizedImage(tag)) {
+        frames.push({
+          terminal: hasVisibilityHidingClass(tag),
+          visibility: elementVisibility(tag),
+          color: elementColor(tag),
+        });
+        const hidden = subtreeHidden(frames, false);
+        frames.pop();
+        if (!hidden) return true;
+      }
+      continue;
+    }
+    if (VOID_HTML_ELEMENTS.has(tagName)) continue;
     frames.push({
       terminal: hasVisibilityHidingClass(match[0]),
       visibility: elementVisibility(match[0]),
       color: elementColor(match[0]),
     });
   }
-  frames.push({
-    terminal: hasVisibilityHidingClass(tag),
-    visibility: elementVisibility(tag),
-    color: elementColor(tag),
-  });
-  return subtreeHidden(frames, false);
+  return false;
 }
 
 function visibleText(content: string): string {
@@ -272,15 +280,7 @@ export function hasReadableContent(content: string): boolean {
   // nothing, so strip them before matching: a commented-out <img> must
   // neither satisfy readability itself nor donate a hidden ancestor.
   const withoutComments = stripRawTextBlocks(stripHtmlComments(content));
-  for (const match of matchMediaElements(withoutComments)) {
-    if (!/^<img\b/i.test(match[0])) continue;
-    const tag = match[0];
-    if (isZeroSizedImage(tag)) continue;
-    const index = match.index ?? withoutComments.length;
-    if (!hasHiddenAncestor(withoutComments, tag, index)) {
-      return true;
-    }
-  }
+  if (hasVisibleImage(withoutComments)) return true;
   const text = stripNonRenderingText(
     visibleText(withoutComments).replace(/&nbsp;/gi, ' ')
   ).trim();

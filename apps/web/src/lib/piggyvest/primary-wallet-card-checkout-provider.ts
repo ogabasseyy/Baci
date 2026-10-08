@@ -122,10 +122,14 @@ export function createPrimaryWalletCardCheckoutProvider(
           )
         )
           return { outcome: 'reconciliation_required' as const };
-        // Authoritatively abandoned checkouts terminalize: Paystack will never
-        // complete them, so preserving them as pending would pin the
-        // customer to a dead checkout with no path to retry.
-        if (String(data.status) === 'abandoned')
+        // Authoritatively dead checkouts terminalize: Paystack will never
+        // complete an abandoned or failed transaction, so preserving them
+        // would pin the customer to a dead checkout with no path to retry.
+        // (Evidence mismatches above still route to reconciliation.)
+        if (
+          String(data.status) === 'abandoned' ||
+          String(data.status) === 'failed'
+        )
           return { outcome: 'abandoned' as const };
         if (
           ['pending', 'ongoing', 'processing', 'queued'].includes(

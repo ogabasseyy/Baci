@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
 import {
   getPiggyvestPrimaryCapability,
-  isPrimaryWalletNotReady,
+  rollbackObservedCapabilityOnNotReady,
 } from '@/lib/piggyvest-primary-capability';
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
@@ -161,7 +161,7 @@ export async function fundPrimaryWalletCard(
     // charged the card, so keep it and surface the failure. Re-read on
     // not-ready because the request drops its own null-operation
     // placeholder, which must not block fallback either.
-    if (isPrimaryWalletNotReady(error)) {
+    if (rollbackObservedCapabilityOnNotReady(merchantId, error)) {
       const retained = await client
         .readPending({ merchantId, userId })
         .catch(() => pending);

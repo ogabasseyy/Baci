@@ -100,7 +100,9 @@ describe('goal-independent primary card collection', () => {
     { customer: { email: 'other@example.test' } },
     { metadata: {} },
     { id: Number.MAX_SAFE_INTEGER + 1 },
-    { status: 'failed' },
+    // { status: 'failed' } is not a mismatch: Paystack 'failed' is
+    // authoritatively dead and terminalizes as abandoned (covered by the
+    // 'terminalizes an authoritatively dead checkout (failed)' case).
   ])('rejects mismatched collection %j', async (override) => {
     expect(
       await setup(response(override)).provider.verify(fixture.intent)
@@ -123,11 +125,12 @@ describe('goal-independent primary card collection', () => {
       await setup(response({ status })).provider.verify(fixture.intent)
     ).toEqual({ outcome: 'pending' });
   });
-  it('terminalizes an authoritatively abandoned checkout', async () => {
+  it.each([
+    'abandoned',
+    'failed',
+  ])('terminalizes an authoritatively dead checkout (%s)', async (status) => {
     expect(
-      await setup(response({ status: 'abandoned' })).provider.verify(
-        fixture.intent
-      )
+      await setup(response({ status })).provider.verify(fixture.intent)
     ).toEqual({ outcome: 'abandoned' });
   });
   it('supports live verification only with production settings', async () => {

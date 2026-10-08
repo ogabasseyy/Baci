@@ -29,6 +29,24 @@ export function isPrimaryWalletNotReady(error: unknown): boolean {
   );
 }
 
+/**
+ * Rolls back the cached verdict when an authoritative NOT_READY arrives
+ * over a non-probe path (connect/reserve/status mutations). A cached
+ * positive verdict otherwise survives the server's explicit "unconfigured"
+ * signal, so every later sync gate keeps routing into primary and each new
+ * attempt earns another 503. Returns true when the error is authoritative
+ * (the caller falls back to the working legacy flow); transient and
+ * foreign failures leave the cache untouched and return false.
+ */
+export function rollbackObservedCapabilityOnNotReady(
+  merchantId: string | null | undefined,
+  error: unknown
+): boolean {
+  if (!isPrimaryWalletNotReady(error)) return false;
+  if (merchantId) observePiggyvestPrimaryCapability(merchantId, false);
+  return true;
+}
+
 const inflight = new Map<string, Promise<boolean>>();
 
 export function clearPiggyvestPrimaryCapabilityCache() {

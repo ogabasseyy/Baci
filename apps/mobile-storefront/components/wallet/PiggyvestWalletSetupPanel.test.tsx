@@ -36,7 +36,7 @@ it('explains when a read-only refresh still has no verified account', async () =
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
   fireEvent.press(
-    screen.getByRole('button', { name: 'Create PiggyVest account' })
+    screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
     expect(
@@ -74,7 +74,7 @@ it('keeps an uncertain creation pending and offers read-only refresh rather than
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
   fireEvent.press(
-    screen.getByRole('button', { name: 'Create PiggyVest account' })
+    screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() =>
     expect(

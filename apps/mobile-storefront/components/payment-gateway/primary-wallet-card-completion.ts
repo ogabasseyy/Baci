@@ -18,6 +18,10 @@ export function beginPrimaryWalletCardCompletion(
   input.clearPendingLoadTimeout();
   input.setPaymentStatus('processing');
   void (async () => {
+    let failureCause:
+      | 'incomplete_details'
+      | 'account_changed'
+      | 'recovery_unconfirmed' = 'recovery_unconfirmed';
     try {
       const userId = useAuthStore.getState().user?.id;
       if (
@@ -26,8 +30,10 @@ export function beginPrimaryWalletCardCompletion(
         !input.reference ||
         input.gateway !== 'paystack' ||
         !isPiggyvestPrimaryMerchant(input.merchantId)
-      )
+      ) {
+        failureCause = 'incomplete_details';
         throw new Error('Primary card funding details are incomplete.');
+      }
       const result = await client.recover({
         merchantId: input.merchantId,
         userId,
@@ -35,8 +41,10 @@ export function beginPrimaryWalletCardCompletion(
       });
       if (!input.refs.isMountedRef.current) return;
       const requireSameAccount = () => {
-        if (useAuthStore.getState().user?.id !== userId)
+        if (useAuthStore.getState().user?.id !== userId) {
+          failureCause = 'account_changed';
           throw new Error('The funding account changed.');
+        }
       };
       requireSameAccount();
       if (result.status !== 'completed') {
@@ -58,6 +66,11 @@ export function beginPrimaryWalletCardCompletion(
           router.replace(getWalletReturnHref(result.returnTo));
       });
     } catch {
+      // Redacted cause only: the error itself may carry provider or
+      // account details, so log the classification, never the value.
+      console.warn(
+        `[primary-wallet-card] completion failed: ${failureCause}`
+      );
       if (!input.refs.isMountedRef.current) return;
       input.refs.paymentCompletionStartedRef.current = false;
       input.setPaymentStatus('error');

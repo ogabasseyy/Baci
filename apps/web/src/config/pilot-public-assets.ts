@@ -67,7 +67,17 @@ export function assertPilotPublicAssets(
   labEnabled = process.env.BACI_IMAGE_PILOT_LAB === '1'
 ): void {
   const root = join(publicDir, '__pilot');
-  if (!directoryExists(root)) return;
+  if (!directoryExists(root)) {
+    // The sawFillers check below only runs when the root exists: an
+    // absent root must fail lab startup too, or deleting the whole tree
+    // bypasses the filler requirement the previous fix just added.
+    if (labEnabled) {
+      throw new Error(
+        'lab public pilot tree is missing the pilot root directory'
+      );
+    }
+    return;
+  }
   let sawFillers = false;
   for (const name of readdirSync(root)) {
     // The approved filler set is hash-pinned in BOTH modes: a stale or

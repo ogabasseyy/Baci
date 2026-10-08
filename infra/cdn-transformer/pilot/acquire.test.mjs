@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -703,5 +703,62 @@ test('a rejected inventory append rolls back only its own snapshot', async () =>
     await readFile(join(inputRoot, `${MERCHANT}-logo-2.png`)),
     PNG_BYTES
   );
+});
+
+test('a losing append never deletes a published snapshot', async () => {
+  // Overlap shape: this call wrote the snapshot file but lost the
+  // inventory-append race — the winner's record references these exact
+  // bytes. Rollback must keep the file, not orphan the record.
+  const inputRoot = await makeInputRoot();
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  const target = join(inputRoot, `${MERCHANT}-racer.png`);
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await acquireSnapshot({
+        allowPrivateHosts: true,
+        assetId: 'racer',
+        inputRoot,
+        inventoryPath,
+        merchantId: MERCHANT,
+        probe: stubProbe,
+        role: 'logo',
+        slot: 'header-logo',
+        url,
+      });
+    }
+  );
+  // The winner's record is published; the snapshot file is gone from
+  // disk (the loser's position: it must rewrite, then fail to append).
+  await rm(target);
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'image/png' });
+      response.end(PNG_BYTES);
+    },
+    async (url) => {
+      await assert.rejects(
+        () =>
+          acquireSnapshot({
+            allowPrivateHosts: true,
+            assetId: 'racer',
+            inputRoot,
+            inventoryPath,
+            merchantId: MERCHANT,
+            probe: stubProbe,
+            role: 'logo',
+            slot: 'header-logo',
+            url,
+          }),
+        /duplicate/
+      );
+    }
+  );
+  // The loser's rewrite restored the winner's bytes — and rollback kept
+  // them, so the published record still resolves.
+  assert.deepEqual(await readFile(target), PNG_BYTES);
 });
 

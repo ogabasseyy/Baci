@@ -132,6 +132,22 @@ export async function commitGeneration({
         'existing generation identity does not match the requested generation'
       );
     }
+    // Byte-identity before reuse: the id pins sharp/libvips versions but
+    // not codec builds or architecture, so a generation directory reused
+    // or copied from another machine can hold different lossy bytes under
+    // the same id. The job reports the freshly encoded tiers, so reusing
+    // mismatched retained bytes would certify output the gate never saw.
+    // Both manifests are zod-normalized, so the serialized ladders
+    // compare canonically. Mismatch fails closed: clear the foreign
+    // generation directory and re-run on one encoder build.
+    if (
+      JSON.stringify(loaded.manifest.tiers) !== JSON.stringify(valid.tiers)
+    ) {
+      throw new PilotManifestError(
+        'generation-misbound',
+        'existing generation bytes differ from the requested generation'
+      );
+    }
     // A failed reuse-path removal must surface: the caller skips its own
     // removal for reused generations, so a swallowed error would strand a
     // complete staging directory on every reuse until the disk floor stops

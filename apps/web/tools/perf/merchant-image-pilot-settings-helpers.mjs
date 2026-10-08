@@ -14,10 +14,15 @@ export function parseArgs(argv) {
 
 export function parseDimensions(value, name) {
   const match = /^(\d+)x(\d+)$/.exec(String(value ?? ''));
-  if (!match) {
+  const width = match ? Number(match[1]) : Number.NaN;
+  const height = match ? Number(match[2]) : Number.NaN;
+  // Zero is not a viewport: --expect-viewport=0x0 would certify an
+  // empty screenshot, so both axes must be positive like every other
+  // geometry expectation.
+  if (!match || width <= 0 || height <= 0) {
     throw new Error(`bad --${name}: ${value}`);
   }
-  return { height: Number(match[2]), width: Number(match[1]) };
+  return { height, width };
 }
 
 // A non-numeric DPR would make every geometry comparison NaN (false) and

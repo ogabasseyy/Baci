@@ -17,6 +17,8 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { MAX_INVENTORY_BYTES } from './constants.mjs';
+import { readUpToBytes } from './disk-guards.mjs';
 import {
   validateInventory,
   validateInventoryUniqueness,
@@ -193,26 +195,46 @@ export async function releaseInventoryLock(lockDir, token) {
   await rm(lockDir, { force: true, recursive: true });
 }
 
+// Bounded inventory read shared by the serialized appender and the
+// acquisition rollback guard: a corrupt or swapped-in giant file
+// rejects on size before parsing, never exhausts the caller.
+export async function readInventoryRecords(inventoryPath) {
+  const { bytes, truncated } = await readUpToBytes(
+    inventoryPath,
+    MAX_INVENTORY_BYTES
+  );
+  if (truncated) {
+    throw new PilotAcquireError(
+      `acquire: inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
+    );
+  }
+  let records;
+  try {
+    records = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
+  }
+  if (!Array.isArray(records)) {
+    throw new PilotAcquireError(`acquire: inventory is not an array`);
+  }
+  return records;
+}
+
 export async function appendInventoryRecord(inventoryPath, record) {
   // Serialized: two concurrent appends must never read the same array and
   // overwrite each other, silently dropping an asset.
   const lockDir = `${inventoryPath}.lock`;
   const token = await acquireInventoryLock(lockDir);
   try {
-    const existing = await readFile(inventoryPath, 'utf8').catch((error) => {
-      if (error?.code === 'ENOENT') {
-        return '[]';
-      }
-      throw error;
-    });
     let records;
     try {
-      records = JSON.parse(existing);
-    } catch {
-      throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
-    }
-    if (!Array.isArray(records)) {
-      throw new PilotAcquireError(`acquire: inventory is not an array`);
+      records = await readInventoryRecords(inventoryPath);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        records = [];
+      } else {
+        throw error;
+      }
     }
     records.push(record);
     const jobs = records.map((entry) => ({

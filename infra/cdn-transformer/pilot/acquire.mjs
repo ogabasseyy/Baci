@@ -4,13 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { parseCliArgs } from './cli-args.mjs';
 import {
+  EXTENSION_FOR_CONTENT_TYPE,
+  fetchBoundedBytes,
+} from './acquire-fetch.mjs';
+import {
   MAX_INPUT_BYTES,
   OP_TIMEOUT_MS,
   PILOT_UUID_PATTERN,
   ROLES,
 } from './constants.mjs';
 import { readUpToBytes } from './disk-guards.mjs';
-import { assertPublicFetchUrl } from './fetch-policy.mjs';
 import {
   ASSET_ID_PATTERN,
   resolveNewSnapshotPath,
@@ -19,15 +22,11 @@ import {
 import {
   appendInventoryRecord,
   PilotAcquireError,
+  readInventoryRecords,
 } from './inventory-store.mjs';
 import { parsePilotJob } from './job-schema.mjs';
 
-export const EXTENSION_FOR_CONTENT_TYPE = {
-  'image/avif': 'avif',
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
+export { EXTENSION_FOR_CONTENT_TYPE };
 
 const AcquireIdentitySchema = z
   .object({
@@ -52,77 +51,6 @@ const CONTENT_TYPE_FOR_DECODED_FORMAT = {
 async function defaultProbe() {
   const { probeImageFile } = await import('./encoder.mjs');
   return probeImageFile;
-}
-
-async function fetchBoundedBytes(
-  url,
-  { allowPrivateHosts, maxBytes, timeoutMs }
-) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new PilotAcquireError(`acquire: invalid URL`);
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new PilotAcquireError(`acquire: only http(s) URLs are allowed`);
-  }
-  // Loopback fixtures (node:http test servers) opt in explicitly; the
-  // operator CLI never does, so a mistyped inventory URL fails closed.
-  if (!allowPrivateHosts) {
-    assertPublicFetchUrl(url);
-  }
-  let response;
-  try {
-    response = await fetch(url, {
-      redirect: 'error',
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (error) {
-    throw new PilotAcquireError(
-      `acquire: fetch failed or timed out after ${timeoutMs}ms (${error?.name ?? 'fetch'})`
-    );
-  }
-  if (!response.ok) {
-    throw new PilotAcquireError(
-      `acquire: origin returned HTTP ${response.status}`
-    );
-  }
-  const contentType = (response.headers.get('content-type') ?? '')
-    .split(';', 1)[0]
-    .trim()
-    .toLowerCase();
-  if (!Object.hasOwn(EXTENSION_FOR_CONTENT_TYPE, contentType)) {
-    await response.body?.cancel?.().catch(() => undefined);
-    throw new PilotAcquireError(
-      `acquire: unsupported content-type "${contentType}"`
-    );
-  }
-  if (!response.body) {
-    throw new PilotAcquireError('acquire: origin returned an empty body');
-  }
-  const chunks = [];
-  let total = 0;
-  const reader = response.body.getReader();
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      total += value.length;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        throw new PilotAcquireError(
-          `acquire: body exceeds ${maxBytes} byte limit`
-        );
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return { bytes: Buffer.concat(chunks), contentType };
 }
 
 export async function acquireSnapshot(options) {
@@ -195,6 +123,28 @@ export async function acquireSnapshot(options) {
     await writeFile(target, bytes, { flag: 'wx' });
     wroteSnapshot = true;
   }
+  // Overlap guard: two acquisitions for the same asset can interleave so
+  // that this call wrote the snapshot but lost the inventory-append race
+  // — the winner's published record references these exact bytes.
+  // Rollback unlinks only when no published record references the target;
+  // records are append-only, so a reference present at check time cannot
+  // vanish before the unlink. An unreadable inventory keeps the file
+  // (orphan bytes a retry reuses or flags as differing, never a record
+  // pointing at a missing source).
+  async function rollbackOwnSnapshot() {
+    if (inventoryPath !== undefined) {
+      const records = await readInventoryRecords(inventoryPath).catch(
+        () => null
+      );
+      if (
+        records === null ||
+        records.some((entry) => entry?.sourcePath === fileName)
+      ) {
+        return;
+      }
+    }
+    await unlink(target).catch(() => undefined);
+  }
   const probeFile = probe ?? (await defaultProbe());
   let geometry;
   try {
@@ -204,7 +154,7 @@ export async function acquireSnapshot(options) {
     // call wrote, never a pre-existing snapshot, then rethrow the original
     // probe error (cleanup best-effort).
     if (wroteSnapshot) {
-      await unlink(target).catch(() => undefined);
+      await rollbackOwnSnapshot();
     }
     throw error;
   }
@@ -213,7 +163,7 @@ export async function acquireSnapshot(options) {
   const decodedContentType = CONTENT_TYPE_FOR_DECODED_FORMAT[geometry?.format];
   if (decodedContentType !== contentType) {
     if (wroteSnapshot) {
-      await unlink(target).catch(() => undefined);
+      await rollbackOwnSnapshot();
     }
     throw new PilotAcquireError(
       `acquire: origin labeled bytes "${contentType}" but they decode as "${geometry?.format ?? 'unknown'}"`
@@ -269,7 +219,7 @@ export async function acquireSnapshot(options) {
     return { ...record, inventoryCount };
   } catch (error) {
     if (wroteSnapshot) {
-      await unlink(target).catch(() => undefined);
+      await rollbackOwnSnapshot();
     }
     throw error;
   }

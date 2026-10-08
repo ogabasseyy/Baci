@@ -26,6 +26,12 @@ describe('non-lab public assets gate', () => {
   it('permits absent staging and verified committed fillers', () => {
     const dir = root();
     expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+    // Lab mode requires the tree itself: an absent root must fail
+    // startup, or deleting the whole directory bypasses the filler
+    // requirement.
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /missing the pilot root directory/
+    );
     cpSync(
       join(process.cwd(), 'public/__pilot/fillers'),
       join(dir, '__pilot/fillers'),

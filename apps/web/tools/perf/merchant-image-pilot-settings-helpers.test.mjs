@@ -6,6 +6,7 @@ import {
   findCacheHits,
   harUserAgent,
   parseArgs,
+  parseDimensions,
   parseNonNegativeNumber,
   parsePositiveInteger,
   parsePositiveNumber,
@@ -121,6 +122,19 @@ describe('merchant-image-pilot-settings helpers', () => {
     for (const bad of ['abc', '', '0', '-2', 'NaN', 'Infinity']) {
       expect(() => parsePositiveNumber(bad, 'expect-dpr')).toThrow(
         /bad --expect-dpr/
+      );
+    }
+  });
+
+  it('requires positive viewport axes, never zero', () => {
+    // --expect-viewport=0x0 would certify an empty screenshot.
+    expect(parseDimensions('375x667', 'expect-viewport')).toEqual({
+      height: 667,
+      width: 375,
+    });
+    for (const bad of ['0x0', '0x667', '375x0', 'axb', '', '375']) {
+      expect(() => parseDimensions(bad, 'expect-viewport')).toThrow(
+        /bad --expect-viewport/
       );
     }
   });

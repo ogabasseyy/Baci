@@ -268,3 +268,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low id-cap FIXED: comparison-facts refresh capped survivors to the tray capacity (4) after dedupe/UUID-filter, with a 6-ids→4 test.
 - Muse low capacity (3 vs 4): repeat of the line-7 adjudication (intentional, session-local presentation difference).
 - Muse medium assurance: repeat of the Rounds 23-31 adjudication.
+
+## Round 41 (Codex clean on 76d0c4aac6; Muse 2 med + 2 low — all 4 adjudicated; inventory regen)
+
+- Codex: "Didn't find any major issues. Swish!" with zero inline comments on 76d0c4aac6.
+- Muse medium namespace-fallback adjudicated: audited all V2ComparisonScope/V2ComparisonProvider callers — exactly 2 (category + search page-content), both pass storageNamespace={merchant.id}. The shared-key fallback never triggers in production; bleed needs a future caller to omit the prop. No code change.
+- Muse low intake-substrings adjudicated: message matching is established codebase practice (discount-codes, receipts, webhooks routes) and the 404/409 mapping is pinned by route tests. A migration for distinct codes is disproportionate for the hypothetical rewording.
+- Muse medium assurance + low capacity: repeats of the Rounds 23-31 and line-7 adjudications.
+- CI: web shard 4 failed only on inventory drift from Round 40 source changes; regenerated via sanctioned CLI (568 rows, sha c8d77e1b…) + pin update.

@@ -235,12 +235,11 @@ async function searchTransactionReview(
     };
   }
 
-  // The missing-costs tab filters after the server cap, so a page of newer
-  // complete-cost matches would otherwise hide an older missing-cost match.
-  // Page the ranked candidates until 100 post-tab orders accumulate or the
-  // source runs dry. A mid-paging failure throws rather than presenting a
-  // partial set as final.
+  // The missing-costs tab filters after the server cap, so page the ranked
+  // candidates until 100 post-tab orders accumulate or the source runs dry.
+  // A mid-paging failure throws rather than presenting a partial set.
   const accumulated: TransactionReviewOrder[] = [];
+  const seenOrderIds = new Set<string>();
   let orderIds = firstPage.orderIds;
   for (
     let pageIndex = 0;
@@ -252,10 +251,8 @@ async function searchTransactionReview(
     }
 
     // Tab before refinement: refinement must judge the missing-cost items
-    // the tab keeps, not items the tab is about to strip. Otherwise a mixed
-    // order (matching complete-cost item, non-matching missing-cost item)
-    // would consume cap space and then vanish in the screen's final search
-    // filter, hiding older genuine matches.
+    // the tab keeps. Otherwise a mixed order would consume cap space and
+    // then vanish in the screen's final search filter.
     const pageOrders = filterTransactionOrders(
       filterOrdersForTransactionTab(
         await hydrateSearchIds(merchantId, orderIds),
@@ -263,13 +260,19 @@ async function searchTransactionReview(
       ),
       search
     );
-    // A full page carries the peek row, so more candidates may exist; a
-    // short page means the source is exhausted. Either way, qualifying
-    // orders dropped for cap space are truncation, not a complete set.
+    // A full page carries the peek row; a short page means the source is
+    // exhausted. Rank shifts between pages can resurface ids, so drop
+    // repeats: they must neither render twice nor consume the cap. Only
+    // fresh orders dropped for cap space count toward truncation.
+    const freshOrders = pageOrders.filter((order) => {
+      const seen = seenOrderIds.has(order.id);
+      seenOrderIds.add(order.id);
+      return !seen;
+    });
     const remaining = TRANSACTION_REVIEW_SEARCH_LIMIT - accumulated.length;
-    accumulated.push(...pageOrders.slice(0, remaining));
+    accumulated.push(...freshOrders.slice(0, remaining));
     const pageFull = orderIds.length > TRANSACTION_REVIEW_SEARCH_LIMIT;
-    const truncated = pageFull || pageOrders.length > remaining;
+    const truncated = pageFull || freshOrders.length > remaining;
     if (!pageFull || accumulated.length >= TRANSACTION_REVIEW_SEARCH_LIMIT) {
       return { orders: accumulated, searchTruncated: truncated };
     }

@@ -19,10 +19,10 @@ import { useAnalyticsOverview } from '@/hooks/useAnalyticsOverview';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useCurrentDate } from '@/hooks/useCurrentDate';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useMonthlyTransactionCount } from '@/hooks/useMonthlyTransactionCount';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEditor';
 import { useTransactionReview } from '@/hooks/useTransactionReview';
+import { useTransactionsSummary } from '@/hooks/useTransactionsSummary';
 import { resolveAnalyticsDateRange } from '@/lib/analytics-period';
 import { parseTransactionReviewRangeParams } from '@/lib/parse-transaction-review-range-params';
 import {
@@ -59,7 +59,6 @@ export default function TransactionsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 250);
   const searching = Boolean(debouncedSearchQuery.trim());
-  const monthlyCountQuery = useMonthlyTransactionCount(currentMonthAnchor);
   const {
     data: orders = [],
     isLoading,
@@ -71,35 +70,17 @@ export default function TransactionsScreen() {
     search: searching ? debouncedSearchQuery : undefined,
     tab: activeTab,
   });
-  const {
-    data: rangeOrders = [],
-    error: rangeSummaryError,
-    isPending: rangeSummaryPending,
-  } = useTransactionReview(range, {
-    enabled: !searching,
-  });
+  const { refetchMonthlyCount, summary } = useTransactionsSummary(
+    range,
+    searching,
+    currentMonthAnchor
+  );
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
     formatCurrency,
   });
 
-  const summary = {
-    // The range query has no data on a cold cache (or while disabled during
-    // search): show a placeholder rather than a 0 that reads as final. A
-    // failed range query is unavailable, even when the search succeeds.
-    missingCosts: rangeSummaryError
-      ? 'Unavailable'
-      : rangeSummaryPending
-        ? '--'
-        : rangeOrders.reduce(
-            (count, order) => count + order.missingCostCount,
-            0
-          ),
-    transactions: monthlyCountQuery.error
-      ? 'Unavailable'
-      : (monthlyCountQuery.data ?? '--'),
-  };
   const estimatedProfitThisMonthLabel = profitError
     ? 'Unavailable'
     : profitAnalytics
@@ -244,7 +225,7 @@ export default function TransactionsScreen() {
             isRetrying={isRetrying}
             onRetry={() => {
               void refetch();
-              void monthlyCountQuery.refetch();
+              void refetchMonthlyCount();
             }}
             searching={searching}
             searchTruncated={searchTruncated}

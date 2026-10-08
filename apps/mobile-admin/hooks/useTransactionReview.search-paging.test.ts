@@ -213,4 +213,64 @@ describe('useTransactionReview search tab paging', () => {
     expect(result.current.searchTruncated).toBe(false);
     expect(mocks.searchTransactionReviewOrders).toHaveBeenCalledTimes(2);
   });
+
+  it('drops ids that resurface when ranks shift between pages', async () => {
+    const pageOneIds = Array.from(
+      { length: 101 },
+      (_, index) => `new-${index}`
+    );
+    // A concurrent insert ahead of the boundary shifts the ranking: the
+    // short second page repeats 10 first-page ids alongside 10 new ones.
+    const pageTwoIds = [
+      ...pageOneIds.slice(0, 10),
+      ...Array.from({ length: 10 }, (_, index) => `old-${index}`),
+    ];
+    mocks.searchTransactionReviewOrders.mockImplementation(
+      ({ offset = 0 }: { offset?: number }) =>
+        Promise.resolve({
+          error: null,
+          errorKind: null,
+          orderIds: offset === 0 ? pageOneIds : pageTwoIds,
+        })
+    );
+    const row = (id: string, costPrice: number | null) => ({
+      cancelled_at: null,
+      customerEmail: null,
+      customerName: 'Ada',
+      customerPhone: null,
+      id,
+      items: [{ costPrice, id: `${id}-item`, profit: null, searchText: 'ada' }],
+      missingCostCount: costPrice == null ? 1 : 0,
+      orderNumber: id,
+      paymentMethod: 'card',
+      searchText: 'ada lovelace',
+      shipping_status: 'pending',
+    });
+    mocks.fetchTransactionReviewRows.mockImplementation(
+      ({ orderIds = [] }: { orderIds?: string[] }) =>
+        Promise.resolve({
+          data: orderIds.map((id: string) => {
+            const pageTwo = orderIds.includes('old-0');
+            const pageOneComplete =
+              !pageTwo && id.startsWith('new-') && Number(id.slice(4)) >= 60;
+            return row(id, pageOneComplete ? 4000 : null);
+          }),
+          error: null,
+        })
+    );
+
+    const { result } = renderHook(
+      () =>
+        useTransactionReview(undefined, {
+          search: 'ada',
+          tab: 'missing-costs',
+        }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => expect(result.current.data).toHaveLength(70));
+    const ids = result.current.data?.map((order) => order.id) ?? [];
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(result.current.searchTruncated).toBe(false);
+  });
 });

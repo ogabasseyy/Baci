@@ -26,18 +26,21 @@ export async function fundPrimaryWalletCard(
   }
   active = true;
   input.setIsFundPending(true);
+  let pending: Awaited<ReturnType<typeof client.readPending>> = null;
   try {
-    // Confirm the server capability before writing any pending funding
-    // state: when primary is unconfigured the caller falls back to the
-    // working legacy top-up instead of stranding a primary-only pending op.
-    if (!(await getPiggyvestPrimaryCapability(merchantId))) {
+    // Inspect the locally saved operation before probing server
+    // capability: readPending never touches the network, and a saved
+    // checkout may already have charged the card. Only when no operation
+    // exists is it safe to report primary unavailable so the caller can
+    // run the legacy top-up instead.
+    pending = await client.readPending({ merchantId, userId });
+    if (!pending && !(await getPiggyvestPrimaryCapability(merchantId))) {
       const unavailable = new Error(
         'Primary card funding is unavailable.'
       ) as Error & { code: string };
       unavailable.code = 'PRIMARY_CARD_NOT_READY';
       throw unavailable;
     }
-    const pending = await client.readPending({ merchantId, userId });
     let result: Awaited<ReturnType<typeof client.start>>;
     if (pending) result = await client.recover({ merchantId, userId });
     else {
@@ -100,9 +103,10 @@ export async function fundPrimaryWalletCard(
         'This operation is saved. Check again later; do not start another card charge.'
       );
   } catch (error) {
-    // Unconfigured primary is the caller's cue to run the legacy top-up;
-    // rethrow without an alert so the fallback stays invisible.
-    if (isPrimaryWalletNotReady(error)) throw error;
+    // Unconfigured primary is the caller's cue to run the legacy top-up,
+    // but only when no saved operation exists: a found checkout may
+    // already have charged the card, so keep it and surface the failure.
+    if (!pending && isPrimaryWalletNotReady(error)) throw error;
     Alert.alert(
       'Card funding could not be confirmed',
       'Any pending operation is retained. Check again before attempting another charge.'

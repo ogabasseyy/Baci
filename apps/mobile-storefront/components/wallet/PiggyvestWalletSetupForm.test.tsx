@@ -19,10 +19,24 @@ it('requires BVN and explicit consent before submitting', () => {
     />
   );
   fireEvent.press(
-    screen.getByRole('button', { name: 'Create PiggyVest account' })
+    screen.getByRole('button', { name: 'Create account number' })
   );
   expect(onSubmit).not.toHaveBeenCalled();
   expect(screen.getByText('Enter a valid 11-digit BVN.')).toBeOnTheScreen();
+});
+
+it('exposes the visible button label as its accessible name', () => {
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={jest.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: 'Create account number' })
+  ).toBeOnTheScreen();
+  expect(screen.getByText('Create account number')).toBeOnTheScreen();
 });
 
 it('clears sensitive input and shows a safe inline error on failure', async () => {
@@ -39,7 +53,7 @@ it('clears sensitive input and shows a safe inline error on failure', async () =
   fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
   fireEvent.press(screen.getByRole('checkbox'));
   fireEvent.press(
-    screen.getByRole('button', { name: 'Create PiggyVest account' })
+    screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
   expect(screen.getByLabelText('BVN').props.value).toBe('');

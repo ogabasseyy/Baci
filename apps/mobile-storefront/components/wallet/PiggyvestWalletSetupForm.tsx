@@ -105,7 +105,7 @@ export function PiggyvestWalletSetupForm({
       ) : null}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Create PiggyVest account"
+        accessibilityLabel="Create account number"
         accessibilityState={{ disabled: busy }}
         disabled={busy}
         onPress={submit}

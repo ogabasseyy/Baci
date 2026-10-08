@@ -1,5 +1,4 @@
 import { PiggyvestPrimarySavingsSchemas as schemas } from '@/schemas/piggyvest-primary-savings';
-import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
 const client = createStorefrontCustomerApiClient();
@@ -8,18 +7,14 @@ export async function recoverPiggyvestPrimarySavings(input: {
   goalId: string;
 }) {
   const parsed = schemas.recoveryRequest.parse(input);
-  let payload: unknown;
-  try {
-    payload = await client.fetchJson({
-      path: `/api/storefront/customer/savings/primary-transfer/pending?merchantId=${encodeURIComponent(parsed.merchantId)}&goalId=${encodeURIComponent(parsed.goalId)}`,
-      method: 'GET',
-    });
-  } catch (error) {
-    // Unconfigured primary has no pending operations to recover; report
-    // none instead of surfacing a spurious recovery error.
-    if (isPrimaryWalletNotReady(error)) return null;
-    throw error;
-  }
+  // Never translate a failed lookup into "no operation": the pending
+  // endpoint answers SAVINGS_NOT_READY without consulting durable state,
+  // so only a successful response may clear the client operation context.
+  // Callers treat a throw as unknown and must block new contributions.
+  const payload: unknown = await client.fetchJson({
+    path: `/api/storefront/customer/savings/primary-transfer/pending?merchantId=${encodeURIComponent(parsed.merchantId)}&goalId=${encodeURIComponent(parsed.goalId)}`,
+    method: 'GET',
+  });
   const response = schemas.recoveryResponse.safeParse(payload);
   if (
     !response.success ||

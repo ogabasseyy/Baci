@@ -118,10 +118,39 @@ it('rethrows unconfigured primary silently so the caller can run the legacy top-
   await expect(fundPrimaryWalletCard(input)).rejects.toMatchObject({
     code: 'PRIMARY_CARD_NOT_READY',
   });
-  expect(mockRead).not.toHaveBeenCalled();
+  expect(mockRead).toHaveBeenCalledWith({
+    merchantId: input.activeMerchantId,
+    userId: input.user.id,
+  });
   expect(mockStart).not.toHaveBeenCalled();
   expect(alert).not.toHaveBeenCalled();
   expect(input.setIsFundPending).toHaveBeenLastCalledWith(false);
+});
+it('recovers a saved checkout before trusting an unavailable capability probe', async () => {
+  mockCapability.mockResolvedValue(false);
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockResolvedValue({ status: 'custody_pending' });
+  await fundPrimaryWalletCard(input);
+  expect(mockRecover).toHaveBeenCalledWith({
+    merchantId: input.activeMerchantId,
+    userId: input.user.id,
+  });
+  expect(mockStart).not.toHaveBeenCalled();
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Card funding pending',
+    expect.stringContaining('saved')
+  );
+});
+it('keeps a saved checkout instead of falling back when recovery reports unavailable', async () => {
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PRIMARY_CARD_NOT_READY' })
+  );
+  await fundPrimaryWalletCard(input);
+  expect(Alert.alert).toHaveBeenCalledWith(
+    'Card funding could not be confirmed',
+    expect.stringContaining('retained')
+  );
 });
 it('resumes the stored real savings handoff only after completed restart recovery', async () => {
   const returnTo =

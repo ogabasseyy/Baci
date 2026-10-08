@@ -98,6 +98,36 @@ it('shows a status-check failure, not a failed charge, and permits read-only ret
   expect(input.setPaymentStatus).toHaveBeenLastCalledWith('pending');
   expect(router.replace).not.toHaveBeenCalled();
 });
+it.each([
+  ['account_changed', '33333333-3333-4333-8333-333333333333', 'completed'],
+  ['recovery_unconfirmed', '11111111-1111-4111-8111-111111111111', 'error'],
+])(
+  'logs a redacted %s cause without provider detail',
+  async (cause, switchTo, outcome) => {
+    const input = fixture();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      if (outcome === 'error') {
+        mockRecover.mockRejectedValueOnce(
+          new Error('Network unavailable token=secret')
+        );
+      } else {
+        mockRecover.mockImplementationOnce(async () => {
+          mockUserId = switchTo;
+          return { status: 'completed', returnTo: '/wallet' };
+        });
+      }
+      beginPrimaryWalletCardCompletion(input);
+      await flush();
+      expect(warn).toHaveBeenCalledWith(
+        `[primary-wallet-card] completion failed: ${cause}`
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
+    } finally {
+      warn.mockRestore();
+    }
+  }
+);
 it('refreshes and resumes only authoritative completed custody without legacy confirmation', async () => {
   const input = fixture();
   mockRecover.mockResolvedValue({ status: 'completed', returnTo: '/wallet' });

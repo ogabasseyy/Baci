@@ -174,6 +174,10 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
+  // The union gate reads every secret var directly; pin the rotation vars
+  // empty so each test's PVB_SECRET_KEY stub fully decides the outcome.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_SECRETS', '');
+  vi.stubEnv('PIGGYVEST_WEBHOOK_SECRET_PREVIOUS', '');
 });
 
 describe('GET reachability probe', () => {

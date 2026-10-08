@@ -13,14 +13,13 @@ import { dispatchPrimaryCardSignedCustodyIntake } from '@/lib/piggyvest/primary-
 import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-inflow-dispatch';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
-import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
 import {
   type RecordPiggyvestEventInput,
   recordPiggyvestEvent,
 } from '@/lib/piggyvest/webhook-inbox';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
-import { collectPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
+import { verifyPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
 import {
   type PiggyvestWebhookEvent,
   piggyvestWebhookEventSchema,
@@ -36,12 +35,9 @@ import {
  *   `x-pvb-signature`, verified over the exact wire bytes.
  *
  * Status mapping:
- * - No secret configured anywhere -> 503 (fail closed; nothing is
- *   accepted).
+ * - No secret configured -> 503 (fail closed; nothing is accepted).
  * - Bad/missing signature -> 200 without processing (docs behavior;
- *   forged traffic must not consume the 10 retries). Verification spans
- *   the legacy secret plus every primary inbox's current and retained
- *   keys, so rotation never strands a signed delivery at this gate.
+ *   forged traffic must not consume the 10 retries).
  * - Authentic but unparseable/unknown/conflicting event -> quarantine
  *   (durable receipt of a non-retryable observation) -> 200. Retries
  *   cannot fix these, so they must not burn the 10 attempts; nothing
@@ -149,14 +145,6 @@ async function quarantineAndAck(
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const secrets = collectPiggyvestWebhookSecrets();
-  if (secrets.length === 0) {
-    return NextResponse.json(
-      { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
-      { status: 503, headers: noStore }
-    );
-  }
-
   // Bounded read (64 KiB / 5 s) before anything else: the edge proxy only
   // rejects declared Content-Lengths over 2 MiB, so a lengthless stream must
   // not be buffered unboundedly ahead of signature validation.
@@ -181,21 +169,20 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
   const rawBody: Buffer = bounded.body;
   const signature = request.headers.get('x-pvb-signature');
-  // Accept any secret a downstream intake trusts (current or retained):
-  // the matched secret flows on so re-verifying handlers agree.
-  const matchedSecret = secrets.find((secret) =>
-    verifyPiggyvestPayloadSignature({
-      payload: rawBody,
-      signature,
-      secret,
-    })
-  );
-  if (!matchedSecret) {
+  const verification = verifyPiggyvestWebhookSecrets({ rawBody, signature });
+  if (verification.status === 'unconfigured') {
+    return NextResponse.json(
+      { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
+      { status: 503, headers: noStore }
+    );
+  }
+  if (verification.status === 'invalid') {
     return NextResponse.json(
       { received: false, code: 'PIGGYVEST_INVALID_SIGNATURE' },
       { status: 200, headers: noStore }
     );
   }
+  const matchedSecret = verification.secret;
 
   let jsonPayload: unknown;
   try {

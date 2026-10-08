@@ -1,7 +1,6 @@
-import { z } from 'zod';
 import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
-import { CustomerRowSchema, TransactionRowSchema } from '@/lib/validation';
+import { CustomerRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
 import {
   readPrimaryFundingAccount,
@@ -23,50 +22,10 @@ import {
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
-
-const WalletTransactionDataSchema = TransactionRowSchema.omit({
-  amount: true,
-  id: true,
-}).extend({
-  amount: z.union([z.number(), z.string()]),
-  id: z.string(),
-});
-
-function coerceDatabaseNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      return null;
-    }
-
-    const numericValue = Number(trimmedValue);
-    return Number.isFinite(numericValue) ? numericValue : null;
-  }
-
-  return null;
-}
-
-function normalizeWalletTransaction(row: unknown): Transaction | null {
-  const validation = WalletTransactionDataSchema.safeParse(row);
-  if (!validation.success) {
-    return null;
-  }
-
-  const amount = coerceDatabaseNumber(validation.data.amount);
-  if (amount === null) {
-    return null;
-  }
-
-  return {
-    ...validation.data,
-    amount,
-    description: validation.data.description ?? '',
-  };
-}
+import {
+  coerceDatabaseNumber,
+  normalizeWalletTransaction,
+} from './wallet-transaction-normalize';
 
 function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   const safeLoyaltyPoints = coerceDatabaseNumber(loyaltyPoints) ?? 0;

@@ -1,12 +1,13 @@
+import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { CONFIG } from '@/lib/config';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
-import { resolveNativeAssuranceDefault } from './cart-assurance-policy';
 import {
   createCartLineId,
   isSameCartLine,
@@ -84,11 +85,16 @@ export const useCartStore = create<CartState>()(
           }
           let items: CartItem[];
           let lineSequence = state.lineSequence;
+          const assurancePolicy = {
+            smartCartProEnabled: CONFIG.ENABLE_SMART_CART_PRO,
+            merchantSlug: CONFIG.MERCHANT_SLUG,
+          };
           if (existingIndex >= 0) {
             items = [...state.items];
             items[existingIndex] = mergeExistingCartItem(
               items[existingIndex],
-              itemToAdd
+              itemToAdd,
+              assurancePolicy
             );
           } else {
             lineSequence = state.lineSequence + 1;
@@ -96,9 +102,16 @@ export const useCartStore = create<CartState>()(
               ...state.items,
               {
                 ...itemToAdd,
-                // Ogabassey-scoped Smart Cart Pro default (see policy).
-                hasAssurance:
-                  itemToAdd.hasAssurance ?? resolveNativeAssuranceDefault(),
+                hasAssurance: resolveAddedLineAssurance(
+                  itemToAdd.hasAssurance,
+                  undefined,
+                  {
+                    ...assurancePolicy,
+                    hasQuizVoucher: Boolean(
+                      itemToAdd.voucher_award_id || itemToAdd.voucher_token
+                    ),
+                  }
+                ),
                 id: createCartLineId(itemToAdd, lineSequence),
               },
             ];

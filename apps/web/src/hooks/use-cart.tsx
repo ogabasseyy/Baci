@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { resolveAddedLineAssurance } from '@/hooks/cart/cart-assurance-policy';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
@@ -21,6 +20,7 @@ import {
   createCartHash,
   validateStorefrontCart,
 } from '@/hooks/cart/storefront-cart-validation';
+import { resolveAddedLineAssurance } from '../../../../packages/shared/src/lib/assurance-policy';
 
 // Re-exported so existing importers keep working; the helper lives in ./cart/cart-persistence.
 export { clearCartStorage } from '@/hooks/cart/cart-persistence';
@@ -414,7 +414,14 @@ export const CartProvider = ({
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
             item,
-            { enableSmartCartPro, merchantSlug }
+            {
+              smartCartProEnabled: enableSmartCartPro,
+              merchantSlug,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId &&
+                  normalizedOptions?.quizVoucherToken
+              ),
+            }
           ),
         };
         return newCart;
@@ -444,7 +451,14 @@ export const CartProvider = ({
           hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
             undefined,
-            { enableSmartCartPro, merchantSlug }
+            {
+              smartCartProEnabled: enableSmartCartPro,
+              merchantSlug,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId &&
+                  normalizedOptions?.quizVoucherToken
+              ),
+            }
           ),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },

@@ -83,7 +83,8 @@ describe('cart-line helpers', () => {
           price: 210000,
           quantity: 2,
           max_quantity: 3,
-        }
+        },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
       )
     ).toMatchObject({
       id: 'line-1',
@@ -94,5 +95,26 @@ describe('cart-line helpers', () => {
       hasAssurance: true,
       assuranceRate: 0.05,
     });
+  });
+
+  it('forces voucher merges to opt out without an explicit choice', () => {
+    expect(
+      mergeExistingCartItem(
+        { ...baseItem, voucher_award_id: 'award-1', hasAssurance: true },
+        { ...incomingBaseItem, voucher_award_id: 'award-1' },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
+      )
+    ).toMatchObject({ quantity: 1, hasAssurance: false });
+    expect(
+      mergeExistingCartItem(
+        { ...baseItem, voucher_award_id: 'award-1', hasAssurance: true },
+        {
+          ...incomingBaseItem,
+          voucher_award_id: 'award-1',
+          hasAssurance: true,
+        },
+        { smartCartProEnabled: true, merchantSlug: 'ogabassey' }
+      )
+    ).toMatchObject({ quantity: 1, hasAssurance: true });
   });
 });

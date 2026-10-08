@@ -168,4 +168,29 @@ describe('StorefrontCartProvider', () => {
     expect(result.current.cart[0].hasAssurance).toBe(false);
     expect(result.current.cartTotal).toBe(100);
   });
+
+  it('forces quiz voucher lines to opt out without an explicit choice', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() =>
+      result.current.addToCart(mockProduct, 1, {
+        quizAwardId: 'award-1',
+        quizVoucherToken: 'token-1',
+      })
+    );
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+    act(() =>
+      result.current.addToCart({ ...mockProduct, id: 'prod-2' }, 1, {
+        quizAwardId: 'award-2',
+        quizVoucherToken: 'token-2',
+        hasAssurance: true,
+      })
+    );
+    expect(result.current.cart[1].hasAssurance).toBe(true);
+  });
 });

@@ -1,3 +1,4 @@
+import { resolveAddedLineAssurance } from '@baci/shared/lib';
 import type { CartItem } from './cart-store.types';
 
 export function createCartLineId(
@@ -53,7 +54,11 @@ function hasMatchingVoucherIdentifier(
 
 export function mergeExistingCartItem(
   existingItem: CartItem,
-  incomingItem: Omit<CartItem, 'id'>
+  incomingItem: Omit<CartItem, 'id'>,
+  policy: {
+    smartCartProEnabled: boolean;
+    merchantSlug: string | null | undefined;
+  }
 ): CartItem {
   const newQuantity = existingItem.quantity + incomingItem.quantity;
   const isVoucherLine =
@@ -70,9 +75,11 @@ export function mergeExistingCartItem(
         : newQuantity,
     negotiatedPrice: existingItem.negotiatedPrice,
     negotiationStatus: existingItem.negotiationStatus,
-    // An explicit incoming choice wins; an absent one preserves the stored
-    // choice so silent adds never flip an opt-out.
-    hasAssurance: incomingItem.hasAssurance ?? existingItem.hasAssurance,
+    hasAssurance: resolveAddedLineAssurance(
+      incomingItem.hasAssurance,
+      existingItem,
+      { ...policy, hasQuizVoucher: isVoucherLine }
+    ),
     assuranceRate: existingItem.assuranceRate,
   };
 }

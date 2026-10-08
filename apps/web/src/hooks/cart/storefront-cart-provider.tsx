@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
+import { resolveAddedLineAssurance } from '../../../../../packages/shared/src/lib/assurance-policy';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
-import { resolveAddedLineAssurance } from './cart-assurance-policy';
 import { CartContext } from './cart-context';
 import {
   DEFAULT_ASSURANCE_RATE,
@@ -401,8 +401,12 @@ export function StorefrontCartProvider({
             normalizedOptions?.hasAssurance,
             existingItem,
             {
-              enableSmartCartPro,
+              smartCartProEnabled: enableSmartCartPro,
               merchantSlug: merchantSlugRef.current,
+              hasQuizVoucher: Boolean(
+                normalizedOptions?.quizAwardId &&
+                  normalizedOptions?.quizVoucherToken
+              ),
             }
           ),
         };
@@ -434,8 +438,12 @@ export function StorefrontCartProvider({
               normalizedOptions?.hasAssurance,
               undefined,
               {
-                enableSmartCartPro,
+                smartCartProEnabled: enableSmartCartPro,
                 merchantSlug: merchantSlugRef.current,
+                hasQuizVoucher: Boolean(
+                  normalizedOptions?.quizAwardId &&
+                    normalizedOptions?.quizVoucherToken
+                ),
               }
             ),
             assuranceRate: DEFAULT_ASSURANCE_RATE,

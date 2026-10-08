@@ -370,6 +370,17 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse LOW randomUUID FIXED: request ids now use createProductRequestId (randomUUID → getRandomValues v4 → Math.random v4), always emitting server-valid UUIDs. Regression test simulates undefined randomUUID and asserts v4 shape + sent status. The throw-recovery test still passes (throw path unchanged).
 - Muse low assist-budget: dev-gated (lines 24-28) + explicit flag; ceiling tightening is a pre-enablement product decision.
 
+## Round 54 (Muse 1 med + 1 low on ad830af0a5 — both adjudicated; Codex pending)
+
+- Muse med assurance-disclosure: repeat (itemization + merge/rehydration evidence on record; row copy quoted by Muse itself).
+- Muse low intake-rotation: PR-disclosed repeat.
+
+## Round 55 (Codex 4 P1 + 1 P2 on ad830af0a5 — all fixed)
+
+- CX-104/105/106/107 FIXED together: single shared `resolveAddedLineAssurance` in packages/shared (one export) with the voucher opt-out rule; both per-app policy files deleted (callers updated: 4 web sites + native store/merge). Shared colocated test (14 cases incl. voucher matrix); provider + native voucher tests added (web handoff, native new-line + merge). The merge path needed a policy arg; legacy-undefined preserved.
+- CX-108 (P2) FIXED: the 4 canonical PDP redirects (top-level + content, legacy + category/case) preserve the query string via an extended getRedirectTargetPath (arrays appended, undefined dropped); the invalid-variant redirect stays intentionally bare. Category-mismatch test pins variant_id + match_base survival. (Test hygiene: route control consumes only the LCP hint, so the new test queues only that — clearAllMocks does not drain Once queues.)
+- CI shard 4: inventory regen + pin (page.tsx moved the tree).
+
 - Muse low intake-oracle: repeat (accepted public-slug signal).
 - Muse med intake-rotation: PR-disclosed repeat.
 - Muse low assurance-disclosure: repeat — checkout quote itemization + invoice line (Round 42) and the rehydration opt-out test already answer both asks.

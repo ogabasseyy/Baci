@@ -1,3 +1,4 @@
+export * from './assurance-policy';
 export * from './cac-registration';
 export * from './commerce-variant-axis';
 export * from './customer-savings-earnings';

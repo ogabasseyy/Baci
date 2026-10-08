@@ -131,6 +131,30 @@ describe('cart-store', () => {
     }
   });
 
+  it('forces voucher lines to opt out without an explicit choice', () => {
+    useCartStore.getState().addItem({
+      product_id: 'quiz-prize-phone',
+      slug: 'quiz-prize-phone',
+      name: 'Phone',
+      price: 0,
+      quantity: 1,
+      voucher_award_id: 'award-1',
+      voucher_token: 'token-1',
+    });
+    expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
+    useCartStore.getState().addItem({
+      product_id: 'quiz-prize-explicit',
+      slug: 'quiz-prize-explicit',
+      name: 'Phone',
+      price: 0,
+      quantity: 1,
+      voucher_award_id: 'award-2',
+      voucher_token: 'token-2',
+      hasAssurance: true,
+    });
+    expect(useCartStore.getState().items[1].hasAssurance).toBe(true);
+  });
+
   it('keeps assurance opt-in when Smart Cart Pro is disabled', () => {
     mockSmartCartPro.current = false;
     try {

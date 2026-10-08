@@ -182,6 +182,17 @@ it('resumes the stored real savings handoff only after completed restart recover
   expect(router.push).not.toHaveBeenCalled();
   expect(router.replace).toHaveBeenCalledWith(returnTo);
 });
+it.each([
+  ['', 'Enter an amount greater than zero.'],
+  ['0', 'Enter an amount greater than zero.'],
+  ['-50', 'Enter an amount greater than zero.'],
+  ['10.123', 'Enter an amount with no more than two decimal places.'],
+  ['100000000', 'Enter a smaller amount.'],
+])('rejects invalid amount %p with a specific message before consent', async (fundAmount, message) => {
+  await fundPrimaryWalletCard({ ...input, fundAmount });
+  expect(alert).toHaveBeenCalledWith('Check the amount', message);
+  expect(mockStart).not.toHaveBeenCalled();
+});
 it('re-sanitizes a tampered handoff before navigating on completed recovery', async () => {
   mockRead.mockResolvedValue({ operationId: 'persisted' });
   mockRecover.mockResolvedValue({

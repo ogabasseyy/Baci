@@ -12,6 +12,18 @@ import type { fundWallet } from './wallet-screen.handlers';
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();
 
+function validateFundAmountKobo(fundAmount: unknown): string | null {
+  const amountKobo = Math.round(Number(fundAmount) * 100);
+  if (
+    !Number.isSafeInteger(amountKobo) ||
+    Math.abs(Number(fundAmount) * 100 - amountKobo) > 0.000001
+  )
+    return 'Enter an amount with no more than two decimal places.';
+  if (amountKobo <= 0) return 'Enter an amount greater than zero.';
+  if (amountKobo > 9999999999) return 'Enter a smaller amount.';
+  return null;
+}
+
 export async function fundPrimaryWalletCard(
   input: Parameters<typeof fundWallet>[0]
 ) {
@@ -48,14 +60,14 @@ export async function fundPrimaryWalletCard(
     let result: Awaited<ReturnType<typeof client.start>>;
     if (pending) result = await client.recover({ merchantId, userId });
     else {
+      const amountError = validateFundAmountKobo(input.fundAmount);
+      if (amountError) {
+        // Invalid input is a user error, not a failed charge: say so
+        // directly instead of falling into the retained-operation alert.
+        Alert.alert('Check the amount', amountError);
+        return;
+      }
       const amountKobo = Math.round(Number(input.fundAmount) * 100);
-      if (
-        !Number.isSafeInteger(amountKobo) ||
-        Math.abs(Number(input.fundAmount) * 100 - amountKobo) > 0.000001
-      )
-        throw new Error(
-          'Enter an amount with no more than two decimal places.'
-        );
       const accepted = await new Promise<boolean>((resolve) =>
         Alert.alert(
           'Confirm card wallet funding',

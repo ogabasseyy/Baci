@@ -3,6 +3,11 @@ import path from 'node:path';
 import { z } from 'zod';
 
 import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
+import {
+  GuestCartStorageUnavailableError,
+  guestCartWriteError,
+  isStorageWriteError,
+} from './guest-cart-writer-lock-errors';
 
 const queues = new Map<string, Promise<unknown>>();
 
@@ -204,9 +209,23 @@ export async function admitGuestCartWrite(
         try {
           const info = await stat(candidate);
           if (didCartFileChange({ mtimeMs, ino }, info)) return false;
-          await unlink(candidate);
+          try {
+            await unlink(candidate);
+          } catch (error) {
+            // A lost race (already removed) tries the next candidate, but
+            // a volume failure (read-only, full, quota) must surface as
+            // the typed storage outage — through the store wrapper into
+            // /health — instead of degrading into a generic capacity
+            // error after pointlessly trying every candidate.
+            if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
+              return false;
+            if (isStorageWriteError(error))
+              throw guestCartWriteError(candidate, error);
+            return false;
+          }
           return true;
-        } catch {
+        } catch (error) {
+          if (error instanceof GuestCartStorageUnavailableError) throw error;
           return false;
         }
       });

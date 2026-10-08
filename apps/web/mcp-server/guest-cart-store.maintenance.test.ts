@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdtemp,
   readFile,
   readdir,
@@ -9,8 +10,13 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
+import {
+  GuestCartExpiredError,
+  GuestCartStore,
+  describeGuestCartStoreHealth,
+} from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
+import { GuestCartStorageUnavailableError } from './guest-cart-writer-lock-errors';
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const directories: string[] = [];
@@ -135,6 +141,34 @@ it('evicts the least-recently-written cart at capacity', async () => {
   expect(remaining).toHaveLength(2000);
 });
 
+it('reports a storage outage (not capacity) when eviction cannot delete', async () => {
+  // Root bypasses permission bits, so the probe is meaningless there.
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
+  const { directory, instance } = await store();
+  const tokens = Array.from({ length: 2000 }, (_, index) =>
+    index.toString(16).padStart(64, '0')
+  );
+  const payload = JSON.stringify({
+    expires_at: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    items: [],
+  });
+  for (const token of tokens)
+    await writeFile(path.join(directory, `${token}.json`), payload);
+  try {
+    await chmod(directory, 0o555);
+    // Every eviction candidate fails with EACCES: the typed outage must
+    // propagate (and flip /health) instead of degrading into a generic
+    // capacity error after trying all 2,000 candidates.
+    await expect(
+      instance.update(undefined, { product_id: id, quantity: 1 }, async () => {})
+    ).rejects.toBeInstanceOf(GuestCartStorageUnavailableError);
+    expect(describeGuestCartStoreHealth(instance).guestCarts).toBe(
+      'degraded'
+    );
+  } finally {
+    await chmod(directory, 0o755);
+  }
+});
 it('reports expired or missing tokens distinctly so the caller can recover', async () => {
   const { directory, instance } = await store();
   const expiredToken = 'e'.repeat(64);

@@ -1,4 +1,11 @@
-import { readFileSync, statSync, unlinkSync, utimesSync } from 'node:fs';
+import {
+  linkSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  utimesSync,
+} from 'node:fs';
 
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 
@@ -28,6 +35,58 @@ function ownsWriterLock(lockPath: string, owned: OwnedLock): boolean {
     return readLockContent(lockPath) === owned.content;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Removes a verified own claim without unlinking the shared pathname
+ * after a check: the rename atomically captures whatever generation
+ * exists, identity is verified on the captured file (no concurrent
+ * claimant can slip a generation between the check and the delete), and
+ * only a matching generation is deleted. A captured foreign generation
+ * (a replacement installed before the rename) is restored atomically
+ * via link, which fails when a third claimant landed meanwhile — its
+ * claim then wins and the orphaned side file stays inert for the
+ * stale-lock sweeper. All failures are best-effort: the caller is
+ * exiting, and the worst case is a stale-window wait.
+ */
+export function removeVerifiedOwnClaim(
+  lockPath: string,
+  owned: OwnedLock
+): void {
+  const sidePath = `${lockPath}.stale-released-${process.pid}`;
+  try {
+    renameSync(lockPath, sidePath);
+  } catch {
+    return;
+  }
+  let ownGeneration = false;
+  try {
+    const identity = statSync(sidePath);
+    ownGeneration =
+      identity.dev === owned.dev &&
+      identity.ino === owned.ino &&
+      readLockContent(sidePath) === owned.content;
+  } catch {
+    /* Treat an unreadable capture as foreign. */
+  }
+  if (ownGeneration) {
+    try {
+      unlinkSync(sidePath);
+    } catch {
+      /* Best effort: the sweeper reclaims stale sidecars. */
+    }
+    return;
+  }
+  try {
+    linkSync(sidePath, lockPath);
+  } catch {
+    return;
+  }
+  try {
+    unlinkSync(sidePath);
+  } catch {
+    /* lockPath already carries the restored claim. */
   }
 }
 
@@ -69,14 +128,11 @@ export function startWriterHeartbeat(
       // closed. Unlike the takeover path — where the claim file now
       // belongs to the replacement and must be left untouched — this
       // claim is still ours: remove it (re-verifying identity first so
-      // a replacement that installed concurrently keeps its file), or
-      // the heartbeat-fresh lock refuses the replacement until the
-      // 30s stale window elapses.
-      try {
-        if (ownsWriterLock(lockPath, owned)) unlinkSync(lockPath);
-      } catch {
-        /* Best effort: the exit below is the guarantee. */
-      }
+      // belongs to the replacement and must be left untouched — this
+      // claim is still ours: remove it through the generation-bound
+      // capture above, or the heartbeat-fresh lock refuses the
+      // replacement until the 30s stale window elapses.
+      removeVerifiedOwnClaim(lockPath, owned);
       failClosed('no longer refreshable');
       return;
     }

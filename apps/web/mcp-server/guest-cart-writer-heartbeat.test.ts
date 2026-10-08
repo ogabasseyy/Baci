@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   type OwnedLock,
+  removeVerifiedOwnClaim,
   startWriterHeartbeat,
 } from './guest-cart-writer-heartbeat';
 
@@ -63,4 +64,26 @@ it('releases and exits when another writer takes over', async () => {
   expect(release.mock.invocationCallOrder[0]).toBeLessThan(
     exit.mock.invocationCallOrder[0]
   );
+});
+
+it('removeVerifiedOwnClaim deletes only a matching captured generation', async () => {
+  const { lockPath, owned } = await ownedClaim();
+  removeVerifiedOwnClaim(lockPath, owned);
+  await expect(stat(lockPath)).rejects.toThrow();
+  await expect(
+    stat(`${lockPath}.stale-released-${process.pid}`)
+  ).rejects.toThrow();
+});
+
+it('removeVerifiedOwnClaim restores a captured foreign generation', async () => {
+  const { lockPath, owned } = await ownedClaim();
+  // A replacement installed a fresh claim before the capture.
+  await rm(lockPath);
+  const foreign = JSON.stringify({ pid: 424242 });
+  await writeFile(lockPath, foreign);
+  removeVerifiedOwnClaim(lockPath, owned);
+  await expect(readFile(lockPath, 'utf8')).resolves.toBe(foreign);
+  await expect(
+    stat(`${lockPath}.stale-released-${process.pid}`)
+  ).rejects.toThrow();
 });

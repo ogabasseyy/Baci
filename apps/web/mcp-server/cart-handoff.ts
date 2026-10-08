@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+import { STOREFRONT_SNAPSHOT_VARIANT_WINDOW } from './search-product-availability';
 
 type CartHandoffResult = {
   content: Array<{ type: 'text'; text: string }>;
@@ -123,17 +124,24 @@ export async function prepareCartHandoff({
         { p_product_ids: [productId], p_merchant_id: merchantId }
       );
       if (variantsError) transient = true;
-      optionAvailable ||= !variantsError && Array.isArray(variants) &&
-        variants.some((variant) => {
-          if (variant.product_id !== productId) return false;
-          // Mirrors isPublicVariantPurchasable for the serialized
-          // policies: then-unlimited is purchasable at any units, strict
-          // gates on exact units, and unprojected rows keep the existing
-          // raw-stock comparison for the requested quantity.
-          if (variant.effective_policy === 'serialized_then_unlimited')
-            return true;
-          return Number(variant.stock_quantity ?? 0) >= quantity;
-        });
+      const own =
+        !variantsError && Array.isArray(variants)
+          ? variants.filter((variant) => variant.product_id === productId)
+          : [];
+      // The RPC returns a 129th sentinel row past the storefront's
+      // 128-variant window, and the PDP refuses truncated products as
+      // unavailable: fail closed instead of offering selection the PDP
+      // cannot present.
+      if (own.length > STOREFRONT_SNAPSHOT_VARIANT_WINDOW) unavailable = true;
+      optionAvailable ||= own.some((variant) => {
+        // Mirrors isPublicVariantPurchasable for the serialized
+        // policies: then-unlimited is purchasable at any units, strict
+        // gates on exact units, and unprojected rows keep the existing
+        // raw-stock comparison for the requested quantity.
+        if (variant.effective_policy === 'serialized_then_unlimited')
+          return true;
+        return Number(variant.stock_quantity ?? 0) >= quantity;
+      });
     }
     if (product.has_condition_offers === true || product.has_variants === true) {
       unavailable ||= !optionAvailable;
@@ -161,6 +169,10 @@ export async function prepareCartHandoff({
       const own = variants.filter(
         (variant) => variant.product_id === productId
       );
+      // Same truncation fail-closed as the managed path: the PDP
+      // refuses products past the 128-variant window, so a sentinel
+      // row means selection would dead-end there.
+      if (own.length > STOREFRONT_SNAPSHOT_VARIANT_WINDOW) unavailable = true;
       if (
         own.length > 0 &&
         own.every(

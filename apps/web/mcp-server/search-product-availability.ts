@@ -38,7 +38,10 @@ function isSearchVariantAvailable(
 // excludes truncated rows from selection; offers past 16 are invisible to
 // the PDP itself.
 const STOREFRONT_SNAPSHOT_OFFER_WINDOW = 16;
-const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
+// Exported for cart handoff: its variant RPC shares the same 128-window
+// plus 129th-sentinel contract, and a truncated product is PDP-refused
+// there exactly as in search.
+export const STOREFRONT_SNAPSHOT_VARIANT_WINDOW = 128;
 // PostgREST clamps responses at 1,000 rows, so the option RPCs page by
 // product: 7 products carry at most 903 variant rows (129 each) and 62
 // carry at most 992 offer rows (16 each), keeping every response complete.

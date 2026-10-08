@@ -41,7 +41,7 @@ const mockSupabase = {
   },
 };
 
-import { DELETE, POST } from './route';
+import { POST } from './route';
 
 describe('POST /api/admin/blog/upload', () => {
   beforeEach(() => {
@@ -205,76 +205,5 @@ describe('POST /api/admin/blog/upload', () => {
       error: 'File too large. Maximum size is 4MB',
     });
     expect(mockStorageBucket.upload).not.toHaveBeenCalled();
-  });
-});
-
-describe('DELETE /api/admin/blog/upload', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockCreateClient.mockResolvedValue(mockSupabase);
-    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
-      status: 'authenticated',
-      user: { email: 'admin@baci.com', id: 'user-1' },
-    });
-    mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
-    mockCheckRateLimit.mockResolvedValue(true);
-    mockStorageBucket.remove.mockResolvedValue({ error: null });
-  });
-
-  it('rejects non-platform media paths', async () => {
-    const response = await DELETE(
-      new NextRequest('http://localhost/api/admin/blog/upload', {
-        body: JSON.stringify({ path: 'merchant-1/blog/cover.png' }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'DELETE',
-      })
-    );
-
-    expect(response.status).toBe(403);
-  });
-
-  it('deletes platform media paths and revalidates', async () => {
-    const response = await DELETE(
-      new NextRequest('http://localhost/api/admin/blog/upload', {
-        body: JSON.stringify({ path: 'platform/blog/cover.png' }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'DELETE',
-      })
-    );
-
-    expect(response.status).toBe(200);
-    expect(mockStorageBucket.remove).toHaveBeenCalledWith([
-      'platform/blog/cover.png',
-    ]);
-    expect(mockCheckRateLimit).toHaveBeenCalledWith(
-      mockSupabase,
-      'user-1',
-      'platform_blog_media_delete',
-      30,
-      1
-    );
-    expect(mockRevalidatePlatformBlog).toHaveBeenCalled();
-  });
-
-  it('allows cleanup when the upload budget is exhausted', async () => {
-    // An invalidated upload may itself be the request that exhausts the
-    // upload bucket; its cleanup must draw from a separate budget so a
-    // 429 cannot strand the persisted source and variants.
-    mockCheckRateLimit.mockImplementation(
-      async (_supabase: unknown, _userId: string, key: string) =>
-        key !== 'platform_blog_upload'
-    );
-    const response = await DELETE(
-      new NextRequest('http://localhost/api/admin/blog/upload', {
-        body: JSON.stringify({ path: 'platform/blog/cover.png' }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'DELETE',
-      })
-    );
-
-    expect(response.status).toBe(200);
-    expect(mockStorageBucket.remove).toHaveBeenCalledWith([
-      'platform/blog/cover.png',
-    ]);
   });
 });

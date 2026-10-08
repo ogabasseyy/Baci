@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/server';
 import {
   buildPlatformMediaPath,
   cleanupUploadedPaths,
+  filterBlogMediaPathsWithoutPersistedReferences,
   getAllowedTypesForPurpose,
   MAX_FILE_SIZE,
   MIME_TO_EXTENSION,
@@ -241,13 +242,29 @@ export async function DELETE(request: NextRequest) {
     return parsedDeleteBody.response;
   }
 
-  const { error } = await supabase.storage
-    .from('media')
-    .remove(parsedDeleteBody.paths);
+  const filtered = await filterBlogMediaPathsWithoutPersistedReferences(
+    supabase,
+    parsedDeleteBody.paths
+  );
+  if (filtered === null) {
+    console.error('Platform blog media reference check failed', {
+      paths: parsedDeleteBody.paths,
+    });
+    return NextResponse.json(
+      { error: 'Failed to verify media references' },
+      { status: 500 }
+    );
+  }
+  const { deletable, skipped } = filtered;
+  if (deletable.length === 0) {
+    return NextResponse.json({ skipped, success: true });
+  }
+
+  const { error } = await supabase.storage.from('media').remove(deletable);
   if (error) {
     console.error('Platform blog media delete failed', {
       error,
-      paths: parsedDeleteBody.paths,
+      paths: deletable,
     });
     return NextResponse.json(
       { error: 'Failed to delete file' },
@@ -256,5 +273,5 @@ export async function DELETE(request: NextRequest) {
   }
 
   revalidatePlatformBlog();
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ skipped, success: true });
 }

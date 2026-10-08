@@ -2,40 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { validateImportedContent } from './review-handoff-content';
 
 describe('validateImportedContent media srcset', () => {
-  it('accepts transform commas combined with a spaceless candidate separator', () => {
-    expect(
+  it('rejects transform commas the editor cannot preserve', () => {
+    expect(() =>
       validateImportedContent(
         '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70/a.webp 640w,https://cdn.example.com/b.webp 1280w">'
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
-  it('accepts query-style transform commas glued mid-assignment', () => {
-    expect(
+  it('rejects query-style transform srcsets the editor cannot preserve', () => {
+    expect(() =>
       validateImportedContent(
         '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/img?width=384,quality=70/a.webp 640w, https://cdn.example.com/b.webp 1280w">'
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
   it.each([
     'https://cdn.example.com/a.webp?crop=1,2 1x',
     'https://cdn.example.com/a.webp?scale=1,1.5 2x',
     'https://cdn.example.com/a.webp?palette=red,blue 1x',
-  ])('glues commas inside one srcset query string: %s', (srcset) => {
-    expect(
+  ])('glues commas, then rejects the unpreservable srcset: %s', (srcset) => {
+    expect(() =>
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
-  it('accepts srcset candidates with CDN transform commas', () => {
-    expect(
+  it('rejects CDN transform srcsets the editor cannot preserve', () => {
+    expect(() =>
       validateImportedContent(
         '<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="https://cdn.example.com/image/width=384,quality=70,format=webp/a.png 640w, https://cdn.example.com/image/width=1280,quality=70,format=webp/a.png 1280w">'
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
   it('rejects a second srcset URL after a complete candidate', () => {
@@ -67,26 +67,27 @@ describe('validateImportedContent media srcset', () => {
     'https://cdn.example.com/a.webp,asset=broken.webp 2x',
     'https://cdn.example.com/a.webp,format=webp/b.png 640w',
     'https://cdn.example.com/a.webp,http://example.com/evil.png 2x',
-  ])('treats a bare comma as part of one srcset URL token: %s', (srcset) => {
+  ])('treats a bare comma as one token, then rejects: %s', (srcset) => {
     // WHATWG splits candidates only at whitespace-adjacent commas; a bare
-    // comma belongs to the URL token, so the joined absolute URL validates
-    // as one candidate instead of a relative second one.
-    expect(
+    // comma belongs to the URL token, so the joined absolute URL passes
+    // media validation as one candidate — then rejects under the editor
+    // rule, which the 'srcset' (not HTTPS) error proves.
+    expect(() =>
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
   it.each([
     'https://cdn.example.com/a.webp, https://cdn.example.com/b.webp 2x',
     'https://cdn.example.com/a.webp,https://cdn.example.com/b.webp 2x',
-  ])('accepts a split second srcset candidate: %s', (srcset) => {
-    expect(
+  ])('rejects a split second srcset candidate: %s', (srcset) => {
+    expect(() =>
       validateImportedContent(
         `<p>Body</p><img src="https://cdn.example.com/a.webp" alt="A" srcset="${srcset}">`
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
   });
 
   it.each([
@@ -153,11 +154,22 @@ describe('validateImportedContent media srcset', () => {
     'https://cdn.example.com/a.webp 1e3x',
     'https://cdn.example.com/a.webp 100w',
     'https://cdn.example.com/a.webp .5x',
-  ])('accepts srcset candidates with valid descriptors: %s', (srcset) => {
-    expect(
+  ])('rejects srcset candidates with valid descriptors: %s', (srcset) => {
+    expect(() =>
       validateImportedContent(
         `<p>Body</p><img alt="A" src="https://cdn.example.com/a.png" srcset="${srcset}">`
       )
-    ).toContain('srcset');
+    ).toThrow('srcset');
+  });
+
+  it('rejects img srcsets the editor cannot preserve', () => {
+    // Tiptap image nodes keep src/alt/title/width/height only: the
+    // first body edit serializes just the fallback, silently dropping
+    // responsive assets validation explicitly retained.
+    expect(() =>
+      validateImportedContent(
+        '<img src="https://cdn.example.com/fallback.png" srcset="https://cdn.example.com/mobile.webp 480w, https://cdn.example.com/desktop.webp 1200w" sizes="100vw" alt="A">'
+      )
+    ).toThrow('srcset');
   });
 });

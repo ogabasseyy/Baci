@@ -179,6 +179,21 @@ function hasDroppedAnchorTarget(html: string): boolean {
   return [...fragments].some((target) => ids.has(target));
 }
 
+function hasUnpreservableImgSrcset(html: string): boolean {
+  // Tiptap image nodes keep src/alt/title/width/height only, so the
+  // first body edit drops any srcset the browser would have selected
+  // from. An empty srcset contributes nothing and stays accepted.
+  for (const { tags } of groupMediaElements(html)) {
+    for (const tag of tags) {
+      if (!/^<img\b/i.test(tag)) continue;
+      for (const { name, value } of tagAttributes(tag)) {
+        if (name === 'srcset' && value.trim() !== '') return true;
+      }
+    }
+  }
+  return false;
+}
+
 function hasSelectablePictureSource(html: string): boolean {
   // Tiptap has no picture or source nodes, so the first body edit
   // serializes only the fallback img: an actively selected source is
@@ -270,6 +285,13 @@ export function validateImportedContent(rawContent: string): string {
   if (hasSelectablePictureSource(visible)) {
     throw new Error(
       'Article content has responsive picture sources the editor cannot preserve'
+    );
+  }
+  // Standalone img srcsets cannot survive either: image nodes keep
+  // only src/alt/title/width/height.
+  if (hasUnpreservableImgSrcset(visible)) {
+    throw new Error(
+      'Article content has responsive image srcsets the editor cannot preserve'
     );
   }
   return visible;

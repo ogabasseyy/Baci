@@ -1,7 +1,7 @@
 import type { ColorScheme } from './review-handoff-breakpoints';
 import { elementFrame, type HidingFrame } from './review-handoff-element-frame';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
-import { imageSizeZeroAt } from './review-handoff-size-markers';
+import { imageSizeZeroAt } from './review-handoff-image-size';
 import { subtreeHiddenAt } from './review-handoff-subtree-hidden';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { VOID_HTML_ELEMENTS } from './review-handoff-void-elements';

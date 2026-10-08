@@ -28,6 +28,8 @@ await db.exec(await fs.readFile(new URL('../../supabase/migrations/2026100219000
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261004170500_restrict_storefront_product_request_intake.sql', import.meta.url), 'utf8'));
 // Apply contact canonicalization so replay covers the shipped dedup/budget keys.
 await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008210000_storefront_product_request_contact_canonical.sql', import.meta.url), 'utf8'));
+// Apply distinct outcome codes so replay pins the route's SQLSTATE contract.
+await db.exec(await fs.readFile(new URL('../../supabase/migrations/20261008220000_storefront_product_request_outcome_codes.sql', import.meta.url), 'utf8'));
 const submit = (query, contact, id, slug = 'ogabassey') => db.query('SELECT public.submit_storefront_product_request($1,$2,$3,$4::uuid)', [slug, query, contact, id]);
 const id = (number) => `20000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 await db.exec('SET ROLE anon');
@@ -41,8 +43,8 @@ await db.exec('RESET ROLE; SET ROLE storefront_intake');
 await submit('iPhone 20', 'shopper@example.com', id(1));
 await submit('iPhone 20', 'shopper@example.com', id(1));
 await submit('iPhone 20', 'shopper@example.com', id(2));
-await assert.rejects(submit('iPhone 20', 'other@example.com', id(1)), /Request conflict/);
-await assert.rejects(submit('iPhone 20', 'shopper@example.com', id(3), 'draft-store'), /Store unavailable/);
+await assert.rejects(submit('iPhone 20', 'other@example.com', id(1)), { message: /Request conflict/, code: '23505' });
+await assert.rejects(submit('iPhone 20', 'shopper@example.com', id(3), 'draft-store'), { message: /Store unavailable/, code: 'P0001' });
 await assert.rejects(submit('!!!', 'shopper@example.com', id(3)), /Invalid product request/);
 await assert.rejects(submit('iPhone 20', '', id(3)), /Invalid product request/);
 await assert.rejects(submit('iPhone 20', '-------', id(10)), /Invalid product request/);

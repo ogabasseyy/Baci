@@ -30,11 +30,12 @@ export async function POST(request: Request) {
   }
   const { error } = result;
   if (!error) return Response.json({ ok: true });
-  const info = error as { code?: string; message?: string };
-  if (
-    info.code === '54000' ||
-    info.message?.includes('Request limit reached')
-  ) {
+  // Map on SQLSTATE only: message substrings would mis-route if RPC text
+  // ever changes. Codes are pinned by the intake migrations (54000
+  // budget, 23505 id conflict, P0001 store unavailable, 22023
+  // validation) and covered by the route tests.
+  const info = error as { code?: string };
+  if (info.code === '54000') {
     // Merchant-scoped spike signal for budget-abuse alerting. The contact
     // stays out of logs; per-contact rotation is visible only as volume.
     logger.warn({
@@ -43,9 +44,9 @@ export async function POST(request: Request) {
     });
     return Response.json({ error: 'Request limit reached' }, { status: 429 });
   }
-  if (info.message?.includes('Store unavailable'))
+  if (info.code === 'P0001')
     return Response.json({ error: 'Store unavailable' }, { status: 404 });
-  if (info.message?.includes('Request conflict'))
+  if (info.code === '23505')
     return Response.json({ error: 'Request conflict' }, { status: 409 });
   if (info.code === '22023')
     return Response.json({ error: 'Invalid request' }, { status: 400 });

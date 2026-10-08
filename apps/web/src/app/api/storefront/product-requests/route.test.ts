@@ -65,7 +65,7 @@ describe('product request intake', () => {
       'shopper@example.com'
     );
     mocks.submit.mockResolvedValueOnce({
-      error: { code: '22023', message: 'Store unavailable' },
+      error: { code: 'P0001', message: 'Store unavailable' },
     });
     expect((await POST(request(input))).status).toBe(404);
     mocks.submit.mockResolvedValueOnce({
@@ -81,7 +81,7 @@ describe('product request intake', () => {
   });
   it('maps idempotency conflicts to 409 instead of a validation error', async () => {
     mocks.submit.mockResolvedValueOnce({
-      error: { code: '22023', message: 'Request conflict' },
+      error: { code: '23505', message: 'Request conflict' },
     });
     const response = await POST(request(input));
     expect(response.status).toBe(409);

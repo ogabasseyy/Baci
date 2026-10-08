@@ -423,3 +423,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-120 (P1) FIXED: redOutline (Ogabassey brand red) replaced by the per-merchant border-store-primary token; prop removed from form + caller, test rewritten to the themed contract.
 - Muse on 890ba99: no highs; 2 lows both adjudicated repeats (AI assist tenant spend is dev-gated; intake rotation PR-disclosed).
 - CI inventory regen + pin (page extraction moved the tree).
+
+## Round 61 (Muse 2 med + 2 low on 0729903 — 1 fixed, 3 adjudicated; Codex pending)
+
+- Muse med unbounded family pagination ADJUDICATED (intended design): collectRankedSearchProductIds documents "omit maxCandidates when post-filtered counts must be exact" — the family path returns count: filteredProducts.length for pagination, so capping would silently corrupt page math. The real fix (push the family filter into SQL) touches base search_products_v2 RPC (June infra, not PR-owned) → follow-up outside this PR.
+- Muse low RPC error mapping FIXED: migration 20261008220000 gives intake outcomes distinct codes (23505 conflict, P0001 unavailable; 54000/22023 unchanged, messages unchanged); route maps on SQLSTATE only. Route tests refixtured (5/5); verify-sql.mjs applies M4 and pins both codes; scratch probe green. Registered (9e96115c…). PR body → 27.
+- Muse low idempotency-canonical ADJUDICATED (intended): same requestId + different payload raising conflict is textbook idempotency (the key binds the payload; retries reuse the identical payload). Cross-spelling repeats are covered by the canonical 24h dedup net, not the id branch.
+- Muse med assurance disclosure: repeat (both PDPs route through the itemized cart toggle; pre-add copy is a product follow-up).

@@ -2,7 +2,11 @@ import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from '@/lib/piggyvest/primary-wallet-card-custody-inbox.test-fixture';
 
-const mocks = vi.hoisted(() => ({ intake: vi.fn(), legacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  intake: vi.fn(),
+  legacy: vi.fn(),
+  families: ['legacy', 'custody'] as string[],
+}));
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({
   getPiggyvestWebhookSecret: () => fixture.configuration.webhookSecret,
@@ -23,10 +27,10 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
         ...input,
         secrets: [fixture.configuration.webhookSecret],
       });
-      // Family binding is covered by dedicated tests; these suites pin
-      // downstream handling with the legacy-authorized family.
+      // Family binding defaults to a secret shared across families;
+      // individual tests narrow it to pin each intake gate.
       return secret
-        ? { status: 'verified' as const, secret, families: ['legacy'] as const }
+        ? { status: 'verified' as const, secret, families: mocks.families }
         : { status: 'invalid' as const };
     },
   };
@@ -49,6 +53,7 @@ function request(valid = true) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.families = ['legacy', 'custody'];
   mocks.legacy.mockImplementation(() => {
     throw new Error('legacy must not handle primary custody');
   });
@@ -96,6 +101,13 @@ it('preserves legacy processing when intake proves a receipt is unrelated', asyn
   mocks.intake.mockResolvedValue({ outcome: 'not_handled', response: null });
   expect((await POST(request())).status).toBe(503);
   expect(mocks.legacy).toHaveBeenCalledTimes(1);
+});
+it('skips the custody intake for legacy-only deliveries so legacy outflow processing proceeds', async () => {
+  mocks.families = ['legacy'];
+  const response = await POST(request());
+  expect(mocks.intake).not.toHaveBeenCalled();
+  expect(mocks.legacy).toHaveBeenCalled();
+  expect(response.status).toBe(503);
 });
 it('redacts unexpected custody failures without falling through to legacy', async () => {
   mocks.intake.mockRejectedValue(new Error('private custody database detail'));

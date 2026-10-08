@@ -11,6 +11,15 @@ interface Ports {
     | { status: 'claimed'; reservation: unknown }
     | { status: 'pending' | 'confirmed' | 'insufficient' | 'conflict' }
   >;
+  adoptPending: (
+    operationId: string
+  ) => Promise<
+    | { status: 'adopted' | 'reclaimed'; reservation: Reservation }
+    | { status: 'existing' }
+  >;
+  lookupTransfer: (
+    reservation: Reservation
+  ) => Promise<'submitted' | 'absent' | 'uncertain'>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   cancelBeforeDispatch: (operationId: string) => Promise<void>;
   claimDispatch: (operationId: string) => Promise<boolean>;
@@ -23,7 +32,44 @@ export async function submitPrimaryWalletSavingsTransfer(
 ) {
   const request = schemas.request.parse(input);
   const claim = await ports.reserve(request);
-  if (claim.status !== 'claimed') return { status: claim.status };
+  if (claim.status !== 'claimed') {
+    // A pending operation may belong to a holder that died mid-flight:
+    // adopt it and drive it instead of stranding the hold and the goal
+    // slot. Fresh dispatches stay with their live holder ('existing').
+    if (claim.status !== 'pending') return { status: claim.status };
+    const adoption = await ports.adoptPending(request.operationId);
+    if (adoption.status === 'existing') return { status: 'pending' as const };
+    const reservation = schemas.reserved.parse(adoption.reservation);
+    if (
+      reservation.operationId !== request.operationId ||
+      reservation.goalId !== request.goalId ||
+      reservation.amountKobo !== request.amountKobo ||
+      reservation.sourceWalletId === reservation.destinationWalletId
+    )
+      throw new Error('Savings transfer ownership unavailable');
+    // A reclaimed dispatch may predate a provider submission that landed:
+    // only a proven-absent reference resubmits. Anything else stays
+    // pending for reconciliation, which settles submitted transfers.
+    if (adoption.status === 'reclaimed') {
+      let observed: 'submitted' | 'absent' | 'uncertain';
+      try {
+        observed = await ports.lookupTransfer(reservation);
+      } catch {
+        observed = 'uncertain';
+      }
+      if (observed !== 'absent') return { status: 'pending' as const };
+      if (!(await verifyWallets(reservation, ports)))
+        return { status: 'pending' as const };
+      try {
+        const response = await ports.transfer(reservation);
+        if (response.accepted !== true) throw new Error('Invalid acceptance');
+      } catch {
+        return { status: 'pending' as const };
+      }
+      return { status: 'pending' as const };
+    }
+    return await dispatchFresh(request, reservation, ports);
+  }
   const reservation = schemas.reserved.parse(claim.reservation);
   if (
     reservation.operationId !== request.operationId ||
@@ -32,7 +78,10 @@ export async function submitPrimaryWalletSavingsTransfer(
     reservation.sourceWalletId === reservation.destinationWalletId
   )
     throw new Error('Savings transfer ownership unavailable');
-  let verified = false;
+  return await dispatchFresh(request, reservation, ports);
+}
+
+async function verifyWallets(reservation: Reservation, ports: Ports) {
   try {
     const source = schemas.wallet.parse(
       await ports.retrieveWallet(reservation.sourceWalletId)
@@ -40,17 +89,25 @@ export async function submitPrimaryWalletSavingsTransfer(
     const destination = schemas.wallet.parse(
       await ports.retrieveWallet(reservation.destinationWalletId)
     );
-    verified =
+    return (
       source.id === reservation.sourceWalletId &&
       destination.id === reservation.destinationWalletId &&
       source.api_customer_id === reservation.providerCustomerId &&
       source.business_id === reservation.businessId &&
       destination.business_id === reservation.businessId &&
-      source.balance >= reservation.amountKobo;
+      source.balance >= reservation.amountKobo
+    );
   } catch {
-    verified = false;
+    return false;
   }
-  if (!verified) {
+}
+
+async function dispatchFresh(
+  request: Request,
+  reservation: Reservation,
+  ports: Ports
+) {
+  if (!(await verifyWallets(reservation, ports))) {
     await ports.cancelBeforeDispatch(request.operationId);
     return { status: 'unavailable' as const };
   }

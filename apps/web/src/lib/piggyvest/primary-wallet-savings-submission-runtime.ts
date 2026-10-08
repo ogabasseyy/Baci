@@ -9,6 +9,7 @@ import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-exe
 import { runPrimaryWalletSavingsReconciliation } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsStore } from './primary-wallet-savings-store';
 import { submitPrimaryWalletSavingsTransfer } from './primary-wallet-savings-transfer';
+import { lookupSavingsTransferReference } from './primary-wallet-savings-transfer-lookup';
 import { transferToWallet } from './transfers';
 import { retrievePiggyvestWallet } from './wallets';
 
@@ -68,6 +69,15 @@ export async function submitPrimaryWalletSavings(input: {
       }
       return result;
     },
+    lookupTransfer: async (reservation) =>
+      await lookupSavingsTransferReference({
+        reference: reservation.reference,
+        walletId: reservation.sourceWalletId,
+        amountKobo: reservation.amountKobo,
+        destinationWalletId: reservation.destinationWalletId,
+        token: provider.token,
+        baseUrl: provider.baseUrl,
+      }),
     retrieveWallet: async (walletId) =>
       await retrievePiggyvestWallet(provider, walletId),
     transfer: async (reservation) =>

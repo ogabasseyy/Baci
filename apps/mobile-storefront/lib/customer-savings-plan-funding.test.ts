@@ -1,5 +1,22 @@
-import { describe, expect, it } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
+
+const mockProbePlanFunding = jest.fn<() => Promise<boolean>>();
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual('@/lib/piggyvest-primary-capability') as Record<
+    string,
+    unknown
+  >;
+  return {
+    ...actual,
+    getPiggyvestPrimaryCapability: (...args: unknown[]) =>
+      mockProbePlanFunding(...args),
+  };
+});
+
+beforeEach(() => {
+  mockProbePlanFunding.mockResolvedValue(false);
+});
 
 const { fetchExistingSavingsPlanFunding, fetchSavingsPlanFunding } =
   require('@/lib/customer-savings') as typeof import('@/lib/customer-savings');

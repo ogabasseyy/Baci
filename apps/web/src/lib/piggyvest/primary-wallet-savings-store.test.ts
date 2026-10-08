@@ -79,3 +79,33 @@ it('rejects malformed database acknowledgements', async () => {
     )
   ).rejects.toThrow();
 });
+it('adopts pending operations through fixed adoption SQL with a parsed reservation', async () => {
+  const reservation = {
+    operationId,
+    goalId: operationId,
+    amountKobo: 500,
+    sourceWalletId: 'source',
+    destinationWalletId: 'destination',
+    reference: 'stable-reference',
+    businessId: 'business',
+    providerCustomerId: 'source-customer',
+  };
+  const execute = vi
+    .fn()
+    .mockResolvedValueOnce({
+      rows: [{ result: { status: 'reclaimed', reservation } }],
+    })
+    .mockResolvedValueOnce({ rows: [{ result: { status: 'existing' } }] });
+  const store = createPrimaryWalletSavingsStore({ scope, execute });
+  expect(await store.adoptPending(operationId)).toEqual({
+    status: 'reclaimed',
+    reservation,
+  });
+  expect(await store.adoptPending(operationId)).toEqual({
+    status: 'existing',
+  });
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result',
+    [JSON.stringify(scope), operationId]
+  );
+});

@@ -63,6 +63,19 @@ export const piggyvestPrimarySavingsTransferSchemas = {
     balance: z.int().nonnegative(),
   }),
   acknowledgement: z.array(z.strictObject({ result: z.boolean() })).length(1),
+  adoptionRows: z
+    .array(
+      z.strictObject({
+        result: z.discriminatedUnion('status', [
+          z.strictObject({
+            status: z.enum(['adopted', 'reclaimed']),
+            reservation: z.unknown(),
+          }),
+          z.strictObject({ status: z.literal('existing') }),
+        ]),
+      })
+    )
+    .length(1),
   reservationRows: z
     .array(
       z.strictObject({

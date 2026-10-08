@@ -187,11 +187,17 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   try {
     if (parsed.data.eventType === 'wallet-transfer.outflow.success') {
-      const custody = await dispatchPrimaryCardSignedCustodyIntake({
-        rawBody,
-        signature,
-      });
-      if (custody.response) return custody.response;
+      // The custody inbox verifies against custody keys only: invoke it
+      // solely for custody-family deliveries so a legacy-signed outflow
+      // keeps flowing to the legacy outflow processor instead of
+      // 503-looping on an invalid-signature verdict here.
+      if (verification.families.includes('custody')) {
+        const custody = await dispatchPrimaryCardSignedCustodyIntake({
+          rawBody,
+          signature,
+        });
+        if (custody.response) return custody.response;
+      }
     }
     if (parsed.data.eventType === 'interest-payout.success') {
       const primary = await primaryInterestWebhookResponse({

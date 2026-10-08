@@ -25,4 +25,15 @@ describe('resolveGuestCartTransfer', () => {
     expect(resolveGuestCartTransfer(null)).toBeNull();
     expect(resolveGuestCartTransfer('bad')).toBeNull();
   });
+
+  it('canonicalizes product ids to lowercase', () => {
+    const upper = {
+      product_id: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+      quantity: 2,
+    };
+    expect(resolveGuestCartTransfer(JSON.stringify([upper]))).toEqual({
+      itemIds: upper.product_id.toLowerCase(),
+      quantities: new Map([[upper.product_id.toLowerCase(), upper.quantity]]),
+    });
+  });
 });

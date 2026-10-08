@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { prepareCartHandoff } from './cart-handoff';
 import { GuestCartStore } from './guest-cart-store';
 import { registerGuestCartTool } from './guest-cart-tool';
+import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
 import { loadMcpBrowseFacetValues } from './browse-catalog-facets';
 import * as fs from 'node:fs';
@@ -2661,6 +2662,10 @@ process.on('SIGTERM', () => {
       timestamp: new Date().toISOString(),
     })
   );
+  // Free the guest-cart lock before draining: the replacement container
+  // starts without waiting out the stale-takeover window. In-flight cart
+  // writes during the drain are absolute-quantity last-wins either way.
+  releaseWriterLocks();
   httpServer.close(() => process.exit(0));
 });
 
@@ -2672,6 +2677,7 @@ process.on('SIGINT', () => {
       timestamp: new Date().toISOString(),
     })
   );
+  releaseWriterLocks();
   httpServer.close(() => process.exit(0));
 });
 

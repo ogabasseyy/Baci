@@ -11,10 +11,13 @@ export function resolveGuestCartTransfer(
 ): GuestCartTransfer | null {
   const items = parseGuestCartHandoff(raw);
   if (!items) return null;
+  // UUID text is case-insensitive: canonicalize so handoff ids match the
+  // lowercase ids the catalog returns when looking up quantities.
+  const ids = items.map((item) => item.product_id.toLowerCase());
   return {
-    itemIds: items.map((item) => item.product_id).join(','),
+    itemIds: ids.join(','),
     quantities: new Map(
-      items.map((item) => [item.product_id, item.quantity] as const)
+      items.map((item, index) => [ids[index], item.quantity] as const)
     ),
   };
 }

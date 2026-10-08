@@ -38,14 +38,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('retries a stale token once without it and replaces state with the fresh cart', async () => {
+it('retries a stale token once and replays survivors into the fresh cart', async () => {
   const fresh = 'b'.repeat(64);
   const callTool = vi
     .fn()
     .mockResolvedValueOnce(response())
     .mockResolvedValueOnce(response([product, second]))
     .mockResolvedValueOnce(expiredResponse())
-    .mockResolvedValueOnce(response([product], fresh));
+    .mockResolvedValueOnce(response([product], fresh))
+    .mockResolvedValueOnce(response([product, second], fresh));
   window.openai = { callTool, setWidgetState: vi.fn() };
   const { result } = renderHook(() => useCartHandoff());
   await act(async () => {
@@ -58,7 +59,7 @@ it('retries a stale token once without it and replaces state with the fresh cart
   await act(async () => {
     await result.current.handleAddToCart(product);
   });
-  expect(callTool).toHaveBeenCalledTimes(4);
+  expect(callTool).toHaveBeenCalledTimes(5);
   expect(callTool).toHaveBeenNthCalledWith(3, 'update_ogabassey_guest_cart', {
     product_id: product.id,
     quantity: 2,
@@ -69,6 +70,38 @@ it('retries a stale token once without it and replaces state with the fresh cart
     quantity: 2,
     cart_token: undefined,
   });
+  expect(callTool).toHaveBeenNthCalledWith(5, 'update_ogabassey_guest_cart', {
+    product_id: second.id,
+    quantity: 1,
+    cart_token: fresh,
+  });
+  expect(result.current.cartError).toBeNull();
+  expect(result.current.cart).toEqual([
+    { product: second, quantity: 1 },
+    { product, quantity: 1 },
+  ]);
+});
+it('drops only the stale survivor when its replay fails', async () => {
+  const fresh = 'b'.repeat(64);
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce(response([product, second]))
+    .mockResolvedValueOnce(expiredResponse())
+    .mockResolvedValueOnce(response([product], fresh))
+    .mockResolvedValueOnce({ structuredContent: { success: false } });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(second);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(callTool).toHaveBeenCalledTimes(5);
   expect(result.current.cartError).toBeNull();
   expect(result.current.cart).toEqual([{ product, quantity: 1 }]);
 });
@@ -164,4 +197,27 @@ it('opens the bare cart when the stored handoff payload is malformed', async () 
   expect(openExternal).toHaveBeenCalledWith({
     href: 'https://ogabassey.com/cart',
   });
+});
+
+it('removes locally when legacy state has no token', async () => {
+  const callTool = vi.fn();
+  window.openai = {
+    widgetState: {
+      cart: [
+        { product, quantity: 1 },
+        { product: second, quantity: 1 },
+      ],
+      cartUrl: `https://ogabassey.com/cart?item_id=${product.id}&qty=1`,
+    },
+    callTool,
+    setWidgetState: vi.fn(),
+  };
+  const { result } = renderHook(() => useCartHandoff());
+  expect(result.current.cart).toHaveLength(2);
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  expect(callTool).not.toHaveBeenCalled();
+  expect(result.current.cartError).toBeNull();
+  expect(result.current.cart).toEqual([{ product: second, quantity: 1 }]);
 });

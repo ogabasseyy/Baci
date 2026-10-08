@@ -11,6 +11,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Extracts the structured payload from a raw tool result, if present. */
+export function readStructuredContent(response: unknown): unknown {
+  return typeof response === 'object' && response !== null
+    ? Reflect.get(response, 'structuredContent')
+    : undefined;
+}
+
 /**
  * Validates guest-cart tool output without zod: the served widget must stay
  * dependency-free. A success response is accepted only with the handoff

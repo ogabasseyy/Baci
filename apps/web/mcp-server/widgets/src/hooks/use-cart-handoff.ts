@@ -1,17 +1,16 @@
 import { useRef, useState } from 'react';
+import { dropLineFromCartState } from '../drop-cart-line';
 import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
-import { parseCartToolOutput } from '../parse-cart-tool-output';
+import {
+  parseCartToolOutput,
+  readStructuredContent,
+} from '../parse-cart-tool-output';
 import { parseHandoffLines } from '../parse-handoff-lines';
+import { recoverExpiredAdd } from '../recover-expired-add';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
-
-function readStructuredContent(response: unknown): unknown {
-  return typeof response === 'object' && response !== null
-    ? Reflect.get(response, 'structuredContent')
-    : undefined;
-}
 
 function openOgabasseyUrl(url: string, pendingTab?: Window | null): boolean {
   if (window.openai?.openExternal) {
@@ -85,20 +84,22 @@ export function useCartHandoff() {
         return;
       }
       // A stale token (expired or evicted cart) retries once without the
-      // token so the server mints a fresh cart; the retry response replaces
-      // prior state through the same merge below. Other failures retry never.
+      // token so the server mints a fresh cart, replaying the surviving
+      // lines so recovery preserves the shopper's cart. The final response
+      // replaces prior state through the same merge below.
       if (
         widgetState?.cartToken &&
         parseCartToolOutput(readStructuredContent(result))?.cart_expired ===
           true
       ) {
-        result = await window.openai.callTool(
-          'update_ogabassey_guest_cart',
-          {
-            product_id: product.id,
-            quantity,
-            cart_token: undefined,
-          }
+        const callTool = window.openai.callTool.bind(window.openai);
+        result = await recoverExpiredAdd(
+          (args) => callTool('update_ogabassey_guest_cart', args),
+          product.id,
+          quantity,
+          (widgetState?.cart ?? []).filter(
+            (item) => item.product.id !== product.id
+          )
         );
         if (requestId !== handoffRequestId.current) {
           pendingTab?.close();
@@ -176,11 +177,18 @@ export function useCartHandoff() {
   };
 
   const handleRemoveItem = async (productId: string) => {
-    if (busy.current || !widgetState?.cartToken || !window.openai?.callTool)
-      return;
+    if (busy.current || !window.openai?.callTool) return;
     busy.current = true;
     setIsSavingCart(true);
     setCartError(null);
+    // Legacy conversations restore cart state without a token; with no
+    // server cart to update, the line is dropped locally instead.
+    if (!widgetState?.cartToken) {
+      setWidgetState((previous) => dropLineFromCartState(previous, productId));
+      busy.current = false;
+      setIsSavingCart(false);
+      return;
+    }
     try {
       const response = await window.openai.callTool(
         'update_ogabassey_guest_cart',
@@ -193,31 +201,9 @@ export function useCartHandoff() {
       const content = parseCartToolOutput(readStructuredContent(response));
       if (content?.success === false && content.cart_expired === true) {
         // The server cart is gone, so the removed line is gone with it: drop
-        // it locally, forget the dead token, and rebuild the handoff URL from
-        // the surviving lines. (Tokenless removals are rejected, so unlike
-        // adds this path cannot retry without the token.)
-        setWidgetState((previous) => {
-          const survivors = (previous?.cart ?? []).filter(
-            (item) => item.product.id !== productId
-          );
-          const review = new URL('https://ogabassey.com/cart');
-          if (survivors.length > 0)
-            review.searchParams.set(
-              'guest_cart',
-              JSON.stringify(
-                survivors.map((item) => ({
-                  product_id: item.product.id,
-                  quantity: item.quantity,
-                }))
-              )
-            );
-          return {
-            ...previous!,
-            cart: survivors,
-            cartUrl: survivors.length > 0 ? review.toString() : undefined,
-            cartToken: undefined,
-          };
-        });
+        // it locally and forget the dead token. (Tokenless removals are
+        // rejected, so unlike adds this path cannot retry without the token.)
+        setWidgetState((previous) => dropLineFromCartState(previous, productId));
         return;
       }
       const url = content?.cart_url ? new URL(content.cart_url) : null;

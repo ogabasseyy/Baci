@@ -19,7 +19,20 @@ import path from 'node:path';
 const WRITER_LOCK_FILE = '.writer.lock';
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
-const heldWriterLocks = new Set<string>();
+interface OwnedLock {
+  lockPath: string;
+  content: string;
+  heartbeat: NodeJS.Timeout;
+}
+const heldWriterLocks = new Map<string, OwnedLock>();
+
+function readLockContent(lockPath: string): string | null {
+  try {
+    return readFileSync(lockPath, 'utf8');
+  } catch {
+    return null;
+  }
+}
 
 function isPermissionError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException)?.code;
@@ -52,6 +65,10 @@ export function acquireWriterLock(directory: string): void {
   const key = realpathSync(directory);
   if (heldWriterLocks.has(key)) return;
   const lockPath = path.join(directory, WRITER_LOCK_FILE);
+  const content = JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+  });
   const claim = () => {
     let fd: number;
     try {
@@ -62,10 +79,7 @@ export function acquireWriterLock(directory: string): void {
       throw error;
     }
     try {
-      writeSync(
-        fd,
-        JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })
-      );
+      writeSync(fd, content);
     } finally {
       closeSync(fd);
     }
@@ -104,8 +118,25 @@ export function acquireWriterLock(directory: string): void {
     }
     claim();
   }
-  heldWriterLocks.add(key);
-  const heartbeat = setInterval(() => {
+  const owned: OwnedLock = {
+    lockPath,
+    content,
+    heartbeat: undefined as unknown as NodeJS.Timeout,
+  };
+  heldWriterLocks.set(key, owned);
+  owned.heartbeat = setInterval(() => {
+    // A process suspended past the stale window must not refresh a lock
+    // another process took over while it slept: verify ownership first,
+    // and fail closed when the lock no longer carries our claim.
+    if (readLockContent(lockPath) !== owned.content) {
+      clearInterval(owned.heartbeat);
+      heldWriterLocks.delete(key);
+      console.error(
+        `[guest-cart] writer lock for ${lockPath} was taken over; exiting instead of writing without the single-writer guarantee.`
+      );
+      process.exit(1);
+      return;
+    }
     try {
       const now = new Date();
       utimesSync(lockPath, now, now);
@@ -113,5 +144,24 @@ export function acquireWriterLock(directory: string): void {
       /* Lock lost; takeover is another writer's decision now. */
     }
   }, WRITER_HEARTBEAT_INTERVAL_MS);
-  heartbeat.unref();
+  owned.heartbeat.unref();
+}
+
+/**
+ * Releases every lock this process owns. Ownership is verified by content:
+ * a lock taken over by another process is left untouched. Called during
+ * graceful shutdown so a replacement container starts without waiting out
+ * the stale-takeover window.
+ */
+export function releaseWriterLocks(): void {
+  for (const [key, owned] of heldWriterLocks) {
+    clearInterval(owned.heartbeat);
+    heldWriterLocks.delete(key);
+    try {
+      if (readLockContent(owned.lockPath) === owned.content)
+        unlinkSync(owned.lockPath);
+    } catch {
+      /* Best effort during shutdown. */
+    }
+  }
 }

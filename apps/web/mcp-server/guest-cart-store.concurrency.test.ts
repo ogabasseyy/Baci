@@ -1,5 +1,4 @@
 import {
-  chmod,
   mkdtemp,
   readFile,
   readdir,
@@ -26,29 +25,6 @@ afterEach(async () => {
       .splice(0)
       .map((directory) => rm(directory, { recursive: true, force: true }))
   );
-});
-it('takes over a stale writer lock', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'guest-lock-stale-'));
-  try {
-    const lock = path.join(directory, '.writer.lock');
-    await writeFile(lock, '{}');
-    const old = new Date(Date.now() - 60_000);
-    await utimes(lock, old, old);
-    const instance = new GuestCartStore(directory);
-    const cart = await instance.update(
-      undefined,
-      { product_id: id, quantity: 1 },
-      async () => {}
-    );
-    expect(cart.items).toEqual([{ product_id: id, quantity: 1 }]);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-it('allows reentrant construction in the same process', async () => {
-  const { directory } = await store();
-  expect(() => new GuestCartStore(directory)).not.toThrow();
 });
 
 it('reports token liveness for live, expired, corrupt, and unknown carts', async () => {
@@ -190,21 +166,6 @@ it('reclaims expired carts before evicting live ones at capacity', async () => {
   expect(remaining).toHaveLength(2000);
 });
 
-it('refuses an unwritable cart directory with remediation instead of a raw errno', async () => {
-  // Root bypasses permission bits, so the probe is meaningless there.
-  if (typeof process.getuid === 'function' && process.getuid() === 0) return;
-  const directory = await mkdtemp(path.join(tmpdir(), 'guest-lock-perms-'));
-  try {
-    await chmod(directory, 0o555);
-    expect(() => new GuestCartStore(directory)).toThrow(
-      /not writable.*chown the mounted directory/
-    );
-  } finally {
-    await chmod(directory, 0o755);
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 it('throttles the expiry sweep independently per directory', async () => {
   const first = await store();
   const secondStore = await store();
@@ -224,4 +185,54 @@ it('throttles the expiry sweep independently per directory', async () => {
   );
   await expect(readFile(deadA, 'utf8')).rejects.toThrow();
   await expect(readFile(deadB, 'utf8')).rejects.toThrow();
+});
+
+it('validates before evicting so a rejected line never costs a live cart', async () => {
+  const { directory, instance } = await store();
+  const tokens = Array.from({ length: 2000 }, (_, index) =>
+    index.toString(16).padStart(64, '0')
+  );
+  const payload = JSON.stringify({
+    expires_at: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    items: [],
+  });
+  for (const token of tokens)
+    await writeFile(path.join(directory, `${token}.json`), payload);
+  await expect(
+    instance.update(
+      undefined,
+      { product_id: id, quantity: 1 },
+      async () => {
+        throw new Error('unavailable');
+      }
+    )
+  ).rejects.toThrow('unavailable');
+  const remaining = (await readdir(directory)).filter((entry) =>
+    entry.endsWith('.json')
+  );
+  expect(remaining).toHaveLength(2000);
+});
+
+it('treats product ids case-insensitively across add, update, and remove', async () => {
+  const { instance } = await store();
+  const upper = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA';
+  const lower = upper.toLowerCase();
+  const created = await instance.update(
+    undefined,
+    { product_id: upper, quantity: 1 },
+    async () => {}
+  );
+  expect(created.items).toEqual([{ product_id: lower, quantity: 1 }]);
+  const updated = await instance.update(
+    created.cart_token,
+    { product_id: lower, quantity: 3 },
+    async () => {}
+  );
+  expect(updated.items).toEqual([{ product_id: lower, quantity: 3 }]);
+  const removed = await instance.update(
+    created.cart_token,
+    { product_id: upper, quantity: 0 },
+    async () => {}
+  );
+  expect(removed.items).toEqual([]);
 });

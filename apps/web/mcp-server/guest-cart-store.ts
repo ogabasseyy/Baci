@@ -111,6 +111,15 @@ export class GuestCartStore {
     const cartToken = token ?? randomBytes(32).toString('hex');
     if (!/^[a-f0-9]{64}$/.test(cartToken))
       throw new Error('Invalid guest cart');
+    // UUID text is case-insensitive: canonicalize before persisting,
+    // comparing, and enforcing per-product uniqueness.
+    const normalizedLine = {
+      ...line,
+      product_id:
+        typeof line.product_id === 'string'
+          ? line.product_id.toLowerCase()
+          : line.product_id,
+    };
     const file = path.join(this.directory, `${cartToken}.json`);
     const queueKey = token ? file : this.directory;
     const previous = queues.get(queueKey) ?? Promise.resolve();
@@ -118,6 +127,29 @@ export class GuestCartStore {
       .catch(() => undefined)
       .then(async () => {
         await mkdir(this.directory, { recursive: true, mode: 0o700 });
+        let stored: z.infer<typeof storedCartSchema>;
+        if (!token) {
+          stored = { expires_at: Date.now() + TTL, items: [] };
+        } else {
+          stored = await readStoredCart(file);
+          if (stored.expires_at <= Date.now()) {
+            await unlink(file).catch(() => undefined);
+            throw new GuestCartExpiredError();
+          }
+        }
+        // Absolute quantities make a lost-response retry safe without incrementing twice.
+        const items = [
+          ...stored.items.filter(
+            (item) => item.product_id !== normalizedLine.product_id
+          ),
+          ...(normalizedLine.quantity === 0
+            ? []
+            : [guestCartLineSchema.parse(normalizedLine)]),
+        ];
+        if (items.length > 20) throw new Error('Guest cart is full');
+        // Validate before any eviction: a rejected line must never cost
+        // another shopper's live cart.
+        await validate(items);
         if (!token) {
           const sweepDue =
             Date.now() -
@@ -233,23 +265,6 @@ export class GuestCartStore {
             if (!evicted) throw new Error('Guest cart capacity reached');
           }
         }
-        let stored: z.infer<typeof storedCartSchema>;
-        if (!token) {
-          stored = { expires_at: Date.now() + TTL, items: [] };
-        } else {
-          stored = await readStoredCart(file);
-          if (stored.expires_at <= Date.now()) {
-            await unlink(file).catch(() => undefined);
-            throw new GuestCartExpiredError();
-          }
-        }
-        // Absolute quantities make a lost-response retry safe without incrementing twice.
-        const items = [
-          ...stored.items.filter((item) => item.product_id !== line.product_id),
-          ...(line.quantity === 0 ? [] : [guestCartLineSchema.parse(line)]),
-        ];
-        if (items.length > 20) throw new Error('Guest cart is full');
-        await validate(items);
         // Sliding expiry: a successful write extends the cart seven days so
         // active conversations never expire mid-use; idle carts still die.
         stored = { ...stored, expires_at: Date.now() + TTL };

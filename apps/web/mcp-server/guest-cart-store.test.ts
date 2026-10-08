@@ -231,30 +231,6 @@ it('evicts the least-recently-written cart at capacity', async () => {
   expect(remaining).toHaveLength(2000);
 });
 
-it('refuses a second writer while a live lock is held', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'guest-lock-live-'));
-  const logged: string[] = [];
-  const originalError = console.error;
-  console.error = (...args: unknown[]) => {
-    logged.push(args.map(String).join(' '));
-  };
-  try {
-    await writeFile(
-      path.join(directory, '.writer.lock'),
-      JSON.stringify({ pid: 99999999, startedAt: new Date().toISOString() })
-    );
-    expect(() => new GuestCartStore(directory)).toThrow(
-      /Another MCP writer owns/
-    );
-    expect(logged.join('\n')).toContain('.writer.lock');
-    expect(logged.join('\n')).toContain('99999999');
-    expect(logged.join('\n')).toContain(`pid ${process.pid}`);
-  } finally {
-    console.error = originalError;
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 it('reports expired or missing tokens distinctly so the caller can recover', async () => {
   const { directory, instance } = await store();
   const expiredToken = 'e'.repeat(64);

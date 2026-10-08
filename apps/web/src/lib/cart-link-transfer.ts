@@ -108,9 +108,14 @@ export async function fetchAndAddCartItems({
     }
 
     // Lines the catalog no longer returns stay retryable in the link instead
-    // of being silently consumed with the rest of the handoff.
-    const returnedIds = new Set(activeProducts.map((product) => product.id));
-    const missingIds = ids.filter((id) => !returnedIds.has(id));
+    // of being silently consumed with the rest of the handoff. UUID text is
+    // case-insensitive (Postgres accepts uppercase but returns lowercase),
+    // so compare canonically: otherwise a found product is retained as
+    // missing and every refresh adds it again.
+    const returnedIds = new Set(
+      activeProducts.map((product) => product.id.toLowerCase())
+    );
+    const missingIds = ids.filter((id) => !returnedIds.has(id.toLowerCase()));
     if (missingIds.length > 0) {
       toast({
         title: 'Some items unavailable',

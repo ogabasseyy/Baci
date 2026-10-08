@@ -228,7 +228,10 @@ export function useCartHandoff() {
       }
       const url = content?.cart_url ? new URL(content.cart_url) : null;
       const raw = url?.searchParams.get('guest_cart') ?? null;
-      const remaining = raw === '[]' ? [] : parseHandoffLines(raw);
+      // An emptied cart arrives as a bare /cart URL (legacy responses
+      // carry guest_cart=[]); both mean no lines remain.
+      const remaining =
+        raw === null || raw === '[]' ? [] : parseHandoffLines(raw);
       if (
         !content?.success ||
         content.cart_token !== widgetState.cartToken ||

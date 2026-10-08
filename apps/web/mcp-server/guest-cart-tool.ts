@@ -133,7 +133,10 @@ export function registerGuestCartTool(
           consumeGuestCartCreation(options.clientIp ?? 'unknown');
         }
         const url = new URL('https://ogabassey.com/cart');
-        url.searchParams.set('guest_cart', JSON.stringify(cart.items));
+        // An emptied cart transfers nothing, so advertise the bare cart
+        // page instead of a guest_cart=[] link the website would reject.
+        if (cart.items.length > 0)
+          url.searchParams.set('guest_cart', JSON.stringify(cart.items));
         return {
           content: [
             {

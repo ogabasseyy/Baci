@@ -206,3 +206,23 @@ it('retains variant lines as retryable on the legacy item_id path', async () => 
     added
   );
 });
+
+it('treats an uppercase item_id as found when the catalog returns lowercase', async () => {
+  setupProductsQuery({
+    data: [{ id: added, name: 'Phone', status: 'active', images: [] }],
+    error: null,
+  });
+  const options = setupOptions({ itemIds: added.toUpperCase() });
+  window.history.pushState(
+    {},
+    '',
+    `/cart?item_id=${added.toUpperCase()}&qty=1`
+  );
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).toHaveBeenCalledTimes(1);
+  expect(new URLSearchParams(window.location.search).get('item_id')).toBeNull();
+  expect(options.toast).not.toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Some items unavailable' })
+  );
+});

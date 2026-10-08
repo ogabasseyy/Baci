@@ -20,26 +20,31 @@ export const guestCartHandoffSchema = z
 
 export const MCP_GUEST_CART_DESCRIPTION =
   'Save a simple product in a persistent Ogabassey guest cart without signing in. Supply the cart_token returned previously to continue the same cart. Use quantity 0 to remove a product. quantity is the desired total for this product, not an increment, so retries with the same cart token are safe. Products requiring options must be selected on the website. Open cart_url to transfer all items to the website for guest checkout; account creation is optional there. Guest carts expire seven days after the last update.';
-export const mcpGuestCartInputSchema = z.object({
-  product_id: z
-    .string()
-    .uuid()
-    .describe('The public product ID to add, update or remove'),
-  quantity: z
-    .number()
-    .int()
-    .min(0)
-    .max(10)
-    .default(1)
-    .describe('Desired total quantity, or 0 to remove this product'),
-  cart_token: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional()
-    .describe(
-      'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
-    ),
-});
+export const mcpGuestCartInputSchema = z
+  .object({
+    product_id: z
+      .string()
+      .uuid()
+      .describe('The public product ID to add, update or remove'),
+    quantity: z
+      .number()
+      .int()
+      .min(0)
+      .max(10)
+      .default(1)
+      .describe('Desired total quantity, or 0 to remove this product'),
+    cart_token: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional()
+      .describe(
+        'Opaque capability returned by the previous cart call; omit only to start a new guest cart'
+      ),
+  })
+  .refine((value) => value.quantity !== 0 || value.cart_token !== undefined, {
+    message: 'cart_token is required to remove a product',
+    path: ['cart_token'],
+  });
 // Flat object (not a union): the installed MCP SDK only publishes and
 // validates plain-object output schemas, silently dropping unions from
 // tools/list. The refine below carries the success-branch requirement.

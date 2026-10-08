@@ -62,6 +62,14 @@ it('rejects fresh callers once the map is full of live windows', () => {
       retryAfterSeconds: 3600,
     });
     expect(consumeGuestCartCreation('10.8.0.2').allowed).toBe(false);
+    expect(
+      consumeGuestCartCreation('2001:db8:abcd:12::99').allowed
+    ).toBe(false);
+    const logged = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('10.8.xxx.xxx');
+    expect(logged).not.toContain('10.8.0.1');
+    expect(logged).toContain('2001:db8:abcd:12:xxxx');
+    expect(logged).not.toContain('2001:db8:abcd:12::99');
   } finally {
     warn.mockRestore();
   }

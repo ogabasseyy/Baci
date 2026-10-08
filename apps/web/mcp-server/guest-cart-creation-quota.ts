@@ -25,6 +25,19 @@ export interface GuestCartQuotaVerdict {
   retryAfterSeconds: number;
 }
 
+// Partial-IP logging: keep the routable prefix, drop host bits. IPv4
+// keeps its /16; IPv6 keeps its /64, dropping the interface identifier.
+function maskIpForLog(ip: string): string {
+  // IPv4 first so mapped forms (::ffff:1.2.3.4) mask the embedded address.
+  if (/(\d+)\.(\d+)\.(\d+)\.(\d+)/.test(ip))
+    return ip.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.xxx.xxx');
+  if (ip.includes(':')) {
+    const head = ip.split(':').slice(0, 4).join(':');
+    return `${head}:xxxx:xxxx:xxxx:xxxx`;
+  }
+  return ip;
+}
+
 function inspectQuota(ip: string, now: number): GuestCartQuotaVerdict {
   const entry = quotaByIp.get(ip);
   if (entry && now - entry.windowStart < GUEST_CART_QUOTA_WINDOW_MS) {
@@ -53,7 +66,7 @@ function inspectQuota(ip: string, now: number): GuestCartQuotaVerdict {
         JSON.stringify({
           type: 'security',
           event: 'guest_cart_quota_capacity',
-          ip: ip.replace(/(\d+)\.(\d+)\.(\d+)\.(\d+)/, '$1.$2.xxx.xxx'),
+          ip: maskIpForLog(ip),
         })
       );
       return {

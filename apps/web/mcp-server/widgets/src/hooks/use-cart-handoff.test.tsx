@@ -83,6 +83,27 @@ it('removes on the server before updating the persisted chat state', async () =>
     cart_token: token,
   });
 });
+it('removes against a bare cart URL when the server emptied the cart', async () => {
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce({
+      structuredContent: {
+        ...response([]).structuredContent,
+        cart_url: 'https://ogabassey.com/cart',
+      },
+    });
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  expect(result.current.cart).toEqual([]);
+  expect(result.current.cartError).toBeNull();
+});
 it('retains the cart when removal fails and rejects hostile handoff destinations', async () => {
   window.openai = {
     callTool: vi

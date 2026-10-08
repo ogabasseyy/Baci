@@ -94,6 +94,18 @@ describe('mcpGuestCartInputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects quantity 0 without a cart token', () => {
+    const result = mcpGuestCartInputSchema.safeParse({
+      product_id: id,
+      quantity: 0,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues[0]).toMatchObject({
+        path: ['cart_token'],
+      });
+  });
+
   it('rejects quantity above 10', () => {
     expect(
       mcpGuestCartInputSchema.safeParse({ product_id: id, quantity: 11 })

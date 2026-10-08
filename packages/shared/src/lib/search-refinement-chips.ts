@@ -1,4 +1,4 @@
-import type { SearchRefinements } from './search-refinements';
+import type { SearchRefinements } from './search-refinement-types';
 export interface SearchRefinementChip {
   key: string;
   label: string;

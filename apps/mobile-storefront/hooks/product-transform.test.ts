@@ -54,6 +54,25 @@ const variantProductRow = {
 };
 
 describe('product-transform', () => {
+  it('carries serialized policy and units through variant normalization', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      variants: [
+        {
+          ...variantProductRow.variants[0],
+          effective_policy: 'serialized_strict',
+          available_units: 3,
+        },
+      ],
+    });
+    expect(product?.variants).toEqual([
+      expect.objectContaining({
+        effective_policy: 'serialized_strict',
+        available_units: 3,
+      }),
+    ]);
+  });
+
   it('normalizes live variant attributes to selector strings only', () => {
     expect(
       normalizeProductVariants(variantProductRow.variants, {

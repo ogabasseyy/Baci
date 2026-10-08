@@ -129,6 +129,8 @@ export function normalizeProductVariants(
             ? stockQuantity > 0
             : (variant.in_stock ?? undefined),
         stock_quantity: stockQuantity,
+        effective_policy: variant.effective_policy ?? undefined,
+        available_units: variant.available_units ?? undefined,
         attributes,
       };
     }) ?? []

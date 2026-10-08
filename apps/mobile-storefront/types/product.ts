@@ -149,6 +149,8 @@ export interface ProductVariant {
   images?: string[];
   in_stock?: boolean;
   stock_quantity?: number;
+  effective_policy?: string;
+  available_units?: number;
   attributes?: Record<string, string>;
 }
 

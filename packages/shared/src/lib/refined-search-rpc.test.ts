@@ -4,7 +4,7 @@ import {
   REFINED_SEARCH_MAX_OFFSET,
   readRefinedSearchRows,
 } from './refined-search-rpc';
-import type { SearchRefinements } from './search-refinements';
+import type { SearchRefinements } from './search-refinement-types';
 
 const criteria: SearchRefinements = {
   brands: ['Samsung', 'Apple', 'Samsung'],
@@ -55,7 +55,10 @@ describe('refined-search-rpc', () => {
       getRefinedSearchArgs(
         'm1',
         'phone',
-        { brands: ['apple', 'Apple', ' Samsung ', 'SAMSUNG'], sort: 'relevance' },
+        {
+          brands: ['apple', 'Apple', ' Samsung ', 'SAMSUNG'],
+          sort: 'relevance',
+        },
         20
       )
     ).toMatchObject({ brands_filter: [' Samsung ', 'apple'] });

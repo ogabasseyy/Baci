@@ -1,7 +1,5 @@
-import {
-  deduplicateFacetChoices,
-  type SearchRefinements,
-} from './search-refinements';
+import { deduplicateFacetChoices } from './deduplicate-facet-choices';
+import type { SearchRefinements } from './search-refinement-types';
 
 // Matches SQL's 100 pages at the storefront's 20-row page size.
 export const REFINED_SEARCH_MAX_OFFSET = 1980;

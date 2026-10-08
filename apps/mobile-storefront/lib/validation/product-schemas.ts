@@ -99,6 +99,8 @@ const ProductVariantSchema = z.object({
   images: z.array(ProductImageEntrySchema).nullable().optional(),
   in_stock: z.boolean().nullable().optional(),
   stock_quantity: NullableNonnegativeIntegerLikeSchema.optional(),
+  effective_policy: z.string().nullable().optional(),
+  available_units: NullableNonnegativeIntegerLikeSchema.optional(),
   attributes: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 

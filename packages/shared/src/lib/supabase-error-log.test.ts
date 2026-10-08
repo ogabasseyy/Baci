@@ -52,7 +52,9 @@ describe('formatSupabaseErrorLog', () => {
       code: 'PGRST000',
       thrownValueType: 'Object',
     });
-    expect(formatSupabaseErrorLog({ message: '', hint: 'Retry later' })).toEqual({
+    expect(
+      formatSupabaseErrorLog({ message: '', hint: 'Retry later' })
+    ).toEqual({
       message: 'Unknown error',
       hint: 'Retry later',
       thrownValueType: 'Object',

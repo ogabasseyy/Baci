@@ -1,16 +1,21 @@
 export * from './assurance-policy';
+export * from './build-refined-search-href';
 export * from './cac-registration';
 export * from './commerce-variant-axis';
 export * from './customer-savings-earnings';
 export * from './dedupe-by-id';
+export * from './deduplicate-facet-choices';
 export * from './delivery-metadata';
 export * from './derive-category-slug';
 export * from './eligible-condition-offers';
+export * from './empty-search-refinements';
 export * from './fetch-with-timeout';
 export * from './filter-by-location-phrase';
 export * from './get-paystack-dva-account-number';
 export * from './gigl-tracking-status';
+export * from './has-active-search-refinements';
 export * from './is-finite-number';
+export * from './is-same-facet-choice';
 export * from './kuda-data-plan-bill-items';
 export * from './kuda-electricity-bill-items';
 export * from './location-state-aliases';
@@ -23,6 +28,7 @@ export * from './order-item-analytics-profit';
 export * from './order-item-display';
 export * from './parse-merchant-rate-quote-id';
 export * from './parse-santa-action';
+export * from './parse-search-refinements';
 export * from './piggyvest-cancellation-client';
 export * from './piggyvest-cancellation-client-binding';
 export * from './piggyvest-cancellation-controller';
@@ -69,6 +75,7 @@ export * from './redvault-eligibility';
 export * from './redvault-pricing';
 export * from './redvault-refund-allocations';
 export * from './refined-search-rpc';
+export * from './reset-refinements-for-query';
 export * from './resumable-wallet-return-to';
 export * from './sanitize-html-text';
 export * from './sanitize-wallet-return-to';
@@ -78,7 +85,9 @@ export {
   getSearchRefinementChips,
   type SearchRefinementChip,
 } from './search-refinement-chips';
-export * from './search-refinements';
+export * from './search-refinement-criteria-schema';
+export * from './search-refinement-types';
+export * from './search-sort-options';
 export {
   buildCatalogSearchSuggestions,
   type SearchSuggestion,

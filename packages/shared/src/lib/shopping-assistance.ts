@@ -1,10 +1,8 @@
 import { z } from 'zod';
+import { parseSearchRefinements } from './parse-search-refinements';
 import { buildProductSearchQuery } from './product-search';
-import {
-  parseSearchRefinements,
-  resetRefinementsForQuery,
-  type SearchRefinements,
-} from './search-refinements';
+import { resetRefinementsForQuery } from './reset-refinements-for-query';
+import type { SearchRefinements } from './search-refinement-types';
 
 const money = z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER);
 // Single source for the assistance query rule (trimmed 2–120 chars plus a
@@ -57,7 +55,11 @@ export function mergeAssistedRefinements(
   proposal: SearchAssistanceProposal,
   committedQuery: string
 ): SearchRefinements {
-  const base = resetRefinementsForQuery(committedQuery, proposal.query, current);
+  const base = resetRefinementsForQuery(
+    committedQuery,
+    proposal.query,
+    current
+  );
   const next = { ...base, ...proposal.filters };
   const parsed = parseSearchRefinements({
     brand: next.brands,

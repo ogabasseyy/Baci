@@ -45,6 +45,58 @@ beforeEach(() => {
   mockFindMatchingConditionOffer.mockClear();
 });
 
+it.each([
+  {
+    name: 'unlimited with zero raw quantity stays purchasable',
+    variant: {
+      stock_quantity: 0,
+      effective_policy: 'serialized_then_unlimited',
+    },
+    quantityInCart: 0,
+    expected: true,
+  },
+  {
+    name: 'strict compares available units against the cart quantity',
+    variant: {
+      stock_quantity: 0,
+      effective_policy: 'serialized_strict',
+      available_units: 3,
+    },
+    quantityInCart: 2,
+    expected: true,
+  },
+  {
+    name: 'strict with exhausted units is out of stock',
+    variant: {
+      stock_quantity: 0,
+      effective_policy: 'serialized_strict',
+      available_units: 1,
+    },
+    quantityInCart: 1,
+    expected: false,
+  },
+  {
+    name: 'finite variants still use the raw quantity',
+    variant: { stock_quantity: 2, effective_policy: 'off' },
+    quantityInCart: 2,
+    expected: false,
+  },
+])('$name', ({ variant, quantityInCart, expected }) => {
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: { id: 'p1', price: 100, has_variants: true } as Product,
+        currentVariantSelection: {
+          variant: { id: 'v1', ...variant },
+        } as never,
+      }),
+      quantityInCart,
+      null
+    )
+  );
+  expect(result.current.canPurchase).toBe(expected);
+});
+
 it('forwards an exact offer id into price resolution and offer selection', () => {
   renderHook(() =>
     useProductDetailPurchaseState(

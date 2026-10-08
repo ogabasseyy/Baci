@@ -13,19 +13,13 @@ DO $$
 DECLARE
   fixture redvault_private_pilot_case%ROWTYPE;
   rotated uuid;
+  tracked uuid;
+  caught text;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
-  -- With no pilot-user applications yet, rotating the binding stays
-  -- allowed; switch away and back so the suite continues on the fixture.
-  INSERT INTO public.products(
-    id, merchant_id, brand, name, price, condition, vat_category_code, vat_rate,
-    has_variants, taxable, manage_stock, stock_quantity, stock, status
-  )
-  VALUES (
-    extensions.gen_random_uuid(), '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fixture',
-    'REDVAULT rotation probe product', 100, 'new', 'S', 0, false, false, false, 1, 1, 'active'
-  )
-  RETURNING id INTO rotated;
+  -- No pilot-user applications yet: rotating the binding stays allowed;
+  -- switch away and back so the suite continues on the fixture product.
+  rotated := public.redvault_private_pilot_probe_product('REDVAULT rotation probe product');
   PERFORM private.configure_uba_redvault_live_pilot(true, rotated, pg_catalog.now() + interval '1 hour');
   IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = rotated) THEN
     RAISE EXCEPTION 'pilot_applicationless_rotation_rejected';
@@ -33,6 +27,15 @@ BEGIN
   PERFORM private.configure_uba_redvault_live_pilot(true, fixture.product_id, pg_catalog.now() + interval '1 hour');
   IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = fixture.product_id) THEN
     RAISE EXCEPTION 'pilot_rotation_restore_rejected';
+  END IF;
+  -- Serialized tracking would poison pilot checkout, so activation must reject tracked products.
+  tracked := public.redvault_private_pilot_probe_product('REDVAULT tracked probe product', 'serialized_strict');
+  BEGIN
+    PERFORM private.configure_uba_redvault_live_pilot(true, tracked, pg_catalog.now() + interval '1 hour');
+  EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
+  END;
+  IF caught IS DISTINCT FROM 'redvault_pilot_product_not_dedicated' THEN
+    RAISE EXCEPTION 'pilot_tracked_product_wrong_result:%', COALESCE(caught, 'accepted');
   END IF;
 END;
 $$;
@@ -138,18 +141,9 @@ DECLARE
   caught text;
 BEGIN
   SELECT * INTO STRICT fixture FROM redvault_private_pilot_case;
-  -- The pilot user has an application but no reservation yet: rotating to
-  -- a different product must fail so the used test product stays
-  -- quarantined, and the failed rotation must leave the policy untouched.
-  INSERT INTO public.products(
-    id, merchant_id, brand, name, price, condition, vat_category_code, vat_rate,
-    has_variants, taxable, manage_stock, stock_quantity, stock, status
-  )
-  VALUES (
-    extensions.gen_random_uuid(), '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fixture',
-    'REDVAULT rotation probe product', 100, 'new', 'S', 0, false, false, false, 1, 1, 'active'
-  )
-  RETURNING id INTO rotated;
+  -- Application exists, no reservation yet: rotating must fail so the
+  -- used test product stays quarantined; the policy must be untouched.
+  rotated := public.redvault_private_pilot_probe_product('REDVAULT rotation probe product');
   BEGIN
     PERFORM private.configure_uba_redvault_live_pilot(true, rotated, pg_catalog.now() + interval '1 hour');
   EXCEPTION WHEN OTHERS THEN caught := SQLERRM;
@@ -159,6 +153,13 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = fixture.product_id) THEN
     RAISE EXCEPTION 'pilot_failed_rotation_changed_policy';
+  END IF;
+  -- Same-product recovery after disable must still work: the pilot
+  -- order's own lines are excluded from the prior-use check.
+  PERFORM private.configure_uba_redvault_live_pilot(false, NULL, NULL);
+  PERFORM private.configure_uba_redvault_live_pilot(true, fixture.product_id, pg_catalog.now() + interval '1 hour');
+  IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE singleton AND enabled IS TRUE AND product_id = fixture.product_id) THEN
+    RAISE EXCEPTION 'pilot_same_product_reenable_rejected';
   END IF;
 END;
 $$;

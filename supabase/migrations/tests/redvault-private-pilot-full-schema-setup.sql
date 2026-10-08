@@ -134,6 +134,26 @@ SELECT ordinary_product_id, '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fi
   'REDVAULT non-pilot rollback product', 100, 'new', 'S', 0, false, false, false, 1, 1, 'active'
 FROM redvault_private_pilot_case;
 
+CREATE FUNCTION public.redvault_private_pilot_probe_product(product_name text, tracking_policy text DEFAULT 'off')
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  product_id uuid;
+BEGIN
+  INSERT INTO public.products(
+    id, merchant_id, brand, name, price, condition, vat_category_code, vat_rate,
+    has_variants, taxable, manage_stock, stock_quantity, stock, status,
+    inventory_tracking_policy
+  )
+  VALUES (
+    extensions.gen_random_uuid(), '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'REDVAULT fixture',
+    product_name, 100, 'new', 'S', 0, false, false, false, 1, 1, 'active',
+    tracking_policy
+  )
+  RETURNING id INTO product_id;
+  RETURN product_id;
+END;
+$$;
+
 CREATE FUNCTION public.redvault_private_pilot_test_route_proof(p_order jsonb, p_quote jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE

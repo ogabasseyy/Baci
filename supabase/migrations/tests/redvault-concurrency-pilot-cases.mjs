@@ -27,6 +27,7 @@ export async function runConcurrencyPilotCases({
     '20261006190300_uba_redvault_pilot_item_fulfillment_guard.sql',
     '20261006190400_uba_redvault_pilot_db_staging_mode.sql',
     '20261006190500_uba_redvault_pilot_bound_product_immutable.sql',
+    '20261006190600_uba_redvault_pilot_reenable_and_tracking_guard.sql',
   ]) {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }

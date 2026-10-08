@@ -22,7 +22,11 @@ describe('POST /api/orders REDVAULT integration', () => {
       | 'private_live_pilot'
       | 'staging_test_mode' = 'private_live_pilot',
     lineVatRateBp = 0,
-    merchantVatRegistrationStatus: string | null = null
+    merchantVatRegistrationStatus: string | null = null,
+    overrides: {
+      body?: Record<string, unknown>;
+      shippingVerification?: { amount: number; kind: 'ship' | 'pickup' };
+    } = {}
   ) {
     vi.clearAllMocks();
     vi.stubEnv('REDVAULT_LIVE_PILOT_ENABLED', 'true');
@@ -115,6 +119,23 @@ describe('POST /api/orders REDVAULT integration', () => {
       error: null,
       supabase: supabase as never,
     });
+    const shippingSpy = overrides.shippingVerification
+      ? vi
+          .spyOn(
+            await import(
+              '@/lib/shipping/merchant-rates/verify-order-shipping-rate'
+            ),
+            'verifyOrderShippingRate'
+          )
+          .mockResolvedValue({
+            ok: true,
+            amount: overrides.shippingVerification.amount,
+            currency: 'NGN',
+            kind: overrides.shippingVerification.kind,
+            rateName: 'Verified rate',
+            pickupAddress: null,
+          } as never)
+      : null;
 
     try {
       const response = await POST(
@@ -134,6 +155,7 @@ describe('POST /api/orders REDVAULT integration', () => {
             ],
             subtotal: 100,
             payment_method: 'uba_redvault',
+            ...overrides.body,
           }),
         })
       );
@@ -151,6 +173,7 @@ describe('POST /api/orders REDVAULT integration', () => {
       availabilitySpy.mockRestore();
       quoteSpy.mockRestore();
       checkoutSpy.mockRestore();
+      shippingSpy?.mockRestore();
     }
   }
 
@@ -209,6 +232,37 @@ describe('POST /api/orders REDVAULT integration', () => {
 
   it('returns 409 when the quote VAT rate disagrees with the computed order tax', async () => {
     const result = await runPilotOrder(true, 'private_live_pilot', 750);
+
+    expect(result.response.status).toBe(409);
+    expect(await result.response.json()).toMatchObject({
+      code: 'REDVAULT_PILOT_UNAVAILABLE',
+    });
+    expect(result.checkoutCalled).toBe(false);
+    expect(result.createDraftRpcCalled).toBe(false);
+    expect(result.genericOrderRpcCalled).toBe(false);
+  });
+
+  it('judges the server-verified shipping fee rather than the client claim', async () => {
+    const result = await runPilotOrder(true, 'private_live_pilot', 0, null, {
+      body: {
+        shipping_fee: 0.005,
+        shipping_rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      shippingVerification: { amount: 0, kind: 'pickup' },
+    });
+
+    expect(result.response.status).toBe(201);
+    expect(result.checkoutCalled).toBe(true);
+  });
+
+  it('returns 409 at the app layer for a verified nonzero shipping fee', async () => {
+    const result = await runPilotOrder(true, 'private_live_pilot', 0, null, {
+      body: {
+        shipping_fee: 1500,
+        shipping_rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      },
+      shippingVerification: { amount: 1500, kind: 'pickup' },
+    });
 
     expect(result.response.status).toBe(409);
     expect(await result.response.json()).toMatchObject({

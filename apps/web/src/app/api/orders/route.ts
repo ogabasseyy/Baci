@@ -1579,25 +1579,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
-      redvaultRequested,
-      redvaultQuote,
-      userId: resolvedUserId,
-      merchantId: merchant_id,
-      currency: merchantResolvedCurrency,
-      shippingFee: shippingFeeValue,
-      wrappingFee: giftWrappingFeeValue,
-      orderItems: orderItemsPayload,
-      useWalletCredit: use_wallet_credit,
-      walletAmount: wallet_amount,
-      useSavingsCredit: use_savings_credit,
-      savingsAmount: savings_amount,
-      taxAmount: orderTaxAmount,
-    });
-    if (pilotOrderRejection) {
-      return pilotOrderRejection;
-    }
-
     // Canonical server-verified pre-discount subtotal. Computed lazily (at
     // most once) — shared by the discount-code amount computation and the
     // merchant shipping-rate fee verification below.
@@ -1936,6 +1917,31 @@ export async function POST(request: NextRequest) {
       verifiedMerchantShippingRate?.amount ??
       (isIdempotentLocalAirportReplay ? null : localAirportShippingFee) ??
       shippingFeeValue;
+
+    // Pilot gate runs on the SERVER-verified shipping fee: validating the
+    // client value before merchant-rate verification would let a spoofed
+    // zero-fee payload pass the app layer and fail only at the DB guards.
+    // (Tax and assurance are already server-computed inputs; wrapping has
+    // no server-computed counterpart, and wallet/savings are rechecked
+    // from server records at initialization.)
+    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
+      redvaultRequested,
+      redvaultQuote,
+      userId: resolvedUserId,
+      merchantId: merchant_id,
+      currency: merchantResolvedCurrency,
+      shippingFee: effectiveShippingFee,
+      wrappingFee: giftWrappingFeeValue,
+      orderItems: orderItemsPayload,
+      useWalletCredit: use_wallet_credit,
+      walletAmount: wallet_amount,
+      useSavingsCredit: use_savings_credit,
+      savingsAmount: savings_amount,
+      taxAmount: orderTaxAmount,
+    });
+    if (pilotOrderRejection) {
+      return pilotOrderRejection;
+    }
 
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({

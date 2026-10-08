@@ -476,3 +476,9 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-130 (P2) FIXED: brand search input stays while its query is nonempty (brands ≤ 6 shrink case). Regression test (8/8).
 - Muse: med rotation + med tray identity repeats; low idempotency satisfied via the Round 66 doc; low inbox-XSS adjudicated (React-default escaping, pre-existing files, no unescaped sinks).
 - CI inventory regen + pin (session split moved the tree).
+
+## Round 68 (Muse 2 med + 1 low on 10f6a2f — all adjudicated, 0 code action; Codex pending)
+
+- Muse med Assurance default-on ADJUDICATED (product sign-off, already tracked): policy + opt-out preservation + cart disclosure verified in code; Muse itself frames remaining risk as product/UX, not logic. Needs explicit merchant approval before merge — open product decision, unchanged.
+- Muse med deploy-ordering ADJUDICATED non-issue: both the base intake migration (20261002190000, raises 22023) and the outcome-code migration (20261008220000, P0001) ship in this PR and apply in timestamp order in one migration run before web deploys — the route's P0001 contract always meets the migrated head. No deploy window.
+- Muse low platform-admin visibility ADJUDICATED (parity confirmed): pre-existing public projections (20261001140000 MCP search, 20261002090720 variant projection, 20261002090724 bounded search, 20261002090725/31/32 bounds) all use the published-or-platform-admin form. Header claim verified; no unpublished-store leak beyond established behavior.

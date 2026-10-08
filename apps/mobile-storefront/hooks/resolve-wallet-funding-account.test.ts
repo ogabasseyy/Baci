@@ -1,5 +1,8 @@
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
-import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
+import {
+  readPrimaryFundingAccount,
+  resolveWalletFundingAccount,
+} from './resolve-wallet-funding-account';
 
 jest.mock('@/lib/piggyvest-primary-wallet', () => ({
   piggyvestPrimaryWalletApi: { read: jest.fn() },
@@ -12,22 +15,24 @@ const legacy = {
   bank_name: 'Wema Bank',
   provider: 'paystack',
 };
+const primaryAccount = {
+  accountName: 'Verified',
+  accountNumber: '0987654321',
+  bankName: 'Provider Bank',
+  provider: 'piggyvest',
+};
 const read = jest.mocked(piggyvestPrimaryWalletApi.read);
 
 beforeEach(() => jest.resetAllMocks());
 
 it('displays the confirmed PiggyVest account rather than the legacy account', async () => {
   read.mockResolvedValue({
-    account: {
-      accountName: 'Verified',
-      accountNumber: '0987654321',
-      bankName: 'Provider Bank',
-      provider: 'piggyvest',
-    },
+    account: primaryAccount,
     requiresConsent: false,
     provisioningStatus: 'ready',
   });
-  expect(await resolveWalletFundingAccount(legacy, merchantId)).toEqual({
+  const primary = await readPrimaryFundingAccount(merchantId);
+  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual({
     account_name: 'Verified',
     account_number: '0987654321',
     bank_name: 'Provider Bank',
@@ -35,19 +40,39 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
   });
 });
 
-it('never falls back to Paystack when PiggyVest reads fail', async () => {
+it('settles failed reads as unavailable instead of throwing the wallet load', async () => {
   read.mockRejectedValue(new Error('Unavailable'));
-  expect(await resolveWalletFundingAccount(legacy, merchantId)).toBeNull();
+  await expect(readPrimaryFundingAccount(merchantId)).resolves.toEqual({
+    status: 'unavailable',
+  });
+});
+
+it('keeps the last-known legacy account when PiggyVest reads fail', async () => {
+  read.mockRejectedValue(new Error('Unavailable'));
+  const primary = await readPrimaryFundingAccount(merchantId);
+  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
+    legacy
+  );
 });
 
 it('keeps the working legacy account when the server reports primary unconfigured', async () => {
   read.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'PIGGYVEST_NOT_READY' })
   );
-  expect(await resolveWalletFundingAccount(legacy, merchantId)).toEqual(legacy);
+  const primary = await readPrimaryFundingAccount(merchantId);
+  expect(resolveWalletFundingAccount(legacy, merchantId, primary)).toEqual(
+    legacy
+  );
+});
+
+it('resolves no account for freshly onboarded customers without legacy rows', async () => {
+  read.mockRejectedValue(new Error('Unavailable'));
+  const primary = await readPrimaryFundingAccount(merchantId);
+  expect(resolveWalletFundingAccount(null, merchantId, primary)).toBeNull();
 });
 
 it('preserves other merchants accounts without contacting PiggyVest', async () => {
-  expect(await resolveWalletFundingAccount(legacy, 'other')).toEqual(legacy);
+  const primary = await readPrimaryFundingAccount('other');
+  expect(resolveWalletFundingAccount(legacy, 'other', primary)).toEqual(legacy);
   expect(read).not.toHaveBeenCalled();
 });

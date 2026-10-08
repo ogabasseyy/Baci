@@ -3,7 +3,10 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema, TransactionRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
-import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
+import {
+  readPrimaryFundingAccount,
+  resolveWalletFundingAccount,
+} from './resolve-wallet-funding-account';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -162,7 +165,7 @@ export async function fetchWalletData(
     throw walletResult.error;
   }
 
-  const [fundingAccountResult, savingsGoalsResult, savingsInterest] =
+  const [fundingAccountResult, savingsGoalsResult, savingsInterest, primaryFunding] =
     await Promise.all([
       supabase
         .from('customer_wallet_payment_accounts')
@@ -184,6 +187,9 @@ export async function fetchWalletData(
       // Best-effort and never throws: on any failure it resolves to an
       // explicit unavailable marker, so the wallet still loads.
       fetchWalletSavingsInterest(merchantId),
+      // Same contract for the primary provider lookup: it resolves
+      // alongside the database reads instead of serializing the load.
+      readPrimaryFundingAccount(merchantId),
     ]);
 
   if (fundingAccountResult.error) {
@@ -233,9 +239,10 @@ export async function fetchWalletData(
     }
   );
 
-  const fundingAccountData = await resolveWalletFundingAccount(
+  const fundingAccountData = resolveWalletFundingAccount(
     fundingAccountResult.data,
-    merchantId
+    merchantId,
+    primaryFunding
   );
 
   let transactionRows: Transaction[] = [];

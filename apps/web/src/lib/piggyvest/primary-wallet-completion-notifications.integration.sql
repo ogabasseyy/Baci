@@ -13,7 +13,7 @@ INSERT INTO public.customer_savings_goals(id,merchant_id,customer_id,status,targ
 VALUES(pg_temp.goal_id(21),'00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000002','active',130,100);
 INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
-SELECT integration_id,pg_temp.goal_id(21),id,'notification-wallet',true FROM piggyvest_primary.onboarding_intents;
+SELECT integration_id,pg_temp.goal_id(21),id,'notification-wallet',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
 INSERT INTO piggyvest_savings_ledger.bindings(goal_id,integration_id,merchant_id,customer_id,authorized_login,enabled)
 VALUES(pg_temp.goal_id(21),'10000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','primary_interest_fixture',true);

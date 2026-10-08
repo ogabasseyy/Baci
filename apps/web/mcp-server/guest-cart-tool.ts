@@ -6,6 +6,7 @@ import {
   mcpGuestCartOutputSchema,
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
+import { consumeGuestCartCreation } from './guest-cart-creation-quota';
 import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
 
 class VariantSelectionRequired extends Error {
@@ -25,6 +26,7 @@ export function registerGuestCartTool(
     supabase: SupabaseClient;
     getMerchantId: () => Promise<string | null>;
     formatPrice: (price: number) => string;
+    clientIp?: string;
   }
 ) {
   server.registerTool(
@@ -53,6 +55,29 @@ export function registerGuestCartTool(
     },
     async (args) => {
       try {
+        // Tokenless calls mint a fresh cart file, so anonymous creation (but
+        // never token-bound updates) is capped per caller IP.
+        if (!args.cart_token) {
+          const quota = consumeGuestCartCreation(
+            options.clientIp ?? 'unknown'
+          );
+          if (!quota.allowed) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: 'Too many guest carts were created from this address. Continue an existing cart with its cart token, or try again later.',
+                },
+              ],
+              structuredContent: {
+                success: false,
+                quota_exceeded: true,
+                retry_after_seconds: quota.retryAfterSeconds,
+              },
+            };
+          }
+        }
         const merchantId = await options.getMerchantId();
         if (!merchantId) throw new Error('Store unavailable');
         const cart = await options.store.update(

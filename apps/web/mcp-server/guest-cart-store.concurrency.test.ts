@@ -9,7 +9,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { GuestCartStore } from './guest-cart-store';
+import { GuestCartExpiredError, GuestCartStore } from './guest-cart-store';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 const id = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -239,4 +239,29 @@ it('treats product ids case-insensitively across add, update, and remove', async
     async () => {}
   );
   expect(removed.items).toEqual([]);
+});
+
+it('deletes the cart file when the last line is removed', async () => {
+  const { directory, instance } = await store();
+  const created = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  const file = path.join(directory, `${created.cart_token}.json`);
+  const emptied = await instance.update(
+    created.cart_token,
+    { product_id: id, quantity: 0 },
+    async () => {}
+  );
+  expect(emptied.items).toEqual([]);
+  await expect(readFile(file, 'utf8')).rejects.toThrow();
+  await expect(instance.hasToken(created.cart_token)).resolves.toBe(false);
+  await expect(
+    instance.update(
+      created.cart_token,
+      { product_id: id, quantity: 1 },
+      async () => {}
+    )
+  ).rejects.toBeInstanceOf(GuestCartExpiredError);
 });

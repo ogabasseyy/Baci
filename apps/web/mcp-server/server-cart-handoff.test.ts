@@ -259,4 +259,24 @@ describe('MCP cart handoff', () => {
     }
   });
 
+  it('rejects overlong cart-link product ids without running the lookup', async () => {
+    const server = await startMcpServerWithPostgrest({});
+    try {
+      const rejected = getResultRecord(
+        await postMcpJsonRpc(server.baseUrl, {
+          id: 91,
+          method: 'tools/call',
+          params: {
+            name: 'prepare_storefront_cart_link',
+            arguments: { product_id: 'p'.repeat(81), quantity: 1 },
+          },
+        })
+      );
+      expect(rejected.isError).toBe(true);
+      expect(JSON.stringify(rejected)).not.toContain('cart_url');
+    } finally {
+      await server.close();
+    }
+  });
+
 });

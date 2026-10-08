@@ -1,9 +1,11 @@
 import {
+  chmodSync,
   closeSync,
   mkdirSync,
   openSync,
   readFileSync,
   realpathSync,
+  renameSync,
   statSync,
   unlinkSync,
   utimesSync,
@@ -54,6 +56,24 @@ function directoryNotWritableError(target: string, cause: unknown): Error {
   );
 }
 
+function refuseSecondWriter(lockPath: string, directory: string): never {
+  // Fail closed with an actionable record: the refusal crashes the process
+  // at startup, so log the lock path and both PIDs for the ops alert trail
+  // (e.g. an accidental `--scale 2` under plain compose).
+  let holder = 'unknown';
+  try {
+    holder = readFileSync(lockPath, 'utf8');
+  } catch {
+    /* Fall through with an unknown holder. */
+  }
+  console.error(
+    `[guest-cart] refusing second writer for ${lockPath} (held by ${holder}, claimant pid ${process.pid})`
+  );
+  throw new Error(
+    `Another MCP writer owns ${directory}; refusing to start a second guest-cart writer.`
+  );
+}
+
 export function acquireWriterLock(directory: string): void {
   try {
     // Cart filenames are the Bearer [REDACTED] tokens: match the store's 0700 so other
@@ -63,6 +83,28 @@ export function acquireWriterLock(directory: string): void {
     if (isPermissionError(error))
       throw directoryNotWritableError(directory, error);
     throw error;
+  }
+  // Creation mode does not affect pre-existing directories (a restored or
+  // pre-created volume keeps its mode), so restrict explicitly and verify:
+  // group/other access would expose the token filenames.
+  try {
+    chmodSync(directory, 0o700);
+  } catch {
+    /* Verified below; the claim maps real permission failures. */
+  }
+  if (process.platform !== 'win32') {
+    let mode = 0;
+    try {
+      mode = statSync(directory).mode & 0o777;
+    } catch (error) {
+      if (isPermissionError(error))
+        throw directoryNotWritableError(directory, error);
+      throw error;
+    }
+    if (mode & 0o077)
+      throw new Error(
+        `Guest-cart directory ${directory} is accessible by other users (mode ${mode.toString(8)}); restrict it to owner-only access (chmod 700 ${directory}).`
+      );
   }
   const key = realpathSync(directory);
   if (heldWriterLocks.has(key)) return;
@@ -96,29 +138,33 @@ export function acquireWriterLock(directory: string): void {
     } catch {
       stale = true;
     }
-    if (!stale) {
-      // Fail closed with an actionable record: the refusal crashes the
-      // process at startup, so log the lock path and both PIDs for the ops
-      // alert trail (e.g. an accidental `--scale 2` under plain compose).
-      let holder = 'unknown';
+    if (!stale) refuseSecondWriter(lockPath, directory);
+    // Atomic takeover: rename moves the stale lock aside in one step, so at
+    // most one racing process wins it. An unconditional unlink here could
+    // delete another process's fresh claim made after our staleness check.
+    const staleSidePath = `${lockPath}.stale-${process.pid}`;
+    let renamed = false;
+    try {
+      renameSync(lockPath, staleSidePath);
+      renamed = true;
+    } catch {
+      // Lost the race (taken over or freshly claimed); the fresh claim
+      // below decides.
+    }
+    if (renamed) {
       try {
-        holder = readFileSync(lockPath, 'utf8');
+        unlinkSync(staleSidePath);
       } catch {
-        /* Fall through with an unknown holder. */
+        /* A leftover side file is inert; the claim below decides. */
       }
-      console.error(
-        `[guest-cart] refusing second writer for ${lockPath} (held by ${holder}, claimant pid ${process.pid})`
-      );
-      throw new Error(
-        `Another MCP writer owns ${directory}; refusing to start a second guest-cart writer.`
-      );
     }
     try {
-      unlinkSync(lockPath);
-    } catch {
-      /* Lost the takeover race; the claim below decides. */
+      claim();
+    } catch (claimError) {
+      if ((claimError as NodeJS.ErrnoException).code === 'EEXIST')
+        refuseSecondWriter(lockPath, directory);
+      throw claimError;
     }
-    claim();
   }
   const owned: OwnedLock = {
     lockPath,

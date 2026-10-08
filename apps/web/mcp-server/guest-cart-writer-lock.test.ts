@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import {
   chmod,
   mkdtemp,
@@ -9,6 +10,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   acquireWriterLock,
@@ -75,14 +77,14 @@ it('allows reentrant acquisition in the same process', async () => {
 it('refuses an unwritable directory with remediation instead of a raw errno', async () => {
   // Root bypasses permission bits, so the probe is meaningless there.
   if (typeof process.getuid === 'function' && process.getuid() === 0) return;
-  const root = await directory('guest-lock-perms-');
+  const parent = await directory('guest-lock-perms-');
   try {
-    await chmod(root, 0o555);
-    expect(() => acquireWriterLock(root)).toThrow(
+    await chmod(parent, 0o555);
+    expect(() => acquireWriterLock(path.join(parent, 'carts'))).toThrow(
       /not writable.*chown the mounted directory/
     );
   } finally {
-    await chmod(root, 0o755);
+    await chmod(parent, 0o755);
   }
 });
 
@@ -141,4 +143,66 @@ it('creates the cart directory with owner-only permissions', async () => {
   );
   acquireWriterLock(root);
   expect((await stat(root)).mode & 0o777).toBe(0o700);
+});
+
+it('restricts a pre-existing world-readable directory to owner-only', async () => {
+  if (process.platform === 'win32') return;
+  const root = await directory('guest-lock-chmod-');
+  await chmod(root, 0o755);
+  acquireWriterLock(root);
+  expect((await stat(root)).mode & 0o777).toBe(0o700);
+});
+
+it('elects exactly one owner when two processes race a stale lock', async () => {
+  const root = await directory('guest-lock-race-');
+  const lock = path.join(root, '.writer.lock');
+  await writeFile(lock, '{}');
+  const old = new Date(Date.now() - 60_000);
+  await utimes(lock, old, old);
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.dirname(path.dirname(path.dirname(moduleDir)));
+  const tsxExecutable = path.join(
+    repoRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  );
+  const childScript = path.join(root, 'claim-child.mts');
+  await writeFile(
+    childScript,
+    `import { acquireWriterLock } from ${JSON.stringify(path.join(moduleDir, 'guest-cart-writer-lock.ts'))};
+try {
+  acquireWriterLock(process.argv[2]);
+  console.log('owner:' + process.pid);
+} catch {
+  console.log('refused');
+}`
+  );
+  const run = () =>
+    new Promise<string>((resolve, reject) => {
+      const child = spawn(tsxExecutable, [childScript, root], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let output = '';
+      child.stdout?.on('data', (chunk) => {
+        output += chunk.toString();
+      });
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('lock race child timed out'));
+      }, 15000);
+      timer.unref();
+      child.on('error', reject);
+      child.on('close', () => {
+        clearTimeout(timer);
+        resolve(output);
+      });
+    });
+  const [first, second] = await Promise.all([run(), run()]);
+  const owners = (first + second).match(/owner:\d+/g) ?? [];
+  expect(owners).toHaveLength(1);
+  expect(first + second).toContain('refused');
+  await expect(readFile(lock, 'utf8')).resolves.toContain(
+    `"pid":${owners[0].split(':')[1]}`
+  );
 });

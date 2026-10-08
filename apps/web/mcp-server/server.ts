@@ -1189,7 +1189,7 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
-function createOgabasseyServer() {
+function createOgabasseyServer(options: { clientIp?: string } = {}) {
   const server = new McpServer({
     name: 'ogabassey-store',
     version: '1.0.0',
@@ -1304,12 +1304,16 @@ function createOgabasseyServer() {
     }
   );
 
-  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice });
+  registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
   // Tool: Add to Cart (Widget-accessible)
   // This tool can be called from the widget iframe using window.openai.callTool
   const cartLinkInputSchema = {
-    product_id: z.string().describe('The product ID to add to cart'),
+    product_id: z
+      .string()
+      .min(1)
+      .max(80)
+      .describe('The product ID to add to cart'),
     quantity: z
       .number()
       .int()
@@ -2597,7 +2601,7 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Allow-Headers', MCP_ALLOWED_HEADERS);
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
-      const server = createOgabasseyServer();
+      const server = createOgabasseyServer({ clientIp: ip });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,

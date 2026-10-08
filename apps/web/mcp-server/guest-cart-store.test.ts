@@ -271,3 +271,26 @@ it('reports corrupt carts as expired and reclaims them', async () => {
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
   await expect(readFile(corruptFile, 'utf8')).rejects.toThrow();
 });
+
+it('runs the expiry sweep on token updates as well as creates', async () => {
+  const { directory, instance } = await store();
+  const created = await instance.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    async () => {}
+  );
+  const dead = path.join(directory, `${'d'.repeat(64)}.json`);
+  await writeFile(dead, JSON.stringify({ expires_at: 1, items: [] }));
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(Date.now() + 61 * 1000);
+    await instance.update(
+      created.cart_token,
+      { product_id: id, quantity: 2 },
+      async () => {}
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+  await expect(readFile(dead, 'utf8')).rejects.toThrow();
+});

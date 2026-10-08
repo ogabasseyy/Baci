@@ -16,6 +16,10 @@ it('rejects malformed, duplicate, oversized, fractional and excessive handoffs',
   for (const raw of [
     'bad',
     JSON.stringify([line, line]),
+    JSON.stringify([
+      line,
+      { ...line, product_id: line.product_id.toUpperCase() },
+    ]),
     'x'.repeat(4001),
     JSON.stringify([{ ...line, quantity: 1.5 }]),
     JSON.stringify([{ ...line, quantity: 11 }]),

@@ -4,6 +4,10 @@ export const guestCartLineSchema = z.object({
   product_id: z.string().uuid(),
   quantity: z.number().int().min(1).max(10),
 });
+export const storedCartSchema = z.object({
+  expires_at: z.number(),
+  items: z.array(guestCartLineSchema).max(20),
+});
 export const guestCartHandoffSchema = z
   .array(guestCartLineSchema)
   .min(1)
@@ -51,6 +55,8 @@ export const mcpGuestCartOutputSchema = z
     cart_url: z.string().url().optional(),
     requires_variant_selection: z.literal(true).optional(),
     cart_expired: z.literal(true).optional(),
+    quota_exceeded: z.literal(true).optional(),
+    retry_after_seconds: z.number().int().min(0).optional(),
     product_id: z.string().uuid().optional(),
     product_url: z.string().url().optional(),
   })

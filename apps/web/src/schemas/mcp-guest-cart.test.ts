@@ -167,6 +167,19 @@ describe('mcpGuestCartOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('parses a quota-denial payload without stripping its flags', () => {
+    const result = mcpGuestCartOutputSchema.safeParse({
+      success: false,
+      quota_exceeded: true,
+      retry_after_seconds: 1800,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      quota_exceeded: true,
+      retry_after_seconds: 1800,
+    });
+  });
+
   it('rejects invalid token, oversized items, datetime, and url fields', () => {
     const base = {
       success: true,

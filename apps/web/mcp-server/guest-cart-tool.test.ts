@@ -77,3 +77,26 @@ it('returns a recoverable flag when the token names a dead cart', async () => {
     expect(validate).not.toHaveBeenCalled();
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
+it('caps anonymous cart creation per caller while token updates stay unlimited', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-quota-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String, clientIp: 'quota-test-client' });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    let firstToken = '';
+    for (let i = 0; i < 20; i += 1) {
+      const created = await handler?.({ product_id: id, quantity: 1 }) as { structuredContent: { success: boolean; cart_token: string } };
+      expect(created.structuredContent.success).toBe(true);
+      if (i === 0) firstToken = created.structuredContent.cart_token;
+    }
+    const denied = await handler?.({ product_id: id, quantity: 1 }) as { isError?: boolean; structuredContent: Record<string, unknown> };
+    expect(denied.isError).toBe(true);
+    expect(denied.structuredContent).toMatchObject({ success: false, quota_exceeded: true });
+    expect(denied.structuredContent.retry_after_seconds).toEqual(expect.any(Number));
+    const update = await handler?.({ product_id: id, quantity: 2, cart_token: firstToken }) as { structuredContent: { success: boolean; items: unknown[] } };
+    expect(update.structuredContent.success).toBe(true);
+    expect(update.structuredContent.items).toEqual([{ product_id: id, quantity: 2 }]);
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});

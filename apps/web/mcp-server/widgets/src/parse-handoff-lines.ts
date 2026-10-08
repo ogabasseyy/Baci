@@ -39,8 +39,8 @@ export function parseHandoffLines(raw: string | null): HandoffLine[] | null {
       quantity > 10
     )
       return null;
-    if (seen.has(product_id)) return null;
-    seen.add(product_id);
+    if (seen.has(product_id.toLowerCase())) return null;
+    seen.add(product_id.toLowerCase());
     lines.push({ product_id, quantity });
   }
   return lines;

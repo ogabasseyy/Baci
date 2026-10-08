@@ -244,3 +244,12 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low intake-budget + low assurance-default: repeats of the contact-PII (Rounds 26/30) and assurance (Rounds 23-31) adjudications.
 - Muse low totalCount/count: adjudicated — deliberate and pinned: page count uses the raw ranked total so hydration drops don't strand reachable pages (`search-page-content.tsx` comment + "keeps other pages reachable" test); the summary line uses the adjusted count. Using the adjusted total for pages would regress that test.
 - Muse next-steps staleness noted: slide-fixture errors, replay/inventory failures, and CI-pending are resolved (10/10 gates, replay suites green, CI green except in-flight shards); CodeRabbit rate_limit is a vendor-side gap, not a code finding.
+
+## Round 38 (Codex clean on 36683f0a91 + a2bb1502d9; Muse 2 med + 2 low — 1 comment fix, 3 adjudicated)
+
+- Codex: "Didn't find any major issues" with zero inline comments on both Round 37 heads (36683f0a91 code, a2bb1502d9 inventory refresh).
+- CI: web shard 4 failed only on the inventory snapshot (match_base link changes moved the route tree); regenerated via the sanctioned CLI (568 rows, new sha 42f693b4…) + pin update, repository test green.
+- Muse low stale-comment FIXED: product-request.ts claimed the submit RPC is "service-role only" but migration 20261004170500 revoked service_role and grants only storefront_intake. Comment now names the intake role.
+- Muse medium snapshot-UUID adjudicated with evidence: matched ids are `uuid` at the RPC source (20261004210000 RETURNS TABLE), pass through readRefinedSearchRows as strings, and the single web writer copies searchMatch ids verbatim — so `.uuid()` matches the wire format exactly. 'o1'/'offer-open-box' exist only in test fixtures. The contract was already pinned (comparison-snapshot.test.ts: UUIDs preserved, malformed dropped with parent basis kept).
+- Muse medium assurance + low PII-copy: repeats of the Rounds 23-31 assurance and Rounds 26/30 inbox-delivery adjudications (documented behavior; disclosure + erasure + RLS verified).
+- Threads: paginated audit (125 total) found the 9 Round 36 threads unresolved; all fixed on the branch — resolved, 0 remaining.

@@ -37,8 +37,9 @@ export class ProductRequestSubmitError extends Error {
   }
 }
 // Submits through POST /api/storefront/product-requests. The submit RPC is
-// service-role only, so callers must never invoke it directly: the API route
-// adds a trusted per-IP network gate in front of the DB budgets.
+// granted only to the storefront_intake role (service_role is revoked), so
+// callers must never invoke it directly: the API route adds a trusted
+// per-IP network gate in front of the DB budgets.
 export async function submitProductRequest(
   endpoint: string,
   input: ProductRequest

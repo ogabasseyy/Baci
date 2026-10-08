@@ -164,8 +164,8 @@ it('elects exactly one owner when two processes race for a fresh lock', async ()
     '.bin',
     process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
   );
-  // The winner stays alive past the race: after a real exit any takeover
-  // is legitimate, so exiting racers cannot assert single ownership.
+  // The winner stays alive past the race so this covers the fresh-claim
+  // path without involving stale takeover (covered by the next test).
   const childScript = path.join(root, 'claim-child.mts');
   await writeFile(
     childScript,
@@ -174,6 +174,63 @@ try {
   acquireWriterLock(process.argv[2]);
   console.log('owner:' + process.pid);
   await new Promise((resolve) => setTimeout(resolve, 3000));
+} catch {
+  console.log('refused');
+}`
+  );
+  const run = () =>
+    new Promise<string>((resolve, reject) => {
+      const child = spawn(tsxExecutable, [childScript, root], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let output = '';
+      child.stdout?.on('data', (chunk) => {
+        output += chunk.toString();
+      });
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error('lock race child timed out'));
+      }, 15000);
+      timer.unref();
+      child.on('error', reject);
+      child.on('close', () => {
+        clearTimeout(timer);
+        resolve(output);
+      });
+    });
+  const [first, second] = await Promise.all([run(), run()]);
+  const owners = (first + second).match(/owner:\d+/g) ?? [];
+  expect(owners).toHaveLength(1);
+  expect(first + second).toContain('refused');
+  await expect(readFile(lock, 'utf8')).resolves.toContain(
+    `"pid":${owners[0].split(':')[1]}`
+  );
+});
+
+it('elects exactly one owner when two processes race a stale lock', async () => {
+  const root = await directory('guest-lock-stale-race-');
+  const lock = path.join(root, '.writer.lock');
+  await writeFile(lock, JSON.stringify({ pid: 99999999 }));
+  const old = new Date(Date.now() - 60_000);
+  await utimes(lock, old, old);
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.dirname(path.dirname(path.dirname(moduleDir)));
+  const tsxExecutable = path.join(
+    repoRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  );
+  // Exiting racers: a takeover that finds a fresh claim mid-flight must
+  // restore it and refuse, so exactly one owner is elected even though
+  // both processes verified the same stale generation.
+  const childScript = path.join(root, 'takeover-child.mts');
+  await writeFile(
+    childScript,
+    `import { acquireWriterLock } from ${JSON.stringify(path.join(moduleDir, 'guest-cart-writer-lock.ts'))};
+try {
+  acquireWriterLock(process.argv[2]);
+  console.log('owner:' + process.pid);
 } catch {
   console.log('refused');
 }`

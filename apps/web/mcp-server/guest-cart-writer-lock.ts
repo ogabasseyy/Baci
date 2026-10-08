@@ -16,9 +16,10 @@ import path from 'node:path';
 // Cross-process single-writer guard: the in-memory queues only serialize
 // operations within one process, so the cart directory itself carries an
 // exclusive lock. Claims are atomic (`wx`); heartbeats keep a live
-// holder's claim fresh, and takeovers move aside only the exact stale
-// generation verified by a content sandwich, so a fresh claim landing
-// mid-takeover fails closed instead of electing two owners.
+// holder's claim fresh, and takeovers verify the moved generation after
+// renaming it aside, restoring a fresh claim that landed mid-takeover
+// instead of stealing it, so simultaneous stale claimants elect exactly
+// one owner.
 const WRITER_LOCK_FILE = '.writer.lock';
 const WRITER_HEARTBEAT_INTERVAL_MS = 5_000;
 const WRITER_LOCK_STALE_MS = 30_000;
@@ -165,11 +166,13 @@ export function acquireWriterLock(directory: string): void {
         Date.now() - mtimeMs <= WRITER_LOCK_STALE_MS
       )
         refuseSecondWriter(lockPath, directory);
-      // The verified stale claim: rename moves it aside in one step, and
-      // the exclusive re-claim below still decides between simultaneous
-      // takeovers, so exactly one process wins. A holder suspended past
-      // the stale window can briefly overlap a takeover; its heartbeat
-      // exits on wake instead of writing without the guarantee.
+      // Move the verified stale claim aside, then confirm the generation
+      // actually moved: a fresh claim that landed after our sandwich must
+      // be restored, not stolen. Simultaneous stale takeovers still meet
+      // at the exclusive re-claim below, so exactly one process wins; a
+      // holder suspended past the stale window can briefly overlap a
+      // takeover, and its heartbeat exits on wake instead of writing
+      // without the guarantee.
       const staleSidePath = `${lockPath}.stale-${process.pid}`;
       let renamed = false;
       try {
@@ -180,6 +183,29 @@ export function acquireWriterLock(directory: string): void {
         // below decides.
       }
       if (renamed) {
+        if (readLockContent(staleSidePath) !== before) {
+          // Stole a fresh claim: put it back when nothing claimed
+          // meanwhile, then refuse. A claimant displaced here heals via
+          // its heartbeat instead of writing without the guarantee.
+          if (readLockContent(lockPath) === null) {
+            try {
+              renameSync(staleSidePath, lockPath);
+            } catch {
+              try {
+                unlinkSync(staleSidePath);
+              } catch {
+                /* A leftover side file is inert. */
+              }
+            }
+          } else {
+            try {
+              unlinkSync(staleSidePath);
+            } catch {
+              /* A leftover side file is inert. */
+            }
+          }
+          refuseSecondWriter(lockPath, directory);
+        }
         try {
           unlinkSync(staleSidePath);
         } catch {

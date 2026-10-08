@@ -49,16 +49,20 @@ export async function runPrimaryCardTransferOutbox(input: {
   const reconciliationRequired =
     selected.unknownCount > 0 || selected.dispatchingCount > 0;
   const operationId = selected.operationIds[0];
-  const outcome =
-    operationId && !reconciliationRequired
-      ? await dispatchPrimaryCardProviderTransfer({
-          operationId,
-          environment,
-          fetchImplementation: input.fetchImplementation,
-          now: clock,
-          signal: input.signal,
-        })
-      : null;
+  // Drain the selected ready operation even while unrelated operations
+  // await reconciliation: selection, claim, and the provider reference
+  // are all per-operation, so one ambiguous transfer must not stall the
+  // integration-wide outbox. The status below still reports
+  // reconciliation_required until the stuck counts clear.
+  const outcome = operationId
+    ? await dispatchPrimaryCardProviderTransfer({
+        operationId,
+        environment,
+        fetchImplementation: input.fetchImplementation,
+        now: clock,
+        signal: input.signal,
+      })
+    : null;
   return {
     mode: input.mode,
     status:

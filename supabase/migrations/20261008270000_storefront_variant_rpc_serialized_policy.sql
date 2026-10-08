@@ -10,7 +10,12 @@
 -- the approved availability counter (0 when the variant has no serialized
 -- units). Existing columns, visibility, ordering, and grants are
 -- unchanged; the merchant-scoped units lookup runs once per merchant.
+-- The return type gains two columns, so the old signature is dropped
+-- first: CREATE OR REPLACE cannot change a function's return type
+-- (42P13).
 BEGIN;
+
+DROP FUNCTION IF EXISTS public.get_storefront_product_variants(uuid[]);
 
 CREATE OR REPLACE FUNCTION public.get_storefront_product_variants(
   p_product_ids uuid[]

@@ -4,7 +4,6 @@ import { WalletFundModal } from './WalletFundModal';
 import { createWalletContentProps } from './wallet-content.test-utils';
 
 jest.mock('./PiggyvestWalletSetupPanel', () => {
-  const React = require('react');
   const { Text } = require('react-native');
   return {
     PiggyvestWalletSetupPanel: () => <Text>Primary setup panel</Text>,

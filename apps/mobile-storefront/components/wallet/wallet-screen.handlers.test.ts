@@ -21,9 +21,11 @@ jest.mock('@/lib/wallet-top-up', () => ({
   initializeWalletTopUp: jest.fn(),
 }));
 
-const mockFundPrimaryWalletCard = jest.fn<(...args: never[]) => Promise<void>>();
+const mockFundPrimaryWalletCard =
+  jest.fn<(...args: never[]) => Promise<void>>();
 jest.mock('./fund-primary-wallet-card', () => ({
-  fundPrimaryWalletCard: (...args: never[]) => mockFundPrimaryWalletCard(...args),
+  fundPrimaryWalletCard: (...args: never[]) =>
+    mockFundPrimaryWalletCard(...args),
 }));
 
 jest.mock('@/lib/logger', () => ({

@@ -116,7 +116,9 @@ describe('fetchSavingsPlanFunding', () => {
     const urls = mockFetchWithTimeout.mock.calls
       .map(([url]) => String(url))
       .filter((url) => !url.includes('/api/csrf'));
-    expect(urls[0]).toContain('/api/storefront/customer/savings/primary-provisioning');
+    expect(urls[0]).toContain(
+      '/api/storefront/customer/savings/primary-provisioning'
+    );
     expect(urls[1]).toContain('/api/storefront/customer/savings/funding');
   });
 

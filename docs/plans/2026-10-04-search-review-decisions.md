@@ -386,3 +386,11 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low assurance-disclosure: repeat — checkout quote itemization + invoice line (Round 42) and the rehydration opt-out test already answer both asks.
 - CI Quality Gate - Test FIXED: compare screen test mocked useComparisonProducts without unavailableIds (unfaithful — the hook always returns it); the required prop exposed the mock. Added unavailableIds: [] (6/6). Swept: no other hook mocks.
 - CI shard 4 FIXED: inventory regen + pin (Round-49 sources moved the tree).
+
+## Round 56 (CI Misc fail + Muse 2 med + 2 low on 1f640c8b8f — 1 fixed, 4 adjudicated; Codex pending)
+
+- CI Misc FIXED: cart-store.ts hit 308 lines (>300 module-size guard) after Round 55. Extracted nativeAssurancePolicy()/resolveNativeAddedLineAssurance() (CONFIG wiring + voucher sniffing) into stores/cart-assurance-default.ts (29 lines, structural input type so addItem's Omit<CartItem,'id'> fits); store back to 297 lines. Guard green; cart suites 16/16; native lint/typecheck green; edge-inventory pin untouched (web-only snapshot, repo test 1/1).
+- Muse med migration-manifest: VALID re description staleness — PR body said "five additive migrations", actual is 23 files + 12 replay tests vs origin/main. Body corrected with the reconciled manifest. Double-apply risk answered: DB Replay is green on this head (4m46s).
+- Muse med intake-rotation: PR-disclosed repeat (deferred IP-throttle follow-up; merchant acceptance still needed before public launch).
+- Muse low notification-PII: design coherent — contact lives in the merchant-scoped inbox row (needed for fulfillment), reads are merchant-owner-scoped, erase trigger deletes the inbox copy with the request. Retention window is a policy follow-up, not a code defect.
+- Muse low pre-add disclosure: verified chain — NEITHER PDP pre-discloses the +5%, but both PDPs route through the cart (web "View Cart and Checkout", native router.navigate('/cart'); no direct checkout), where the fee is itemized with an opt-out toggle before payment. PDP pre-add copy is a product/UX follow-up.

@@ -14,7 +14,9 @@ function object(value: unknown): Record<string, unknown> | null {
 }
 
 function metadataOf(body: unknown): Record<string, unknown> | null {
-  const data = object(body && typeof body === 'object' && 'data' in body ? body.data : null);
+  const data = object(
+    body && typeof body === 'object' && 'data' in body ? body.data : null
+  );
   if (!data) return null;
   let metadata: unknown = data.metadata;
   if (typeof metadata === 'string') {
@@ -47,13 +49,16 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
   const body = object(input.body);
   const data = body ? object(body.data) : null;
   const metadata = metadataOf(input.body);
-  const reference = data && typeof data.reference === 'string' ? data.reference : null;
+  const reference =
+    data && typeof data.reference === 'string' ? data.reference : null;
   const operationId =
     metadata && typeof metadata.operation_id === 'string'
       ? metadata.operation_id
       : null;
   const email =
-    data && object(data.customer) && typeof object(data.customer)?.email === 'string'
+    data &&
+    object(data.customer) &&
+    typeof object(data.customer)?.email === 'string'
       ? (object(data.customer)?.email as string)
       : null;
   if (!reference || !operationId || !email) return null;
@@ -88,13 +93,18 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
         businessId: runtime.settings.businessId,
         email,
       },
-      execute: input.execute ?? createPrimaryWalletCardCheckoutExecutor(runtime),
+      execute:
+        input.execute ?? createPrimaryWalletCardCheckoutExecutor(runtime),
       provider:
         input.provider ??
         createPrimaryWalletCardCheckoutProvider(runtime.settings, fetch),
     });
     const result = await service.status(operationId);
-    if (['initializing', 'init_unknown', 'ready'].includes(result.status))
+    if (
+      !['custody_pending', 'reconciliation_required', 'completed'].includes(
+        result.status
+      )
+    )
       return null;
     return Response.json(
       { received: true },

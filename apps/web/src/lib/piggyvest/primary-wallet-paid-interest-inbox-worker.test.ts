@@ -72,6 +72,13 @@ it('durably quarantines financial conflict', async () => {
     expect.objectContaining({ outcome: 'conflict' })
   );
 });
+it('quarantines a mid-flight crosswalk disappearance for operator review', async () => {
+  mocks.dispatch.mockResolvedValue('not_handled');
+  expect((await drainPrimaryWalletPaidInterestInbox({})).quarantined).toBe(1);
+  expect(mocks.finish).toHaveBeenCalledWith(
+    expect.objectContaining({ outcome: 'conflict' })
+  );
+});
 it('retries provider or database I/O rather than claiming completion', async () => {
   mocks.dispatch.mockRejectedValue(new Error('secret provider failure'));
   await expect(drainPrimaryWalletPaidInterestInbox({})).rejects.toThrow(

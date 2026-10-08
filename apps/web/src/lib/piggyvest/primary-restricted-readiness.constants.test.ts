@@ -8,9 +8,7 @@ describe('primaryRestrictedReadinessRequirements', () => {
     ).toBeGreaterThan(0);
     expect(
       primaryRestrictedReadinessRequirements.maxApprovalWindowMs
-    ).toBeGreaterThan(
-      primaryRestrictedReadinessRequirements.maxEvidenceAgeMs
-    );
+    ).toBeGreaterThan(primaryRestrictedReadinessRequirements.maxEvidenceAgeMs);
   });
 
   it('requires a unique non-empty environment contract', () => {

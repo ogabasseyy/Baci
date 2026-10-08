@@ -30,10 +30,10 @@ describe('getPrimaryCustomerSavingsFeatureSettings', () => {
       paystackEnabled: true,
       savingsEnabled: true,
     });
-    expect(rpc).toHaveBeenCalledWith(
-      'get_customer_savings_feature_settings',
-      { p_customer_id: 'customer-1', p_merchant_id: 'merchant-1' }
-    );
+    expect(rpc).toHaveBeenCalledWith('get_customer_savings_feature_settings', {
+      p_customer_id: 'customer-1',
+      p_merchant_id: 'merchant-1',
+    });
   });
 
   it('fails closed when savings is disabled or the row is missing', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { primaryWalletCardCheckoutFixture as fixture } from './primary-wallet-card-checkout.test-fixture';
+import { createPrimaryWalletCardCheckoutProvider } from './primary-wallet-card-checkout-provider';
 import { reconcilePrimaryWalletCardCheckoutWebhook } from './primary-wallet-card-checkout-webhook-reconcile';
 
 vi.mock('server-only', () => ({}));
@@ -56,6 +57,95 @@ function setup(status = 'ready') {
 }
 
 describe('primary card checkout webhook reconcile', () => {
+  it('uses authoritative mocked HTTP verification without a phone callback and deduplicates durable collection', async () => {
+    const { execute, runtime } = setup('ready');
+    const receipt = body();
+    const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      Response.json({
+        status: true,
+        data: {
+          ...receipt.data,
+          id: '12345',
+          amount: fixture.intent.amountKobo,
+          currency: 'NGN',
+          domain: 'test',
+          channel: 'card',
+          status: 'success',
+          metadata: {
+            ...receipt.data.metadata,
+            request_fingerprint: fixture.intent.fingerprint,
+          },
+        },
+      })
+    );
+    const provider = createPrimaryWalletCardCheckoutProvider(
+      fixture.settings,
+      transport
+    );
+    const input = {
+      body: body({ amount: 1 }),
+      runtime,
+      execute: execute as never,
+      provider,
+    };
+    expect(
+      (await reconcilePrimaryWalletCardCheckoutWebhook(input))?.status
+    ).toBe(200);
+    expect(
+      (await reconcilePrimaryWalletCardCheckoutWebhook(input))?.status
+    ).toBe(200);
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(transport).toHaveBeenCalledWith(
+      `https://api.paystack.co/transaction/verify/${fixture.intent.reference}`,
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(execute.mock.calls.map(([action]) => action)).toEqual([
+      'read',
+      'collection',
+      'read',
+      'read',
+    ]);
+  });
+
+  it('does not acknowledge a reserved operation without durable collection evidence', async () => {
+    const { execute, provider, runtime } = setup('reserved');
+    expect(
+      await reconcilePrimaryWalletCardCheckoutWebhook({
+        body: body(),
+        runtime,
+        execute: execute as never,
+        provider: provider as never,
+      })
+    ).toBeNull();
+    expect(provider.verify).not.toHaveBeenCalled();
+    expect(execute.mock.calls.map(([action]) => action)).toEqual(['read']);
+  });
+
+  it.each([
+    'reject',
+    'false acknowledgement',
+    'unchanged state',
+  ])('keeps a verified collection retryable after %s instead of losing webhook delivery', async (failure) => {
+    const { execute, provider, runtime } = setup('ready');
+    execute.mockImplementation(async (action: string) => {
+      if (action === 'read') return { ...fixture.intent, status: 'ready' };
+      if (action === 'collection') {
+        if (failure === 'reject') throw new Error('private storage failure');
+        return failure !== 'false acknowledgement';
+      }
+      throw new Error('Unexpected action');
+    });
+    expect(
+      await reconcilePrimaryWalletCardCheckoutWebhook({
+        body: body(),
+        runtime,
+        execute: execute as never,
+        provider: provider as never,
+      })
+    ).toBeNull();
+    expect(provider.verify).toHaveBeenCalledTimes(1);
+  });
+
   it('verifies and durably records a charged collection before acknowledging', async () => {
     const { execute, provider, runtime } = setup('ready');
     const response = await reconcilePrimaryWalletCardCheckoutWebhook({
@@ -116,8 +206,14 @@ describe('primary card checkout webhook reconcile', () => {
   });
 
   it.each([
-    ['missing operation', { metadata: { transaction_type: 'primary_wallet_card_checkout' } }],
-    ['mismatched reference', { reference: 'pvb-first-primary-00000000-0000-4000-8000-000000000000' }],
+    [
+      'missing operation',
+      { metadata: { transaction_type: 'primary_wallet_card_checkout' } },
+    ],
+    [
+      'mismatched reference',
+      { reference: 'pvb-first-primary-00000000-0000-4000-8000-000000000000' },
+    ],
     ['missing customer email', { customer: {} }],
   ])('stays retryable on %s', async (_label, overrides) => {
     const { execute, provider, runtime } = setup('ready');
@@ -143,9 +239,8 @@ describe('primary card checkout webhook reconcile', () => {
       })
     ).toBeNull();
     const foreign = body();
-    (
-      foreign.data.metadata as Record<string, unknown>
-    ).merchant_id = '00000000-0000-4000-8000-000000000099';
+    (foreign.data.metadata as Record<string, unknown>).merchant_id =
+      '00000000-0000-4000-8000-000000000099';
     expect(
       await reconcilePrimaryWalletCardCheckoutWebhook({
         body: foreign,

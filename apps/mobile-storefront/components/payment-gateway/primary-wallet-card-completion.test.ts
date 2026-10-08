@@ -162,6 +162,14 @@ it('refreshes and resumes only authoritative completed custody without legacy co
   expect(input.queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith('/wallet');
 });
+it('never re-reads scope when details are incomplete', async () => {
+  const input = { ...fixture(), merchantId: undefined };
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  await flush();
+  expect(mockReadPending).not.toHaveBeenCalled();
+  expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
+});
 it('directs a new funding when retry finds no retained operation', async () => {
   const input = fixture();
   mockRecover.mockRejectedValueOnce(new Error('No matching operation'));

@@ -99,8 +99,11 @@ export function beginPrimaryWalletCardCompletion(
     } catch {
       // A dropped operation (abandoned terminal state removes the
       // persisted record) can never succeed on re-check: direct a new
-      // funding instead of claiming an operation is retained.
-      if (failureCause === 'recovery_unconfirmed') {
+      // funding instead of claiming an operation is retained. The scope
+      // must be valid for the re-read to mean anything; without a
+      // merchant the read would throw and coerce to 'unknown', so skip it
+      // and keep the generic retained-operation message.
+      if (failureCause === 'recovery_unconfirmed' && input.merchantId) {
         const retained = await client
           .readPending({
             merchantId: input.merchantId,

@@ -4,8 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setupLabRoots } from './lab-test-roots';
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-const GENERATION = 'c'.repeat(64);
-
 describe('setupLabRoots', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -17,7 +15,6 @@ describe('setupLabRoots', () => {
       accepted: [
         {
           assetId: 'logo-a',
-          generationId: GENERATION,
           ladder: [96, 192, 384],
           merchantId: MERCHANT,
           role: 'logo',
@@ -34,9 +31,11 @@ describe('setupLabRoots', () => {
     const acceptances = JSON.parse(
       await readFile(join(roots.outputRoot, 'acceptances.json'), 'utf8')
     );
-    expect(acceptances[0]?.generationId).toBe(GENERATION);
+    expect(acceptances[0]?.generationId).toBe(roots.generationIds['logo-a']);
     // The pre-start staging step ran: tiers + originals are on disk.
-    const staged = await readdir(join(roots.publicDir, '__pilot', GENERATION));
+    const staged = await readdir(
+      join(roots.publicDir, '__pilot', roots.generationIds['logo-a'] as string)
+    );
     expect(staged.length).toBeGreaterThan(0);
     const originals = await readdir(
       join(roots.publicDir, '__pilot', 'originals')
@@ -56,7 +55,6 @@ describe('setupLabRoots', () => {
   it('creates an isolated temp root per call', async () => {
     const asset = {
       assetId: 'logo-a',
-      generationId: GENERATION,
       ladder: [96, 192, 384],
       merchantId: MERCHANT,
       role: 'logo' as const,

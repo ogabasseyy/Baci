@@ -45,13 +45,27 @@ function fingerprintStats(
 export async function verifyStagedBytes(
   paths: readonly { path: string; sha256: string }[]
 ): Promise<void> {
-  if (paths.length > MAX_STAGED_ENTRIES) {
+  // Deduplicate identical references first: a narrow source or
+  // same-codec passthrough reused for several rungs lists the same
+  // content-hash path multiple times, and counting each reference
+  // would reject a valid bounded staging set above the byte budget.
+  // Keyed by path AND hash so conflicting expectations for one path
+  // still surface as separate entries below.
+  const seen = new Map<string, { path: string; sha256: string }>();
+  for (const entry of paths) {
+    const key = `${entry.path}\n${entry.sha256}`;
+    if (!seen.has(key)) {
+      seen.set(key, entry);
+    }
+  }
+  const unique = [...seen.values()];
+  if (unique.length > MAX_STAGED_ENTRIES) {
     throw new Error(
-      `merchant image pilot: ${paths.length} staged lab asset(s) exceed the ${MAX_STAGED_ENTRIES}-entry verification budget; re-run pnpm pilot:stage and restart the origin`
+      `merchant image pilot: ${unique.length} staged lab asset(s) exceed the ${MAX_STAGED_ENTRIES}-entry verification budget; re-run pnpm pilot:stage and restart the origin`
     );
   }
   const sizes = await Promise.all(
-    paths.map((entry) => stat(entry.path).catch(() => null))
+    unique.map((entry) => stat(entry.path).catch(() => null))
   );
   const totalBytes = sizes.reduce((sum, info) => sum + (info?.size ?? 0), 0);
   if (totalBytes > MAX_STAGED_BYTES) {
@@ -59,7 +73,7 @@ export async function verifyStagedBytes(
       `merchant image pilot: staged lab assets total ${totalBytes} bytes, exceeding the ${MAX_STAGED_BYTES}-byte verification budget; re-run pnpm pilot:stage and restart the origin`
     );
   }
-  const key = snapshotKey(paths);
+  const key = snapshotKey(unique);
   const fingerprint = fingerprintStats(sizes);
   if (
     fingerprint !== null &&
@@ -70,7 +84,7 @@ export async function verifyStagedBytes(
   }
   const bad = (
     await Promise.all(
-      paths.map(async (entry, index) => {
+      unique.map(async (entry, index) => {
         if (sizes[index] === null) {
           return { detail: 'missing', path: entry.path };
         }

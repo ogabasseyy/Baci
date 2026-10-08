@@ -241,3 +241,56 @@ test('embeds the validated tier bytes, never a later reread', async () => {
     syncBuiltinESMExports();
   }
 });
+
+test('rejects oversized and malformed inventories before rendering', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const [record] = JSON.parse(await readFile(inventoryPath, 'utf8'));
+  // 21 records breach the 20-job cap even when every record is valid.
+  const many = Array.from({ length: 21 }, (_, index) => ({
+    ...record,
+    assetId: `tiny-${index}`,
+    slot: `slot-${index}`,
+  }));
+  const manyPath = join(inputRoot, 'inventory-many.json');
+  await writeFile(manyPath, JSON.stringify(many));
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath: manyPath,
+        outputRoot,
+        slots: { 'header-logo': { cssWidth: 40 } },
+      }),
+    /at most 20 jobs/
+  );
+  // Malformed records fail closed instead of rendering a partial sheet.
+  const badPath = join(inputRoot, 'inventory-bad.json');
+  await writeFile(badPath, JSON.stringify([{ ...record, sha256: 'nope' }]));
+  await assert.rejects(
+    () =>
+      buildQualitySheet({
+        inputRoot,
+        inventoryPath: badPath,
+        outputRoot,
+        slots: { 'header-logo': { cssWidth: 40 } },
+      }),
+    /invalid inventory/
+  );
+});
+
+test('keeps tier aspect ratio under the DPR-3 cap and warns on over-source', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const html = await buildQualitySheet({
+    inputRoot,
+    inventoryPath,
+    outputRoot,
+    slots: { 'header-logo': { cssWidth: 40 } },
+  });
+  // The tiny-48x48 ladder encodes over-source on every tier (incompatible
+  // codec, bytes above source): the sheet must say so, per tier and up
+  // top, instead of implying merchant-wide savings.
+  assert.match(html, /height:auto/);
+  assert.match(html, /Over-source warning/);
+  assert.match(html, /6 tier\(s\) serve more bytes than their source/);
+  assert.match(html, /over-source/);
+});

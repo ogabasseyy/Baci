@@ -13,7 +13,10 @@ import {
 } from '@/schemas/merchant-image-variant-pilot';
 import { readBoundedLabJson } from './lab-bounded-json';
 import { indexKey } from './lab-index-lookup';
-import { verifyOutputHashes } from './lab-index-verify';
+import {
+  verifyGenerationBinding,
+  verifyOutputHashes,
+} from './lab-index-verify';
 
 export type PilotTierDelivery =
   | 'generated'
@@ -208,7 +211,12 @@ export async function buildLabIndex(input: {
       parsedManifest.merchantId !== binding.merchantId ||
       parsedManifest.assetId !== binding.assetId ||
       parsedManifest.role !== binding.role ||
-      parsedManifest.source.sha256 !== binding.sourceSha256
+      parsedManifest.source.sha256 !== binding.sourceSha256 ||
+      verifyGenerationBinding({
+        binding,
+        generationId: record.generationId,
+        manifest: parsedManifest,
+      }) !== null
     ) {
       statuses.push({
         binding,

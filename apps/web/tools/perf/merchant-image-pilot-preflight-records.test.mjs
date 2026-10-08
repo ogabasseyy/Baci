@@ -28,14 +28,14 @@ describe('sameAcceptance', () => {
     verdict: 'accepted',
   };
 
-  it('compares identity fields with order-insensitive hashes', () => {
+  it('compares identity fields with positional hashes', () => {
     expect(sameAcceptance(base, { ...base })).toBe(true);
     expect(
       sameAcceptance(base, {
         ...base,
         outputHashes: ['b'.repeat(64), 'a'.repeat(64)],
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(sameAcceptance(base, { ...base, verdict: 'rejected' })).toBe(false);
     expect(
       sameAcceptance(base, { ...base, outputHashes: ['a'.repeat(64)] })

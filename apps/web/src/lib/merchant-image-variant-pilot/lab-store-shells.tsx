@@ -16,8 +16,10 @@ import type { ProjectedPilotImage } from './next-image-adapter';
 
 // Lab-scoped hrefs: store pages never link production. PDP/cart hrefs stay
 // inside the lab route so crawlers and matched runs cannot escape it.
-function labHref(basePath: string, path: string): string {
-  return `${basePath}${path}`;
+// Every link preserves the arm: without ?arm= the destination renders
+// the pilot default, silently flipping a control session mid-browse.
+function labHref(basePath: string, path: string, arm: PilotLabArm): string {
+  return `${basePath}${path}?arm=${arm}`;
 }
 
 function noopProduct(_product: Product): void {
@@ -43,7 +45,7 @@ export function LabStoreHeaderBar({
   stagedOriginal: string;
   storeName: string;
 }) {
-  const getHref = (path: string) => labHref(basePath, path);
+  const getHref = (path: string) => labHref(basePath, path, arm);
   return (
     <LabStoreHeader storeName={storeName}>
       {arm === 'pilot' && projection ? (
@@ -120,6 +122,7 @@ export function LabStoreGrid({
             onUpdateQuantity={noopQuantity}
             onQuickView={noopProduct}
             basePath={basePath}
+            arm={arm}
           />
         ) : (
           <StorefrontProductCard
@@ -129,6 +132,7 @@ export function LabStoreGrid({
             onUpdateQuantity={noopQuantity}
             onQuickView={noopProduct}
             basePath={basePath}
+            hrefSuffix={`?arm=${arm}`}
             priority
           />
         )}
@@ -149,6 +153,7 @@ export function LabStoreGrid({
           onUpdateQuantity={noopQuantity}
           onQuickView={noopProduct}
           basePath={basePath}
+          hrefSuffix={`?arm=${arm}`}
           priority
         />
       ))}

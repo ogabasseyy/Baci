@@ -7,6 +7,10 @@ import {
   generationIdFor,
 } from './generation-identity.mjs';
 import { readInputSnapshot, verifySnapshotHash } from './input-store.mjs';
+import {
+  validateInventory,
+  validateInventoryUniqueness,
+} from './job-schema.mjs';
 import { parsePilotManifest, PilotManifestError } from './manifest.mjs';
 import { loadGeneration } from './manifest-store.mjs';
 
@@ -79,7 +83,11 @@ async function findGenerationFor(outputRoot, record) {
 function tierCells(tier, files, cssWidth) {
   const file = files.get(tier.path);
   const dataUri = `data:${tier.contentType};base64,${file.toString('base64')}`;
-  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="max-width:${cssWidth * 3}px"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+  // height:auto keeps the aspect ratio when the DPR-3 cap constrains
+  // the width: without it the browser stretches the tier to height=.
+  const overSource =
+    tier.delivery === 'generated-over-source' ? ' · over-source' : '';
+  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="max-width:${cssWidth * 3}px;height:auto"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
 }
 
 export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, slots }) {
@@ -87,7 +95,30 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
   if (!Array.isArray(records) || records.length === 0) {
     throw new PilotSheetError('inventory is empty');
   }
+  // Shape + cap before rendering: an unvalidated 10k-record inventory
+  // would embed gigabytes of data URIs, and a malformed record must
+  // fail here — not half-way through a sheet a reviewer might trust.
+  const validated = validateInventory(
+    records.map((entry) => ({
+      assetId: entry?.assetId,
+      expectedSha256: entry?.sha256,
+      merchantId: entry?.merchantId,
+      role: entry?.role,
+      schemaVersion: entry?.schemaVersion,
+      sourcePath: entry?.sourcePath,
+    }))
+  );
+  if (!validated.ok) {
+    throw new PilotSheetError(
+      `invalid inventory: ${validated.errors.join('; ')}`
+    );
+  }
+  const unique = validateInventoryUniqueness(records);
+  if (!unique.ok) {
+    throw new PilotSheetError(`invalid inventory: ${unique.errors.join('; ')}`);
+  }
   const sections = [];
+  let overSourceTiers = 0;
   for (const record of records) {
     const geometry = slots?.[record.slot];
     if (!geometry || !Number.isInteger(geometry.cssWidth) || geometry.cssWidth < 1) {
@@ -106,6 +137,9 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
     if (!parsed.ok) {
       throw new PilotSheetError('stored manifest is invalid');
     }
+    overSourceTiers += manifest.tiers.filter(
+      (tier) => tier.delivery === 'generated-over-source'
+    ).length;
     const originalUri = `data:${record.contentType ?? 'image/png'};base64,${snapshot.bytes.toString('base64')}`;
     const seenTiers = new Map();
     for (const tier of manifest.tiers) {
@@ -139,11 +173,15 @@ ${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).j
 <p>merchant <code>${escapeHtml(record.merchantId)}</code> · source <code>${escapeHtml(record.sha256.slice(0, 16))}…</code> · generation <code>${escapeHtml(generationId.slice(0, 16))}…</code> · recipe <code>${escapeHtml(manifest.recipeId)}</code> · slot CSS width ${geometry.cssWidth}px</p>
 <table><thead><tr><th>tier</th><th>original (browser-scaled)</th><th>AVIF (actual pixels)</th><th>WebP (actual pixels)</th></tr></thead><tbody>${rows}</tbody></table></section>`);
   }
+  const overSourceNote =
+    overSourceTiers > 0
+      ? `<p><strong>Over-source warning:</strong> ${overSourceTiers} tier(s) serve more bytes than their source (generated-over-source); the never-larger guard is per rung/format only, and no merchant-wide savings claim applies while these exist.</p>\n`
+      : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Pilot quality sheet</title>
 <style>body{font-family:system-ui,sans-serif;margin:24px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:8px;vertical-align:top}img{background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0 0/16px 16px}code{font-size:12px}</style></head><body>
 <h1>Merchant image pilot — quality sheet</h1>
 <p><strong>Inspection aid only.</strong> This sheet renders verified generation bytes for human review; it is not visual acceptance and does not bypass the acceptance requirement.</p>
-${sections.join('\n')}</body></html>\n`;
+${overSourceNote}${sections.join('\n')}</body></html>\n`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

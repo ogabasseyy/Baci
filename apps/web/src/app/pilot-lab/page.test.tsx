@@ -24,7 +24,6 @@ async function setupLabRoots() {
     accepted: [
       {
         assetId: 'logo-a',
-        generationId: 'c'.repeat(64),
         ladder: [96, 192, 384],
         merchantId: MERCHANT,
         role: 'logo',
@@ -33,7 +32,6 @@ async function setupLabRoots() {
       },
       {
         assetId: 'hero-s0',
-        generationId: 'd'.repeat(64),
         ladder: [384, 768, 1280],
         merchantId: MERCHANT,
         role: 'hero',
@@ -46,7 +44,6 @@ async function setupLabRoots() {
     unreviewed: [
       {
         assetId: 'orphan-card',
-        generationId: 'e'.repeat(64),
         ladder: [96, 192, 384],
         merchantId: MERCHANT,
         role: 'product',
@@ -87,8 +84,8 @@ describe('pilot-lab route', () => {
     await initializeLabRuntime();
     const html = await renderPage('pilot');
     expect(html).toContain('data-pilot-lab-picture="pilot"');
-    expect(html).toContain(`/__pilot/${'c'.repeat(64)}/`);
-    expect(html).toContain(`/__pilot/${'d'.repeat(64)}/`);
+    expect(html).toContain(`/__pilot/${roots.generationIds['logo-a']}/`);
+    expect(html).toContain(`/__pilot/${roots.generationIds['hero-s0']}/`);
     expect(html).toContain('data-pilot-lab-preload="pilot"');
     expect(html).toContain('384w');
     // The unreviewed binding keeps the reported path in the pilot arm too.
@@ -106,8 +103,8 @@ describe('pilot-lab route', () => {
     const html = await renderPage('control');
     expect(html).toContain('data-pilot-lab-picture="control"');
     expect(html).toContain('/__pilot/originals/');
-    expect(html).not.toContain(`/__pilot/${'c'.repeat(64)}/`);
-    expect(html).not.toContain(`/__pilot/${'d'.repeat(64)}/`);
+    expect(html).not.toContain(`/__pilot/${roots.generationIds['logo-a']}/`);
+    expect(html).not.toContain(`/__pilot/${roots.generationIds['hero-s0']}/`);
   });
 
   it('caveats the per-format guard and the over-source exception', async () => {

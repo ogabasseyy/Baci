@@ -64,7 +64,7 @@ describe('LabStoreHeroSection', () => {
         />
       );
       expect(html).toContain('data-pilot-lab-status="not-optimized"');
-      expect(html).toContain('no staged tiers or original');
+      expect(html).toContain('no staged tiers or verified original');
     }
   });
 });

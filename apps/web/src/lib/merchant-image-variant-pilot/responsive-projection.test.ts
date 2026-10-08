@@ -78,6 +78,34 @@ describe('buildPilotSrcSet', () => {
     ).toMatch(/ 48w$/);
   });
 
+  it('coalesces passthrough-collapsed widths to one descriptor', () => {
+    // Two rungs collapsed to one source width with different URLs must
+    // not emit duplicate width descriptors (selection unspecified).
+    // Smallest file wins the width.
+    const tiers = [
+      tier({
+        bytes: 9000,
+        fileName: 'source.webp',
+        sha256: 'e'.repeat(64),
+        width: 500,
+      }),
+      tier({
+        bytes: 1200,
+        fileName: 'rung.webp',
+        sha256: 'f'.repeat(64),
+        width: 500,
+      }),
+    ];
+    const srcSet = buildPilotSrcSet({
+      baseUrl: '/__pilot',
+      format: 'webp',
+      tiers,
+    });
+    const entries = srcSet.split(', ');
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatch(/rung\.webp 500w$/);
+  });
+
   it('returns an empty string when no tier matches', () => {
     expect(
       buildPilotSrcSet({ baseUrl: '/__pilot', format: 'avif', tiers: [] })

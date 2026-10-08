@@ -146,6 +146,21 @@ export const PilotManifestSchema = z
     // exceed them (the exception must actually hold).
     for (const tier of manifest.tiers) {
       const key = `${tier.requestedWidth}:${tier.format}`;
+      // Geometry binds to the ladder and the source: generated tiers
+      // encode exactly min(requested, source) — a hash-consistent 1px
+      // or upscaled claim for a ladder rung is a misbound manifest, not
+      // a valid generation. Pass-through reuses source bytes, so its
+      // width is exactly the source width (it may exceed the request).
+      const ladderWidth =
+        tier.delivery === 'original-passthrough'
+          ? manifest.source.orientedWidth
+          : Math.min(tier.requestedWidth, manifest.source.orientedWidth);
+      if (tier.width !== ladderWidth) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `tier "${key}" claims width ${tier.width} but the ladder binds ${ladderWidth}`,
+        });
+      }
       // Recipe byte ceilings bind every encoded tier — including frozen r1
       // legacy (the encoder enforces budgets on every encode) and
       // over-source (the exception records bytes above the SOURCE, still

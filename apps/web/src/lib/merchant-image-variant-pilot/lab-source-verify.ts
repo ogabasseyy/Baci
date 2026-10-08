@@ -18,6 +18,16 @@ function normalizeFormat(metadata: {
   return metadata.format ?? '';
 }
 
+// Decoded container format of hash-verified snapshot bytes, for bindings
+// with no accepted manifest to name the format. Unaccepted bindings still
+// stage their verified original (so the store renders the real control
+// instead of a not-optimized row) but the filename must come from the
+// bytes themselves, never from an unaccepted claim.
+export async function snapshotFormat(snapshot: Buffer): Promise<string> {
+  const metadata = await sharp(snapshot).metadata();
+  return normalizeFormat(metadata).toLowerCase();
+}
+
 // Decodes the hash-verified snapshot and proves the accepted manifest's
 // source facts against the real bytes: a manifest whose hash matches but
 // whose claimed format or dimensions describe a different file is

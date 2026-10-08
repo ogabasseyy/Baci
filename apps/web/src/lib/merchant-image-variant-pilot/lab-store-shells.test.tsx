@@ -52,6 +52,22 @@ describe('LabStoreHeaderBar', () => {
     expect(control).toContain('data-pilot-lab-store-header="Omnimart"');
   });
 
+  it('preserves the arm on header commerce links', () => {
+    for (const arm of ['pilot', 'control'] as const) {
+      const html = renderToStaticMarkup(
+        <LabStoreHeaderBar
+          arm={arm}
+          basePath="/pilot-lab/store/omnimart"
+          layout="logo-left-nav-center"
+          projection={arm === 'pilot' ? PROJECTION : null}
+          stagedOriginal="http://localhost:3000/__pilot/originals/logo.png"
+          storeName="Omnimart"
+        />
+      );
+      expect(html).toContain(`?arm=${arm}`);
+    }
+  });
+
   it('falls back to the original when the pilot projection is empty', () => {
     const html = renderToStaticMarkup(
       <LabStoreHeaderBar
@@ -157,5 +173,22 @@ describe('LabStoreGrid', () => {
       />
     );
     expect(html).toContain('/pilot-lab/store/omnimart');
+  });
+
+  it('preserves the control arm on grid card links', () => {
+    const html = renderToStaticMarkup(
+      <LabStoreGrid
+        arm="control"
+        basePath="/pilot-lab/store/omnimart"
+        fillerImageUrls={[
+          'http://localhost:3000/__pilot/fillers/grid-filler-600x400-a.png',
+        ]}
+        fillers={[{ imageHint: 'filler', name: 'Lab Filler Two', price: 1800 }]}
+        mountedProduct={product}
+        mountedProjection={null}
+      />
+    );
+    expect(html).toContain('?arm=control');
+    expect(html).not.toContain('?arm=pilot');
   });
 });

@@ -18,6 +18,25 @@ describe('labRequestOrigin', () => {
     );
   });
 
+  it('collapses localhost subdomains to bare localhost', () => {
+    // A request-supplied subdomain must never reach rendered URLs, even
+    // inside the loopback namespace: keep the scheme and port, pin the
+    // host (lab routes are path-based, so nothing needs the subdomain).
+    expect(
+      labRequestOrigin({ host: 'evil-sub.localhost:4000', proto: 'http' })
+    ).toBe('http://localhost:4000');
+    expect(labRequestOrigin({ host: 'store.localhost', proto: null })).toBe(
+      'http://localhost'
+    );
+    // Bare loopback names and IPs echo unchanged.
+    expect(labRequestOrigin({ host: 'localhost:4000', proto: null })).toBe(
+      'http://localhost:4000'
+    );
+    expect(labRequestOrigin({ host: '127.0.0.1:4000', proto: null })).toBe(
+      'http://127.0.0.1:4000'
+    );
+  });
+
   it('never reflects non-loopback hosts', () => {
     // Attacker-controlled Host must not reach rendered image URLs, even
     // normalized: untrusted hosts fall back to loopback.

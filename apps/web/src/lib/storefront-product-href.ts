@@ -16,7 +16,10 @@ interface StorefrontProductHrefInput {
 
 export function getStorefrontProductHref(
   product: StorefrontProductHrefInput,
-  basePath = ''
+  basePath = '',
+  // Lab-only query preservation (?arm=...): production callers omit it
+  // and get byte-identical hrefs.
+  suffix = ''
 ): Route {
   const normalizedBasePath =
     basePath === '/' ? '' : basePath.replace(/\/+$/, '');
@@ -24,5 +27,5 @@ export function getStorefrontProductHref(
   return `${normalizedBasePath}${getProductUrl({
     ...product,
     id: String(product.id),
-  })}` as Route;
+  })}${suffix}` as Route;
 }

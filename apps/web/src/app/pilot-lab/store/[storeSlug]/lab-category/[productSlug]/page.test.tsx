@@ -63,7 +63,6 @@ const OMNIMART = 'de968340-de02-4aa8-95f9-9d5f7d2b1f20';
 async function setupRoots() {
   const asset: LabTestAsset = {
     assetId: 'omnimart-earbuds',
-    generationId: 'd'.repeat(64),
     ladder: [384, 768, 1280],
     merchantId: OMNIMART,
     role: 'product',
@@ -118,6 +117,29 @@ describe('pilot lab fixture product route', () => {
       expect(html).toContain('data-pilot-lab-fixture-product="true"');
       expect(html).toContain(productSlug);
     }
+  });
+
+  it('keeps the arm on the back link so the return trip stays in-arm', async () => {
+    await setupRoots();
+    const control = renderToStaticMarkup(
+      await PilotLabFixtureProductRoute({
+        params: Promise.resolve({
+          productSlug: 'lab-filler-two',
+          storeSlug: 'omnimart',
+        }),
+        searchParams: Promise.resolve({ arm: 'control' }),
+      })
+    );
+    expect(control).toContain('/pilot-lab/store/omnimart?arm=control');
+    const direct = renderToStaticMarkup(
+      await PilotLabFixtureProductRoute({
+        params: Promise.resolve({
+          productSlug: 'lab-filler-two',
+          storeSlug: 'omnimart',
+        }),
+      })
+    );
+    expect(direct).not.toContain('?arm=');
   });
 
   it('404s unknown stores and a disabled flag', async () => {

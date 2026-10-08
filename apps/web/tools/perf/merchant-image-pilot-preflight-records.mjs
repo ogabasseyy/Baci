@@ -15,13 +15,16 @@ export function acceptanceKey(record) {
 }
 
 export function sameAcceptance(left, right) {
+  // Positional, mirroring the route's buildLabIndex dedupe: outputHashes
+  // pins each rung positionally, so a reordered duplicate is a
+  // conflicting record, not the same acceptance.
   return (
     left.generationId === right.generationId &&
     left.verdict === right.verdict &&
     left.recipeId === right.recipeId &&
     left.sourceSha256 === right.sourceSha256 &&
-    [...left.outputHashes].sort().join(',') ===
-      [...right.outputHashes].sort().join(',')
+    left.outputHashes.length === right.outputHashes.length &&
+    left.outputHashes.every((hash, index) => hash === right.outputHashes[index])
   );
 }
 

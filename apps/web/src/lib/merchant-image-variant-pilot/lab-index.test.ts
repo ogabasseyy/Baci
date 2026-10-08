@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { labGenerationIdFor } from './lab-generation-identity';
 import { buildLabIndex, lookupPilotTiers, selectPilotTier } from './lab-index';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -24,7 +25,20 @@ const GENERATOR_FIXTURES = join(
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const SOURCE =
   'd9ffc58df5cc06104ae0eb604f84606549e8e6b5d06a35bff668c1f2e3511b98';
-const GENERATION_ID = 'c'.repeat(64);
+// The bound recipe output for the fixture job: buildLabIndex recomputes
+// this from (job, recipe, encoder, source) and rejects renamed dirs.
+const GENERATION_ID = labGenerationIdFor({
+  assetId: 'logo-1',
+  encoderIdentity: {
+    libvipsVersion: '8.18.6',
+    name: 'sharp',
+    sharpVersion: '0.35.4',
+  },
+  merchantId: MERCHANT,
+  recipeId: PILOT_RECIPE_ID,
+  role: 'logo',
+  sourceSha256: SOURCE,
+});
 
 function sha256(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -36,6 +50,7 @@ async function setupLab(
     acceptance?: Record<string, unknown>;
     tamper?: string;
     skipManifest?: boolean;
+    generationId?: string;
   } = {}
 ) {
   const base = join(
@@ -43,7 +58,8 @@ async function setupLab(
     `pilot-lab-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   const outputRoot = join(base, 'output');
-  const generationDir = join(outputRoot, 'generations', GENERATION_ID);
+  const generationId = options.generationId ?? GENERATION_ID;
+  const generationDir = join(outputRoot, 'generations', generationId);
   await mkdir(generationDir, { recursive: true });
   const payload = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
 
@@ -389,14 +405,30 @@ describe('buildLabIndex', () => {
     });
     expect(rejected.statuses[0]?.status).toBe('rejected');
 
+    // A realistic stale generation: produced (and id-bound) under the
+    // old recipe, so the binding check passes and the recipe gate fires.
+    const staleId = labGenerationIdFor({
+      assetId: 'logo-1',
+      encoderIdentity: {
+        libvipsVersion: '8.18.6',
+        name: 'sharp',
+        sharpVersion: '0.35.4',
+      },
+      merchantId: MERCHANT,
+      recipeId: 'pilot-r1-old',
+      role: 'logo',
+      sourceSha256: SOURCE,
+    });
     const stale = await setupLab({
       acceptance: { recipeId: 'pilot-r1-old' },
+      generationId: staleId,
       manifest: { recipeId: 'pilot-r1-old' },
     });
     const staleResult = await buildLabIndex({
       acceptances: [
         {
           ...base,
+          generationId: staleId,
           outputHashes: stale.tiers.map((t) => t.sha256),
           recipeId: 'pilot-r1-old',
         },
@@ -440,6 +472,35 @@ describe('buildLabIndex', () => {
     });
     expect(result.statuses[0]?.status).toBe('missing-manifest');
     expect(result.statuses[0]?.generationId).toBe(GENERATION_ID);
+  });
+
+  it('rejects a copied generation served under a different id', async () => {
+    const renamed = 'd'.repeat(64);
+    await cp(lab.generationDir, join(lab.outputRoot, 'generations', renamed), {
+      recursive: true,
+    });
+    const result = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: renamed,
+          merchantId: MERCHANT,
+          note: 'n',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    // Every hash inside still verifies, but the directory is not the
+    // recipe output for this binding under the claimed id.
+    expect(result.statuses[0]?.status).toBe('binding-mismatch');
   });
 
   it('refuses to activate conflicting duplicate acceptances in either order', async () => {

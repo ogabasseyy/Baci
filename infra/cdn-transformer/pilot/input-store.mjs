@@ -49,16 +49,31 @@ export async function resolveExistingInputPath(inputRoot, sourcePath) {
   return real;
 }
 
-export async function readInputSnapshot(inputRoot, sourcePath) {
+export async function readInputSnapshot(inputRoot, sourcePath, deps) {
+  const openFile = deps?.openFile ?? open;
   const resolvedPath = await resolveExistingInputPath(inputRoot, sourcePath);
   // Bound the read BEFORE allocating: a stat-then-read races a concurrent
   // replacement, so read at most MAX+1 bytes through an open handle. A file
   // that exceeds the cap — or grows past it mid-read — is rejected instead
   // of exhausting the generator process.
-  const handle = await open(resolvedPath, 'r');
+  const handle = await openFile(resolvedPath, 'r');
   try {
+    // Loop to EOF-or-cap: a single read() may return short (pipes,
+    // network mounts), which would hash a truncated snapshot while the
+    // cap check sees only the short count.
     const probe = Buffer.alloc(MAX_INPUT_BYTES + 1);
-    const { bytesRead } = await handle.read(probe, 0, probe.length, 0);
+    let bytesRead = 0;
+    let short = false;
+    while (bytesRead < probe.length && !short) {
+      const chunk = await handle.read(
+        probe,
+        bytesRead,
+        probe.length - bytesRead,
+        bytesRead
+      );
+      bytesRead += chunk.bytesRead;
+      short = chunk.bytesRead === 0;
+    }
     if (bytesRead > MAX_INPUT_BYTES) {
       throw new PilotInputError(
         `source file is too large: exceeds ${MAX_INPUT_BYTES} bytes`

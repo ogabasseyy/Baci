@@ -44,7 +44,7 @@ export function LabStoreHeroSection({
     return (
       <PilotLabNotOptimized
         binding={binding}
-        reason="accepted binding has no staged tiers or original; refusing to render rather than mixing arms."
+        reason="binding has no staged tiers or verified original; refusing to render rather than mixing arms."
       />
     );
   }

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import { isPilotLabEnabled, loadLabConfig } from './lab-config';
+import { labGenerationIdFor } from './lab-generation-identity';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const GENERATOR_FIXTURES = join(
@@ -22,7 +23,6 @@ const GENERATOR_FIXTURES = join(
 );
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-const GENERATION_ID = 'c'.repeat(64);
 
 async function setupLabFiles() {
   const base = join(
@@ -32,13 +32,26 @@ async function setupLabFiles() {
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   const publicDir = join(base, 'public');
-  const generationDir = join(outputRoot, 'generations', GENERATION_ID);
-  await mkdir(generationDir, { recursive: true });
-  await mkdir(inputRoot, { recursive: true });
-
   const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
+  await mkdir(inputRoot, { recursive: true });
   await writeFile(join(inputRoot, 'logo-1.png'), snapshot);
   const sourceSha256 = createHash('sha256').update(snapshot).digest('hex');
+  // The bound recipe output for this fixture job: buildLabIndex
+  // recomputes it and rejects renamed directories.
+  const generationId = labGenerationIdFor({
+    assetId: 'logo-1',
+    encoderIdentity: {
+      libvipsVersion: '8.18.6',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
+    merchantId: MERCHANT,
+    recipeId: PILOT_RECIPE_ID,
+    role: 'logo',
+    sourceSha256,
+  });
+  const generationDir = join(outputRoot, 'generations', generationId);
+  await mkdir(generationDir, { recursive: true });
 
   const tiers = [];
   for (const requestedWidth of [96, 192, 384]) {
@@ -95,7 +108,7 @@ async function setupLabFiles() {
   );
   const acceptance = {
     assetId: 'logo-1',
-    generationId: GENERATION_ID,
+    generationId,
     merchantId: MERCHANT,
     note: 'Lab review passed.',
     outputHashes: tiers.map((tier) => tier.sha256),
@@ -120,6 +133,7 @@ async function setupLabFiles() {
   ];
   return {
     acceptances: [acceptance],
+    generationId,
     inputRoot,
     inventoryRecords,
     outputRoot,
@@ -159,7 +173,7 @@ describe('loadLabConfig', () => {
     expect(config.statuses[0]?.status).toBe('accepted');
     expect(config.baseUrl).toBe('/__pilot');
     // Every approved output is staged under the lab base URL path.
-    const staged = join(lab.publicDir, '__pilot', GENERATION_ID);
+    const staged = join(lab.publicDir, '__pilot', lab.generationId);
     expect((await stat(staged)).isDirectory()).toBe(true);
     // The original bytes are staged for the same-origin control arm.
     const originalUrl = config.originalUrlFor({
@@ -202,6 +216,48 @@ describe('loadLabConfig', () => {
     expect((await stat(join(lab.publicDir, originalUrl))).isFile()).toBe(true);
   });
 
+  it('stages the verified original for unaccepted bindings, tiers only when accepted', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    const config = await loadLabConfig(
+      { ...lab, acceptances: [] },
+      { stage: true }
+    );
+    expect(config.statuses).toHaveLength(1);
+    expect(config.statuses[0]?.status).toBe('missing-acceptance');
+    // Out-of-coverage slots render the real control, not a placeholder:
+    // the suffix is decoded from the verified bytes (no manifest to ask).
+    const originalUrl = config.originalUrlFor({
+      merchantId: MERCHANT,
+      slotId: 'header-logo',
+    });
+    expect(originalUrl).toBe(`/__pilot/originals/${MERCHANT}-logo-1.png`);
+    if (originalUrl === null) {
+      throw new Error('expected a staged original URL');
+    }
+    expect((await stat(join(lab.publicDir, originalUrl))).isFile()).toBe(true);
+    // No derivative activation without acceptance: only the original path.
+    expect(config.stagedPaths).toHaveLength(1);
+    expect(config.stagedPaths[0]?.path).toContain('originals');
+  });
+
+  it('skips the original when unaccepted bytes fail hash verification', async () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const lab = await setupLabFiles();
+    await writeFile(join(lab.inputRoot, 'logo-1.png'), Buffer.from('tampered'));
+    const config = await loadLabConfig(
+      { ...lab, acceptances: [] },
+      { stage: true }
+    );
+    // Unverifiable bytes fail open into the not-optimized row (null
+    // original), not into a control the freeze cannot vouch for — and the
+    // load itself still succeeds for the remaining bindings.
+    expect(
+      config.originalUrlFor({ merchantId: MERCHANT, slotId: 'header-logo' })
+    ).toBeNull();
+    expect(config.stagedPaths).toHaveLength(0);
+  });
+
   it('hides the absolute input root when it is unresolvable', async () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     const lab = await setupLabFiles();
@@ -240,7 +296,7 @@ describe('loadLabConfig', () => {
     const manifestPath = join(
       lab.outputRoot,
       'generations',
-      GENERATION_ID,
+      lab.generationId,
       'manifest.json'
     );
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -261,7 +317,7 @@ describe('loadLabConfig', () => {
     const manifestPath = join(
       lab.outputRoot,
       'generations',
-      GENERATION_ID,
+      lab.generationId,
       'manifest.json'
     );
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -304,7 +360,7 @@ describe('loadLabConfig', () => {
     const manifestPath = join(
       lab.outputRoot,
       'generations',
-      GENERATION_ID,
+      lab.generationId,
       'manifest.json'
     );
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));

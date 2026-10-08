@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
+import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import { RECIPE_BYTE_CEILINGS } from '@/schemas/merchant-image-variant-pilot-tiers';
 import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
@@ -26,7 +27,6 @@ import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
 
 export interface LabTestAsset {
   assetId: string;
-  generationId: string;
   ladder: readonly number[];
   merchantId: string;
   role: 'hero' | 'logo' | 'product';
@@ -35,6 +35,7 @@ export interface LabTestAsset {
 }
 
 export interface LabTestRoots {
+  generationIds: Record<string, string>;
   inputRoot: string;
   outputRoot: string;
   publicDir: string;
@@ -74,6 +75,7 @@ export async function setupLabRoots(input: {
   const payload = await readFile(join(GENERATOR_FIXTURES, 'wide-2000x500.png'));
 
   async function addAsset(asset: LabTestAsset): Promise<{
+    generationId: string;
     record: Record<string, unknown>;
     tierHashes: string[];
   }> {
@@ -84,7 +86,22 @@ export async function setupLabRoots(input: {
     );
     const snapshot = await readFile(join(inputRoot, sourcePath));
     const sourceSha = sha256(snapshot);
-    const generationDir = join(outputRoot, 'generations', asset.generationId);
+    // The bound recipe output for this fixture job: buildLabIndex
+    // recomputes it and rejects renamed directories, so fixtures use
+    // real ids (returned to callers for URL assertions).
+    const generationId = labGenerationIdFor({
+      assetId: asset.assetId,
+      encoderIdentity: {
+        libvipsVersion: '8.18.6',
+        name: 'sharp',
+        sharpVersion: '0.35.4',
+      },
+      merchantId: asset.merchantId,
+      recipeId: PILOT_RECIPE_ID,
+      role: asset.role,
+      sourceSha256: sourceSha,
+    });
+    const generationDir = join(outputRoot, 'generations', generationId);
     await mkdir(generationDir, { recursive: true });
     const tiers = [];
     for (const requestedWidth of asset.ladder) {
@@ -150,6 +167,7 @@ export async function setupLabRoots(input: {
       })
     );
     return {
+      generationId,
       record: {
         assetId: asset.assetId,
         capturedAt: '2026-10-01T20:00:00.000Z',
@@ -171,12 +189,14 @@ export async function setupLabRoots(input: {
 
   const records: Record<string, unknown>[] = [];
   const acceptances: Record<string, unknown>[] = [];
+  const generationIds: Record<string, string> = {};
   for (const asset of input.accepted) {
-    const { record, tierHashes } = await addAsset(asset);
+    const { generationId, record, tierHashes } = await addAsset(asset);
     records.push(record);
+    generationIds[asset.assetId] = generationId;
     acceptances.push({
       assetId: record.assetId,
-      generationId: asset.generationId,
+      generationId,
       merchantId: asset.merchantId,
       note: 'Lab review: fixture acceptance.',
       outputHashes: tierHashes,
@@ -225,5 +245,5 @@ export async function setupLabRoots(input: {
       process.env.BACI_IMAGE_PILOT_LAB = flagWas;
     }
   }
-  return { inputRoot, outputRoot, publicDir };
+  return { generationIds, inputRoot, outputRoot, publicDir };
 }

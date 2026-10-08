@@ -64,6 +64,20 @@ describe('merchant-image-pilot-readiness coverage and cross-arm', () => {
         surface: 'hero',
       })
     ).toEqual(['pilot requested a selected original']);
+    // The control arm needs no original fetch when the primary is hidden:
+    // a display:none hero correctly requests nothing.
+    expect(
+      surfaceProblems(
+        { ...collected, imageUrls: [] },
+        {
+          arm: 'control',
+          expectHiddenMounts: true,
+          expectedFit: 'contain',
+          expectedMounts: [hero],
+          surface: 'hero',
+        }
+      )
+    ).toEqual([]);
   });
 
   it('rejects stale generations and foreign originals per slot', () => {

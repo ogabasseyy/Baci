@@ -232,3 +232,62 @@ test('buildEncoderIdentity reports the pinned toolchain', () => {
   assert.ok(identity.libvipsVersion.length > 0);
 });
 
+test('parsePilotManifest binds tier geometry to the ladder and source', async () => {
+  const { parsePilotManifest: parse } = await import('./manifest.mjs');
+  const withTier = (index, patch) => {
+    const tiers = logoTiers();
+    tiers[index] = { ...tiers[index], ...patch };
+    return validManifest({ tiers });
+  };
+  // A hash-consistent 1px claim for a 96 rung is a misbound manifest.
+  assert.match(
+    JSON.stringify(parse(withTier(0, { actualWidth: 1, width: 1 })).issues ?? []),
+    /ladder binds 96/
+  );
+  // Upscaling past the request is rejected even below the source width.
+  assert.equal(parse(withTier(0, { actualWidth: 192, width: 192 })).ok, false);
+  // Pass-through reuses source bytes, so its width is the source width
+  // even above the request — and nothing else.
+  const webpSource = {
+    bytes: 1234,
+    format: 'webp',
+    orientedHeight: 600,
+    orientedWidth: 800,
+    sha256: 'b'.repeat(64),
+  };
+  const webpTiers = logoTiers();
+  webpTiers[1] = {
+    ...webpTiers[1],
+    actualWidth: 800,
+    bytes: 1234,
+    delivery: 'original-passthrough',
+    height: 600,
+    path: `${'b'.repeat(64)}.webp`,
+    quality: null,
+    sha256: 'b'.repeat(64),
+    width: 800,
+  };
+  assert.equal(
+    parse(validManifest({ source: webpSource, tiers: webpTiers })).ok,
+    true
+  );
+  const narrowTiers = logoTiers();
+  narrowTiers[1] = {
+    ...narrowTiers[1],
+    actualWidth: 96,
+    bytes: 1234,
+    delivery: 'original-passthrough',
+    height: 600,
+    path: `${'b'.repeat(64)}.webp`,
+    quality: null,
+    sha256: 'b'.repeat(64),
+    width: 96,
+  };
+  assert.match(
+    JSON.stringify(
+      parse(validManifest({ source: webpSource, tiers: narrowTiers })).issues ??
+        []
+    ),
+    /ladder binds 800/
+  );
+});

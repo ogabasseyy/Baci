@@ -21,6 +21,27 @@ describe('verifyStagedBytes', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('counts duplicated references once against the budgets', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-dupe-'));
+    const file = join(dir, 'tier.avif');
+    const bytes = Buffer.from('bytes');
+    await writeFile(file, bytes);
+    const entry = {
+      path: file,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
+    // Same path+hash three times (passthrough reused across rungs):
+    // one verification, not three budget charges.
+    await expect(
+      verifyStagedBytes([entry, { ...entry }, { ...entry }])
+    ).resolves.toBeUndefined();
+    // Same path with a conflicting hash is not a duplicate: both
+    // entries verify, and the wrong expectation fails closed.
+    await expect(
+      verifyStagedBytes([entry, { ...entry, sha256: '0'.repeat(64) }])
+    ).rejects.toThrow(/1 staged lab asset\(s\) unverified/);
+  });
+
   it('fails closed on missing or drifted bytes, naming the operator fix', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-bad-'));
     const drifted = join(dir, 'drifted.avif');
@@ -87,11 +108,14 @@ describe('verifyStagedBytes', () => {
 
   it('refuses staged sets beyond the per-request verification budget', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-budget-'));
-    const file = join(dir, 'tier.avif');
-    await writeFile(file, 'bytes');
-    const entry = { path: file, sha256: '0'.repeat(64) };
-    await expect(
-      verifyStagedBytes(Array.from({ length: 257 }, () => entry))
-    ).rejects.toThrow(/257 staged lab asset\(s\) exceed the 256-entry/);
+    // 257 DISTINCT references: identical duplicates are deduped before
+    // the budget applies, so the explosion case needs unique paths.
+    const entries = Array.from({ length: 257 }, (_, index) => ({
+      path: join(dir, `tier-${index}.avif`),
+      sha256: '0'.repeat(64),
+    }));
+    await expect(verifyStagedBytes(entries)).rejects.toThrow(
+      /257 staged lab asset\(s\) exceed the 256-entry/
+    );
   });
 });

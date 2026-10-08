@@ -59,6 +59,18 @@ export function labRequestOrigin(headers: {
     if (!isLoopbackHostname(url.hostname)) {
       return LAB_LOOPBACK_ORIGIN;
     }
+    // Never reflect a request-supplied subdomain: on a shared deployment
+    // with the lab flag on, Host evil-sub.localhost would otherwise be
+    // embedded in rendered absolute image URLs. Loopback IPs have no
+    // subdomains and echo unchanged; *.localhost collapses to bare
+    // localhost with the request's scheme and port (lab routes are
+    // path-based, so no legitimate flow needs the subdomain).
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== 'localhost' && hostname.endsWith('.localhost')) {
+      return new URL(
+        `${url.protocol}//localhost${url.port ? `:${url.port}` : ''}`
+      ).origin;
+    }
     return url.origin;
   } catch {
     return LAB_LOOPBACK_ORIGIN;

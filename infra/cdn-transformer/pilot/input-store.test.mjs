@@ -76,6 +76,31 @@ test('rejects oversized input', async () => {
   await assert.rejects(() => readInputSnapshot(root, 'big.png'), /too large/);
 });
 
+test('loops short reads to EOF instead of hashing a truncation', async () => {
+  const { root } = await makeRoots();
+  await writeFile(join(root, 'a.png'), PNG_BYTES);
+  const dribble = {
+    async close() {},
+    async read(buffer, offset, length, position) {
+      const { open } = await import('node:fs/promises');
+      const handle = await open(join(root, 'a.png'), 'r');
+      try {
+        // One byte per call, like a slow pipe: the loop must still
+        // assemble the full snapshot before hashing.
+        return await handle.read(buffer, offset, Math.min(1, length), position);
+      } finally {
+        await handle.close();
+      }
+    },
+  };
+  const snapshot = await readInputSnapshot(root, 'a.png', {
+    openFile: async () => dribble,
+  });
+  assert.equal(snapshot.size, PNG_BYTES.length);
+  assert.deepEqual(snapshot.bytes, PNG_BYTES);
+  assert.equal(snapshot.sha256, sha256(PNG_BYTES));
+});
+
 test('verifySnapshotHash detects source mutation', async () => {
   const { root } = await makeRoots();
   await writeFile(join(root, 'a.png'), PNG_BYTES);

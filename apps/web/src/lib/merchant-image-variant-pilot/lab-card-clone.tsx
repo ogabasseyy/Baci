@@ -10,6 +10,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { getProductBlurPlaceholder } from '@/lib/image-utils';
 import type { Product } from '@/lib/products';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
+import type { PilotLabArm } from './lab-mount';
 import { LabProductCardImage } from './lab-product-card-image';
 import type { ProjectedPilotImage } from './next-image-adapter';
 
@@ -47,6 +48,7 @@ interface LabStorefrontProductCardProps {
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onQuickView: (product: Product) => void;
   basePath?: string;
+  arm?: PilotLabArm;
 }
 
 export function LabStorefrontProductCard({
@@ -58,6 +60,7 @@ export function LabStorefrontProductCard({
   onUpdateQuantity,
   onQuickView,
   basePath = '',
+  arm,
 }: LabStorefrontProductCardProps) {
   const { formatCurrency } = useCurrency();
 
@@ -129,7 +132,11 @@ export function LabStorefrontProductCard({
     >
       <div className="relative group/image">
         <Link
-          href={getStorefrontProductHref(product, basePath)}
+          href={getStorefrontProductHref(
+            product,
+            basePath,
+            arm ? `?arm=${arm}` : ''
+          )}
           className="block"
         >
           <LabProductCardImage

@@ -45,6 +45,7 @@ vi.mock(
   }
 );
 
+import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import {
   loadLabConfigAtStartup as getLabConfig,
@@ -367,7 +368,6 @@ async function waitForLoaderCalls(calls: readonly unknown[], count: number) {
 }
 
 const ROUTE_MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
-const ROUTE_GENERATION = 'c'.repeat(64);
 
 async function stageRouteFiles(lab: {
   inputRoot: string;
@@ -399,13 +399,27 @@ async function setupRouteFiles() {
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   const publicDir = join(base, 'public');
-  const generationDir = join(outputRoot, 'generations', ROUTE_GENERATION);
-  await mkdir(generationDir, { recursive: true });
   await mkdir(inputRoot, { recursive: true });
 
   const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
   await writeFile(join(inputRoot, 'logo-1.png'), snapshot);
   const sourceSha256 = createHash('sha256').update(snapshot).digest('hex');
+  // The bound recipe output for this fixture job: buildLabIndex
+  // recomputes it and rejects renamed directories.
+  const generationId = labGenerationIdFor({
+    assetId: 'logo-1',
+    encoderIdentity: {
+      libvipsVersion: '8.18.6',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
+    merchantId: ROUTE_MERCHANT,
+    recipeId: PILOT_RECIPE_ID,
+    role: 'logo',
+    sourceSha256,
+  });
+  const generationDir = join(outputRoot, 'generations', generationId);
+  await mkdir(generationDir, { recursive: true });
 
   const tiers = [];
   for (const requestedWidth of [96, 192, 384]) {
@@ -464,7 +478,7 @@ async function setupRouteFiles() {
     JSON.stringify([
       {
         assetId: 'logo-1',
-        generationId: ROUTE_GENERATION,
+        generationId,
         merchantId: ROUTE_MERCHANT,
         note: 'Lab review passed.',
         outputHashes: tiers.map((tier) => tier.sha256),

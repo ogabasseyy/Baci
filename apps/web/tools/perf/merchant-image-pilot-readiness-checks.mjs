@@ -240,8 +240,13 @@ export function surfaceProblems(
   if (arm === 'pilot' && !pilotImageUrlsOk(collected.imageUrls)) {
     problems.push('pilot requested a selected original');
   }
+  // The non-vacuous-control check cannot apply to hidden primaries: a
+  // display:none or media-gated hero correctly fetches nothing, which is
+  // indistinguishable from a broken control — the per-mount hidden
+  // assertions own this profile instead.
   if (
     arm === 'control' &&
+    !expectHiddenMounts &&
     !collected.imageUrls.some((url) => url.includes('/originals/'))
   ) {
     problems.push('control requested no staged original');

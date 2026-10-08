@@ -22,6 +22,7 @@ export interface UpdateOrderItemPayload {
 }
 
 export interface UpdateOrderPayload {
+  transaction_date?: string;
   branch_id: string | null;
   customer: {
     email: string | null;

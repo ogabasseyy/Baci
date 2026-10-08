@@ -43,6 +43,26 @@ const validPayload = {
 };
 
 describe('adminOrderEditSchema', () => {
+  it('preserves backdated transaction dates', () => {
+    const transaction_date = '2024-01-02T10:00:00.000Z';
+    expect(
+      adminOrderEditSchema.parse({ ...validPayload, transaction_date })
+        .transaction_date
+    ).toBe(transaction_date);
+  });
+
+  it.each([
+    'not-a-date',
+    '2024-02-31T10:00:00.000Z',
+    '2999-01-01T00:00:00.000Z',
+    null,
+  ])('rejects invalid or future order dates: %s', (transaction_date) => {
+    expect(
+      adminOrderEditSchema.safeParse({ ...validPayload, transaction_date })
+        .success
+    ).toBe(false);
+  });
+
   it('accepts the mobile-admin edit payload', () => {
     expect(adminOrderEditSchema.safeParse(validPayload).success).toBe(true);
   });

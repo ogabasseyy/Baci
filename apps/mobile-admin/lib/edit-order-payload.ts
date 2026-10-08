@@ -48,6 +48,8 @@ interface EditabilityOrderState {
 
 export type EditableOrderRecord = Record<string, unknown> & {
   amount_paid?: number | null;
+  transaction_date?: string | null;
+  created_at?: string;
   customer_email?: string | null;
   customer_id?: string | null;
   customer_name?: string | null;
@@ -73,6 +75,7 @@ export interface EditOrderPayloadDraft {
   customerSelectionChanged?: boolean;
   deliveryInfo: DeliveryInfo;
   discount: number;
+  orderDate?: Date;
   notes: string;
   notifyCustomer: boolean;
   orderItems: OrderItem[];
@@ -121,6 +124,7 @@ export function buildEditOrderPayload({
   discount,
   notes,
   notifyCustomer,
+  orderDate,
   orderItems,
   sameAsCustomer,
   selectedBranchId,
@@ -166,6 +170,7 @@ export function buildEditOrderPayload({
       };
 
   return {
+    ...(orderDate ? { transaction_date: orderDate.toISOString() } : {}),
     branch_id: selectedBranchId || null,
     customer: {
       email: sanitizedCustomerEmail,

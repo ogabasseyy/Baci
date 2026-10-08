@@ -28,6 +28,7 @@ export function useEditOrderController() {
   const order = orderQuery.data as EditableOrderRecord | undefined;
   const {
     setCustomer,
+    setDate,
     setDeliveryInfo,
     setDiscount,
     setIsVatApplied,
@@ -62,6 +63,12 @@ export function useEditOrderController() {
     const sameAsCustomer =
       shippingName === customerName && shippingPhone === customerPhone;
 
+    const savedDate = order.transaction_date ?? order.created_at;
+    if (typeof savedDate === 'string') {
+      const parsedDate = new Date(savedDate);
+      if (Number.isFinite(parsedDate.getTime())) setDate(parsedDate);
+    }
+
     setCustomer({
       address,
       email: order.customer_email ?? '',
@@ -93,6 +100,7 @@ export function useEditOrderController() {
   }, [
     order,
     setCustomer,
+    setDate,
     setDeliveryInfo,
     setDiscount,
     setIsVatApplied,
@@ -134,6 +142,14 @@ export function useEditOrderController() {
             ? order.customer_id !== baseController.customer.id
             : false,
           deliveryInfo: baseController.deliveryInfo,
+          orderDate:
+            order &&
+            baseController.date?.getTime() ===
+              new Date(
+                order.transaction_date ?? order.created_at ?? ''
+              ).getTime()
+              ? undefined
+              : baseController.date,
           discount: baseController.discount,
           notes: baseController.notes,
           notifyCustomer,

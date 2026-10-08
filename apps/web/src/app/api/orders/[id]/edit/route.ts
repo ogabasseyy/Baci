@@ -112,6 +112,7 @@ function mapOrderEditError(error: { code?: string; message?: string }) {
   }
 
   if (
+    message.includes('order_date_invalid') ||
     message.includes('branch_not_found') ||
     message.includes('customer_not_found') ||
     message.includes('branch_id_invalid') ||

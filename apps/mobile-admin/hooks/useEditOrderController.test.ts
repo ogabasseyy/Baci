@@ -73,6 +73,7 @@ function createBaseController(
     sameAsCustomer: true,
     selectedBranchId: 'branch-1',
     selectedChannel: 'physical',
+    setDate: vi.fn(),
     setCustomer: vi.fn(),
     setDeliveryInfo: vi.fn(),
     setDiscount: vi.fn(),
@@ -107,6 +108,8 @@ describe('useEditOrderController', () => {
     });
     useOrderMock.mockReturnValue({
       data: {
+        transaction_date: '2024-01-02T10:00:00.000Z',
+        created_at: '2026-10-08T10:00:00.000Z',
         branch_id: 'branch-2',
         customer_email: 'buyer@example.com',
         customer_id: 'customer-2',
@@ -144,6 +147,9 @@ describe('useEditOrderController', () => {
     });
 
     renderHook(() => useEditOrderController());
+    expect(baseController.setDate).toHaveBeenCalledWith(
+      new Date('2024-01-02T10:00:00.000Z')
+    );
 
     expect(useNewOrderControllerMock).toHaveBeenCalledWith({
       autoApplyVat: false,

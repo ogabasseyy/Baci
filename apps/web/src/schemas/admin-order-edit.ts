@@ -34,6 +34,13 @@ const editOrderItemSchema = z.object({
 
 export const adminOrderEditSchema = z
   .object({
+    transaction_date: z.iso
+      .datetime({ offset: true })
+      .refine(
+        (value) => new Date(value).getTime() <= Date.now(),
+        'Order date cannot be in the future'
+      )
+      .optional(),
     branch_id: z.uuid().nullable(),
     customer: editCustomerSchema,
     discount_amount: moneySchema,

@@ -115,7 +115,15 @@ vi.mock('./NewOrderCustomerSheet', () => ({
   NewOrderCustomerSheet: () => null,
 }));
 vi.mock('./NewOrderDetailsSection', () => ({
-  NewOrderDetailsSection: () => <div>Details</div>,
+  NewOrderDetailsSection: ({
+    showDateField = true,
+  }: {
+    showDateField?: boolean;
+  }) => (
+    <div>
+      Details{showDateField && <button type="button">Select order date</button>}
+    </div>
+  ),
 }));
 vi.mock('./NewOrderEditItemSheet', () => ({
   NewOrderEditItemSheet: () => null,
@@ -175,6 +183,9 @@ describe('EditOrderScreenContent', () => {
     render(<EditOrderScreenContent controller={controller} />);
 
     expect(screen.getByText('Edit Order')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Select order date' })
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel edit order' }));
 
     expect(controller.viewOrder).toHaveBeenCalledTimes(1);

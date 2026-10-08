@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { primaryWalletCardCheckoutFixture as fixture } from './primary-wallet-card-checkout.test-fixture';
-import { readPrimaryWalletCardCheckoutRuntime } from './primary-wallet-card-checkout-runtime';
+import {
+  readPrimaryWalletCardCheckoutRuntime,
+  readPrimaryWalletCardCheckoutRuntimeDrain,
+} from './primary-wallet-card-checkout-runtime';
 
 const env: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
@@ -38,5 +41,30 @@ describe('primary card trusted deployment configuration', () => {
   });
   it('rejects non-finite time', () => {
     expect(readPrimaryWalletCardCheckoutRuntime(env, Number.NaN)).toBeNull();
+  });
+  it('drains pre-expiry operations past the deadline for status and webhooks', () => {
+    const expired = {
+      ...env,
+      PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-10-06T15:59:10Z',
+    };
+    expect(readPrimaryWalletCardCheckoutRuntime(expired)).toBeNull();
+    expect(
+      readPrimaryWalletCardCheckoutRuntimeDrain(expired)?.settings.expiresAt
+    ).toBe('2026-10-06T15:59:10Z');
+  });
+  it.each([
+    { PIGGYVEST_PRIMARY_CARD_ENABLED: 'false' },
+    { VERCEL_ENV: 'production' },
+    { PIGGYVEST_PRIMARY_CARD_ENVIRONMENT: 'production' },
+    { PIGGYVEST_PRIMARY_CARD_EVIDENCE_PASSWORD: '' },
+  ])('drain still fails closed for invalid config %j', (override) => {
+    expect(
+      readPrimaryWalletCardCheckoutRuntimeDrain({ ...env, ...override })
+    ).toBeNull();
+  });
+  it('drain rejects non-finite time', () => {
+    expect(
+      readPrimaryWalletCardCheckoutRuntimeDrain(env, Number.NaN)
+    ).toBeNull();
   });
 });

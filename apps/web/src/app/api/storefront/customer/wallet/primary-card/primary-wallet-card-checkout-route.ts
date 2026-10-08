@@ -3,7 +3,10 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createPrimaryWalletCardCheckoutExecutor } from '@/lib/piggyvest/primary-wallet-card-checkout-executor';
 import { createPrimaryWalletCardCheckoutProvider } from '@/lib/piggyvest/primary-wallet-card-checkout-provider';
-import { readPrimaryWalletCardCheckoutRuntime } from '@/lib/piggyvest/primary-wallet-card-checkout-runtime';
+import {
+  readPrimaryWalletCardCheckoutRuntime,
+  readPrimaryWalletCardCheckoutRuntimeDrain,
+} from '@/lib/piggyvest/primary-wallet-card-checkout-runtime';
 import { createPrimaryWalletCardCheckoutService } from '@/lib/piggyvest/primary-wallet-card-checkout-service';
 import { primaryWalletCardCheckoutSchemas as schemas } from '@/schemas/primary-wallet-card-checkout';
 
@@ -38,7 +41,12 @@ export async function handlePrimaryWalletCardCheckout(
   ).safeParse(body);
   if (!parsed.success) return error('INVALID_INPUT', 400);
   try {
-    const runtime = readPrimaryWalletCardCheckoutRuntime();
+    // New reservations stop at expiry; status polling drains through the
+    // recovery reader so pre-expiry operations still resolve.
+    const runtime =
+      action === 'initialize'
+        ? readPrimaryWalletCardCheckoutRuntime()
+        : readPrimaryWalletCardCheckoutRuntimeDrain();
     if (!runtime || runtime.settings.merchantId !== parsed.data.merchantId)
       return error('PRIMARY_CARD_NOT_READY', 503);
     if (!auth.user.email_confirmed_at || !auth.user.email)

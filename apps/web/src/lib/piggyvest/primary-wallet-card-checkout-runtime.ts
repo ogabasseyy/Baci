@@ -5,6 +5,26 @@ export function readPrimaryWalletCardCheckoutRuntime(
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now()
 ) {
+  return parseRuntime(env, now, false);
+}
+
+// Drain/recovery reader for status polling and webhook reconciliation:
+// after expiresAt no NEW checkout may start, but operations created
+// before expiry must still resolve (status reads, collection recording)
+// or customers stay charged-but-uncredited while Paystack retries a 503.
+// Only the deadline is bypassed; every other gate still fails closed.
+export function readPrimaryWalletCardCheckoutRuntimeDrain(
+  env: NodeJS.ProcessEnv = process.env,
+  now = Date.now()
+) {
+  return parseRuntime(env, now, true);
+}
+
+function parseRuntime(
+  env: NodeJS.ProcessEnv,
+  now: number,
+  allowExpired: boolean
+) {
   if (env.PIGGYVEST_PRIMARY_CARD_ENABLED !== 'true') return null;
   const environment = env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT;
   if ((env.VERCEL_ENV === 'production') !== (environment === 'production'))
@@ -39,7 +59,7 @@ export function readPrimaryWalletCardCheckoutRuntime(
   if (
     !parsed.success ||
     !Number.isFinite(now) ||
-    now >= Date.parse(parsed.data.settings.expiresAt)
+    (!allowExpired && now >= Date.parse(parsed.data.settings.expiresAt))
   )
     return null;
   return parsed.data;

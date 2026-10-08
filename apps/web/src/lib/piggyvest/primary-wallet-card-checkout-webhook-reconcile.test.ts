@@ -228,6 +228,38 @@ describe('primary card checkout webhook reconcile', () => {
     expect(provider.verify).not.toHaveBeenCalled();
   });
 
+  it('drains through the recovery reader past expiry instead of 503-looping', async () => {
+    const { execute, provider } = setup('ready');
+    const saved = { ...process.env };
+    Object.assign(process.env, {
+      PIGGYVEST_PRIMARY_CARD_ENABLED: 'true',
+      PIGGYVEST_PRIMARY_CARD_ENVIRONMENT: 'staging',
+      PIGGYVEST_PRIMARY_CARD_INTEGRATION_ID: fixture.settings.integrationId,
+      PIGGYVEST_PRIMARY_CARD_MERCHANT_ID: fixture.settings.merchantId,
+      PIGGYVEST_PRIMARY_CARD_BUSINESS_ID: fixture.settings.businessId,
+      PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-09-29T15:59:10Z',
+      PIGGYVEST_PRIMARY_CARD_CALLBACK_URL: fixture.settings.callbackUrl,
+      PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET: fixture.settings.paystackSecret,
+      PIGGYVEST_PRIMARY_CARD_DB_HOST: fixture.database.host,
+      PIGGYVEST_PRIMARY_CARD_DB_PORT: '5432',
+      PIGGYVEST_PRIMARY_CARD_DB_NAME: fixture.database.name,
+      PIGGYVEST_PRIMARY_CARD_DB_CA: fixture.database.certificateAuthority,
+      PIGGYVEST_PRIMARY_CARD_AUTHORIZER_PASSWORD: fixture.database.password,
+      PIGGYVEST_PRIMARY_CARD_EVIDENCE_PASSWORD: fixture.database.password,
+    });
+    delete process.env.VERCEL_ENV;
+    try {
+      const response = await reconcilePrimaryWalletCardCheckoutWebhook({
+        body: body(),
+        execute: execute as never,
+        provider: provider as never,
+      });
+      expect(response?.status).not.toBe('pending');
+      expect(provider.verify).toHaveBeenCalled();
+    } finally {
+      process.env = saved;
+    }
+  });
   it('stays retryable when the runtime is unconfigured or the scope disagrees', async () => {
     const { execute, provider, runtime } = setup('ready');
     expect(

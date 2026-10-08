@@ -3,6 +3,21 @@ import type { PilotBindingStatus } from './lab-index';
 
 type SourceFacts = NonNullable<PilotBindingStatus['source']>;
 
+// Mirror of normalizeFormat in
+// infra/cdn-transformer/pilot/encode-worker-formats.mjs: Sharp/libvips
+// reports the shared HEIF container as `heif` for both input and output
+// bytes. Only AV1-coded stills are AVIF: HEVC-coded HEIC stills and
+// unknown compressions stay `heif` so the format gates reject them.
+function normalizeFormat(metadata: {
+  compression?: string;
+  format?: string;
+}): string {
+  if (metadata.format === 'heif' && metadata.compression === 'av1') {
+    return 'avif';
+  }
+  return metadata.format ?? '';
+}
+
 // Decodes the hash-verified snapshot and proves the accepted manifest's
 // source facts against the real bytes: a manifest whose hash matches but
 // whose claimed format or dimensions describe a different file is
@@ -15,7 +30,7 @@ export async function assertSnapshotMatchesSource(
   label: string
 ): Promise<void> {
   const metadata = await sharp(snapshot).metadata();
-  const decodedFormat = (metadata.format ?? '').toLowerCase();
+  const decodedFormat = normalizeFormat(metadata).toLowerCase();
   if (decodedFormat !== source.format.toLowerCase()) {
     throw new Error(
       `merchant image pilot: snapshot for "${label}" decodes as "${decodedFormat || 'unknown'}" but the accepted manifest claims "${source.format}"`

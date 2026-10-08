@@ -227,3 +227,16 @@ test('corrupt claims are reported, not auto-deleted', async () => {
   );
   assert.equal(error.code, 'claim-corrupt');
 });
+
+test('a symlinked claims dir is refused before publishing anything', async () => {
+  const root = await outputRoot();
+  const outside = join(root, 'outside');
+  await mkdir(outside);
+  const { symlink } = await import('node:fs/promises');
+  await symlink(outside, join(root, 'claims'));
+  const error = await acquireClaim(root, JOB, createRunToken()).catch(
+    (value) => value
+  );
+  assert.equal(error.code, 'unsafe-claims-directory');
+  assert.deepEqual(await readdir(outside), []);
+});

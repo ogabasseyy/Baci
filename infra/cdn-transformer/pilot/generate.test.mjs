@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MIN_FREE_BYTES } from './constants.mjs';
+import { runJob } from './generate-job.mjs';
+import { readInventoryJobs } from './job-schema.mjs';
 import { loadGeneration } from './manifest-store.mjs';
 import { parseMinFreeBytes, runPilotGeneration } from './generate.mjs';
 
@@ -48,7 +50,7 @@ async function writeInventory(inputRoot, records) {
   return path;
 }
 
-for (const child of ['generations', 'reports']) {
+for (const child of ['claims', 'generations', 'reports']) {
   test(`rejects a symlinked ${child} directory before starting jobs`, async () => {
     const { base, inputRoot, outputRoot } = await setup();
     const outside = join(base, 'outside');
@@ -246,4 +248,30 @@ test('empty inventories are rejected instead of reporting green', async () => {
       return true;
     }
   );
+});
+
+test('a post-commit claim-release failure still reports the published job ok', async () => {
+  const { inputRoot, outputRoot } = await setup();
+  const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+  const inventoryPath = await writeInventory(inputRoot, records);
+  const [job] = await readInventoryJobs(inventoryPath);
+  await mkdir(outputRoot, { recursive: true });
+  const result = await runJob({
+    deps: {
+      releaseClaim: async () => {
+        throw Object.assign(new Error('claims unreadable'), {
+          code: 'EACCES',
+        });
+      },
+    },
+    inputRoot,
+    job,
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(result.status, 'ok');
+  assert.match(result.cleanupWarning, /post-commit cleanup failed/);
+  assert.match(result.cleanupWarning, /published and reusable/);
+  // The generation really is durable: exactly one committed directory.
+  assert.equal((await readdir(join(outputRoot, 'generations'))).length, 1);
 });

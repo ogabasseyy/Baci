@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import {
+  link,
+  lstat,
+  mkdir,
+  readFile,
+  realpath,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { ownedStagingPath, removeOwnedStaging } from './disk-guards.mjs';
 import { pilotJobKey } from './job-schema.mjs';
@@ -59,7 +67,23 @@ function ownerExited(pid) {
 }
 
 export async function acquireClaim(outputRoot, job, runToken) {
-  await mkdir(join(outputRoot, 'claims'), { recursive: true });
+  // Claims live under the output root like generations and reports: a
+  // symlinked claims dir would publish claim temp files and the job claim
+  // outside the configured root (recursive mkdir follows symlinks), so
+  // confine it with the same lstat/realpath check before publishing.
+  const claimsDir = join(outputRoot, 'claims');
+  await mkdir(claimsDir, { recursive: true });
+  const claimsInfo = await lstat(claimsDir);
+  if (
+    claimsInfo.isSymbolicLink() ||
+    !claimsInfo.isDirectory() ||
+    (await realpath(claimsDir)) !== join(await realpath(outputRoot), 'claims')
+  ) {
+    throw new PilotClaimError(
+      'unsafe-claims-directory',
+      'claims must be a confined directory, not a symlink'
+    );
+  }
   const path = claimPath(outputRoot, job);
   const stagingDirName = `staging-${runToken}`;
   // Validate the staging path shape up front so recovery can rely on it.

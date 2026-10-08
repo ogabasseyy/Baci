@@ -71,7 +71,9 @@ describe('merchant-image-pilot-settings gate', () => {
           formFactor: 'mobile',
           screenEmulation: {
             deviceScaleFactor: 1.75,
+            disabled: false,
             height: 823,
+            mobile: true,
             width: 412,
           },
           throttling: { cpuSlowdownMultiplier: 4 },
@@ -172,6 +174,65 @@ describe('merchant-image-pilot-settings gate', () => {
     expect(mismatched.stdout).not.toBe(matched.stdout);
     expect(matched.error).toBe(null);
     expect(JSON.parse(matched.stdout).ok).toBe(true);
+    // Dormant geometry never certifies a viewport: disabled emulation and
+    // a wrong mobile mode fail even when width/height/DPR all match.
+    const lhArgs = [
+      '--expect-iterations=1',
+      '--expect-connectivity=native',
+      '--expect-chrome-major=154',
+      '--expect-viewport=375x667',
+      '--expect-dpr=2',
+      provenance,
+      '--expect-form-factor=mobile',
+      '--expect-throttling-method=simulate',
+      '--expect-lh-viewport=412x823',
+      '--expect-lh-dpr=1.75',
+      '--expect-cpu-slowdown=4',
+    ];
+    const lhDisabled = join(dir, 'report-disabled.json');
+    await writeFile(
+      lhDisabled,
+      JSON.stringify({
+        configSettings: {
+          formFactor: 'mobile',
+          screenEmulation: {
+            deviceScaleFactor: 1.75,
+            disabled: true,
+            height: 823,
+            mobile: true,
+            width: 412,
+          },
+          throttling: { cpuSlowdownMultiplier: 4 },
+          throttlingMethod: 'simulate',
+        },
+        environment: {},
+      })
+    );
+    const disabled = await run([`--lighthouse=${lhDisabled}`, ...lhArgs]);
+    expect(disabled.error).not.toBe(null);
+    expect(disabled.stdout).toMatch(/lighthouse\.screen-emulation/);
+    const lhDesktop = join(dir, 'report-desktop-mode.json');
+    await writeFile(
+      lhDesktop,
+      JSON.stringify({
+        configSettings: {
+          formFactor: 'mobile',
+          screenEmulation: {
+            deviceScaleFactor: 1.75,
+            disabled: false,
+            height: 823,
+            mobile: false,
+            width: 412,
+          },
+          throttling: { cpuSlowdownMultiplier: 4 },
+          throttlingMethod: 'simulate',
+        },
+        environment: {},
+      })
+    );
+    const wrongMode = await run([`--lighthouse=${lhDesktop}`, ...lhArgs]);
+    expect(wrongMode.error).not.toBe(null);
+    expect(wrongMode.stdout).toMatch(/lighthouse\.emulation-mode/);
   });
   describe('merchant-image-pilot-settings cache evidence', () => {
     async function runWithEntries(

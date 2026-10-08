@@ -125,6 +125,7 @@ export async function acquireSnapshot(options) {
     allowPrivateHosts = false,
     assetId,
     inputRoot,
+    inventoryPath,
     maxBytes = MAX_INPUT_BYTES,
     merchantId,
     probe,
@@ -241,7 +242,23 @@ export async function acquireSnapshot(options) {
       `acquire: built invalid job (${job.issues.join('; ')})`
     );
   }
-  return record;
+  if (inventoryPath === undefined) {
+    return record;
+  }
+  // Append-and-roll-back: the snapshot above is already committed, but a
+  // rejected append (capacity, merchant/slot collision) must not leave an
+  // orphan no record references — a later retry after the remote image
+  // changes would then be rejected by the stale bytes. Only this call's
+  // own file is removed, never a pre-existing snapshot.
+  try {
+    const inventoryCount = await appendInventoryRecord(inventoryPath, record);
+    return { ...record, inventoryCount };
+  } catch (error) {
+    if (wroteSnapshot) {
+      await unlink(target).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -258,15 +275,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const record = await acquireSnapshot({
       assetId: args.asset,
       inputRoot: args['input-root'],
+      inventoryPath: args.inventory,
       merchantId: args.merchant,
       role: args.role,
       slot: args.slot,
       url: args.url,
     });
-    const count = await appendInventoryRecord(args.inventory, record);
     console.log(
       JSON.stringify({
-        count,
+        count: record.inventoryCount,
         sha256: record.sha256,
         sourcePath: record.sourcePath,
       })

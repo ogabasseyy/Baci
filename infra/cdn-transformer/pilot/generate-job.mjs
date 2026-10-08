@@ -68,7 +68,8 @@ export async function assertPreCommitGuards({
 }
 
 
-export async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
+export async function runJob({ deps, inputRoot, job, minFreeBytes, outputRoot }) {
+  const releaseClaimFn = deps?.releaseClaim ?? releaseClaim;
   const startedAt = Date.now();
   const deadlineMs = startedAt + JOB_TIMEOUT_MS;
   // Memory accounting: parent RSS sampled at checkpoints, plus the max
@@ -222,14 +223,28 @@ export async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
     // rename and a directory fsync remain — a throw cannot interrupt them,
     // it would only report failed-but-published. elapsedMs stays visible.
     sampleRss();
-    await releaseClaim(outputRoot, job, claim.runToken);
-    if (!committed.reused) {
-      await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
+    // Post-commit cleanup must never report failed-but-published: the
+    // generation is durable and reusable past the visibility rename, so a
+    // claim-release or staging-removal failure is recorded as a warning
+    // (the operator clears the stranded claim via recovery) while the job
+    // still reports the true published outcome.
+    let cleanupWarning = null;
+    try {
+      await releaseClaimFn(outputRoot, job, claim.runToken);
+      if (!committed.reused) {
+        await removeOwnedStaging(outputRoot, stagingDir);
+      }
+    } catch (error) {
+      cleanupWarning =
+        `post-commit cleanup failed (${error?.code ?? 'unknown'}): ` +
+        `${error instanceof Error ? error.message : String(error)}`.slice(0, 200) +
+        `; generation ${generationId} is published and reusable`;
     }
     stagingDir = null;
     const peakWorkerRssBytes = takePeakWorkerRssBytes();
     return {
       assetId: job.assetId,
+      ...(cleanupWarning ? { cleanupWarning } : {}),
       durability: committed.durability,
       elapsedMs: Date.now() - startedAt,
       generationId,
@@ -256,7 +271,7 @@ export async function runJob({ inputRoot, job, minFreeBytes, outputRoot }) {
     if (stagingDir) {
       await removeOwnedStaging(outputRoot, stagingDir).catch(() => {});
     }
-    await releaseClaim(outputRoot, job, runToken).catch(() => {});
+    await releaseClaimFn(outputRoot, job, runToken).catch(() => {});
     const peakWorkerRssBytes = takePeakWorkerRssBytes();
     return {
       assetId: job.assetId,

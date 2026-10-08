@@ -77,8 +77,8 @@ export function selectedImageProblems(image, arm, mount, dpr, options = {}) {
 }
 
 // Per-slot mount verdict: every expected bound slot must render its bound
-// section (a reporting status is not a mount), occupy a visible box inside
-// the viewport, and decode its arm-correct staged image. `slot` is the
+// section (a reporting status is not a mount), show a visible image box
+// intersecting the viewport, and decode its arm-correct staged image. `slot` is the
 // collected [data-pilot-lab-slot] section for the mount's binding, or
 // nullish when that binding rendered nothing.
 //
@@ -99,8 +99,15 @@ export function slotMountProblems(
   if (slot.status) {
     return [`slot "${mount.slotId}" renders only "${slot.status}"`];
   }
-  const rect = slot.rect ?? {};
-  const visible = (rect.width ?? 0) >= 1 && (rect.height ?? 0) >= 1;
+  if (!slot.img) {
+    return [`slot "${mount.slotId}" image absent`];
+  }
+  // Visibility and placement verdict on the MOUNT image box, never the
+  // section: a slot section wraps every card in the binding (four rows
+  // at the mobile one-column breakpoint) and legitimately extends below
+  // the fold, while only the mount image must be visible to measure.
+  const box = slot.img.box ?? {};
+  const visible = (box.width ?? 0) >= 1 && (box.height ?? 0) >= 1;
   if (expectHidden) {
     if (visible) {
       return [`slot "${mount.slotId}" should be hidden on this profile`];
@@ -115,30 +122,27 @@ export function slotMountProblems(
       `slot "${mount.slotId}" viewport unverifiable (missing collection data)`,
     ];
   }
-  if (!withinViewport(rect, viewportWidth, viewportHeight)) {
-    return [`slot "${mount.slotId}" overflows the viewport`];
+  if (!intersectsViewport(box, viewportWidth, viewportHeight)) {
+    return [`slot "${mount.slotId}" is outside the viewport`];
   }
   return stagedImageProblems(slot.img, arm, label, mount, dpr, {
     expectNoAvif,
   });
 }
 
-// Full viewport containment on both axes (1px rounding slack): a nonzero
-// box parked fully offscreen (negative x, below the fold) still decodes
-// its priority image, so a right-edge-only check would certify an LCP
-// surface the user never sees — and a slot hanging past any edge is a
-// layout break, not a measurable surface.
-function withinViewport(rect, viewportWidth, viewportHeight) {
-  const x = rect.x ?? 0;
-  const y = rect.y ?? 0;
-  const width = rect.width ?? 0;
-  const height = rect.height ?? 0;
-  return (
-    x >= -1 &&
-    y >= -1 &&
-    x + width <= viewportWidth + 1 &&
-    y + height <= viewportHeight + 1
-  );
+// Viewport intersection on both axes (≥1px overlap each way): LCP
+// eligibility needs visibility, not full containment — a partially
+// visible hero is measurable, and a grid section hanging past the fold
+// is scrolling, not a layout break. Zero overlap still fails: a
+// fully-offscreen box decodes but the user never sees it.
+function intersectsViewport(box, viewportWidth, viewportHeight) {
+  const x = box.x ?? 0;
+  const y = box.y ?? 0;
+  const width = box.width ?? 0;
+  const height = box.height ?? 0;
+  const overlapX = Math.min(x + width, viewportWidth) - Math.max(x, 0);
+  const overlapY = Math.min(y + height, viewportHeight) - Math.max(y, 0);
+  return overlapX >= 1 && overlapY >= 1;
 }
 
 // Pure verdict on one collected surface: console/request hygiene, style
@@ -185,8 +189,15 @@ export function surfaceProblems(
     problems.push(
       'selected slot viewport unverifiable (missing collection data)'
     );
-  } else if (!withinViewport(g.selected, g.viewportWidth, g.viewportHeight)) {
-    problems.push('selected slot overflows the viewport');
+  } else if (
+    // Hidden primary surfaces (desktop hero) have no measurable box: like
+    // decode below, the geometric verdict is vacuous and the per-mount
+    // hidden assertions own this profile. Presence/collection hygiene
+    // above still apply.
+    !expectHiddenMounts &&
+    !intersectsViewport(g.selected, g.viewportWidth, g.viewportHeight)
+  ) {
+    problems.push('selected slot is outside the viewport');
   }
   if (surface === 'grid' && g.gridDisplay !== 'grid') {
     problems.push(`grid display is ${g.gridDisplay ?? 'missing'}`);

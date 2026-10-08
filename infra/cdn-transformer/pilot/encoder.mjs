@@ -38,6 +38,7 @@ export async function verifyVariant({
 export async function encodeVariant({
   budgetBytes,
   deadlineMs,
+  deps,
   expectedSha256,
   fileStem,
   format,
@@ -78,9 +79,21 @@ export async function encodeVariant({
   // the reorder, charge() only ever sees in-budget actuals the reserve
   // check already proved to fit, so it cannot throw here.
   if (encoded.bytes > budgetBytes) {
-    await unlink(output).catch(() => {
-      // Best-effort removal; job-scope cleanup handles leftovers.
-    });
+    // Removal failure fails the job: a retained over-budget file holds
+    // unaccounted bytes outside the staging cap, and continuing with
+    // lower qualities could stack several such files before job-scope
+    // cleanup runs. ENOENT alone is safe — nothing was retained.
+    const unlinkFile = deps?.unlinkFile ?? unlink;
+    try {
+      await unlinkFile(output);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw new PilotEncodeError(
+          'staging-cleanup-failed',
+          `over-budget output for "${fileStem}" w${width} q${quality} could not be removed (${error?.code ?? 'unknown'}); refusing to exceed the staging cap with unaccounted bytes`
+        );
+      }
+    }
     return { bytes: encoded.bytes, quality, status: 'over-budget' };
   }
   stagingBudget?.charge(encoded.bytes);
@@ -114,6 +127,7 @@ const CONTENT_TYPE_FOR_FORMAT = { avif: 'image/avif', webp: 'image/webp' };
 export async function encodeRoleLadder({
   budgets,
   deadlineMs,
+  deps,
   expectedSha256,
   role,
   signal,
@@ -144,6 +158,7 @@ export async function encodeRoleLadder({
         const attempt = await encodeVariant({
           budgetBytes: ceiling,
           deadlineMs,
+          deps,
           expectedSha256,
           fileStem: `tier-${actualWidth}-${format}`,
           format,

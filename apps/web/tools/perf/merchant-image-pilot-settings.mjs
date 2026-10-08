@@ -33,6 +33,7 @@ import {
   verifyHarConnectivity,
   verifyHarIterations,
 } from './merchant-image-pilot-settings-helpers.mjs';
+import { checkLighthouse } from './merchant-image-pilot-settings-lighthouse.mjs';
 
 async function checkHar(args, pass, fail, warn, recorded) {
   let har;
@@ -154,53 +155,6 @@ async function checkHar(args, pass, fail, warn, recorded) {
       pass('har.browser-version');
     }
   }
-}
-
-async function checkLighthouse(args, pass, fail, recorded) {
-  let report;
-  try {
-    report = JSON.parse(await readFile(args.lighthouse, 'utf8'));
-  } catch {
-    fail('lighthouse.readable', `cannot parse ${args.lighthouse}`);
-    return;
-  }
-  const settings = report?.configSettings ?? {};
-  const emulation = settings.screenEmulation ?? {};
-  const viewport = parseDimensions(
-    args['expect-lh-viewport'],
-    'expect-lh-viewport'
-  );
-  const scaled = [
-    ['lighthouse.form-factor', settings.formFactor, args['expect-form-factor']],
-    [
-      'lighthouse.throttling-method',
-      settings.throttlingMethod,
-      args['expect-throttling-method'],
-    ],
-    ['lighthouse.viewport-width', emulation.width, viewport.width],
-    ['lighthouse.viewport-height', emulation.height, viewport.height],
-    [
-      'lighthouse.dpr',
-      emulation.deviceScaleFactor,
-      Number(args['expect-lh-dpr']),
-    ],
-    [
-      'lighthouse.cpu-slowdown',
-      settings.throttling?.cpuSlowdownMultiplier,
-      Number(args['expect-cpu-slowdown']),
-    ],
-  ];
-  for (const [name, actual, expected] of scaled) {
-    if (actual !== expected) {
-      fail(name, `recorded ${actual}, expected ${expected}`);
-    } else {
-      pass(name);
-    }
-  }
-  recorded.lighthouse = {
-    benchmarkIndex: report?.environment?.benchmarkIndex ?? null,
-    throttling: settings.throttling ?? null,
-  };
 }
 
 async function run() {

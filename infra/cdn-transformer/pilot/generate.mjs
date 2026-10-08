@@ -58,7 +58,7 @@ export async function runPilotGeneration({
   }
   await mkdir(outputRoot, { recursive: true });
   outputRoot = await realpath(outputRoot);
-  for (const child of ['generations', 'reports']) {
+  for (const child of ['claims', 'generations', 'reports']) {
     const path = join(outputRoot, child);
     await mkdir(path, { recursive: true });
     const info = await lstat(path);

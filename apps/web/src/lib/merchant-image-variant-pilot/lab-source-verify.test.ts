@@ -52,6 +52,34 @@ describe('assertSnapshotMatchesSource', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('normalizes the HEIF container to AVIF for AV1-coded stills', async () => {
+    // Sharp reports AVIF bytes as format `heif` with compression `av1`;
+    // without the generator's normalization every accepted AVIF source
+    // (including the sampled AVIF hero) fails staging and loading.
+    const snapshot = await sharp({
+      create: {
+        background: '#ffffff',
+        channels: 3,
+        height: 8,
+        width: 8,
+      },
+    })
+      .avif()
+      .toBuffer();
+    await expect(
+      assertSnapshotMatchesSource(
+        snapshot,
+        {
+          bytes: snapshot.length,
+          format: 'avif',
+          orientedHeight: 8,
+          orientedWidth: 8,
+        },
+        'merchant/slot'
+      )
+    ).resolves.toBeUndefined();
+  });
+
   it('rejects a format the bytes do not decode as', async () => {
     const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
     await expect(

@@ -609,3 +609,56 @@ test('rejects content-type and decoded-format mismatches', async () => {
   );
 });
 
+test('a rejected inventory append rolls back only its own snapshot', async () => {
+  const inputRoot = await makeInputRoot();
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  // Occupied merchant/slot: both appends below must reject as duplicates.
+  await writeFile(
+    inventoryPath,
+    JSON.stringify([
+      {
+        assetId: 'logo-0',
+        merchantId: MERCHANT,
+        role: 'logo',
+        schemaVersion: 1,
+        sha256: 'a'.repeat(64),
+        slot: 'header-logo',
+        sourcePath: `${MERCHANT}-logo-0.png`,
+      },
+    ])
+  );
+  const attempt = (assetId) =>
+    withServer(
+      (_request, response) => {
+        response.writeHead(200, { 'content-type': 'image/png' });
+        response.end(PNG_BYTES);
+      },
+      (url) =>
+        acquireSnapshot({
+          allowPrivateHosts: true,
+          assetId,
+          inputRoot,
+          inventoryPath,
+          merchantId: MERCHANT,
+          probe: stubProbe,
+          role: 'logo',
+          slot: 'header-logo',
+          url,
+        })
+    );
+  // Fresh write: the orphan is removed and the inventory keeps one record.
+  await assert.rejects(() => attempt('logo-1'), /duplicate slot/);
+  await assert.rejects(
+    readFile(join(inputRoot, `${MERCHANT}-logo-1.png`)),
+    /ENOENT/
+  );
+  assert.equal(JSON.parse(await readFile(inventoryPath, 'utf8')).length, 1);
+  // Pre-existing identical bytes: not this call's file, so it is kept.
+  await writeFile(join(inputRoot, `${MERCHANT}-logo-2.png`), PNG_BYTES);
+  await assert.rejects(() => attempt('logo-2'), /duplicate slot/);
+  assert.deepEqual(
+    await readFile(join(inputRoot, `${MERCHANT}-logo-2.png`)),
+    PNG_BYTES
+  );
+});
+

@@ -363,3 +363,35 @@ test('encodeRoleLadder descends quality and deduplicates small sources', async (
     'budget-floor-exceeded'
   );
 });
+
+test('encodeVariant fails the job when an over-budget output cannot be removed', async () => {
+  const input = fixture('photo-1254x1254.jpg');
+  const attempt = async (stagingDir, unlinkFile) =>
+    encodeVariant({
+      budgetBytes: 100,
+      deadlineMs: Date.now() + 60_000,
+      deps: { unlinkFile },
+      expectedSha256: await shaOf(input),
+      fileStem: 'photo-stuck',
+      format: 'webp',
+      quality: 70,
+      snapshotPath: input,
+      stagingBudget: createStagingBudget(),
+      stagingDir,
+      width: 384,
+    });
+  // A stuck file keeps unaccounted bytes on disk: continuing with lower
+  // qualities could stack several such files past the staging cap.
+  const busy = async () => {
+    throw Object.assign(new Error('device busy'), { code: 'EBUSY' });
+  };
+  assert.equal(await errorCode(attempt(await staging(), busy)), 'staging-cleanup-failed');
+  // ENOENT means nothing was retained: still a plain over-budget refusal.
+  // (The injected removal is a stub, so no on-disk assertion applies.)
+  const gone = async () => {
+    throw Object.assign(new Error('already gone'), { code: 'ENOENT' });
+  };
+  const over = await attempt(await staging(), gone);
+  assert.equal(over.status, 'over-budget');
+  assert.ok(over.bytes > 100);
+});

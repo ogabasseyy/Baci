@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { initializeLabRuntime } from './lab-route';
 import { setupLabRoots as baseSetupLabRoots } from './lab-test-roots';
 import PilotLabPage from './page';
 
@@ -65,6 +66,10 @@ async function renderPage(arm?: string): Promise<string> {
 
 describe('pilot-lab route', () => {
   afterEach(() => {
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.runtime')
+    );
     vi.unstubAllEnvs();
   });
 
@@ -79,6 +84,7 @@ describe('pilot-lab route', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage('pilot');
     expect(html).toContain('data-pilot-lab-picture="pilot"');
     expect(html).toContain(`/__pilot/${'c'.repeat(64)}/`);
@@ -96,6 +102,7 @@ describe('pilot-lab route', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage('control');
     expect(html).toContain('data-pilot-lab-picture="control"');
     expect(html).toContain('/__pilot/originals/');
@@ -109,6 +116,7 @@ describe('pilot-lab route', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage('pilot');
     expect(html).toContain('per-format');
     expect(html).toContain('generated-over-source');
@@ -120,6 +128,7 @@ describe('pilot-lab route', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage();
     expect(html).toContain('data-pilot-lab-picture="pilot"');
   });
@@ -141,21 +150,29 @@ describe('pilot-lab route', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage('pilot');
     expect(html).toContain(`data-pilot-lab-binding="${MERCHANT}/logo-a"`);
     expect(html).toContain(`data-pilot-lab-binding="${MERCHANT}/hero-s0"`);
     expect(html).toContain(`data-pilot-lab-binding="${MERCHANT}/orphan-card"`);
   });
 
-  it('reloads the lab config when the frozen inputs change', async () => {
+  it('refuses startup when the frozen inputs are corrupt', async () => {
     const roots = await setupLabRoots();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
     vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+    await initializeLabRuntime();
     const html = await renderPage('pilot');
     expect(html).toContain('data-pilot-lab-picture="pilot"');
+    // Frozen runtime ignores later drift (covered in lab-route.test.ts);
+    // a restart against corrupt inputs fails closed at startup instead.
     await writeFile(join(roots.outputRoot, 'acceptances.json'), '{corrupt');
-    await expect(renderPage('pilot')).rejects.toThrow();
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.runtime')
+    );
+    await expect(initializeLabRuntime()).rejects.toThrow();
   });
 });

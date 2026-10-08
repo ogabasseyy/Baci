@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { initializeLabRuntime } from '../../../../lab-route';
 import { type LabTestAsset, setupLabRoots } from '../../../../lab-test-roots';
 import PilotLabStoreRoute from '../../page';
 import PilotLabFixtureProductRoute from './page';
@@ -74,6 +75,7 @@ async function setupRoots() {
   vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', roots.inputRoot);
   vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', roots.outputRoot);
   vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', roots.publicDir);
+  await initializeLabRuntime();
 }
 
 async function renderStore(): Promise<string> {
@@ -96,6 +98,10 @@ function labCategorySlugs(html: string): string[] {
 
 describe('pilot lab fixture product route', () => {
   afterEach(() => {
+    Reflect.deleteProperty(
+      globalThis,
+      Symbol.for('baci.merchant-image-pilot.runtime')
+    );
     vi.unstubAllEnvs();
   });
 

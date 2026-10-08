@@ -47,25 +47,27 @@ export async function GET(request: NextRequest) {
       );
     }
     // Activation validates the dedicated-product shape (NGN 100, no
-    // variants) only once; recheck the live catalog row here so a
-    // repriced or variant-enabled product stops being offered. Any
-    // lookup failure fails closed.
+    // variants, inventory tracking off) only once; recheck the live
+    // catalog row here so a repriced, variant-enabled, or newly tracked
+    // product stops being offered. Any lookup failure fails closed.
     const shapeLookup = auth.supabase
       ? await auth.supabase
           .from('products')
-          .select('price, has_variants')
+          .select('price, has_variants, inventory_tracking_policy')
           .eq('id', policy.productId)
           .maybeSingle()
       : { data: null, error: { message: 'unavailable' } };
     const shape = shapeLookup.data as {
       price: number | string | null;
       has_variants: boolean | null;
+      inventory_tracking_policy: string | null;
     } | null;
     if (
       shapeLookup.error ||
       !shape ||
       Number(shape.price) !== 100 ||
-      shape.has_variants !== false
+      shape.has_variants !== false ||
+      shape.inventory_tracking_policy !== 'off'
     ) {
       return NextResponse.json(
         { available: false, reason: 'unavailable' },

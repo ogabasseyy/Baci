@@ -97,7 +97,11 @@ describe('GET /api/payments/redvault/availability', () => {
       expiresAt: 1_789_000_000_000,
     });
     const supabase = stubSupabaseShape({
-      data: { price: 100, has_variants: false },
+      data: {
+        price: 100,
+        has_variants: false,
+        inventory_tracking_policy: 'off',
+      },
       error: null,
     });
     routeMocks.authenticateApiRequest.mockResolvedValue({
@@ -119,8 +123,22 @@ describe('GET /api/payments/redvault/availability', () => {
   });
 
   it.each([
-    ['repriced product', { price: 150, has_variants: false }],
-    ['variant-enabled product', { price: 100, has_variants: true }],
+    [
+      'repriced product',
+      { price: 150, has_variants: false, inventory_tracking_policy: 'off' },
+    ],
+    [
+      'variant-enabled product',
+      { price: 100, has_variants: true, inventory_tracking_policy: 'off' },
+    ],
+    [
+      'newly tracked product',
+      {
+        price: 100,
+        has_variants: false,
+        inventory_tracking_policy: 'serialized_strict',
+      },
+    ],
     ['missing product row', null],
   ])('hides the pilot for a %s', async (_label, data) => {
     const productId = '11111111-1111-4111-8111-111111111111';

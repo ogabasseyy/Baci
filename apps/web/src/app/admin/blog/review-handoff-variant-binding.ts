@@ -1,10 +1,8 @@
-import {
-  getTrustedCdnSourcePath,
-  isBlogFeaturedVariantKey,
-  isTrustedGeneratedCodexBlogImageUrl,
-  isTrustedGeneratedCodexBlogVariantUrl,
-} from '@/lib/blog-image-url-identity';
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
+import { getTrustedCdnSourcePath } from '@/lib/get-trusted-cdn-source-path';
+import { isBlogFeaturedVariantKey } from '@/lib/is-blog-featured-variant-key';
+import { isTrustedGeneratedCodexBlogImageUrl } from '@/lib/is-trusted-generated-codex-blog-image-url';
+import { isTrustedGeneratedCodexBlogVariantUrl } from '@/lib/is-trusted-generated-codex-blog-variant-url';
 
 // The upload route names the source platform/blog/<token>.<ext> and its
 // variants platform/blog/<token>/<key>.webp: the token binds a variant

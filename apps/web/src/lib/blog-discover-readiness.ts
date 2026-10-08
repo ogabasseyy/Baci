@@ -2,12 +2,10 @@ import {
   type BlogStorageScope,
   extractManagedBlogStoragePath,
 } from '@/lib/blog-managed-storage-paths';
-import {
-  isBlogFeaturedVariantKey,
-  isTrustedGeneratedCodexBlogImageUrl,
-  isTrustedGeneratedCodexBlogVariantUrl,
-  isTrustedManagedBlogImageUrl,
-} from './blog-image-url-identity';
+import { isBlogFeaturedVariantKey } from './is-blog-featured-variant-key';
+import { isTrustedGeneratedCodexBlogImageUrl } from './is-trusted-generated-codex-blog-image-url';
+import { isTrustedGeneratedCodexBlogVariantUrl } from './is-trusted-generated-codex-blog-variant-url';
+import { isTrustedManagedBlogImageUrl } from './is-trusted-managed-blog-image-url';
 
 const MIN_DISCOVER_IMAGE_WIDTH = 1200;
 const MIN_DISCOVER_IMAGE_HEIGHT = 675;

@@ -54,6 +54,29 @@ function retainKeptUploadPaths(
   return { ...result, url, variants };
 }
 
+function dropKeptUploadPaths(
+  result: UploadResult,
+  keepPaths: Set<string>
+): UploadResult | null {
+  // Complement trim for staged originals: what stays pending when a
+  // reuse revives the kept paths back into tracking. Fully reused
+  // results vanish from pending instead of being copied.
+  const urlPath = extractManagedBlogStoragePath(result.url, {
+    kind: 'platform',
+  });
+  const url = urlPath !== null && !keepPaths.has(urlPath) ? result.url : '';
+  const variants = Object.fromEntries(
+    Object.entries(result.variants ?? {}).filter(([, variantUrl]) => {
+      const variantPath = extractManagedBlogStoragePath(variantUrl, {
+        kind: 'platform',
+      });
+      return variantPath !== null && !keepPaths.has(variantPath);
+    })
+  );
+  if (url === '' && Object.keys(variants).length === 0) return null;
+  return { ...result, url, variants };
+}
+
 export function useBlogFeaturedImageUpload({
   upload,
   deleteUpload,
@@ -85,13 +108,14 @@ export function useBlogFeaturedImageUpload({
   // Deferred dispatch: cleanups only stage results — nothing is
   // deleted while a later import could still reuse it, since an
   // aborted fetch cannot recall a DELETE the server already ran.
-  // The staged results flush once, on unmount (saves navigate
-  // away), minus the live form and the last saved payload: manual
-  // edits after the last import can re-embed a staged path, and
-  // edits made while a save is in flight must not delete media
-  // the submitted payload contains. A failed flush leaks
-  // silently — there is no session left to retry in, and a leak is
-  // safer than deleting live media.
+  // The flush covers settled and staged results alike (an upload
+  // discarded without any import never stages), minus the live
+  // form and the last saved payload: manual edits after the last
+  // import can re-embed a staged path, and edits made while a
+  // save is in flight must not delete media the submitted payload
+  // contains. A failed flush leaks silently — there is no session
+  // left to retry in, and a leak is safer than deleting live
+  // media.
   useEffect(
     () => () => {
       const keepPaths = draftReferencedMediaPaths(formRef.current);
@@ -102,7 +126,11 @@ export function useBlogFeaturedImageUpload({
         }
       }
       const paths = new Set<string>();
-      for (const result of pendingDeletesRef.current) {
+      const candidates = [
+        ...settledUploadsRef.current,
+        ...pendingDeletesRef.current,
+      ];
+      for (const result of candidates) {
         for (const path of unreferencedUploadPaths(result, keepPaths)) {
           paths.add(path);
         }
@@ -232,14 +260,19 @@ export function useBlogFeaturedImageUpload({
     // into one DELETE call so a long session cannot trip the shared
     // per-minute delete budget one upload at a time.
     const keepPaths = draftReferencedMediaPaths(draft);
-    // A reuse revives staged results back into tracking, trimmed
-    // to their kept paths; staged originals stay put, since the
-    // flush filters by live keeps and never double-deletes.
+    // A reuse moves staged results back into tracking, trimmed to
+    // their kept paths, while only the unreferenced remainder stays
+    // staged: copying would double the tracked entries on every
+    // retain/discard cycle.
     const tracked = settledUploadsRef.current;
+    const stillPending: UploadResult[] = [];
     for (const result of pendingDeletesRef.current) {
       const kept = retainKeptUploadPaths(result, keepPaths);
       if (kept !== null) tracked.push(kept);
+      const remainder = dropKeptUploadPaths(result, keepPaths);
+      if (remainder !== null) stillPending.push(remainder);
     }
+    pendingDeletesRef.current = stillPending;
     if (tracked.length === 0) return;
     const retained: UploadResult[] = [];
     for (const result of tracked) {

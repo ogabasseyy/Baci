@@ -34,7 +34,8 @@ export function useBlogInlineImageUpload({
   // Deferred dispatch, mirroring the featured hook: cleanups stage
   // uploads and a reuse revives them before anything is dispatched,
   // since an aborted fetch cannot recall a DELETE the server
-  // already ran. The staged uploads flush once on unmount, minus
+  // already ran. The flush covers settled and staged uploads alike
+  // (an upload discarded without any import never stages), minus
   // the live form and the last saved payload; a failed flush leaks
   // silently — there is no session left to retry in.
   useEffect(
@@ -47,7 +48,11 @@ export function useBlogInlineImageUpload({
         }
       }
       const paths = new Set<string>();
-      for (const url of pendingDeletesRef.current) {
+      const candidates = [
+        ...settledUploadsRef.current,
+        ...pendingDeletesRef.current,
+      ];
+      for (const url of candidates) {
         const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
         if (path !== null && !keepPaths.has(path)) paths.add(path);
       }
@@ -94,14 +99,18 @@ export function useBlogInlineImageUpload({
     // Unreferenced paths batch into one DELETE call so a long session
     // cannot trip the shared per-minute delete budget.
     const keepPaths = draftReferencedMediaPaths(draft);
-    // A reuse revives staged uploads back into tracking; staged
-    // originals stay put, since the flush filters by live keeps
-    // and never double-deletes.
+    // A reuse moves staged uploads back into tracking: copying
+    // would double the tracked entries on every retain/discard
+    // cycle. Inline uploads are atomic, so a revived URL leaves
+    // pending entirely.
     const tracked = settledUploadsRef.current;
+    const stillPending: string[] = [];
     for (const url of pendingDeletesRef.current) {
       const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
       if (path !== null && keepPaths.has(path)) tracked.push(url);
+      else stillPending.push(url);
     }
+    pendingDeletesRef.current = stillPending;
     if (tracked.length === 0) return;
     const retained: string[] = [];
     for (const url of tracked) {

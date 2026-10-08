@@ -75,3 +75,37 @@ it('marks an out-of-stock line unavailable', async () => {
     product_unavailable: true,
   });
 });
+
+it('matches an uppercase variant UUID against canonical lowercase rows', async () => {
+  const lower = '11111111-1111-4111-8111-111111111111';
+  const supabase = supabaseFor({
+    products: {
+      data: {
+        name: 'Phone',
+        slug: 'phone',
+        manage_stock: true,
+        has_variants: true,
+        has_condition_offers: false,
+      },
+      error: null,
+    },
+  }) as unknown as {
+    rpc: () => Promise<{ data: unknown; error: unknown }>;
+  } & SupabaseClient;
+  supabase.rpc = async () => ({
+    data: [{ product_id: lower, stock_quantity: 5 }],
+    error: null,
+  });
+  const result = await prepareCartHandoff({
+    supabase,
+    merchantId: 'merchant',
+    productId: lower.toUpperCase(),
+    quantity: 1,
+    formatPrice: String,
+  });
+  expect(result.structuredContent).toMatchObject({
+    success: false,
+    requires_variant_selection: true,
+    product_id: lower,
+  });
+});

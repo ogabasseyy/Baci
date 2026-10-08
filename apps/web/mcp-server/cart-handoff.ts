@@ -18,7 +18,7 @@ function guardCartHandoffResult(result: CartHandoffResult): CartHandoffResult {
 export async function prepareCartHandoff({
   supabase,
   merchantId,
-  productId,
+  productId: rawProductId,
   quantity,
   formatPrice,
 }: {
@@ -28,6 +28,16 @@ export async function prepareCartHandoff({
   quantity: number;
   formatPrice: (price: number) => string;
 }): Promise<CartHandoffResult> {
+  // UUID text is case-insensitive, but the variants check below compares
+  // exact strings against canonical lowercase RPC values: normalize
+  // UUID-shaped IDs so an uppercase caller takes the same path as its
+  // lowercase twin. Non-UUID legacy IDs pass through untouched.
+  const productId =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      rawProductId
+    )
+      ? rawProductId.toLowerCase()
+      : rawProductId;
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
     return {
       content: [{ type: 'text', text: '❌ Unable to add item to cart.' }],

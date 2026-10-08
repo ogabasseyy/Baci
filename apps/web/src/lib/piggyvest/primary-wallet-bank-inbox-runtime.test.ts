@@ -1,6 +1,9 @@
 import { expect, it } from 'vitest';
 import { primaryBankInboxFixture as fixture } from './primary-wallet-bank-inbox.test-fixture';
-import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
+import {
+  readPrimaryWalletBankInboxRuntime,
+  readPrimaryWalletBankInboxSecrets,
+} from './primary-wallet-bank-inbox-runtime';
 
 it.each([
   'intake',
@@ -14,6 +17,26 @@ it.each([
       NODE_ENV: 'test',
       PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'false',
     })
+  ).toBeNull();
+});
+it('exposes signing keys while the worker stays unconfigured', () => {
+  const env = {
+    NODE_ENV: 'test' as const,
+    PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true',
+    PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET: 'bank-secret',
+    PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: JSON.stringify([
+      'bank-retained',
+    ]),
+  };
+  expect(readPrimaryWalletBankInboxSecrets(env)).toEqual({
+    webhookSecret: 'bank-secret',
+    retainedWebhookSecrets: ['bank-retained'],
+  });
+  expect(() => readPrimaryWalletBankInboxRuntime('intake', env)).toThrow(
+    /Primary bank inbox/
+  );
+  expect(
+    readPrimaryWalletBankInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();
 });
 it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-environment settings', () => {

@@ -1,6 +1,9 @@
 import { expect, it, vi } from 'vitest';
 import { paidInterestFixture as fixture } from './primary-wallet-paid-interest.test-support';
-import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
+import {
+  readPrimaryWalletPaidInterestInboxRuntime,
+  readPrimaryWalletPaidInterestInboxSecrets,
+} from './primary-wallet-paid-interest-inbox-runtime';
 
 vi.mock('server-only', () => ({}));
 const env = {
@@ -20,6 +23,22 @@ const env = {
 it('keeps inbox disabled unless explicitly enabled', () => {
   expect(
     readPrimaryWalletPaidInterestInboxRuntime({ NODE_ENV: 'test' })
+  ).toBeNull();
+});
+it('exposes signing keys while the worker stays unconfigured', () => {
+  const incomplete = {
+    ...env,
+    PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD: undefined,
+  };
+  expect(readPrimaryWalletPaidInterestInboxSecrets(incomplete)).toEqual({
+    webhookSecret: fixture.config.webhookSecret,
+    retainedWebhookSecrets: [],
+  });
+  expect(() =>
+    readPrimaryWalletPaidInterestInboxRuntime(incomplete)
+  ).toThrow(/configuration unavailable/);
+  expect(
+    readPrimaryWalletPaidInterestInboxSecrets({ NODE_ENV: 'test' })
   ).toBeNull();
 });
 it('can preserve signed receipts while API credentials are unavailable', () => {

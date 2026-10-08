@@ -1,6 +1,30 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
 
+export type PrimaryCardCustodyIntakeSecrets = {
+  webhookSecret: unknown;
+};
+
+/**
+ * Authentication keys independent of intake readiness (see the bank
+ * secrets reader): the outer gate verifies with these while the intake
+ * itself still fails closed on incomplete provisioning.
+ */
+export function readPrimaryCardCustodyIntakeSecrets(
+  env: NodeJS.ProcessEnv = process.env
+): PrimaryCardCustodyIntakeSecrets | null {
+  if (
+    env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true' ||
+    env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true' ||
+    (env.VERCEL_ENV === 'production') !==
+      (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
+  )
+    return null;
+  return {
+    webhookSecret: env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+  };
+}
+
 export function readPrimaryCardCustodyIntakeRuntime(
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now()

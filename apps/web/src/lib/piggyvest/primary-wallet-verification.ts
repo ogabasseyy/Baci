@@ -19,6 +19,7 @@ export async function verifyPrimaryWalletMapping(input: {
     const proof = schemas.proof.parse(input.proof);
     if (
       proof.wallet.id !== proof.mapping.providerWalletId ||
+      proof.wallet.api_customer_id !== proof.mapping.providerCustomerId ||
       proof.wallet.business_id !== scope.businessId ||
       proof.wallet.status !== 'active'
     ) {

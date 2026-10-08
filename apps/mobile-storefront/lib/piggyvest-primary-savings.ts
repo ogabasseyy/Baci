@@ -3,8 +3,6 @@ import { addSavingsContribution } from './customer-savings';
 import { isPrimaryWalletNotReady } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
-const client = createStorefrontCustomerApiClient();
-
 export async function addPiggyvestPrimarySavingsContribution(input: {
   amount: number;
   goalId: string;
@@ -24,6 +22,10 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     operationId: input.idempotencyKey,
     amountKobo,
   });
+  // Fresh client per operation: the factory caches the access token in a
+  // closure, so a module-level singleton would keep serving the previous
+  // user's Bearer [REDACTED] after an account switch.
+  const client = createStorefrontCustomerApiClient();
   try {
     const response = schemas.response.safeParse(
       await client.fetchJson({

@@ -10,6 +10,7 @@ export const piggyvestPrimaryWalletSnapshotSchemas = {
     .nullable(),
   wallet: z.object({
     id: piggyvestProviderIdSchema,
+    api_customer_id: piggyvestProviderIdSchema,
     business_id: piggyvestProviderIdSchema,
     currency: z.literal('NGN'),
     status: z.string(),

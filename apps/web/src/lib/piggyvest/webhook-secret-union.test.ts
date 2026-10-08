@@ -7,13 +7,13 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
-  readPrimaryWalletBankInboxRuntime: mocks.bank,
+  readPrimaryWalletBankInboxSecrets: mocks.bank,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
-  readPrimaryCardCustodyIntakeRuntime: mocks.custody,
+  readPrimaryCardCustodyIntakeSecrets: mocks.custody,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
-  readPrimaryWalletPaidInterestInboxRuntime: mocks.interest,
+  readPrimaryWalletPaidInterestInboxSecrets: mocks.interest,
 }));
 
 import {
@@ -189,4 +189,20 @@ it('authorizes every family sharing the matched secret value', async () => {
     secret: 'shared-secret',
     families: ['legacy', 'bank'],
   });
+});
+
+it('keeps healthy families when one secrets reader throws', () => {
+  mocks.bank.mockImplementation(() => {
+    throw new Error('incomplete provisioning');
+  });
+  mocks.interest.mockReturnValue({ webhookSecret: 'interest-secret' });
+  expect(
+    collectPiggyvestWebhookSecretsWithFamilies({
+      NODE_ENV: 'test',
+      PIGGYVEST_SECRET_KEY: 'legacy-secret',
+    })
+  ).toEqual([
+    { secret: 'legacy-secret', family: 'legacy' },
+    { secret: 'interest-secret', family: 'interest' },
+  ]);
 });

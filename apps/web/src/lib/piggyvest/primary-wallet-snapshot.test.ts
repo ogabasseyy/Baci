@@ -11,6 +11,7 @@ function fixture() {
     }),
     retrieveWallet: vi.fn().mockResolvedValue({
       id: 'wallet-test',
+      api_customer_id: 'customer-test',
       business_id: 'business-test',
       currency: 'NGN',
       status: 'active',
@@ -48,6 +49,7 @@ describe('primary wallet funding snapshot', () => {
       },
       wallet: {
         id: 'wallet-test',
+        api_customer_id: 'customer-test',
         business_id: 'business-test',
         currency: 'NGN',
         status: 'active',
@@ -75,12 +77,14 @@ describe('primary wallet funding snapshot', () => {
   });
   it.each([
     { id: 'different-wallet' },
+    { api_customer_id: 'different-customer' },
     { business_id: 'different-business' },
     { currency: 'USD' },
   ])('does not expose funding details for mismatched wallet evidence %j', async (change) => {
     const input = fixture();
     input.retrieveWallet.mockResolvedValue({
       id: 'wallet-test',
+      api_customer_id: 'customer-test',
       business_id: 'business-test',
       currency: 'NGN',
       status: 'active',
@@ -103,6 +107,7 @@ describe('primary wallet funding snapshot', () => {
     });
     input.retrieveWallet.mockResolvedValue({
       id: 'wallet-test',
+      api_customer_id: 'customer-test',
       business_id: 'business-test',
       currency: 'NGN',
       status: 'pending',
@@ -149,6 +154,7 @@ describe('primary wallet funding snapshot', () => {
     });
     input.retrieveWallet.mockResolvedValue({
       id: 'wallet-test',
+      api_customer_id: 'customer-test',
       business_id: 'business-test',
       currency: 'NGN',
       status: 'active',

@@ -9,6 +9,7 @@ const boundary = vi.hoisted(() => ({
   legacyRecord: vi.fn(),
   legacyProcess: vi.fn(),
   quarantine: vi.fn(),
+  families: ['bank'] as string[],
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({
@@ -30,10 +31,12 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
         ...input,
         secrets: ['fixture-secret'],
       });
-      // Family binding is covered by dedicated tests; these suites pin
-      // downstream handling with the legacy-authorized family.
       return secret
-        ? { status: 'verified' as const, secret, families: ['legacy'] as const }
+        ? {
+            status: 'verified' as const,
+            secret,
+            families: boundary.families,
+          }
         : { status: 'invalid' as const };
     },
   };
@@ -110,6 +113,7 @@ function request(signatureValid = true) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  boundary.families = ['bank'];
   boundary.intake.mockResolvedValue({ outcome: 'disabled', response: null });
   boundary.legacyRecord.mockResolvedValue('recorded');
   boundary.legacyProcess.mockResolvedValue('processed');
@@ -156,9 +160,30 @@ it('requests redelivery when durable bank inbox storage is unavailable', async (
 });
 
 it('preserves unrelated legacy deposits when bank inbox attribution is not handled', async () => {
+  boundary.families = ['legacy'];
   boundary.intake.mockResolvedValue({ outcome: 'not_handled', response: null });
   boundary.dispatch.mockResolvedValue('unmapped');
   expect((await POST(request())).status).toBe(200);
+  expect(boundary.intake).not.toHaveBeenCalled();
+  expect(boundary.legacyProcess).toHaveBeenCalledTimes(1);
+});
+
+it('skips the bank inbox for legacy-signed inflows instead of 503-looping', async () => {
+  boundary.families = ['legacy'];
+  // The bank inbox would 503 a legacy-signed delivery (bank keys only);
+  // the route must not invoke it at all.
+  boundary.intake.mockResolvedValue({
+    outcome: 'unavailable',
+    response: Response.json(
+      { code: 'PRIMARY_BANK_INBOX_UNAVAILABLE' },
+      { status: 503 }
+    ),
+  });
+  boundary.dispatch.mockResolvedValue('unmapped');
+  const response = await POST(request());
+  expect(response.status).toBe(200);
+  expect(boundary.intake).not.toHaveBeenCalled();
+  expect(boundary.dispatch).toHaveBeenCalledTimes(1);
   expect(boundary.legacyProcess).toHaveBeenCalledTimes(1);
 });
 
@@ -191,6 +216,7 @@ it.each([
   'disabled',
   'unmapped',
 ])('preserves legacy inflow handling for %s primary attribution', async (outcome) => {
+  boundary.families = ['legacy'];
   boundary.dispatch.mockResolvedValue(outcome);
   const response = await POST(request());
   expect(response.status).toBe(200);

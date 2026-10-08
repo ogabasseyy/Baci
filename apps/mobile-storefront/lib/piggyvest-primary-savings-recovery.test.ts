@@ -1,8 +1,12 @@
 import { expect, it, jest } from '@jest/globals';
 
 const mockFetchJson = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockCreateClient = jest.fn((..._args: unknown[]) => ({
+  fetchJson: mockFetchJson,
+}));
 jest.mock('./storefront-customer-api-client', () => ({
-  createStorefrontCustomerApiClient: () => ({ fetchJson: mockFetchJson }),
+  createStorefrontCustomerApiClient: (...args: unknown[]) =>
+    mockCreateClient(...args),
 }));
 const { recoverPiggyvestPrimarySavings } =
   require('./piggyvest-primary-savings-recovery') as typeof import('./piggyvest-primary-savings-recovery');
@@ -44,4 +48,11 @@ it('surfaces ambiguous recovery failures', async () => {
   await expect(recoverPiggyvestPrimarySavings(input)).rejects.toThrow(
     'timeout'
   );
+});
+it('constructs a fresh API client for every recovery', async () => {
+  jest.clearAllMocks();
+  mockFetchJson.mockResolvedValue({ operation: null });
+  await recoverPiggyvestPrimarySavings(input);
+  await recoverPiggyvestPrimarySavings(input);
+  expect(mockCreateClient).toHaveBeenCalledTimes(2);
 });

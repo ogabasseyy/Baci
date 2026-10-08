@@ -1,6 +1,38 @@
 import 'server-only';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
 
+export type PrimaryWalletBankInboxSecrets = {
+  webhookSecret: unknown;
+  retainedWebhookSecrets: unknown;
+};
+
+/**
+ * Authentication keys independent of worker readiness: the outer webhook
+ * gate collects these so a bank-signed delivery still verifies (and then
+ * receives a retryable 503 from the unready intake) instead of being
+ * 200-ACKed as invalid when e.g. the database password is missing.
+ */
+export function readPrimaryWalletBankInboxSecrets(
+  env: NodeJS.ProcessEnv = process.env
+): PrimaryWalletBankInboxSecrets | null {
+  if (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true') return null;
+  let retainedWebhookSecrets: unknown = [];
+  try {
+    if (env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS)
+      retainedWebhookSecrets = JSON.parse(
+        env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS
+      );
+  } catch {
+    // Malformed rotation config drops the retained list only; the full
+    // runtime still fails closed and the intake answers 503.
+    retainedWebhookSecrets = [];
+  }
+  return {
+    webhookSecret: env.PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET,
+    retainedWebhookSecrets,
+  };
+}
+
 export function readPrimaryWalletBankInboxRuntime(
   mode: 'intake' | 'worker',
   env: NodeJS.ProcessEnv = process.env,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { primaryCardCustodyInboxFixture as fixture } from './primary-wallet-card-custody-inbox.test-fixture';
-import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
+import {
+  readPrimaryCardCustodyIntakeRuntime,
+  readPrimaryCardCustodyIntakeSecrets,
+} from './primary-wallet-card-custody-intake-runtime';
 
 describe('intake-only configured custody capability', () => {
   it('requires only scoped custody storage and signature credentials, not provider API or financial dispatch secrets', () => {
@@ -17,6 +20,24 @@ describe('intake-only configured custody capability', () => {
     expect(config).not.toHaveProperty('apiToken');
     expect(config).not.toHaveProperty('transfer');
     expect(config?.signedInbox).not.toHaveProperty('batchSize');
+  });
+  it('exposes the signing key while intake provisioning stays incomplete', () => {
+    const env = {
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_INTAKE_PASSWORD: undefined,
+    };
+    expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
+      webhookSecret: fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+    });
+    expect(
+      readPrimaryCardCustodyIntakeRuntime(env, fixture.now)
+    ).toBeNull();
+    expect(
+      readPrimaryCardCustodyIntakeSecrets({
+        ...fixture.environment,
+        PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+      })
+    ).toBeNull();
   });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },

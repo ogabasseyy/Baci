@@ -20,6 +20,7 @@ function fixture() {
       mapping: { providerCustomerId: 'customer', providerWalletId: 'wallet' },
       wallet: {
         id: 'wallet',
+        api_customer_id: 'customer',
         business_id: 'fixture-business',
         currency: 'NGN',
         status: 'active',
@@ -59,6 +60,7 @@ describe('primary wallet durable verification', () => {
 
   it.each([
     { id: 'other-wallet' },
+    { api_customer_id: 'other-customer' },
     { business_id: 'other-business' },
     { status: 'pending' },
   ])('does not verify mismatched or inactive provider evidence %j', async (change) => {

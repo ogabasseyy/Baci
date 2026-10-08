@@ -1,5 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
-import { mockFetchWithTimeout } from '@/lib/wallet-top-up.test-utils';
+import {
+  mockFetchWithTimeout,
+  mockGetSession,
+} from '@/lib/wallet-top-up.test-utils';
 
 const { piggyvestPrimaryWalletApi } =
   require('./piggyvest-primary-wallet') as typeof import('./piggyvest-primary-wallet');
@@ -88,6 +91,57 @@ describe('primary PiggyVest wallet API client', () => {
         method: 'POST',
         headers: expect.objectContaining({ 'x-csrf-token': 'csrf-test' }),
         body: JSON.stringify({ merchantId, bvn: '00000000000', consent: true }),
+      })
+    );
+  });
+  it('looks up a fresh access token for every operation', async () => {
+    // Far-future expiry: a shared client would cache token-user-a and reuse
+    // it after the account switch, leaking the previous user's Bearer [REDACTED]
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: {
+          session: { access_token: 'token-user-a', expires_at: 4102444800 },
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          session: { access_token: 'token-user-b', expires_at: 4102444800 },
+        },
+        error: null,
+      });
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'ready',
+        balanceKobo: 0,
+        account: {
+          accountNumber: '0123456789',
+          accountName: 'Test Customer',
+          bankName: 'Provider Bank',
+          provider: 'piggyvest',
+        },
+      }),
+    });
+    await piggyvestPrimaryWalletApi.read(merchantId);
+    await piggyvestPrimaryWalletApi.read(merchantId);
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-user-a',
+        }),
+      })
+    );
+    expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-user-b',
+        }),
       })
     );
   });

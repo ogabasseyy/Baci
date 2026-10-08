@@ -47,6 +47,7 @@ function fixture() {
     retrieveWallet: vi.fn().mockResolvedValue({
       id: 'destination',
       name: walletName,
+      api_customer_id: 'customer',
       business_id: 'business',
       currency: 'NGN',
       type: 'api',

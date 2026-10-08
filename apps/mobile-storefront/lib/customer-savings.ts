@@ -14,6 +14,11 @@ export type {
   CustomerPaymentMethod,
   SavingsGoal,
 } from '@/schemas/customer-savings';
+export {
+  fetchExistingSavingsPlanFunding,
+  fetchSavingsPlanFunding,
+} from './customer-savings-plan-funding';
+export { resolveSavingsGoalVariant } from './customer-savings-variant-resolution';
 
 /** Default savings card authorization amount in kobo, NGN minor units. */
 export const DEFAULT_SAVINGS_AUTHORIZATION_AMOUNT = 100;
@@ -102,6 +107,7 @@ export async function createSavingsGoal(input: {
   targetAmount: number;
   termsAccepted: true;
   autoDebitAuthorized?: boolean;
+  goalIdempotencyKey?: string;
   initialContributionAmount?: number;
   initialContributionIdempotencyKey?: string;
   merchantId?: string | null;

@@ -28,6 +28,12 @@ describe('getEligibleCheckoutSavingsGoal', () => {
         product_id: 'product-1',
         variant_id: 'variant-1',
       })
+    ).toBe(false);
+    expect(
+      goalMatchesCartItem(baseGoal, {
+        product_id: 'product-1',
+        variant_id: null,
+      })
     ).toBe(true);
     expect(
       goalMatchesCartItem(baseGoal, {
@@ -90,7 +96,27 @@ describe('getEligibleCheckoutSavingsGoal', () => {
           },
         ]
       )
+    ).toBeNull();
+    expect(
+      getEligibleCheckoutSavingsGoal(
+        [baseGoal],
+        [
+          {
+            product_id: 'product-1',
+            variant_id: null,
+          },
+        ]
+      )
     ).toEqual(baseGoal);
+  });
+
+  it('does not apply a variant-less goal to a specific cart variant', () => {
+    expect(
+      goalMatchesCartItem(baseGoal, {
+        product_id: 'product-1',
+        variant_id: 'variant-1',
+      })
+    ).toBe(false);
   });
 
   it('requires the cart variant to match when the goal is variant-specific', () => {

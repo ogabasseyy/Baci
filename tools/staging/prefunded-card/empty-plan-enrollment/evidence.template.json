@@ -1,0 +1,21 @@
+{
+  "scope": {
+    "environment": "staging",
+    "systemIdentifier": "7685292944002592802",
+    "merchantId": "10000000-0000-4000-8000-000000000001",
+    "customerId": "10000000-0000-4000-8000-000000000002",
+    "actorId": "baeb4f5a-54c7-4d46-8b07-9e69ab2907b3",
+    "integrationId": "d91d9e87-8e0d-44de-9b84-1e1d709633d2",
+    "businessId": "01M2381RG34HQJMHQKE7DWDACR",
+    "oldGoalId": "430314fd-cd8b-4579-98d4-e9f345713dd6",
+    "publicWalletId": "01M3W0Y93XHJY9RPQ2G75X81WG",
+    "faasWalletId": "01M3W0YENHMFJ8Z9FS76E3CC6T",
+    "apiCustomerId": "01M2T3PAHG3P5A32REX8MH3HD7",
+    "webhookCustomerId": "c096507d-dc32-45d2-9c01-871a27abfd10"
+  },
+  "goalId": "9f01153c-1589-4dde-b9aa-8f644a846832",
+  "expiresAt": "2026-10-06T15:59:10Z",
+  "parentCommit": null,
+  "providerWallet": null,
+  "database": null
+}

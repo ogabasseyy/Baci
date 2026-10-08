@@ -79,7 +79,10 @@ export function TrackOrderTimelineCard({
         const eventColor = STATUS_COLORS[event.status] || STATUS_COLORS.pending;
 
         return (
-          <View key={`${event.icon}-${index}`} style={styles.timelineItem}>
+          <View
+            key={`${event.timestamp}-${event.status}`}
+            style={styles.timelineItem}
+          >
             <View style={styles.timelineLeft}>
               <View
                 style={[styles.timelineDot, { backgroundColor: eventColor }]}

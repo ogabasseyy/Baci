@@ -350,6 +350,17 @@ jobs:
           --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
           --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
           --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
+          --sql-check supabase/migrations/tests/claim_push_tokenless_retry.sql
+          --sql-check supabase/migrations/tests/requeue_push_rate_limited.sql
+          --sql-check supabase/migrations/tests/plan_transfer_goal_projection.sql
+          --sql-check supabase/migrations/tests/staging_wallet_mapping_bridges.sql
+          --sql-check supabase/migrations/tests/plan_transfer_projection_grants.sql
+          --sql-check supabase/migrations/tests/finish_push_unregistered.sql
+          --sql-check supabase/migrations/tests/push_delivery_retry_backoff.sql
+          --sql-check supabase/migrations/tests/plan_transfer_wallet_binding.sql
+          --sql-check supabase/migrations/tests/plan_transfer_excess_projection.sql
+          --sql-check supabase/migrations/tests/plan_transfer_interest_headroom.sql
+          --sql-check supabase/migrations/tests/staging_wallet_restriction_state.sql
           --sql-check supabase/tests/repair_booking_rpc.sql
           --sql-check supabase/migrations/tests/normalize_product_key_specs_gpu.sql
           --sql-check supabase/migrations/tests/santa_catalog_projection.sql
@@ -362,6 +373,7 @@ jobs:
           --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
           --sql-check supabase/tests/mcp_search_option_windows.sql
           --sql-check supabase/tests/mcp_search_option_windows_guard.sql --sql-check supabase/migrations/tests/connector_owner_creation_limit.sql
+          --sql-check supabase/migrations/tests/piggyvest_transfer_outbox_claims_authorization_index.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

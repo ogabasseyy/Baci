@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { StorefrontScreenShell } from '@/components/storefront/StorefrontScreenShell';
@@ -36,6 +37,13 @@ export function WalletScreenView({
       >
         {presentation === 'tab' ? (
           <View style={styles.tabHeader}>
+            <Ionicons
+              name="wallet-outline"
+              size={24}
+              color={colors.text}
+              accessible={false}
+              importantForAccessibility="no"
+            />
             <Text style={[styles.tabHeaderTitle, { color: colors.text }]}>
               Wallet & Loyalty
             </Text>

@@ -1,0 +1,73 @@
+export function paymentProofFixture() {
+  const intent = {
+    deployment: 'staging' as const,
+    integrationId: '10000000-0000-4000-8000-000000000001',
+    merchantId: '10000000-0000-4000-8000-000000000002',
+    treasuryBindingId: '10000000-0000-4000-8000-000000000003',
+    businessId: 'business',
+    systemIdentifier: '7685292944002592802',
+    expiresAt: '2026-10-06T15:59:10Z' as const,
+    intentId: '10000000-0000-4000-8000-000000000004',
+    customerId: '10000000-0000-4000-8000-000000000005',
+    actorId: '10000000-0000-4000-8000-000000000006',
+    goalId: '10000000-0000-4000-8000-000000000007',
+    email: 'fixture@example.com',
+    amountKobo: 10000,
+    currency: 'NGN' as const,
+    reference: 'pvb-first-10000000-0000-4000-8000-000000000004',
+    requestFingerprint: 'a'.repeat(64),
+    idempotencyKey: '10000000-0000-4000-8000-000000000008',
+    consent: {
+      version: 'prefunded-first-card-v1' as const,
+      oneTimeCharge: true as const,
+      saveCard: true as const,
+    },
+  };
+  const settings = {
+    deployment: intent.deployment,
+    integrationId: intent.integrationId,
+    merchantId: intent.merchantId,
+    treasuryBindingId: intent.treasuryBindingId,
+    businessId: intent.businessId,
+    systemIdentifier: intent.systemIdentifier,
+    expiresAt: intent.expiresAt,
+    paystackSecret: 'sk_test_fixture',
+    callbackUrl: 'https://staging.ogabassey.com/savings/card-return',
+  };
+  const data = {
+    id: 1234,
+    domain: 'test',
+    status: 'success',
+    amount: 10000,
+    currency: 'NGN',
+    reference: intent.reference,
+    paidAt: '2026-10-02T12:59:00Z',
+    channel: 'card',
+    customer: { email: intent.email, customer_code: 'CUS_fixture' },
+    metadata: {
+      transaction_type: 'prefunded_first_card',
+      intent_id: intent.intentId,
+      customer_id: intent.customerId,
+      merchant_id: intent.merchantId,
+      integration_id: intent.integrationId,
+      goal_id: intent.goalId,
+      request_fingerprint: intent.requestFingerprint,
+    },
+    authorization: {
+      channel: 'card',
+      reusable: true,
+      authorization_code: 'AUTH_fixture',
+      signature: 'SIG_fixture',
+      brand: 'visa',
+      last4: '1234',
+      exp_month: '12',
+      exp_year: '2030',
+    },
+  };
+  return {
+    intent,
+    settings,
+    data,
+    now: () => Date.parse('2026-10-02T13:00:00Z'),
+  };
+}

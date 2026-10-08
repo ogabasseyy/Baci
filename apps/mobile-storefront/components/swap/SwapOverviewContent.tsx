@@ -62,7 +62,7 @@ export function SwapOverviewContent({
       <View style={styles.stepsContainer}>
         {SWAP_HOW_IT_WORKS.map((step, index) => (
           <View
-            key={index}
+            key={step.title}
             style={[styles.stepCard, { backgroundColor: colors.card }]}
           >
             <View style={styles.stepIconContainer}>
@@ -82,8 +82,8 @@ export function SwapOverviewContent({
         <Text style={[styles.eligibleTitle, { color: colors.text }]}>
           What can you trade in?
         </Text>
-        {SWAP_ELIGIBLE_DEVICES.map((device, index) => (
-          <View key={index} style={styles.eligibleItem}>
+        {SWAP_ELIGIBLE_DEVICES.map((device) => (
+          <View key={device} style={styles.eligibleItem}>
             <View
               style={[styles.eligibleCheck, { backgroundColor: colors.muted }]}
             >

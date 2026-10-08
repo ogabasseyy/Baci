@@ -51,6 +51,10 @@ import type {
   MerchantTrustProfileReturnFee,
   MerchantTrustProfileReturnMethod,
 } from './storefront-trust/merchant-trust-profile-types';
+import { productManufacturerIdentifiers } from './variant-product-identifiers';
+
+const { normalizeParentProductIdentifiers, resolveVariantProductIdentifiers } =
+  productManufacturerIdentifiers;
 
 export { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 // Re-export escapeHtml for use in other modules
@@ -654,6 +658,7 @@ export function generateProductSchema(
 
   const safeBrand = product.brand || merchantName;
   const safeMerchantName = merchantName;
+  const productIdentifiers = normalizeParentProductIdentifiers(product);
   const structuredDataProductUrl = parseStructuredDataUrl(options.productUrl);
   const acceptedPaymentMethod = normalizeAcceptedPaymentMethods(
     options.acceptedPaymentMethods
@@ -759,18 +764,21 @@ export function generateProductSchema(
     schema.sku = product.sku;
   }
 
-  if (product.gtin) {
-    schema.gtin = product.gtin;
-    if (product.gtin.length === 13) {
-      schema.gtin13 = product.gtin;
+  // Group-level identifiers describe the parent product listing itself and are
+  // kept even when hasVariant entries carry distinct identifiers: the group
+  // node and each variant node describe different entities, so no suppression.
+  if (productIdentifiers.gtin) {
+    schema.gtin = productIdentifiers.gtin;
+    if (productIdentifiers.gtin.length === 13) {
+      schema.gtin13 = productIdentifiers.gtin;
     }
-    if (product.gtin.length === 14) {
-      schema.gtin14 = product.gtin;
+    if (productIdentifiers.gtin.length === 14) {
+      schema.gtin14 = productIdentifiers.gtin;
     }
   }
 
-  if (product.mpn) {
-    schema.mpn = product.mpn;
+  if (productIdentifiers.mpn) {
+    schema.mpn = productIdentifiers.mpn;
   }
 
   // Relation-backed category metadata outranks the deprecated text column.
@@ -1010,6 +1018,7 @@ export function generateProductSchema(
 
     // Build hasVariant array — each variant becomes a @type Product
     schema.hasVariant = product.variants.map((variant) => {
+      const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
       const variantUrl = buildStructuredDataVariantUrl(
         structuredDataProductUrl,
@@ -1050,8 +1059,8 @@ export function generateProductSchema(
         ...(variantColor && { color: variantColor }),
         ...(variantSize && { size: variantSize }),
         sku: variant.sku || variant.id,
-        ...(product.gtin && { gtin: product.gtin }),
-        ...(product.mpn && { mpn: product.mpn }),
+        ...(identifiers.gtin && { gtin: identifiers.gtin }),
+        ...(identifiers.mpn && { mpn: identifiers.mpn }),
         offers: {
           '@type': 'Offer',
           price: variantPrice,
@@ -1748,6 +1757,7 @@ export function generateCollectionPageSchema(
           data.url,
           getProductUrl(product)
         );
+        const identifiers = normalizeParentProductIdentifiers(product);
 
         return {
           '@type': 'ListItem',
@@ -1764,8 +1774,8 @@ export function generateCollectionPageSchema(
               '@type': 'Brand',
               name: escapeHtml(product.brand || data.merchantName),
             },
-            ...(product.gtin && { gtin: escapeHtml(product.gtin) }),
-            ...(product.mpn && { mpn: escapeHtml(product.mpn) }),
+            ...(identifiers.gtin && { gtin: escapeHtml(identifiers.gtin) }),
+            ...(identifiers.mpn && { mpn: escapeHtml(identifiers.mpn) }),
             offers: {
               '@type': 'Offer',
               price: product.price,

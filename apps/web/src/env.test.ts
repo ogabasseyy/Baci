@@ -1375,4 +1375,38 @@ describe('recovery-code env', () => {
     vi.stubGlobal('window', {} as unknown as Window & typeof globalThis);
     expect(() => getRecoveryCodePepper()).toThrow(/client/i);
   });
+
+  it('reads the PiggyVest secret from the validated key', async () => {
+    vi.stubEnv('PIGGYVEST_SECRET_KEY', '  pv-secret  ');
+    const { getPiggyvestWebhookSecret } = await loadEnvModule();
+
+    expect(getPiggyvestWebhookSecret()).toBe('pv-secret');
+  });
+
+  it('falls back to the legacy PVB secret name', async () => {
+    delete process.env.PIGGYVEST_SECRET_KEY;
+    vi.stubEnv('PVB_SECRET_KEY', 'pv-legacy-secret');
+    const { getPiggyvestWebhookSecret } = await loadEnvModule();
+
+    expect(getPiggyvestWebhookSecret()).toBe('pv-legacy-secret');
+  });
+
+  it('returns no PiggyVest API config without a secret', async () => {
+    delete process.env.PIGGYVEST_SECRET_KEY;
+    delete process.env.PVB_SECRET_KEY;
+    const { getPiggyvestApiConfig } = await loadEnvModule();
+
+    expect(getPiggyvestApiConfig()).toBeNull();
+  });
+
+  it('builds the PiggyVest API config from the secret', async () => {
+    vi.stubEnv('PIGGYVEST_SECRET_KEY', 'pv-secret');
+    vi.stubEnv('PIGGYVEST_API_BASE_URL', 'https://staging.example.com');
+    const { getPiggyvestApiConfig } = await loadEnvModule();
+
+    expect(getPiggyvestApiConfig()).toEqual({
+      baseUrl: 'https://staging.example.com',
+      token: 'pv-secret',
+    });
+  });
 });

@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as Crypto from 'expo-crypto';
 import { createElement, type PropsWithChildren } from 'react';
+import * as walletSavingsInterest from './wallet-savings-interest';
 
 const mockCalculateCommerce =
   jest.fn<(type: string, payload: unknown) => Promise<unknown>>();
@@ -383,6 +384,19 @@ describe('useWallet', () => {
   });
 
   it('adds savings balance and funding account data to the wallet payload', async () => {
+    // Earnings come from the savings-interest RPC wiring, not the spendable
+    // balance: stub a credited value that differs from the wallet balance.
+    const interestSpy = jest.spyOn(
+      walletSavingsInterest,
+      'fetchWalletSavingsInterest'
+    );
+    interestSpy.mockResolvedValue({
+      status: 'available',
+      creditedInterestKobo: 125050,
+      goalInterestKobo: [],
+    } as Awaited<
+      ReturnType<typeof walletSavingsInterest.fetchWalletSavingsInterest>
+    >);
     setupWalletTableMocks({
       fundingAccountResult: createQueryResult({
         account_name: 'Ogabassey/Jane Doe',
@@ -409,7 +423,8 @@ describe('useWallet', () => {
 
     expect(result.current.data?.wallet).toMatchObject({
       balance: 5000,
-      earnings_balance: 5000,
+      earnings_available: true,
+      earnings_balance: 1250.5,
       funding_account: {
         account_name: 'Ogabassey/Jane Doe',
         account_number: '1234567890',
@@ -421,7 +436,9 @@ describe('useWallet', () => {
       savings_balance: 35000.5,
       total_balance: 40000.5,
     });
+    expect(interestSpy).toHaveBeenCalledWith('merchant-1');
 
+    interestSpy.mockRestore();
     unmount();
     queryClient.clear();
   });
@@ -683,9 +700,13 @@ describe('useWallet', () => {
 
     await waitFor(() => expect(result.current.data).toBeDefined());
 
+    // The non-UUID test merchant cannot satisfy the interest request schema,
+    // so earnings resolve to the explicit unavailable marker while the empty
+    // wallet still loads.
     expect(result.current.data?.wallet).toMatchObject({
       balance: 0,
-      earnings_balance: 0,
+      earnings_available: false,
+      earnings_balance: null,
       loyalty_points: 1200,
       savings_balance: 0,
       total_balance: 0,

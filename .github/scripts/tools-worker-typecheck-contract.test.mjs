@@ -59,6 +59,8 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'node', 'vitest/globals', '@testing-library/jest-dom', 'google.maps',
   ]);
   assert.deepEqual(toolsTsconfig.include, [
+    '../../tools/staging/prefunded-card/treasury-snapshot-cli.ts',
+    '../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts',
     'tools/events/**/*.ts',
     'tools/db/**/*.ts',
     'tools/cost/**/*.ts',

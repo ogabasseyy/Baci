@@ -4,15 +4,11 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('Wallet');
 const warnedWalletBalanceWarnings = new Set<string>();
 
-type WalletBalanceField =
-  | 'earnings_balance'
-  | 'savings_balance'
-  | 'total_balance';
+type WalletBalanceField = 'balance' | 'savings_balance' | 'total_balance';
 type WalletBalanceWarningKey = WalletBalanceField | 'total_balance_mismatch';
 
 type WalletBalanceData = {
   balance?: number;
-  earnings_balance?: number;
   savings_balance?: number;
   total_balance?: number;
 };
@@ -24,16 +20,16 @@ interface UseWalletBalanceContractWarningParams {
 }
 
 function logWalletBalanceContractWarning({
+  availableBalance,
   computedTotalBalance,
-  earningsBalance,
   merchantId,
   ownerId,
   savingsBalance,
   totalBalance,
   walletData,
 }: {
+  availableBalance: number;
   computedTotalBalance: number;
-  earningsBalance: number;
   merchantId: string;
   ownerId: string;
   savingsBalance: number;
@@ -41,12 +37,12 @@ function logWalletBalanceContractWarning({
   walletData: WalletBalanceData;
 }) {
   const fallbackValues: Record<WalletBalanceField, number> = {
-    earnings_balance: earningsBalance,
+    balance: availableBalance,
     savings_balance: savingsBalance,
     total_balance: totalBalance,
   };
   const missingFields = (
-    ['earnings_balance', 'savings_balance', 'total_balance'] as const
+    ['balance', 'savings_balance', 'total_balance'] as const
   ).filter((field) => walletData[field] == null);
   const hasTotalMismatch =
     walletData.total_balance != null &&
@@ -95,15 +91,14 @@ export function useWalletBalanceContractWarning({
       return;
     }
 
-    const earningsBalance =
-      walletData.earnings_balance ?? walletData.balance ?? 0;
+    const availableBalance = walletData.balance ?? 0;
     const savingsBalance = walletData.savings_balance ?? 0;
-    const computedTotalBalance = earningsBalance + savingsBalance;
+    const computedTotalBalance = availableBalance + savingsBalance;
     const totalBalance = walletData.total_balance ?? computedTotalBalance;
 
     logWalletBalanceContractWarning({
+      availableBalance,
       computedTotalBalance,
-      earningsBalance,
       merchantId,
       ownerId,
       savingsBalance,

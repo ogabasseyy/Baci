@@ -128,6 +128,31 @@ describe('primary wallet onboarding', () => {
     expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
   });
 
+  it('adopts the existing provider customer when retrying a reclaimed uncertain intent', async () => {
+    const input = fixture();
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent',
+      claimToken: 'claim',
+      reclaimed: true,
+    });
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-fixture',
+      wallet_id: 'wallet-fixture',
+      new_customer: false,
+    });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordAccepted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-fixture',
+        providerWalletId: 'wallet-fixture',
+      })
+    );
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+  });
+
   it('marks an ambiguous provider timeout without retrying creation', async () => {
     const input = fixture();
     input.createCustomer.mockRejectedValue(

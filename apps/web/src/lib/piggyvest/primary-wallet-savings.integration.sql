@@ -9,7 +9,7 @@ GRANT piggyvest_primary_authorizer TO primary_authorizer_fixture;
 INSERT INTO piggyvest_primary.savings_authorities VALUES('00000000-0000-4000-8000-000000000004','primary_authorizer_fixture',true);
 INSERT INTO public.customer_savings_goals VALUES('00000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','active',200,0);
 INSERT INTO piggyvest_primary.savings_destinations(integration_id,goal_id,intent_id,provider_wallet_id,enabled)
-  SELECT integration_id,'00000000-0000-4000-8000-000000000006',id,'destination',true FROM piggyvest_primary.onboarding_intents;
+  SELECT integration_id,'00000000-0000-4000-8000-000000000006',id,'destination',true FROM piggyvest_primary.onboarding_intents WHERE customer_id='00000000-0000-4000-8000-000000000002';
 SET SESSION AUTHORIZATION primary_authorizer_fixture;
 DO $$
 DECLARE

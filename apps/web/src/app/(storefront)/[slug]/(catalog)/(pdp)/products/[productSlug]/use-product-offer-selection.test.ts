@@ -174,6 +174,31 @@ describe('useProductOfferSelection', () => {
     expect(result.current.currentPrice).toBe(100);
   });
 
+  it('keeps the advertised base price for ID-less base-row matches', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=used&match_base=1')
+    );
+    const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    // A same-condition offer (o1 @ 80) exists, but the entry advertised the
+    // base price: the PDP must not resolve the offer's price instead.
+    expect(result.current.selectedCondition).toBe('used');
+    expect(result.current.selectedOffer).toBeNull();
+    expect(result.current.currentPrice).toBe(100);
+  });
+
+  it('re-enables offers when the shopper picks a condition on a base-row entry', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=used&match_base=1')
+    );
+    const { result } = renderHook(() => useProductOfferSelection(baseProduct));
+    expect(result.current.selectedOffer).toBeNull();
+    act(() => {
+      result.current.handleConditionChange('used');
+    });
+    expect(result.current.selectedOffer?.id).toBe('o1');
+    expect(result.current.currentPrice).toBe(80);
+  });
+
   it('seeds the default variant and follows attribute changes', () => {
     const { result } = renderHook(() =>
       useProductOfferSelection(variantProduct)

@@ -9,6 +9,7 @@ export interface ProductSelectionHandlerInputs {
   selectedAttributes: Record<string, string>;
   selectedCondition: ProductCondition;
   selectionAttributes: Record<string, string>;
+  setIgnoredRouteBaseMatch: (ignored: boolean) => void;
   setIgnoredRouteOfferId: (offerId: string | null) => void;
   setSelectedAttributes: (attributes: Record<string, string>) => void;
   setSelectedCondition: (condition: ProductCondition) => void;
@@ -33,6 +34,7 @@ export function createProductSelectionHandlers(
     selectedAttributes,
     selectedCondition,
     selectionAttributes,
+    setIgnoredRouteBaseMatch,
     setIgnoredRouteOfferId,
     setSelectedAttributes,
     setSelectedCondition,
@@ -89,6 +91,8 @@ export function createProductSelectionHandlers(
 
   const handleConditionChange = (condition: ProductCondition) => {
     setIgnoredRouteOfferId(offerIdParam);
+    // Any explicit pick re-enables offers on a base-row entry.
+    setIgnoredRouteBaseMatch(true);
     setSelectedCondition(condition);
 
     if (!usesVariantConditions) {

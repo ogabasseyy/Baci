@@ -18,6 +18,10 @@ export function useProductRouteSelection(product: Product) {
   const searchParams = useSearchParams();
   const conditionParam = searchParams.get('condition');
   const offerIdParam = searchParams.get('offer_id');
+  // Search/compare entry points mark ID-less base-row matches explicitly
+  // (mirrors native): without this identity the entry condition is
+  // indistinguishable from a condition-offer selection.
+  const routeBaseMatch = searchParams.get('match_base') === '1';
   const usesVariantRouteSelection = Boolean(
     product.has_variants && product.variants && product.variants.length > 0
   );
@@ -52,6 +56,7 @@ export function useProductRouteSelection(product: Product) {
     availableConditionOptions,
     defaultVariantSelection,
     offerIdParam,
+    routeBaseMatch,
     routeCondition,
     routeSelectionAttributes,
     routeVariantId,

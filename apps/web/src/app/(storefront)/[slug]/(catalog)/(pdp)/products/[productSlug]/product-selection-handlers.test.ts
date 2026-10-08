@@ -34,6 +34,7 @@ const variantProduct = {
 
 function setup(overrides: Partial<ProductSelectionHandlerInputs> = {}) {
   const setters = {
+    setIgnoredRouteBaseMatch: vi.fn(),
     setIgnoredRouteOfferId: vi.fn(),
     setSelectedAttributes: vi.fn(),
     setSelectedCondition: vi.fn(),
@@ -102,6 +103,7 @@ describe('createProductSelectionHandlers', () => {
   it('drops the routed offer and keeps variant state for simple conditions', () => {
     const {
       handleConditionChange,
+      setIgnoredRouteBaseMatch,
       setIgnoredRouteOfferId,
       setSelectedCondition,
       setSelectedVariant,
@@ -109,6 +111,7 @@ describe('createProductSelectionHandlers', () => {
     handleConditionChange('used');
 
     expect(setIgnoredRouteOfferId).toHaveBeenCalledWith('o1');
+    expect(setIgnoredRouteBaseMatch).toHaveBeenCalledWith(true);
     expect(setSelectedCondition).toHaveBeenCalledWith('used');
     expect(setSelectedVariant).not.toHaveBeenCalled();
   });

@@ -193,6 +193,15 @@ export function SearchComparisonTray({
             if (variantId) matchParams.set('variant_id', variantId);
             if (condition) matchParams.set('condition', condition);
             if (offerId) matchParams.set('offer_id', offerId);
+            // An ID-less match advertised the base price: mark the entry so
+            // the PDP keeps it instead of resolving a same-condition offer.
+            // Entries without any match context keep their bare link.
+            if (
+              !variantId &&
+              !offerId &&
+              (liveMatch || snapshot.matchCondition)
+            )
+              matchParams.set('match_base', '1');
             const detailsPath = `${pathPrefix}${getProductUrl(product ?? { ...snapshot, id: String(snapshot.id) })}`;
             const detailsHref = matchParams.size
               ? `${detailsPath}?${matchParams}`

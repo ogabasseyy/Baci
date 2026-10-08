@@ -109,6 +109,14 @@ export function ProductIndexCard({
     matchParams.set('condition', product.searchMatch.condition);
   if (product.searchMatch?.offerId)
     matchParams.set('offer_id', product.searchMatch.offerId);
+  // ID-less matches carry an explicit base identity so the PDP keeps the
+  // advertised base price instead of resolving a same-condition offer.
+  if (
+    product.searchMatch &&
+    !product.searchMatch.variantId &&
+    !product.searchMatch.offerId
+  )
+    matchParams.set('match_base', '1');
   const searchProductPath = matchParams.size
     ? `${productPath}?${matchParams}`
     : productPath;

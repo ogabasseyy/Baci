@@ -197,6 +197,7 @@ describe('ProductIndexCard', () => {
       .getAttribute('href');
     expect(href).toContain('offer_id=o1');
     expect(href).not.toContain('condition=');
+    expect(href).not.toContain('match_base=');
   });
 
   it('forwards a condition-only match without an exact id', () => {
@@ -219,6 +220,9 @@ describe('ProductIndexCard', () => {
     expect(
       screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
     ).toHaveAttribute('href', expect.stringContaining('condition=used'));
+    expect(
+      screen.getByRole('link', { name: 'Choose iPhone 13 Pro to buy' })
+    ).toHaveAttribute('href', expect.stringContaining('match_base=1'));
   });
 
   it('shows the no-image fallback when the product image is blank', () => {

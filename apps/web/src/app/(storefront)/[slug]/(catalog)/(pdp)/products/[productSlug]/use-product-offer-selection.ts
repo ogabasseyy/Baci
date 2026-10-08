@@ -43,6 +43,7 @@ export function useProductOfferSelection(product: Product) {
     availableConditionOptions,
     defaultVariantSelection,
     offerIdParam,
+    routeBaseMatch,
     routeCondition,
     routeSelectionAttributes,
     routeVariantId,
@@ -62,12 +63,23 @@ export function useProductOfferSelection(product: Product) {
   const [ignoredRouteOfferId, setIgnoredRouteOfferId] = useState<string | null>(
     null
   );
+  const [ignoredRouteBaseMatch, setIgnoredRouteBaseMatch] = useState(false);
   const routeOfferId =
     offerIdParam &&
     offerIdParam !== ignoredRouteOfferId &&
     product.offers?.some((o: { id: string }) => String(o.id) === offerIdParam)
       ? offerIdParam
       : null;
+  // A base-row entry keeps the advertised base price until the shopper
+  // picks a condition on the PDP (mirrors native suppressConditionOfferMatch):
+  // ids-bearing links never suppress, and any explicit pick re-enables
+  // offers via ignoredRouteBaseMatch.
+  const suppressConditionOfferMatch =
+    routeBaseMatch &&
+    !ignoredRouteBaseMatch &&
+    !routeOfferId &&
+    !routeVariantId &&
+    (selectedCondition === routeCondition || !routeCondition);
   const selectedOffer = usesVariantConditions
     ? null
     : (routeOfferId &&
@@ -77,8 +89,9 @@ export function useProductOfferSelection(product: Product) {
             normalizeCanonicalProductCondition(offer.condition) ===
               selectedCondition
         )) ||
-      (selectedCondition !==
-      (normalizeCanonicalProductCondition(product.condition) || 'new')
+      (!suppressConditionOfferMatch &&
+      selectedCondition !==
+        (normalizeCanonicalProductCondition(product.condition) || 'new')
         ? product.offers?.find(
             (offer: { condition: string }) =>
               normalizeCanonicalProductCondition(offer.condition) ===
@@ -97,6 +110,7 @@ export function useProductOfferSelection(product: Product) {
     routeCondition,
     routeVariantId ?? '',
     offerIdParam ?? '',
+    routeBaseMatch ? 'base' : '',
     Object.entries(routeSelectionAttributes)
       .map(([key, value]) => `${key}=${value}`)
       .sort()
@@ -106,6 +120,7 @@ export function useProductOfferSelection(product: Product) {
   if (routeSeedKey !== prevRouteSeedKey) {
     setPrevRouteSeedKey(routeSeedKey);
     setIgnoredRouteOfferId(null);
+    setIgnoredRouteBaseMatch(false);
 
     if (!usesVariantRouteSelection) {
       // An ID-only offer that stops resolving (removed offer, or offer_id
@@ -221,6 +236,7 @@ export function useProductOfferSelection(product: Product) {
       selectedAttributes,
       selectedCondition,
       selectionAttributes,
+      setIgnoredRouteBaseMatch,
       setIgnoredRouteOfferId,
       setSelectedAttributes,
       setSelectedCondition,

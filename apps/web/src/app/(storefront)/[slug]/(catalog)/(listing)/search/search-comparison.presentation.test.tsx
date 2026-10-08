@@ -192,3 +192,26 @@ it('formats refreshed comparison prices in merchant currency', () => {
   expect(screen.getByText('storage: 128 GB')).toBeTruthy();
   expect(screen.getByText('Open product for current price')).toBeTruthy();
 });
+
+it('marks id-less comparison entries so the PDP keeps the base price', () => {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one', matchCondition: 'used' },
+    { id: '2', name: 'Two', slug: 'two', matchOfferId: 'o2' },
+  ];
+  render(
+    <SearchComparisonTray
+      products={[]}
+      pathPrefix=""
+      merchantId="m1"
+      currency="USD"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  const links = screen.getAllByRole('link', {
+    name: 'View details and options',
+  });
+  expect(links).toHaveLength(2);
+  expect(links[0].getAttribute('href')).toContain('match_base=1');
+  expect(links[1].getAttribute('href')).toContain('offer_id=o2');
+  expect(links[1].getAttribute('href')).not.toContain('match_base=');
+});

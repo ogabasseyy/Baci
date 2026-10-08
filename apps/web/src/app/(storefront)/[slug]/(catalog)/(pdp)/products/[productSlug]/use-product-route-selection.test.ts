@@ -59,6 +59,7 @@ describe('useProductRouteSelection', () => {
     expect(result.current.routeCondition).toBe('');
     expect(result.current.routeVariantId).toBeUndefined();
     expect(result.current.offerIdParam).toBeNull();
+    expect(result.current.routeBaseMatch).toBe(false);
     expect(result.current.routeSelectionAttributes).toEqual({});
     expect(result.current.usesVariantRouteSelection).toBe(false);
     expect(result.current.usesVariantConditions).toBe(false);
@@ -73,6 +74,14 @@ describe('useProductRouteSelection', () => {
     expect(result.current.routeCondition).toBe('used');
     expect(result.current.offerIdParam).toBe('o1');
     expect(result.current.usesVariantRouteSelection).toBe(false);
+  });
+
+  it('reads the base-row match identity', () => {
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('condition=used&match_base=1')
+    );
+    const { result } = renderHook(() => useProductRouteSelection(baseProduct));
+    expect(result.current.routeBaseMatch).toBe(true);
   });
 
   it('parses variant selection params on variant products', () => {

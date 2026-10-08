@@ -161,4 +161,45 @@ describe('V2ComparisonProvider', () => {
     // numeric-id entry; the three corrupt rows never enter the tray.
     expect(screen.getByTestId('compare-count')).toHaveTextContent('2');
   });
+
+  it('dedupes and caps overfull stored selections to the newest tray', () => {
+    const stored = [1, 2, 3, 2, 4, 5].map((entry) => ({
+      ...baseProduct,
+      id: `product-${entry}`,
+      name: `Product ${entry}`,
+    }));
+    sessionStorage.setItem('ogabassey_v2_compare', JSON.stringify(stored));
+
+    function TrayConsumer() {
+      const { compareItems } = useV2Comparison();
+      return (
+        <div>
+          <span data-testid="compare-count">{compareItems.length}</span>
+          <ul>
+            {compareItems.map((item) => (
+              <li key={item.id}>{item.name}</li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
+    render(
+      <V2ComparisonProvider>
+        <TrayConsumer />
+      </V2ComparisonProvider>
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(1200);
+    });
+
+    // Six stored rows (one repeated id) collapse to the four newest
+    // unique products, matching the live oldest-first eviction.
+    expect(screen.getByTestId('compare-count')).toHaveTextContent('4');
+    expect(screen.queryByText('Product 1')).not.toBeInTheDocument();
+    for (const name of ['Product 2', 'Product 3', 'Product 4', 'Product 5']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
 });

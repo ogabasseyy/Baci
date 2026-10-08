@@ -23,6 +23,9 @@ const V2ComparisonContext = createContext<V2ComparisonContextType | undefined>(
 // Legacy localStorage selections are intentionally ignored.
 const COMPARISON_STORAGE_KEY = 'ogabassey_v2_compare';
 const STORAGE_HYDRATION_TIMEOUT_MS = 1200;
+// Tray capacity (1 main + 3 comparisons): the live add path evicts the
+// oldest entry past this, so hydration enforces the same invariant.
+const COMPARISON_TRAY_CAPACITY = 4;
 
 function getComparisonStorageKey(storageNamespace?: string | null) {
   const normalizedNamespace = storageNamespace?.trim();
@@ -34,10 +37,19 @@ function getComparisonStorageKey(storageNamespace?: string | null) {
 function readValidStoredComparisonItems(stored: string): Product[] {
   const parsed: unknown = JSON.parse(stored);
   if (!Array.isArray(parsed)) return [];
-  return parsed.flatMap((entry) => {
+  // Storage can hold more than the tray allows (buggy older client or
+  // manual edits): dedupe by product id keeping the first row, then keep
+  // the most recent entries, mirroring the live oldest-first eviction.
+  const seenProductIds = new Set<string>();
+  const deduped = parsed.flatMap((entry) => {
     const result = comparisonSnapshotSchema.safeParse(entry);
-    return result.success ? [result.data] : [];
+    if (!result.success) return [];
+    const productKey = String(result.data.id);
+    if (seenProductIds.has(productKey)) return [];
+    seenProductIds.add(productKey);
+    return [result.data];
   });
+  return deduped.slice(-COMPARISON_TRAY_CAPACITY);
 }
 
 export const useV2Comparison = () => {
@@ -164,7 +176,9 @@ export const V2ComparisonProvider: React.FC<{
       (p) => String(p.id) === String(product.id)
     );
     const replacedComparisonItem =
-      !isDuplicate && source.length >= 4 ? source[0] : null;
+      !isDuplicate && source.length >= COMPARISON_TRAY_CAPACITY
+        ? source[0]
+        : null;
 
     setCompareItems((prev) => {
       const current = hydratedComparisonItems ?? prev;
@@ -173,8 +187,8 @@ export const V2ComparisonProvider: React.FC<{
         return current;
       }
 
-      // Limit to 4 items for UI sanity (1 main + 3 comparisons)
-      if (current.length >= 4) {
+      // Limit to the tray capacity for UI sanity (1 main + 3 comparisons)
+      if (current.length >= COMPARISON_TRAY_CAPACITY) {
         // Remove first, add new
         return [...current.slice(1), product];
       }

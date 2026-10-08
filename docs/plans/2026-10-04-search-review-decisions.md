@@ -394,3 +394,8 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse med intake-rotation: PR-disclosed repeat (deferred IP-throttle follow-up; merchant acceptance still needed before public launch).
 - Muse low notification-PII: design coherent — contact lives in the merchant-scoped inbox row (needed for fulfillment), reads are merchant-owner-scoped, erase trigger deletes the inbox copy with the request. Retention window is a policy follow-up, not a code defect.
 - Muse low pre-add disclosure: verified chain — NEITHER PDP pre-discloses the +5%, but both PDPs route through the cart (web "View Cart and Checkout", native router.navigate('/cart'); no direct checkout), where the fee is itemized with an opt-out toggle before payment. PDP pre-add copy is a product/UX follow-up.
+
+## Round 57 (Codex 1 P1 + 1 P2 on 1f640c8b8f — both addressed)
+
+- CX-109 (P1) ALREADY FIXED: cart-store.ts extraction landed in eb21dfb22e (stores/cart-assurance-default.ts, 297 lines, guard green) before this review arrived. Reply + resolve only.
+- CX-110 (P2) FIXED: readValidStoredComparisonItems now dedupes hydrated rows by product id (first row wins) and slices to the newest COMPARISON_TRAY_CAPACITY entries, mirroring the live oldest-first eviction; the add path uses the same constant. New hydration test pins 6 stored rows (1 dup) → 4 newest unique. Provider suites 15/15; web lint/typecheck green; inventory pin untouched (1/1).

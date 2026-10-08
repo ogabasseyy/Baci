@@ -27,6 +27,11 @@ export function createPrimaryWalletCardCheckoutService(input: {
     expiresAt: settings.expiresAt,
     callbackUrl: settings.callbackUrl,
   });
+  // The deadline blocks NEW reservations only. Status polling,
+  // initialization re-entry, and webhook reconciliation must keep draining
+  // operations created before expiry — otherwise a customer who pays (or
+  // whose webhook lands) after the deadline stays charged-but-uncredited.
+  // Those paths deliberately never call active().
   const active = () => {
     const timestamp = (input.now ?? Date.now)();
     if (
@@ -83,7 +88,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
     const reclaimed = select(claim.intent);
     if (reclaimed.operationId !== operationId)
       throw new Error('Primary card identity unavailable');
-    active();
     let session: ReturnType<typeof schemas.session.parse> | null = null;
     try {
       session = schemas.session.parse(
@@ -98,7 +102,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
       // starts fresh instead of polling a dead reference forever. Any
       // other failure stays ambiguous and records init_unknown below.
       if (isPrimaryCardDuplicateReference(error)) {
-        active();
         schemas.acknowledgement.parse(
           await input.execute('abandonment', [storageScope, operationId])
         );
@@ -106,7 +109,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
       }
       session = null;
     }
-    active();
     schemas.initializationAcknowledgement.parse(
       await input.execute('initialize', [
         storageScope,
@@ -184,7 +186,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
       return publicState(await read(intent.operationId));
     },
     async status(operationId: string) {
-      active();
       const intent = await read(
         schemas.statusRequest.shape.operationId.parse(operationId)
       );
@@ -211,7 +212,6 @@ export function createPrimaryWalletCardCheckoutService(input: {
         if (reentered) return reentered;
       }
       const verification = await input.provider.verify(intent);
-      active();
       if (verification.outcome === 'pending') return publicState(intent);
       if (verification.outcome === 'abandoned')
         schemas.acknowledgement.parse(

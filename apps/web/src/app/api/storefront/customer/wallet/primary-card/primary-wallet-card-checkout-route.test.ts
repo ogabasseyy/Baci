@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
   runtime: vi.fn(),
+  runtimeDrain: vi.fn(),
   service: vi.fn(),
   initialize: vi.fn(),
   status: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-checkout-runtime', () => ({
   readPrimaryWalletCardCheckoutRuntime: mocks.runtime,
+  readPrimaryWalletCardCheckoutRuntimeDrain: mocks.runtimeDrain,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-checkout-executor', () => ({
   createPrimaryWalletCardCheckoutExecutor: mocks.execute,
@@ -32,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.runtime.mockReturnValue({ settings: fixture.settings });
+  mocks.runtimeDrain.mockReturnValue({ settings: fixture.settings });
   mocks.service.mockReturnValue({
     initialize: mocks.initialize,
     status: mocks.status,
@@ -58,6 +61,7 @@ describe.each([
     ).toBe(401);
     expect(mocks.csrf).not.toHaveBeenCalled();
     expect(mocks.runtime).not.toHaveBeenCalled();
+    expect(mocks.runtimeDrain).not.toHaveBeenCalled();
   });
   it('rejects invalid CSRF before customer lookup', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);
@@ -171,5 +175,21 @@ describe.each([
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private details');
+  });
+  it('reads runtime through the strict reader for initialize and the drain reader for status', async () => {
+    const test = primaryWalletCardCheckoutRouteFixture(action);
+    mocks.auth.mockResolvedValue(test.auth);
+    const response = await handlePrimaryWalletCardCheckout(
+      test.request(),
+      action
+    );
+    expect(response.status).toBe(action === 'initialize' ? 200 : 202);
+    if (action === 'initialize') {
+      expect(mocks.runtime).toHaveBeenCalledTimes(1);
+      expect(mocks.runtimeDrain).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.runtimeDrain).toHaveBeenCalledTimes(1);
+      expect(mocks.runtime).not.toHaveBeenCalled();
+    }
   });
 });

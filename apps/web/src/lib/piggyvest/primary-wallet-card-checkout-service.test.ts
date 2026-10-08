@@ -297,6 +297,43 @@ describe('durable goal-independent card checkout service', () => {
     await expect(service.initialize(request)).rejects.toThrow();
     expect(execute).not.toHaveBeenCalled();
   });
+  it('drains status past expiry so pre-expiry payments still settle', async () => {
+    const { execute, provider } = setup();
+    const service = createPrimaryWalletCardCheckoutService({
+      settings: { ...fixture.settings, expiresAt: '2026-09-29T15:59:10Z' },
+      scope,
+      execute,
+      provider,
+    });
+    execute.mockImplementationOnce(async () =>
+      schemas.intent.parse({ ...fixture.intent, status: 'ready' })
+    );
+    const result = await service.status(fixture.intent.operationId);
+    expect(result.status).toBe('custody_pending');
+    expect(execute.mock.calls.some(([action]) => action === 'collection')).toBe(
+      true
+    );
+  });
+  it('re-enters initialization past expiry for a stale uninitialized claim', async () => {
+    const { execute, provider } = setup();
+    const service = createPrimaryWalletCardCheckoutService({
+      settings: { ...fixture.settings, expiresAt: '2026-09-29T15:59:10Z' },
+      scope,
+      execute,
+      provider,
+    });
+    execute.mockImplementationOnce(async () =>
+      schemas.intent.parse({ ...fixture.intent, status: 'initializing' })
+    );
+    execute.mockImplementationOnce(async () => ({
+      outcome: 'claimed',
+      token: '55555555-5555-4555-8555-555555555555',
+      intent: { ...fixture.intent, status: 'initializing' },
+    }));
+    const result = await service.status(fixture.intent.operationId);
+    expect(provider.initialize).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe('ready');
+  });
   it('rejects below-minimum funding before storage', async () => {
     const { service, execute } = setup();
     await expect(

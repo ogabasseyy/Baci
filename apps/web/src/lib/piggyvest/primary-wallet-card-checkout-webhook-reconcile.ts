@@ -1,7 +1,7 @@
 import 'server-only';
 import { createPrimaryWalletCardCheckoutExecutor } from './primary-wallet-card-checkout-executor';
 import { createPrimaryWalletCardCheckoutProvider } from './primary-wallet-card-checkout-provider';
-import { readPrimaryWalletCardCheckoutRuntime } from './primary-wallet-card-checkout-runtime';
+import { readPrimaryWalletCardCheckoutRuntimeDrain } from './primary-wallet-card-checkout-runtime';
 import { createPrimaryWalletCardCheckoutService } from './primary-wallet-card-checkout-service';
 
 type Executor = ReturnType<typeof createPrimaryWalletCardCheckoutExecutor>;
@@ -63,13 +63,13 @@ export async function reconcilePrimaryWalletCardCheckoutWebhook(input: {
       : null;
   if (!reference || !operationId || !email) return null;
   if (reference !== `pvb-first-primary-${operationId}`) return null;
-  let runtime: ReturnType<typeof readPrimaryWalletCardCheckoutRuntime>;
+  let runtime: ReturnType<typeof readPrimaryWalletCardCheckoutRuntimeDrain>;
   try {
     runtime =
       input.runtime === undefined
-        ? readPrimaryWalletCardCheckoutRuntime()
+        ? readPrimaryWalletCardCheckoutRuntimeDrain()
         : (input.runtime as ReturnType<
-            typeof readPrimaryWalletCardCheckoutRuntime
+            typeof readPrimaryWalletCardCheckoutRuntimeDrain
           >);
   } catch {
     return null;

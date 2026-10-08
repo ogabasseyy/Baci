@@ -5,6 +5,7 @@ import { DEFAULT_REQUIRED_TOOLS } from './mcp-tool-inventory.mjs';
 test('defines the current required public MCP tool inventory', () => {
   assert.deepEqual(DEFAULT_REQUIRED_TOOLS, [
     'prepare_storefront_cart_link',
+    'add_to_cart',
   'update_ogabassey_guest_cart',
     'browse_categories',
     'get_brands',

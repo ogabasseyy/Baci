@@ -207,7 +207,7 @@ export function registerGuestCartTool(
             content: [
               {
                 type: 'text' as const,
-                text: 'This product is no longer available and was removed from the guest cart.',
+                text: 'This product is no longer available, so the guest cart was left unchanged.',
               },
             ],
             structuredContent: {

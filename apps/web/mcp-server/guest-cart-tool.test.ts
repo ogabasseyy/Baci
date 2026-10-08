@@ -118,6 +118,26 @@ it('passes product unavailability through instead of returning a generic failure
     expect(result.structuredContent).toMatchObject({ success: false, product_unavailable: true, product_id: id });
   } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
 });
+it('leaves the live cart unchanged when an update fails availability', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-stale-'));
+  const survivor = '33333333-3333-4333-8333-333333333333';
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId: async () => 'merchant', formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    const created = await handler?.({ product_id: id, quantity: 2 }) as { structuredContent: { cart_token: string } };
+    validate.mockResolvedValue({ structuredContent: { success: false, product_unavailable: true } });
+    const failed = await handler?.({ product_id: id, quantity: 5, cart_token: created.structuredContent.cart_token }) as { structuredContent: Record<string, unknown> };
+    expect(failed.structuredContent).toMatchObject({ success: false, product_unavailable: true, product_id: id });
+    expect(JSON.stringify(failed)).toContain('left unchanged');
+    expect(JSON.stringify(failed)).not.toContain('removed');
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    const after = await handler?.({ product_id: survivor, quantity: 1, cart_token: created.structuredContent.cart_token }) as { structuredContent: { items: unknown[] } };
+    expect(after.structuredContent.items).toEqual([{ product_id: id, quantity: 2 }, { product_id: survivor, quantity: 1 }]);
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});
 it('advertises the bare cart page when the last line is removed', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-empty-'));
   type Args = { product_id: string; quantity: number; cart_token?: string };

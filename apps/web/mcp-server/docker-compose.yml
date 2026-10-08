@@ -30,6 +30,14 @@ services:
       - MCP_GUEST_CART_DIRECTORY=/var/lib/baci/guest-carts
     volumes:
       - mcp-guest-carts:/var/lib/baci/guest-carts
+    # Read-only root: the server persists only guest carts (named volume
+    # above) and needs no other runtime writes, so the filesystem stays
+    # immutable except for /tmp scratch space.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     # Single writer only: in-process queues serialize one replica, and an
     # exclusive `.writer.lock` in the cart directory refuses a second writer
     # process. `deploy.replicas` is honored only by `docker stack deploy`

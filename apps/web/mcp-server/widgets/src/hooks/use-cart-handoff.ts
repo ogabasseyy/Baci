@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { dropLineFromCartState } from '../drop-cart-line';
+import { openOgabasseyUrl } from '../open-ogabassey-url';
 import { resolveOptionAwareProductUrl } from '../option-aware-product-url';
 import { getVariantSelectionUrl } from '../variant-selection-url';
 import {
@@ -8,21 +9,10 @@ import {
 } from '../parse-cart-tool-output';
 import { parseHandoffLines } from '../parse-handoff-lines';
 import { recoverExpiredAdd } from '../recover-expired-add';
+import { buildReviewCartUrl } from '../review-cart-url';
 import type { Product, WidgetState } from '../widget-types';
 import { createDefaultState } from '../widget-types';
 import { useWidgetState } from './use-widget-state';
-
-function openOgabasseyUrl(url: string, pendingTab?: Window | null): boolean {
-  if (window.openai?.openExternal) {
-    window.openai.openExternal({ href: url });
-    return true;
-  } else if (pendingTab && !pendingTab.closed) {
-    pendingTab.location.href = url;
-    return true;
-  } else {
-    return window.open(url, '_blank') !== null;
-  }
-}
 
 export function useCartHandoff() {
   const [widgetState, setWidgetState] =
@@ -265,6 +255,11 @@ export function useCartHandoff() {
                 remainingQuantities.get(item.product.id) ?? item.quantity,
             })) || [],
         cartUrl: content.cart_url,
+        // An emptied cart deletes its server file, so the returned token is
+        // dead: forget it now so the next add mints directly instead of
+        // paying for an expired-recovery round trip.
+        cartToken:
+          remaining.length === 0 ? undefined : previous?.cartToken,
       }));
     } catch {
       setCartError('Could not remove this item. Please try again.');
@@ -277,24 +272,8 @@ export function useCartHandoff() {
   const handleViewCart = () => {
     if (busy.current || cart.length === 0 || !widgetState?.cartUrl) return;
     try {
-      const url = new URL(widgetState.cartUrl);
-      if (
-        url.origin !== 'https://ogabassey.com' ||
-        url.pathname !== '/cart' ||
-        url.username ||
-        url.password
-      )
-        return;
-      // Legacy one-shot `?item_id=&qty=` handoffs replay the add on every
-      // open, so Review keeps only the idempotent `guest_cart` payload and
-      // otherwise opens the bare cart. The payload is re-parsed before
-      // re-emitting so a malformed stored value opens the bare cart instead
-      // of propagating to the website.
-      const guestCart = url.searchParams.get('guest_cart');
-      const review = new URL('https://ogabassey.com/cart');
-      if (guestCart && parseHandoffLines(guestCart))
-        review.searchParams.set('guest_cart', guestCart);
-      openOgabasseyUrl(review.toString());
+      const reviewUrl = buildReviewCartUrl(widgetState.cartUrl);
+      if (reviewUrl) openOgabasseyUrl(reviewUrl);
     } catch {
       setCartError('Could not open your guest cart. Please try again.');
     }

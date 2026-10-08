@@ -244,6 +244,35 @@ it('does not silently select variants and preserves the existing guest cart', as
   });
 });
 
+it('forgets the dead token when a removal empties the cart', async () => {
+  const callTool = vi
+    .fn()
+    .mockResolvedValueOnce(response())
+    .mockResolvedValueOnce({
+      structuredContent: {
+        ...response([]).structuredContent,
+        cart_url: 'https://ogabassey.com/cart',
+      },
+    })
+    .mockResolvedValueOnce(response());
+  window.openai = { callTool, setWidgetState: vi.fn() };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  await act(async () => {
+    await result.current.handleRemoveItem(product.id);
+  });
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  // No cart_token: the next add mints directly instead of recovering.
+  expect(callTool).toHaveBeenLastCalledWith('update_ogabassey_guest_cart', {
+    product_id: product.id,
+    quantity: 1,
+    cart_token: undefined,
+  });
+});
 it('reports quota exhaustion with the retry wait instead of a product error', async () => {
   const callTool = vi.fn().mockResolvedValueOnce({
     structuredContent: {

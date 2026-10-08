@@ -12,16 +12,51 @@ import type { fundWallet } from './wallet-screen.handlers';
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();
 
-function validateFundAmountKobo(fundAmount: unknown): string | null {
-  const amountKobo = Math.round(Number(fundAmount) * 100);
-  if (
-    !Number.isSafeInteger(amountKobo) ||
-    Math.abs(Number(fundAmount) * 100 - amountKobo) > 0.000001
-  )
-    return 'Enter an amount with no more than two decimal places.';
-  if (amountKobo <= 0) return 'Enter an amount greater than zero.';
-  if (amountKobo > 9999999999) return 'Enter a smaller amount.';
-  return null;
+const MAX_FUND_AMOUNT_KOBO = 9999999999;
+
+function formatNairaFromKobo(amountKobo: number): string {
+  // Render from the integer kobo value, not the raw input string, so the
+  // consent prompt always shows exactly what will be charged. Decimals
+  // are manual (integer grouping uses the codebase's en-NG convention)
+  // so every JS engine formats identically.
+  const whole = Math.floor(amountKobo / 100).toLocaleString('en-NG');
+  const koboPart = String(amountKobo % 100).padStart(2, '0');
+  return `${whole}.${koboPart}`;
+}
+
+function parseFundAmountKobo(fundAmount: unknown): number | null {
+  if (typeof fundAmount !== 'string') return null;
+  // Normalize display/user input (surrounding whitespace, thousands
+  // separators), then require a plain shape: digits with at most two
+  // decimals. Bare Number() would also accept exponents, hex, and signs,
+  // which must never silently become a charge amount.
+  const normalized = fundAmount.trim().replace(/,/g, '');
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+  const amountKobo = Math.round(Number(normalized) * 100);
+  return Number.isSafeInteger(amountKobo) ? amountKobo : null;
+}
+
+function validateFundAmountKobo(
+  fundAmount: unknown
+): { amountKobo: number } | { error: string } {
+  const amountKobo = parseFundAmountKobo(fundAmount);
+  if (amountKobo === null) {
+    const text =
+      typeof fundAmount === 'string' ? fundAmount.trim().replace(/,/g, '') : '';
+    if (text === '') return { error: 'Enter an amount greater than zero.' };
+    const numeric = Number(text);
+    if (Number.isFinite(numeric) && numeric <= 0)
+      return { error: 'Enter an amount greater than zero.' };
+    if (Number.isFinite(numeric))
+      return {
+        error: 'Enter an amount with no more than two decimal places.',
+      };
+    return { error: 'Enter a valid amount using digits only.' };
+  }
+  if (amountKobo <= 0) return { error: 'Enter an amount greater than zero.' };
+  if (amountKobo > MAX_FUND_AMOUNT_KOBO)
+    return { error: 'Enter a smaller amount.' };
+  return { amountKobo };
 }
 
 export async function fundPrimaryWalletCard(
@@ -60,18 +95,18 @@ export async function fundPrimaryWalletCard(
     let result: Awaited<ReturnType<typeof client.start>>;
     if (pending) result = await client.recover({ merchantId, userId });
     else {
-      const amountError = validateFundAmountKobo(input.fundAmount);
-      if (amountError) {
+      const validated = validateFundAmountKobo(input.fundAmount);
+      if ('error' in validated) {
         // Invalid input is a user error, not a failed charge: say so
         // directly instead of falling into the retained-operation alert.
-        Alert.alert('Check the amount', amountError);
+        Alert.alert('Check the amount', validated.error);
         return;
       }
-      const amountKobo = Math.round(Number(input.fundAmount) * 100);
+      const amountKobo = validated.amountKobo;
       const accepted = await new Promise<boolean>((resolve) =>
         Alert.alert(
           'Confirm card wallet funding',
-          `Authorize a one-time ₦${Number(input.fundAmount).toLocaleString()} charge to fund your wallet. Your card will not be saved. Money appears in your wallet after funding is confirmed.`,
+          `Authorize a one-time ₦${formatNairaFromKobo(amountKobo)} charge to fund your wallet. Your card will not be saved. Money appears in your wallet after funding is confirmed.`,
           [
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
             { text: 'Authorize one-time charge', onPress: () => resolve(true) },

@@ -187,11 +187,32 @@ it.each([
   ['0', 'Enter an amount greater than zero.'],
   ['-50', 'Enter an amount greater than zero.'],
   ['10.123', 'Enter an amount with no more than two decimal places.'],
+  ['1e6', 'Enter an amount with no more than two decimal places.'],
+  ['0x10', 'Enter an amount with no more than two decimal places.'],
+  ['abc', 'Enter a valid amount using digits only.'],
   ['100000000', 'Enter a smaller amount.'],
 ])('rejects invalid amount %p with a specific message before consent', async (fundAmount, message) => {
   await fundPrimaryWalletCard({ ...input, fundAmount });
   expect(alert).toHaveBeenCalledWith('Check the amount', message);
   expect(mockStart).not.toHaveBeenCalled();
+});
+it('renders the exact kobo-derived amount in the consent prompt', async () => {
+  await fundPrimaryWalletCard({ ...input, fundAmount: '1250.5' });
+  expect(alert).toHaveBeenCalledWith(
+    'Confirm card wallet funding',
+    expect.stringContaining('₦1,250.50'),
+    expect.any(Array),
+    expect.any(Object)
+  );
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ amountKobo: 125050 })
+  );
+});
+it('accepts thousands separators and surrounding whitespace', async () => {
+  await fundPrimaryWalletCard({ ...input, fundAmount: ' 1,000 ' });
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ amountKobo: 100000 })
+  );
 });
 it('re-sanitizes a tampered handoff before navigating on completed recovery', async () => {
   mockRead.mockResolvedValue({ operationId: 'persisted' });

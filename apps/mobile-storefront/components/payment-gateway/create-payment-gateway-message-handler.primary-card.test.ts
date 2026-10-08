@@ -27,3 +27,21 @@ it('uses the existing hosted callback boundary to request authoritative primary 
   expect(confirm).toHaveBeenCalledTimes(1);
   expect(mockCrypto).not.toHaveBeenCalled();
 });
+it('routes raw success messages through server confirmation only under production wiring', async () => {
+  mockCrypto.mockClear();
+  const confirm = jest.fn();
+  // Production wiring: use-payment-gateway-controller always provides the
+  // server-checkout confirmer for primary_wallet_card, so raw WebView
+  // claims must reach only that confirmer — never the blind-credit
+  // crypto path or a direct success side effect.
+  const { handler, clearCart, setSuccessStatus } = createHandler({
+    paymentKind: 'primary_wallet_card',
+    confirmRedvaultPayment: confirm,
+  });
+  await sendMessage(handler, { type: 'crypto_success' });
+  await sendMessage(handler, { type: 'success' });
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(mockCrypto).not.toHaveBeenCalled();
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(setSuccessStatus).not.toHaveBeenCalled();
+});

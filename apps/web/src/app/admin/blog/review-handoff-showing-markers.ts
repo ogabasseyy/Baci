@@ -157,7 +157,6 @@ export function showingMarkers(classes: readonly string[]): {
   widthRestored: boolean;
   maxWidthRestored: boolean;
 } {
-  let display = false;
   let visible = false;
   let opacity = false;
   let notSrOnly = false;
@@ -166,9 +165,18 @@ export function showingMarkers(classes: readonly string[]): {
   let maxHeightRestored = false;
   let widthRestored = false;
   let maxWidthRestored = false;
+  // Display resolves per breakpoint: Tailwind emits `hidden` after the
+  // showing display utilities, so `md:hidden` beats `md:block` at md
+  // while other breakpoints decide independently.
+  const displayShowing = new Set<string>();
+  const displayHidden = new Set<string>();
   for (const token of classes) {
     const utility = responsiveUtility(token);
-    if (utility !== null && DISPLAY_UTILITIES.has(utility)) display = true;
+    if (utility !== null) {
+      const breakpoint = token.slice(0, token.length - utility.length);
+      if (DISPLAY_UTILITIES.has(utility)) displayShowing.add(breakpoint);
+      else if (utility === 'hidden') displayHidden.add(breakpoint);
+    }
     if (token === 'visible' || utility === 'visible') visible = true;
     if (utility !== null && isNonZeroOpacityUtility(utility)) opacity = true;
     if (token === 'not-sr-only' || utility === 'not-sr-only') notSrOnly = true;
@@ -187,6 +195,9 @@ export function showingMarkers(classes: readonly string[]): {
       if (property === 'max-w') maxWidthRestored = true;
     }
   }
+  const display = [...displayShowing].some(
+    (breakpoint) => !displayHidden.has(breakpoint)
+  );
   return {
     display,
     visible,

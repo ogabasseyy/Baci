@@ -91,9 +91,21 @@ function importHandoff() {
   });
 }
 
-it('keeps an imported image and deletes the stale upload when an older featured upload finishes later', async () => {
-  const pending = Promise.withResolvers<Response>();
-  fetchWithCsrf.mockReturnValueOnce(pending.promise);
+it('deletes a settled session upload when an accepted import replaces it', async () => {
+  fetchWithCsrf.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        url: 'https://cdn.example.com/media/platform/blog/settled.webp',
+        width: 1200,
+        height: 675,
+        variants: {
+          landscape_16x9:
+            'https://cdn.example.com/media/platform/blog/settled/landscape_16x9.webp',
+        },
+      }),
+      { status: 200 }
+    )
+  );
   fetchWithCsrf.mockResolvedValueOnce(
     new Response(JSON.stringify({ success: true }), { status: 200 })
   );
@@ -104,55 +116,54 @@ it('keeps an imported image and deletes the stale upload when an older featured 
       target: { files: [new File(['image'], 'cover.png')] },
     });
   });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
-  expect(fetchWithCsrf).toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+      'https://cdn.example.com/media/platform/blog/settled.webp'
+    )
+  );
   importHandoff();
   await waitFor(() =>
     expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
   );
-  await act(async () =>
-    pending.resolve(
-      new Response(
-        JSON.stringify({
-          url: 'https://cdn.example.com/media/platform/blog/stale.webp',
-          width: 1200,
-          height: 675,
-          variants: {
-            landscape_16x9:
-              'https://cdn.example.com/media/platform/blog/stale/landscape_16x9.webp',
-          },
-        }),
-        { status: 200 }
-      )
-    )
-  );
   expect(screen.getByLabelText('Featured image')).toHaveTextContent(
     'https://cdn.example.com/cover.webp'
   );
-  // The route persisted the stale upload before the import invalidated
-  // it, so the discarded result is deleted instead of leaking.
-  expect(fetchWithCsrf).toHaveBeenCalledWith(
-    '/api/admin/blog/upload',
-    expect.objectContaining({
-      body: JSON.stringify({
-        path: 'platform/blog/stale.webp',
-        variantPaths: ['platform/blog/stale/landscape_16x9.webp'],
-      }),
-      method: 'DELETE',
-    })
+  // The settled upload is no longer pending, so invalidation alone
+  // would leave its persisted objects behind: the import deletes the
+  // replaced session upload instead of leaking it.
+  await waitFor(() =>
+    expect(fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/admin/blog/upload',
+      expect.objectContaining({
+        body: JSON.stringify({
+          path: 'platform/blog/settled.webp',
+          variantPaths: ['platform/blog/settled/landscape_16x9.webp'],
+        }),
+        method: 'DELETE',
+      })
+    )
   );
 });
 
-it('keeps a manual cover when its URL edit invalidates a pending upload', async () => {
-  // Upload C pending; the reviewer instead types URL B with alt for B.
-  // The manual edit takes over: C is discarded and cleaned up when it
-  // resolves, and B keeps the description written for it.
-  const pending = Promise.withResolvers<Response>();
-  fetchWithCsrf.mockReturnValueOnce(pending.promise);
+it('keeps a settled upload reused by the draft through an aliased URL', async () => {
   fetchWithCsrf.mockResolvedValueOnce(
-    new Response(JSON.stringify({ success: true }), { status: 200 })
+    new Response(
+      JSON.stringify({
+        url: 'https://cdn.example.com/media/platform/blog/aliased.webp',
+        width: 1200,
+        height: 675,
+        variants: {},
+      }),
+      { status: 200 }
+    )
   );
+  // Scope call history to this test: earlier tests in this file leave
+  // DELETE calls behind, which would trip the absence assertion below.
+  // mockClear keeps the queued upload response while dropping history.
+  fetchWithCsrf.mockClear();
   vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
     this: HTMLInputElement
   ) {
@@ -160,36 +171,34 @@ it('keeps a manual cover when its URL edit invalidates a pending upload', async 
       target: { files: [new File(['image'], 'cover.png')] },
     });
   });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   render(<BlogEditorClient mode="create" />);
   fireEvent.click(screen.getByRole('button', { name: 'Upload cover' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Edit cover URL' }));
-  await act(async () =>
-    pending.resolve(
-      new Response(
-        JSON.stringify({
-          url: 'https://cdn.example.com/media/platform/blog/uploaded.webp',
-          width: 1200,
-          height: 675,
-          variants: {},
-        }),
-        { status: 200 }
-      )
+  await waitFor(() =>
+    expect(screen.getByLabelText('Featured image')).toHaveTextContent(
+      'https://cdn.example.com/media/platform/blog/aliased.webp'
     )
   );
-  expect(screen.getByLabelText('Featured image')).toHaveTextContent(
-    'https://cdn.example.com/manual.webp'
+  // Same managed object, Supabase public-URL form instead of the CDN
+  // form the upload returned.
+  const aliasedHandoff = {
+    ...handoff,
+    featured_image: {
+      url: 'https://project.supabase.co/storage/v1/object/public/media/platform/blog/aliased.webp',
+    },
+  };
+  fireEvent.change(screen.getByLabelText('Review handoff JSON'), {
+    target: {
+      files: [new File([JSON.stringify(aliasedHandoff)], 'handoff.json')],
+    },
+  });
+  await waitFor(() =>
+    expect(screen.getByLabelText('Draft title')).toHaveValue('Imported article')
   );
-  expect(screen.getByLabelText('Featured alt')).toHaveTextContent(
-    'Manual cover'
-  );
-  expect(fetchWithCsrf).toHaveBeenCalledWith(
+  // The draft reuses the uploaded object, so no DELETE may fire.
+  await act(async () => {});
+  expect(fetchWithCsrf).not.toHaveBeenCalledWith(
     '/api/admin/blog/upload',
-    expect.objectContaining({
-      body: JSON.stringify({
-        path: 'platform/blog/uploaded.webp',
-        variantPaths: [],
-      }),
-      method: 'DELETE',
-    })
+    expect.objectContaining({ method: 'DELETE' })
   );
 });

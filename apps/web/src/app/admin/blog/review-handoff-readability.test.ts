@@ -17,6 +17,7 @@ describe('hasReadableContent', () => {
     '<div class="text-transparent"><p class="text-black/50">Readable</p></div>',
     '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
     '<div class="text-transparent"><p class="text-foreground">Readable</p></div>',
+    '<div class="hidden md:block lg:hidden">Readable</div>',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });
@@ -43,6 +44,7 @@ describe('hasReadableContent', () => {
     '<div class="max-h-0 overflow-hidden md:h-auto">Hidden</div>',
     '<div class="text-transparent"><p class="text-black/0">Hidden</p></div>',
     '<img class="max-h-0 md:h-auto" src="https://cdn.example.com/a.png">',
+    '<div class="hidden md:block md:hidden">Hidden</div>',
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

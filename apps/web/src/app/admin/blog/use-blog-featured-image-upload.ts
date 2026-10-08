@@ -137,25 +137,32 @@ export function useBlogFeaturedImageUpload({
   ) => {
     // Settled uploads are past invalidation: when an accepted import
     // replaces the form, every tracked session result is unreferenced
-    // (saves navigate away, so nothing persisted them) — except URLs
-    // the incoming draft itself reuses, which must be kept.
+    // (saves navigate away, so nothing persisted them) — except
+    // objects the incoming draft itself reuses, which must be kept.
+    // Both sides compare by storage path: the draft may reference the
+    // same object through another public URL form (Supabase public
+    // URLs vs the CDN URLs the upload returned).
     const tracked = settledUploadsRef.current;
     settledUploadsRef.current = [];
     if (tracked.length === 0) return;
-    const keepUrls = new Set(
+    const keepPaths = new Set(
       [
         draft.featured_image_url,
         ...Object.values(draft.featured_image_variants),
-      ].filter((url): url is string => typeof url === 'string')
+      ]
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => extractManagedBlogStoragePath(url, { kind: 'platform' }))
+        .filter((path): path is string => path !== null)
     );
     void (async () => {
       for (const result of tracked) {
         const paths = [result.url, ...Object.values(result.variants ?? {})]
-          .filter((url) => !keepUrls.has(url))
           .map((url) =>
             extractManagedBlogStoragePath(url, { kind: 'platform' })
           )
-          .filter((path): path is string => path !== null);
+          .filter(
+            (path): path is string => path !== null && !keepPaths.has(path)
+          );
         if (paths.length === 0) continue;
         const [path, ...variantPaths] = paths;
         try {

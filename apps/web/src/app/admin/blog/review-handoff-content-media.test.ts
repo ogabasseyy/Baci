@@ -58,6 +58,7 @@ describe('validateImportedContent media', () => {
     '<div class="hidden"><p class="md:block">Only body</p></div>',
     '<div class="opacity-0"><p class="md:opacity-100">Only body</p></div>',
     '<div class="sr-only"><p class="md:not-sr-only">Only body</p></div>',
+    '<div class="hidden md:block md:hidden">Only body</div>',
     '<div class="max-h-0 overflow-hidden md:h-auto">Only body</div>',
     '<div class="w-0 overflow-hidden md:h-64">Only body</div>',
     '<div class="h-0 overflow-hidden md:h-0">Only body</div>',
@@ -154,6 +155,7 @@ describe('validateImportedContent media', () => {
     '<div class="w-0 overflow-hidden md:w-full">Only body</div>',
     '<div class="max-h-0 overflow-hidden md:max-h-none">Only body</div>',
     '<div class="size-0 overflow-hidden md:size-64">Only body</div>',
+    '<div class="hidden md:block lg:hidden">Only body</div>',
   ])('counts responsive overrides of hiding utilities as readable: %s', (body) => {
     // Each pair renders at some breakpoint: same-element responsive
     // overrides restore display, visibility, opacity, screen-reader

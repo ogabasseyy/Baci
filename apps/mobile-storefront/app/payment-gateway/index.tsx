@@ -10,6 +10,7 @@ import { PaymentGatewayCheckoutView } from '@/components/payment-gateway/Payment
 import { PaymentProcessingView } from '@/components/payment-gateway/PaymentProcessingView';
 import { PaymentSuccessView } from '@/components/payment-gateway/PaymentSuccessView';
 import { PrimaryWalletCardPendingView } from '@/components/payment-gateway/PrimaryWalletCardPendingView';
+import { getWalletReturnHref } from '@/components/payment-gateway/payment-gateway-controller.helpers';
 import { RedvaultPendingView } from '@/components/payment-gateway/RedvaultPendingView';
 import { resolvePendingOrdersRoute } from '@/components/payment-gateway/resolve-pending-orders-route';
 import { usePaymentGatewayController } from '@/components/payment-gateway/use-payment-gateway-controller';
@@ -60,7 +61,9 @@ export default function PaymentGatewayScreen() {
           statusError={controller.status === 'error'}
           message={controller.errorMessage}
           onCheck={controller.handleRetry}
-          onBack={() => router.replace('/wallet')}
+          onBack={() =>
+            router.replace(getWalletReturnHref(controller.returnTo))
+          }
         />
       );
     }

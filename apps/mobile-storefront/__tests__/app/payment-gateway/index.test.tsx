@@ -4,6 +4,7 @@ import PaymentGatewayScreen from '@/app/payment-gateway';
 
 const mockRetry = jest.fn();
 let mockStatus = 'pending';
+let mockReturnTo: string | undefined;
 jest.mock('expo-router', () => ({ router: { replace: jest.fn() } }));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'light',
@@ -21,6 +22,7 @@ jest.mock(
       status: mockStatus,
       errorMessage: null,
       handleRetry: mockRetry,
+      returnTo: mockReturnTo,
     }),
   })
 );
@@ -28,7 +30,10 @@ jest.mock('@/components/payment-gateway/PaymentGatewayCheckoutView', () => ({
   PaymentGatewayCheckoutView: () => null,
 }));
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockReturnTo = undefined;
+});
 
 it.each([
   ['pending', 'Wallet funding pending'],
@@ -46,4 +51,12 @@ it.each([
   expect(mockRetry).toHaveBeenCalledTimes(1);
   fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
   expect(router.replace).toHaveBeenCalledWith('/wallet');
+});
+
+it('resumes the saved savings handoff when leaving the pending funding view', () => {
+  mockStatus = 'pending';
+  mockReturnTo = '/wallet?action=savings&savingsGoalId=owned-goal';
+  render(<PaymentGatewayScreen />);
+  fireEvent.press(screen.getByRole('button', { name: 'Return to wallet' }));
+  expect(router.replace).toHaveBeenCalledWith(mockReturnTo);
 });

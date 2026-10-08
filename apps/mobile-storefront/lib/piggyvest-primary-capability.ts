@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
+import {
+  clearObservedPiggyvestPrimaryCapability,
+  observePiggyvestPrimaryCapability,
+  readObservedPiggyvestPrimaryCapability,
+} from './piggyvest-primary-capability-cache';
 import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
 
 /**
@@ -24,47 +29,35 @@ export function isPrimaryWalletNotReady(error: unknown): boolean {
   );
 }
 
-const CAPABILITY_TTL_MS = 60_000;
-const capabilityCache = new Map<
-  string,
-  { available: boolean; observedAt: number }
->();
 const inflight = new Map<string, Promise<boolean>>();
 
 export function clearPiggyvestPrimaryCapabilityCache() {
-  capabilityCache.clear();
+  clearObservedPiggyvestPrimaryCapability();
   inflight.clear();
 }
 
 /**
  * Confirms with the server that the primary wallet capability is enabled
- * for this merchant. Resolves false only on the server's explicit
- * not-ready signal; any other failure rejects so callers never misroute
- * money on an ambiguous error.
+ * for this merchant. Probes every merchant so rollout is server-driven;
+ * resolves false only on the server's explicit not-ready signal, while any
+ * other failure rejects so callers never misroute money on an ambiguous
+ * error.
  */
 export async function getPiggyvestPrimaryCapability(
   merchantId: string
 ): Promise<boolean> {
-  if (!isPiggyvestPrimaryMerchant(merchantId)) return false;
-  const cached = capabilityCache.get(merchantId);
-  if (cached && Date.now() - cached.observedAt < CAPABILITY_TTL_MS)
-    return cached.available;
+  const cached = readObservedPiggyvestPrimaryCapability(merchantId);
+  if (cached !== null) return cached;
   const pending = inflight.get(merchantId);
   if (pending) return pending;
   const probe = (async () => {
     try {
       await piggyvestPrimaryWalletApi.read(merchantId);
-      capabilityCache.set(merchantId, {
-        available: true,
-        observedAt: Date.now(),
-      });
+      observePiggyvestPrimaryCapability(merchantId, true);
       return true;
     } catch (error) {
       if (!isPrimaryWalletNotReady(error)) throw error;
-      capabilityCache.set(merchantId, {
-        available: false,
-        observedAt: Date.now(),
-      });
+      observePiggyvestPrimaryCapability(merchantId, false);
       return false;
     } finally {
       inflight.delete(merchantId);
@@ -75,28 +68,31 @@ export async function getPiggyvestPrimaryCapability(
 }
 
 /**
- * React binding for the primary capability probe. Resolves to null while
- * unknown (treat as enabled to preserve the current UX; the async actions
- * re-check at call time), true when the server confirms primary, and false
- * when the server reports primary as not configured.
+ * React binding for the primary capability probe. Pilot merchants fail open
+ * while unknown (null reads as enabled; async actions re-check at call
+ * time). Every other merchant fails closed until the server positively
+ * confirms primary, so rollout stays server-driven without flashing
+ * primary UI at unconfigured merchants.
  */
 export function usePiggyvestPrimaryCapability(
   merchantId?: string | null
 ): boolean | null {
   const [available, setAvailable] = useState<boolean | null>(null);
   useEffect(() => {
-    if (!merchantId || !isPiggyvestPrimaryMerchant(merchantId)) {
+    if (!merchantId) {
       setAvailable(false);
       return;
     }
     let active = true;
-    setAvailable(null);
+    const pilot = isPiggyvestPrimaryMerchant(merchantId);
+    const observed = readObservedPiggyvestPrimaryCapability(merchantId);
+    setAvailable(pilot ? observed : observed === true);
     void getPiggyvestPrimaryCapability(merchantId).then(
       (result) => {
         if (active) setAvailable(result);
       },
       () => {
-        if (active) setAvailable(null);
+        if (active) setAvailable(pilot ? null : false);
       }
     );
     return () => {

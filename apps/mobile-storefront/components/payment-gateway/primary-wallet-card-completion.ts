@@ -39,7 +39,10 @@ export function beginPrimaryWalletCardCompletion(
         userId,
         reference: input.reference,
       });
-      if (!input.refs.isMountedRef.current) return;
+      if (!input.refs.isMountedRef.current) {
+        input.refs.paymentCompletionStartedRef.current = false;
+        return;
+      }
       const requireSameAccount = () => {
         if (useAuthStore.getState().user?.id !== userId) {
           failureCause = 'account_changed';
@@ -58,7 +61,10 @@ export function beginPrimaryWalletCardCompletion(
         return;
       }
       await input.queryClient.invalidateQueries({ queryKey: WALLET_QUERY_KEY });
-      if (!input.refs.isMountedRef.current) return;
+      if (!input.refs.isMountedRef.current) {
+        input.refs.paymentCompletionStartedRef.current = false;
+        return;
+      }
       requireSameAccount();
       input.setPaymentStatus('success');
       input.scheduleDelayedNavigation(() => {
@@ -69,8 +75,8 @@ export function beginPrimaryWalletCardCompletion(
       // Redacted cause only: the error itself may carry provider or
       // account details, so log the classification, never the value.
       console.warn(`[primary-wallet-card] completion failed: ${failureCause}`);
-      if (!input.refs.isMountedRef.current) return;
       input.refs.paymentCompletionStartedRef.current = false;
+      if (!input.refs.isMountedRef.current) return;
       input.setPaymentStatus('error');
       input.setErrorMessage(
         'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'

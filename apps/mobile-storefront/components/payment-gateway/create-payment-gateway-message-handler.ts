@@ -171,9 +171,11 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
-    if (paymentKind === 'primary_wallet_card') return;
-
     if (data.type === 'crypto_success') {
+      // Primary card checkout confirms only through the hosted status
+      // boundary; a WebView crypto claim must never credit it. Scoped to
+      // this branch so later handlers stay reachable for primary flows.
+      if (paymentKind === 'primary_wallet_card') return;
       await handleCryptoSuccessMessage(data, {
         amount,
         clearCart,

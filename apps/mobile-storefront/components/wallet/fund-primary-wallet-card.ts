@@ -9,12 +9,11 @@ import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
-let active = false;
+const activeFundings = new Set<string>();
 
 export async function fundPrimaryWalletCard(
   input: Parameters<typeof fundWallet>[0]
 ) {
-  if (active) return;
   const merchantId = input.activeMerchantId;
   const userId = input.user?.id;
   if (!merchantId || !userId) {
@@ -24,7 +23,11 @@ export async function fundPrimaryWalletCard(
     );
     return;
   }
-  active = true;
+  // Debounce repeat taps per funding scope: a global flag would silently
+  // drop a second account's funding while another is in flight.
+  const fundingKey = `${merchantId} ${userId}`;
+  if (activeFundings.has(fundingKey)) return;
+  activeFundings.add(fundingKey);
   input.setIsFundPending(true);
   let pending: Awaited<ReturnType<typeof client.readPending>> = null;
   try {
@@ -112,7 +115,7 @@ export async function fundPrimaryWalletCard(
       'Any pending operation is retained. Check again before attempting another charge.'
     );
   } finally {
-    active = false;
+    activeFundings.delete(fundingKey);
     input.setIsFundPending(false);
   }
 }

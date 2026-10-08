@@ -149,3 +149,16 @@ it('ignores duplicate callbacks and does not update unmounted UI', async () => {
   expect(mockRecover).toHaveBeenCalledTimes(1);
   expect(input.setPaymentStatus).not.toHaveBeenCalledWith('success');
 });
+it('releases the completion guard after an unmounted attempt so retry stays possible', async () => {
+  const input = fixture();
+  input.refs.isMountedRef.current = false;
+  mockRecover.mockResolvedValue({ status: 'completed' });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  expect(input.refs.paymentCompletionStartedRef.current).toBe(false);
+  input.refs.isMountedRef.current = true;
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  expect(mockRecover).toHaveBeenCalledTimes(2);
+  expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
+});

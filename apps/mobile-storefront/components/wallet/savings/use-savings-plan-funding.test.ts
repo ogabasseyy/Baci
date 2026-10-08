@@ -323,4 +323,14 @@ describe('useSavingsPlanFunding', () => {
     );
     expect(result.current.planFundingRequiresBvn).toBe(false);
   });
+  it('requires BVN for primary merchants while the capability probe is pending', async () => {
+    mockUseCapability.mockReturnValue(null);
+    const { result } = renderHook(() =>
+      useSavingsPlanFunding({
+        ...input,
+        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      })
+    );
+    expect(result.current.planFundingRequiresBvn).toBe(true);
+  });
 });

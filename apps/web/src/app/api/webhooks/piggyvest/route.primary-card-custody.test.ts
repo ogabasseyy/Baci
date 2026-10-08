@@ -8,6 +8,27 @@ vi.mock('@/env', () => ({
   getPiggyvestWebhookSecret: () => fixture.configuration.webhookSecret,
   getPiggyvestApiConfig: () => undefined,
 }));
+vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@/lib/piggyvest/webhook-secret-union')
+    >();
+  return {
+    ...actual,
+    verifyPiggyvestWebhookSecrets: (input: {
+      rawBody: Uint8Array;
+      signature: string | null;
+    }) => {
+      const secret = actual.matchPiggyvestWebhookSecret({
+        ...input,
+        secrets: [fixture.configuration.webhookSecret],
+      });
+      return secret
+        ? { status: 'verified' as const, secret }
+        : { status: 'invalid' as const };
+    },
+  };
+});
 vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch', () => ({
   dispatchPrimaryCardSignedCustodyIntake: mocks.intake,
 }));

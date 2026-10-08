@@ -5,6 +5,7 @@ import { dispatchPrimaryWalletPaidInterest } from './primary-wallet-paid-interes
 
 const mocks = vi.hoisted(() => ({
   runtime: vi.fn(),
+  involved: vi.fn(),
   resolveCrosswalk: vi.fn(),
   apply: vi.fn(),
 }));
@@ -14,6 +15,7 @@ vi.mock('./primary-wallet-paid-interest-runtime', () => ({
 }));
 vi.mock('./primary-wallet-paid-interest-store', () => ({
   createPrimaryWalletPaidInterestStore: () => ({
+    involved: mocks.involved,
     resolveCrosswalk: mocks.resolveCrosswalk,
     apply: mocks.apply,
   }),
@@ -25,6 +27,7 @@ const signature = createHmac('sha512', fixture.config.webhookSecret)
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.runtime.mockReturnValue(fixture.config);
+  mocks.involved.mockResolvedValue(true);
   mocks.resolveCrosswalk.mockResolvedValue(fixture.crosswalk);
   mocks.apply.mockResolvedValue('credited');
 });

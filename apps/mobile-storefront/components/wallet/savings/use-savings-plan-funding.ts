@@ -40,9 +40,14 @@ export function useSavingsPlanFunding({
   const [statusCode, setStatusCode] = useState<string | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
+  // Hide the BVN field only after the server explicitly confirms primary:
+  // while the capability probe is still pending (null), collect BVN for the
+  // legacy path. Primary provisioning ignores client BVN (it resolves
+  // identity from auth plus goal ownership), so an early primary
+  // confirmation never misuses the collected value.
   const planFundingRequiresBvn =
     !isPiggyvestPrimaryMerchant(activeMerchantId) ||
-    primaryCapability === false;
+    primaryCapability !== true;
   const scopeKey = JSON.stringify([
     goalId,
     identityKey,

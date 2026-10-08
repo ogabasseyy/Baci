@@ -42,3 +42,10 @@ test('production smoke watches and runs the extracted contract tests', () => {
     assert.ok(command.includes(`.github/scripts/${name}.test.mjs`));
   }
 });
+
+
+test('production smoke ignores stale repository tool overrides', () => {
+  const workflow = readFileSync(new URL('../workflows/mcp-production-smoke.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /^      MCP_REQUIRED_TOOLS: ""$/m);
+  assert.equal(workflow.includes('vars.MCP_REQUIRED_TOOLS'), false);
+});

@@ -31,7 +31,8 @@ jobs:
     env:
       MCP_HEALTH_URL: ${{ vars.MCP_HEALTH_URL || 'https://mcp.ogabassey.com/health' }}
       MCP_SMOKE_URL: ${{ vars.MCP_SMOKE_URL || 'https://mcp.ogabassey.com/mcp' }}
-      MCP_REQUIRED_TOOLS: ${{ vars.MCP_REQUIRED_TOOLS || '' }}
+      # Use the versioned inventory; repository overrides can retain retired tools.
+      MCP_REQUIRED_TOOLS: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

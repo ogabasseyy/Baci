@@ -276,6 +276,7 @@ try {
     '20261006160000_uba_redvault_pilot_activation_lock_and_policy_indexes.sql',
     '20261006170000_uba_redvault_pilot_reserve_lock_order.sql',
     '20261006180000_uba_redvault_pilot_savings_and_expiry_guards.sql',
+    '20261006190000_uba_redvault_pilot_preserve_binding_after_disable.sql',
   ]) {
     sql(readFileSync(resolve(migrations, filename), 'utf8'));
   }

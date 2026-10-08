@@ -7,6 +7,8 @@ describe('validateImportedContent media', () => {
     '<img src="https://cdn.example.com/a.png" width="0">',
     '<img src="https://cdn.example.com/a.png" height="0">',
     '<img src="https://cdn.example.com/a.png" width=0 height=0>',
+    '<img class="max-h-0 md:h-auto" src="https://cdn.example.com/a.png">',
+    '<img class="h-0 md:h-0" src="https://cdn.example.com/a.png">',
   ])('disregards zero-sized images as readable content: %s', (img) => {
     expect(() => validateImportedContent(img)).toThrow(
       'no readable text or images'
@@ -147,6 +149,16 @@ describe('validateImportedContent media', () => {
     // hiding, and text color, while visibility and color also inherit,
     // so responsive descendants escape transparent ancestors too.
     expect(validateImportedContent(body)).toContain('Only body');
+  });
+
+  it.each([
+    '<img class="h-0 md:h-auto" src="https://cdn.example.com/a.png">',
+    '<img class="md:w-full" src="https://cdn.example.com/a.png" width="0">',
+  ])('counts images with responsive size restoration as readable: %s', (body) => {
+    // CSS beats presentational attributes, so a responsive size
+    // utility restores zeroed class tokens and zero width/height
+    // attributes alike at its breakpoint.
+    expect(validateImportedContent(body)).toContain('<img');
   });
 
   it('counts opaque text inside a transparent ancestor as readable', () => {

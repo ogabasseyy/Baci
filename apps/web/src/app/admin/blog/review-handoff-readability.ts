@@ -4,35 +4,38 @@ import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
 
-const ZERO_SIZE_IMAGE_CLASS_TOKENS = new Set([
-  'h-0',
-  'w-0',
-  'size-0',
-  'max-h-0',
-  'max-w-0',
-]);
-
 function isZeroSizedImage(tag: string): boolean {
   // A zero width or height renders no pixels. Only bare zeros count: the
   // width/height attributes take plain pixel counts, so `0px` is invalid
   // and ignored by browsers (natural size, still visible). Zero-size
   // utilities on the image itself need no overflow rule: replaced
-  // content conforms to the zero box instead of overflowing it.
+  // content conforms to the zero box instead of overflowing it. CSS
+  // beats presentational attributes, so a responsive size utility
+  // restores zeroed tokens and zero attributes alike at its
+  // breakpoint, per constraint kind like the clipping path.
+  const classes: string[] = [];
+  let widthAttrZero = false;
+  let heightAttrZero = false;
   for (const { name, value } of tagAttributes(tag)) {
     if (name === 'class') {
-      if (
-        value
-          .split(/\s+/)
-          .some((token) => ZERO_SIZE_IMAGE_CLASS_TOKENS.has(token))
-      ) {
-        return true;
-      }
+      classes.push(...value.split(/\s+/));
       continue;
     }
-    if (name !== 'width' && name !== 'height') continue;
-    if (/^0+$/.test(value.trim())) return true;
+    if (name === 'width' && /^0+$/.test(value.trim())) widthAttrZero = true;
+    if (name === 'height' && /^0+$/.test(value.trim())) heightAttrZero = true;
   }
-  return false;
+  const markers = showingMarkers(classes);
+  const heightZero =
+    ((classes.some((token) => ZERO_HEIGHT_CLASS_TOKENS.has(token)) ||
+      heightAttrZero) &&
+      !markers.heightRestored) ||
+    (classes.includes('max-h-0') && !markers.maxHeightRestored);
+  const widthZero =
+    ((classes.some((token) => ZERO_WIDTH_CLASS_TOKENS.has(token)) ||
+      widthAttrZero) &&
+      !markers.widthRestored) ||
+    (classes.includes('max-w-0') && !markers.maxWidthRestored);
+  return heightZero || widthZero;
 }
 
 // Same-element hiding: display:none removes the subtree, group opacity

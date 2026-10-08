@@ -100,7 +100,9 @@ export const useCartStore = create<CartState>()(
                 // (StorefrontCartProvider). CONFIG.MERCHANT_SLUG is the
                 // fully-resolved build identity (config.ts defaults
                 // unconfigured builds to Ogabassey, as do requests and
-                // repairs); anything else stays opt-in.
+                // repairs); anything else stays opt-in. Web's
+                // enableSmartCartPro gate is a bare (always-true) prop in
+                // production, so this matches web's effective behavior.
                 hasAssurance:
                   itemToAdd.hasAssurance ??
                   CONFIG.MERCHANT_SLUG === 'ogabassey',

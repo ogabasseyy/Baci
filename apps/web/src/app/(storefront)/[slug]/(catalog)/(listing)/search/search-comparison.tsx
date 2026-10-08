@@ -184,8 +184,21 @@ export function SearchComparisonTray({
             // only legacy snapshots without match metadata.
             const liveMatch = matches.get(String(snapshot.id));
             const matchParams = new URLSearchParams();
-            const variantId = snapshot.matchVariantId ?? liveMatch?.variantId;
-            const offerId = snapshot.matchOfferId ?? liveMatch?.offerId;
+            // Any snapshot match field (ids or condition) marks the basis
+            // as authoritative: a condition-only base match must not adopt
+            // a re-filtered live match's option ids. Callers treat option
+            // links as exact when variant_id/offer_id are present.
+            const snapshotHasMatchMetadata = Boolean(
+              snapshot.matchVariantId ||
+                snapshot.matchOfferId ||
+                snapshot.matchCondition
+            );
+            const legacyLiveMatch = snapshotHasMatchMetadata
+              ? undefined
+              : liveMatch;
+            const variantId =
+              snapshot.matchVariantId ?? legacyLiveMatch?.variantId;
+            const offerId = snapshot.matchOfferId ?? legacyLiveMatch?.offerId;
             // Exact IDs resolve the live option; a saved condition can change
             // independently and must not invalidate that identity on the PDP.
             const condition =

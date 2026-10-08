@@ -74,6 +74,43 @@ beforeEach(() => {
   mocks.state.compareItems = [];
   mocks.facts.mockReturnValue({ products: [], pending: false, error: false });
 });
+
+function renderSecondDetailLink(liveMatch: {
+  variantId?: string;
+  condition?: string;
+}) {
+  mocks.state.compareItems = [
+    { id: '1', name: 'One', slug: 'one' },
+    { id: '2', name: 'Two', slug: 'two', matchCondition: 'open_box' },
+  ];
+  mocks.facts.mockReturnValue({
+    products: [
+      { id: '1', name: 'One', slug: 'one', price: 200 },
+      { id: '2', name: 'Two', slug: 'two', price: 300, condition: 'used' },
+    ],
+    pending: false,
+    error: false,
+  });
+  render(
+    <SearchComparisonTray
+      products={[
+        {
+          id: '2',
+          name: 'Two',
+          slug: 'two',
+          price: 300,
+          searchMatch: { productId: '2', total: 1, ...liveMatch },
+        } as NormalizedProduct,
+      ]}
+      pathPrefix=""
+      merchantId="m1"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
+  return screen
+    .getAllByRole('link', { name: 'View details and options' })[1]
+    .getAttribute('href');
+}
 it('announces the existing fourth-item replacement without touching any cart', () => {
   mocks.state.compareItems = ['1', '2', '3', '4'].map((id) => ({
     id,
@@ -220,48 +257,18 @@ it('flags off-page matched snapshots as verify-on-product-page', () => {
 });
 
 it('uses the refreshed base condition instead of stale saved or re-filtered conditions', () => {
-  mocks.state.compareItems = [
-    { id: '1', name: 'One', slug: 'one' },
-    {
-      id: '2',
-      name: 'Two',
-      slug: 'two',
-      matchCondition: 'open_box',
-    },
-  ];
-  mocks.facts.mockReturnValue({
-    products: [
-      { id: '1', name: 'One', slug: 'one', price: 200 },
-      { id: '2', name: 'Two', slug: 'two', price: 300, condition: 'used' },
-    ],
-    pending: false,
-    error: false,
-  });
   // Base condition changed after selection; neither saved nor current
   // search criteria may override the refreshed product facts.
-  render(
-    <SearchComparisonTray
-      products={[
-        {
-          id: '2',
-          name: 'Two',
-          slug: 'two',
-          price: 300,
-          searchMatch: {
-            productId: '2',
-            total: 1,
-            condition: 'new',
-          },
-        } as NormalizedProduct,
-      ]}
-      pathPrefix=""
-      merchantId="m1"
-    />
-  );
-  fireEvent.click(screen.getByRole('button', { name: 'Compare fixture' }));
-  const detailLinks = screen.getAllByRole('link', {
-    name: 'View details and options',
-  });
-  expect(detailLinks[1].getAttribute('href')).toContain('condition=used');
-  expect(detailLinks[1].getAttribute('href')).not.toContain('condition=new');
+  const href = renderSecondDetailLink({ condition: 'new' });
+  expect(href).toContain('condition=used');
+  expect(href).not.toContain('condition=new');
+});
+
+it('keeps a saved base match from adopting re-filtered live option ids', () => {
+  // The live search was re-filtered onto a variant; the saved base match
+  // stays authoritative and must not adopt the live option identity.
+  const href = renderSecondDetailLink({ variantId: 'v9', condition: 'new' });
+  expect(href).toContain('match_base=1');
+  expect(href).not.toContain('variant_id=');
+  expect(href).not.toContain('offer_id=');
 });

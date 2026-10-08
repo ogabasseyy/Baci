@@ -131,10 +131,20 @@ export function useComparisonProducts(selected: Product[]) {
                 (match && !(match.variantId || match.offerId)
                   ? liveCondition
                   : product.condition),
-              specifications: {
-                ...product.specifications,
-                ...(option && 'attributes' in option ? option.attributes : {}),
-              },
+              // A degraded exact-variant match may verify identity, price,
+              // and condition while the local option stays missing: the
+              // parent specifications are then unverified for the matched
+              // option (a 128 GB match must not show the parent's 256 GB),
+              // so suppress them and let the cells render unknown.
+              specifications:
+                match?.variantId && !option
+                  ? {}
+                  : {
+                      ...product.specifications,
+                      ...(option && 'attributes' in option
+                        ? option.attributes
+                        : {}),
+                    },
             },
             unavailable: false,
           };

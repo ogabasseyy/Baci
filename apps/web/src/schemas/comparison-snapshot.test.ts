@@ -51,11 +51,13 @@ it('drops malformed match ids but keeps the parent-basis item', () => {
       ...snapshot,
       matchVariantId: 'not-a-uuid',
       matchOfferId: '22222222-2222-4222-8222-222222222222',
+      matchCondition: 'hand-edited',
     })
   ).toEqual({
     ...snapshot,
     matchVariantId: undefined,
     matchOfferId: '22222222-2222-4222-8222-222222222222',
+    matchCondition: undefined,
   });
 });
 it.each([

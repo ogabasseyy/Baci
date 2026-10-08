@@ -139,6 +139,7 @@ it('verifies exact variant matches against the projection when hydration degrade
     name: 'Phone',
     price: 100,
     manage_stock: true,
+    specifications: { storage: '256 GB' },
   });
   mockRpc.mockResolvedValue({
     data: [
@@ -172,6 +173,10 @@ it('verifies exact variant matches against the projection when hydration degrade
   await waitFor(() => expect(mockRpc).toHaveBeenCalled());
   expect(result.current.unavailableIds).toEqual([]);
   await waitFor(() => expect(result.current.products[0]?.price).toBe(80));
+  // The 128 GB-equivalent match is verified, but its attributes stay
+  // unknown until the option hydrates, so the parent storage spec is
+  // suppressed rather than shown as the match's own.
+  expect(result.current.products[0]?.specifications).toEqual({});
 });
 it('refreshes merchant-scoped snapshots and keeps matched identities without mutating selection', async () => {
   const snapshot = {

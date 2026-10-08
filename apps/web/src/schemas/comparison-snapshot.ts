@@ -46,5 +46,8 @@ export const comparisonSnapshotSchema = z.object({
   // (keeping the parent-basis item) instead of failing downstream readers.
   matchVariantId: z.string().uuid().optional().catch(undefined),
   matchOfferId: z.string().uuid().optional().catch(undefined),
-  matchCondition: z.string().optional(),
+  // Same union as condition: writers only emit canonical values, so a
+  // stale or hand-edited string drops the marker instead of flowing to
+  // tray/PDP basis labels.
+  matchCondition: snapshotCondition,
 });

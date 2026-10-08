@@ -154,6 +154,53 @@ describe('applyCoverUrlChange', () => {
     });
   });
 
+  it('restores an intermediate cover established after the first diversion', () => {
+    // A -> B stashes A; fresh alt typed for B makes B an established
+    // cover, so diverting B -> C must replace the stale A stash with B.
+    // Restoring B then recovers B's record instead of clearing it.
+    const coverStashRef = { current: null };
+    const args = { coverStashRef, initialCover: initialCover() };
+    const coverB = 'https://cdn.example.com/cover-b.webp';
+    const coverC = 'https://cdn.example.com/cover-c.webp';
+    const atB = applyCoverUrlChange({
+      ...args,
+      current: formAt(COVER_A, {
+        featured_image_alt: 'Cover A',
+        featured_image_height: 675,
+        featured_image_variants: VARIANTS_A,
+        featured_image_width: 1200,
+      }),
+      nextUrl: coverB,
+    });
+    expect(coverStashRef.current).toMatchObject({ url: COVER_A });
+    const typedB = {
+      ...atB,
+      featured_image_alt: 'Cover B',
+      featured_image_alt_edited: true,
+    };
+    const atC = applyCoverUrlChange({
+      ...args,
+      current: typedB,
+      nextUrl: coverC,
+    });
+    expect(coverStashRef.current).toMatchObject({
+      alt: 'Cover B',
+      altEdited: true,
+      url: coverB,
+    });
+    const restored = applyCoverUrlChange({
+      ...args,
+      current: atC,
+      nextUrl: coverB,
+    });
+    expect(restored).toMatchObject({
+      featured_image_alt: 'Cover B',
+      featured_image_alt_edited: true,
+      featured_image_url: coverB,
+    });
+    expect(coverStashRef.current).toBeNull();
+  });
+
   it('ignores partially typed URLs when stashing the origin', () => {
     const coverStashRef = { current: null };
     const args = { coverStashRef };

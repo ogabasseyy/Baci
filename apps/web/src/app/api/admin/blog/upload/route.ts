@@ -24,6 +24,11 @@ import {
 
 const PLATFORM_BLOG_UPLOAD_RATE_LIMIT = 30;
 const PLATFORM_BLOG_UPLOAD_RATE_WINDOW_MINUTES = 1;
+// Cleanup draws from its own budget: an invalidated upload may itself be
+// the request that exhausts the upload bucket, and its DELETE must not
+// 429 on the count it just contributed to.
+const PLATFORM_BLOG_MEDIA_DELETE_RATE_LIMIT = 30;
+const PLATFORM_BLOG_MEDIA_DELETE_RATE_WINDOW_MINUTES = 1;
 
 export async function POST(request: NextRequest) {
   const auth = await getPlatformAdminAuthForPermission('content.manage');
@@ -220,9 +225,9 @@ export async function DELETE(request: NextRequest) {
   const isAllowed = await checkRateLimit(
     supabase,
     auth.user.id,
-    'platform_blog_upload',
-    PLATFORM_BLOG_UPLOAD_RATE_LIMIT,
-    PLATFORM_BLOG_UPLOAD_RATE_WINDOW_MINUTES
+    'platform_blog_media_delete',
+    PLATFORM_BLOG_MEDIA_DELETE_RATE_LIMIT,
+    PLATFORM_BLOG_MEDIA_DELETE_RATE_WINDOW_MINUTES
   );
   if (!isAllowed) {
     return NextResponse.json(

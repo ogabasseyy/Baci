@@ -55,6 +55,16 @@ describe('validateImportedContent media', () => {
     ).toContain('Visible body');
   });
 
+  it('ignores media-like text inside another element quoted attribute', () => {
+    // The <img> text is the div's title, not an element: its HTTP URL
+    // must not reject the handoff.
+    expect(
+      validateImportedContent(
+        `<div title="<img src='http://example.com/draft.png'>">Readable</div>`
+      )
+    ).toContain('Readable');
+  });
+
   it('does not count a commented-out image as readable content', () => {
     // The sanitizer discards the comment, so a comment-only body is
     // empty after sanitization; the readability half is pinned at the

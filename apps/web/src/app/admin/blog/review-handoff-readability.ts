@@ -1,8 +1,7 @@
+import { matchMediaElements } from './review-handoff-media-elements';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 import { stripNonRenderingText } from './strip-non-rendering-text';
-
-const IMG_TAG_PATTERN = /<img\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
 
 function isZeroSizedImage(tag: string): boolean {
   // A zero width or height renders no pixels. Only bare zeros count: the
@@ -120,7 +119,8 @@ export function hasReadableContent(content: string): boolean {
   // nothing, so strip them before matching: a commented-out <img> must
   // neither satisfy readability itself nor donate a hidden ancestor.
   const withoutComments = stripHtmlComments(content);
-  for (const match of withoutComments.matchAll(IMG_TAG_PATTERN)) {
+  for (const match of matchMediaElements(withoutComments)) {
+    if (!/^<img\b/i.test(match[0])) continue;
     const tag = match[0];
     if (isZeroSizedImage(tag) || hasVisibilityHidingClass(tag)) continue;
     const index = match.index ?? withoutComments.length;

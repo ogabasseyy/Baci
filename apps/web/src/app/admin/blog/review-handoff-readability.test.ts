@@ -22,6 +22,7 @@ describe('hasReadableContent', () => {
     '<p class="text-transparent">Only body</p>',
     '<!-- <img src="https://cdn.example.com/a.png"> -->',
     '<!-- <p>Draft note</p> -->',
+    `<div title="<img src='https://cdn.example.com/a.png'>"></div>`,
   ])('disregards non-rendering content: %s', (content) => {
     expect(hasReadableContent(content)).toBe(false);
   });

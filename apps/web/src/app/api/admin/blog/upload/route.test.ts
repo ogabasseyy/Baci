@@ -249,10 +249,32 @@ describe('DELETE /api/admin/blog/upload', () => {
     expect(mockCheckRateLimit).toHaveBeenCalledWith(
       mockSupabase,
       'user-1',
-      'platform_blog_upload',
+      'platform_blog_media_delete',
       30,
       1
     );
     expect(mockRevalidatePlatformBlog).toHaveBeenCalled();
+  });
+
+  it('allows cleanup when the upload budget is exhausted', async () => {
+    // An invalidated upload may itself be the request that exhausts the
+    // upload bucket; its cleanup must draw from a separate budget so a
+    // 429 cannot strand the persisted source and variants.
+    mockCheckRateLimit.mockImplementation(
+      async (_supabase: unknown, _userId: string, key: string) =>
+        key !== 'platform_blog_upload'
+    );
+    const response = await DELETE(
+      new NextRequest('http://localhost/api/admin/blog/upload', {
+        body: JSON.stringify({ path: 'platform/blog/cover.png' }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'DELETE',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockStorageBucket.remove).toHaveBeenCalledWith([
+      'platform/blog/cover.png',
+    ]);
   });
 });

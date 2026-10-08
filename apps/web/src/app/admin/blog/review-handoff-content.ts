@@ -2,13 +2,13 @@ import { decodeHTMLAttribute } from 'entities';
 import { marked } from 'marked';
 import { isHttpsUrl } from '@/lib/is-https-url';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { matchMediaElements } from './review-handoff-media-elements';
 import { hasReadableContent } from './review-handoff-readability';
 import { splitSrcsetCandidates } from './review-handoff-srcset';
 import { tagAttributes } from './review-handoff-tag-attributes';
 import { stripHtmlComments } from './strip-html-comments';
 
 const INLINE_IMAGE_PLACEHOLDER_PATTERN = /\{\{\s*INLINE_IMAGE_\d+\s*\}\}/u;
-const MEDIA_TAG_PATTERN = /<(img|source)\b(?:[^>"']|"[^"]*"|'[^']*')*>/giu;
 
 // Lowercase only: like the sanitizer (and browsers), uppercase descriptors
 // do not parse as width/density values. Density fractions accept a
@@ -133,9 +133,11 @@ function normalizeContent(
 function hasBrokenMediaTag(html: string): boolean {
   // Markdown rendering preserves editorial comments while the sanitizer
   // discards them, so strip first: a commented-out draft URL is not a
-  // rendered image and must not reject the handoff.
+  // rendered image and must not reject the handoff. Elements (not
+  // substrings) are matched so media-like text quoted inside another
+  // element's attribute is not mistaken for a real image.
   const withoutComments = stripHtmlComments(html);
-  return (withoutComments.match(MEDIA_TAG_PATTERN) ?? []).some((tag) => {
+  return matchMediaElements(withoutComments).some(([tag]) => {
     const candidates = mediaTagCandidates(tag);
     return (
       candidates.length === 0 ||

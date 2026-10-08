@@ -54,10 +54,14 @@ export function applyCoverUrlChange({
       current.featured_image_height != null ||
       current.featured_image_width != null ||
       Object.keys(current.featured_image_variants).length > 0);
-  if ((urlChanged || urlRemoved) && stashed == null && hasStashableOrigin) {
-    // First diversion away: preserve the pre-diversion record so that
-    // returning restores it. Later hops in the same chain keep the
-    // original stash; their own records were already cleared.
+  if ((urlChanged || urlRemoved) && hasStashableOrigin) {
+    // Preserve the pre-diversion record so that returning restores it.
+    // Later hops in the same chain keep the original stash because
+    // their own records were already cleared (not stashable). But an
+    // intermediate URL can become an established cover after the first
+    // diversion (fresh alt typed for it), and diverting away from that
+    // replaces the stale stash: restoring the intermediate must recover
+    // its record, not the older origin's.
     coverStashRef.current = {
       alt: current.featured_image_alt,
       altEdited: current.featured_image_alt_edited === true,

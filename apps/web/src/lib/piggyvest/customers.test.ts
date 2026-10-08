@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPiggyvestCustomer } from './customers';
 
 function jsonResponse(body: unknown): Response {
@@ -17,6 +17,35 @@ const input = {
 };
 
 describe('createPiggyvestCustomer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  it('explicitly disables accrual for ordinary primary wallets', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        status: true,
+        message: 'Created',
+        data: {
+          customer_id: 'customer-test',
+          wallet_id: 'wallet-test',
+          new_customer: true,
+        },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await createPiggyvestCustomer(
+      { token: 'test-only-token' },
+      {
+        ...input,
+        enableInterestAccrual: false,
+      }
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toHaveProperty(
+      'enable_interest_accrual',
+      false
+    );
+  });
   it('creates idempotently and returns the default wallet', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

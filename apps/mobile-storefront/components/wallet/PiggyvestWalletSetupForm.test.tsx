@@ -1,0 +1,52 @@
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
+import Colors from '@/constants/Colors';
+import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
+
+const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+
+it('requires BVN and explicit consent before submitting', () => {
+  const onSubmit = jest.fn();
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.dark}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create PiggyVest account' })
+  );
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(screen.getByText('Enter a valid 11-digit BVN.')).toBeOnTheScreen();
+});
+
+it('clears sensitive input and shows a safe inline error on failure', async () => {
+  const onSubmit = jest
+    .fn()
+    .mockRejectedValue(new Error('private provider error'));
+  render(
+    <PiggyvestWalletSetupForm
+      colors={Colors.light}
+      merchantId={merchantId}
+      onSubmit={onSubmit}
+    />
+  );
+  fireEvent.changeText(screen.getByLabelText('BVN'), '12345678901');
+  fireEvent.press(screen.getByRole('checkbox'));
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Create PiggyVest account' })
+  );
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(screen.getByLabelText('BVN').props.value).toBe('');
+  expect(screen.queryByText('private provider error')).toBeNull();
+  expect(onSubmit).toHaveBeenCalledWith({
+    merchantId,
+    bvn: '12345678901',
+    consent: true,
+  });
+});

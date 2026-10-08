@@ -12,7 +12,6 @@ import {
   isPaymentGateway,
   PAYMENT_GATEWAY_LABELS,
 } from './payment-gateway.helpers';
-import { createPaymentGatewayCompletionHandlers } from './payment-gateway-completion-handlers';
 import {
   getCloseConfirmationMessage,
   parsePaymentGatewayParams,
@@ -23,7 +22,9 @@ import type {
 } from './payment-gateway-controller.types';
 import { createPaymentGatewayEventHandlers } from './payment-gateway-event-handlers';
 import { createPaymentGatewayTimers } from './payment-gateway-timers';
+import { requiresServerCheckoutConfirmation } from './requires-server-checkout-confirmation';
 import { resolvePendingOrdersRoute } from './resolve-pending-orders-route';
+import { usePaymentGatewayCompletionHandlers } from './use-payment-gateway-completion-handlers';
 
 // React Compiler forbids passing refs to plain function calls during render but
 // allows passing them to hooks. These wrappers classify the render-time handler
@@ -45,13 +46,6 @@ function usePaymentGatewayEventHandlers(
 ) {
   return createPaymentGatewayEventHandlers(input);
 }
-
-function usePaymentGatewayCompletionHandlers(
-  input: Parameters<typeof createPaymentGatewayCompletionHandlers>[0]
-) {
-  return createPaymentGatewayCompletionHandlers(input);
-}
-
 export function usePaymentGatewayController() {
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<Record<string, string>>();
@@ -195,8 +189,12 @@ export function usePaymentGatewayController() {
     amount,
     clearCart,
     confirmVtuPaymentSuccess: beginVtuPaymentCompletion,
-    confirmRedvaultPayment:
-      paymentMethod === 'uba_redvault' ? beginPaymentCompletion : undefined,
+    confirmRedvaultPayment: requiresServerCheckoutConfirmation(
+      paymentMethod,
+      paymentKind
+    )
+      ? beginPaymentCompletion
+      : undefined,
     copiedGatewayTextRef,
     copyGatewayText,
     customerIdentifier,

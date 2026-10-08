@@ -21,6 +21,8 @@ export function getWalletReturnHref(returnTo?: string): Href {
 
 export function getCloseConfirmationMessage(paymentKind?: string) {
   switch (paymentKind) {
+    case PAYMENT_KINDS.PRIMARY_WALLET_CARD:
+      return 'Your card funding operation is saved. Leaving does not cancel a charge already in progress. Check its status from your wallet. Do not pay again.';
     case PAYMENT_KINDS.SAVINGS_AUTH:
       return 'If you leave now, your savings card authorization may remain incomplete.';
     case PAYMENT_KINDS.VTU:

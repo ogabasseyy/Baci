@@ -56,7 +56,7 @@ import {
 import { handlePaystackCancellationRefundEvent } from '@/lib/paystack-cancellation-refund-event-webhook';
 import { handlePaystackMerchantWalletAssignmentFailure } from '@/lib/paystack-merchant-wallet-assignment-failure-webhook';
 import { handlePaystackMerchantWalletAssignmentSuccess } from '@/lib/paystack-merchant-wallet-assignment-success-webhook';
-import { prefundedCardWebhookBoundary } from '@/lib/piggyvest/prefunded-card-webhook-boundary';
+import { walletCardWebhookBoundary } from '@/lib/piggyvest/wallet-card-webhook-boundary';
 import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
@@ -734,7 +734,7 @@ export async function POST(request: NextRequest) {
     // store.flagReconciliation on mismatch). Mutations stay disabled by
     // default and require PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED=true.
     if (gateway === 'paystack') {
-      const firstCardBoundary = prefundedCardWebhookBoundary(body);
+      const firstCardBoundary = walletCardWebhookBoundary(body);
       if (firstCardBoundary) return firstCardBoundary;
     }
 

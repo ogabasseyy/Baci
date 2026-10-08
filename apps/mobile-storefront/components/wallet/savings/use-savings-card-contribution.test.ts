@@ -15,6 +15,9 @@ jest.mock('@/lib/savings-card-contributions', () => ({
   getSavingsCardContributionStatus: jest.fn(),
   submitSavingsCardContribution: jest.fn(),
 }));
+jest.mock('@/services/savings-reminder-notifications', () => ({
+  cancelSavingsReminderNotification: jest.fn(),
+}));
 jest.mock('@/lib/savings-card-contribution-snapshot', () => ({
   clearTerminalSavingsCardContributionSnapshot: jest.fn(),
   readSavingsCardContributionSnapshot: jest.fn(),

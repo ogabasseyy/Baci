@@ -171,6 +171,8 @@ export function createPaymentGatewayMessageHandler({
       return;
     }
 
+    if (paymentKind === 'primary_wallet_card') return;
+
     if (data.type === 'crypto_success') {
       await handleCryptoSuccessMessage(data, {
         amount,

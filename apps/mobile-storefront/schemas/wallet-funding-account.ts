@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const WALLET_FUNDING_PROVIDERS = ['paystack'] as const;
+const WALLET_FUNDING_PROVIDERS = ['paystack', 'piggyvest'] as const;
 
 const WalletFundingProviderSchema = z.enum(WALLET_FUNDING_PROVIDERS);
 

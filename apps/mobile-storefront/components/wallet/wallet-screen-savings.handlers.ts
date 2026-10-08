@@ -123,6 +123,19 @@ export async function addSavingsContributionToGoal({
       merchantSlug: activeMerchantSlug,
     });
     if (
+      typeof contributionResult === 'object' &&
+      contributionResult !== null &&
+      'status' in contributionResult &&
+      contributionResult.status === 'pending'
+    ) {
+      await refetchWallet().catch(() => undefined);
+      Alert.alert(
+        'Contribution pending',
+        'Your savings will update after PiggyVest confirms the transfer. Check its status before starting another contribution.'
+      );
+      return;
+    }
+    if (
       amount >= remainingAmount ||
       isCompletedSavingsContributionResult(contributionResult)
     ) {

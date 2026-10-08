@@ -7,6 +7,10 @@ import {
 } from '@/lib/piggyvest/event-quarantine';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
+import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
+import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
+import { dispatchPrimaryCardSignedCustodyIntake } from '@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch';
+import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-inflow-dispatch';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
 import { verifyPiggyvestPayloadSignature } from '@/lib/piggyvest/verify-piggyvest-payload-signature';
@@ -208,6 +212,46 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   try {
+    if (parsed.data.eventType === 'wallet-transfer.outflow.success') {
+      const custody = await dispatchPrimaryCardSignedCustodyIntake({
+        rawBody,
+        signature,
+      });
+      if (custody.response) return custody.response;
+    }
+    if (parsed.data.eventType === 'interest-payout.success') {
+      const primary = await primaryInterestWebhookResponse({
+        rawBody,
+        signature,
+      });
+      if (primary) return primary;
+    }
+    if (parsed.data.eventType === 'bank-transfer.inflow.success') {
+      const bank = await dispatchPrimaryWalletBankInboxIntake({
+        rawBody,
+        signature,
+      });
+      if (bank.response) return bank.response;
+      const primary = await dispatchPrimaryWalletInflow({
+        rawBody,
+        signature,
+        secret,
+      });
+      if (primary === 'credited' || primary === 'duplicate') {
+        return NextResponse.json(
+          { received: true, duplicate: primary === 'duplicate' },
+          { status: 200, headers: noStore }
+        );
+      }
+      if (primary === 'conflict') {
+        return quarantineAndAck(
+          rawBody,
+          'conflict',
+          { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
+          redactEventDetails(parsed.data)
+        );
+      }
+    }
     // Processing runs even for duplicates: if the first delivery recorded
     // the inbox row but crashed before the ledger write, the redelivery
     // must still credit. The claim makes concurrent attempts safe.

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import type { Customer } from '@/stores/auth-store.types';
 import { deriveWalletFundingAccountAvailability } from './deriveWalletFundingAccountAvailability';
 import type { WalletFundPhoneSubmitResult } from './WalletFundPhonePrompt';
@@ -45,17 +46,25 @@ export function useWalletFundingAccountController({
   setShowFundPanel,
   updateProfile,
 }: UseWalletFundingAccountControllerParams) {
+  const primary = Boolean(
+    activeMerchantId && isPiggyvestPrimaryMerchant(activeMerchantId)
+  );
   const availability = deriveWalletFundingAccountAvailability({
     customerPhone,
     isPaymentSettingsError,
     isPaymentSettingsPending,
     paymentSettings,
+    primaryWalletSetup: primary,
   });
   const [phoneRequiredOverride, setPhoneRequiredOverride] = useState(false);
   const needsPhone = availability.needsPhone || phoneRequiredOverride;
 
-  const handleCreateFundingAccount = () =>
-    createWalletFundingAccount({
+  const handleCreateFundingAccount = () => {
+    if (primary) {
+      setShowFundPanel(true);
+      return Promise.resolve(false);
+    }
+    return createWalletFundingAccount({
       activeMerchantId,
       activeMerchantSlug,
       createFundingAccount,
@@ -69,6 +78,7 @@ export function useWalletFundingAccountController({
       },
       walletDvaEnabled: availability.walletDvaEnabled,
     });
+  };
 
   const handleSubmitPhone = async (
     phone: string

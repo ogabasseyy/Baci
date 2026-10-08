@@ -6,6 +6,7 @@ interface DeriveWalletFundingAccountAvailabilityParams {
   isPaymentSettingsError: boolean;
   isPaymentSettingsPending: boolean;
   paymentSettings?: PaymentSettings | null;
+  primaryWalletSetup?: boolean;
 }
 
 export interface WalletFundingAccountAvailability {
@@ -22,17 +23,18 @@ export function deriveWalletFundingAccountAvailability({
   isPaymentSettingsError,
   isPaymentSettingsPending,
   paymentSettings,
+  primaryWalletSetup = false,
 }: DeriveWalletFundingAccountAvailabilityParams): WalletFundingAccountAvailability {
   const walletDvaEnabled =
-    paymentSettings?.wallet_paystack_dva_enabled === true;
+    primaryWalletSetup || paymentSettings?.wallet_paystack_dva_enabled === true;
   const normalizedCustomerPhone = customerPhone?.trim() ?? '';
   let createFundingAccountUnavailableMessage: string | undefined;
   let needsPhone = false;
 
-  if (isPaymentSettingsPending) {
+  if (!primaryWalletSetup && isPaymentSettingsPending) {
     createFundingAccountUnavailableMessage =
       WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_CHECKING;
-  } else if (isPaymentSettingsError) {
+  } else if (!primaryWalletSetup && isPaymentSettingsError) {
     createFundingAccountUnavailableMessage =
       WALLET_FUNDING_ACCOUNT_MESSAGES.AVAILABILITY_ERROR;
   } else if (!walletDvaEnabled) {
@@ -51,7 +53,7 @@ export function deriveWalletFundingAccountAvailability({
       !createFundingAccountUnavailableMessage && !needsPhone,
     createFundingAccountUnavailableMessage,
     customerPhone: normalizedCustomerPhone,
-    isPaymentSettingsPending,
+    isPaymentSettingsPending: !primaryWalletSetup && isPaymentSettingsPending,
     needsPhone,
     walletDvaEnabled,
   };

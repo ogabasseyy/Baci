@@ -1,6 +1,8 @@
 import { ScrollView } from 'react-native';
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import type { WalletCreditWatch } from '@/hooks/use-wallet-credit-watch';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
 import type { WalletContentProps } from './WalletContent';
 import { WalletFundPanel } from './WalletFundPanel';
 
@@ -15,6 +17,8 @@ type WalletFundModalProps = Pick<
   | 'isCreatingFundingAccount'
   | 'isFundPending'
   | 'needsPhone'
+  | 'merchantId'
+  | 'onRefresh'
   | 'onChangeFundAmount'
   | 'onConfirmFund'
   | 'onCreateFundingAccount'
@@ -34,6 +38,8 @@ export function WalletFundModal({
   isCreatingFundingAccount,
   isFundPending,
   needsPhone,
+  merchantId,
+  onRefresh,
   onChangeFundAmount,
   onConfirmFund,
   onCreateFundingAccount,
@@ -63,25 +69,38 @@ export function WalletFundModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <WalletFundPanel
-            canCreateFundingAccount={canCreateFundingAccount}
-            colors={colors}
-            createFundingAccountUnavailableMessage={
-              createFundingAccountUnavailableMessage
-            }
-            creditWatch={creditWatch}
-            fundAmount={fundAmount}
-            fundingAccount={fundingAccount}
-            isCreatingFundingAccount={isCreatingFundingAccount}
-            isFundPending={isFundPending}
-            needsPhone={needsPhone}
-            onChangeFundAmount={onChangeFundAmount}
-            onConfirmFund={onConfirmFund}
-            onCreateFundingAccount={onCreateFundingAccount}
-            onResetFund={onResetFund}
-            onSubmitPhone={onSubmitPhone}
-            returnToSavings={fundReturnTo === '/wallet?action=savings'}
-          />
+          {merchantId &&
+          isPiggyvestPrimaryMerchant(merchantId) &&
+          !fundingAccount ? (
+            <PiggyvestWalletSetupPanel
+              colors={colors}
+              merchantId={merchantId}
+              needsPhone={needsPhone}
+              onSubmitPhone={onSubmitPhone}
+              onRefresh={onRefresh}
+              onClose={onResetFund}
+            />
+          ) : (
+            <WalletFundPanel
+              canCreateFundingAccount={canCreateFundingAccount}
+              colors={colors}
+              createFundingAccountUnavailableMessage={
+                createFundingAccountUnavailableMessage
+              }
+              creditWatch={creditWatch}
+              fundAmount={fundAmount}
+              fundingAccount={fundingAccount}
+              isCreatingFundingAccount={isCreatingFundingAccount}
+              isFundPending={isFundPending}
+              needsPhone={needsPhone}
+              onChangeFundAmount={onChangeFundAmount}
+              onConfirmFund={onConfirmFund}
+              onCreateFundingAccount={onCreateFundingAccount}
+              onResetFund={onResetFund}
+              onSubmitPhone={onSubmitPhone}
+              returnToSavings={fundReturnTo === '/wallet?action=savings'}
+            />
+          )}
         </ScrollView>
       ) : null}
     </ModalSheet>

@@ -140,6 +140,7 @@ export function useStartSavingsController() {
     planFundingAccounts,
     planFundingPhase,
     planFundingStatusCode,
+    planFundingRequiresBvn,
   } = useSavingsPlanFunding({
     activeMerchantId: activeMerchantId ?? undefined,
     activeMerchantSlug,
@@ -245,6 +246,7 @@ export function useStartSavingsController() {
     planFundingError,
     planFundingPhase,
     planFundingStatusCode,
+    planFundingRequiresBvn,
     preferredDebitTime,
     products,
     refetch,

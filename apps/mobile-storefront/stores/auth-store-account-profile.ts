@@ -8,6 +8,7 @@ import {
   getUsernamePolicyError,
   parseUsernameWriteResult,
 } from './auth-username-policy';
+import { getProfileUpdateError } from './profile-update-error';
 
 type AccountIdentity = {
   merchantId: string;
@@ -87,7 +88,8 @@ export function createProfileActions(set: AuthStoreSet, get: AuthStoreGet) {
           .eq('merchant_id', merchantId)
           .select(CUSTOMER_SELECT_COLUMNS)
           .single();
-        if (error) return { success: false, error: error.message };
+        if (error)
+          return { success: false, error: getProfileUpdateError(error) };
 
         const updateValidation = CustomerRowSchema.safeParse(updated);
         if (!updateValidation.success) {
@@ -123,9 +125,7 @@ export function createProfileActions(set: AuthStoreSet, get: AuthStoreGet) {
         set({ customer: nextCustomer });
         return { success: true };
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Failed to update profile';
-        return { success: false, error: message };
+        return { success: false, error: getProfileUpdateError(error) };
       }
     },
     setUsername: async (username: string) => {

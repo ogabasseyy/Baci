@@ -3,6 +3,7 @@ import { REDEEMABLE_SAVINGS_STATUSES } from '@/lib/checkout-savings';
 import { supabase } from '@/lib/supabase';
 import { CustomerRowSchema, TransactionRowSchema } from '@/lib/validation';
 import { trackEvent } from '@/services/analytics';
+import { resolveWalletFundingAccount } from './resolve-wallet-funding-account';
 import type {
   Transaction,
   WalletActiveSavingsGoal,
@@ -19,13 +20,6 @@ import {
 } from './wallet-savings-interest';
 import { projectWalletSavingsInterest } from './wallet-savings-interest-projection';
 import { hydrateWalletSavingsProducts } from './wallet-savings-product-hydration';
-
-const WalletFundingAccountSchema = z.object({
-  account_name: z.string().min(1),
-  account_number: z.string().regex(/^\d{10,20}$/),
-  bank_name: z.string().min(1),
-  provider: z.literal('paystack'),
-});
 
 const WalletTransactionDataSchema = TransactionRowSchema.omit({
   amount: true,
@@ -239,11 +233,10 @@ export async function fetchWalletData(
     }
   );
 
-  const fundingAccountValidation =
-    WalletFundingAccountSchema.nullable().safeParse(fundingAccountResult.data);
-  const fundingAccountData = fundingAccountValidation.success
-    ? fundingAccountValidation.data
-    : null;
+  const fundingAccountData = await resolveWalletFundingAccount(
+    fundingAccountResult.data,
+    merchantId
+  );
 
   let transactionRows: Transaction[] = [];
   if (walletResult.data?.id) {

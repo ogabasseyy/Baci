@@ -65,7 +65,7 @@ describe('wallet-screen.handlers', () => {
     );
   });
 
-  it('creates a funding account and announces the account summary', async () => {
+  it('does not duplicate the funding sheet with a success alert when account details exist', async () => {
     await createWalletFundingAccount({
       createFundingAccount: async () => ({
         account: {
@@ -79,10 +79,7 @@ describe('wallet-screen.handlers', () => {
       walletDvaEnabled: true,
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Account Ready',
-      'Kuda - 1234567890'
-    );
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
   it('shows the phone prompt instead of alerting on CUSTOMER_PHONE_REQUIRED', async () => {

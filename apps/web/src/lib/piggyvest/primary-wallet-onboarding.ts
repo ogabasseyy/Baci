@@ -1,0 +1,108 @@
+import 'server-only';
+import { createHmac } from 'node:crypto';
+import {
+  piggyvestPrimaryWalletConfigurationSchema,
+  piggyvestPrimaryWalletCreationSchema,
+  piggyvestPrimaryWalletIdentitySchema,
+  piggyvestPrimaryWalletOnboardingSchema,
+} from '@/schemas/piggyvest-primary-wallet-onboarding';
+import type {
+  PrimaryWalletCustomerRequest,
+  PrimaryWalletIntentScope,
+  PrimaryWalletOnboardingStorage,
+} from './primary-wallet-onboarding.types';
+
+type Input = {
+  configuration: unknown;
+  verifiedIdentity: unknown;
+  request: unknown;
+  storage: PrimaryWalletOnboardingStorage;
+  createCustomer: (request: PrimaryWalletCustomerRequest) => Promise<unknown>;
+};
+
+type Outcome = {
+  status: 'pending' | 'ready' | 'conflict' | 'unavailable';
+  code?:
+    | 'NOT_CONFIGURED'
+    | 'INVALID_INPUT'
+    | 'OWNERSHIP_REVIEW_REQUIRED'
+    | 'STORAGE_UNAVAILABLE';
+};
+
+export async function onboardPiggyvestPrimaryWallet(
+  input: Input
+): Promise<Outcome> {
+  const config = piggyvestPrimaryWalletConfigurationSchema.safeParse(
+    input.configuration
+  );
+  const identity = piggyvestPrimaryWalletIdentitySchema.safeParse(
+    input.verifiedIdentity
+  );
+  const request = piggyvestPrimaryWalletOnboardingSchema.safeParse(
+    input.request
+  );
+  if (!config.success) return { status: 'unavailable', code: 'NOT_CONFIGURED' };
+  if (!identity.success || !request.success)
+    return { status: 'unavailable', code: 'INVALID_INPUT' };
+  if (config.data.merchantId !== identity.data.merchantId) {
+    return { status: 'unavailable', code: 'NOT_CONFIGURED' };
+  }
+
+  const scope: PrimaryWalletIntentScope = {
+    merchantId: identity.data.merchantId,
+    customerId: identity.data.customerId,
+    userId: identity.data.userId,
+    integrationId: config.data.integrationId,
+    businessId: config.data.businessId,
+    environment: config.data.environment,
+  };
+  const providerRequest: PrimaryWalletCustomerRequest = {
+    bvn: request.data.bvn,
+    email: identity.data.email.toLowerCase(),
+    name: identity.data.name.normalize('NFKC'),
+    phone: identity.data.phone,
+    third_party_identifier: `baci:${scope.integrationId}:${scope.customerId}`,
+    enable_interest_accrual: false,
+  };
+  const requestFingerprint = createHmac('sha256', config.data.fingerprintKey)
+    .update(JSON.stringify({ scope, request: providerRequest }))
+    .digest('hex');
+
+  let claim: Awaited<ReturnType<PrimaryWalletOnboardingStorage['claim']>>;
+  try {
+    claim = await input.storage.claim({ ...scope, requestFingerprint });
+  } catch {
+    return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+  }
+  if (claim.status !== 'claimed') return { status: claim.status };
+  const claimedScope = {
+    ...scope,
+    intentId: claim.intentId,
+    claimToken: claim.claimToken,
+  };
+
+  try {
+    const result = piggyvestPrimaryWalletCreationSchema.safeParse(
+      await input.createCustomer(providerRequest)
+    );
+    if (!result.success || !result.data.new_customer) {
+      await input.storage.recordUncertain(claimedScope);
+      return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+    }
+    const recorded = await input.storage.recordAccepted({
+      ...claimedScope,
+      providerCustomerId: result.data.customer_id,
+      providerWalletId: result.data.wallet_id,
+    });
+    return recorded
+      ? { status: 'pending' }
+      : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+  } catch {
+    try {
+      await input.storage.recordUncertain(claimedScope);
+    } catch {
+      return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+    }
+    return { status: 'pending' };
+  }
+}

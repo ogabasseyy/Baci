@@ -6,7 +6,7 @@ it('rejects a cancelled dispatch before configuration, database or provider work
   await expect(
     dispatchPrimaryCardProviderTransfer({
       operationId: '10000000-0000-4000-8000-000000000099',
-      environment: {},
+      environment: { NODE_ENV: 'test' },
       fetchImplementation,
       signal: AbortSignal.abort(),
     })

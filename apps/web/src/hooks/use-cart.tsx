@@ -1,10 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import {
-  mergeAssuranceChoice,
-  resolveAssuranceDefault,
-} from '@/hooks/cart/cart-assurance-policy';
+import { resolveAddedLineAssurance } from '@/hooks/cart/cart-assurance-policy';
 import { CartContext, useCart, useCartSafe } from '@/hooks/cart/cart-context';
 import {
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
@@ -414,9 +411,10 @@ export const CartProvider = ({
           quantity: item.quantity + quantity,
           // Ensure cartItemId is set on legacy item upgrade
           cartItemId: item.cartItemId || cartItemId,
-          hasAssurance: mergeAssuranceChoice(
+          hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
-            item.hasAssurance
+            item,
+            { enableSmartCartPro, merchantSlug }
           ),
         };
         return newCart;
@@ -443,9 +441,11 @@ export const CartProvider = ({
             | 'refurbished'
             | undefined,
           negotiationStatus: 'none',
-          hasAssurance:
-            normalizedOptions?.hasAssurance ??
-            resolveAssuranceDefault({ enableSmartCartPro, merchantSlug }),
+          hasAssurance: resolveAddedLineAssurance(
+            normalizedOptions?.hasAssurance,
+            undefined,
+            { enableSmartCartPro, merchantSlug }
+          ),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },
       ];

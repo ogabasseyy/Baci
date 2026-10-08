@@ -297,3 +297,9 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low intake-CSRF adjudicated: route uses no cookies/session/headers (no ambient authority → no CSRF vector); budget half is the PR-disclosed repeat.
 - Muse assurance x2 + count/totalCount: repeats (itemization evidence Round 42; pinned reachability test covers the suggested regression — it exists).
 - CI green on dd6f738954 (25 pass, 0 pending) before Round 43 push.
+
+## Round 44 (Codex CX-85..CX-87 on e22893bdc0 — all fixed; Muse 1 med + 2 low — all repeats)
+
+- CX-85/CX-86 (P1) FIXED: consolidated all PR-added assurance conditionals into the PR-created policy module via resolveAddedLineAssurance(incoming, existing, policy) — both oversized providers now contain only call sites (no assurance branching); the import shrinks to one name and the provider's default const is gone. Unit tests pin new-line default, merge preservation, legacy-undefined, and off-policy opt-in (62/62 across policy + cart suites). Full decomposition of the 700-line pre-existing providers is out of scope for this PR.
+- CX-87 (P3) FIXED: replacement notice clears on removal and on non-replacing adds. Two tests pin both; moved to the presentation split to hold the 300-line ceiling (267/295, 14/14).
+- Muse medium intake-rotation + low assurance-QA + low zero-price: repeats (PR-disclosed budgets; Round 42 itemization evidence; Round 43 sole-consumer adjudication).

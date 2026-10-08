@@ -6,10 +6,7 @@ import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
 import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
-import {
-  mergeAssuranceChoice,
-  resolveAssuranceDefault,
-} from './cart-assurance-policy';
+import { resolveAddedLineAssurance } from './cart-assurance-policy';
 import { CartContext } from './cart-context';
 import {
   DEFAULT_ASSURANCE_RATE,
@@ -380,10 +377,6 @@ export function StorefrontCartProvider({
       return;
     }
 
-    const assuranceEnabledByDefault = resolveAssuranceDefault({
-      enableSmartCartPro,
-      merchantSlug: merchantSlugRef.current,
-    });
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const cartItemId = generateCartItemId(
@@ -404,9 +397,13 @@ export function StorefrontCartProvider({
           ...existingItem,
           quantity: existingItem.quantity + quantity,
           cartItemId: existingItem.cartItemId || cartItemId,
-          hasAssurance: mergeAssuranceChoice(
+          hasAssurance: resolveAddedLineAssurance(
             normalizedOptions?.hasAssurance,
-            existingItem.hasAssurance
+            existingItem,
+            {
+              enableSmartCartPro,
+              merchantSlug: merchantSlugRef.current,
+            }
           ),
         };
         result = nextCart;
@@ -433,8 +430,14 @@ export function StorefrontCartProvider({
             quizAwardId: normalizedOptions?.quizAwardId,
             quizVoucherToken: normalizedOptions?.quizVoucherToken,
             negotiationStatus: 'none',
-            hasAssurance:
-              normalizedOptions?.hasAssurance ?? assuranceEnabledByDefault,
+            hasAssurance: resolveAddedLineAssurance(
+              normalizedOptions?.hasAssurance,
+              undefined,
+              {
+                enableSmartCartPro,
+                merchantSlug: merchantSlugRef.current,
+              }
+            ),
             assuranceRate: DEFAULT_ASSURANCE_RATE,
           },
         ];

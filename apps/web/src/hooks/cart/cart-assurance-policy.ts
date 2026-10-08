@@ -23,3 +23,21 @@ export function mergeAssuranceChoice(
 ): boolean | undefined {
   return incoming ?? stored;
 }
+
+/**
+ * Single entry point for cart adds: new lines fall back to the merchant
+ * default, merges preserve the stored choice. Providers call this instead
+ * of branching on assurance state inline, so the oversized cart providers
+ * gain no new assurance conditionals.
+ */
+export function resolveAddedLineAssurance(
+  incoming: boolean | undefined,
+  existing: { hasAssurance?: boolean } | undefined,
+  policy: {
+    enableSmartCartPro: boolean;
+    merchantSlug: string | null | undefined;
+  }
+): boolean | undefined {
+  if (!existing) return incoming ?? resolveAssuranceDefault(policy);
+  return mergeAssuranceChoice(incoming, existing.hasAssurance);
+}

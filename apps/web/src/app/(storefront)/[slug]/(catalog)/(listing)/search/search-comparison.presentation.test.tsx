@@ -215,3 +215,81 @@ it('marks id-less comparison entries so the PDP keeps the base price', () => {
   expect(links[1].getAttribute('href')).toContain('offer_id=o2');
   expect(links[1].getAttribute('href')).not.toContain('match_base=');
 });
+
+it('clears the replacement notice when the selection is removed', () => {
+  mocks.state.compareItems = ['1', '2', '3', '4'].map((id) => ({
+    id,
+    name: `Product ${id}`,
+    slug: `p${id}`,
+  }));
+  mocks.add.mockReturnValue({ id: '1', name: 'Product 1', slug: 'p1' });
+  const { rerender } = render(
+    <SearchCompareButton
+      product={
+        {
+          id: '5',
+          name: 'Product 5',
+          slug: 'p5',
+          price: 50,
+        } as NormalizedProduct
+      }
+      price="₦50"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: '+ Add to comparison' }));
+  expect(screen.getByRole('status').textContent).toContain(
+    'Replaced Product 1'
+  );
+  // Clicking the selected button removes the product; the stale
+  // replacement notice must not survive the removal.
+  mocks.state.isInCompare.mockReturnValue(true);
+  rerender(
+    <SearchComparisonSession scope="phone">
+      <ActivateCompare />
+      <SearchCompareButton
+        product={
+          {
+            id: '5',
+            name: 'Product 5',
+            slug: 'p5',
+            price: 50,
+          } as NormalizedProduct
+        }
+        price="₦50"
+      />
+    </SearchComparisonSession>
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: '✓ Added to comparison' })
+  );
+  expect(mocks.remove).toHaveBeenCalledWith('5');
+  expect(screen.queryByRole('status')).toBeNull();
+});
+it('clears the replacement notice on a later add that replaces nothing', () => {
+  mocks.state.compareItems = ['1', '2', '3', '4'].map((id) => ({
+    id,
+    name: `Product ${id}`,
+    slug: `p${id}`,
+  }));
+  mocks.add.mockReturnValueOnce({ id: '1', name: 'Product 1', slug: 'p1' });
+  mocks.add.mockReturnValue(null);
+  render(
+    <SearchCompareButton
+      product={
+        {
+          id: '5',
+          name: 'Product 5',
+          slug: 'p5',
+          price: 50,
+        } as NormalizedProduct
+      }
+      price="₦50"
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: '+ Add to comparison' }));
+  expect(screen.getByRole('status').textContent).toContain(
+    'Replaced Product 1'
+  );
+  fireEvent.click(screen.getByRole('button', { name: '+ Add to comparison' }));
+  expect(screen.queryByRole('status')).toBeNull();
+});

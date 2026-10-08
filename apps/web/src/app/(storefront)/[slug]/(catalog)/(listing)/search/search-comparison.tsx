@@ -39,6 +39,7 @@ export function SearchCompareButton({
           intent.activate();
           if (selected) {
             comparison.removeFromCompare(product.id);
+            setNotice('');
             return;
           }
           const replaced = comparison.addToCompare({
@@ -58,8 +59,9 @@ export function SearchCompareButton({
             matchOfferId: product.searchMatch?.offerId,
             matchCondition: product.searchMatch?.condition,
           });
-          if (replaced)
-            setNotice(`Replaced ${replaced.name} in your comparison.`);
+          setNotice(
+            replaced ? `Replaced ${replaced.name} in your comparison.` : ''
+          );
         }}
       >
         {compact

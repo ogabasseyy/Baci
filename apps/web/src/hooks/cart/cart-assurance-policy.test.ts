@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   mergeAssuranceChoice,
+  resolveAddedLineAssurance,
   resolveAssuranceDefault,
 } from './cart-assurance-policy';
 
@@ -18,6 +19,38 @@ describe('resolveAssuranceDefault', () => {
         merchantSlug: fixture.merchantSlug,
       })
     ).toBe(fixture.expected);
+  });
+});
+
+describe('resolveAddedLineAssurance', () => {
+  const policy = { enableSmartCartPro: true, merchantSlug: 'ogabassey' };
+  it.each([
+    { incoming: true, existing: undefined, expected: true },
+    { incoming: undefined, existing: undefined, expected: true },
+    { incoming: false, existing: undefined, expected: false },
+    {
+      incoming: undefined,
+      existing: { hasAssurance: false },
+      expected: false,
+    },
+    { incoming: true, existing: { hasAssurance: false }, expected: true },
+    { incoming: undefined, existing: {}, expected: undefined },
+  ])('resolves incoming=$incoming existing=$existing', ({
+    incoming,
+    existing,
+    expected,
+  }) => {
+    expect(resolveAddedLineAssurance(incoming, existing, policy)).toBe(
+      expected
+    );
+  });
+  it('falls back to opt-in for new lines off-policy', () => {
+    expect(
+      resolveAddedLineAssurance(undefined, undefined, {
+        enableSmartCartPro: true,
+        merchantSlug: 'other',
+      })
+    ).toBe(false);
   });
 });
 

@@ -63,7 +63,14 @@ export function isAllowedBlogOgImageUrl(
     const url = new URL(raw);
     if (url.protocol !== 'https:') return false;
     if (!TRUSTED_OG_IMAGE_ORIGINS.has(url.origin)) return false;
-    return extractManagedBlogStoragePath(raw, storageScope) !== null;
+    // The extractor re-validates the origin against process.env, which
+    // diverges from this module's validated env source, so pass the
+    // already-checked origins explicitly for a single trust decision.
+    return (
+      extractManagedBlogStoragePath(raw, storageScope, {
+        trustedOrigins: [...TRUSTED_OG_IMAGE_ORIGINS],
+      }) !== null
+    );
   } catch {
     return false;
   }

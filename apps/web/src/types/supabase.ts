@@ -16150,6 +16150,13 @@ export type Database = {
           tombstone_path: string;
         }[];
       };
+      register_blog_media_references_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+          status: string;
+        }[];
+      };
       accept_staff_invite: {
         Args: { p_email: string; p_token: string };
         Returns: {

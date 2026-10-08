@@ -6,7 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BlogEditorClient } from './blog-editor-client';
 import type { PlatformAdminBlogFormState } from './blog-types';
 
@@ -76,7 +76,13 @@ vi.mock('@/app/admin/blog/blog-editor-fields', () => ({
   ),
 }));
 
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 const handoff = {
   schema_version: 'baci-blog-review-handoff/v1',

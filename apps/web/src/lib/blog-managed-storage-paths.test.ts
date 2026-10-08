@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import {
   buildBlogMediaCdnUrl,
@@ -9,6 +9,9 @@ import {
 } from '@/lib/blog-managed-storage-paths';
 
 describe('blog managed storage paths', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it('accepts same-merchant blog originals and generated variants', () => {
     expect(
       isManagedBlogStoragePath('merchant-1/blog/cover.png', 'merchant-1')
@@ -37,6 +40,8 @@ describe('blog managed storage paths', () => {
   });
 
   it('recovers managed paths from public storage and cdn media URLs', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://mock.supabase.co');
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     expect(
       extractManagedBlogStoragePath(
         'https://mock.supabase.co/storage/v1/object/public/media/merchant-1/blog/cover.png?width=1200',
@@ -53,6 +58,7 @@ describe('blog managed storage paths', () => {
   });
 
   it('does not recover unowned or non-media URLs', () => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     expect(
       extractManagedBlogStoragePath(
         'https://cdn.example.com/media/merchant-2/blog/cover.png',
@@ -63,6 +69,36 @@ describe('blog managed storage paths', () => {
       extractManagedBlogStoragePath(
         'https://example.com/assets/cover.png',
         'merchant-1'
+      )
+    ).toBeNull();
+  });
+
+  it('rejects external lookalikes whose pathname matches the media prefix', () => {
+    // An external host serving /media/platform/blog/* must not extract:
+    // otherwise saves would probe (and roll back over) an object that
+    // was never a managed Baci upload.
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+    expect(
+      extractManagedBlogStoragePath(
+        'https://example.com/media/platform/blog/example.jpg',
+        { kind: 'platform' }
+      )
+    ).toBeNull();
+  });
+
+  it('accepts explicit trusted origins without env access', () => {
+    expect(
+      extractManagedBlogStoragePath(
+        'https://cdn.example.com/media/platform/blog/cover.png',
+        { kind: 'platform' },
+        { trustedOrigins: ['https://cdn.example.com'] }
+      )
+    ).toBe(`${PLATFORM_BLOG_MEDIA_PREFIX}/cover.png`);
+    expect(
+      extractManagedBlogStoragePath(
+        'https://example.com/media/platform/blog/cover.png',
+        { kind: 'platform' },
+        { trustedOrigins: ['https://cdn.example.com'] }
       )
     ).toBeNull();
   });
@@ -96,6 +132,7 @@ describe('blog managed storage paths', () => {
   });
 
   it('canonicalizes Supabase public URLs to the owned CDN media origin', () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://mock.supabase.co');
     expect(
       canonicalizeBlogMediaUrl(
         'https://mock.supabase.co/storage/v1/object/public/media/merchant-1/blog/upload-1/landscape_16x9.webp',
@@ -142,6 +179,7 @@ describe('blog managed storage paths', () => {
   });
 
   it('extracts managed platform paths from public URLs', () => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     expect(
       extractManagedBlogStoragePath(
         'https://cdn.example.com/media/platform/blog/upload-1/landscape_16x9.webp',

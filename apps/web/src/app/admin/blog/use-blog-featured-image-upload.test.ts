@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PLATFORM_BLOG_FORM_STATE,
   type PlatformAdminBlogCoverState,
@@ -45,6 +45,10 @@ function setup(
 }
 
 describe('useBlogFeaturedImageUpload', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('clears imported alt text when a replacement cover succeeds', async () => {
     const { result } = setup(vi.fn().mockResolvedValue(uploadedImage));
     act(() =>

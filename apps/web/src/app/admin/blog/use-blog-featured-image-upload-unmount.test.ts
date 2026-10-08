@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement, StrictMode, useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PLATFORM_BLOG_FORM_STATE } from './blog-types';
 import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
 
@@ -54,6 +54,10 @@ const abandonedUrl =
   'https://cdn.example.com/media/platform/blog/abandoned.webp';
 
 describe('useBlogFeaturedImageUpload unmount', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('tracks uploads after a StrictMode effect replay', async () => {
     // StrictMode runs setup-cleanup-setup: the replayed setup must
     // restore the mounted flag or every upload late-deletes. The

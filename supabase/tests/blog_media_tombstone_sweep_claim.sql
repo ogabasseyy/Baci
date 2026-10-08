@@ -174,6 +174,83 @@ BEGIN
 END;
 $probe$;
 
+DO $register$
+DECLARE
+  v_row RECORD;
+  v_seen integer := 0;
+BEGIN
+  -- A merchant save commits after the sweep staged (but before it
+  -- claimed) the tombstones for paths it now references.
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at)
+  VALUES ('platform/blog/kept.webp', now() - interval '2 hours');
+
+  FOR v_row IN
+    SELECT path, status
+      FROM public.register_blog_media_references_v1(
+        ARRAY[
+          'platform/blog/kept.webp',
+          'platform/blog/stale.webp',
+          'platform/blog/fresh.webp',
+          'platform/blog/missing.webp'
+        ]
+      )
+  LOOP
+    v_seen := v_seen + 1;
+    IF v_row.path = 'platform/blog/stale.webp'
+      AND v_row.status = 'claimed'
+    THEN
+      CONTINUE;
+    ELSIF v_row.path = 'platform/blog/missing.webp'
+      AND v_row.status = 'missing'
+    THEN
+      CONTINUE;
+    ELSIF v_row.path IN ('platform/blog/kept.webp', 'platform/blog/fresh.webp')
+      AND v_row.status = 'cleared'
+    THEN
+      CONTINUE;
+    ELSE
+      RAISE EXCEPTION
+        'unexpected register row: % status=%',
+        v_row.path,
+        v_row.status;
+    END IF;
+  END LOOP;
+
+  IF v_seen <> 4 THEN
+    RAISE EXCEPTION 'register must report all 4 candidates, got %', v_seen;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM public.blog_media_delete_tombstones
+     WHERE path IN ('platform/blog/kept.webp', 'platform/blog/fresh.webp')
+  ) THEN
+    RAISE EXCEPTION 'register must resurrect unclaimed tombstones';
+  END IF;
+
+  IF (
+    SELECT count(*)
+      FROM public.blog_media_delete_tombstones
+     WHERE path IN (
+       'platform/blog/stale.webp',
+       'platform/blog/special_%_name.webp'
+     )
+       AND claimed IS TRUE
+  ) <> 2 THEN
+    RAISE EXCEPTION 'register must leave claimed rows flagged';
+  END IF;
+
+  IF (
+    SELECT count(*)
+      FROM storage.objects
+     WHERE bucket_id = 'media'
+       AND name LIKE 'platform/blog/%'
+  ) <> 5 THEN
+    RAISE EXCEPTION 'register must not touch object metadata';
+  END IF;
+END;
+$register$;
+
 DO $grants$
 BEGIN
   IF NOT EXISTS (
@@ -254,6 +331,46 @@ BEGIN
     'execute'
   ) THEN
     RAISE EXCEPTION 'presence RPC must be executable by authenticated/service_role';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_proc AS proc
+     WHERE proc.oid =
+        'public.register_blog_media_references_v1(text[])'::pg_catalog.regprocedure
+       AND proc.prosecdef
+       AND proc.provolatile = 'v'
+       AND proc.proowner = 'postgres'::pg_catalog.regrole
+       AND EXISTS (
+        SELECT 1
+          FROM pg_catalog.pg_options_to_table(
+            COALESCE(proc.proconfig, ARRAY[]::text[])
+          ) AS config
+         WHERE config.option_name = 'search_path'
+           AND pg_catalog.btrim(config.option_value, '"') = ''
+      )
+  ) THEN
+    RAISE EXCEPTION 'register RPC must be VOLATILE SECURITY DEFINER with blank search_path';
+  END IF;
+
+  IF pg_catalog.has_function_privilege(
+    'anon',
+    'public.register_blog_media_references_v1(text[])',
+    'execute'
+  ) THEN
+    RAISE EXCEPTION 'register RPC must not be executable by anon';
+  END IF;
+
+  IF NOT pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.register_blog_media_references_v1(text[])',
+    'execute'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'public.register_blog_media_references_v1(text[])',
+    'execute'
+  ) THEN
+    RAISE EXCEPTION 'register RPC must be executable by authenticated/service_role';
   END IF;
 END;
 $grants$;

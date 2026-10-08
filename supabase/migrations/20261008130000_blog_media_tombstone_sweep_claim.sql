@@ -108,3 +108,55 @@ REVOKE ALL ON FUNCTION public.blog_media_objects_present_v1(TEXT[])
 FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.blog_media_objects_present_v1(TEXT[])
 TO authenticated, service_role;
+
+-- Tombstone registration for merchant mutations. Merchant saves run
+-- under row-level security that cannot touch the platform tombstone
+-- staging table, yet a merchant post can embed a public platform URL;
+-- without a handshake, a merchant commit landing between the sweep's
+-- claim scan and its API removal would lose its media. The clear below
+-- blocks on the sweep's row locks while a claim is in flight, so the
+-- status probe (a separate statement with a fresh snapshot) always
+-- sees post-claim truth: each path reports cleared (resurrected or
+-- never staged), claimed (the sweep decided to remove it), or missing
+-- (its object is already gone). The caller rolls back on anything but
+-- cleared. Any authenticated caller can clear unclaimed rows, but
+-- staged paths are unguessable and the effect is bounded to delaying
+-- byte cleanup, never to breaking references.
+CREATE OR REPLACE FUNCTION public.register_blog_media_references_v1(
+  p_paths TEXT[]
+)
+RETURNS TABLE (path TEXT, status TEXT)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  DELETE FROM public.blog_media_delete_tombstones AS tomb
+   WHERE tomb.path = ANY(p_paths)
+     AND tomb.claimed IS FALSE;
+  RETURN QUERY
+  SELECT candidate AS path,
+         CASE
+           WHEN EXISTS (
+             SELECT 1
+               FROM public.blog_media_delete_tombstones AS tomb
+              WHERE tomb.path = candidate
+                AND tomb.claimed IS TRUE
+           ) THEN 'claimed'
+           WHEN NOT EXISTS (
+             SELECT 1
+               FROM storage.objects AS object
+              WHERE object.bucket_id = 'media'
+                AND object.name = candidate
+           ) THEN 'missing'
+           ELSE 'cleared'
+         END AS status
+    FROM pg_catalog.unnest(p_paths) AS candidate;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.register_blog_media_references_v1(TEXT[])
+FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.register_blog_media_references_v1(TEXT[])
+TO authenticated, service_role;

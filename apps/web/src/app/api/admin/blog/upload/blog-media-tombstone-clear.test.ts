@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createClient } from '@/lib/supabase/server';
 import { clearBlogMediaTombstonesForRow } from './blog-media-tombstone-clear';
 
@@ -42,6 +42,12 @@ const MEDIA_ROW = {
 };
 
 describe('clearBlogMediaTombstonesForRow', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it('clears tombstones across media-carrying columns', async () => {
     const { client, remove } = fakeClient({ error: null });
     await clearBlogMediaTombstonesForRow(client, MEDIA_ROW);

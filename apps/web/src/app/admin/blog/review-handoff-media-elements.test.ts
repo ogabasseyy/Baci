@@ -150,4 +150,17 @@ describe('matchMediaElements', () => {
   it('returns no matches for text without elements', () => {
     expect(matchMediaElements('a < b and c > d')).toEqual([]);
   });
+
+  it('scans deep nesting with many unmatched closes in linear time', () => {
+    // Quadratic ancestry scans (lastIndexOf per unmatched close)
+    // take tens of seconds here; indexed positions stay in
+    // milliseconds while still matching trailing media.
+    const html = `${'<div>'.repeat(80000)}${'</span>'.repeat(80000)}<img src="https://cdn.example.com/a.webp">`;
+    const started = Date.now();
+    const matches = matchMediaElements(html);
+    expect(Date.now() - started).toBeLessThan(10000);
+    expect(matches.map((match) => match[0])).toEqual([
+      '<img src="https://cdn.example.com/a.webp">',
+    ]);
+  }, 15000);
 });

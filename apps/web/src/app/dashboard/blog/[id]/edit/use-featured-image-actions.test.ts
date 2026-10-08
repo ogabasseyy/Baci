@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PostFormData } from './edit-blog-types';
 import { useFeaturedImageActions } from './use-featured-image-actions';
 
@@ -37,7 +37,11 @@ function response(body: unknown) {
 }
 
 describe('useFeaturedImageActions merchant context', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
 
   it('sends the selected merchant context with inline image uploads', async () => {
     mockFetchWithCsrf.mockResolvedValueOnce(

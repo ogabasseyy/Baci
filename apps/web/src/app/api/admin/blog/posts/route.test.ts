@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockCreateClient = vi.fn();
@@ -118,8 +118,10 @@ describe('GET /api/admin/blog/posts', () => {
 });
 
 describe('POST /api/admin/blog/posts', () => {
+  afterEach(vi.unstubAllEnvs);
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     mockCreateClient.mockResolvedValue(mockSupabase);
     mockGetPlatformAdminAuthForPermission.mockResolvedValue({
       status: 'authenticated',

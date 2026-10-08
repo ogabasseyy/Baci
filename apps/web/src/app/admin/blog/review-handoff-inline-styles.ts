@@ -106,6 +106,24 @@ function isZeroScaleProperty(value: string): boolean {
   return args[0] === 0 || (args.length >= 2 && args[1] === 0);
 }
 
+function isZeroOpacityFilter(value: string): boolean {
+  // A filter list applies its functions in order and opacity values
+  // multiply, so any opacity(0) zeroes the final alpha. Only opacity
+  // hides: brightness(0) paints black, blur paints unfocused pixels.
+  TRANSFORM_FUNCTION_PATTERN.lastIndex = 0;
+  let match = TRANSFORM_FUNCTION_PATTERN.exec(value);
+  while (match !== null) {
+    if (match[1] === 'opacity') {
+      const arg = (match[2] ?? '').trim().replace(/%$/, '');
+      if (arg !== '' && Number(arg) === 0) {
+        return true;
+      }
+    }
+    match = TRANSFORM_FUNCTION_PATTERN.exec(value);
+  }
+  return false;
+}
+
 function hidingUtilityForStyle(
   style: string
 ): 'hidden' | 'text-transparent' | null {
@@ -125,7 +143,9 @@ function hidingUtilityForStyle(
   if (visibility === 'hidden' || visibility === 'collapse') return 'hidden';
   const opacity = finals.get('opacity');
   // Number('') is 0, so an empty opacity must not count as hiding.
-  if (opacity !== undefined && opacity !== '' && Number(opacity) === 0) {
+  // Percentages are valid opacity values (`opacity: 0%` hides).
+  const opacityValue = opacity?.replace(/%$/, '') ?? '';
+  if (opacityValue !== '' && Number(opacityValue) === 0) {
     return 'hidden';
   }
   // -webkit-text-fill-color paints over color for glyphs, so it
@@ -153,6 +173,14 @@ function hidingUtilityForStyle(
   const scale = finals.get('scale');
   if (scale !== undefined && scale !== 'none') {
     if (isZeroScaleProperty(scale)) {
+      return 'hidden';
+    }
+  }
+  // A zeroed filter opacity makes the whole box transparent including
+  // replaced content, so it maps to hidden rather than text-transparent.
+  const filter = finals.get('filter');
+  if (filter !== undefined && filter !== 'none') {
+    if (isZeroOpacityFilter(filter)) {
       return 'hidden';
     }
   }

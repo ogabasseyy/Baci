@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement, StrictMode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PLATFORM_BLOG_FORM_STATE } from './blog-types';
 import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
 
@@ -19,6 +19,10 @@ function setup(upload: (file: File) => Promise<{ url: string }>) {
 }
 
 describe('useBlogInlineImageUpload pending', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('reports pending while an upload is in flight', async () => {
     const pending = Promise.withResolvers<{ url: string }>();
     const { result } = setup(() => pending.promise);

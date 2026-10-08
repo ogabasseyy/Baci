@@ -13,6 +13,7 @@ import { getMerchantBlogRevalidationContext } from '@/lib/get-merchant-blog-cach
 import { blogPostSchema, sanitizeBlogPostData } from '@/lib/validations/blog';
 import { parseBlogPostMutationBody } from '../blog-post-mutation-body';
 import { persistBlogPostMutation } from '../persist-blog-post-mutation';
+import { applyFeaturedImageDefaults } from './apply-featured-image-defaults';
 import { featuredImageVariantsEqual } from './featured-image-variants';
 import { loadBlogPostForUpdate } from './load-blog-post-for-update';
 import type { RouteParams } from './route-params';
@@ -85,17 +86,10 @@ export async function updateBlogPost(
     const { embedded_products: embeddedProductIds, ...validatedPostData } =
       validated.data;
     const updateData: Record<string, unknown> = { ...validatedPostData };
-    const featuredImageUrlChanged =
-      Object.hasOwn(updateData, 'featured_image_url') &&
-      updateData.featured_image_url !== existingPost.featured_image_url;
-    if (featuredImageUrlChanged) {
-      if (!Object.hasOwn(updateData, 'featured_image_width'))
-        updateData.featured_image_width = null;
-      if (!Object.hasOwn(updateData, 'featured_image_height'))
-        updateData.featured_image_height = null;
-      if (!Object.hasOwn(updateData, 'featured_image_variants'))
-        updateData.featured_image_variants = {};
-    }
+    const featuredImageUrlChanged = applyFeaturedImageDefaults(
+      updateData,
+      existingPost
+    );
     const featureSettings = await auth.supabase
       .from('merchant_feature_settings')
       .select('blog_enabled, blog_discover_image_validation_enabled')
@@ -216,6 +210,7 @@ export async function updateBlogPost(
     }
     const persistence = await persistBlogPostMutation({
       embeddedProductIds,
+      existingPost,
       merchantId: access.merchantId,
       postData: updateData,
       postId: id,

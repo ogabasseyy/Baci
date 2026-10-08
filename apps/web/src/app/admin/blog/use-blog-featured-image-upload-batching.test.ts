@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PLATFORM_BLOG_FORM_STATE } from './blog-types';
 import { useBlogFeaturedImageUpload } from './use-blog-featured-image-upload';
 
@@ -40,6 +40,10 @@ const discardDraft = {
 };
 
 describe('useBlogFeaturedImageUpload batching', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('batches cleanup above the shared delete budget into one call', async () => {
     let count = 0;
     const { deleteUpload, result, unmount } = setup(async () => {

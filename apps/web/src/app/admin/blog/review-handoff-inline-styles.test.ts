@@ -96,6 +96,18 @@ describe('convertHiddenInlineStyles', () => {
       '<p style="scale:0">Note</p>',
       '<p style="scale:0" class="hidden">Note</p>',
     ],
+    [
+      '<p style="filter:opacity(0)">Draft note</p><p>Body</p>',
+      '<p style="filter:opacity(0)" class="hidden">Draft note</p><p>Body</p>',
+    ],
+    [
+      '<p style="filter: blur(2px) opacity(0%)">Note</p>',
+      '<p style="filter: blur(2px) opacity(0%)" class="hidden">Note</p>',
+    ],
+    [
+      '<p style="opacity:0%">Note</p>',
+      '<p style="opacity:0%" class="hidden">Note</p>',
+    ],
   ])('converts hiding inline styles to hiding classes: %s', (html, expected) => {
     expect(convertHiddenInlineStyles(html)).toBe(expected);
   });
@@ -127,6 +139,13 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="transform:scale(0, foo)">Shown</p>',
     '<p style="scale:1">Shown</p>',
     '<p style="transform:scale(0);transform:none">Shown</p>',
+    '<p style="filter:opacity(0.5)">Shown</p>',
+    '<p style="filter:brightness(0)">Shown</p>',
+    '<p style="filter:blur(8px)">Shown</p>',
+    '<p style="filter:none">Shown</p>',
+    '<p style="filter:opacity()">Shown</p>',
+    '<p style="filter:opacity(0);filter:none">Shown</p>',
+    '<p style="opacity:50%">Shown</p>',
     '<p>No style</p>',
   ])('leaves non-hiding styles alone: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
@@ -156,5 +175,13 @@ describe('convertHiddenInlineStyles', () => {
         '<p style="transform:scale(0)">Draft note</p><p>Visible article</p>'
       )
     ).toBe('<p>Visible article</p>');
+  });
+
+  it('strips zero-opacity filter content at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="filter:opacity(0)">Draft note</p><p>Body</p>'
+      )
+    ).toBe('<p>Body</p>');
   });
 });

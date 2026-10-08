@@ -55,6 +55,19 @@ function getConfiguredBlogMediaCdnOrigin(origin?: string): string {
   }
 }
 
+function getTrustedBlogMediaOrigins(): string[] {
+  const origins = [getConfiguredBlogMediaCdnOrigin()];
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (supabaseUrl) {
+    try {
+      origins.push(new URL(supabaseUrl).origin);
+    } catch {
+      // A malformed Supabase URL simply contributes no trusted origin.
+    }
+  }
+  return origins;
+}
+
 export function isManagedBlogStoragePath(
   path: string,
   scopeOrMerchantId: string | BlogStorageScope
@@ -100,10 +113,19 @@ export function isManagedBlogStoragePath(
 
 export function extractManagedBlogStoragePath(
   publicUrl: string,
-  scopeOrMerchantId: string | BlogStorageScope
+  scopeOrMerchantId: string | BlogStorageScope,
+  options?: { trustedOrigins?: readonly string[] }
 ): string | null {
   try {
     const parsed = new URL(publicUrl);
+    // Pathname matching alone would treat an external lookalike (an
+    // attacker- or user-controlled host serving /media/platform/blog/*)
+    // as a managed object, so only the configured CDN and Supabase
+    // origins extract. Callers without env access pass explicit origins.
+    const trusted = options?.trustedOrigins ?? getTrustedBlogMediaOrigins();
+    if (!trusted.includes(parsed.origin)) {
+      return null;
+    }
     const path = decodeURIComponent(parsed.pathname);
     const bucketPathMarker = '/storage/v1/object/public/media/';
     const directMediaMarker = '/media/';

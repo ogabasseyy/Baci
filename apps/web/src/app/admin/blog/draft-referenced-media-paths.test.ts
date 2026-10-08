@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 
 const COVER = 'https://cdn.example.com/media/platform/blog/cover.webp';
@@ -18,6 +18,12 @@ function draft(overrides: Record<string, unknown> = {}) {
 }
 
 describe('draftReferencedMediaPaths', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it('collects the cover and its variants', () => {
     expect(
       draftReferencedMediaPaths(

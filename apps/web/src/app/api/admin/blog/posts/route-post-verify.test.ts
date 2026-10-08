@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockCreateClient = vi.fn();
@@ -65,8 +65,10 @@ function postRequest(body: Record<string, unknown>) {
 }
 
 describe('POST /api/admin/blog/posts media verification', () => {
+  afterEach(vi.unstubAllEnvs);
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     // Reset per-test implementations so unconsumed once-queues can
     // never leak a stale probe result into the next test.
     mockSupabase.eq.mockReset();
@@ -179,6 +181,24 @@ describe('POST /api/admin/blog/posts media verification', () => {
 
     expect(response.status).toBe(500);
     expect(rollbackAttempts).toBe(3);
+  });
+
+  it('ignores external lookalikes instead of rolling back', async () => {
+    // An external host serving /media/platform/blog/* is not a managed
+    // object: the save must not probe it, so no missing verdict can
+    // roll back an otherwise valid post.
+    const response = await POST(
+      postRequest({
+        author_name: 'Baci Editorial',
+        content:
+          '<p>Body</p><img src="https://example.com/media/platform/blog/example.jpg">',
+        slug: 'launch-faster',
+        title: 'Launch Faster',
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
 
   it('keeps the post when every referenced object still exists', async () => {

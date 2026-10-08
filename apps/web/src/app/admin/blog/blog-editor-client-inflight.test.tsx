@@ -6,7 +6,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BlogEditorClient } from './blog-editor-client';
 
 const mockPush = vi.fn();
@@ -104,9 +104,12 @@ function jsonResponse(payload: unknown, status = 200): Response {
   });
 }
 
+afterEach(vi.unstubAllEnvs);
+
 describe('BlogEditorClient in-flight saves', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     mockCreatePlatformBlogPost.mockResolvedValue({ id: 'new-post' });
     mockUpdatePlatformBlogPost.mockResolvedValue({ id: 'post-1' });
     mockFetchWithCsrf.mockResolvedValue(

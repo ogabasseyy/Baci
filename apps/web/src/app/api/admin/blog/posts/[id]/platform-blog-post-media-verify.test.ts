@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
@@ -19,37 +19,64 @@ type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 function fakeClient(args: {
   claimed?: string[];
+  current?: Record<string, unknown> | null;
   present: string[] | null;
   restoreErrors?: ({ message: string } | null)[];
+  restoreRows?: { id: string }[];
 }) {
   const claimed = args.claimed ?? [];
   const restoreErrors = [...(args.restoreErrors ?? [])];
-  const state = { restored: [] as Record<string, unknown>[] };
+  const state = {
+    eqCalls: [] as [string, unknown][],
+    restored: [] as Record<string, unknown>[],
+  };
+  const query = {
+    eq: vi.fn(),
+    in: vi.fn(),
+    is: vi.fn(),
+    select: vi.fn(),
+    single: vi.fn(),
+    update: vi.fn(),
+  };
+  query.eq.mockImplementation((column: string, value: unknown) => {
+    state.eqCalls.push([column, value]);
+    return query;
+  });
+  query.is.mockReturnValue(query);
+  query.in.mockImplementation((_column: string, paths: string[]) =>
+    Promise.resolve({
+      data: paths
+        .filter((path) => claimed.includes(path))
+        .map((path) => ({ path })),
+      error: null,
+    })
+  );
+  query.select.mockImplementation((columns: string) => {
+    // Guard pre-reads select many columns and end in single(); the
+    // restore write selects only the id for its affected-row check.
+    if (columns !== 'id') return query;
+    const error = restoreErrors.length > 0 ? restoreErrors.shift() : null;
+    return Promise.resolve({
+      data: error ? null : (args.restoreRows ?? [{ id: 'post-1' }]),
+      error,
+    });
+  });
+  query.single.mockImplementation(() =>
+    Promise.resolve({
+      data: args.current === undefined ? null : args.current,
+      error: args.current == null ? { message: 'no row' } : null,
+    })
+  );
+  query.update.mockImplementation((value: Record<string, unknown>) => {
+    state.restored.push(value);
+    return query;
+  });
   const client = {
     from: (table: string) => {
       if (table !== 'blog_posts' && table !== 'blog_media_delete_tombstones') {
         throw new Error(`unexpected ${table}`);
       }
-      return {
-        select: () => ({
-          eq: () => ({
-            in: (_column: string, paths: string[]) =>
-              Promise.resolve({
-                data: paths
-                  .filter((path) => claimed.includes(path))
-                  .map((path) => ({ path })),
-                error: null,
-              }),
-          }),
-        }),
-        update: (value: Record<string, unknown>) => {
-          state.restored.push(value);
-          const error = restoreErrors.length > 0 ? restoreErrors.shift() : null;
-          return {
-            eq: () => ({ eq: () => ({ is: () => ({ error }) }) }),
-          };
-        },
-      };
+      return query;
     },
     rpc: (_name: string, rpcArgs: { p_paths: string[] }) => {
       if (args.present === null) {
@@ -66,13 +93,24 @@ function fakeClient(args: {
   return { client, state };
 }
 
+const SWEPT_MEDIA_ROW = {
+  content: '<img src="https://cdn.example.com/media/platform/blog/swept.webp">',
+};
+
 describe('verifyPatchedBlogPostMediaOrRestore', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it('accepts the save when every referenced object still exists', async () => {
     const { client, state } = fakeClient({
       present: ['platform/blog/kept.webp'],
     });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
       existingPost: { content: '<p>Old</p>' },
       finalUpdateData: { content: '<p>New</p>' },
       mediaRow: {
@@ -89,10 +127,18 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
   it('restores the pre-update fields when the sweep claimed mid-save', async () => {
     const { client, state } = fakeClient({
       claimed: ['platform/blog/swept.webp'],
+      current: {
+        content: '<p>New</p>',
+        is_platform_post: true,
+        merchant_id: null,
+        slug: 'new-slug',
+        updated_at: 'ts-a',
+      },
       present: ['platform/blog/swept.webp'],
     });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
       existingPost: { content: '<p>Old</p>', slug: 'old-slug' },
       finalUpdateData: {
         content: '<p>New</p>',
@@ -100,39 +146,92 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
         merchant_id: null,
         slug: 'new-slug',
       },
-      mediaRow: {
-        content:
-          '<img src="https://cdn.example.com/media/platform/blog/swept.webp">',
-      },
+      mediaRow: SWEPT_MEDIA_ROW,
       postId: 'post-1',
     });
 
-    expect(result).toEqual({ ok: false });
+    expect(result).toEqual({ ok: false, restored: true });
     // Only changed keys present in the pre-image restore; forced
     // scoping columns are canonical by construction, not snapshots.
     expect(state.restored).toEqual([
       { content: '<p>Old</p>', slug: 'old-slug' },
     ]);
+    expect(state.eqCalls).toContainEqual(['updated_at', 'ts-a']);
+  });
+
+  it('skips the restore when an intervening update changed a field', async () => {
+    // Tab B saved after tab A and re-verified its own content, so
+    // restoring tab A's snapshot would resurrect broken media over a
+    // valid post.
+    const { client, state } = fakeClient({
+      claimed: ['platform/blog/swept.webp'],
+      current: {
+        content: '<p>Bee</p>',
+        is_platform_post: true,
+        merchant_id: null,
+        slug: 'new-slug',
+        updated_at: 'ts-b',
+      },
+      present: ['platform/blog/swept.webp'],
+    });
+
+    const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
+      existingPost: { content: '<p>Old</p>', slug: 'old-slug' },
+      finalUpdateData: {
+        content: '<p>New</p>',
+        is_platform_post: true,
+        merchant_id: null,
+        slug: 'new-slug',
+      },
+      mediaRow: SWEPT_MEDIA_ROW,
+      postId: 'post-1',
+    });
+
+    expect(result).toEqual({ ok: false, restored: false });
+    expect(state.restored).toEqual([]);
+  });
+
+  it('reports unrelieved when the guarded write affects no rows', async () => {
+    const { client, state } = fakeClient({
+      claimed: ['platform/blog/swept.webp'],
+      current: {
+        content: '<p>New</p>',
+        updated_at: 'ts-a',
+      },
+      present: ['platform/blog/swept.webp'],
+      restoreRows: [],
+    });
+
+    const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
+      existingPost: { content: '<p>Old</p>' },
+      finalUpdateData: { content: '<p>New</p>' },
+      mediaRow: SWEPT_MEDIA_ROW,
+      postId: 'post-1',
+    });
+
+    expect(result).toEqual({ ok: false, restored: false });
+    expect(state.restored).toHaveLength(3);
   });
 
   it('retries the restore when it resolves with an error', async () => {
     const { client, state } = fakeClient({
       claimed: ['platform/blog/swept.webp'],
+      current: { content: '<p>New</p>', updated_at: 'ts-a' },
       present: ['platform/blog/swept.webp'],
       restoreErrors: [{ message: 'locked' }, null],
     });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
       existingPost: { content: '<p>Old</p>' },
       finalUpdateData: { content: '<p>New</p>' },
-      mediaRow: {
-        content:
-          '<img src="https://cdn.example.com/media/platform/blog/swept.webp">',
-      },
+      mediaRow: SWEPT_MEDIA_ROW,
       postId: 'post-1',
     });
 
-    expect(result).toEqual({ ok: false });
+    expect(result).toEqual({ ok: false, restored: true });
     expect(state.restored).toEqual([
       { content: '<p>Old</p>' },
       { content: '<p>Old</p>' },
@@ -140,9 +239,13 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
   });
 
   it('restores when media presence is unverifiable', async () => {
-    const { client, state } = fakeClient({ present: null });
+    const { client, state } = fakeClient({
+      current: { content: '<p>New</p>', updated_at: 'ts-a' },
+      present: null,
+    });
 
     const result = await verifyPatchedBlogPostMediaOrRestore(client, {
+      expectedUpdatedAt: 'ts-a',
       existingPost: { content: '<p>Old</p>' },
       finalUpdateData: { content: '<p>New</p>' },
       mediaRow: {
@@ -152,12 +255,12 @@ describe('verifyPatchedBlogPostMediaOrRestore', () => {
       postId: 'post-1',
     });
 
-    expect(result).toEqual({ ok: false });
+    expect(result).toEqual({ ok: false, restored: true });
     expect(state.restored).toEqual([{ content: '<p>Old</p>' }]);
   });
 });
 
-function patchSupabase(present: string[]) {
+function patchSupabase(present: string[], preRead: Record<string, unknown>) {
   const updates: Record<string, unknown>[] = [];
   const query = {
     eq: vi.fn(),
@@ -180,6 +283,7 @@ function patchSupabase(present: string[]) {
           id: 'post-1',
           slug: 'old-slug',
           status: 'draft',
+          title: 'Old title',
         },
         error: null,
       })
@@ -189,9 +293,11 @@ function patchSupabase(present: string[]) {
             '<p>New</p><img src="https://cdn.example.com/media/platform/blog/swept.webp">',
           id: 'post-1',
           slug: 'new-slug',
+          updated_at: 'ts-a',
         },
         error: null,
-      }),
+      })
+      .mockResolvedValueOnce({ data: preRead, error: null }),
     update: vi.fn((value: Record<string, unknown>) => {
       updates.push(value);
       return query;
@@ -199,20 +305,37 @@ function patchSupabase(present: string[]) {
   };
   query.eq.mockReturnValue(query);
   query.is.mockReturnValue(query);
-  query.select.mockReturnValue(query);
+  query.select.mockImplementation((columns: string) =>
+    columns === 'id'
+      ? Promise.resolve({ data: [{ id: 'post-1' }], error: null })
+      : query
+  );
   return { from: vi.fn(() => query), rpc: query.rpc, updates };
 }
 
 describe('PATCH media verification', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('returns 500 and restores the pre-image when media was swept mid-save', async () => {
-    const supabase = patchSupabase([]);
+    // Title-only patch: the guard pre-read matches every written
+    // field, so the restore proceeds.
+    const supabase = patchSupabase([], {
+      is_platform_post: true,
+      merchant_id: null,
+      title: 'Updated',
+      updated_at: 'ts-a',
+    });
     mocks.createClient.mockResolvedValue(supabase);
 
     const response = await updatePlatformBlogPost(
       new NextRequest('http://localhost/api/admin/blog/posts/post-1', {
-        body: JSON.stringify({ content: '<p>New</p>', title: 'Updated' }),
+        body: JSON.stringify({ title: 'Updated' }),
         headers: { 'content-type': 'application/json' },
         method: 'PATCH',
       }),
@@ -224,8 +347,33 @@ describe('PATCH media verification', () => {
       error: 'Referenced media was removed during save',
     });
     expect(
-      supabase.updates.some((update) => update.content === '<p>Old</p>')
+      supabase.updates.some((update) => update.title === 'Old title')
     ).toBe(true);
+    expect(mocks.revalidatePlatformBlog).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 without clobbering an intervening update', async () => {
+    // Tab B saved after tab A: the guard pre-read mismatches, so no
+    // restore runs and B's re-verified content stands.
+    const supabase = patchSupabase([], {
+      is_platform_post: true,
+      merchant_id: null,
+      title: 'Bee',
+      updated_at: 'ts-b',
+    });
+    mocks.createClient.mockResolvedValue(supabase);
+
+    const response = await updatePlatformBlogPost(
+      new NextRequest('http://localhost/api/admin/blog/posts/post-1', {
+        body: JSON.stringify({ title: 'Updated' }),
+        headers: { 'content-type': 'application/json' },
+        method: 'PATCH',
+      }),
+      { params: Promise.resolve({ id: 'post-1' }) }
+    );
+
+    expect(response.status).toBe(500);
+    expect(supabase.updates).toHaveLength(1);
     expect(mocks.revalidatePlatformBlog).not.toHaveBeenCalled();
   });
 });

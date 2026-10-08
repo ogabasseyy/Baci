@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PLATFORM_BLOG_FORM_STATE } from './blog-types';
 import { useBlogInlineImageUpload } from './use-blog-inline-image-upload';
 
@@ -29,6 +29,10 @@ function setup(upload: (file: File) => Promise<{ url: string }>) {
 }
 
 describe('useBlogInlineImageUpload', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
+  });
+  afterEach(vi.unstubAllEnvs);
   it('deletes settled uploads the draft does not reference', async () => {
     const { deleteUpload, result, unmount } = setup(async () => ({
       url: 'https://cdn.example.com/media/platform/blog/inline-1.png',

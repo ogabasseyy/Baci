@@ -50,6 +50,29 @@ function flagMatch(
 export function matchMediaElements(html: string): MediaElementMatch[] {
   const elements: MediaElementMatch[] = [];
   const ancestors: string[] = [];
+  // Open-ancestor positions per tag: an unmatched end tag resolves in
+  // O(1) instead of scanning the whole stack, keeping deeply nested
+  // documents with stray closes linear.
+  const openPositions = new Map<string, number[]>();
+  const pushAncestor = (tag: string): void => {
+    const positions = openPositions.get(tag);
+    if (positions) positions.push(ancestors.length);
+    else openPositions.set(tag, [ancestors.length]);
+    ancestors.push(tag);
+  };
+  // Returns the index the close matched, or -1 when no open element
+  // matches. A matched close also drops every ancestor above it, so
+  // their positions pop alongside the stack truncation.
+  const closeThrough = (tag: string): number => {
+    const positions = openPositions.get(tag);
+    const openIndex = positions?.pop();
+    if (openIndex === undefined) return -1;
+    for (let index = openIndex + 1; index < ancestors.length; index += 1) {
+      openPositions.get(ancestors[index])?.pop();
+    }
+    ancestors.length = openIndex;
+    return openIndex;
+  };
   for (const match of html.matchAll(HTML_ELEMENT_PATTERN)) {
     const tagName = match[2].toLowerCase();
     if (match[1] === '/') {
@@ -60,9 +83,7 @@ export function matchMediaElements(html: string): MediaElementMatch[] {
       // matched close is recorded, keeping caller picture stacks in
       // sync with this ancestry.
       if (VOID_ELEMENTS.has(tagName)) continue;
-      const openIndex = ancestors.lastIndexOf(tagName);
-      if (openIndex === -1) continue;
-      ancestors.length = openIndex;
+      if (closeThrough(tagName) === -1) continue;
       if (tagName === 'picture') {
         elements.push(flagMatch(match, false));
       }
@@ -70,11 +91,11 @@ export function matchMediaElements(html: string): MediaElementMatch[] {
     }
     if (tagName === 'picture') {
       elements.push(flagMatch(match, false));
-      ancestors.push(tagName);
+      pushAncestor(tagName);
       continue;
     }
     if (!MEDIA_ELEMENT_NAME_PATTERN.test(match[0])) {
-      if (!VOID_ELEMENTS.has(tagName)) ancestors.push(tagName);
+      if (!VOID_ELEMENTS.has(tagName)) pushAncestor(tagName);
       continue;
     }
     if (tagName === 'source' && ancestors[ancestors.length - 1] !== 'picture') {

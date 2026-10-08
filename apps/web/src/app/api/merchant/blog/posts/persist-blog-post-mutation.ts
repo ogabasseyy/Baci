@@ -1,4 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { BlogPostMediaRow } from '@/app/api/admin/blog/upload/blog-media-reference-scan';
+import { verifyMerchantBlogPostMedia } from './merchant-blog-post-media-verify';
+import { rollbackMerchantBlogPostMutation } from './rollback-merchant-blog-post-mutation';
 
 type BlogPostMutationRecord = {
   category: string | null;
@@ -13,13 +16,19 @@ type BlogPostMutationRecord = {
   title: string;
 };
 
-type PersistBlogPostMutationInput = {
+type PersistBlogPostMutationBase = {
   embeddedProductIds: string[] | undefined;
   merchantId: string;
   postData: Record<string, unknown>;
-  postId: string | null;
   supabase: SupabaseClient;
 };
+
+type PersistBlogPostMutationInput =
+  | (PersistBlogPostMutationBase & { postId: null })
+  | (PersistBlogPostMutationBase & {
+      existingPost: object;
+      postId: string;
+    });
 
 type PersistBlogPostMutationResult =
   | { error: null; post: BlogPostMutationRecord; status: null }
@@ -110,13 +119,10 @@ function readMutationPost({
   };
 }
 
-export async function persistBlogPostMutation({
-  embeddedProductIds,
-  merchantId,
-  postData,
-  postId,
-  supabase,
-}: PersistBlogPostMutationInput): Promise<PersistBlogPostMutationResult> {
+export async function persistBlogPostMutation(
+  args: PersistBlogPostMutationInput
+): Promise<PersistBlogPostMutationResult> {
+  const { embeddedProductIds, merchantId, postData, postId, supabase } = args;
   if (embeddedProductIds && embeddedProductIds.length > 0) {
     const { data: products, error: productsError } = await supabase
       .from('products')
@@ -179,6 +185,62 @@ export async function persistBlogPostMutation({
           : mappedError.error,
       post: null,
       status: error === null ? 500 : mappedError.status,
+    };
+  }
+
+  // The sweep scan snapshots references before claiming, so a merchant
+  // commit landing in between loses its media. Registering the saved
+  // paths resurrects unclaimed tombstones; claimed or missing paths
+  // roll the save back loudly instead of persisting broken media. The
+  // mutation merges per key, so unwritten variant fields fall back to
+  // the pre-update snapshot exactly like the RPC does.
+  const snapshot =
+    postId === null ? null : (args.existingPost as Record<string, unknown>);
+  const mediaRow: BlogPostMediaRow = {
+    author_image_url: readNullableString(
+      Object.hasOwn(postData, 'author_image_url')
+        ? postData.author_image_url
+        : snapshot?.author_image_url
+    ),
+    content: post.content,
+    excerpt: post.excerpt,
+    featured_image_url: post.featured_image_url,
+    featured_image_variants: Object.hasOwn(postData, 'featured_image_variants')
+      ? postData.featured_image_variants
+      : (snapshot?.featured_image_variants ?? null),
+  };
+  const mediaCheck = await verifyMerchantBlogPostMedia({
+    supabase,
+    mediaRow,
+  });
+  if (mediaCheck.kind === 'failed') {
+    console.error('Merchant blog post references swept media', {
+      merchantId,
+      postId: post.id,
+      reason: mediaCheck.reason,
+    });
+    if (postId === null) {
+      await rollbackMerchantBlogPostMutation({
+        merchantId,
+        mode: 'create',
+        postId: post.id,
+        savedMedia: mediaRow,
+        supabase,
+      });
+    } else {
+      await rollbackMerchantBlogPostMutation({
+        existingPost: args.existingPost,
+        merchantId,
+        mode: 'update',
+        postId: post.id,
+        savedMedia: mediaRow,
+        supabase,
+      });
+    }
+    return {
+      error: 'Referenced media was removed during save',
+      post: null,
+      status: 500,
     };
   }
 

@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
   routerPush: vi.fn(),
   useAnalyticsOverview: vi.fn(),
+  useDebounce: vi.fn(),
+  useMonthlyTransactionCount: vi.fn(),
   useTransactionReview: vi.fn(),
   useUpdateTransactionCostPrice: vi.fn(),
 }));
@@ -138,6 +140,14 @@ vi.mock('@/hooks/useAnalyticsOverview', () => ({
 
 vi.mock('@/hooks/useTransactionReview', () => ({
   useTransactionReview: mocks.useTransactionReview,
+}));
+
+vi.mock('@/hooks/useDebounce', () => ({
+  useDebounce: mocks.useDebounce,
+}));
+
+vi.mock('@/hooks/useMonthlyTransactionCount', () => ({
+  useMonthlyTransactionCount: mocks.useMonthlyTransactionCount,
 }));
 
 vi.mock('@/hooks/useUpdateTransactionCostPrice', () => ({
@@ -377,6 +387,12 @@ describe('TransactionsScreen', () => {
         },
       },
     });
+    mocks.useDebounce.mockImplementation((value) => value);
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: 2,
+      error: null,
+      refetch: vi.fn(),
+    });
     mocks.useTransactionReview.mockReturnValue({
       data: sampleOrders,
       error: null,
@@ -406,12 +422,18 @@ describe('TransactionsScreen', () => {
 
   it('renders a retryable error state when no transactions are available', () => {
     const refetch = vi.fn();
+    const monthlyRefetch = vi.fn();
     mocks.useTransactionReview.mockReturnValue({
       data: [],
       error: new Error('boom'),
       isLoading: false,
       isRefetching: false,
       refetch,
+    });
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: 2,
+      error: null,
+      refetch: monthlyRefetch,
     });
 
     render(<TransactionsScreen />);
@@ -421,6 +443,7 @@ describe('TransactionsScreen', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Retry loading transactions'));
     expect(refetch).toHaveBeenCalled();
+    expect(monthlyRefetch).toHaveBeenCalled();
   });
 
   it('renders an empty state when there are no transactions', () => {
@@ -1011,21 +1034,20 @@ describe('TransactionsScreen', () => {
     expect(screen.getByText('Save cost price')).toBeInTheDocument();
   });
 
-  it('counts only this month and resets at local midnight without reopening the screen', () => {
+  it('refreshes the monthly anchor at local midnight without reopening the screen', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 30, 23, 59, 59));
-    mocks.useTransactionReview.mockReturnValue({
-      data: sampleOrders,
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-    });
     const view = render(<TransactionsScreen />);
     try {
       expect(screen.getByText('2 transactions')).toBeInTheDocument();
+      const beforeMidnight =
+        mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
+      expect(beforeMidnight.getMonth()).toBe(3);
       act(() => vi.advanceTimersByTime(1000));
-      expect(screen.getByText('0 transactions')).toBeInTheDocument();
+      const afterMidnight =
+        mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
+      expect(afterMidnight.getMonth()).toBe(4);
+      expect(afterMidnight.getDate()).toBe(1);
       // Historical IMEIs remain searchable after the monthly reset.
       fireEvent.change(screen.getByLabelText('Search transactions'), {
         target: { value: '353232106161443' },
@@ -1054,48 +1076,48 @@ describe('TransactionsScreen', () => {
     fireEvent.change(screen.getByLabelText('Search transactions'), {
       target: { value: '353232106161443' },
     });
+    expect(mocks.useDebounce).toHaveBeenCalledWith('353232106161443', 250);
+    expect(mocks.useTransactionReview).toHaveBeenCalledWith(undefined, {
+      search: '353232106161443',
+    });
     expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
   });
 
-  it('counts more than 40 paid orders and includes new payments only in the current month', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 4, 1, 12));
-    const result = {
-      data: sampleOrders,
+  it('shows the monthly count without loading monthly rows', () => {
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: 41,
       error: null,
-      isLoading: false,
-      isRefetching: false,
       refetch: vi.fn(),
-    };
-    mocks.useTransactionReview.mockReturnValue(result);
-    const view = render(<TransactionsScreen />);
-    try {
-      expect(screen.getByText('0 transactions')).toBeInTheDocument();
-      mocks.useTransactionReview.mockReturnValue({
-        ...result,
-        data: [
-          ...sampleOrders,
-          ...Array.from({ length: 41 }, (_, index) => ({
-            ...sampleOrders[1],
-            id: `new-${index}`,
-            createdAt: new Date(2026, 4, 1, 10).toISOString(),
-          })),
-          {
-            ...sampleOrders[1],
-            id: 'next-month',
-            createdAt: new Date(2026, 5, 1).toISOString(),
-          },
-        ],
-      });
-      view.rerender(<TransactionsScreen />);
-      expect(screen.getByText('41 transactions')).toBeInTheDocument();
-    } finally {
-      view.unmount();
-      vi.useRealTimers();
-    }
+    });
+    render(<TransactionsScreen />);
+    expect(screen.getByText('41 transactions')).toBeInTheDocument();
+    expect(mocks.useTransactionReview).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ fetchAll: true })
+    );
   });
 
-  it('resets the counter after resuming in a new month', () => {
+  it('shows a zero monthly count instead of a placeholder', () => {
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: 0,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<TransactionsScreen />);
+    expect(screen.getByText('0 transactions')).toBeInTheDocument();
+  });
+
+  it('shows a placeholder while the monthly count loads', () => {
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: undefined,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<TransactionsScreen />);
+    expect(screen.getByText('-- transactions')).toBeInTheDocument();
+  });
+
+  it('refreshes the monthly anchor after resuming in a new month', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 30, 12));
     const view = render(<TransactionsScreen />);
@@ -1104,20 +1126,20 @@ describe('TransactionsScreen', () => {
       vi.setSystemTime(new Date(2026, 4, 1, 12));
       const listener = mocks.appStateListener.mock.calls.at(-1)?.[1];
       act(() => listener('active'));
-      expect(screen.getByText('0 transactions')).toBeInTheDocument();
+      const anchor = mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
+      expect(anchor.getMonth()).toBe(4);
+      expect(anchor.getDate()).toBe(1);
     } finally {
       view.unmount();
       vi.useRealTimers();
     }
   });
   it('does not present an unavailable monthly count as zero', () => {
-    mocks.useTransactionReview.mockImplementation((_range, options) => ({
-      data: options?.exactDates ? undefined : sampleOrders,
-      error: options?.exactDates ? new Error('Monthly query failed') : null,
-      isLoading: false,
-      isRefetching: false,
+    mocks.useMonthlyTransactionCount.mockReturnValue({
+      data: undefined,
+      error: new Error('Monthly query failed'),
       refetch: vi.fn(),
-    }));
+    });
     render(<TransactionsScreen />);
     expect(screen.getByText('Unavailable transactions')).toBeInTheDocument();
     expect(screen.queryByText('0 transactions')).not.toBeInTheDocument();

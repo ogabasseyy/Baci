@@ -1,0 +1,372 @@
+-- =============================================
+-- REGRESSION TEST: mobile-admin transaction-review search RPC
+--
+-- Validates search_mobile_admin_transaction_review_orders: multi-term AND
+-- matching across order/item/product/variant fields, paid + visibility +
+-- cancelled exclusions, LIKE-wildcard literal handling, limit ordering, and
+-- the merchant-access boundary.
+--
+-- USAGE:
+--   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
+--
+-- This script intentionally mutates inside a transaction and rolls back.
+-- =============================================
+
+\set ON_ERROR_STOP on
+
+BEGIN;
+
+DO $$
+BEGIN
+  IF to_regprocedure(
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'
+  ) IS NULL THEN
+    RAISE EXCEPTION 'transaction review search function is missing';
+  END IF;
+
+  IF NOT has_function_privilege(
+    'authenticated',
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'::regprocedure,
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'authenticated search execute grant is missing';
+  END IF;
+
+  IF has_function_privilege(
+    'anon',
+    'public.search_mobile_admin_transaction_review_orders(uuid,text[],integer)'::regprocedure,
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anonymous search execute grant must remain revoked';
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-4111-8111-111111111111',
+  true
+);
+
+INSERT INTO public.merchants (id, user_id, email) VALUES
+  (
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    '11111111-1111-4111-8111-111111111111',
+    'search-test-a@example.com'
+  ),
+  (
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    '22222222-2222-4222-8222-222222222222',
+    'search-test-b@example.com'
+  );
+
+INSERT INTO public.products (id, merchant_id, name, price, sku, metadata) VALUES
+  (
+    '10000000-0000-4000-8000-000000000001',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'Phone X',
+    500,
+    'PHX-BLK',
+    '{"supplier": "Acme Mobile"}'::jsonb
+  );
+
+INSERT INTO public.product_variants (
+  id, product_id, merchant_id, sku, condition, attributes
+) VALUES (
+  '20000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000001',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'PHX-BLK-128',
+  'new',
+  '{"color": "black"}'::jsonb
+);
+
+-- Target order: paid, visible, IMEI in ITEM fulfillment_data.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, customer_email, customer_phone,
+  shipping_status, payment_status, total, payment_method, fulfillment_details,
+  created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000001',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1001',
+  'Ada Lovelace',
+  'ada@example.com',
+  '+2348000000001',
+  'pending',
+  'paid',
+  500.00,
+  'paystack',
+  '{"note": "fragile"}'::jsonb,
+  '2026-10-05T10:00:00Z'
+);
+
+INSERT INTO public.order_items (
+  id, order_id, product_id, name, price, quantity, fulfillment_data, variant_id
+) VALUES (
+  'd0000000-0000-4000-8000-000000000001',
+  'c0000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000001',
+  'Phone X',
+  500.00,
+  1,
+  '{"inventoryUnits": [{"imei": "353232106161443", "serial": "SN-999"}]}'::jsonb,
+  '20000000-0000-4000-8000-000000000001'
+);
+
+-- Order-level IMEI in fulfillment_details.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, fulfillment_details, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000002',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1002',
+  'Grace Hopper',
+  'pending',
+  'paid',
+  250.00,
+  '{"imei": "354066782325743"}'::jsonb,
+  '2026-10-06T10:00:00Z'
+);
+
+-- Unpaid order: must never match.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000003',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1003',
+  'Ada Unpaid',
+  'pending',
+  'unpaid',
+  100.00,
+  '2026-10-06T11:00:00Z'
+);
+
+-- Returned order: excluded shipping status.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000004',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1004',
+  'Ada Returned',
+  'returned',
+  'paid',
+  100.00,
+  '2026-10-06T12:00:00Z'
+);
+
+-- Cancelled order: excluded via cancelled_at.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, cancelled_at, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000005',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'ORD-1005',
+  'Ada Cancelled',
+  'pending',
+  'paid',
+  100.00,
+  '2026-10-06T12:00:00Z',
+  '2026-10-06T12:00:00Z'
+);
+
+-- Other merchant's paid order with the same IMEI: tenant isolation.
+INSERT INTO public.orders (
+  id, merchant_id, order_number, customer_name, shipping_status, payment_status,
+  total, fulfillment_details, created_at
+) VALUES (
+  'c0000000-0000-4000-8000-000000000006',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'ORD-2001',
+  'Eve Other',
+  'pending',
+  'paid',
+  100.00,
+  '{"imei": "353232106161443"}'::jsonb,
+  '2026-10-06T10:00:00Z'
+);
+
+SET LOCAL ROLE authenticated;
+
+DO $test$
+DECLARE
+  v_merchant_id uuid := 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  v_other_merchant_id uuid := 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  v_item_imei_order_id uuid := 'c0000000-0000-4000-8000-000000000001';
+  v_order_imei_order_id uuid := 'c0000000-0000-4000-8000-000000000002';
+  v_ids uuid[];
+BEGIN
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', false);
+  PERFORM set_config(
+    'request.jwt.claim.sub',
+    '11111111-1111-4111-8111-111111111111',
+    false
+  );
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['353232106161443']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'item-level IMEI search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['354066782325743']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_order_imei_order_id] THEN
+    RAISE EXCEPTION 'order-level IMEI search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['ada', 'sn-999']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'multi-term search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['ada', 'grace']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'multi-term AND unexpectedly matched: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id ORDER BY order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['ada']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'unpaid/returned/cancelled exclusion failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['PHX-BLK-128']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'variant SKU search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['acme']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'product metadata search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['35323210616144_']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'underscore wildcard was not literal: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['%']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'percent wildcard was not literal: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['', '  ']
+  );
+  IF v_ids IS NOT NULL THEN
+    RAISE EXCEPTION 'blank terms unexpectedly matched: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['paystack']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'payment method search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['2026-10-05']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'date search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['ORD-'],
+    1
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_order_imei_order_id] THEN
+    RAISE EXCEPTION 'limit did not return the most recent match: %', v_ids;
+  END IF;
+
+  BEGIN
+    PERFORM public.search_mobile_admin_transaction_review_orders(
+      v_other_merchant_id,
+      ARRAY['353232106161443']
+    );
+    RAISE EXCEPTION 'cross-merchant search unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'insufficient_privilege' THEN
+      RAISE;
+    END IF;
+  END;
+
+  BEGIN
+    PERFORM public.search_mobile_admin_transaction_review_orders(
+      NULL,
+      ARRAY['353232106161443']
+    );
+    RAISE EXCEPTION 'null merchant search unexpectedly succeeded';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'merchant_id_required' THEN
+      RAISE;
+    END IF;
+  END;
+END;
+$test$ LANGUAGE plpgsql;
+
+RESET ROLE;
+
+ROLLBACK;

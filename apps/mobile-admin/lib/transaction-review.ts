@@ -251,11 +251,15 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
   });
 }
 
+export function splitTransactionSearchTerms(searchQuery: string) {
+  return searchQuery.trim().split(/\s+/).filter(Boolean);
+}
+
 export function filterTransactionOrders(
   orders: TransactionReviewOrder[],
   searchQuery: string
 ) {
-  const terms = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = splitTransactionSearchTerms(searchQuery.toLowerCase());
 
   if (terms.length === 0) {
     return orders;

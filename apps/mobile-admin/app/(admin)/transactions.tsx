@@ -18,10 +18,13 @@ import { styles } from '@/components/transactions/transactions.styles';
 import { useAnalyticsOverview } from '@/hooks/useAnalyticsOverview';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useCurrentDate } from '@/hooks/useCurrentDate';
+import { useDebounce } from '@/hooks/useDebounce';
+import { useMonthlyTransactionCount } from '@/hooks/useMonthlyTransactionCount';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEditor';
 import { useTransactionReview } from '@/hooks/useTransactionReview';
 import { resolveAnalyticsDateRange } from '@/lib/analytics-period';
+import { parseTransactionReviewRangeParams } from '@/lib/parse-transaction-review-range-params';
 import {
   filterOrdersForTransactionTab,
   filterTransactionOrders,
@@ -38,25 +41,10 @@ export default function TransactionsScreen() {
     endDate?: string | string[];
     startDate?: string | string[];
   }>();
-  const startDateParam = Array.isArray(params.startDate)
-    ? params.startDate[0]
-    : params.startDate;
-  const endDateParam = Array.isArray(params.endDate)
-    ? params.endDate[0]
-    : params.endDate;
-  const parsedStartDate = startDateParam ? new Date(startDateParam) : undefined;
-  const parsedEndDate = endDateParam ? new Date(endDateParam) : undefined;
-  const range =
-    parsedStartDate &&
-    parsedEndDate &&
-    !Number.isNaN(parsedStartDate.getTime()) &&
-    !Number.isNaN(parsedEndDate.getTime()) &&
-    parsedStartDate.getTime() <= parsedEndDate.getTime()
-      ? {
-          endDate: parsedEndDate,
-          startDate: parsedStartDate,
-        }
-      : undefined;
+  const range = parseTransactionReviewRangeParams(
+    params.startDate,
+    params.endDate
+  );
   const currentMonthAnchor = useCurrentDate();
   const profitRange = resolveAnalyticsDateRange(
     'this_month',
@@ -69,11 +57,9 @@ export default function TransactionsScreen() {
     useAnalyticsOverview(profitRange);
   const [activeTab, setActiveTab] = useState<TransactionReviewTab>('paid');
   const [searchQuery, setSearchQuery] = useState('');
-  const searching = Boolean(searchQuery.trim());
-  const monthlyReview = useTransactionReview(profitRange, {
-    fetchAll: true,
-    exactDates: true,
-  });
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
+  const searching = Boolean(debouncedSearchQuery.trim());
+  const monthlyCountQuery = useMonthlyTransactionCount(currentMonthAnchor);
   const {
     data: orders = [],
     isLoading,
@@ -81,7 +67,7 @@ export default function TransactionsScreen() {
     error,
     refetch,
   } = useTransactionReview(searching ? undefined : range, {
-    fetchAll: searching,
+    search: searching ? debouncedSearchQuery : undefined,
   });
   const isRetrying = isLoading || isRefetching;
   const editor = useTransactionCostPriceEditor({
@@ -89,30 +75,14 @@ export default function TransactionsScreen() {
     formatCurrency,
   });
 
-  const monthStart = new Date(
-    currentMonthAnchor.getFullYear(),
-    currentMonthAnchor.getMonth(),
-    1
-  ).getTime();
-  const nextMonthStart = new Date(
-    currentMonthAnchor.getFullYear(),
-    currentMonthAnchor.getMonth() + 1,
-    1
-  ).getTime();
-  const monthlyCount = (monthlyReview.data ?? []).filter((order) => {
-    const timestamp = new Date(order.createdAt).getTime();
-    return timestamp >= monthStart && timestamp < nextMonthStart;
-  }).length;
   const summary = {
     missingCosts: orders.reduce(
       (count, order) => count + order.missingCostCount,
       0
     ),
-    transactions: monthlyReview.error
+    transactions: monthlyCountQuery.error
       ? 'Unavailable'
-      : monthlyReview.data
-        ? monthlyCount
-        : '--',
+      : (monthlyCountQuery.data ?? '--'),
   };
   const estimatedProfitThisMonthLabel = profitError
     ? 'Unavailable'
@@ -255,7 +225,7 @@ export default function TransactionsScreen() {
             isRetrying={isRetrying}
             onRetry={() => {
               void refetch();
-              void monthlyReview.refetch();
+              void monthlyCountQuery.refetch();
             }}
             visibleOrderCount={visibleOrders.length}
           />

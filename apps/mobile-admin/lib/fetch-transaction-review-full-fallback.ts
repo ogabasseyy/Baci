@@ -36,11 +36,13 @@ export async function fetchFullTransactionReviewRows(
     endDateFilter,
     endDateIso,
     merchantId,
+    orderIds,
     startDateFilter,
     startDateIso,
   } = query;
   const baseOptions = {
     ...(fetchAll ? { fetchAll } : {}),
+    ...(orderIds ? { orderIds } : {}),
     endDateFilter,
     endDateIso,
     includeCancelledAt: true,

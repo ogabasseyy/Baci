@@ -21,6 +21,7 @@ export async function fetchRichTransactionReviewRows(
     endDateFilter,
     endDateIso,
     merchantId,
+    orderIds,
     startDateFilter,
     startDateIso,
   }: TransactionReviewFallbackQuery,
@@ -28,6 +29,7 @@ export async function fetchRichTransactionReviewRows(
 ) {
   const legacyQuery = {
     ...(fetchAll ? { fetchAll } : {}),
+    ...(orderIds ? { orderIds } : {}),
     endDateFilter,
     endDateIso,
     merchantId,

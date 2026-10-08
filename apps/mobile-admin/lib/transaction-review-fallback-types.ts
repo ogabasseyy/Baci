@@ -5,6 +5,7 @@ export interface TransactionReviewFallbackQuery {
   endDateFilter?: string;
   endDateIso?: string;
   merchantId: string;
+  orderIds?: string[];
   startDateFilter?: string;
   startDateIso?: string;
 }

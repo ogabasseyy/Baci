@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { TRANSACTION_REVIEW_EXCLUDED_SHIPPING_STATUSES } from './transaction-review-status';
+import { buildTransactionReviewOrFilter } from './build-transaction-review-or-filter';
 import type { TransactionReviewOrderRow } from './transaction-review-types';
 
 const PAGE_SIZE = 200;
@@ -11,6 +11,7 @@ export async function fetchTransactionReviewRows({
   includeCancelledAt,
   includeTransactionDate,
   merchantId,
+  orderIds,
   selectStatement,
   startDateFilter,
   startDateIso,
@@ -21,6 +22,7 @@ export async function fetchTransactionReviewRows({
   includeCancelledAt: boolean;
   includeTransactionDate: boolean;
   merchantId: string;
+  orderIds?: string[];
   selectStatement: string;
   startDateFilter?: string;
   startDateIso?: string;
@@ -33,20 +35,17 @@ export async function fetchTransactionReviewRows({
       .eq('payment_status', 'paid');
 
     if (includeCancelledAt) query = query.is('cancelled_at', null);
-    const visibilityFilter = `shipping_status.is.null,shipping_status.not.in.(${TRANSACTION_REVIEW_EXCLUDED_SHIPPING_STATUSES.join(',')})`;
-    const orFilters = [visibilityFilter];
-    if (includeTransactionDate) {
-      if (startDateFilter) orFilters.push(startDateFilter);
-      if (endDateFilter) orFilters.push(endDateFilter);
-    } else {
+    if (orderIds) query = query.in('id', orderIds);
+    if (!includeTransactionDate) {
       if (startDateIso) query = query.gte('created_at', startDateIso);
       if (endDateIso) query = query.lte('created_at', endDateIso);
     }
-    // Repeated .or() calls overwrite each other in PostgREST's URL parameters.
     query = query.or(
-      orFilters.length === 1
-        ? visibilityFilter
-        : `and(${orFilters.map((filter) => `or(${filter})`).join(',')})`
+      buildTransactionReviewOrFilter({
+        endDateFilter,
+        includeTransactionDate,
+        startDateFilter,
+      })
     );
 
     if (fetchAll) {
@@ -65,7 +64,7 @@ export async function fetchTransactionReviewRows({
         .order('id', { ascending: false });
     }
     return query
-      .limit(fetchAll ? PAGE_SIZE : 40)
+      .limit(fetchAll ? PAGE_SIZE : orderIds ? orderIds.length : 40)
       .returns<TransactionReviewOrderRow[]>();
   }
 
@@ -83,7 +82,12 @@ export async function fetchTransactionReviewRows({
         const dateDifference =
           new Date(b.transaction_date ?? b.created_at).getTime() -
           new Date(a.transaction_date ?? a.created_at).getTime();
-        return dateDifference || b.id.localeCompare(a.id);
+        // Match browsing order (created_at, then id) for same-date rows.
+        const createdAtDifference =
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return (
+          dateDifference || createdAtDifference || b.id.localeCompare(a.id)
+        );
       });
       return { data: rows, error: null };
     }

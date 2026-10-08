@@ -11,6 +11,7 @@ import {
   getSupplierOptionsFromOrders,
   mapTransactionOrderRows,
   parseCostPriceInput,
+  splitTransactionSearchTerms,
   toSentenceCaseSupplierName,
 } from './transaction-review';
 
@@ -745,6 +746,14 @@ describe('transaction review helpers', () => {
       'ORD-260509-00NV-R'
     );
     expect(filterTransactionOrders(orders, 'missing text')).toEqual([]);
+  });
+
+  it('splits search queries into terms for server and client matching', () => {
+    expect(splitTransactionSearchTerms(' 353232106161443  Ada ')).toEqual([
+      '353232106161443',
+      'Ada',
+    ]);
+    expect(splitTransactionSearchTerms('   ')).toEqual([]);
   });
 
   it('filters the missing-cost tab down to only missing-cost line items', () => {

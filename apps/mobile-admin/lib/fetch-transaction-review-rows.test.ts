@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   gte: vi.fn(),
   gt: vi.fn(),
+  in: vi.fn(),
   is: vi.fn(),
   limit: vi.fn(),
   lte: vi.fn(),
@@ -19,6 +20,7 @@ const query = {
   eq: mocks.eq,
   gte: mocks.gte,
   gt: mocks.gt,
+  in: mocks.in,
   is: mocks.is,
   limit: mocks.limit,
   lte: mocks.lte,
@@ -38,6 +40,7 @@ beforeEach(() => {
   mocks.from.mockReturnValue(query);
   mocks.select.mockReturnValue(query);
   mocks.eq.mockReturnValue(query);
+  mocks.in.mockReturnValue(query);
   mocks.is.mockReturnValue(query);
   mocks.order.mockReturnValue(query);
   mocks.or.mockReturnValue(query);
@@ -84,6 +87,58 @@ describe('fetchTransactionReviewRows', () => {
     expect(mocks.or).toHaveBeenCalledWith(
       'shipping_status.is.null,shipping_status.not.in.(cancelled,canceled,returned)'
     );
+  });
+
+  it('hydrates only the requested order ids', async () => {
+    const { fetchTransactionReviewRows } = await import(
+      './fetch-transaction-review-rows'
+    );
+
+    await fetchTransactionReviewRows({
+      includeCancelledAt: true,
+      includeTransactionDate: false,
+      merchantId: 'merchant-1',
+      orderIds: ['order-1', 'order-2'],
+      selectStatement: 'id',
+    });
+
+    expect(mocks.in).toHaveBeenCalledWith('id', ['order-1', 'order-2']);
+    expect(mocks.limit).toHaveBeenCalledWith(2);
+  });
+
+  it('orders same-date fetch-all rows by recency before id', async () => {
+    const { fetchTransactionReviewRows } = await import(
+      './fetch-transaction-review-rows'
+    );
+    mocks.returns.mockResolvedValue({
+      data: [
+        {
+          created_at: '2026-10-01T10:00:00.000Z',
+          id: 'older-created',
+          transaction_date: '2026-10-05T00:00:00.000Z',
+        },
+        {
+          created_at: '2026-10-02T10:00:00.000Z',
+          id: 'newer-created',
+          transaction_date: '2026-10-05T00:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    const result = await fetchTransactionReviewRows({
+      fetchAll: true,
+      includeCancelledAt: true,
+      includeTransactionDate: true,
+      merchantId: 'merchant-1',
+      selectStatement: 'id',
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data?.map((row) => row.id)).toEqual([
+      'newer-created',
+      'older-created',
+    ]);
   });
 });
 

@@ -13,6 +13,20 @@ const trimmedOptionalString = (message: string) =>
 const optionalOrderIdentifier = z.string().trim().optional();
 const optionalTrackingToken = z.string().trim().optional();
 
+// Hostname-checked parsing instead of a tight path regex: the provider may
+// add path segments, hyphens, or query strings to a legitimate checkout URL.
+function isPaystackCheckoutUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'checkout.paystack.com'
+    );
+  } catch {
+    return false;
+  }
+}
+
 const sanitizedReturnTo = z.preprocess(
   (value) => {
     return sanitizeWalletReturnTo(value);
@@ -89,9 +103,7 @@ export const PaymentGatewayParamsSchema = paymentGatewayParamsObject
         !/^pvb-first-primary-[0-9a-f-]{36}$/.test(data.reference) ||
         !z.uuid().safeParse(data.reference.slice('pvb-first-primary-'.length))
           .success ||
-        !/^https:\/\/checkout\.paystack\.com\/[A-Za-z0-9]+$/.test(
-          data.authorizationUrl
-        ) ||
+        !isPaystackCheckoutUrl(data.authorizationUrl) ||
         data.amount === undefined
       )
         ctx.addIssue({

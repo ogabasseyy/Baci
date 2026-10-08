@@ -152,6 +152,20 @@ it('keeps a saved checkout instead of falling back when recovery reports unavail
     expect.stringContaining('retained')
   );
 });
+it('falls back when recovery drops a stale placeholder on not-ready', async () => {
+  // Pre-call read sees the stale null-operation placeholder; the request
+  // drops it on the authoritative response, so the catch re-read finds
+  // nothing retained and the caller runs the legacy top-up.
+  mockRead.mockResolvedValueOnce({ operationId: null });
+  mockRead.mockResolvedValue(null);
+  mockRecover.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PRIMARY_CARD_NOT_READY' })
+  );
+  await expect(fundPrimaryWalletCard(input)).rejects.toMatchObject({
+    code: 'PRIMARY_CARD_NOT_READY',
+  });
+  expect(alert).not.toHaveBeenCalled();
+});
 it('debounces repeat taps for one scope without blocking another account', async () => {
   const other = {
     ...input,

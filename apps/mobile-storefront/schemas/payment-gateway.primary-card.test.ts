@@ -25,3 +25,16 @@ it.each([
 ])('rejects legacy confirmation and mismatched primary checkout context', (change) => {
   expect(schema.safeParse({ ...input, ...change }).success).toBe(false);
 });
+it.each([
+  'https://checkout.paystack.com/pay/abc-123_XYZ',
+  'https://checkout.paystack.com/abc123?reference=xyz&amount=1000',
+])('routes provider checkout URL variants to the gateway', (authorizationUrl) => {
+  expect(schema.safeParse({ ...input, authorizationUrl }).success).toBe(true);
+});
+it.each([
+  'http://checkout.paystack.com/Synthetic123',
+  'https://checkout.paystack.com.evil.example.com/Synthetic123',
+  'https://checkout.paystack.com@evil.example.com/',
+])('rejects lookalike checkout hosts for primary routing', (authorizationUrl) => {
+  expect(schema.safeParse({ ...input, authorizationUrl }).success).toBe(false);
+});

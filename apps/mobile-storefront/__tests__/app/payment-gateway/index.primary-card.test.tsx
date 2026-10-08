@@ -205,3 +205,25 @@ it('retains the operation through network error and recovers status from the act
   expect(mockInvalidate).not.toHaveBeenCalled();
   expect(mockClearCart).not.toHaveBeenCalled();
 });
+
+it('shows the processing indicator while the primary server check runs', async () => {
+  let release!: (value: unknown) => void;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  mockFetchJson.mockReturnValue(gate);
+  render(<PaymentGatewayScreen />);
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Synthetic checkout callback' })
+  );
+  await waitFor(() =>
+    expect(screen.getByText('Confirming Payment')).toBeOnTheScreen()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Synthetic checkout callback' })
+  ).toBeNull();
+  release({ ...response, status: 'custody_pending' });
+  await waitFor(() =>
+    expect(screen.getByText('Wallet funding pending')).toBeOnTheScreen()
+  );
+});

@@ -50,11 +50,15 @@ export function WalletFundModal({
   showFundPanel,
 }: WalletFundModalProps) {
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
+  // Provisioning is tracked by provider, not by account presence: a retained
+  // legacy account must not mask pending primary onboarding, and the legacy
+  // details stay resolved (nothing is discarded) for transfer display and
+  // fallback once setup completes.
   const showPrimarySetup =
     !!merchantId &&
     isPiggyvestPrimaryMerchant(merchantId) &&
     primaryCapability !== false &&
-    !fundingAccount;
+    fundingAccount?.provider !== 'piggyvest';
   return (
     <ModalSheet
       backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.55)' }}

@@ -148,12 +148,6 @@ export async function fundWallet({
   user,
   walletReturnTo,
 }: FundWalletParams): Promise<void> {
-  const amount = Number(fundAmount);
-  const amountValidationError = validateWalletTopUpAmount(amount);
-  if (amountValidationError) {
-    Alert.alert('Invalid Amount', amountValidationError);
-    return;
-  }
   if (isHostedStagingWalletTopUpBlocked()) {
     Alert.alert(
       'Wallet top-up unavailable',
@@ -162,6 +156,10 @@ export async function fundWallet({
     return;
   }
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) {
+    // Recovery runs before any amount validation: a saved primary-card
+    // operation (possibly already charged) must be rechecked even when the
+    // funding form holds its normal empty amount. New primary fundings
+    // validate inside fundPrimaryWalletCard.
     try {
       return await fundPrimaryWalletCard({
         activeMerchantId,
@@ -178,6 +176,12 @@ export async function fundWallet({
       // working legacy top-up below instead of stranding the customer.
       if (!isPrimaryWalletNotReady(error)) throw error;
     }
+  }
+  const amount = Number(fundAmount);
+  const amountValidationError = validateWalletTopUpAmount(amount);
+  if (amountValidationError) {
+    Alert.alert('Invalid Amount', amountValidationError);
+    return;
   }
   setIsFundPending(true);
   try {

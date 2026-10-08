@@ -229,3 +229,51 @@ it('does not reuse a cached bearer transport when one funding client serves a sw
   expect(await client.readPending(scope)).toMatchObject(scope);
   expect(await client.readPending(otherScope)).toMatchObject(otherScope);
 });
+it('drops only the null-operation placeholder on authoritative not-ready', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'PRIMARY_CARD_NOT_READY' })
+  );
+  await expect(client.start(start)).rejects.toMatchObject({
+    code: 'PRIMARY_CARD_NOT_READY',
+  });
+  expect(mockStorage.size).toBe(0);
+  expect(await client.readPending(scope)).toBeNull();
+});
+it('keeps the placeholder for ambiguous failures so recovery can retry', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  mockFetchJson.mockRejectedValueOnce(new Error('transport exploded'));
+  await expect(client.start(start)).rejects.toThrow('transport exploded');
+  expect(mockStorage.size).toBe(1);
+  await expect(client.recover(scope)).resolves.toMatchObject({
+    status: 'ready',
+  });
+});
+it('lets a slow scope finish without blocking another scope', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  const otherScope = { ...scope, userId: operationId };
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  mockFetchJson.mockImplementationOnce(async () => {
+    await gate;
+    return response;
+  });
+  // Scope A starts first and hangs in transport; scope B authenticates as
+  // its own user and must still complete while A is stuck.
+  mockGetUser
+    .mockResolvedValueOnce({
+      data: { user: { id: scope.userId } },
+      error: null,
+    })
+    .mockResolvedValue({
+      data: { user: { id: otherScope.userId } },
+      error: null,
+    });
+  const pendingA = client.start(start);
+  await client.start({ ...start, ...otherScope });
+  release();
+  await expect(pendingA).resolves.toMatchObject({ status: 'ready' });
+  expect(mockFetchJson).toHaveBeenCalledTimes(2);
+});

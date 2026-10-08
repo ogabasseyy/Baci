@@ -715,7 +715,8 @@ describe('POST /api/orders REDVAULT integration', () => {
     availabilityReason:
       | 'private_live_pilot'
       | 'staging_test_mode' = 'private_live_pilot',
-    lineVatRateBp = 0
+    lineVatRateBp = 0,
+    merchantVatRegistrationStatus: string | null = null
   ) {
     vi.clearAllMocks();
     vi.stubEnv('REDVAULT_LIVE_PILOT_ENABLED', 'true');
@@ -791,6 +792,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     const supabase = buildMockSupabase(
       {},
       {
+        merchantVatRegistrationStatus,
         productRows: [
           {
             id: '11111111-1111-4111-8111-111111111111',
@@ -861,7 +863,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     expect(result.genericOrderRpcCalled).toBe(false);
   });
 
-  it('continues to protected REDVAULT checkout when pilot validation allows the order', async () => {
+  it('continues to protected REDVAULT checkout when pilot validation allows the zero-rate order', async () => {
     const result = await runPilotOrder(true);
 
     expect(result.response.status).toBe(201);
@@ -885,7 +887,24 @@ describe('POST /api/orders REDVAULT integration', () => {
     expect(result.genericOrderRpcCalled).toBe(false);
   });
 
-  it('returns 409 when the pilot line carries VAT', async () => {
+  it('accepts a taxed pilot basket when the quote VAT rate matches the computed order tax', async () => {
+    const result = await runPilotOrder(
+      true,
+      'private_live_pilot',
+      750,
+      'registered'
+    );
+
+    expect(result.response.status).toBe(201);
+    await expect(result.response.json()).resolves.toEqual({
+      order: { id: 'protected-pilot-order' },
+    });
+    expect(result.checkoutCalled).toBe(true);
+    expect(result.createDraftRpcCalled).toBe(false);
+    expect(result.genericOrderRpcCalled).toBe(false);
+  });
+
+  it('returns 409 when the quote VAT rate disagrees with the computed order tax', async () => {
     const result = await runPilotOrder(true, 'private_live_pilot', 750);
 
     expect(result.response.status).toBe(409);

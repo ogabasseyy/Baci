@@ -16,11 +16,13 @@ const base = {
       variantId: null,
       unitPriceKobo: 10_000,
       discountKobo: 500,
-      vatRateBp: 0,
+      vatRateBp: 750,
+      vatCategoryCode: 'S',
     },
   ],
   subtotalKobo: 10_000,
   discountKobo: 500,
+  taxAmountKobo: 750,
   shippingFee: 0,
   assuranceAmount: 0,
   wrappingFee: 0,
@@ -89,7 +91,11 @@ describe('REDVAULT private live pilot policy', () => {
         ],
       },
       { items: [{ ...base.items[0], unitPriceKobo: 9_900 }] },
-      { items: [{ ...base.items[0], vatRateBp: 750 }] },
+      // A zeroed tax against a 7.5% quote is the old zero-VAT pin: it must
+      // fail closed now that the total derives from the quote VAT rate.
+      { taxAmountKobo: 0 },
+      { taxAmountKobo: 751 },
+      { items: [{ ...base.items[0], vatRateBp: 1600 }] },
       { discountKobo: 600 },
       { shippingFee: 1 },
       { assuranceAmount: 1 },
@@ -100,6 +106,18 @@ describe('REDVAULT private live pilot policy', () => {
       expect(validateRedvaultLivePilotOrder({ ...base, ...override })).toBe(
         false
       );
+  });
+  it('derives zero tax for non-standard VAT categories instead of hard-coding an amount', () => {
+    configure();
+    const zeroRated = {
+      ...base,
+      taxAmountKobo: 0,
+      items: [{ ...base.items[0], vatCategoryCode: 'Z', vatRateBp: 0 }],
+    };
+    expect(validateRedvaultLivePilotOrder(zeroRated)).toBe(true);
+    expect(
+      validateRedvaultLivePilotOrder({ ...zeroRated, taxAmountKobo: 1 })
+    ).toBe(false);
   });
   it.each([
     'http://pilot-fixture.supabase.co',

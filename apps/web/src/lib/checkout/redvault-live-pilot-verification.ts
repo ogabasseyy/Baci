@@ -25,10 +25,13 @@ const UNAVAILABLE: RedvaultLivePilotRejection = {
 /**
  * Verifies that a private-live-pilot initialization matches the exact
  * controlled-test snapshot: pilot user, pilot merchant, NGN currency, the
- * NGN 100 / NGN 5 quote with no fees, extras, or mixed basket, and the
- * pinned NGN 95.00 payable with zero tax. The summary helper already
- * cross-checks total against payable arithmetic; pinning both here keeps a
- * drifted persisted total (tax misconfig, tampering) out of the charge path.
+ * pinned NGN 100 / NGN 5 quote with no fees, extras, or mixed basket, and a
+ * payable DERIVED from the normal tax calculation (subtotal - discount +
+ * recomputed quote tax) — never a hard-coded total. The tax VALUE's
+ * genuineness is enforced at order creation (validateRedvaultLivePilotOrder
+ * derives it from the quote's VAT rate); here the derived payable/total
+ * equality keeps a drifted persisted total (tax misconfig, tampering) out
+ * of the charge path.
  */
 export async function verifyRedvaultLivePilotSnapshot({
   client,
@@ -44,12 +47,15 @@ export async function verifyRedvaultLivePilotSnapshot({
   try {
     const summary = await getRedvaultCheckoutSummary({ client, orderId });
     const pilot = getRedvaultLivePilotPolicy();
+    // tax_kobo is validated as a non-negative safe integer by the summary
+    // helper; the expected payable derives from the pinned basket inputs
+    // plus the recomputed tax (fees all pinned to zero below).
+    const expectedPayableKobo = 10_000 - 500 + summary.quote.tax_kobo;
     const exactPilotSnapshot = Boolean(
       pilot &&
         userId === REDVAULT_PILOT_USER_ID &&
         merchantId === pilot.merchantId &&
         summary.order.currency.toUpperCase() === 'NGN' &&
-        summary.order.total === 95 &&
         summary.quote.product_subtotal_kobo === 10_000 &&
         summary.quote.eligible_subtotal_kobo === 10_000 &&
         summary.quote.ineligible_subtotal_kobo === 0 &&
@@ -57,8 +63,8 @@ export async function verifyRedvaultLivePilotSnapshot({
         summary.quote.assurance_fee_kobo === 0 &&
         summary.quote.shipping_kobo === 0 &&
         summary.quote.gift_wrapping_kobo === 0 &&
-        summary.quote.tax_kobo === 0 &&
-        summary.quote.payable_kobo === 9500 &&
+        summary.quote.payable_kobo === expectedPayableKobo &&
+        summary.order.total === expectedPayableKobo / 100 &&
         summary.quote.mixed_basket === false
     );
     if (!exactPilotSnapshot) {

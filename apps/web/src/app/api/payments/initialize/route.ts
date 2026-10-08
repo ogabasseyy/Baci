@@ -1385,6 +1385,8 @@ export async function POST(request: NextRequest) {
           runtimeEnv: process.env.BACI_RUNTIME_ENV,
           vercelEnv: process.env.VERCEL_ENV,
           vercelUrl: process.env.VERCEL_URL,
+          localBaseUrl:
+            process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
         });
       } catch {
         return createErrorResponse(

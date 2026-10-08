@@ -1600,6 +1600,7 @@ export async function POST(request: NextRequest) {
           wrappingFee: giftWrappingFeeValue,
           walletAmount: Number(use_wallet_credit ? wallet_amount : 0),
           savingsAmount: Number(use_savings_credit ? savings_amount : 0),
+          taxAmountKobo: Math.round(orderTaxAmount * 100),
         })
       ) {
         return NextResponse.json(

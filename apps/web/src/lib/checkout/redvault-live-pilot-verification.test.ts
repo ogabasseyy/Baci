@@ -105,6 +105,15 @@ describe('verifyRedvaultLivePilotSnapshot', () => {
     });
   });
 
+  it('accepts a taxed snapshot whose total derives from the recomputed tax', async () => {
+    vi.mocked(getRedvaultCheckoutSummary).mockResolvedValue(
+      summaryFixture({ total: 102.5 }, { tax_kobo: 750, payable_kobo: 10250 })
+    );
+    const result = await verifyRedvaultLivePilotSnapshot(snapshotInput());
+
+    expect(result).toEqual({ ok: true });
+  });
+
   it('rejects a missing pilot policy', async () => {
     vi.mocked(getRedvaultLivePilotPolicy).mockReturnValue(null);
     const result = await verifyRedvaultLivePilotSnapshot(snapshotInput());
@@ -136,7 +145,19 @@ describe('verifyRedvaultLivePilotSnapshot', () => {
     ['negative total', { total: -1 }, {}],
     ['drifted total', { total: 102.25 }, {}],
     ['drifted payable', {}, { payable_kobo: 10225 }],
-    ['nonzero tax', {}, { tax_kobo: 725 }],
+    // Nonzero tax is allowed only when payable/total derive from it: tax
+    // 725 against payable 9500 is arithmetic drift, not a derived total.
+    ['tax inconsistent with payable', {}, { tax_kobo: 725 }],
+    [
+      'taxed snapshot with stale total',
+      { total: 95 },
+      { tax_kobo: 750, payable_kobo: 10250 },
+    ],
+    [
+      'taxed snapshot with stale payable',
+      { total: 102.5 },
+      { tax_kobo: 750, payable_kobo: 9500 },
+    ],
     ['wrong subtotal', {}, { product_subtotal_kobo: 9999 }],
     ['wrong eligible', {}, { eligible_subtotal_kobo: 9999 }],
     ['ineligible present', {}, { ineligible_subtotal_kobo: 1 }],

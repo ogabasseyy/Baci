@@ -12,6 +12,7 @@ type PilotLine = {
   unitPriceKobo: number;
   discountKobo: number;
   vatRateBp: number;
+  vatCategoryCode: string;
 };
 
 export type RedvaultLivePilotPolicy = {
@@ -76,6 +77,13 @@ export function getRedvaultLivePilotPolicy(
   return { enabled: true, merchantId, productId, expiresAt, maxAttempts };
 }
 
+/**
+ * Validates the exact controlled-test basket. The payable total is derived
+ * from the normal tax calculation, never hard-coded: the server-computed
+ * order tax must equal the quote's VAT rate applied to the pinned
+ * merchandise subtotal (mirroring computeAgenticOrderTax, which taxes the
+ * gross line extension for category 'S' lines and zero otherwise).
+ */
 export function validateRedvaultLivePilotOrder(input: {
   userId: string | null;
   merchantId: string;
@@ -88,23 +96,29 @@ export function validateRedvaultLivePilotOrder(input: {
   wrappingFee: number;
   walletAmount: number;
   savingsAmount: number;
+  taxAmountKobo: number;
   now?: number;
 }): boolean {
   const policy = getRedvaultLivePilotPolicy(input.now);
+  const line = input.items[0];
+  const expectedTaxKobo =
+    line?.vatCategoryCode === 'S'
+      ? Math.round((input.subtotalKobo * (line?.vatRateBp ?? 0)) / 10000)
+      : 0;
   return Boolean(
     policy &&
       input.userId === REDVAULT_PILOT_USER_ID &&
       input.merchantId === policy.merchantId &&
       input.currency.toUpperCase() === 'NGN' &&
       input.items.length === 1 &&
-      input.items[0]?.productId === policy.productId &&
-      input.items[0]?.quantity === 1 &&
-      input.items[0]?.variantId === null &&
-      input.items[0]?.unitPriceKobo === PILOT_PRICE_KOBO &&
-      input.items[0]?.vatRateBp === 0 &&
+      line?.productId === policy.productId &&
+      line?.quantity === 1 &&
+      line?.variantId === null &&
+      line?.unitPriceKobo === PILOT_PRICE_KOBO &&
       input.subtotalKobo === PILOT_PRICE_KOBO &&
       input.discountKobo === PILOT_DISCOUNT_KOBO &&
-      input.items[0]?.discountKobo === PILOT_DISCOUNT_KOBO &&
+      line?.discountKobo === PILOT_DISCOUNT_KOBO &&
+      input.taxAmountKobo === expectedTaxKobo &&
       input.shippingFee === 0 &&
       input.assuranceAmount === 0 &&
       input.wrappingFee === 0 &&

@@ -19,6 +19,56 @@ describe('getRedvaultCallbackUrl', () => {
     ).toBe('https://baci-example-team.vercel.app/ogabassey/checkout/success');
   });
 
+  it('routes local staging at the loopback base URL without a root domain', () => {
+    expect(
+      getRedvaultCallbackUrl({
+        ...input,
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        localBaseUrl: 'http://localhost:3000',
+      })
+    ).toBe('http://localhost:3000/ogabassey/checkout/success');
+    expect(
+      getRedvaultCallbackUrl({
+        ...input,
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        vercelEnv: 'development',
+        localBaseUrl: 'http://127.0.0.1:3001/shop?x=1#y',
+      })
+    ).toBe('http://127.0.0.1:3001/ogabassey/checkout/success');
+  });
+
+  it.each([
+    ['missing base URL', undefined],
+    ['empty base URL', ''],
+    ['non-URL', 'not-a-url'],
+    ['non-loopback host', 'https://staging.usebaci.com'],
+    ['loopback suffix trick', 'https://localhost.evil.example'],
+    ['non-http protocol', 'ftp://localhost/x'],
+  ])('rejects local staging with %s', (_label, localBaseUrl) => {
+    expect(() =>
+      getRedvaultCallbackUrl({
+        ...input,
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        localBaseUrl,
+      })
+    ).toThrow('REDVAULT local callback host is unavailable');
+  });
+
+  it('still rejects a bad slug in local staging', () => {
+    expect(() =>
+      getRedvaultCallbackUrl({
+        ...input,
+        merchantSlug: 'evil.shop/x',
+        rootDomain: '',
+        runtimeEnv: 'staging',
+        localBaseUrl: 'http://localhost:3000',
+      })
+    ).toThrow('REDVAULT callback host is unavailable');
+  });
+
   it('preserves the merchant-domain callback outside Preview', () => {
     expect(
       getRedvaultCallbackUrl({

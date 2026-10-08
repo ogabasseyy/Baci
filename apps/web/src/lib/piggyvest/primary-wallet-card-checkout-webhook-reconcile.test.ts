@@ -252,17 +252,17 @@ describe('primary card checkout webhook reconcile', () => {
     expect(provider.verify).not.toHaveBeenCalled();
   });
 
-  it('stays retryable when the stored identity disagrees with the webhook', async () => {
+  it('reconciles across a profile email change by immutable IDs', async () => {
     const { execute, provider, runtime } = setup('ready');
-    const foreign = body({ customer: { email: 'someone-else@example.test' } });
+    const changed = body({ customer: { email: 'someone-else@example.test' } });
     expect(
       await reconcilePrimaryWalletCardCheckoutWebhook({
-        body: foreign,
+        body: changed,
         runtime,
         execute: execute as never,
         provider: provider as never,
       })
-    ).toBeNull();
-    expect(provider.verify).not.toHaveBeenCalled();
+    ).not.toBeNull();
+    expect(provider.verify).toHaveBeenCalled();
   });
 });

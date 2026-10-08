@@ -32,13 +32,22 @@ export function createPrimaryWalletCardCheckoutService(input: {
     )
       throw new Error('Primary card checkout unavailable');
   };
+  // Identity binds the immutable IDs only: the profile email may change
+  // after initialization, and comparing it here would break recovery for
+  // both the provider webhook (original address) and the client (new
+  // address). The stored checkout email is still compared as provider
+  // evidence at the collection boundary.
+  const identityKeys = [
+    'environment',
+    'integrationId',
+    'merchantId',
+    'customerId',
+    'userId',
+    'businessId',
+  ] as const;
   const select = (value: unknown) => {
     const intent = schemas.intent.parse(value);
-    if (
-      Object.entries(scope).some(
-        ([key, value]) => intent[key as keyof typeof scope] !== value
-      )
-    )
+    if (identityKeys.some((key) => intent[key] !== scope[key]))
       throw new Error('Primary card identity unavailable');
     return intent;
   };

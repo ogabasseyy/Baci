@@ -33,7 +33,7 @@ SET SESSION AUTHORIZATION baci_primary_card_authorizer;
 DO $$ DECLARE scope jsonb := (SELECT scope FROM public.custody_fixture WHERE label='third@example.test'); BEGIN
  scope := scope||'{"customerId":"50000000-0000-4000-8000-000000000002","userId":"50000000-0000-4000-8000-000000000003","email":"fifth@example.test"}';
  BEGIN
-  PERFORM piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"50000000-0000-4000-8000-000000000005","amountKobo":1,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  PERFORM piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"50000000-0000-4000-8000-000000000005","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
   RAISE EXCEPTION 'daily/reserved cap bypassed';
  EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;

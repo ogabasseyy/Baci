@@ -21,6 +21,19 @@ describe('refined-search-rpc', () => {
     expect(REFINED_SEARCH_MAX_OFFSET).toBe(1980);
   });
 
+  it.each([
+    { offset: 5000, expected: 1980 },
+    { offset: 1980, expected: 1980 },
+    { offset: 40, expected: 40 },
+    { offset: 0, expected: 0 },
+    { offset: -20, expected: 0 },
+    { offset: 40.9, expected: 40 },
+  ])('clamps offset $offset to $expected', ({ offset, expected }) => {
+    expect(
+      getRefinedSearchArgs('m1', 'phone', criteria, 20, offset)
+    ).toMatchObject({ result_offset: expected });
+  });
+
   it('builds RPC args with deduplicated sorted brands and null fallbacks', () => {
     expect(getRefinedSearchArgs('m1', 'phone', criteria, 20, 40)).toEqual({
       search_query: 'phone',

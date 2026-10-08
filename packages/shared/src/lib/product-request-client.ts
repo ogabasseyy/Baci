@@ -11,6 +11,11 @@ export class ProductRequestSubmitError extends Error {
 // granted only to the storefront_intake role (service_role is revoked), so
 // callers must never invoke it directly: the API route adds a trusted
 // per-IP network gate in front of the DB budgets.
+//
+// Idempotency binds the payload: retries must resend the identical
+// query/contact with the same requestId. Reusing an id with different
+// content (even equivalent phone punctuation) returns 409; equivalent
+// repeats under fresh ids are covered by the 24h canonical dedup.
 export async function submitProductRequest(
   endpoint: string,
   input: ProductRequest

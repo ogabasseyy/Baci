@@ -459,3 +459,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-124 (P1) FIXED: added use-product-detail-purchase-state.test.ts — exact offer id and ID-less base-match suppression forwarded into both price calls + offer selection, plus variant skip. 3/3.
 - CX-125 (P1) FIXED: product-request.ts split into schema module + product-request-client.ts (error + submit); barrel exports both; consumers untouched. Client tests moved, schema tests added (9/9). Web consumers 10/10; shared/native/web typechecks clean.
 - Muse on 8c19ca2: 2 med + 3 low, all positive observations or adjudicated repeats (PII retention policy, disclosure verification, no full-diff CodeRabbit, device QA). No code action.
+
+## Round 66 (Muse 2 med + 2 low on 4b324b2 — 2 fixed, 2 adjudicated; Codex pending)
+
+- Muse med CodeRabbit gate: repeat of the PR-body open item (full-diff review still recommended, not obtained).
+- Muse med web-tray identity ADJUDICATED (documented interim design): the tray header states parent-rows-only refresh with verify-on-PDP markers + PDP-as-truth; per-item price-projection verification is a follow-up (new RPCs per tray item + mismatch UX), not a silent defect.
+- Muse low idempotency-canonical: documented the exact-resend requirement on submitProductRequest (same id + different payload → 409 by design; equivalent repeats under fresh ids hit canonical dedup).
+- Muse low offset clamp FIXED: getRefinedSearchArgs clamps to [0, 1980] (truncated) so native deep links / long tails snap instead of raising 22023 → generic failure. 6 clamp cases; consumers green (web 2/2, native 15/15).

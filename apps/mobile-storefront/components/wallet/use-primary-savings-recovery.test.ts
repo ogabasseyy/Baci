@@ -76,10 +76,22 @@ it('ignores a previous goal response after switching goals', async () => {
   expect(props.operationRef.current).toBeNull();
   expect(props.setAmount).not.toHaveBeenCalled();
 });
-it('allows legacy contribution when savings is off and no operation is bound', async () => {
+it('keeps submissions blocked when recovery throws not-ready with no bound operation', async () => {
+  // The pending endpoint answers from durable storage even when the
+  // runtime is disabled, so a throw means unknown durable state: a
+  // restart must not read it as authoritative absence and reroute a
+  // legacy contribution alongside an outstanding primary transfer.
   mockRecover.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
   );
+  const props = input();
+  const { result } = renderHook(() => usePrimarySavingsRecovery(props));
+  await waitFor(() => expect(result.current.error).toBe(true));
+  expect(result.current.ready).toBe(false);
+  expect(props.operationRef.current).toBeNull();
+});
+it('allows legacy contribution when recovery durably confirms no operation', async () => {
+  mockRecover.mockResolvedValue(null);
   const props = input();
   const { result } = renderHook(() => usePrimarySavingsRecovery(props));
   await waitFor(() => expect(result.current.ready).toBe(true));

@@ -52,16 +52,14 @@ export function usePrimarySavingsRecovery({
       })
       .catch((error: unknown) => {
         if (!active) return;
-        // Savings runtime positively off with no outstanding operation:
-        // allow the contribution path, which falls back to legacy savings.
-        // A bound operation or any ambiguous failure keeps blocking.
-        if (
-          rollbackObservedCapabilityOnNotReady(merchantId, error) &&
-          operationRef.current === null
-        ) {
-          setState({ key, revision, ready: true, error: false });
-          return;
-        }
+        // Any lookup failure blocks: the pending endpoint consults
+        // durable storage even when the runtime is disabled, so a throw
+        // means the durable state is unknown — never "no operation".
+        // Enabling submissions here would reroute a legacy contribution
+        // alongside an already-submitted primary transfer. The rollback
+        // still runs so an authoritative not-ready fails later gates
+        // closed until the next successful probe.
+        rollbackObservedCapabilityOnNotReady(merchantId, error);
         setState({ key, revision, ready: false, error: true });
       });
     return () => {

@@ -157,6 +157,19 @@ it('refreshes and resumes only authoritative completed custody without legacy co
   expect(input.queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith('/wallet');
 });
+it('recovers a non-pilot merchant without consulting the volatile capability cache', async () => {
+  const input = fixture();
+  input.merchantId = '00000000-0000-4000-8000-000000000000';
+  mockRecover.mockResolvedValue({ status: 'completed', returnTo: '/wallet' });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  expect(mockRecover).toHaveBeenCalledWith({
+    merchantId: input.merchantId,
+    userId: '11111111-1111-4111-8111-111111111111',
+    reference: input.reference,
+  });
+  expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
+});
 it('ignores duplicate callbacks and does not update unmounted UI', async () => {
   const input = fixture();
   input.refs.isMountedRef.current = false;

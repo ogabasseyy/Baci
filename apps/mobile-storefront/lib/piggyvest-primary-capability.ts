@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import {
   clearObservedPiggyvestPrimaryCapability,
+  NEGATIVE_CAPABILITY_TTL_MS,
   observePiggyvestPrimaryCapability,
   readObservedPiggyvestPrimaryCapability,
 } from './piggyvest-primary-capability-cache';
@@ -96,18 +97,29 @@ export function usePiggyvestPrimaryCapability(
   merchantId?: string | null
 ): boolean | null {
   const [available, setAvailable] = useState<boolean | null>(null);
+  // Bumped when a cached negative verdict expires so a mounted screen
+  // reprobes: without it the hook would pin `false` (and the sync gates
+  // would keep routing through legacy) until remount even after the
+  // merchant is server-enabled mid-session.
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     if (!merchantId) {
       setAvailable(false);
       return;
     }
     let active = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const pilot = isPiggyvestPrimaryMerchant(merchantId);
     const observed = readObservedPiggyvestPrimaryCapability(merchantId);
     setAvailable(pilot ? observed : observed === true);
     void getPiggyvestPrimaryCapability(merchantId).then(
       (result) => {
-        if (active) setAvailable(result);
+        if (!active) return;
+        setAvailable(result);
+        if (result === false)
+          refreshTimer = setTimeout(() => {
+            if (active) setRevision((value) => value + 1);
+          }, NEGATIVE_CAPABILITY_TTL_MS);
       },
       () => {
         if (active) setAvailable(pilot ? null : false);
@@ -115,7 +127,8 @@ export function usePiggyvestPrimaryCapability(
     );
     return () => {
       active = false;
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
     };
-  }, [merchantId]);
+  }, [merchantId, revision]);
   return available;
 }

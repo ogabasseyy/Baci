@@ -178,6 +178,50 @@ describe('goal-independent primary card collection', () => {
     );
     expect(payload.metadata).not.toHaveProperty('goal_id');
   });
+  it('reports a duplicate reference as an orphaned-session proof, not transport noise', async () => {
+    const transport = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: false,
+          message: 'Duplicate Transaction Reference',
+        }),
+        { status: 400 }
+      )
+    );
+    const provider = createPrimaryWalletCardCheckoutProvider(
+      fixture.settings,
+      transport
+    );
+    await expect(provider.initialize(fixture.intent)).rejects.toMatchObject({
+      code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
+    });
+  });
+  it.each([
+    { status: 500, message: 'Try again' },
+    { status: 400, message: 'Invalid email address' },
+    { status: 400, message: 'Duplicate metadata key' },
+  ])('keeps non-duplicate HTTP failures transport-uncertain (%s)', async ({
+    status,
+    message,
+  }) => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: false, message }), { status })
+      );
+    const provider = createPrimaryWalletCardCheckoutProvider(
+      fixture.settings,
+      transport
+    );
+    await expect(provider.initialize(fixture.intent)).rejects.toThrow(
+      'Primary card provider unavailable'
+    );
+    await expect(provider.initialize(fixture.intent)).rejects.not.toMatchObject(
+      {
+        code: 'PRIMARY_CARD_DUPLICATE_REFERENCE',
+      }
+    );
+  });
   it('rejects expired deployment configuration before transport', async () => {
     const { provider, transport } = setup(response(), {
       ...fixture.settings,

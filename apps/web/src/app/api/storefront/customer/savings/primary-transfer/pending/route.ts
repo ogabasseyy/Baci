@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { recoverPrimaryWalletSavings } from '@/lib/piggyvest/primary-wallet-savings-recovery-runtime';
-import { readPrimaryWalletSavingsRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import { readPrimaryWalletSavingsRecoveryRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
 
 export async function GET(request: NextRequest) {
@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
       { status: 400, headers }
     );
   try {
-    const runtime = readPrimaryWalletSavingsRuntime();
+    // Recovery consults durable storage even when the savings runtime is
+    // disabled: only a successful lookup may clear the client's operation
+    // context, and "runtime off" must never read as "no operation".
+    const runtime = readPrimaryWalletSavingsRecoveryRuntime();
     if (!runtime || runtime.merchantId !== parsed.data.merchantId)
       return NextResponse.json(
         {

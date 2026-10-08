@@ -370,3 +370,101 @@ DO $$ BEGIN
   DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000002';
   UPDATE public.customers SET email='reclaim@example.test' WHERE id='60000000-0000-4000-8000-000000000002';
 END $$;
+\ir ../../../../../supabase/migrations/20261008091500_primary_card_stale_init_reentry.sql
+-- A stale ambiguous claim re-enters initialization: the lease-holder may
+-- have died after recording init_unknown, so reclaiming resets the state
+-- for a fresh recording instead of stranding status polling on verify.
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  intent jsonb;
+  claim jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  intent := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000013","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  claim := piggyvest_primary_card.claim_initialization(scope,(intent->>'operationId')::uuid);
+  IF claim->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'ambiguous fixture not claimed'; END IF;
+  IF NOT piggyvest_primary_card.record_initialization(scope,(intent->>'operationId')::uuid,(claim->>'token')::uuid,NULL) THEN RAISE EXCEPTION 'ambiguous record failed'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,(intent->>'operationId')::uuid)->>'status' <> 'init_unknown' THEN RAISE EXCEPTION 'ambiguous state mismatch'; END IF;
+  IF piggyvest_primary_card.claim_initialization(scope,(intent->>'operationId')::uuid)->>'outcome' <> 'existing' THEN RAISE EXCEPTION 'fresh ambiguous claim reclaimed'; END IF;
+  DELETE FROM card_reclaim_fixture;
+  INSERT INTO card_reclaim_fixture VALUES((intent->>'operationId')::uuid,(claim->>'token')::uuid);
+END $$;
+RESET SESSION AUTHORIZATION;
+UPDATE piggyvest_primary_card.operations SET updated_at=clock_timestamp()-interval '6 minutes'
+WHERE id=(SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  operation_id uuid := (SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+  reclaimed jsonb;
+  session jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  reclaimed := piggyvest_primary_card.claim_initialization(scope,operation_id);
+  IF reclaimed->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'stale ambiguous claim stranded'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,operation_id)->>'status' <> 'initializing' THEN RAISE EXCEPTION 'reclaim did not reset state'; END IF;
+  IF piggyvest_primary_card.record_initialization(scope,operation_id,(SELECT fixture.token FROM card_reclaim_fixture fixture),NULL) THEN RAISE EXCEPTION 'superseded ambiguous token accepted'; END IF;
+  session := jsonb_build_object('reference','pvb-first-primary-'||operation_id::text,'authorizationUrl','https://checkout.paystack.com/reentry123');
+  IF NOT piggyvest_primary_card.record_initialization(scope,operation_id,(reclaimed->>'token')::uuid,session) THEN RAISE EXCEPTION 'reentered session not persisted'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,operation_id)->>'status' <> 'ready' THEN RAISE EXCEPTION 'reentry did not reach ready'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000002';
+-- Orphaned pre-ready operations terminalize: a duplicate-reference proof
+-- means Paystack holds an unpayable session, so abandonment must accept
+-- initializing and init_unknown (reserved stays owned by initialize).
+-- Sequentially: reserve recovery returns the single unresolved operation.
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  stranded jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  stranded := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000014","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  IF piggyvest_primary_card.claim_initialization(scope,(stranded->>'operationId')::uuid)->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'stranded fixture not claimed'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,(stranded->>'operationId')::uuid)->>'status' <> 'initializing' THEN RAISE EXCEPTION 'stranded state mismatch'; END IF;
+  DELETE FROM card_reclaim_fixture;
+  INSERT INTO card_reclaim_fixture(operation_id) VALUES((stranded->>'operationId')::uuid);
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  operation_id uuid := (SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'initializing checkout not abandoned'; END IF;
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'initializing abandonment not idempotent'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  orphan jsonb;
+  orphan_claim jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  orphan := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000015","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  IF orphan->>'status' <> 'reserved' THEN RAISE EXCEPTION 'abandoned initializing still blocks retry'; END IF;
+  orphan_claim := piggyvest_primary_card.claim_initialization(scope,(orphan->>'operationId')::uuid);
+  IF orphan_claim->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'orphan fixture not claimed'; END IF;
+  IF NOT piggyvest_primary_card.record_initialization(scope,(orphan->>'operationId')::uuid,(orphan_claim->>'token')::uuid,NULL) THEN RAISE EXCEPTION 'orphan ambiguous record failed'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,(orphan->>'operationId')::uuid)->>'status' <> 'init_unknown' THEN RAISE EXCEPTION 'orphan state mismatch'; END IF;
+  DELETE FROM card_reclaim_fixture;
+  INSERT INTO card_reclaim_fixture(operation_id) VALUES((orphan->>'operationId')::uuid);
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  operation_id uuid := (SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'ambiguous checkout not abandoned'; END IF;
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'ambiguous abandonment not idempotent'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000002';
+END $$;

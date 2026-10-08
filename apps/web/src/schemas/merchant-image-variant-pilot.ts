@@ -1,42 +1,45 @@
 import { z } from 'zod';
+import type { PilotAcceptance } from './merchant-image-variant-pilot-acceptance';
+import type { PilotInventoryBinding } from './merchant-image-variant-pilot-binding';
+import {
+  PILOT_MAX_DECODED_PIXELS,
+  PILOT_POLICY_VERSION,
+  PILOT_RECIPE_ID,
+  PILOT_SCHEMA_VERSION,
+  PILOT_SHA256_PATTERN,
+  PILOT_TIER_PATH_PATTERN,
+  PILOT_TIERS,
+} from './merchant-image-variant-pilot-constants';
 import { tierContractIssues } from './merchant-image-variant-pilot-tiers';
 
+export type { PilotAcceptance } from './merchant-image-variant-pilot-acceptance';
+export {
+  parsePilotAcceptance,
+  pilotAcceptanceSchema,
+} from './merchant-image-variant-pilot-acceptance';
+export type { PilotInventoryBinding } from './merchant-image-variant-pilot-binding';
+export {
+  parsePilotInventoryBinding,
+  pilotInventoryBindingSchema,
+} from './merchant-image-variant-pilot-binding';
+export type { PilotRole } from './merchant-image-variant-pilot-constants';
 // Lab-only merchant image variant pilot contract. This Zod v4 mirror must
 // stay equivalent to the standalone generator contract in
 // infra/cdn-transformer/pilot/{manifest,acceptance}.mjs; both sides validate
 // the same shared fixtures in contract-fixtures.json. No native imports here.
-
-export const PILOT_SCHEMA_VERSION = 1;
-export const PILOT_POLICY_VERSION = 1;
-export const PILOT_RECIPE_ID = 'pilot-r2-a1323f0dc00f1ecb';
-export const PILOT_MAX_JOBS = 20;
-// Mirror of MAX_DECODED_PIXELS in
-// infra/cdn-transformer/pilot/constants.mjs. Pinned by the shared
-// contract fixtures (sourcePixelsTooMany must fail on both sides) and
-// lab-decode-limits.test.mjs.
-export const PILOT_MAX_DECODED_PIXELS = 40_000_000;
-// Mirror of the channel ceiling in assertAcceptedMetadata
-// (encode-worker.mjs) and SHARP_LIMITS (constants.mjs): lab verification
-// decodes under the same limits as the generator.
-// Pinned by lab-decode-limits.test.mjs.
-export const PILOT_MAX_DECODE_CHANNELS = 5;
-export const PILOT_SHARP_LIMITS = {
-  failOn: 'warning',
-  limitInputChannels: 5,
-  limitInputPixels: 40_000_000,
-  unlimited: false,
-} as const;
-
-export const PILOT_TIERS = {
-  hero: [384, 768, 1280],
-  logo: [96, 192, 384],
-  product: [384, 768, 1280],
-} as const;
-
-export type PilotRole = keyof typeof PILOT_TIERS;
-
-const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const TIER_PATH_PATTERN = /^[0-9a-f]{64}\.(avif|webp)$/;
+//
+// Public barrel: constants, acceptance, and binding live in sibling modules
+// and are re-exported here so existing importers are unaffected.
+export {
+  PILOT_MAX_DECODE_CHANNELS,
+  PILOT_MAX_DECODED_PIXELS,
+  PILOT_MAX_JOBS,
+  PILOT_POLICY_VERSION,
+  PILOT_RECIPE_ID,
+  PILOT_SCHEMA_VERSION,
+  PILOT_SHARP_LIMITS,
+  PILOT_TIERS,
+} from './merchant-image-variant-pilot-constants';
 
 const pilotTierSchema = z
   .object({
@@ -52,7 +55,7 @@ const pilotTierSchema = z
       .optional(),
     format: z.enum(['avif', 'webp']),
     height: z.number().int().min(1).max(16384),
-    path: z.string().regex(TIER_PATH_PATTERN),
+    path: z.string().regex(PILOT_TIER_PATH_PATTERN),
     // Pass-through tiers reuse validated source bytes, so no ladder
     // quality applies; generated tiers always carry their encode quality.
     quality: z.union([
@@ -63,7 +66,7 @@ const pilotTierSchema = z
       z.null(),
     ]),
     requestedWidth: z.number().int().min(1).max(16384),
-    sha256: z.string().regex(SHA256_PATTERN),
+    sha256: z.string().regex(PILOT_SHA256_PATTERN),
     width: z.number().int().min(1).max(16384),
   })
   .strict()
@@ -130,7 +133,7 @@ export const pilotManifestSchema = z
         format: z.enum(['avif', 'jpeg', 'png', 'webp']),
         orientedHeight: z.number().int().min(1).max(16384),
         orientedWidth: z.number().int().min(1).max(16384),
-        sha256: z.string().regex(SHA256_PATTERN),
+        sha256: z.string().regex(PILOT_SHA256_PATTERN),
       })
       .strict(),
     tiers: z.array(pilotTierSchema).min(1).max(24),
@@ -205,43 +208,7 @@ export const pilotManifestSchema = z
     }
   });
 
-export const pilotAcceptanceSchema = z
-  .object({
-    assetId: z.string().min(1).max(128),
-    generationId: z.string().regex(SHA256_PATTERN),
-    merchantId: z.uuid(),
-    note: z.string().min(1).max(500),
-    // Tier sha256 in canonical manifest tier order (requestedWidth
-    // ascending, avif before webp): matchPilotAcceptance compares
-    // positionally, so each hash pins one rung's format, width, and bytes.
-    outputHashes: z.array(z.string().regex(SHA256_PATTERN)).min(1).max(24),
-    // The exact original URL the reviewer approved: a retargeted binding
-    // (same merchant/asset/hash, new URL) must not activate an old
-    // acceptance, per the frozen-binding contract.
-    originalUrl: z.url({ protocol: /^https?$/ }),
-    recipeId: z.string().min(1).max(64),
-    reviewedAt: z.iso.datetime({ offset: true }),
-    reviewer: z.string().min(1).max(128),
-    schemaVersion: z.literal(PILOT_SCHEMA_VERSION),
-    sourceSha256: z.string().regex(SHA256_PATTERN),
-    verdict: z.enum(['accepted', 'rejected']),
-  })
-  .strict();
-
-export const pilotInventoryBindingSchema = z
-  .object({
-    assetId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
-    merchantId: z.uuid(),
-    originalUrl: z.url({ protocol: /^https?$/ }),
-    role: z.enum(['logo', 'product', 'hero']),
-    slotId: z.string().min(1).max(128),
-    sourceSha256: z.string().regex(SHA256_PATTERN),
-  })
-  .strict();
-
 export type PilotManifest = z.infer<typeof pilotManifestSchema>;
-export type PilotAcceptance = z.infer<typeof pilotAcceptanceSchema>;
-export type PilotInventoryBinding = z.infer<typeof pilotInventoryBindingSchema>;
 
 export function parsePilotManifest(
   value: unknown
@@ -254,34 +221,6 @@ export function parsePilotManifest(
     };
   }
   return { manifest: parsed.data, ok: true };
-}
-
-export function parsePilotAcceptance(
-  value: unknown
-): { ok: true; record: PilotAcceptance } | { ok: false; issues: string[] } {
-  const parsed = pilotAcceptanceSchema.safeParse(value);
-  if (!parsed.success) {
-    return {
-      issues: parsed.error.issues.map((issue) => issue.message),
-      ok: false,
-    };
-  }
-  return { ok: true, record: parsed.data };
-}
-
-export function parsePilotInventoryBinding(
-  value: unknown
-):
-  | { ok: true; binding: PilotInventoryBinding }
-  | { ok: false; issues: string[] } {
-  const parsed = pilotInventoryBindingSchema.safeParse(value);
-  if (!parsed.success) {
-    return {
-      issues: parsed.error.issues.map((issue) => issue.message),
-      ok: false,
-    };
-  }
-  return { binding: parsed.data, ok: true };
 }
 
 export function matchPilotAcceptance(input: {

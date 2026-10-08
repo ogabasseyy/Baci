@@ -25,36 +25,50 @@ function directoryExists(path: string): boolean {
   }
 }
 
+function assertFillers(fillersDir: string, labEnabled: boolean): void {
+  directoryExists(fillersDir);
+  for (const file of readdirSync(fillersDir)) {
+    const expected = FILLERS[file];
+    const path = join(fillersDir, file);
+    const stat = lstatSync(path);
+    if (
+      !expected ||
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      stat.size > 2_000_000 ||
+      createHash('sha256').update(readFileSync(path)).digest('hex') !== expected
+    ) {
+      throw new Error(
+        labEnabled
+          ? 'lab public pilot tree contains an unapproved filler'
+          : 'non-lab public pilot tree contains an unapproved filler'
+      );
+    }
+  }
+}
+
 export function assertPilotPublicAssets(
   publicDir: string,
   labEnabled = process.env.BACI_IMAGE_PILOT_LAB === '1'
 ): void {
-  if (labEnabled) return;
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) return;
   for (const name of readdirSync(root)) {
-    if (name !== 'fillers')
-      throw new Error(
-        'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
-      );
-    const fillers = join(root, name);
-    directoryExists(fillers);
-    for (const file of readdirSync(fillers)) {
-      const expected = FILLERS[file];
-      const path = join(fillers, file);
-      const stat = lstatSync(path);
-      if (
-        !expected ||
-        !stat.isFile() ||
-        stat.isSymbolicLink() ||
-        stat.size > 2_000_000 ||
-        createHash('sha256').update(readFileSync(path)).digest('hex') !==
-          expected
-      ) {
-        throw new Error(
-          'non-lab public pilot tree contains an unapproved filler'
-        );
-      }
+    // The approved filler set is hash-pinned in BOTH modes: a stale or
+    // locally replaced filler in lab mode would otherwise pass startup
+    // and compete unreviewed in the measurement while every gate that
+    // compares against the same local file reports green.
+    if (name === 'fillers') {
+      assertFillers(join(root, name), labEnabled);
+      continue;
     }
+    // Lab staging is generation directories (content-derived 64-hex ids)
+    // plus the originals set; anything else is refused even in lab mode.
+    if (labEnabled && (name === 'originals' || /^[0-9a-f]{64}$/.test(name))) {
+      continue;
+    }
+    throw new Error(
+      'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
+    );
   }
 }

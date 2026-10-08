@@ -11,8 +11,8 @@ import {
   sectionLabUrls,
   sectionPictures,
   sectionStandaloneImgs,
+  srcSetEveryHasPrefix,
   srcSetHasBase,
-  srcSetHasPrefix,
   stripQuery,
 } from './merchant-image-pilot-preflight-html.mjs';
 import { selectedCardSubtree } from './merchant-image-pilot-selected-card.mjs';
@@ -71,22 +71,28 @@ function checkHeroMount(section, mount, { arm, origin }) {
       return problems;
     }
     if (
-      !srcSetHasPrefix(avif.srcSet, `/__pilot/${mount.generationId}/`, origin)
+      !srcSetEveryHasPrefix(
+        avif.srcSet,
+        `/__pilot/${mount.generationId}/`,
+        origin
+      )
     ) {
-      problems.push('pilot hero AVIF source does not serve this generation');
+      problems.push(
+        'pilot hero AVIF source serves bytes outside this generation'
+      );
     }
     const fallback = picture.sources.find((source) => !source.type);
     if (!fallback) {
       problems.push('pilot hero mount has no fallback source');
     } else if (
-      !srcSetHasPrefix(
+      !srcSetEveryHasPrefix(
         fallback.srcSet,
         `/__pilot/${mount.generationId}/`,
         origin
       )
     ) {
       problems.push(
-        'pilot hero fallback source does not serve this generation'
+        'pilot hero fallback source serves bytes outside this generation'
       );
     }
     if (pilotScopeLeaksOriginal(section.html, { arm, origin })) {
@@ -145,9 +151,13 @@ function checkLogoMount(section, mount, { arm, origin, surface }) {
   }
   if (arm === 'pilot') {
     if (
-      !srcSetHasPrefix(avif.srcSet, `/__pilot/${mount.generationId}/`, origin)
+      !srcSetEveryHasPrefix(
+        avif.srcSet,
+        `/__pilot/${mount.generationId}/`,
+        origin
+      )
     ) {
-      problems.push('pilot logo mount does not serve this generation');
+      problems.push('pilot logo mount serves bytes outside this generation');
     }
     if (pilotScopeLeaksOriginal(section.html, { arm, origin })) {
       problems.push(
@@ -219,9 +229,13 @@ function checkCardMount(section, mount, { arm, origin, surface }) {
   }
   if (arm === 'pilot') {
     if (
-      !srcSetHasPrefix(avif.srcSet, `/__pilot/${mount.generationId}/`, origin)
+      !srcSetEveryHasPrefix(
+        avif.srcSet,
+        `/__pilot/${mount.generationId}/`,
+        origin
+      )
     ) {
-      problems.push('pilot card mount does not serve this generation');
+      problems.push('pilot card mount serves bytes outside this generation');
     }
     if (pilotScopeLeaksOriginal(scope, { arm, origin })) {
       problems.push(

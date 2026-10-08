@@ -137,6 +137,23 @@ describe('getStorefrontProductHref', () => {
     ).toBe('/ogabassey/products/test-product?arm=control');
   });
 
+  it('rejects suffixes outside the lab arm pins', () => {
+    for (const suffix of [
+      '?arm=pilot&x=1',
+      '?arm=control#frag',
+      '?arm=other',
+      '/evil',
+    ]) {
+      expect(() =>
+        getStorefrontProductHref(
+          { id: 'p1', name: 'Test Product' },
+          '/shop',
+          suffix
+        )
+      ).toThrow(/lab arm pin/);
+    }
+  });
+
   it('trims trailing slashes from the base path', () => {
     expect(
       getStorefrontProductHref(

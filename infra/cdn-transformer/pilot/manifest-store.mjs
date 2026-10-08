@@ -3,18 +3,19 @@
 // parsing stay in manifest.mjs.
 import { createHash } from 'node:crypto';
 import {
+  rename as fsRename,
   lstat,
   mkdir,
   open,
   readFile,
-  rename as fsRename,
+  realpath,
   rm,
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { removeOwnedStaging } from './disk-guards.mjs';
+import { readUpToBytes, removeOwnedStaging } from './disk-guards.mjs';
 import { generationIdFor } from './generation-identity.mjs';
-import { parsePilotManifest, PilotManifestError } from './manifest.mjs';
+import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 
 async function defaultFsync(path) {
   const handle = await open(path, 'r');
@@ -42,14 +43,48 @@ function generationDir(outputRoot, generationId) {
 
 export async function loadGeneration(outputRoot, generationId) {
   const dir = generationDir(outputRoot, generationId);
+  // A symlinked generation entry is never reusable: lstat succeeds on
+  // links, but only a real directory whose canonical path stays beneath
+  // generations/ may serve reuse, quality-sheet, or staging reads.
+  const stat = await lstat(dir).catch(() => {
+    throw new PilotManifestError(
+      'generation-missing',
+      'generation is not published'
+    );
+  });
+  if (!stat.isDirectory()) {
+    throw new PilotManifestError(
+      'generation-corrupt',
+      'generation entry is not a directory'
+    );
+  }
+  const generationsRoot = join(outputRoot, 'generations');
+  const realRoot = await realpath(generationsRoot).catch(() => {
+    throw new PilotManifestError(
+      'generation-missing',
+      'generation is not published'
+    );
+  });
+  if ((await realpath(dir)) !== join(realRoot, generationId)) {
+    throw new PilotManifestError(
+      'generation-corrupt',
+      'generation entry escapes the output root'
+    );
+  }
   const text = await readFile(join(dir, 'manifest.json'), 'utf8').catch(() => {
-    throw new PilotManifestError('generation-missing', 'generation is not published');
+    throw new PilotManifestError(
+      'generation-missing',
+      'generation is not published'
+    );
   });
   let parsed;
   try {
     parsed = parsePilotManifest(JSON.parse(text));
   } catch {
-    throw new PilotManifestError('generation-corrupt', 'manifest is not valid JSON');
+    throw new PilotManifestError(
+      'generation-corrupt',
+      'manifest is not valid JSON'
+    );
   }
   if (!parsed.ok) {
     throw new PilotManifestError(
@@ -62,15 +97,39 @@ export async function loadGeneration(outputRoot, generationId) {
     if (files.has(tier.path)) {
       continue;
     }
-    const bytes = await readFile(join(dir, tier.path)).catch(() => {
-      throw new PilotManifestError('generation-corrupt', `output missing: ${tier.path}`);
-    });
+    // Bounded by the claimed size: a corrupted tier replaced with a huge
+    // file rejects on size without allocating the whole file.
+    let bytes;
+    try {
+      const read = await readUpToBytes(join(dir, tier.path), tier.bytes);
+      if (read.truncated) {
+        throw new PilotManifestError(
+          'generation-corrupt',
+          `byte size changed: ${tier.path}`
+        );
+      }
+      bytes = read.bytes;
+    } catch (error) {
+      if (error instanceof PilotManifestError) {
+        throw error;
+      }
+      throw new PilotManifestError(
+        'generation-corrupt',
+        `output missing: ${tier.path}`
+      );
+    }
     if (bytes.length !== tier.bytes) {
-      throw new PilotManifestError('generation-corrupt', `byte size changed: ${tier.path}`);
+      throw new PilotManifestError(
+        'generation-corrupt',
+        `byte size changed: ${tier.path}`
+      );
     }
     const sha = createHash('sha256').update(bytes).digest('hex');
     if (sha !== tier.sha256) {
-      throw new PilotManifestError('generation-corrupt', `output hash mismatch: ${tier.path}`);
+      throw new PilotManifestError(
+        'generation-corrupt',
+        `output hash mismatch: ${tier.path}`
+      );
     }
     // Keep the validated buffers so consumers embed them without a reread
     // (a reread can race replacement bytes under a valid hash).
@@ -91,7 +150,7 @@ export async function commitGeneration({
   const rename = deps.rename ?? fsRename;
   const fsyncFile = deps.fsyncFile ?? defaultFsync;
   const fsyncDir = deps.fsyncDir ?? defaultFsync;
-  const assertDeadline = deps.assertDeadline ?? (() => {});
+  const assertDeadline = deps.assertDeadline ?? (() => undefined);
   const removeStaging = deps.removeOwnedStaging ?? removeOwnedStaging;
   const parsed = parsePilotManifest(manifest);
   if (!parsed.ok) {
@@ -104,7 +163,10 @@ export async function commitGeneration({
     valid.role !== job.role ||
     valid.source.sha256 !== job.expectedSha256
   ) {
-    throw new PilotManifestError('manifest-mismatch', 'manifest does not match the validated job');
+    throw new PilotManifestError(
+      'manifest-mismatch',
+      'manifest does not match the validated job'
+    );
   }
   // Every manifest tier needs a staged file with identical bytes.
   const stagedByName = new Map(files.map((file) => [file.name, file.from]));
@@ -112,17 +174,26 @@ export async function commitGeneration({
   for (const name of uniquePaths) {
     const from = stagedByName.get(name);
     if (!from) {
-      throw new PilotManifestError('staged-file-mismatch', `missing staged file: ${name}`);
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `missing staged file: ${name}`
+      );
     }
     const tier = valid.tiers.find((entry) => entry.path === name);
     const bytes = await readFile(from).catch(() => {
-      throw new PilotManifestError('staged-file-mismatch', `cannot read staged file: ${name}`);
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `cannot read staged file: ${name}`
+      );
     });
     if (
       bytes.length !== tier.bytes ||
       createHash('sha256').update(bytes).digest('hex') !== tier.sha256
     ) {
-      throw new PilotManifestError('staged-file-mismatch', `staged bytes differ: ${name}`);
+      throw new PilotManifestError(
+        'staged-file-mismatch',
+        `staged bytes differ: ${name}`
+      );
     }
   }
   const expectedId = generationIdFor({
@@ -173,7 +244,10 @@ export async function commitGeneration({
     } catch (error) {
       stagingCleanupError =
         `reuse-path staging cleanup failed (${error?.code ?? 'unknown'}): ` +
-        `${error instanceof Error ? error.message : String(error)}`.slice(0, 200) +
+        `${error instanceof Error ? error.message : String(error)}`.slice(
+          0,
+          200
+        ) +
         `; generation ${generationId} is published and reusable`;
     }
     // Reuse reports the publish-time verdict, never an assumed 'synced':
@@ -191,7 +265,10 @@ export async function commitGeneration({
   for (const name of uniquePaths) {
     await rename(stagedByName.get(name), join(commitDir, name));
   }
-  await writeFile(join(commitDir, 'manifest.json'), `${JSON.stringify(valid, null, 2)}\n`);
+  await writeFile(
+    join(commitDir, 'manifest.json'),
+    `${JSON.stringify(valid, null, 2)}\n`
+  );
   let durability = 'synced';
   try {
     for (const name of [...uniquePaths, 'manifest.json']) {
@@ -209,7 +286,9 @@ export async function commitGeneration({
     // honestly reported instead of claimed on this filesystem.
     durability = 'sync-unsupported';
   }
-  await (deps.mkdir ?? mkdir)(join(outputRoot, 'generations'), { recursive: true });
+  await (deps.mkdir ?? mkdir)(join(outputRoot, 'generations'), {
+    recursive: true,
+  });
   // Recheck the job deadline immediately before the visibility rename:
   // verification and the fsync loop above can consume the remaining
   // budget, and publishing an overdue generation (then reporting the job

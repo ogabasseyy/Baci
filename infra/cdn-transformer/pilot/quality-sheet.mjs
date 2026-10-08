@@ -11,7 +11,7 @@ import {
   validateInventory,
   validateInventoryUniqueness,
 } from './job-schema.mjs';
-import { parsePilotManifest, PilotManifestError } from './manifest.mjs';
+import { PilotManifestError, parsePilotManifest } from './manifest.mjs';
 import { loadGeneration } from './manifest-store.mjs';
 
 export class PilotSheetError extends Error {
@@ -71,12 +71,17 @@ async function findGenerationFor(outputRoot, record) {
   try {
     ({ files, manifest } = await loadGeneration(outputRoot, expectedId));
   } catch (error) {
-    if (error instanceof PilotManifestError && error.code === 'generation-missing') {
+    if (
+      error instanceof PilotManifestError &&
+      error.code === 'generation-missing'
+    ) {
       throw new PilotSheetError(
         `no verified generation for asset "${record.assetId}" under current recipe "${recipeId}"`
       );
     }
-    throw new PilotSheetError(error instanceof Error ? error.message : String(error));
+    throw new PilotSheetError(
+      error instanceof Error ? error.message : String(error)
+    );
   }
   const rebound = generationIdFor({
     encoderIdentity: manifest.encoder,
@@ -102,17 +107,70 @@ async function findGenerationFor(outputRoot, record) {
   return { files, generationId: expectedId, manifest };
 }
 
-function tierCells(tier, files, cssWidth) {
+function tierCells(tier, files, cssWidth, crop, boxWidth) {
   const file = files.get(tier.path);
   const dataUri = `data:${tier.contentType};base64,${file.toString('base64')}`;
   // height:auto keeps the aspect ratio when the DPR-3 cap constrains
   // the width: without it the browser stretches the tier to height=.
   const overSource =
     tier.delivery === 'generated-over-source' ? ' · over-source' : '';
-  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="max-width:${cssWidth * 3}px;height:auto"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
+  const style =
+    crop === null
+      ? `max-width:${cssWidth * 3}px;height:auto`
+      : `width:${boxWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
+  return `<figure><img src="${dataUri}" width="${tier.width}" height="${tier.height}" alt="${escapeHtml(tier.format)} ${tier.width}w" style="${style}"/><figcaption>${escapeHtml(tier.format)} ${tier.width}w · q${tier.quality} · ${tier.bytes} B${overSource}<br><code>${escapeHtml(tier.sha256.slice(0, 16))}…</code></figcaption></figure>`;
 }
 
-export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, slots }) {
+// Mounted-crop contract: cropped consumers (product card 16:9 cover,
+// header logo circular cover) clip content the intrinsic-aspect render
+// hides, so a sheet that ignores the mount can certify an image whose
+// branding the real mount cuts off. The slot geometry may carry the
+// mount box — { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' }
+// — and both original and derivatives then render inside that real CSS
+// box at the row's size-matched width. Absent mount keeps the legacy
+// intrinsic render. Malformed mounts fail closed: a silently misrendered
+// mount is worse than no sheet.
+const MOUNT_FITS = new Set(['cover', 'contain']);
+const MOUNT_POSITION_PATTERN =
+  /^(center|left|right|top|bottom|\d{1,3}%)( (center|left|right|top|bottom|\d{1,3}%))?$/;
+
+function parseMountCrop(geometry, slot) {
+  const mount = geometry?.mount;
+  if (mount === undefined) {
+    return null;
+  }
+  const fail = (why) => {
+    throw new PilotSheetError(`invalid mount for slot "${slot}": ${why}`);
+  };
+  if (typeof mount !== 'object' || mount === null || Array.isArray(mount)) {
+    fail('mount must be an object');
+  }
+  const ratio = /^(\d{1,4})\s*\/\s*(\d{1,4})$/.exec(mount.aspectRatio ?? '');
+  if (!ratio || Number(ratio[1]) < 1 || Number(ratio[2]) < 1) {
+    fail('aspectRatio must look like "16 / 9"');
+  }
+  if (!MOUNT_FITS.has(mount.fit)) {
+    fail('fit must be "cover" or "contain"');
+  }
+  if (
+    typeof mount.position !== 'string' ||
+    !MOUNT_POSITION_PATTERN.test(mount.position)
+  ) {
+    fail('position must be CSS position keywords or percents');
+  }
+  return {
+    aspectRatio: `${ratio[1]} / ${ratio[2]}`,
+    fit: mount.fit,
+    position: mount.position,
+  };
+}
+
+export async function buildQualitySheet({
+  inputRoot,
+  inventoryPath,
+  outputRoot,
+  slots,
+}) {
   const records = JSON.parse(await readFile(inventoryPath, 'utf8'));
   if (!Array.isArray(records) || records.length === 0) {
     throw new PilotSheetError('inventory is empty');
@@ -143,18 +201,26 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
   let overSourceTiers = 0;
   for (const record of records) {
     const geometry = slots?.[record.slot];
-    if (!geometry || !Number.isInteger(geometry.cssWidth) || geometry.cssWidth < 1) {
-      throw new PilotSheetError(`missing slot geometry for slot "${record.slot}"`);
+    if (
+      !geometry ||
+      !Number.isInteger(geometry.cssWidth) ||
+      geometry.cssWidth < 1
+    ) {
+      throw new PilotSheetError(
+        `missing slot geometry for slot "${record.slot}"`
+      );
     }
+    const crop = parseMountCrop(geometry, record.slot);
     const snapshot = await readInputSnapshot(inputRoot, record.sourcePath);
     if (!verifySnapshotHash(snapshot, record.sha256)) {
-      throw new PilotSheetError(`snapshot changed for asset "${record.assetId}"`);
+      throw new PilotSheetError(
+        `snapshot changed for asset "${record.assetId}"`
+      );
     }
-    const {
-      files,
-      generationId,
-      manifest,
-    } = await findGenerationFor(outputRoot, record);
+    const { files, generationId, manifest } = await findGenerationFor(
+      outputRoot,
+      record
+    );
     const parsed = parsePilotManifest(manifest);
     if (!parsed.ok) {
       throw new PilotSheetError('stored manifest is invalid');
@@ -177,6 +243,10 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
     // derivatives cannot reach (capped rungs and narrow sources encode
     // below their request). The caption states which ceiling bound the
     // comparison: full DPR-3 review, or the encoded-pixel width.
+    const mountNote =
+      crop === null
+        ? ''
+        : ` · mount ${escapeHtml(crop.aspectRatio)} ${escapeHtml(crop.fit)} ${escapeHtml(crop.position)}`;
     const rows = [...seenTiers.entries()]
       .map(([requestedWidth, tiers]) => {
         const dprCeiling = geometry.cssWidth * 3;
@@ -186,13 +256,17 @@ export async function buildQualitySheet({ inputRoot, inventoryPath, outputRoot, 
         );
         const ceilingNote =
           compareWidth < dprCeiling ? 'encoded-pixel ceiling' : '3× CSS';
+        const originalStyle =
+          crop === null
+            ? `width:${compareWidth}px`
+            : `width:${compareWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
         return `<tr><td>${requestedWidth}px tier</td>
-<td><figure><img src="${originalUri}" style="width:${compareWidth}px" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (${ceilingNote})</figcaption></figure></td>
-${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth)}</td>`).join('\n')}</tr>`;
+<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (${ceilingNote})${mountNote}</figcaption></figure></td>
+${tiers.map((tier) => `<td>${tierCells(tier, files, geometry.cssWidth, crop, compareWidth)}</td>`).join('\n')}</tr>`;
       })
       .join('\n');
     sections.push(`<section><h2>${escapeHtml(record.assetId)} · ${escapeHtml(record.role)} · slot ${escapeHtml(record.slot)}</h2>
-<p>merchant <code>${escapeHtml(record.merchantId)}</code> · source <code>${escapeHtml(record.sha256.slice(0, 16))}…</code> · generation <code>${escapeHtml(generationId.slice(0, 16))}…</code> · recipe <code>${escapeHtml(manifest.recipeId)}</code> · slot CSS width ${geometry.cssWidth}px</p>
+<p>merchant <code>${escapeHtml(record.merchantId)}</code> · source <code>${escapeHtml(record.sha256.slice(0, 16))}…</code> · generation <code>${escapeHtml(generationId.slice(0, 16))}…</code> · recipe <code>${escapeHtml(manifest.recipeId)}</code> · slot CSS width ${geometry.cssWidth}px${mountNote}</p>
 <table><thead><tr><th>tier</th><th>original (browser-scaled)</th><th>AVIF (actual pixels)</th><th>WebP (actual pixels)</th></tr></thead><tbody>${rows}</tbody></table></section>`);
   }
   const overSourceNote =
@@ -208,7 +282,13 @@ ${overSourceNote}${sections.join('\n')}</body></html>\n`;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   (async () => {
-    const args = parseCliArgs(process.argv.slice(2), ['input-root', 'inventory', 'output-root', 'slots', 'out']);
+    const args = parseCliArgs(process.argv.slice(2), [
+      'input-root',
+      'inventory',
+      'output-root',
+      'slots',
+      'out',
+    ]);
     const slots = JSON.parse(await readFile(args.slots, 'utf8'));
     const html = await buildQualitySheet({
       inputRoot: args['input-root'],

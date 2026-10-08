@@ -1,13 +1,20 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createStagingBudget } from './disk-guards.mjs';
 import { encodeRoleLadder } from './encoder.mjs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   buildEncoderIdentity,
   generationIdFor,
@@ -70,7 +77,11 @@ function validManifest(overrides = {}) {
   return {
     assetId: JOB.assetId,
     createdAt: '2026-10-01T20:00:00.000Z',
-    encoder: { libvipsVersion: '8.18.0', name: 'sharp', sharpVersion: '0.35.4' },
+    encoder: {
+      libvipsVersion: '8.18.0',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
     merchantId: JOB.merchantId,
     policyVersion: 1,
     recipeId: 'pilot-r1-0123456789abcdef',
@@ -108,9 +119,9 @@ async function realLadderStaging() {
   return { expectedSha256, ladder, root, snapshotPath, stagingDir };
 }
 
-
 test('commitGeneration atomically publishes verified encoder output', async () => {
-  const { expectedSha256, ladder, root, stagingDir } = await realLadderStaging();
+  const { expectedSha256, ladder, root, stagingDir } =
+    await realLadderStaging();
   const encoderIdentity = buildEncoderIdentity();
   const generationId = generationIdFor({
     encoderIdentity,
@@ -220,7 +231,9 @@ test('commitGeneration reuses validated generations and never overwrites', async
     outputRoot: first.root,
     stagingDir: first.stagingDir,
   });
-  const before = await stat(join(first.root, 'generations', generationId, 'manifest.json'));
+  const before = await stat(
+    join(first.root, 'generations', generationId, 'manifest.json')
+  );
 
   const second = await realLadderStaging();
   const reused = await commitGeneration({
@@ -233,7 +246,9 @@ test('commitGeneration reuses validated generations and never overwrites', async
   });
   assert.equal(reused.reused, true);
   assert.equal(reused.durability, 'synced');
-  const after = await stat(join(first.root, 'generations', generationId, 'manifest.json'));
+  const after = await stat(
+    join(first.root, 'generations', generationId, 'manifest.json')
+  );
   assert.equal(after.mtimeMs, before.mtimeMs);
 
   // A lost durability sidecar degrades the reuse report to 'unknown',
@@ -255,12 +270,17 @@ test('commitGeneration reuses validated generations and never overwrites', async
 
   // Tampered output invalidates the generation instead of serving bad bytes.
   const victim = manifestFor(first.ladder).tiers[0].path;
-  const victimBytes = await readFile(join(first.root, 'generations', generationId, victim));
+  const victimBytes = await readFile(
+    join(first.root, 'generations', generationId, victim)
+  );
   await writeFile(
     join(first.root, 'generations', generationId, victim),
     Buffer.alloc(victimBytes.length, 7)
   );
-  await assert.rejects(() => loadGeneration(first.root, generationId), /hash mismatch/);
+  await assert.rejects(
+    () => loadGeneration(first.root, generationId),
+    /hash mismatch/
+  );
 });
 
 test('commitGeneration surfaces reuse-path staging cleanup failures', async () => {
@@ -321,9 +341,10 @@ test('commitGeneration surfaces reuse-path staging cleanup failures', async () =
   const second = await realLadderStaging();
   const reused = await commitGeneration({
     deps: {
-      removeOwnedStaging: async () => {
-        throw Object.assign(new Error('staging busy'), { code: 'EBUSY' });
-      },
+      removeOwnedStaging: () =>
+        Promise.reject(
+          Object.assign(new Error('staging busy'), { code: 'EBUSY' })
+        ),
     },
     files: filesFor(second.ladder),
     generationId,
@@ -335,6 +356,152 @@ test('commitGeneration surfaces reuse-path staging cleanup failures', async () =
   assert.equal(reused.reused, true);
   assert.match(reused.stagingCleanupError, /EBUSY/);
   assert.match(reused.stagingCleanupError, /published and reusable/);
+});
+
+test('loadGeneration rejects symlinked generation entries before reuse', async () => {
+  const first = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const recipeId = 'pilot-r1-symlink-reject';
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId,
+    sourceSha256: first.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    recipeId,
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: 48,
+      orientedWidth: 48,
+      sha256: first.expectedSha256,
+    },
+    tiers: first.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  const files = first.ladder.tiers
+    .filter(
+      (tier, index, all) =>
+        all.findIndex((other) => other.path === tier.path) === index
+    )
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
+  await commitGeneration({
+    files,
+    generationId,
+    job: { ...JOB, expectedSha256: first.expectedSha256 },
+    manifest,
+    outputRoot: first.root,
+    stagingDir: first.stagingDir,
+  });
+  // Swap the committed directory for a link to an outside tree: reuse
+  // must refuse, never follow it into external files.
+  const outside = await mkdtemp(join(tmpdir(), 'pilot-outside-'));
+  const linkPath = join(first.root, 'generations', generationId);
+  await rm(linkPath, { recursive: true });
+  await symlink(outside, linkPath);
+  await assert.rejects(
+    () => loadGeneration(first.root, generationId),
+    /not a directory/
+  );
+  const retry = await realLadderStaging();
+  await assert.rejects(
+    () =>
+      commitGeneration({
+        files: retry.ladder.tiers
+          .filter(
+            (tier, index, all) =>
+              all.findIndex((other) => other.path === tier.path) === index
+          )
+          .map((tier) => ({
+            from: tier.path,
+            name: outputFileName(tier.sha256, tier.format),
+          })),
+        generationId,
+        job: { ...JOB, expectedSha256: retry.expectedSha256 },
+        manifest,
+        outputRoot: first.root,
+        stagingDir: retry.stagingDir,
+      }),
+    /not a directory/
+  );
+});
+
+test('loadGeneration rejects oversized tiers without allocating the whole file', async () => {
+  const staged = await realLadderStaging();
+  const encoderIdentity = buildEncoderIdentity();
+  const recipeId = 'pilot-r1-oversize-reject';
+  const generationId = generationIdFor({
+    encoderIdentity,
+    job: JOB,
+    recipeId,
+    sourceSha256: staged.expectedSha256,
+  });
+  const manifest = validManifest({
+    encoder: encoderIdentity,
+    recipeId,
+    source: {
+      bytes: 85,
+      format: 'png',
+      orientedHeight: 48,
+      orientedWidth: 48,
+      sha256: staged.expectedSha256,
+    },
+    tiers: staged.ladder.tiers.map((tier) => ({
+      actualWidth: tier.actualWidth,
+      bytes: tier.bytes,
+      contentType: tier.contentType,
+      format: tier.format,
+      height: tier.height,
+      path: outputFileName(tier.sha256, tier.format),
+      quality: tier.quality,
+      requestedWidth: tier.requestedWidth,
+      sha256: tier.sha256,
+      width: tier.width,
+    })),
+  });
+  const files = staged.ladder.tiers
+    .filter(
+      (tier, index, all) =>
+        all.findIndex((other) => other.path === tier.path) === index
+    )
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
+  await commitGeneration({
+    files,
+    generationId,
+    job: { ...JOB, expectedSha256: staged.expectedSha256 },
+    manifest,
+    outputRoot: staged.root,
+    stagingDir: staged.stagingDir,
+  });
+  const victim = manifest.tiers[0].path;
+  const victimPath = join(staged.root, 'generations', generationId, victim);
+  const original = await readFile(victimPath);
+  await writeFile(
+    victimPath,
+    Buffer.concat([original, Buffer.alloc(2 * 1024 * 1024)])
+  );
+  await assert.rejects(
+    () => loadGeneration(staged.root, generationId),
+    /byte size changed/
+  );
 });
 
 test('commitGeneration degrades honestly on sync failure and fails safe on rename failure', async () => {
@@ -374,18 +541,17 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
       (tier, index, all) =>
         all.findIndex((other) => other.path === tier.path) === index
     )
-    .map((tier) => ({ from: tier.path, name: outputFileName(tier.sha256, tier.format) }));
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
 
   const unsupported = (code) =>
     Object.assign(new Error(`fsync ${code}`), { code });
   const degraded = await commitGeneration({
     deps: {
-      fsyncDir: async () => {
-        throw unsupported('ENOSYS');
-      },
-      fsyncFile: async () => {
-        throw unsupported('EINVAL');
-      },
+      fsyncDir: () => Promise.reject(unsupported('ENOSYS')),
+      fsyncFile: () => Promise.reject(unsupported('EINVAL')),
     },
     files,
     generationId,
@@ -395,7 +561,10 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
     stagingDir: staged.stagingDir,
   });
   assert.equal(degraded.durability, 'sync-unsupported');
-  assert.equal((await loadGeneration(staged.root, generationId)).manifest.recipeId, 'pilot-r1-zzz');
+  assert.equal(
+    (await loadGeneration(staged.root, generationId)).manifest.recipeId,
+    'pilot-r1-zzz'
+  );
 
   // Reuse of the degraded publish reports the persisted verdict, not 'synced'.
   const restaged = await realLadderStaging();
@@ -429,9 +598,8 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
     () =>
       commitGeneration({
         deps: {
-          rename: async () => {
-            throw new Error('simulated crash before rename');
-          },
+          rename: () =>
+            Promise.reject(new Error('simulated crash before rename')),
         },
         files: staged2.ladder.tiers
           .filter(
@@ -451,7 +619,10 @@ test('commitGeneration degrades honestly on sync failure and fails safe on renam
     /crash before rename/
   );
   // No partial generation is visible; the claim owner can diagnose staging.
-  await assert.rejects(() => loadGeneration(staged2.root, generationId2), /not published/);
+  await assert.rejects(
+    () => loadGeneration(staged2.root, generationId2),
+    /not published/
+  );
 });
 
 test('commitGeneration refuses to publish past the job deadline', async () => {
@@ -502,8 +673,7 @@ test('commitGeneration refuses to publish past the job deadline', async () => {
     () =>
       commitGeneration({
         deps: {
-          assertDeadline: () =>
-            assertJobDeadline(Date.now() - 1, 'commit'),
+          assertDeadline: () => assertJobDeadline(Date.now() - 1, 'commit'),
         },
         files,
         generationId,
@@ -579,9 +749,10 @@ test('commitGeneration aborts on genuine pre-commit fsync errors', async () => {
     () =>
       commitGeneration({
         deps: {
-          fsyncFile: async () => {
-            throw Object.assign(new Error('no space'), { code: 'ENOSPC' });
-          },
+          fsyncFile: () =>
+            Promise.reject(
+              Object.assign(new Error('no space'), { code: 'ENOSPC' })
+            ),
         },
         files: fixture.files,
         generationId: fixture.generationId,
@@ -608,10 +779,13 @@ test('commitGeneration unpublishes on post-commit directory fsync errors', async
     () =>
       commitGeneration({
         deps: {
-          fsyncDir: async (path) => {
+          fsyncDir: (path) => {
             if (path.endsWith('generations')) {
-              throw Object.assign(new Error('io error'), { code: 'EIO' });
+              return Promise.reject(
+                Object.assign(new Error('io error'), { code: 'EIO' })
+              );
             }
+            return Promise.resolve();
           },
         },
         files: fixture.files,
@@ -667,7 +841,10 @@ test('commitGeneration rejects a misbound existing directory without reuse', asy
       (tier, index, all) =>
         all.findIndex((other) => other.path === tier.path) === index
     )
-    .map((tier) => ({ from: tier.path, name: outputFileName(tier.sha256, tier.format) }));
+    .map((tier) => ({
+      from: tier.path,
+      name: outputFileName(tier.sha256, tier.format),
+    }));
   await commitGeneration({
     files: filesA,
     generationId: generationIdA,
@@ -678,7 +855,11 @@ test('commitGeneration rejects a misbound existing directory without reuse', asy
   });
   // The same valid bytes appear under asset B's generation directory
   // (misbound placement with fully valid hashes).
-  const jobB = { ...JOB, assetId: 'logo-2', expectedSha256: staged.expectedSha256 };
+  const jobB = {
+    ...JOB,
+    assetId: 'logo-2',
+    expectedSha256: staged.expectedSha256,
+  };
   const generationIdB = generationIdFor({
     encoderIdentity,
     job: jobB,
@@ -703,7 +884,10 @@ test('commitGeneration rejects a misbound existing directory without reuse', asy
         (tier, index, all) =>
           all.findIndex((other) => other.path === tier.path) === index
       )
-      .map((tier) => ({ from: tier.path, name: outputFileName(tier.sha256, tier.format) })),
+      .map((tier) => ({
+        from: tier.path,
+        name: outputFileName(tier.sha256, tier.format),
+      })),
     generationId: generationIdB,
     job: jobB,
     manifest: manifestB,
@@ -718,7 +902,9 @@ test('commitGeneration rejects a misbound existing directory without reuse', asy
 
 test('commitGeneration binds the manifest to the validated job', async () => {
   const staged = await realLadderStaging();
-  const manifest = validManifest({ merchantId: 'de968340-de02-4aa8-95f9-9d5f7d2b1f20' });
+  const manifest = validManifest({
+    merchantId: 'de968340-de02-4aa8-95f9-9d5f7d2b1f20',
+  });
   await assert.rejects(
     () =>
       commitGeneration({

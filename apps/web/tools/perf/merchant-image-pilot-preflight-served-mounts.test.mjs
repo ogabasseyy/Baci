@@ -172,8 +172,32 @@ describe('preflight served gate', () => {
     });
     expect(report.ok).toBe(false);
     expect(report.failures.join('\n')).toMatch(
-      /pilot logo mount does not serve this generation/
+      /pilot logo mount serves bytes outside this generation/
     );
+  });
+
+  it('fails pilot mounts with a mixed approved/unreviewed ladder', async () => {
+    const fixture = await setupOffline();
+    const [logo] = fixture.assets;
+    // Approved candidates plus one unreviewed 1280w rung in the LOGO
+    // section: the existential check would pass on the approved subset
+    // while a wide viewport renders unreviewed bytes.
+    const [pageHead, pageTail] = labHtml({ arm: 'pilot', ...fixture }).split(
+      'header-logo'
+    );
+    const html = `${pageHead}header-logo${pageTail.replace(
+      ' 384w',
+      ` 384w, /__pilot/${'f'.repeat(64)}/evil.avif 1280w`
+    )}`;
+    const report = await fetchServedAgreement('http://unused.invalid', {
+      arms: ['pilot'],
+      expectedBindings: [`${MERCHANT}/logo-a`, `${MERCHANT}/hero-s0`],
+      expectedMounts: [mountFor(logo)],
+      fetchImpl: async () => html,
+      publicDir: fixture.publicDir,
+    });
+    expect(report.ok).toBe(false);
+    expect(report.failures.join('\n')).toMatch(/outside this generation/);
   });
 
   it('accepts same-origin absolute staged URLs on a store control card', async () => {

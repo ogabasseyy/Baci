@@ -1,4 +1,4 @@
-import { realpath, rm, statfs } from 'node:fs/promises';
+import { open, realpath, rm, statfs } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { MAX_STAGING_BYTES, MIN_FREE_BYTES } from './constants.mjs';
 
@@ -49,6 +49,38 @@ export function createStagingBudget(capBytes = MAX_STAGING_BYTES) {
       used += bytes;
     },
   };
+}
+
+// Bounded read: at most maxBytes + 1, looping to EOF-or-cap (a single
+// read may return short). Returns truncated: true when the file is
+// longer, so callers reject the size mismatch without ever allocating
+// the whole file. Throws when unreadable (callers map that to their
+// missing-input error). Mirrored by readUpToBytes in web
+// lab-config-stage-io.ts (TS cannot import infra) and re-exported for
+// the preflight stages.
+export async function readUpToBytes(path, maxBytes) {
+  const handle = await open(path, 'r');
+  try {
+    const probe = Buffer.alloc(maxBytes + 1);
+    let bytesRead = 0;
+    let short = false;
+    while (bytesRead < probe.length && !short) {
+      const chunk = await handle.read(
+        probe,
+        bytesRead,
+        probe.length - bytesRead,
+        bytesRead
+      );
+      bytesRead += chunk.bytesRead;
+      short = chunk.bytesRead === 0;
+    }
+    return {
+      bytes: Buffer.from(probe.subarray(0, Math.min(bytesRead, maxBytes))),
+      truncated: bytesRead > maxBytes,
+    };
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function removeOwnedStaging(outputRoot, stagingDir) {

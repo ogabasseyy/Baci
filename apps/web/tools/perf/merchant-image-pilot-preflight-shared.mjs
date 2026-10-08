@@ -2,7 +2,9 @@
 // small predicates. Every preflight module builds on these; nothing here
 // knows about inventories, manifests, or served pages.
 import { createHash } from 'node:crypto';
-import { open, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+
+export { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
 
 export const HEX64 = /^[0-9a-f]{64}$/;
 export const ASSET_ID = /^[A-Za-z0-9._-]{1,128}$/;
@@ -131,36 +133,4 @@ export function positionalHashesMatch(manifestHashes, recordHashes) {
     manifestHashes.length === record.length &&
     manifestHashes.every((hash, index) => hash === record[index])
   );
-}
-
-// Bounded read: at most maxBytes + 1, looping to EOF-or-cap (a single
-// read may return short). Mirrors readUpToBytes in
-// lab-config-stage-io.ts. Returns truncated: true when the file is
-// longer, so callers reject the size mismatch without ever allocating
-// the whole file — a corrupted tier concatenated into a huge file must
-// fail closed, not exhaust the operator process. Throws when unreadable
-// (callers map that to their missing-input failure).
-export async function readUpToBytes(path, maxBytes) {
-  const handle = await open(path, 'r');
-  try {
-    const probe = Buffer.alloc(maxBytes + 1);
-    let bytesRead = 0;
-    let short = false;
-    while (bytesRead < probe.length && !short) {
-      const chunk = await handle.read(
-        probe,
-        bytesRead,
-        probe.length - bytesRead,
-        bytesRead
-      );
-      bytesRead += chunk.bytesRead;
-      short = chunk.bytesRead === 0;
-    }
-    return {
-      bytes: Buffer.from(probe.subarray(0, Math.min(bytesRead, maxBytes))),
-      truncated: bytesRead > maxBytes,
-    };
-  } finally {
-    await handle.close();
-  }
 }

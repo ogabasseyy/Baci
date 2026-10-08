@@ -1,20 +1,32 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import fs, { copyFile, cp, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import fs, {
+  copyFile,
+  cp,
+  mkdir,
+  readFile,
+  rename,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { runPilotGeneration } from './generate.mjs';
 import { currentRecipeId } from './generation-identity.mjs';
 import { buildQualitySheet } from './quality-sheet.mjs';
-import { runPilotGeneration } from './generate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => join(here, 'fixtures', name);
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 
-async function setupPilot(source = { fixture: 'tiny-48x48.png', height: 48, width: 48 }) {
-  const base = join(tmpdir(), `pilot-sheet-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+async function setupPilot(
+  source = { fixture: 'tiny-48x48.png', height: 48, width: 48 }
+) {
+  const base = join(
+    tmpdir(),
+    `pilot-sheet-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
   const inputRoot = join(base, 'input');
   const outputRoot = join(base, 'output');
   await mkdir(inputRoot, { recursive: true });
@@ -62,14 +74,21 @@ test('renders the original at the same capped width as the derivatives', async (
   // Full-size tiers (2000px source): the logo ladder tops at 384w, and a
   // 40px slot caps the comparison at 120px (DPR-3 review) — the 384-tier
   // row must not compare a 384px original against 120px derivatives.
-  const full = await setupPilot({ fixture: 'wide-2000x500.png', height: 500, width: 2000 });
+  const full = await setupPilot({
+    fixture: 'wide-2000x500.png',
+    height: 500,
+    width: 2000,
+  });
   const capped = await buildQualitySheet({
     inputRoot: full.inputRoot,
     inventoryPath: full.inventoryPath,
     outputRoot: full.outputRoot,
     slots: { 'header-logo': { cssWidth: 40 } },
   });
-  assert.doesNotMatch(capped, /<img src="data:image\/png[^>]*style="width:384px"/);
+  assert.doesNotMatch(
+    capped,
+    /<img src="data:image\/png[^>]*style="width:384px"/
+  );
   assert.match(capped, /<img src="data:image\/png[^>]*style="width:120px"/);
   // The caption states which ceiling bound each row: full DPR-3 review
   // where encoded pixels reach it, the encoded width otherwise.
@@ -196,7 +215,10 @@ test('embeds the validated tier bytes, never a later reread', async () => {
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
   const [generationId] = await fs.readdir(join(outputRoot, 'generations'));
   const manifest = JSON.parse(
-    await readFile(join(outputRoot, 'generations', generationId, 'manifest.json'), 'utf8')
+    await readFile(
+      join(outputRoot, 'generations', generationId, 'manifest.json'),
+      'utf8'
+    )
   );
   const tier = manifest.tiers[0];
   const target = join(outputRoot, 'generations', generationId, tier.path);
@@ -208,17 +230,17 @@ test('embeds the validated tier bytes, never a later reread', async () => {
     createHash('sha256').update(replacement).digest('hex'),
     tier.sha256
   );
-  // Controlled read seam: the first read of the tier returns genuine bytes;
-  // any reread returns same-length replacement bytes (nothing on disk changes).
-  const reads = new Map();
-  const realReadFile = fs.readFile;
-  fs.readFile = async (...args) => {
-    const path = String(args[0]);
-    reads.set(path, (reads.get(path) ?? 0) + 1);
-    if (path === target && reads.get(path) > 1) {
-      return Buffer.from(replacement);
+  // Controlled read seam: tier bytes flow through the bounded
+  // open/read path (readUpToBytes), so the seam counts opens of the tier
+  // instead of readFile calls. Exactly one open plus genuine embedded
+  // bytes proves the sheet renders the validated read, never a reread.
+  const realOpen = fs.open;
+  let opens = 0;
+  fs.open = (...args) => {
+    if (String(args[0]) === target) {
+      opens += 1;
     }
-    return realReadFile(...args);
+    return realOpen(...args);
   };
   syncBuiltinESMExports();
   try {
@@ -228,7 +250,7 @@ test('embeds the validated tier bytes, never a later reread', async () => {
       outputRoot,
       slots: { 'header-logo': { cssWidth: 40 } },
     });
-    assert.equal(reads.get(target), 1);
+    assert.equal(opens, 1);
     assert.equal(
       html.includes(
         `data:${tier.contentType};base64,${genuine.toString('base64')}`
@@ -237,7 +259,7 @@ test('embeds the validated tier bytes, never a later reread', async () => {
     );
     assert.equal(html.includes(replacement.toString('base64')), false);
   } finally {
-    fs.readFile = realReadFile;
+    fs.open = realOpen;
     syncBuiltinESMExports();
   }
 });
@@ -338,4 +360,63 @@ test('keeps tier aspect ratio under the DPR-3 cap and warns on over-source', asy
   assert.match(html, /Over-source warning/);
   assert.match(html, /6 tier\(s\) serve more bytes than their source/);
   assert.match(html, /over-source/);
+});
+
+test('renders cropped mounts in the real CSS box on both sides', async () => {
+  // A square source on a 16:9 cover mount: intrinsic-aspect rendering
+  // would hide the clip, so original and tiers must share the mount box
+  // at the row's size-matched width — and the sheet must record it.
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const mount = { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' };
+  const html = await buildQualitySheet({
+    inputRoot,
+    inventoryPath,
+    outputRoot,
+    slots: { 'header-logo': { cssWidth: 40, mount } },
+  });
+  assert.match(
+    html,
+    /<img src="data:image\/png[^>]*style="width:48px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/
+  );
+  assert.match(
+    html,
+    /<img src="data:image\/avif[^>]*style="width:48px;aspect-ratio:16 \/ 9;object-fit:cover;object-position:50% 50%"/
+  );
+  assert.match(html, /mount 16 \/ 9 cover 50% 50%/);
+  // No mount: legacy intrinsic render, no mount note.
+  const plain = await buildQualitySheet({
+    inputRoot,
+    inventoryPath,
+    outputRoot,
+    slots: { 'header-logo': { cssWidth: 40 } },
+  });
+  assert.doesNotMatch(plain, /aspect-ratio:/);
+  assert.doesNotMatch(plain, /mount 16/);
+});
+
+test('rejects malformed mount boxes instead of misrendering the clip', async () => {
+  const { inputRoot, inventoryPath, outputRoot } = await setupPilot();
+  const good = { aspectRatio: '16 / 9', fit: 'cover', position: '50% 50%' };
+  for (const [name, mount] of [
+    ['ratio', { ...good, aspectRatio: '16x9' }],
+    ['ratio-zero', { ...good, aspectRatio: '0 / 9' }],
+    ['fit', { ...good, fit: 'fill' }],
+    // CSS injection through the position string must fail validation,
+    // not land in a style attribute.
+    ['position', { ...good, position: '50%;color:red' }],
+    ['position-tag', { ...good, position: '50% <x' }],
+    ['shape', '16 / 9 cover'],
+  ]) {
+    await assert.rejects(
+      () =>
+        buildQualitySheet({
+          inputRoot,
+          inventoryPath,
+          outputRoot,
+          slots: { 'header-logo': { cssWidth: 40, mount } },
+        }),
+      /invalid mount/,
+      `mount ${name} must fail closed`
+    );
+  }
 });

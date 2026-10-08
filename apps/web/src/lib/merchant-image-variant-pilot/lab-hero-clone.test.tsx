@@ -73,6 +73,7 @@ const PILOT_TIERS: ApprovedPilotTier[] = [
 
 function slides(imageUrl: string): LaunchProductSlide[] {
   return labHeroSlides({
+    arm: 'pilot',
     basePath: '/pilot-lab/store/ogabassey',
     slide0: {
       imageAlt: 'Lab hero product',
@@ -204,10 +205,10 @@ describe('LabHeroMobileCarousel original-renderer parity', () => {
   it('links hero CTAs at the lab-category fixture route, never a missing product route', () => {
     const [slide0, slide1] = slides(CONTROL_URL);
     expect(slide0.href).toBe(
-      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-0'
+      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-0?arm=pilot'
     );
     expect(slide1.href).toBe(
-      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-1'
+      '/pilot-lab/store/ogabassey/lab-category/lab-hero-slide-1?arm=pilot'
     );
   });
 });

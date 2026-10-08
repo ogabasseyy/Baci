@@ -18,7 +18,8 @@
 // every setting matches. --cache-provenance is REQUIRED for the cold-cache
 // claim: converters can omit cache hits entirely, so zero recorded hits alone never proves cold; --browser-version stays optional.
 // --cache-provenance takes a PATH to a runner profile-reset artifact
-// (event/freshProfile/profileDir/resetAt/tool), bound <=1h before the run.
+// (event/freshProfile/profileDir/resetAt/runId/tool), bound <=1h before
+// the run and to the navigation via the single-use _meta.runId.
 import { readFile } from 'node:fs/promises';
 import {
   findCacheHits,

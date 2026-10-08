@@ -223,6 +223,21 @@ export function srcSetHasPrefix(srcSet, prefix, origin) {
   );
 }
 
+// Universal binding: a non-empty candidate list whose EVERY url carries
+// the generation prefix. Pilot mounts must use this, not the existential
+// above: a mixed ladder (approved 384w/768w plus an unreviewed 1280w
+// rung) would otherwise pass while a later viewport renders unreviewed
+// bytes after all gates reported green.
+export function srcSetEveryHasPrefix(srcSet, prefix, origin) {
+  const candidates = srcSetCandidates(srcSet);
+  return (
+    candidates.length > 0 &&
+    candidates.every((candidate) =>
+      stripQuery(candidate.url, origin).startsWith(prefix)
+    )
+  );
+}
+
 export function srcSetCandidates(srcSet) {
   const value = String(srcSet ?? '').trim();
   if (!value) {

@@ -183,12 +183,18 @@ describe('merchant-image-pilot-settings helpers', () => {
   });
 
   it('binds cache provenance to a fresh runner reset before the run', () => {
-    const pages = [{ startedDateTime: '2026-10-04T00:10:00.000Z' }];
+    const pages = [
+      {
+        _meta: { runId: 'run-navigation-1' },
+        startedDateTime: '2026-10-04T00:10:00.000Z',
+      },
+    ];
     const valid = JSON.stringify({
       event: 'profile-reset',
       freshProfile: true,
       profileDir: '/tmp/run/profile',
       resetAt: '2026-10-04T00:09:00.000Z',
+      runId: 'run-navigation-1',
       tool: 'browsertime',
     });
     expect(verifyCacheProvenance(valid, pages)).toEqual({
@@ -211,6 +217,8 @@ describe('merchant-image-pilot-settings helpers', () => {
       ['fresh', { freshProfile: false }],
       ['dir', { profileDir: '' }],
       ['tool', { tool: '' }],
+      ['run', { runId: '' }],
+      ['run-long', { runId: 'r'.repeat(129) }],
       ['time', { resetAt: 'yesterday' }],
     ]) {
       const broken = JSON.stringify({ ...JSON.parse(valid), ...patch });
@@ -230,8 +238,21 @@ describe('merchant-image-pilot-settings helpers', () => {
     });
     expect(verifyCacheProvenance(postdated, pages).error).toMatch(/postdates/);
     // Undated HAR pages cannot bind the reset to the run.
-    expect(verifyCacheProvenance(valid, [{}]).error).toMatch(
-      /no startedDateTime/
-    );
+    expect(
+      verifyCacheProvenance(valid, [{ _meta: { runId: 'run-navigation-1' } }])
+        .error
+    ).toMatch(/no startedDateTime/);
+    // One reset certifies exactly one navigation: a reused artifact
+    // against a second single-page HAR (different runId) fails, as does
+    // a page that carries no runId at all.
+    expect(
+      verifyCacheProvenance(valid, [
+        {
+          _meta: { runId: 'run-navigation-2' },
+          startedDateTime: '2026-10-04T00:10:00.000Z',
+        },
+      ]).error
+    ).toMatch(/does not match the measured navigation/);
+    expect(verifyCacheProvenance(valid, [{}]).error).toMatch(/no _meta\.runId/);
   });
 });

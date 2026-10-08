@@ -23,6 +23,7 @@ async function provenanceArg(dir, overrides = {}) {
       freshProfile: true,
       profileDir: join(dir, 'profile'),
       resetAt: '2026-10-04T00:09:00.000Z',
+      runId: 'run-navigation-1',
       tool: 'browsertime',
       ...overrides,
     })
@@ -31,7 +32,7 @@ async function provenanceArg(dir, overrides = {}) {
 }
 
 const DATED_PAGE = {
-  _meta: { connectivity: 'native' },
+  _meta: { connectivity: 'native', runId: 'run-navigation-1' },
   startedDateTime: '2026-10-04T00:10:00.000Z',
   title: 'u run 1',
 };
@@ -408,7 +409,12 @@ describe('merchant-image-pilot-settings gate', () => {
       expect(stale.report.failures.join('\n')).toMatch(/stale/);
       // Undated HAR pages cannot bind the reset to the run.
       const undated = await runWithEntries([{ status: 200 }], {
-        pages: [{ _meta: { connectivity: 'native' }, title: 'u run 1' }],
+        pages: [
+          {
+            _meta: { connectivity: 'native', runId: 'run-navigation-1' },
+            title: 'u run 1',
+          },
+        ],
         provenance: {},
       });
       expect(undated.error).not.toBe(null);

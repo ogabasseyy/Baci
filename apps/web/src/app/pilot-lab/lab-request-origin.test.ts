@@ -6,13 +6,15 @@ describe('labRequestOrigin', () => {
     vi.unstubAllEnvs();
   });
 
-  it('reflects loopback hosts with the first proto token', () => {
+  it('pins request-derived loopback origins to http', () => {
     expect(labRequestOrigin({ host: 'localhost:3122', proto: 'http' })).toBe(
       'http://localhost:3122'
     );
+    // X-Forwarded-Proto is untrusted without a trusted proxy: a spoofed
+    // https token must not flip the rendered origin's scheme.
     expect(
       labRequestOrigin({ host: '127.0.0.1:3122', proto: 'HTTPS, http' })
-    ).toBe('https://127.0.0.1:3122');
+    ).toBe('http://127.0.0.1:3122');
     expect(labRequestOrigin({ host: 'LOCALHOST', proto: null })).toBe(
       'http://localhost'
     );

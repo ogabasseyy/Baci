@@ -35,7 +35,7 @@ describe('non-lab public assets gate', () => {
   });
   it.each([
     'originals',
-    'generation-hash',
+    'c'.repeat(64),
   ])('rejects %s at build/start when lab is disabled', (entry) => {
     const dir = root();
     mkdirSync(join(dir, '__pilot', entry), { recursive: true });
@@ -57,6 +57,24 @@ describe('non-lab public assets gate', () => {
     );
     expect(() => assertPilotPublicAssets(dir, false)).toThrow(
       /unapproved filler/
+    );
+  });
+  it('still pins filler hashes when lab is enabled', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot/fillers'), { recursive: true });
+    writeFileSync(
+      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
+      'merchant bytes'
+    );
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /unapproved filler/
+    );
+  });
+  it('rejects non-generation junk directories even when lab is enabled', () => {
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'generation-hash'), { recursive: true });
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /staged merchant pilot assets/
     );
   });
   it('rejects symlinked staging roots', () => {

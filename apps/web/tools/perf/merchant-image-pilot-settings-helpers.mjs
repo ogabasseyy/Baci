@@ -155,9 +155,14 @@ export function findCacheHits(har) {
 // warm run certify itself cold:
 //   {"event":"profile-reset","freshProfile":true,
 //    "profileDir":"<runner profile path>","resetAt":"<ISO datetime>",
-//    "tool":"<runner name>"}
+//    "runId":"<single-use navigation id>","tool":"<runner name>"}
 // A single reset certifies only one HAR navigation and must precede it by at most one
-// hour: a stale (or post-run) reset proves nothing about this run.
+// hour: a stale (or post-run) reset proves nothing about this run. The
+// runId binds the artifact to its navigation: timestamps alone cannot,
+// because separate single-page HARs (control/pilot iterations on one
+// reused profile) would each pass the window check against one shared
+// reset. The runner mints one runId per reset+navigation pair and records
+// it in both the artifact and the HAR page's _meta.
 export function verifyCacheProvenance(text, pages, sourceLabel) {
   if (text === null || text === undefined) {
     return {
@@ -180,18 +185,35 @@ export function verifyCacheProvenance(text, pages, sourceLabel) {
     artifact.profileDir.length === 0 ||
     typeof artifact.tool !== 'string' ||
     artifact.tool.length === 0 ||
+    typeof artifact.runId !== 'string' ||
+    artifact.runId.length === 0 ||
+    artifact.runId.length > 128 ||
     typeof artifact.resetAt !== 'string' ||
     !Number.isFinite(Date.parse(artifact.resetAt))
   ) {
     return {
       error:
-        'cache-provenance artifact must be a runner profile-reset record {event, freshProfile, profileDir, resetAt, tool}',
+        'cache-provenance artifact must be a runner profile-reset record {event, freshProfile, profileDir, resetAt, runId, tool}',
       ok: false,
     };
   }
   if (pages?.length > 1) {
     return {
       error: 'one cache reset can certify exactly one HAR iteration',
+      ok: false,
+    };
+  }
+  const pageRunId = pages?.[0]?._meta?.runId;
+  if (typeof pageRunId !== 'string' || pageRunId.length === 0) {
+    return {
+      error: 'cache-provenance cannot bind: HAR page carries no _meta.runId',
+      ok: false,
+    };
+  }
+  if (pageRunId !== artifact.runId) {
+    return {
+      error:
+        'cache-provenance runId does not match the measured navigation: one reset certifies exactly one navigation',
       ok: false,
     };
   }

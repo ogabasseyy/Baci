@@ -1,12 +1,13 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import test from 'node:test';
 import {
   assertMinFreeBytes,
   createStagingBudget,
   getAvailableBytes,
+  readUpToBytes,
   removeOwnedStaging,
 } from './disk-guards.mjs';
 
@@ -19,7 +20,10 @@ test('reports available bytes and enforces the free-space floor', async () => {
     () => assertMinFreeBytes(dir, Number.MAX_SAFE_INTEGER),
     /free space/
   );
-  await assert.rejects(() => getAvailableBytes(join(dir, 'missing')), /accessible/);
+  await assert.rejects(
+    () => getAvailableBytes(join(dir, 'missing')),
+    /accessible/
+  );
 });
 
 test('staging budget charges bytes up to the cap', () => {
@@ -52,4 +56,31 @@ test('removeOwnedStaging removes only owned staging directories', async () => {
   const nested = join(base, 'staging-nested', 'inner');
   await mkdir(nested, { recursive: true });
   await assert.rejects(() => removeOwnedStaging(base, nested), /owned/);
+});
+
+test('readUpToBytes caps allocation at the claim plus one byte', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'pilot-read-capped-'));
+  const small = join(base, 'small.bin');
+  await writeFile(small, Buffer.from('0123456789'));
+  assert.deepEqual(await readUpToBytes(small, 10), {
+    bytes: Buffer.from('0123456789'),
+    truncated: false,
+  });
+  assert.deepEqual(await readUpToBytes(small, 4), {
+    bytes: Buffer.from('0123'),
+    truncated: true,
+  });
+  // Exact-boundary: claim+1 bytes on disk fills the probe without
+  // truncation, and short content never over-reports.
+  const edge = join(base, 'edge.bin');
+  await writeFile(edge, Buffer.from('01234'));
+  assert.deepEqual(await readUpToBytes(edge, 4), {
+    bytes: Buffer.from('0123'),
+    truncated: true,
+  });
+  assert.deepEqual(await readUpToBytes(edge, 5), {
+    bytes: Buffer.from('01234'),
+    truncated: false,
+  });
+  await assert.rejects(() => readUpToBytes(join(base, 'missing.bin'), 10));
 });

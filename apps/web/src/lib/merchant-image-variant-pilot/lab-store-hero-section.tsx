@@ -32,8 +32,13 @@ export function LabStoreHeroSection({
 }) {
   const { binding } = status;
   if (status.status !== 'accepted') {
+    const stagedOriginal = config.originalUrlFor({
+      merchantId: binding.merchantId,
+      slotId: binding.slotId,
+    });
     return (
       <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
         binding={binding}
         reason={`binding status "${status.status}"${status.detail ? `: ${status.detail}` : ''}; the control path is retained and this slot is excluded from the optimized denominator.`}
       />
@@ -51,6 +56,7 @@ export function LabStoreHeroSection({
   }
   const heroAlt = `${binding.assetId} lab hero`;
   const slides = labHeroSlides({
+    arm,
     basePath,
     slide0: {
       imageAlt: heroAlt,

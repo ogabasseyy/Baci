@@ -48,8 +48,11 @@ export function labRequestOrigin(headers: {
   if (override) {
     return override;
   }
-  const first = (headers.proto ?? '').split(',')[0]?.trim().toLowerCase();
-  const scheme = first === 'http' || first === 'https' ? first : 'http';
+  // Scheme is pinned to http for request-derived origins: X-Forwarded-Proto
+  // is untrusted without a trusted proxy, and the lab's local runs serve
+  // http. Operators needing https set BACI_IMAGE_PILOT_ORIGIN (validated
+  // above), so headers.proto is intentionally ignored here.
+  const scheme = 'http';
   const host = (headers.host ?? '').trim();
   if (!host) {
     return LAB_LOOPBACK_ORIGIN;
@@ -63,8 +66,8 @@ export function labRequestOrigin(headers: {
     // with the lab flag on, Host evil-sub.localhost would otherwise be
     // embedded in rendered absolute image URLs. Loopback IPs have no
     // subdomains and echo unchanged; *.localhost collapses to bare
-    // localhost with the request's scheme and port (lab routes are
-    // path-based, so no legitimate flow needs the subdomain).
+    // localhost with the request's port (lab routes are path-based,
+    // so no legitimate flow needs the subdomain; scheme stays pinned).
     const hostname = url.hostname.toLowerCase();
     if (hostname !== 'localhost' && hostname.endsWith('.localhost')) {
       return new URL(

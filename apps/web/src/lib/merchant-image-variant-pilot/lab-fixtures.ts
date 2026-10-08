@@ -113,17 +113,24 @@ export function labProductFixture(input: {
 // nothing until interaction. Commerce fields are fixed lab constants
 // (identical arms); only slide-0's image varies.
 export function labHeroSlides(input: {
+  // Inline union (not the PilotLabArm import): this module must stay
+  // directive-free for client-clone reuse, and lab-mount is server-only.
+  arm: 'control' | 'pilot';
   basePath: string;
   slide0: { imageAlt: string; imageUrl: string; name: string };
   slide1?: { imageAlt: string; imageUrl: string; name: string };
 }): LaunchProductSlide[] {
+  // The fixture destination has no arm of its own: without the pin, its
+  // Back link returns to the store's default pilot arm and silently flips
+  // a control session mid-browse.
+  const suffix = `?arm=${input.arm}`;
   const slides: LaunchProductSlide[] = [
     {
       kind: 'product',
       id: 'lab-hero-slide-0',
       name: input.slide0.name,
       priceLabel: '₦50,000',
-      href: `${input.basePath}/lab-category/lab-hero-slide-0`,
+      href: `${input.basePath}/lab-category/lab-hero-slide-0${suffix}`,
       imageUrl: input.slide0.imageUrl,
       imageAlt: input.slide0.imageAlt,
       ctaLabel: 'Shop now',
@@ -135,7 +142,7 @@ export function labHeroSlides(input: {
       id: 'lab-hero-slide-1',
       name: input.slide1.name,
       priceLabel: '₦45,000',
-      href: `${input.basePath}/lab-category/lab-hero-slide-1`,
+      href: `${input.basePath}/lab-category/lab-hero-slide-1${suffix}`,
       imageUrl: input.slide1.imageUrl,
       imageAlt: input.slide1.imageAlt,
       ctaLabel: 'Shop now',

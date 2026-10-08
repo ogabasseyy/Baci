@@ -3,6 +3,7 @@ import {
   extractLabPictures,
   extractLabPreloads,
   extractLabSections,
+  srcSetEveryHasPrefix,
 } from './merchant-image-pilot-preflight-html.mjs';
 
 const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -69,5 +70,22 @@ describe('preflight served HTML extraction', () => {
       binding: null,
       status: 'missing-binding',
     });
+  });
+
+  it('requires every srcset candidate to carry the generation prefix', () => {
+    const gen = 'e'.repeat(64);
+    const pure = `/__pilot/${gen}/a.avif 384w, /__pilot/${gen}/b.avif 768w`;
+    const mixed = `${pure}, /__pilot/${'f'.repeat(64)}/evil.avif 1280w`;
+    expect(srcSetEveryHasPrefix(pure, `/__pilot/${gen}/`, '')).toBe(true);
+    expect(srcSetEveryHasPrefix(mixed, `/__pilot/${gen}/`, '')).toBe(false);
+    expect(srcSetEveryHasPrefix('', `/__pilot/${gen}/`, '')).toBe(false);
+    // Query params (loader ?w&q) strip before comparison.
+    expect(
+      srcSetEveryHasPrefix(
+        `/__pilot/${gen}/a.avif?w=384&q=75 384w`,
+        `/__pilot/${gen}/`,
+        ''
+      )
+    ).toBe(true);
   });
 });

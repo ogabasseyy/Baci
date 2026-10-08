@@ -10,6 +10,9 @@ type CheckoutCartItem = {
   id: string;
   quantity: number;
   variantId?: string | null;
+  price?: number | null;
+  negotiatedPrice?: number | null;
+  negotiationStatus?: string | null;
 };
 
 export function useCheckoutRedvaultAvailability({
@@ -44,9 +47,25 @@ export function useCheckoutRedvaultAvailability({
     !cartItems[0]?.variantId
       ? cartItems[0].id
       : undefined;
+  // The identity carries the effective (negotiated) price and negotiation
+  // status: /api/orders rejects every REDVAULT checkout whose recomputed
+  // negotiation discount is nonzero, so a newly negotiated basket must
+  // invalidate a stale positive instead of retaining it pending refresh.
   const cartFingerprint = cartItems
-    .map(({ id, quantity, variantId }) => `${id}:${quantity}:${variantId ?? ''}`)
+    .map(
+      ({ id, quantity, variantId, price, negotiatedPrice, negotiationStatus }) =>
+        `${id}:${quantity}:${variantId ?? ''}:${negotiatedPrice ?? price ?? ''}:${negotiationStatus ?? ''}`
+    )
     .join('|');
+  // An accepted negotiation — or any negotiated price that actually moves
+  // the line price — is a guaranteed REDVAULT_COMBINATION_UNSUPPORTED at
+  // order time. Hide the method for every reason (not just the pilot):
+  // the server rejects the combination for general REDVAULT too.
+  const negotiatedBlocked = cartItems.some(
+    (item) =>
+      item.negotiationStatus === 'accepted' ||
+      (item.negotiatedPrice != null && item.negotiatedPrice !== item.price)
+  );
   // The preserved identity keys on the resolved storefront account, not just
   // the (possibly absent) auth-context user: this route mounts no AuthProvider,
   // so without the session account id a sign-out or account switch would keep
@@ -66,8 +85,9 @@ export function useCheckoutRedvaultAvailability({
       (pilotFeeBlockers?.shippingFee ?? 0) > 0 ||
       (pilotFeeBlockers?.giftWrappingCost ?? 0) > 0);
 
+  const blocked = negotiatedBlocked || pilotFeeBlocked;
   return {
-    availability: pilotFeeBlocked
+    availability: blocked
       ? { available: false, reason: 'unavailable' }
       : availability,
     waitForResolvedAuthenticated:

@@ -230,6 +230,7 @@ export function runSmokePilotPhases({ migrations, sql }) {
     '20261006190400_uba_redvault_pilot_db_staging_mode.sql',
     '20261006190500_uba_redvault_pilot_bound_product_immutable.sql',
     '20261006190600_uba_redvault_pilot_reenable_and_tracking_guard.sql',
+    '20261006190700_uba_redvault_pilot_product_eligibility_guard.sql',
   ]) {
     sql(readFileSync(resolve(migrations, part), 'utf8'));
   }
@@ -290,6 +291,17 @@ export function runSmokePilotPhases({ migrations, sql }) {
     END IF;
     IF strpos(pg_get_functiondef('private.configure_uba_redvault_live_pilot(boolean,uuid,timestamptz)'::regprocedure), 'inventory_tracking_policy') = 0 THEN
       RAISE EXCEPTION 'pilot_activation_tracking_guard_missing';
+    END IF;
+    IF strpos(pg_get_functiondef('private.configure_uba_redvault_live_pilot(boolean,uuid,timestamptz)'::regprocedure), 'redvault_pilot_product_not_eligible') = 0 THEN
+      RAISE EXCEPTION 'pilot_activation_eligibility_guard_missing';
+    END IF;
+    IF private.is_uba_redvault_negotiable_product('Infinix', 'Hot 40')
+      OR private.is_uba_redvault_negotiable_product('Samsung', 'Galaxy A16 5G')
+      OR private.is_uba_redvault_negotiable_product('OPPO', 'A-58')
+      OR NOT private.is_uba_redvault_negotiable_product('Samsung', 'Galaxy S25')
+      OR NOT private.is_uba_redvault_negotiable_product('Apple', 'iPhone 15 Pro Max A2890')
+      OR NOT private.is_uba_redvault_negotiable_product(NULL, NULL) THEN
+      RAISE EXCEPTION 'pilot_eligibility_policy_not_aligned';
     END IF;
   END $$;`);
   process.stdout.write(

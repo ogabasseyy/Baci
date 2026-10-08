@@ -46,8 +46,8 @@ describe('useCheckoutRedvaultAvailability', () => {
     expect(mockUseAvailability).toHaveBeenCalledWith(
       'merchant',
       '11111111-1111-4111-8111-111111111111',
-      'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:',
-      'customer:customer:11111111-1111-4111-8111-111111111111:1:'
+      'customer:authenticated:4:11111111-1111-4111-8111-111111111111:1:::',
+      'customer:customer:11111111-1111-4111-8111-111111111111:1:::'
     );
     expect(result.current.availability.available).toBe(true);
     expect(result.current.waitForResolvedAuthenticated).toBe(
@@ -80,12 +80,12 @@ describe('useCheckoutRedvaultAvailability', () => {
     const updatedKey = mockUseAvailability.mock.calls.at(-1)?.[2];
     const updatedIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
 
-    expect(firstKey).toBe(':authenticated:8:pilot-product:1:');
-    expect(updatedKey).toBe(':authenticated:9:pilot-product:1:');
+    expect(firstKey).toBe(':authenticated:8:pilot-product:1:::');
+    expect(updatedKey).toBe(':authenticated:9:pilot-product:1:::');
     expect(updatedKey).not.toBe(firstKey);
     // Same-user session churn refetches but keeps the stable identity, so
     // the last result stays served while revalidating.
-    expect(firstIdentity).toBe(':customer:pilot-product:1:');
+    expect(firstIdentity).toBe(':customer:pilot-product:1:::');
     expect(updatedIdentity).toBe(firstIdentity);
   });
 
@@ -112,8 +112,8 @@ describe('useCheckoutRedvaultAvailability', () => {
     rerender({ accountId: null });
     const updatedIdentity = mockUseAvailability.mock.calls.at(-1)?.[3];
 
-    expect(firstIdentity).toBe(':customer:pilot-product:1:');
-    expect(updatedIdentity).toBe('::pilot-product:1:');
+    expect(firstIdentity).toBe(':customer:pilot-product:1:::');
+    expect(updatedIdentity).toBe('::pilot-product:1:::');
   });
 
   it.each([
@@ -222,11 +222,55 @@ describe('useCheckoutRedvaultAvailability', () => {
     expect(mockUseAvailability).toHaveBeenCalledWith(
       'merchant',
       '11111111-1111-4111-8111-111111111111',
-      'customer:authenticated:7:11111111-1111-4111-8111-111111111111:1:',
-      'customer:account-9:11111111-1111-4111-8111-111111111111:1:'
+      'customer:authenticated:7:11111111-1111-4111-8111-111111111111:1:::',
+      'customer:account-9:11111111-1111-4111-8111-111111111111:1:::'
     );
     expect(result.current.waitForResolvedAuthenticated).toBe(
       waitForResolvedAuthenticated
+    );
+  });
+
+  it.each([
+    ['an accepted negotiation', { negotiationStatus: 'accepted' }],
+    [
+      'a below-price negotiation without status',
+      { price: 100, negotiatedPrice: 90 },
+    ],
+  ])('hides every reason when a cart carries %s', (_label, negotiation) => {
+    for (const reason of ['private_live_pilot', 'general']) {
+      mockUseAvailability.mockReturnValue({ available: true, reason });
+      const { result } = renderHook(() =>
+        useCheckoutRedvaultAvailability({
+          cartItems: [{ id: 'pilot-product', quantity: 1, ...negotiation }],
+          merchantId: 'merchant',
+          merchantSlug: 'store',
+        })
+      );
+
+      expect(result.current.availability).toEqual({
+        available: false,
+        reason: 'unavailable',
+      });
+    }
+  });
+
+  it('keeps results when the negotiated price equals the line price', () => {
+    const { result } = renderHook(() =>
+      useCheckoutRedvaultAvailability({
+        cartItems: [
+          { id: 'pilot-product', quantity: 1, price: 100, negotiatedPrice: 100 },
+        ],
+        merchantId: 'merchant',
+        merchantSlug: 'store',
+      })
+    );
+
+    expect(result.current.availability).toEqual({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    expect(mockUseAvailability.mock.calls.at(-1)?.[2]).toBe(
+      ':authenticated:4:pilot-product:1::100:'
     );
   });
 });

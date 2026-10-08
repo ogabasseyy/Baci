@@ -101,6 +101,8 @@ describe('GET /api/payments/redvault/availability', () => {
         price: 100,
         has_variants: false,
         inventory_tracking_policy: 'off',
+        brand: 'Apple',
+        name: 'iPhone 15',
       },
       error: null,
     });
@@ -137,6 +139,26 @@ describe('GET /api/payments/redvault/availability', () => {
         price: 100,
         has_variants: false,
         inventory_tracking_policy: 'serialized_strict',
+      },
+    ],
+    [
+      'budget-brand product',
+      {
+        price: 100,
+        has_variants: false,
+        inventory_tracking_policy: 'off',
+        brand: 'Infinix',
+        name: 'Hot 40',
+      },
+    ],
+    [
+      'Samsung A-series product',
+      {
+        price: 100,
+        has_variants: false,
+        inventory_tracking_policy: 'off',
+        brand: 'Samsung',
+        name: 'Galaxy A16 5G',
       },
     ],
     ['missing product row', null],

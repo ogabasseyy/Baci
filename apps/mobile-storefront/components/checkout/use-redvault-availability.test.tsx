@@ -208,4 +208,38 @@ describe('useRedvaultAvailability', () => {
       jest.useRealTimers();
     }
   });
+
+  it.each([
+    ['an accepted negotiation', { negotiationStatus: 'accepted' as const }],
+    ['a below-price negotiation without status', { negotiatedPrice: 9_000 }],
+  ])('hides every reason when a cart carries %s', async (_label, negotiation) => {
+    for (const reason of ['private_live_pilot', 'general']) {
+      mockGetAvailability.mockResolvedValue({ available: true, reason });
+      const { result } = renderHook(() =>
+        useRedvaultAvailability({
+          customerId: 'customer-a',
+          isAuthenticated: true,
+          items: [{ ...item, ...negotiation }],
+          merchantId,
+        })
+      );
+
+      await act(async () => undefined);
+      expect(result.current).toBe(false);
+    }
+  });
+
+  it('keeps results when the negotiated price equals the line price', async () => {
+    const { result } = renderHook(() =>
+      useRedvaultAvailability({
+        customerId: 'customer-a',
+        isAuthenticated: true,
+        items: [{ ...item, negotiatedPrice: 10_000 }],
+        merchantId,
+      })
+    );
+
+    await act(async () => undefined);
+    expect(result.current).toBe(true);
+  });
 });

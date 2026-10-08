@@ -27,12 +27,32 @@ export function useRedvaultAvailability({
   // the method pending refresh instead of retaining a stale positive
   // until the server rejects. Fee combinations without a client-side
   // value at this layer (gift wrapping, wallet/savings) stay server-gated.
+  // Negotiation state rides along too: /api/orders rejects every REDVAULT
+  // checkout whose recomputed negotiation discount is nonzero, so a newly
+  // negotiated basket must invalidate a stale positive.
   const cartFingerprint = items
     .map(
-      ({ id, product_id, price, quantity, variant_id }) =>
-        `${id}:${product_id}:${quantity}:${variant_id ?? ''}:${price ?? ''}`
+      ({
+        id,
+        product_id,
+        price,
+        quantity,
+        variant_id,
+        negotiatedPrice,
+        negotiationStatus,
+      }) =>
+        `${id}:${product_id}:${quantity}:${variant_id ?? ''}:${price ?? ''}:${negotiatedPrice ?? ''}:${negotiationStatus ?? ''}`
     )
     .join('|');
+  // An accepted negotiation — or any negotiated price that actually moves
+  // the line price — is a guaranteed REDVAULT_COMBINATION_UNSUPPORTED at
+  // order time. Hide the method for every reason (not just the pilot):
+  // the server rejects the combination for general REDVAULT too.
+  const negotiatedBlocked = items.some(
+    (item) =>
+      item.negotiationStatus === 'accepted' ||
+      (item.negotiatedPrice != null && item.negotiatedPrice !== item.price)
+  );
   const availabilityRequestKey = `${merchantId}:${pilotCartProductId ?? ''}:${isAuthenticated}:${customerId ?? ''}:${cartFingerprint}`;
   const [availability, setAvailability] = useState<{
     requestKey: string;
@@ -56,7 +76,8 @@ export function useRedvaultAvailability({
     availability?.requestKey === availabilityRequestKey &&
     availability.available &&
     !expired &&
-    !pilotFeeBlocked;
+    !pilotFeeBlocked &&
+    !negotiatedBlocked;
 
   useEffect(() => {
     // Read so expiry invalidation retriggers this effect.

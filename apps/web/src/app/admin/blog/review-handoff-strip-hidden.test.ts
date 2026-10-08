@@ -48,4 +48,18 @@ describe('stripHiddenContent', () => {
   ])('strips only always-hidden subtrees: %s', (content, expected) => {
     expect(stripHiddenContent(content)).toBe(expected);
   });
+
+  it('strips hidden leaves in deeply nested markup', () => {
+    // Hiddenness must propagate down the stack in one traversal:
+    // rebuilding the ancestor chain per element turns deep valid
+    // articles into a quadratic import freeze.
+    const depth = 1500;
+    const open = '<div>'.repeat(depth);
+    const close = '</div>'.repeat(depth);
+    expect(
+      stripHiddenContent(
+        `${open}<p class="hidden">Deep</p>${close}<p>Visible</p>`
+      )
+    ).toBe(`${open}${close}<p>Visible</p>`);
+  });
 });

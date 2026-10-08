@@ -12,6 +12,7 @@ import type {
   PlatformAdminBlogCoverState,
   PlatformAdminBlogFormState,
 } from './blog-types';
+import { chunkArray } from './chunk-array';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 
 type UploadResult = {
@@ -60,6 +61,7 @@ export function useBlogFeaturedImageUpload({
   toast,
   coverStashRef,
   formRef,
+  savedFormRef,
 }: {
   upload: (file: File) => Promise<UploadResult>;
   deleteUpload: (paths: {
@@ -70,6 +72,7 @@ export function useBlogFeaturedImageUpload({
   toast: (props: Parameters<ReturnType<typeof useToast>['toast']>[0]) => void;
   coverStashRef: RefObject<PlatformAdminBlogCoverState | null>;
   formRef: RefObject<PlatformAdminBlogFormState>;
+  savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
 }) {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const generationRef = useRef(0);
@@ -83,26 +86,43 @@ export function useBlogFeaturedImageUpload({
   // deleted while a later import could still reuse it, since an
   // aborted fetch cannot recall a DELETE the server already ran.
   // The staged results flush once, on unmount (saves navigate
-  // away), minus whatever the live form references: manual edits
-  // after the last import can re-embed a staged path. A failed
-  // flush leaks silently — there is no session left to retry in,
-  // and a leak is safer than deleting live media.
+  // away), minus the live form and the last saved payload: manual
+  // edits after the last import can re-embed a staged path, and
+  // edits made while a save is in flight must not delete media
+  // the submitted payload contains. A failed flush leaks
+  // silently — there is no session left to retry in, and a leak is
+  // safer than deleting live media.
   useEffect(
     () => () => {
       const keepPaths = draftReferencedMediaPaths(formRef.current);
+      const saved = savedFormRef.current;
+      if (saved !== null) {
+        for (const path of draftReferencedMediaPaths(saved)) {
+          keepPaths.add(path);
+        }
+      }
       const paths = new Set<string>();
       for (const result of pendingDeletesRef.current) {
         for (const path of unreferencedUploadPaths(result, keepPaths)) {
           paths.add(path);
         }
       }
-      if (paths.size === 0) return;
-      const [path, ...variantPaths] = [...paths];
-      void deleteUploadRef.current({ path, variantPaths }).catch(() => {
-        // Intentionally silent: no session is left to retry in.
-      });
+      // Supabase remove() caps at 1,000 objects per call: chunk the
+      // flush and send sequentially so one oversized session cannot
+      // fail the whole batch (or burst the shared rate limit).
+      const send = async () => {
+        for (const chunk of chunkArray([...paths], 1000)) {
+          const [path, ...variantPaths] = chunk;
+          try {
+            await deleteUploadRef.current({ path, variantPaths });
+          } catch {
+            // Intentionally silent: no session is left to retry in.
+          }
+        }
+      };
+      void send();
     },
-    [formRef]
+    [formRef, savedFormRef]
   );
 
   const invalidateFeaturedUploads = () => {

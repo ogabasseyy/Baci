@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 import type { PlatformAdminBlogFormState } from './blog-types';
+import { chunkArray } from './chunk-array';
 import { draftReferencedMediaPaths } from './draft-referenced-media-paths';
 
 /**
@@ -14,6 +15,7 @@ export function useBlogInlineImageUpload({
   upload,
   deleteUpload,
   formRef,
+  savedFormRef,
 }: {
   upload: (file: File) => Promise<{ url: string }>;
   deleteUpload: (paths: {
@@ -21,6 +23,7 @@ export function useBlogInlineImageUpload({
     variantPaths: string[];
   }) => Promise<void>;
   formRef: RefObject<PlatformAdminBlogFormState>;
+  savedFormRef: RefObject<PlatformAdminBlogFormState | null>;
 }) {
   const [pendingInlineUploads, setPendingInlineUploads] = useState(0);
   const settledUploadsRef = useRef<string[]>([]);
@@ -32,23 +35,38 @@ export function useBlogInlineImageUpload({
   // uploads and a reuse revives them before anything is dispatched,
   // since an aborted fetch cannot recall a DELETE the server
   // already ran. The staged uploads flush once on unmount, minus
-  // whatever the live form references; a failed flush leaks
+  // the live form and the last saved payload; a failed flush leaks
   // silently — there is no session left to retry in.
   useEffect(
     () => () => {
       const keepPaths = draftReferencedMediaPaths(formRef.current);
+      const saved = savedFormRef.current;
+      if (saved !== null) {
+        for (const path of draftReferencedMediaPaths(saved)) {
+          keepPaths.add(path);
+        }
+      }
       const paths = new Set<string>();
       for (const url of pendingDeletesRef.current) {
         const path = extractManagedBlogStoragePath(url, { kind: 'platform' });
         if (path !== null && !keepPaths.has(path)) paths.add(path);
       }
-      if (paths.size === 0) return;
-      const [path, ...variantPaths] = [...paths];
-      void deleteUploadRef.current({ path, variantPaths }).catch(() => {
-        // Intentionally silent: no session is left to retry in.
-      });
+      // Supabase remove() caps at 1,000 objects per call: chunk the
+      // flush and send sequentially so one oversized session cannot
+      // fail the whole batch (or burst the shared rate limit).
+      const send = async () => {
+        for (const chunk of chunkArray([...paths], 1000)) {
+          const [path, ...variantPaths] = chunk;
+          try {
+            await deleteUploadRef.current({ path, variantPaths });
+          } catch {
+            // Intentionally silent: no session is left to retry in.
+          }
+        }
+      };
+      void send();
     },
-    [formRef]
+    [formRef, savedFormRef]
   );
 
   const uploadInlineImage = (file: File) => {

@@ -23,12 +23,16 @@ function setup(
 ) {
   const toast = vi.fn();
   const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
+  const savedFormRef = {
+    current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
+  };
   const hook = renderHook(() => {
     const [form, setForm] = useState(DEFAULT_PLATFORM_BLOG_FORM_STATE);
     const uploader = useBlogFeaturedImageUpload({
       coverStashRef,
       deleteUpload: vi.fn().mockResolvedValue(undefined),
       formRef,
+      savedFormRef,
       setForm,
       toast,
       upload,

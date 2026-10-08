@@ -37,6 +37,7 @@ type SubmitBlogPostArgs = {
   isEditMode: boolean;
   postId?: string;
   initialPost?: PlatformAdminBlogPostDetail | null;
+  onSaved: (payload: PlatformAdminBlogFormState) => void;
   setSaving: (saving: boolean) => void;
   toast: ReturnType<typeof useToast>['toast'];
   router: ReturnType<typeof useRouter>;
@@ -49,6 +50,7 @@ async function submitBlogPost({
   isEditMode,
   postId,
   initialPost,
+  onSaved,
   setSaving,
   toast,
   router,
@@ -73,6 +75,10 @@ async function submitBlogPost({
       await createPlatformBlogPost(payload);
     }
 
+    // Snapshot the submitted payload (frozen before the request, so
+    // edits made while saving cannot shrink it): the unmount delete
+    // flush retains what the server persisted.
+    onSaved(payload);
     toast({ title: isEditMode ? 'Post updated' : 'Post created' });
     router.push('/admin/blog');
     router.refresh();
@@ -140,6 +146,9 @@ export function BlogEditorClient({
   useEffect(() => {
     formRef.current = form;
   });
+  // Last payload the server confirmed: edits made while a save is
+  // in flight must not delete media the submitted payload contains.
+  const savedFormRef = useRef<PlatformAdminBlogFormState | null>(null);
   const {
     uploadingFeatured,
     uploadFeatured,
@@ -151,6 +160,7 @@ export function BlogEditorClient({
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
     formRef,
+    savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'featured'),
     setForm,
     toast,
@@ -163,6 +173,7 @@ export function BlogEditorClient({
     deleteUpload: ({ path, variantPaths }) =>
       deleteBlogMediaUpload(path, variantPaths),
     formRef,
+    savedFormRef,
     upload: (file) => uploadBlogMedia(file, 'inline'),
   });
   const handleReviewHandoffImport = useBlogReviewHandoffImport({
@@ -202,6 +213,9 @@ export function BlogEditorClient({
       isEditMode,
       postId,
       initialPost,
+      onSaved: (payload) => {
+        savedFormRef.current = payload;
+      },
       setSaving,
       toast,
       router,

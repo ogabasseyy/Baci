@@ -8,60 +8,93 @@
 // need no lookahead. Transparent color hides glyphs but not image
 // pixels, so void elements (img, br) ignore the color channel, and
 // text segments hidden at every point drop even under a kept
-// ancestor whose escaping child must stay.
+// ancestor whose escaping child must stay. Hiddenness propagates
+// down the stack in one traversal: each element combines its own
+// frame with its parent's effective state in O(1), so deep valid
+// articles strip in linear time.
+import { BREAKPOINT_POINT_COUNT } from './review-handoff-breakpoints';
 import {
   elementFrame,
   type HidingFrame,
   HTML_TAG_PATTERN,
-  subtreeHiddenAt,
   VOID_HTML_ELEMENTS,
 } from './review-handoff-readability';
+import type {
+  ColorAtPoint,
+  VisibilityAtPoint,
+} from './review-handoff-showing-markers';
+
+type EffectiveHiding = {
+  terminal: boolean[];
+  visibility: VisibilityAtPoint[];
+  color: ColorAtPoint[];
+};
+
+function combineEffective(
+  parent: EffectiveHiding | null,
+  frame: HidingFrame
+): EffectiveHiding {
+  // Terminal hiding wins anywhere in the chain; visibility and
+  // color resolve to the nearest marker, like the readability walk.
+  const terminal: boolean[] = [];
+  const visibility: VisibilityAtPoint[] = [];
+  const color: ColorAtPoint[] = [];
+  for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
+    terminal.push(
+      (parent?.terminal[point] ?? false) || frame.terminalAt[point]
+    );
+    visibility.push(
+      frame.visibilityAt[point] ?? parent?.visibility[point] ?? null
+    );
+    color.push(frame.colorAt[point] ?? parent?.color[point] ?? null);
+  }
+  return { terminal, visibility, color };
+}
+
+function hiddenEverywhere(
+  effective: EffectiveHiding,
+  includeColor: boolean
+): boolean {
+  for (let point = 0; point < BREAKPOINT_POINT_COUNT; point += 1) {
+    if (effective.terminal[point]) continue;
+    if (effective.visibility[point] === 'invisible') continue;
+    if (includeColor && effective.color[point] === 'transparent') continue;
+    return false;
+  }
+  return true;
+}
 
 type ElementRecord = {
   parent: number;
   frame: HidingFrame;
   tagName: string;
+  hiddenNoColor: boolean;
+  hiddenWithColor: boolean;
 };
-
-function chainFrames(
-  elements: readonly ElementRecord[],
-  index: number
-): HidingFrame[] {
-  const chain: HidingFrame[] = [];
-  let at = index;
-  while (at !== -1) {
-    chain.unshift(elements[at].frame);
-    at = elements[at].parent;
-  }
-  return chain;
-}
-
-function hiddenEverywhere(
-  elements: readonly ElementRecord[],
-  index: number,
-  includeColor: boolean
-): boolean {
-  return subtreeHiddenAt(chainFrames(elements, index), includeColor).every(
-    Boolean
-  );
-}
 
 function recordElements(content: string): ElementRecord[] {
   const elements: ElementRecord[] = [];
-  const stack: number[] = [];
+  const stack: { index: number; effective: EffectiveHiding }[] = [];
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     if (match[1] === '/') {
       stack.pop();
       continue;
     }
+    const frame = elementFrame(match[0]);
+    const effective = combineEffective(
+      stack.length === 0 ? null : stack[stack.length - 1].effective,
+      frame
+    );
     const tagName = match[2].toLowerCase();
     const index = elements.length;
     elements.push({
-      parent: stack.length === 0 ? -1 : stack[stack.length - 1],
-      frame: elementFrame(match[0]),
+      parent: stack.length === 0 ? -1 : stack[stack.length - 1].index,
+      frame,
       tagName,
+      hiddenNoColor: hiddenEverywhere(effective, false),
+      hiddenWithColor: hiddenEverywhere(effective, true),
     });
-    if (!VOID_HTML_ELEMENTS.has(tagName)) stack.push(index);
+    if (!VOID_HTML_ELEMENTS.has(tagName)) stack.push({ index, effective });
   }
   return elements;
 }
@@ -72,7 +105,6 @@ export function stripHiddenContent(content: string): string {
   // reverse order decides children first. An element drops when it
   // hides at every point and no element child survives; void
   // elements never consult the color channel.
-  const selfDrop: boolean[] = new Array(elements.length).fill(false);
   const childrenOf = new Map<number, number[]>();
   elements.forEach((element, index) => {
     if (element.parent === -1) return;
@@ -80,10 +112,11 @@ export function stripHiddenContent(content: string): string {
     siblings.push(index);
     childrenOf.set(element.parent, siblings);
   });
+  const selfDrop: boolean[] = new Array(elements.length).fill(false);
   for (let index = elements.length - 1; index >= 0; index -= 1) {
     const hidden = VOID_HTML_ELEMENTS.has(elements[index].tagName)
-      ? hiddenEverywhere(elements, index, false)
-      : hiddenEverywhere(elements, index, true);
+      ? elements[index].hiddenNoColor
+      : elements[index].hiddenWithColor;
     const childrenDrop = (childrenOf.get(index) ?? []).every(
       (child) => selfDrop[child]
     );
@@ -94,36 +127,35 @@ export function stripHiddenContent(content: string): string {
     finalDrop[index] =
       selfDrop[index] || (element.parent !== -1 && finalDrop[element.parent]);
   });
-  // Rebuild, skipping dropped subtrees and text hidden at every
-  // point. Stray close tags are preserved as text-adjacent markup.
+  // Rebuild in one walk, skipping dropped subtrees and text hidden
+  // at every point. Effective hiding propagates down the open stack
+  // again instead of re-scanning it per tag. Stray close tags are
+  // preserved as text-adjacent markup.
   const byOpenStart = new Map<number, number>();
-  {
-    let seen = 0;
-    for (const match of content.matchAll(HTML_TAG_PATTERN)) {
-      if (match[1] === '/') continue;
-      byOpenStart.set(match.index ?? content.length, seen);
-      seen += 1;
-    }
+  let seen = 0;
+  for (const match of content.matchAll(HTML_TAG_PATTERN)) {
+    if (match[1] === '/') continue;
+    byOpenStart.set(match.index ?? content.length, seen);
+    seen += 1;
   }
   const segments: string[] = [];
-  const openStack: number[] = [];
+  const openStack: { index: number; effective: EffectiveHiding }[] = [];
   let position = 0;
-  const insideDropped = () => openStack.some((open) => finalDrop[open]);
+  const insideDropped = () => openStack.some((open) => finalDrop[open.index]);
   for (const match of content.matchAll(HTML_TAG_PATTERN)) {
     const start = match.index ?? content.length;
-    const textHidden =
-      openStack.length > 0 &&
-      subtreeHiddenAt(
-        openStack.map((open) => elements[open].frame),
-        true
-      ).every(Boolean);
-    if (!insideDropped() && !textHidden) {
+    const top =
+      openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
+    if (!insideDropped() && (top === null || !hiddenEverywhere(top, true))) {
       segments.push(content.slice(position, start));
     }
     position = start + match[0].length;
     if (match[1] === '/') {
-      const top = openStack.pop();
-      if ((top === undefined || !finalDrop[top]) && !insideDropped()) {
+      const popped = openStack.pop();
+      if (
+        (popped === undefined || !finalDrop[popped.index]) &&
+        !insideDropped()
+      ) {
         segments.push(match[0]);
       }
       continue;
@@ -134,16 +166,17 @@ export function stripHiddenContent(content: string): string {
       continue;
     }
     if (!VOID_HTML_ELEMENTS.has(elements[index].tagName)) {
-      openStack.push(index);
+      openStack.push({
+        index,
+        effective: combineEffective(top, elements[index].frame),
+      });
     }
     if (!finalDrop[index] && !insideDropped()) segments.push(match[0]);
   }
-  const tailHidden =
-    openStack.length > 0 &&
-    subtreeHiddenAt(
-      openStack.map((open) => elements[open].frame),
-      true
-    ).every(Boolean);
-  if (!insideDropped() && !tailHidden) segments.push(content.slice(position));
+  const tail =
+    openStack.length === 0 ? null : openStack[openStack.length - 1].effective;
+  if (!insideDropped() && (tail === null || !hiddenEverywhere(tail, true))) {
+    segments.push(content.slice(position));
+  }
   return segments.join('');
 }

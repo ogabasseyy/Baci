@@ -20,10 +20,13 @@ function reuseDraft(url: string) {
 function setup(upload: (file: File) => Promise<{ url: string }>) {
   const deleteUpload = vi.fn(async () => {});
   const formRef = { current: DEFAULT_PLATFORM_BLOG_FORM_STATE };
+  const savedFormRef = {
+    current: null as typeof DEFAULT_PLATFORM_BLOG_FORM_STATE | null,
+  };
   const hook = renderHook(() =>
-    useBlogInlineImageUpload({ deleteUpload, formRef, upload })
+    useBlogInlineImageUpload({ deleteUpload, formRef, savedFormRef, upload })
   );
-  return { ...hook, deleteUpload, formRef };
+  return { ...hook, deleteUpload, formRef, savedFormRef };
 }
 
 describe('useBlogInlineImageUpload', () => {
@@ -96,9 +99,7 @@ describe('useBlogInlineImageUpload', () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
     expect(deleteUpload).not.toHaveBeenCalled();
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
@@ -113,16 +114,12 @@ describe('useBlogInlineImageUpload', () => {
       await result.current.uploadInlineImage(file);
     });
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content:
-          '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/inline-1.png">',
-      });
+      result.current.cleanupSettledInlineUploads(
+        reuseDraft('https://cdn.example.com/media/platform/blog/inline-1.png')
+      );
     });
     expect(deleteUpload).not.toHaveBeenCalled();
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     expect(deleteUpload).not.toHaveBeenCalled();
   });
 
@@ -134,20 +131,16 @@ describe('useBlogInlineImageUpload', () => {
       await result.current.uploadInlineImage(file);
     });
     await act(async () => {
-      result.current.cleanupSettledInlineUploads({
-        ...DEFAULT_PLATFORM_BLOG_FORM_STATE,
-        content:
-          '<p>Body</p><img src="https://cdn.example.com/media/platform/blog/inline-1.png">',
-      });
+      result.current.cleanupSettledInlineUploads(
+        reuseDraft('https://cdn.example.com/media/platform/blog/inline-1.png')
+      );
     });
     expect(deleteUpload).not.toHaveBeenCalled();
     await act(async () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
     expect(deleteUpload).not.toHaveBeenCalled();
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
       variantPaths: [],
@@ -171,9 +164,7 @@ describe('useBlogInlineImageUpload', () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
     expect(deleteUpload).not.toHaveBeenCalled();
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     // The platform_blog_media_delete bucket allows 30 requests per
     // minute shared with featured cleanup: 31 uploads must collapse
     // into a single DELETE instead of one call per upload.
@@ -208,9 +199,7 @@ describe('useBlogInlineImageUpload', () => {
     // The accepted import applies its draft to the live form, which
     // the unmount flush consults.
     formRef.current = reuse;
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     expect(deleteUpload).not.toHaveBeenCalled();
   });
 
@@ -233,9 +222,7 @@ describe('useBlogInlineImageUpload', () => {
     await act(async () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     expect(deleteUpload).toHaveBeenCalledTimes(1);
     expect(deleteUpload).toHaveBeenCalledWith({
       path: 'platform/blog/inline-1.png',
@@ -257,9 +244,28 @@ describe('useBlogInlineImageUpload', () => {
     // Manual edits after the last import can re-embed a staged path,
     // so the flush consults the live form rather than the draft.
     formRef.current = reuseDraft(reused);
+    await act(async () => unmount());
+    expect(deleteUpload).not.toHaveBeenCalled();
+  });
+
+  it('keeps media the saved payload contains despite later live edits', async () => {
+    // Deferred-save race: a staged upload is re-embedded, Create is
+    // clicked, and the URL is removed before the request completes.
+    // The server saves the submitted payload, so the flush must
+    // consult that snapshot — not the newer live form.
+    const reused = 'https://cdn.example.com/media/platform/blog/inline-1.png';
+    const { deleteUpload, formRef, result, savedFormRef, unmount } = setup(
+      async () => ({ url: reused })
+    );
     await act(async () => {
-      unmount();
+      await result.current.uploadInlineImage(file);
     });
+    await act(async () => {
+      result.current.cleanupSettledInlineUploads(discardDraft);
+    });
+    savedFormRef.current = reuseDraft(reused);
+    formRef.current = discardDraft;
+    await act(async () => unmount());
     expect(deleteUpload).not.toHaveBeenCalled();
   });
 
@@ -274,9 +280,7 @@ describe('useBlogInlineImageUpload', () => {
     await act(async () => {
       result.current.cleanupSettledInlineUploads(discardDraft);
     });
-    await act(async () => {
-      unmount();
-    });
+    await act(async () => unmount());
     // No session is left to retry in: the failure leaks silently
     // instead of throwing out of the unmount.
     expect(deleteUpload).toHaveBeenCalledTimes(1);

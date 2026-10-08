@@ -127,14 +127,13 @@ export function RedvaultPaymentOption({
             </span>
             {summary && summary.discountKobo > 0 && (
               <span className="rounded-full bg-store-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-store-primary">
-                Tiered savings on eligible items
+                5% off eligible items
               </span>
             )}
           </span>
           <span className="mt-0.5 block text-xs text-store-background-text/70">
-            10% off when the eligible pre-discount subtotal is below ₦200,000;
-            5% at ₦200,000 or more. Excluded products and fees do not count
-            toward this threshold.
+            Save 5% on eligible products. Excluded products and fees do not
+            receive a discount.
           </span>
           <span className="mt-0.5 block text-xs text-store-background-text/70">
             {summary

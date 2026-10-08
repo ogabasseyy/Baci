@@ -28,6 +28,7 @@ import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airpo
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
@@ -1916,6 +1917,31 @@ export async function POST(request: NextRequest) {
       verifiedMerchantShippingRate?.amount ??
       (isIdempotentLocalAirportReplay ? null : localAirportShippingFee) ??
       shippingFeeValue;
+
+    // Pilot gate runs on the SERVER-verified shipping fee: validating the
+    // client value before merchant-rate verification would let a spoofed
+    // zero-fee payload pass the app layer and fail only at the DB guards.
+    // (Tax and assurance are already server-computed inputs; wrapping has
+    // no server-computed counterpart, and wallet/savings are rechecked
+    // from server records at initialization.)
+    const pilotOrderRejection = rejectDisallowedRedvaultLivePilotOrder({
+      redvaultRequested,
+      redvaultQuote,
+      userId: resolvedUserId,
+      merchantId: merchant_id,
+      currency: merchantResolvedCurrency,
+      shippingFee: effectiveShippingFee,
+      wrappingFee: giftWrappingFeeValue,
+      orderItems: orderItemsPayload,
+      useWalletCredit: use_wallet_credit,
+      walletAmount: wallet_amount,
+      useSavingsCredit: use_savings_credit,
+      savingsAmount: savings_amount,
+      taxAmount: orderTaxAmount,
+    });
+    if (pilotOrderRejection) {
+      return pilotOrderRejection;
+    }
 
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({

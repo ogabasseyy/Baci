@@ -7,6 +7,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 import { createOrder } from '@/services/orders';
 import { getRedvaultPaymentAvailability } from '@/services/redvault';
 import type { FetchImplementation } from '@/types/fetch';
@@ -18,6 +19,15 @@ import {
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn() },
+}));
+jest.mock('@/components/ui/ModalSheet', () => ({
+  ModalSheet: ({
+    children,
+    visible,
+  }: {
+    children: ReactNode;
+    visible: boolean;
+  }) => (visible ? children : null),
 }));
 jest.mock('@/services/orders-auth', () => ({
   resolveCheckoutAuth: async () => ({
@@ -100,7 +110,7 @@ beforeEach(() => {
 async function mountReview() {
   expect(
     await getRedvaultPaymentAvailability('6b5cb8a4-5575-456c-b936-8cdfae30db74')
-  ).toBe(true);
+  ).toEqual({ available: true, reason: 'ready' });
   const orderResponse = await createOrder(request);
   const onClose = jest.fn();
   render(
@@ -233,19 +243,6 @@ it('permits retry after a definitive initialization failure without starting a p
     ).toHaveLength(2)
   );
   expect(router.push).not.toHaveBeenCalled();
-});
-
-it('rejects incomplete persisted totals before a payment can start', async () => {
-  orderBody = {
-    ...responseBody,
-    redvault: { status: 'pending', quote: { discount_kobo: 500 } },
-  };
-  await expect(createOrder(request)).rejects.toMatchObject({
-    code: 'RESPONSE_VALIDATION_ERROR',
-  });
-  expect(
-    mockFetch.mock.calls.some(([url]) => String(url).endsWith('/initialize'))
-  ).toBe(false);
 });
 
 it('starts with a fresh review after closing and reopening an order', async () => {

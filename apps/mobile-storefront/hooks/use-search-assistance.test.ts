@@ -13,6 +13,9 @@ jest.mock('@baci/shared/lib', () => ({
   ...jest.requireActual('@baci/shared/lib'),
   readAssistanceStream: (...args: unknown[]) => mockRead(...args),
 }));
+jest.mock('@/lib/config', () => ({
+  CONFIG: { MERCHANT_SLUG: 'test-store' },
+}));
 
 import { useSearchAssistance } from './use-search-assistance';
 
@@ -98,4 +101,24 @@ it('does not reopen a dismissed proposal when an unfinished stream rejects', asy
   });
   expect(result.current.error).toBeUndefined();
   expect(result.current.pending).toBe(false);
+});
+
+it('asserts the build merchant so unsupported builds fail closed', async () => {
+  process.env.EXPO_PUBLIC_SEARCH_ASSIST_URL =
+    'http://localhost:3001/api/search/assist';
+  mockFetch.mockReset().mockResolvedValue({ ok: true });
+  mockRead.mockReset().mockResolvedValue(undefined);
+  const { result } = renderHook(() => useSearchAssistance('iphone'));
+  await act(async () => {
+    await result.current.ask();
+  });
+  expect(mockFetch).toHaveBeenCalledWith(
+    'http://localhost:3001/api/search/assist',
+    expect.objectContaining({
+      headers: {
+        'Content-Type': 'application/json',
+        'x-baci-storefront-slug': 'test-store',
+      },
+    })
+  );
 });

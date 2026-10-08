@@ -157,9 +157,15 @@ export function useProductDetailRouteData({
       product?.slug &&
       product.slug !== slug
     ) {
-      router.replace(`/product/${product.slug}`);
+      // Canonicalize a legacy slug without dropping the saved selection
+      // (the invalid-selection effect below intentionally clears params;
+      // a mere slug change must keep variant/offer/base-match identity).
+      router.replace({
+        pathname: '/product/[slug]',
+        params: { ...routeParams, slug: product.slug },
+      } as const);
     }
-  }, [isValidSlug, product?.slug, slug]);
+  }, [isValidSlug, product?.slug, routeParams, slug]);
 
   useEffect(() => {
     if (!product?.slug || product.slug !== slug) return;

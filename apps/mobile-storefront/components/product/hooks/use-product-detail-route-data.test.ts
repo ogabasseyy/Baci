@@ -158,3 +158,22 @@ it('treats a bare match_base flag as keep-base-price', () => {
   });
   expect(result.current.suppressConditionOfferMatch).toBe(false);
 });
+
+it('preserves the saved selection when canonicalizing a legacy slug', () => {
+  setup({
+    slug: 'legacy-phone',
+    offer_id: 'o1',
+    condition: 'used',
+    match_base: '1',
+  });
+
+  expect(mockReplace).toHaveBeenCalledWith({
+    pathname: '/product/[slug]',
+    params: {
+      slug: 'phone',
+      offer_id: 'o1',
+      condition: 'used',
+      match_base: '1',
+    },
+  });
+});

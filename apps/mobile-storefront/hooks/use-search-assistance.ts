@@ -5,6 +5,7 @@ import {
 import { fetch } from 'expo/fetch';
 import { randomUUID } from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
+import { CONFIG } from '@/lib/config';
 
 export function useSearchAssistance(query: string) {
   const endpoint = process.env.EXPO_PUBLIC_SEARCH_ASSIST_URL;
@@ -35,7 +36,13 @@ export function useSearchAssistance(query: string) {
       const requestId = randomUUID();
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Assert the build merchant: hostless mobile callers otherwise fall
+        // back to the server-configured tenant, so an unsupported build
+        // would silently consume another merchant's budget and branding.
+        headers: {
+          'Content-Type': 'application/json',
+          'x-baci-storefront-slug': CONFIG.MERCHANT_SLUG,
+        },
         body: JSON.stringify({ query, requestId }),
         signal: request.signal,
       });

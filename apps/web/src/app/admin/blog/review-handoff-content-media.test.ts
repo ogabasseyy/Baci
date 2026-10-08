@@ -56,6 +56,10 @@ describe('validateImportedContent media', () => {
     '<div class="hidden"><p class="md:block">Only body</p></div>',
     '<div class="opacity-0"><p class="md:opacity-100">Only body</p></div>',
     '<div class="sr-only"><p class="md:not-sr-only">Only body</p></div>',
+    '<div class="max-h-0 overflow-hidden md:h-auto">Only body</div>',
+    '<div class="w-0 overflow-hidden md:h-64">Only body</div>',
+    '<div class="h-0 overflow-hidden md:h-0">Only body</div>',
+    '<div class="text-transparent"><p class="text-black/0">Only body</p></div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -133,6 +137,10 @@ describe('validateImportedContent media', () => {
     '<div class="sr-only md:not-sr-only">Only body</div>',
     '<div class="invisible"><p class="md:visible">Only body</p></div>',
     '<div class="text-transparent"><p class="md:text-black">Only body</p></div>',
+    '<div class="h-0 overflow-hidden md:h-auto">Only body</div>',
+    '<div class="w-0 overflow-hidden md:w-full">Only body</div>',
+    '<div class="max-h-0 overflow-hidden md:max-h-none">Only body</div>',
+    '<div class="size-0 overflow-hidden md:size-64">Only body</div>',
   ])('counts responsive overrides of hiding utilities as readable: %s', (body) => {
     // Each pair renders at some breakpoint: same-element responsive
     // overrides restore display, visibility, opacity, screen-reader

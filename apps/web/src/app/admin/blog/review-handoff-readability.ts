@@ -59,8 +59,8 @@ function tagHasTerminalHidingClass(tag: string): boolean {
   return false;
 }
 
-const ZERO_HEIGHT_CLASS_TOKENS = new Set(['h-0', 'max-h-0', 'size-0']);
-const ZERO_WIDTH_CLASS_TOKENS = new Set(['w-0', 'max-w-0', 'size-0']);
+const ZERO_HEIGHT_CLASS_TOKENS = new Set(['h-0', 'size-0']);
+const ZERO_WIDTH_CLASS_TOKENS = new Set(['w-0', 'size-0']);
 const CLIP_X_CLASS_TOKENS = new Set([
   'overflow-hidden',
   'overflow-clip',
@@ -78,16 +78,21 @@ function hasClippedZeroSizeClass(tag: string): boolean {
   // A zeroed axis alone still overflows visibly, and clipping alone
   // sizes normally: only a zeroed axis paired with clipping on that
   // same axis hides. Cross-axis pairs (h-0 with overflow-x-hidden)
-  // overflow visibly on the unclipped axis and stay readable.
+  // overflow visibly on the unclipped axis and stay readable. A
+  // responsive size override restores its own constraint kind only:
+  // max-h-0 still caps the box after md:h-auto.
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
-    const zeroHeight = classes.some((token) =>
-      ZERO_HEIGHT_CLASS_TOKENS.has(token)
-    );
-    const zeroWidth = classes.some((token) =>
-      ZERO_WIDTH_CLASS_TOKENS.has(token)
-    );
+    const markers = showingMarkers(classes);
+    const zeroHeight =
+      (classes.some((token) => ZERO_HEIGHT_CLASS_TOKENS.has(token)) &&
+        !markers.heightRestored) ||
+      (classes.includes('max-h-0') && !markers.maxHeightRestored);
+    const zeroWidth =
+      (classes.some((token) => ZERO_WIDTH_CLASS_TOKENS.has(token)) &&
+        !markers.widthRestored) ||
+      (classes.includes('max-w-0') && !markers.maxWidthRestored);
     const clipsX = classes.some((token) => CLIP_X_CLASS_TOKENS.has(token));
     const clipsY = classes.some((token) => CLIP_Y_CLASS_TOKENS.has(token));
     if ((zeroHeight && clipsY) || (zeroWidth && clipsX)) {

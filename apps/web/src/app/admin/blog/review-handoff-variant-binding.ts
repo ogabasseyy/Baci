@@ -3,7 +3,7 @@ import {
   isBlogFeaturedVariantKey,
   isTrustedGeneratedCodexBlogImageUrl,
   isTrustedGeneratedCodexBlogVariantUrl,
-} from '@/lib/blog-discover-readiness';
+} from '@/lib/blog-image-url-identity';
 import { extractManagedBlogStoragePath } from '@/lib/blog-managed-storage-paths';
 
 // The upload route names the source platform/blog/<token>.<ext> and its

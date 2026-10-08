@@ -141,7 +141,14 @@ it('verifies exact variant matches against the projection when hydration degrade
     manage_stock: true,
   });
   mockRpc.mockResolvedValue({
-    data: [{ variant_id: 'v1', offer_id: null, condition: 'new' }],
+    data: [
+      {
+        variant_id: 'v1',
+        offer_id: null,
+        condition: 'new',
+        effective_price: 80,
+      },
+    ],
     error: null,
   });
   const client = new QueryClient({
@@ -164,6 +171,7 @@ it('verifies exact variant matches against the projection when hydration degrade
   );
   await waitFor(() => expect(mockRpc).toHaveBeenCalled());
   expect(result.current.unavailableIds).toEqual([]);
+  await waitFor(() => expect(result.current.products[0]?.price).toBe(80));
 });
 it('refreshes merchant-scoped snapshots and keeps matched identities without mutating selection', async () => {
   const snapshot = {

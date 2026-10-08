@@ -67,6 +67,7 @@ export function useComparisonProducts(selected: Product[]) {
           let liveCondition = normalizeProductConditionFilterValue(
             option?.condition ?? product.condition
           );
+          let livePrice: number | undefined;
           if (match) {
             const { data, error } = await withSupabaseRetry(async () =>
               supabase.rpc('get_storefront_search_price_options', {
@@ -79,6 +80,7 @@ export function useComparisonProducts(selected: Product[]) {
               variant_id: string | null;
               offer_id: string | null;
               condition?: string;
+              effective_price?: number | null;
             }[];
             const liveOption = options.find((o) =>
               match.variantId
@@ -91,6 +93,13 @@ export function useComparisonProducts(selected: Product[]) {
             liveCondition =
               normalizeProductConditionFilterValue(liveOption?.condition) ??
               liveCondition;
+            // Degraded hydration may verify the exact id while the local
+            // option stays missing: price from the projection, never the
+            // parent price, so a verified label never shows an unverified
+            // amount.
+            if (typeof liveOption?.effective_price === 'number') {
+              livePrice = liveOption.effective_price;
+            }
           }
           if (match && !optionAvailable)
             return {
@@ -109,7 +118,7 @@ export function useComparisonProducts(selected: Product[]) {
               searchMatch: match
                 ? { ...match, condition: liveCondition }
                 : undefined,
-              price: option?.price ?? product.price,
+              price: option?.price ?? livePrice ?? product.price,
               // A matched option price must never pair with the parent's
               // strike-through: suppress it exactly as the search card does
               // for matched items, so the table shows no false discount.

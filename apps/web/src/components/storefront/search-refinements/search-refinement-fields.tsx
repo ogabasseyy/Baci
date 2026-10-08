@@ -37,6 +37,10 @@ export function SearchRefinementFields({
   const visible = deduplicateFacetChoices([...brands, ...draft.brands]).filter(
     (brand) => brand.toLowerCase().includes(brandQuery.toLowerCase())
   );
+  const visibleProcessors = deduplicateFacetChoices([
+    ...processors,
+    ...(draft.processor ? [draft.processor] : []),
+  ]);
   const inputClass =
     'min-h-11 w-full rounded-lg border border-store-background-text/20 bg-store-background px-3 py-2 text-store-background-text';
   return (
@@ -189,18 +193,19 @@ export function SearchRefinementFields({
             <span className="sr-only">Processor</span>
             <select
               className={inputClass}
-              value={draft.processor ?? ''}
+              value={
+                visibleProcessors.find(
+                  (processor) =>
+                    draft.processor !== undefined &&
+                    isSameFacetChoice(processor, draft.processor)
+                ) ?? ''
+              }
               onChange={(e) =>
                 onChange({ ...draft, processor: e.target.value || undefined })
               }
             >
               <option value="">Any processor</option>
-              {[
-                ...new Set([
-                  ...processors,
-                  ...(draft.processor ? [draft.processor] : []),
-                ]),
-              ].map((processor) => (
+              {visibleProcessors.map((processor) => (
                 <option key={processor} value={processor}>
                   {processor}
                 </option>

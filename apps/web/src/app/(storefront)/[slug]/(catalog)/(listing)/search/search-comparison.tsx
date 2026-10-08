@@ -212,6 +212,9 @@ export function SearchComparisonTray({
                   {product?.name ?? snapshot.name}
                 </h3>
                 <p>
+                  {/* Parent-basis price: matched entries carry the
+                      verify-on-product-page marker below; exact option
+                      pricing resolves on the PDP. */}
                   {product
                     ? new Intl.NumberFormat('en-NG', {
                         style: 'currency',

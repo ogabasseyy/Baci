@@ -138,7 +138,11 @@ export function useSearchScreenQuery({
 
   const applyAssistance = (proposal: SearchAssistanceProposal) => {
     try {
-      const next = mergeAssistedRefinements(refinements, proposal);
+      const next = mergeAssistedRefinements(
+        refinements,
+        proposal,
+        debouncedQuery
+      );
       cancelDebounce();
       writeParams({
         q: proposal.query,

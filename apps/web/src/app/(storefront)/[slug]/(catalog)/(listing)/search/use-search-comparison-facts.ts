@@ -14,7 +14,14 @@ const UUID_PATTERN =
 // The web tray holds at most four selections; the refresh never needs more.
 const MAX_COMPARISON_FACTS_IDS = 4;
 
-/** Opening comparison refreshes all selected identities, including other result pages. */
+/**
+ * Opening comparison refreshes all selected identities, including other
+ * result pages. Parent rows only: unlike the native tray, this refresh
+ * does not verify matched variant/offer identity against the price
+ * projection. The tray therefore shows parent-basis facts with a
+ * "verify on product page" marker for matched entries; the PDP's
+ * ID-gated selection is the source of truth on open.
+ */
 export function useSearchComparisonFacts(
   merchantId: string,
   ids: string[],

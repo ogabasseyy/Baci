@@ -30,7 +30,7 @@ export function SearchAssistance({
     }
   ).filter((suggestion) => {
     try {
-      mergeAssistedRefinements(criteria, suggestion.proposal);
+      mergeAssistedRefinements(criteria, suggestion.proposal, resultQuery);
       return true;
     } catch {
       return false;
@@ -48,7 +48,7 @@ export function SearchAssistance({
           href={buildRefinedSearchHref(
             basePath,
             suggestion.proposal.query,
-            mergeAssistedRefinements(criteria, suggestion.proposal)
+            mergeAssistedRefinements(criteria, suggestion.proposal, resultQuery)
           )}
           className="flex min-h-11 shrink-0 items-center rounded-full border border-store-background-text/20 px-4 text-sm text-store-background-text"
         >

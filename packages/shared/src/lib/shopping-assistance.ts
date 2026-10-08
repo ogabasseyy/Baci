@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { buildProductSearchQuery } from './product-search';
 import {
   parseSearchRefinements,
+  resetRefinementsForQuery,
   type SearchRefinements,
 } from './search-refinements';
 
@@ -44,12 +45,20 @@ export function parseSearchAssistanceProposal(
 ): SearchAssistanceProposal {
   return searchAssistanceProposalSchema.parse(value);
 }
-/** A proposal is applied only by a customer action; retain existing constraints. */
+/**
+ * A proposal is applied only by a customer action. Constraints carry over
+ * only when the proposal answers the committed results query; a proposal
+ * for a different query starts from empty refinements (mirroring form
+ * submission), otherwise stale brand/category/processor constraints the
+ * proposal cannot express would produce false no-results.
+ */
 export function mergeAssistedRefinements(
   current: SearchRefinements,
-  proposal: SearchAssistanceProposal
+  proposal: SearchAssistanceProposal,
+  committedQuery: string
 ): SearchRefinements {
-  const next = { ...current, ...proposal.filters };
+  const base = resetRefinementsForQuery(committedQuery, proposal.query, current);
+  const next = { ...base, ...proposal.filters };
   const parsed = parseSearchRefinements({
     brand: next.brands,
     condition: next.condition,

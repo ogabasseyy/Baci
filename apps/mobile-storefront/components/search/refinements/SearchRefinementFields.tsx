@@ -215,16 +215,15 @@ export function SearchRefinementFields({
               !draft.processor,
               'radio'
             )}
-            {[
-              ...new Set([
-                ...processors,
-                ...(draft.processor ? [draft.processor] : []),
-              ]),
-            ].map((processor) =>
+            {deduplicateFacetChoices([
+              ...processors,
+              ...(draft.processor ? [draft.processor] : []),
+            ]).map((processor) =>
               action(
                 processor,
                 () => setDraft({ ...draft, processor }),
-                draft.processor === processor,
+                draft.processor !== undefined &&
+                  isSameFacetChoice(draft.processor, processor),
                 'radio'
               )
             )}

@@ -286,3 +286,14 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - Muse low merge-undefined FIXED by documentation (Muse's own alternative): verified all undefined positions are fail-safe (fee math falsy→0, toggle || false + !flip, persistence stable) and recorded the opt-out contract in the policy docblock.
 - Muse low itemization adjudicated with evidence: fee itemized in cart (per-line row), checkout quote (assuranceFeeKobo), and invoice (buildAssuranceInvoiceLineItem); order-success shows grand totals only for ALL fees (pre-existing page design).
 - Muse medium intake-rotation + low capacity: repeats of the PR-disclosed and line-7 adjudications.
+
+## Round 43 (Codex CX-82..CX-84 on dd6f738954 — all fixed; Muse 4 med + 2 low — 1 doc fix, 5 adjudicated)
+
+- CX-82 (P2) FIXED: degraded comparison refresh now prices verified exact ids from the projection's effective_price (option?.price ?? livePrice ?? product.price) instead of the parent price. Degraded test asserts the 80 projection price, not the 100 parent price.
+- CX-83 (P3) FIXED: processor choices deduplicate case-insensitively in both renderers via the shared CX-63 helpers (facet spellings win), with case-insensitive selected-state resolution (web select value resolves to facet spelling; native radio checked via isSameFacetChoice). Tests on both sides pin single-option + selected.
+- CX-84 (P2) FIXED: mergeAssistedRefinements takes the committed query and resets to empty (mirroring form submission) when the proposal answers a different query; same-query proposals retain as before. All 3 callers pass their committed query (web resultQuery/query, native debouncedQuery). Shared test pins Apple/phone → Lenovo/laptop reset.
+- Muse medium web-refresh-verification FIXED by documentation (Muse's own alternative): recorded the parent-basis-until-PDP contract on the facts hook and tray price block; the tray already marks matches "verify on product page".
+- Muse medium zero-price adjudicated: sole consumer (CompareTable) verified honoring unavailableIds; contract documented + tested; a branded-price type would ripple without forcing new-consumer checks.
+- Muse low intake-CSRF adjudicated: route uses no cookies/session/headers (no ambient authority → no CSRF vector); budget half is the PR-disclosed repeat.
+- Muse assurance x2 + count/totalCount: repeats (itemization evidence Round 42; pinned reachability test covers the suggested regression — it exists).
+- CI green on dd6f738954 (25 pass, 0 pending) before Round 43 push.

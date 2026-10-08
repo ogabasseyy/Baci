@@ -35,6 +35,20 @@ const props: ComponentProps<typeof SearchRefinementFields> = {
   ),
 };
 beforeEach(() => jest.clearAllMocks());
+it('merges a case-variant draft processor into the facet spelling', () => {
+  const view = render(
+    <SearchRefinementFields
+      {...props}
+      processors={['Intel Core i7', 'M1']}
+      draft={{ ...draft, processor: 'intel core i7' }}
+    />
+  );
+  fireEvent.press(view.getByLabelText('Processor options'));
+  // One radio in the facet spelling, selected via the draft value.
+  const radios = view.getAllByLabelText('Intel Core i7');
+  expect(radios).toHaveLength(1);
+  expect(radios[0].props.accessibilityState.selected).toBe(true);
+});
 it('expands one section and calls the price draft callbacks', () => {
   const view = render(<SearchRefinementFields {...props} />);
   expect(

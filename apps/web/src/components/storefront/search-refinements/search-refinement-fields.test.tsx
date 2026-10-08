@@ -50,6 +50,29 @@ it('merges case-variant draft brands into the facet spelling', () => {
   );
 });
 
+it('merges a case-variant draft processor into the facet spelling', () => {
+  render(
+    <SearchRefinementFields
+      draft={createRefinementDraft({
+        brands: [],
+        processor: 'intel core i7',
+        sort: 'relevance',
+      })}
+      onChange={vi.fn()}
+      brands={[]}
+      categories={[]}
+      processors={['Intel Core i7', 'M1']}
+    />
+  );
+  // One option in the facet spelling, selected via the draft value.
+  const options = screen.getAllByRole('option', { name: 'Intel Core i7' });
+  expect(options).toHaveLength(1);
+  expect(
+    (screen.getByRole('combobox', { name: 'Processor' }) as HTMLSelectElement)
+      .value
+  ).toBe('Intel Core i7');
+});
+
 it('commits a minimum rating through the draft field', () => {
   const onChange = vi.fn();
   render(

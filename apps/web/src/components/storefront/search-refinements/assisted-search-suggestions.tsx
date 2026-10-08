@@ -33,7 +33,7 @@ export function AssistedSearchSuggestions({
       proposalHref = buildRefinedSearchHref(
         basePath,
         assistance.proposal.query,
-        mergeAssistedRefinements(criteria, assistance.proposal)
+        mergeAssistedRefinements(criteria, assistance.proposal, query)
       );
     } catch {
       /* A conflicting proposal cannot replace the current filters. */

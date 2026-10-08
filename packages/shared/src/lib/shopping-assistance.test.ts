@@ -16,7 +16,8 @@ describe('assisted search proposals', () => {
     expect(
       mergeAssistedRefinements(
         { brands: [], sort: 'price_asc', minRating: 4 },
-        proposal
+        proposal,
+        'iphone'
       )
     ).toEqual({
       brands: ['Apple'],
@@ -59,9 +60,32 @@ describe('assisted search proposals', () => {
     expect(() =>
       mergeAssistedRefinements(
         { brands: [], sort: 'relevance', minPrice: 100 },
-        proposal
+        proposal,
+        'iphone'
       )
     ).toThrow('price range');
+  });
+  it('drops stale constraints when the proposal answers a different query', () => {
+    const proposal = parseSearchAssistanceProposal({
+      query: 'gaming laptop',
+      explanation: 'Laptops for gaming.',
+      filters: { brands: ['Lenovo'] },
+    });
+    // Apple/category/processor/rating/sort from the phone search cannot
+    // carry into a laptop proposal the filters cannot express.
+    expect(
+      mergeAssistedRefinements(
+        {
+          brands: ['Apple'],
+          categoryId: 'phones',
+          processor: 'A17',
+          sort: 'price_asc',
+          minRating: 4,
+        },
+        proposal,
+        'iphone'
+      )
+    ).toEqual({ brands: ['Lenovo'], sort: 'relevance' });
   });
   it('bounds the shared query rule at 2–120 trimmed chars plus a catalog term', () => {
     expect(searchAssistanceQuerySchema.safeParse('ab').success).toBe(true);

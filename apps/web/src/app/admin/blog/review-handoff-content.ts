@@ -155,18 +155,32 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   'image/x-icon',
 ]);
 
+function isAlwaysFalseMediaQuery(value: string): boolean {
+  // `not all` never matches any device, so the source can never be
+  // selected. Every other query needs a viewport or device the
+  // validator has not — including `not <type>` negations, which
+  // match other devices — so only this exact shape is provably
+  // inapplicable.
+  return value.trim().toLowerCase().replace(/\s+/g, ' ') === 'not all';
+}
+
 function isApplicableSource(tag: string): boolean {
   // Browsers skip sources with unsupported types. In picture context
   // only supported image MIME types are meaningful; anything else
-  // (or an empty type) contributes no candidate. The media attribute
-  // is assumed applicable: matching it requires a viewport the
-  // validator has not.
+  // (or an empty type) contributes no candidate. A provably
+  // non-matching media query skips the same way; any other media
+  // value is assumed applicable, since matching it requires a
+  // viewport the validator has not.
+  let applicable = true;
   for (const { name, value } of tagAttributes(tag)) {
-    if (name !== 'type') continue;
-    const essence = value.split(';')[0].trim().toLowerCase();
-    return SUPPORTED_IMAGE_MIME_TYPES.has(essence);
+    if (name === 'type') {
+      const essence = value.split(';')[0].trim().toLowerCase();
+      if (!SUPPORTED_IMAGE_MIME_TYPES.has(essence)) applicable = false;
+    } else if (name === 'media') {
+      if (isAlwaysFalseMediaQuery(value)) applicable = false;
+    }
   }
-  return true;
+  return applicable;
 }
 
 function hasBrokenMediaTag(html: string): boolean {

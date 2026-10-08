@@ -29,6 +29,7 @@ describe('validateImportedContent media', () => {
     '<span class="invisible"><p><img src="https://cdn.example.com/a.png"></p></span>',
     '<div class="max-h-0 overflow-hidden"><img src="https://cdn.example.com/a.png"></div>',
     '<div class="h-0 overflow-hidden"><img src="https://cdn.example.com/a.png"></div>',
+    '<div class="w-0 overflow-hidden"><img src="https://cdn.example.com/a.png"></div>',
   ])('disregards images inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -43,6 +44,10 @@ describe('validateImportedContent media', () => {
     '<div class="sr-only">Only body</div>',
     '<div class="max-h-0 overflow-hidden">Only body</div>',
     '<div class="h-0 overflow-hidden">Only body</div>',
+    '<div class="w-0 overflow-hidden">Only body</div>',
+    '<div class="max-w-0 overflow-hidden">Only body</div>',
+    '<div class="h-0 overflow-y-hidden">Only body</div>',
+    '<div class="w-0 overflow-x-hidden">Only body</div>',
   ])('disregards text inside hidden ancestors: %s', (body) => {
     expect(() => validateImportedContent(body)).toThrow(
       'no readable text or images'
@@ -83,11 +88,15 @@ describe('validateImportedContent media', () => {
   it.each([
     '<div class="max-h-0">Only body</div>',
     '<div class="h-0">Only body</div>',
+    '<div class="w-0">Only body</div>',
     '<div class="overflow-hidden">Only body</div>',
+    '<div class="h-0 overflow-x-hidden">Only body</div>',
+    '<div class="w-0 overflow-y-hidden">Only body</div>',
   ])('counts partial clip utilities without their partner as readable: %s', (body) => {
-    // max-h-0 alone does not clip (content overflows visibly) and
-    // overflow-hidden alone does not zero the height: only the pair
-    // hides, so each half stays readable on its own.
+    // A zeroed axis alone does not clip (content overflows visibly)
+    // and overflow-hidden alone zeroes nothing: only a zeroed axis
+    // paired with clipping on that same axis hides, so each half —
+    // and each cross-axis pairing — stays readable on its own.
     expect(validateImportedContent(body)).toContain('Only body');
   });
 
@@ -107,6 +116,16 @@ describe('validateImportedContent media', () => {
         '<div class="invisible"><img class="visible" src="https://cdn.example.com/a.png"></div>'
       )
     ).toContain('a.png');
+  });
+
+  it('counts opaque text inside a transparent ancestor as readable', () => {
+    // color inherits but the child's opaque text utility overrides
+    // it, so the paragraph renders and the handoff must not be rejected.
+    expect(
+      validateImportedContent(
+        '<div class="text-transparent"><p class="text-black">Readable</p></div>'
+      )
+    ).toContain('Readable');
   });
 
   it('disregards a zero-height image without any overflow rule', () => {

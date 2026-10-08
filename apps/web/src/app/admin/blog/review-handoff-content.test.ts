@@ -96,6 +96,28 @@ describe('validateImportedContent', () => {
     ).toContain('<img');
   });
 
+  it('ignores a picture source with an always-false media query', () => {
+    // Browsers never match `not all`, leaving the src-less img with
+    // no candidate: the image-only article renders blank and must be
+    // rejected.
+    expect(() =>
+      validateImportedContent(
+        '<picture><source media="not all" srcset="https://cdn.example.com/a.webp"><img alt=""></picture>'
+      )
+    ).toThrow('must use HTTPS URLs');
+  });
+
+  it('accepts a device-dependent media query with an img fallback', () => {
+    // Viewport-dependent queries cannot be evaluated without a
+    // device, so they stay applicable; the img fallback supplies a
+    // candidate either way.
+    expect(
+      validateImportedContent(
+        '<picture><source media="(min-width: 800px)" srcset="https://cdn.example.com/a.webp"><img src="https://cdn.example.com/a.png" alt="A"></picture>'
+      )
+    ).toContain('<img');
+  });
+
   it('ignores a picture source placed after the img', () => {
     // Only preceding source siblings participate in selecting the
     // resource for the img, so this source cannot supply the src-less

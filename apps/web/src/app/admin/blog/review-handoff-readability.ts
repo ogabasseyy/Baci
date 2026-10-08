@@ -41,11 +41,14 @@ function isZeroSizedImage(tag: string): boolean {
 // it, so visibility is tracked separately below.
 const IMAGE_HIDING_CLASS_TOKENS = new Set(['hidden', 'opacity-0', 'sr-only']);
 // text-transparent sets only `color: transparent`: it hides glyphs but not
-// decoded image pixels, so it joins the text set alone.
-const TEXT_HIDING_CLASS_TOKENS = new Set([
-  ...IMAGE_HIDING_CLASS_TOKENS,
-  'text-transparent',
-]);
+// decoded image pixels, and — unlike display or opacity — a descendant
+// with an opaque text color overrides it. Color is therefore tracked as
+// an overridable inherited marker (like visibility), never as terminal
+// hiding. Opaque means a concrete Tailwind v4 palette color; text-current
+// and text-inherit pass the ancestor color through, and font-size or
+// alignment utilities (text-sm, text-center) set no color at all.
+const OPAQUE_TEXT_COLOR_PATTERN =
+  /^text-(?:black|white|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))(?:\/(?:\d+|\[[^\]]+\]))?$/;
 
 function tagHasHidingClass(tag: string, tokens: ReadonlySet<string>): boolean {
   // The sanitizer preserves class but strips style, so hidden subtrees
@@ -61,18 +64,38 @@ function tagHasHidingClass(tag: string, tokens: ReadonlySet<string>): boolean {
   return false;
 }
 
-function hasClippedZeroHeightClass(tag: string): boolean {
-  // max-h-0 and h-0 cap the box at zero height but content still
-  // overflows visibly; overflow-hidden clips but sizes normally. Only
-  // the pair hides, so each utility alone must keep matching as
-  // visible.
+const ZERO_HEIGHT_CLASS_TOKENS = new Set(['h-0', 'max-h-0', 'size-0']);
+const ZERO_WIDTH_CLASS_TOKENS = new Set(['w-0', 'max-w-0', 'size-0']);
+const CLIP_X_CLASS_TOKENS = new Set([
+  'overflow-hidden',
+  'overflow-clip',
+  'overflow-x-hidden',
+  'overflow-x-clip',
+]);
+const CLIP_Y_CLASS_TOKENS = new Set([
+  'overflow-hidden',
+  'overflow-clip',
+  'overflow-y-hidden',
+  'overflow-y-clip',
+]);
+
+function hasClippedZeroSizeClass(tag: string): boolean {
+  // A zeroed axis alone still overflows visibly, and clipping alone
+  // sizes normally: only a zeroed axis paired with clipping on that
+  // same axis hides. Cross-axis pairs (h-0 with overflow-x-hidden)
+  // overflow visibly on the unclipped axis and stay readable.
   for (const { name, value } of tagAttributes(tag)) {
     if (name !== 'class') continue;
     const classes = value.split(/\s+/);
-    if (
-      (classes.includes('max-h-0') || classes.includes('h-0')) &&
-      classes.includes('overflow-hidden')
-    ) {
+    const zeroHeight = classes.some((token) =>
+      ZERO_HEIGHT_CLASS_TOKENS.has(token)
+    );
+    const zeroWidth = classes.some((token) =>
+      ZERO_WIDTH_CLASS_TOKENS.has(token)
+    );
+    const clipsX = classes.some((token) => CLIP_X_CLASS_TOKENS.has(token));
+    const clipsY = classes.some((token) => CLIP_Y_CLASS_TOKENS.has(token));
+    if ((zeroHeight && clipsY) || (zeroWidth && clipsX)) {
       return true;
     }
   }
@@ -82,20 +105,23 @@ function hasClippedZeroHeightClass(tag: string): boolean {
 function hasVisibilityHidingClass(tag: string): boolean {
   return (
     tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS) ||
-    hasClippedZeroHeightClass(tag)
+    hasClippedZeroSizeClass(tag)
   );
 }
 
 function hasTextHidingClass(tag: string): boolean {
+  // Transparent text color is tracked per frame as an overridable
+  // marker, so the terminal text set matches the visibility set.
   return (
-    tagHasHidingClass(tag, TEXT_HIDING_CLASS_TOKENS) ||
-    hasClippedZeroHeightClass(tag)
+    tagHasHidingClass(tag, IMAGE_HIDING_CLASS_TOKENS) ||
+    hasClippedZeroSizeClass(tag)
   );
 }
 
 type HidingFrame = {
   terminal: boolean;
   visibility: 'visible' | 'invisible' | null;
+  color: 'opaque' | 'transparent' | null;
 };
 
 function elementVisibility(tag: string): 'visible' | 'invisible' | null {
@@ -110,11 +136,38 @@ function elementVisibility(tag: string): 'visible' | 'invisible' | null {
   return null;
 }
 
-function subtreeHidden(frames: readonly HidingFrame[]): boolean {
+function elementColor(tag: string): 'opaque' | 'transparent' | null {
+  for (const { name, value } of tagAttributes(tag)) {
+    if (name !== 'class') continue;
+    const classes = value.split(/\s+/);
+    // A pathological element carrying both markers resolves to opaque,
+    // matching the override direction.
+    if (classes.some((token) => OPAQUE_TEXT_COLOR_PATTERN.test(token))) {
+      return 'opaque';
+    }
+    if (classes.includes('text-transparent')) return 'transparent';
+  }
+  return null;
+}
+
+function subtreeHidden(
+  frames: readonly HidingFrame[],
+  includeColor: boolean
+): boolean {
   if (frames.some((frame) => frame.terminal)) return true;
   for (let index = frames.length - 1; index >= 0; index -= 1) {
     const marker = frames[index].visibility;
     if (marker !== null) return marker === 'invisible';
+  }
+  // Transparent color hides glyphs but not decoded image pixels, so
+  // only the text path consults it. Like visibility, the nearest
+  // marker wins and an opaque descendant escapes a transparent
+  // ancestor.
+  if (includeColor) {
+    for (let index = frames.length - 1; index >= 0; index -= 1) {
+      const marker = frames[index].color;
+      if (marker !== null) return marker === 'transparent';
+    }
   }
   return false;
 }
@@ -158,13 +211,15 @@ function hasHiddenAncestor(
     frames.push({
       terminal: hasVisibilityHidingClass(match[0]),
       visibility: elementVisibility(match[0]),
+      color: elementColor(match[0]),
     });
   }
   frames.push({
     terminal: hasVisibilityHidingClass(tag),
     visibility: elementVisibility(tag),
+    color: elementColor(tag),
   });
-  return subtreeHidden(frames);
+  return subtreeHidden(frames, false);
 }
 
 function visibleText(content: string): string {
@@ -177,7 +232,7 @@ function visibleText(content: string): string {
   let position = 0;
   for (const match of withoutComments.matchAll(HTML_TAG_PATTERN)) {
     const index = match.index ?? withoutComments.length;
-    if (!subtreeHidden(frames)) {
+    if (!subtreeHidden(frames, true)) {
       segments.push(withoutComments.slice(position, index));
     }
     position = index + match[0].length;
@@ -189,9 +244,10 @@ function visibleText(content: string): string {
     frames.push({
       terminal: hasTextHidingClass(match[0]),
       visibility: elementVisibility(match[0]),
+      color: elementColor(match[0]),
     });
   }
-  if (!subtreeHidden(frames)) {
+  if (!subtreeHidden(frames, true)) {
     segments.push(withoutComments.slice(position));
   }
   return segments.join('');
@@ -203,7 +259,9 @@ export function hasReadableContent(content: string): boolean {
   // hiding class sits on the image itself or on an ancestor. Terminal
   // hiding (display, opacity, clipping) wins anywhere, while inherited
   // `invisible` yields to the nearest `visible` descendant. Text gets
-  // the same ancestry handling through visibleText. Comments render
+  // the same ancestry handling through visibleText, plus an overridable
+  // color marker so opaque text escapes a `text-transparent` ancestor
+  // (glyph-only: images under transparent text still count). Comments render
   // nothing, so strip them before matching: a commented-out <img> must
   // neither satisfy readability itself nor donate a hidden ancestor.
   const withoutComments = stripHtmlComments(content);

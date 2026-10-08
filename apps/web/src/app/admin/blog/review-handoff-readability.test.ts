@@ -9,6 +9,8 @@ describe('hasReadableContent', () => {
     '<div class="text-transparent"><img src="https://cdn.example.com/a.png"></div>',
     '<div class="hidden"></div><p>Visible body</p>',
     '<div class="invisible"><p class="visible">Readable</p></div>',
+    '<div class="text-transparent"><p class="text-black">Readable</p></div>',
+    '<div class="text-transparent"><p class="text-emerald-600">Readable</p></div>',
   ])('counts visible content as readable: %s', (content) => {
     expect(hasReadableContent(content)).toBe(true);
   });

@@ -119,13 +119,18 @@ export function createPrimaryWalletCardCheckoutService(input: {
           'custody_pending',
           'reconciliation_required',
           'completed',
+          'abandoned',
         ].includes(intent.status)
       )
         return publicState(intent);
       const verification = await input.provider.verify(intent);
       active();
       if (verification.outcome === 'pending') return publicState(intent);
-      if (verification.outcome === 'reconciliation_required')
+      if (verification.outcome === 'abandoned')
+        schemas.acknowledgement.parse(
+          await input.execute('abandonment', [storageScope, operationId])
+        );
+      else if (verification.outcome === 'reconciliation_required')
         schemas.initializationAcknowledgement.parse(
           await input.execute('reconciliation', [storageScope, operationId])
         );

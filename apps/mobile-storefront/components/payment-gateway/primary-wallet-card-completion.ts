@@ -50,6 +50,14 @@ export function beginPrimaryWalletCardCompletion(
         }
       };
       requireSameAccount();
+      if (result.status === 'abandoned') {
+        input.refs.paymentCompletionStartedRef.current = false;
+        input.setErrorMessage(
+          'This card checkout was cancelled before payment. No money moved. Start a new funding to try again.'
+        );
+        input.setPaymentStatus('error');
+        return;
+      }
       if (result.status !== 'completed') {
         input.refs.paymentCompletionStartedRef.current = false;
         input.setErrorMessage(

@@ -35,9 +35,7 @@ it('exposes signing keys while the worker stays unconfigured', () => {
   expect(() => readPrimaryWalletBankInboxRuntime('intake', env)).toThrow(
     /Primary bank inbox/
   );
-  expect(
-    readPrimaryWalletBankInboxSecrets({ NODE_ENV: 'test' })
-  ).toBeNull();
+  expect(readPrimaryWalletBankInboxSecrets({ NODE_ENV: 'test' })).toBeNull();
 });
 it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-environment settings', () => {
   for (const env of [

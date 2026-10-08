@@ -11,6 +11,11 @@ jest.mock('@/lib/customer-savings', () => ({
   fetchSavingsPlanFunding: (...args: unknown[]) =>
     mockFetchSavingsPlanFunding(...args),
 }));
+const mockUseCapability = jest.fn<(...args: unknown[]) => unknown>();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
 
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
@@ -61,6 +66,7 @@ it('clears displayed accounts when verification stops reporting readiness', asyn
   expect(result.current.planFundingAccounts).toEqual([]);
 });
 it('uses the verified primary identity without requiring BVN again', async () => {
+  mockUseCapability.mockReturnValue(true);
   mockFetchSavingsPlanFunding.mockResolvedValue({ status: 'pending' });
   const { result } = renderHook(() =>
     useSavingsPlanFunding({

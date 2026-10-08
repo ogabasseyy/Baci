@@ -144,6 +144,20 @@ it('clears only after authoritative completed custody, never checkout acceptance
   await client.recover(scope);
   expect(mockStorage.size).toBe(0);
 });
+it('clears an abandoned checkout so a fresh funding can start', async () => {
+  const client = createPrimaryWalletCardFundingClient();
+  await client.start(start);
+  mockFetchJson.mockResolvedValue({
+    ...response,
+    status: 'abandoned',
+    authorizationUrl: undefined,
+  });
+  expect((await client.recover(scope)).status).toBe('abandoned');
+  expect(mockStorage.size).toBe(0);
+  mockFetchJson.mockResolvedValue(response);
+  await client.start(start);
+  expect(mockStorage.size).toBe(1);
+});
 it('serializes concurrent factory instances so double taps use one initialization then status', async () => {
   await Promise.all([
     createPrimaryWalletCardFundingClient().start(start),

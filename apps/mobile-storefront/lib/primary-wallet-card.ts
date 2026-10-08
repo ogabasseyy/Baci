@@ -89,7 +89,10 @@ export function createPrimaryWalletCardFundingClient() {
         throw new Error(
           'Card funding could not be confirmed. Keep the pending operation for review.'
         );
-      if (response.status === 'completed')
+      // Terminal states drop the saved record so a fresh operation can
+      // start: an abandoned checkout can never complete, and keeping it
+      // would pin every later funding attempt to the dead operation.
+      if (response.status === 'completed' || response.status === 'abandoned')
         await AsyncStorage.removeItem(key(record));
       else await write({ ...record, operationId: response.operationId });
       return { ...response, returnTo: record.returnTo };

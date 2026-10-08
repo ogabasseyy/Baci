@@ -24,7 +24,9 @@ function setup() {
     ): Promise<unknown> => {
       if (action === 'reserve' || action === 'read') return intent;
       if (action === 'claim') {
-        if (intent.status !== 'reserved')
+        // Mirrors claim_initialization reclaim semantics: a stale
+        // 'initializing' claim is re-issued instead of stranding the retry.
+        if (intent.status !== 'reserved' && intent.status !== 'initializing')
           return { outcome: 'existing', intent };
         intent = { ...intent, status: 'initializing' };
         return {
@@ -50,6 +52,10 @@ function setup() {
       }
       if (action === 'reconciliation') {
         intent = { ...intent, status: 'reconciliation_required' };
+        return true;
+      }
+      if (action === 'abandonment') {
+        intent = { ...intent, status: 'abandoned' };
         return true;
       }
       throw new Error('Invalid test action');
@@ -126,6 +132,38 @@ describe('durable goal-independent card checkout service', () => {
     expect((await service.status(fixture.intent.operationId)).status).toBe(
       'reconciliation_required'
     );
+  });
+  it('terminalizes an abandoned checkout and stops verifying it', async () => {
+    const { service, provider, execute } = setup();
+    await service.initialize(request);
+    provider.verify.mockResolvedValue({ outcome: 'abandoned' });
+    expect((await service.status(fixture.intent.operationId)).status).toBe(
+      'abandoned'
+    );
+    expect(
+      execute.mock.calls.some(([action]) => action === 'abandonment')
+    ).toBe(true);
+    expect((await service.status(fixture.intent.operationId)).status).toBe(
+      'abandoned'
+    );
+    expect(provider.verify).toHaveBeenCalledTimes(1);
+  });
+  it('reinitializes through a reclaimed stale claim instead of stalling', async () => {
+    const { service, provider, execute } = setup();
+    const inner = execute.getMockImplementation();
+    let crashed = false;
+    execute.mockImplementation(async (action, parameters) => {
+      // First attempt crashes between claim and record: the acknowledgement
+      // is lost and the operation stays 'initializing'.
+      if (action === 'initialize' && !crashed) {
+        crashed = true;
+        return true;
+      }
+      return inner?.(action, parameters);
+    });
+    expect((await service.initialize(request)).status).toBe('initializing');
+    expect((await service.initialize(request)).status).toBe('ready');
+    expect(provider.initialize).toHaveBeenCalledTimes(2);
   });
   it('rejects a foreign scope returned by storage before provider initialization', async () => {
     const { service, execute, provider } = setup();

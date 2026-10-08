@@ -53,6 +53,11 @@ jest.mock('./use-start-savings-payment-methods', () => ({
 jest.mock('./use-start-savings-submit', () => ({
   useStartSavingsSubmit: () => ({}),
 }));
+const mockUseCapability = jest.fn<(...args: unknown[]) => unknown>();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -67,10 +72,14 @@ afterEach(() => {
 });
 
 it.each([
-  ['merchant-1', true],
-  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', false],
-])('exposes plan funding BVN requirements for merchant %s', (merchantId, requiresBvn) => {
-  mockMerchantId = merchantId;
+  ['merchant-1', null, true],
+  ['merchant-1', true, true],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', true, false],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', null, true],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', false, true],
+])('exposes plan funding BVN requirements for merchant %s with capability %s', (merchantId, capability, requiresBvn) => {
+  mockMerchantId = merchantId as string;
+  mockUseCapability.mockReturnValue(capability);
   const { result } = renderHook(() => useStartSavingsController());
   expect(result.current.planFundingRequiresBvn).toBe(requiresBvn);
   expect(result.current.fetchExistingPlanFunding).toEqual(expect.any(Function));

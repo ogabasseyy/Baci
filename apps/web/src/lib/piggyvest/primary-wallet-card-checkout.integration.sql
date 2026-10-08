@@ -221,3 +221,80 @@ DO $$ BEGIN
   EXCEPTION WHEN check_violation THEN NULL; END;
   DELETE FROM piggyvest_primary_card.operations WHERE customer_id='51000000-0000-4000-8000-000000000002';
 END $$;
+\ir ../../../../../supabase/migrations/20261008090600_primary_card_claim_reclaim.sql
+\ir ../../../../../supabase/migrations/20261008090700_primary_card_abandoned_release.sql
+-- Stale-claim reclaim and abandoned-checkout release: a crash between claim
+-- and record must not strand the operation, and a provider-abandoned
+-- checkout must terminalize so the customer can start a fresh operation.
+INSERT INTO public.customers VALUES('60000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000003','reclaim@example.test');
+INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001','60000000-0000-4000-8000-000000000002','60000000-0000-4000-8000-000000000003',repeat('d',64),'verified','reclaim-customer','reclaim-primary');
+CREATE TEMP TABLE card_reclaim_fixture(operation_id uuid);
+GRANT SELECT, INSERT, DELETE ON card_reclaim_fixture TO baci_primary_card_authorizer, baci_primary_card_evidence;
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  intent jsonb;
+  claim jsonb;
+  reclaimed jsonb;
+  session jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  intent := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000005","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  INSERT INTO card_reclaim_fixture VALUES((intent->>'operationId')::uuid);
+  claim := piggyvest_primary_card.claim_initialization(scope,(intent->>'operationId')::uuid);
+  IF claim->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'reclaim fixture not claimed'; END IF;
+  reclaimed := piggyvest_primary_card.claim_initialization(scope,(intent->>'operationId')::uuid);
+  IF reclaimed->>'outcome' <> 'claimed' THEN RAISE EXCEPTION 'stale claim not reclaimed'; END IF;
+  IF (reclaimed->>'token')::uuid = (claim->>'token')::uuid THEN RAISE EXCEPTION 'reclaim reused token'; END IF;
+  IF piggyvest_primary_card.record_initialization(scope,(intent->>'operationId')::uuid,(claim->>'token')::uuid,NULL) THEN RAISE EXCEPTION 'superseded token accepted'; END IF;
+  session := jsonb_build_object('reference',intent->>'reference','authorizationUrl','https://checkout.paystack.com/reclaim123');
+  IF NOT piggyvest_primary_card.record_initialization(scope,(intent->>'operationId')::uuid,(reclaimed->>'token')::uuid,session) THEN RAISE EXCEPTION 'reclaimed session not persisted'; END IF;
+  IF piggyvest_primary_card.read_operation(scope,(intent->>'operationId')::uuid)->>'status' <> 'ready' THEN RAISE EXCEPTION 'reclaim did not reach ready'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  operation_id uuid := (SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'ready checkout not abandoned'; END IF;
+  IF NOT piggyvest_primary_card.record_abandonment(scope,operation_id) THEN RAISE EXCEPTION 'abandonment not idempotent'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_authorizer;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  fresh jsonb;
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  fresh := piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000006","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+  DELETE FROM card_reclaim_fixture;
+  INSERT INTO card_reclaim_fixture VALUES((fresh->>'operationId')::uuid);
+  IF fresh->>'status' <> 'reserved' THEN RAISE EXCEPTION 'abandoned operation still blocks retry'; END IF;
+  IF piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000005","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}')->>'status' <> 'abandoned' THEN RAISE EXCEPTION 'same-key reserve lost abandonment'; END IF;
+  BEGIN
+    PERFORM piggyvest_primary_card.reserve(scope,'{"idempotencyKey":"60000000-0000-4000-8000-000000000007","amountKobo":25000,"consent":{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}}');
+    RAISE EXCEPTION 'unresolved guard lost after abandonment';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+RESET SESSION AUTHORIZATION;
+SET SESSION AUTHORIZATION baci_primary_card_evidence;
+DO $$ DECLARE
+  scope jsonb := (SELECT scope FROM public.card_fixture LIMIT 1);
+  reserved_id uuid := (SELECT fixture.operation_id FROM card_reclaim_fixture fixture);
+  custody_scope jsonb := (SELECT card.scope FROM public.card_fixture card WHERE card.scope->>'email'='customer@example.test');
+  custody_id uuid := (SELECT fixture.operation_id FROM public.card_fixture fixture WHERE fixture.scope->>'email'='customer@example.test');
+BEGIN
+  scope := scope || '{"customerId":"60000000-0000-4000-8000-000000000002","userId":"60000000-0000-4000-8000-000000000003","email":"reclaim@example.test"}';
+  IF piggyvest_primary_card.record_abandonment(scope,reserved_id) THEN RAISE EXCEPTION 'reserved operation abandoned'; END IF;
+  IF piggyvest_primary_card.record_abandonment(custody_scope,custody_id) THEN RAISE EXCEPTION 'custody-bound operation abandoned'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$ BEGIN
+  IF NOT has_function_privilege('baci_primary_card_evidence','piggyvest_primary_card.record_abandonment(jsonb,uuid)','EXECUTE') THEN RAISE EXCEPTION 'evidence cannot record abandonment'; END IF;
+  IF has_function_privilege('baci_primary_card_authorizer','piggyvest_primary_card.record_abandonment(jsonb,uuid)','EXECUTE') THEN RAISE EXCEPTION 'authorizer can abandon evidence'; END IF;
+  IF has_function_privilege('authenticated','piggyvest_primary_card.record_abandonment(jsonb,uuid)','EXECUTE') OR has_function_privilege('service_role','piggyvest_primary_card.record_abandonment(jsonb,uuid)','EXECUTE') THEN RAISE EXCEPTION 'public/service abandonment granted'; END IF;
+  DELETE FROM piggyvest_primary_card.operations WHERE customer_id='60000000-0000-4000-8000-000000000002';
+END $$;

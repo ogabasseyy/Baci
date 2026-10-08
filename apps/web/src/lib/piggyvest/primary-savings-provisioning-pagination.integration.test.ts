@@ -75,6 +75,7 @@ beforeEach(() => {
       expect(url.pathname).toBe(`/api/v1/wallet/${target.id}`);
       data = {
         ...target,
+        api_customer_id: 'customer-with-hyphens',
         business_id: 'business',
         currency: 'NGN',
         type: 'api',

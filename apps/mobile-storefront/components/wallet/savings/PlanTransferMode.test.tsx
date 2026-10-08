@@ -58,6 +58,11 @@ jest.mock('./use-start-savings-submit', () => ({
     },
   }),
 }));
+// Primary-path tests assume the server already confirmed capability;
+// BVN-free assertions only hold after explicit confirmation.
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: () => true,
+}));
 beforeEach(() => {
   jest.clearAllMocks();
   mockMerchant = 'merchant-1';

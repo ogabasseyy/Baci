@@ -194,8 +194,10 @@ export function useProductOfferSelection(product: Product) {
   const attributeOptions = product.has_variants
     ? getAttributeOptions(product.variants || [])
     : [];
-  // Legacy `NULL` manage_stock rows are treated as unlimited inventory.
-  const isStockManaged = product.manage_stock ?? false;
+  // Legacy `NULL` manage_stock rows are managed inventory (mirrors the
+  // categorized PDP resolver and isPublicVariantPurchasable): a depleted
+  // child under a null parent is unavailable everywhere.
+  const isStockManaged = product.manage_stock ?? true;
   const selectionAttributes = {
     ...routeSelectionAttributes,
     ...selectedAttributes,

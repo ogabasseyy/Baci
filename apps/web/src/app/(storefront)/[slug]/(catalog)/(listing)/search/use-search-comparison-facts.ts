@@ -11,6 +11,9 @@ import { createClient } from '@/lib/supabase/client';
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// The web tray holds at most four selections; the refresh never needs more.
+const MAX_COMPARISON_FACTS_IDS = 4;
+
 /** Opening comparison refreshes all selected identities, including other result pages. */
 export function useSearchComparisonFacts(
   merchantId: string,
@@ -30,11 +33,13 @@ export function useSearchComparisonFacts(
     const controller = new AbortController();
     setState({ key, products: [], pending: true, error: false });
     // Session-persisted ids are untrusted input: drop malformed values so
-    // one poisoned entry cannot fail the whole tray refresh, and skip the
-    // round-trip when nothing valid remains (PostgREST rejects empty `in`).
+    // one poisoned entry cannot fail the whole tray refresh, cap the
+    // survivors to the tray capacity so a stuffed entry cannot build a
+    // huge `in` query, and skip the round-trip when nothing valid remains
+    // (PostgREST rejects empty `in`).
     const validIds = [
       ...new Set(key.split(',').filter((id) => UUID_PATTERN.test(id))),
-    ];
+    ].slice(0, MAX_COMPARISON_FACTS_IDS);
     async function refresh() {
       if (validIds.length === 0) {
         if (active)

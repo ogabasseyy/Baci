@@ -208,7 +208,7 @@ describe('ProductDetailClient', () => {
     expect(mockUpdateQuantity).toHaveBeenCalledWith('product-1', 3, undefined);
   });
 
-  it('treats missing manage_stock as unlimited stock on the storefront PDP', async () => {
+  it('treats missing manage_stock as managed stock on the storefront PDP', async () => {
     const { manage_stock: _manageStock, ...product } = {
       ...makeBaseProduct(),
       stock: 0,
@@ -216,13 +216,15 @@ describe('ProductDetailClient', () => {
 
     render(<ProductDetailClient product={product as Product} />);
 
-    expect(screen.getByText('Unlimited stock available')).toBeInTheDocument();
-    expect(screen.queryByText('Out of Stock')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Unlimited stock available')
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Out of Stock')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          selectedStock: Number.POSITIVE_INFINITY,
+          selectedStock: 0,
         })
       );
     });

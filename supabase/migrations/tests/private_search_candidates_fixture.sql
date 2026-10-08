@@ -27,12 +27,14 @@ INSERT INTO merchants VALUES ('55555555-5555-4555-8555-555555555555',false);
 INSERT INTO products(id,merchant_id,price,status,manage_stock,has_variants,search_name_norm,search_name_compact,search_doc_vector,search_identify_vector)
 VALUES ('66666666-6666-4666-8666-666666666666','55555555-5555-4555-8555-555555555555',100,'active',false,false,'fixture phone','fixturephone',to_tsvector('simple','fixture phone'),to_tsvector('simple','fixture phone'));
 
--- Final option-projection regressions: null management, independent base,
--- and no standalone condition offers on products with required variants.
+-- Final option-projection regressions: null managed (category-PDP policy),
+-- independent base, and no standalone condition offers on products with
+-- required variants.
 INSERT INTO products(id,merchant_id,price,status,manage_stock,stock,has_variants,has_condition_offers)
 VALUES ('77777777-7777-4777-8777-777777777771','11111111-1111-4111-8111-111111111111',100,'active',NULL,0,false,false),
 ('77777777-7777-4777-8777-777777777772','11111111-1111-4111-8111-111111111111',100,'active',true,1,false,true),
-('77777777-7777-4777-8777-777777777773','11111111-1111-4111-8111-111111111111',100,'active',true,1,true,true);
+('77777777-7777-4777-8777-777777777773','11111111-1111-4111-8111-111111111111',100,'active',true,1,true,true),
+('77777777-7777-4777-8777-777777777774','11111111-1111-4111-8111-111111111111',100,'active',NULL,5,false,false);
 INSERT INTO product_offers(id,product_id,merchant_id,status,condition,price,stock_quantity)
 VALUES ('88888888-8888-4888-8888-888888888882','77777777-7777-4777-8777-777777777772','11111111-1111-4111-8111-111111111111','active','used',50,1),
 ('88888888-8888-4888-8888-888888888883','77777777-7777-4777-8777-777777777773','11111111-1111-4111-8111-111111111111','active','used',50,1);

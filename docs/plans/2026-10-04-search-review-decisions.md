@@ -261,3 +261,10 @@ The disposable regression fixture executes the actual RBAC migration and tests a
 - CX-76 (P1) ADJUDICATED with evidence: the category PDP does not have separate selection state — page → DefaultProductPageRenderer → DefaultProductDetailClient → the SAME ProductDetailClient, whose useSearchParams reads offer_id/condition/match_base identically on both routes. No code change.
 - Muse low stale-comment FIXED at the right layer: the old migration's service-role comment is historically true for its own step, so I clarified the superseding migration (04170500 header now states the transition) with recomputed sha in both registries — no stale pins remain. The live shared-lib comment was already fixed in Round 38.
 - Muse medium assurance + medium intake-rotation: repeats of the Rounds 23-31 and intake-budget adjudications.
+
+## Round 40 (Codex CX-77 on b1fef3fd7c FIXED; Muse 1 med + 2 low — 1 fixed, 2 repeats)
+
+- CX-77 (P1) FIXED: NULL manage_stock policy was split three ways — the PR's SQL (IS NOT TRUE) and products client (?? false) said unmanaged, while main's category resolver (?? true, #3611) and isPublicVariantPurchasable (documented platform policy: "a depleted child under a null parent is unavailable everywhere") say managed. The PR was the outlier, so the PR aligned: migration 20261008130000 flips the three price-options bypasses to IS FALSE, the products client flips to ?? true, the SQL regression pins 771→0 rows plus a new NULL+stocked positive control (774→1), and the PDP test pins managed/out-of-stock. Full SQL regression chain passes on scratch Postgres (all counts/facets/wrappers hold). Native's pre-existing ?? false is untouched (separate purchase flow; noted follow-up).
+- Muse low id-cap FIXED: comparison-facts refresh capped survivors to the tray capacity (4) after dedupe/UUID-filter, with a 6-ids→4 test.
+- Muse low capacity (3 vs 4): repeat of the line-7 adjudication (intentional, session-local presentation difference).
+- Muse medium assurance: repeat of the Rounds 23-31 adjudication.

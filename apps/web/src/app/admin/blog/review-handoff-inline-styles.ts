@@ -26,6 +26,18 @@ function isZeroAlphaColor(value: string): boolean {
   return alpha !== '' && Number(alpha) === 0;
 }
 
+// Absolute, font-relative, viewport, container, and percentage
+// length units: only a zero in one of these (or unitless) hides.
+// Anything else is an invalid declaration the browser ignores, so
+// over-matching would strip visible text.
+const ZERO_FONT_SIZE_PATTERN =
+  /^(\d+(?:\.\d+)?|\.\d+)\s*(px|cm|mm|q|in|pc|pt|em|rem|ex|rex|cap|rcap|ch|rch|ic|ric|lh|rlh|vw|vh|vi|vb|vmin|vmax|cqw|cqh|cqi|cqb|cqmin|cqmax|%)?$/;
+
+function isZeroFontSize(value: string): boolean {
+  const match = ZERO_FONT_SIZE_PATTERN.exec(value);
+  return match !== null && Number(match[1]) === 0;
+}
+
 function hidingUtilityForStyle(
   style: string
 ): 'hidden' | 'text-transparent' | null {
@@ -55,6 +67,11 @@ function hidingUtilityForStyle(
   const glyphColor =
     finals.get('-webkit-text-fill-color') ?? finals.get('color');
   if (glyphColor !== undefined && isZeroAlphaColor(glyphColor)) {
+    return 'text-transparent';
+  }
+  // Zero font size hides glyphs the same glyph-only way.
+  const fontSize = finals.get('font-size');
+  if (fontSize !== undefined && isZeroFontSize(fontSize)) {
     return 'text-transparent';
   }
   return null;

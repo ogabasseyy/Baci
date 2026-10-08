@@ -35,3 +35,37 @@ WITH CHECK (
       AND merchants.is_platform_admin IS TRUE
   )
 );
+
+-- Platform RBAC content managers (mirrors the
+-- platform_blog_posts_content_manage_*_v1 bridge): role members pass
+-- the route's content.manage check, so the table must authorize them
+-- too instead of legacy owners only.
+DROP POLICY IF EXISTS
+  blog_media_delete_tombstones_content_manage_insert_v1
+ON public.blog_media_delete_tombstones;
+CREATE POLICY blog_media_delete_tombstones_content_manage_insert_v1
+ON public.blog_media_delete_tombstones
+FOR INSERT TO authenticated
+WITH CHECK (
+  public.current_user_has_platform_admin_permission_v1('content.manage')
+);
+
+DROP POLICY IF EXISTS
+  blog_media_delete_tombstones_content_manage_select_v1
+ON public.blog_media_delete_tombstones;
+CREATE POLICY blog_media_delete_tombstones_content_manage_select_v1
+ON public.blog_media_delete_tombstones
+FOR SELECT TO authenticated
+USING (
+  public.current_user_has_platform_admin_permission_v1('content.manage')
+);
+
+DROP POLICY IF EXISTS
+  blog_media_delete_tombstones_content_manage_delete_v1
+ON public.blog_media_delete_tombstones;
+CREATE POLICY blog_media_delete_tombstones_content_manage_delete_v1
+ON public.blog_media_delete_tombstones
+FOR DELETE TO authenticated
+USING (
+  public.current_user_has_platform_admin_permission_v1('content.manage')
+);

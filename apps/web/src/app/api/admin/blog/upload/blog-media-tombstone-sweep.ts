@@ -14,8 +14,11 @@ type TombstoneRow = { path: string };
  * Remove staged deletions whose grace window expired and no persisted
  * post references. Tombstones referenced again (a concurrent save
  * resurrected them, or missed resurrection but committed anyway) are
- * cleared and their objects kept. Returns null when the sweep cannot
- * verify safety so the scheduler retries instead of deleting blind.
+ * cleared and their objects kept. Staging is rechecked after the
+ * scan so a save committing between scan and removal invalidates the
+ * sweep instead of losing the race. Returns null when the sweep
+ * cannot verify safety so the scheduler retries instead of deleting
+ * blind.
  */
 export async function sweepDueBlogMediaTombstones(
   supabase: ServerSupabaseClient,
@@ -52,42 +55,73 @@ export async function sweepDueBlogMediaTombstones(
   );
   if (filtered === null) return null;
   const { deletable, skipped } = filtered;
+  // Recheck staging before removal: a save may have committed and
+  // cleared tombstones since the scan, and only rows still present
+  // are safe to remove.
+  let removable = deletable;
+  let invalidated: string[] = [];
   if (deletable.length > 0) {
+    let staged: {
+      data: TombstoneRow[] | null;
+      error: { message: string } | null;
+    };
     try {
-      const { error } = await supabase.storage.from('media').remove(deletable);
+      const result = await supabase
+        .from(BLOG_MEDIA_TOMBSTONE_TABLE)
+        .select('path')
+        .in('path', deletable);
+      staged = {
+        data: result.data as TombstoneRow[] | null,
+        error: result.error as { message: string } | null,
+      };
+    } catch {
+      return null;
+    }
+    if (staged.error) return null;
+    const stillStaged = new Set((staged.data ?? []).map((row) => row.path));
+    removable = deletable.filter((path) => stillStaged.has(path));
+    invalidated = deletable.filter((path) => !stillStaged.has(path));
+  }
+  if (removable.length > 0) {
+    try {
+      const { error } = await supabase.storage.from('media').remove(removable);
       if (error) {
         console.error('Blog media tombstone sweep removal failed', {
           error,
-          paths: deletable,
+          paths: removable,
         });
         return null;
       }
     } catch (error) {
       console.error('Blog media tombstone sweep removal failed', {
         error,
-        paths: deletable,
+        paths: removable,
       });
       return null;
     }
   }
   // Row cleanup is best-effort: lingering rows are rechecked next
-  // sweep, and object removal above is idempotent.
-  try {
-    const { error } = await supabase
-      .from(BLOG_MEDIA_TOMBSTONE_TABLE)
-      .delete()
-      .in('path', paths);
-    if (error) {
+  // sweep, and object removal above is idempotent. Invalidated rows
+  // were already cleared by the concurrent save.
+  const done = [...removable, ...skipped];
+  if (done.length > 0) {
+    try {
+      const { error } = await supabase
+        .from(BLOG_MEDIA_TOMBSTONE_TABLE)
+        .delete()
+        .in('path', done);
+      if (error) {
+        console.error('Blog media tombstone sweep row cleanup failed', {
+          error,
+          paths: done,
+        });
+      }
+    } catch (error) {
       console.error('Blog media tombstone sweep row cleanup failed', {
         error,
-        paths,
+        paths: done,
       });
     }
-  } catch (error) {
-    console.error('Blog media tombstone sweep row cleanup failed', {
-      error,
-      paths,
-    });
   }
-  return { swept: deletable, resurrected: skipped };
+  return { swept: removable, resurrected: [...skipped, ...invalidated] };
 }

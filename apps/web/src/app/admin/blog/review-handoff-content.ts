@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from '@/lib/sanitize';
+import { hasClosedDisclosure } from './review-handoff-disclosure';
 import { hasUnpreservableFigure } from './review-handoff-figure';
 import { convertHiddenAttributes } from './review-handoff-hidden-attributes';
 import { HTML_TAG_PATTERN } from './review-handoff-html-tag-pattern';
@@ -215,6 +216,15 @@ export function validateImportedContent(rawContent: string): string {
   if (hasUnpreservableFigure(visible)) {
     throw new Error(
       'Article content has figure markup the editor cannot preserve'
+    );
+  }
+  // Closed disclosures cannot survive either: sanitization unwraps
+  // the unrepresented control and exposes collapsed content. The
+  // check runs pre-sanitize, since sanitization itself removes the
+  // evidence.
+  if (hasClosedDisclosure(rendered)) {
+    throw new Error(
+      'Article content has closed disclosure markup the editor cannot preserve'
     );
   }
   return visible;

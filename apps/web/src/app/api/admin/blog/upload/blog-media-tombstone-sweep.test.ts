@@ -16,6 +16,7 @@ type TombstoneRow = { created_at: string; path: string };
 function fakeStore() {
   const state = {
     now: new Date('2026-10-08T12:00:00.000Z'),
+    onRecheck: null as null | (() => void),
     posts: [] as BlogPostMediaRow[],
     removeError: null as { message: string } | null,
     removed: [] as string[],
@@ -45,6 +46,18 @@ function fakeStore() {
       },
     }),
     select: () => ({
+      in: (_column: string, paths: string[]) => {
+        // A test hook models a save committing between the reference
+        // scan and this recheck read.
+        state.onRecheck?.();
+        state.onRecheck = null;
+        return Promise.resolve({
+          data: state.tombstones
+            .filter((row) => paths.includes(row.path))
+            .map((row) => ({ path: row.path })),
+          error: null,
+        });
+      },
       lt: (_column: string, cutoff: string) => ({
         limit: (count: number) => serveDueTombstones(cutoff, count),
         order: (_column: string) => ({
@@ -176,6 +189,31 @@ describe('sweepDueBlogMediaTombstones', () => {
       await sweepDueBlogMediaTombstones(removal.client, removal.state.now)
     ).toBeNull();
     expect(removal.state.tombstones).toHaveLength(1);
+  });
+
+  it('lets a save between scan and removal invalidate the sweep', async () => {
+    // The reference scan finishes before the save commits; the save
+    // then commits and clears the tombstone. The pre-removal recheck
+    // must see the cleared row and keep the media instead of
+    // unconditionally removing what the first scan approved.
+    const { client, state } = fakeStore();
+    const shared = 'platform/blog/shared.webp';
+    state.tombstones = [
+      { created_at: '2026-10-08T10:00:00.000Z', path: shared },
+    ];
+    state.onRecheck = () => {
+      state.posts = [
+        {
+          content: `<img src="https://cdn.example.com/media/${shared}">`,
+        },
+      ];
+      state.tombstones = [];
+    };
+
+    const result = await sweepDueBlogMediaTombstones(client, state.now);
+
+    expect(result).toEqual({ resurrected: [shared], swept: [] });
+    expect(state.removed).toEqual([]);
   });
 
   it('closes the concurrent save/delete race deterministically', async () => {

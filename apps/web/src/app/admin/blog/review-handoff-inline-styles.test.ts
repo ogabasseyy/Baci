@@ -56,6 +56,18 @@ describe('convertHiddenInlineStyles', () => {
       '<p style="color:red;color:transparent">Note</p>',
       '<p style="color:red;color:transparent" class="text-transparent">Note</p>',
     ],
+    [
+      '<p style="font-size:0">Draft note</p><p>Visible article</p>',
+      '<p style="font-size:0" class="text-transparent">Draft note</p><p>Visible article</p>',
+    ],
+    [
+      '<p style="font-size:0px">Note</p>',
+      '<p style="font-size:0px" class="text-transparent">Note</p>',
+    ],
+    [
+      '<p style="font-size: 0.0em">Note</p>',
+      '<p style="font-size: 0.0em" class="text-transparent">Note</p>',
+    ],
   ])('converts hiding inline styles to hiding classes: %s', (html, expected) => {
     expect(convertHiddenInlineStyles(html)).toBe(expected);
   });
@@ -74,6 +86,11 @@ describe('convertHiddenInlineStyles', () => {
     '<p style="visibility:hidden;visibility:visible">Shown</p>',
     '<p style="color:transparent;color:red">Shown</p>',
     '<p style="color:transparent;-webkit-text-fill-color:red">Shown</p>',
+    '<p style="font-size:16px">Shown</p>',
+    '<p style="font-size:medium">Shown</p>',
+    '<p style="font-size:0abc">Shown</p>',
+    '<p style="font-size:-1px">Shown</p>',
+    '<p style="font-size:0;font-size:16px">Shown</p>',
     '<p>No style</p>',
   ])('leaves non-hiding styles alone: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
@@ -87,5 +104,13 @@ describe('convertHiddenInlineStyles', () => {
     );
     expect(stored).not.toContain('Draft note');
     expect(stored).toContain('https://cdn.example.com/a.png');
+  });
+
+  it('strips zero-size inline text at import', () => {
+    expect(
+      validateImportedContent(
+        '<p style="font-size:0">Draft note</p><p>Visible article</p>'
+      )
+    ).toBe('<p>Visible article</p>');
   });
 });

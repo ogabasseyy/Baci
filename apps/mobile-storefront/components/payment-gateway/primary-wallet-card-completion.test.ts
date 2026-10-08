@@ -4,9 +4,13 @@ import { router } from 'expo-router';
 import type { PaymentGatewayRefs } from './payment-gateway-controller.types';
 
 const mockRecover = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockReadPending = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 let mockUserId = '11111111-1111-4111-8111-111111111111';
 jest.mock('@/lib/primary-wallet-card', () => ({
-  createPrimaryWalletCardFundingClient: () => ({ recover: mockRecover }),
+  createPrimaryWalletCardFundingClient: () => ({
+    recover: mockRecover,
+    readPending: mockReadPending,
+  }),
 }));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: {
@@ -39,6 +43,7 @@ function fixture() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockUserId = '11111111-1111-4111-8111-111111111111';
+  mockReadPending.mockResolvedValue({ operationId: 'persisted' });
 });
 it('does not show another account a completed result when auth switches during recovery', async () => {
   const input = fixture();
@@ -156,6 +161,77 @@ it('refreshes and resumes only authoritative completed custody without legacy co
   expect(input.setPaymentStatus).toHaveBeenCalledWith('success');
   expect(input.queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith('/wallet');
+});
+it('directs a new funding when retry finds no retained operation', async () => {
+  const input = fixture();
+  mockRecover.mockRejectedValueOnce(new Error('No matching operation'));
+  mockReadPending.mockResolvedValueOnce(null);
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  await flush();
+  expect(input.setPaymentStatus).toHaveBeenLastCalledWith('error');
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Start a new funding to try again')
+  );
+  expect(input.setErrorMessage).toHaveBeenCalledWith(
+    expect.not.stringContaining('Do not pay again')
+  );
+});
+it('reports the confirmed reference and terminal directive to the controller', async () => {
+  const setConfirmedOperationReference = jest.fn();
+  const setTerminalDirective = jest.fn();
+  const input = {
+    ...fixture(),
+    setConfirmedOperationReference,
+    setTerminalDirective,
+  };
+  mockRecover.mockResolvedValue({
+    status: 'custody_pending',
+    reference: 'pvb-first-primary-22222222-2222-4222-8222-222222222222',
+  });
+  beginPrimaryWalletCardCompletion(input);
+  await flush();
+  expect(setConfirmedOperationReference).toHaveBeenCalledWith(
+    'pvb-first-primary-22222222-2222-4222-8222-222222222222'
+  );
+  expect(setTerminalDirective).toHaveBeenCalledWith(null);
+  expect(setTerminalDirective).not.toHaveBeenCalledWith(
+    expect.stringContaining('Start a new funding')
+  );
+});
+it('sets the terminal directive on abandoned and dropped runs', async () => {
+  const setTerminalDirective = jest.fn();
+  const abandoned = {
+    ...fixture(),
+    setTerminalDirective,
+    refs: {
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+    } as PaymentGatewayRefs,
+  };
+  mockRecover.mockResolvedValue({ status: 'abandoned' });
+  beginPrimaryWalletCardCompletion(abandoned);
+  await flush();
+  expect(setTerminalDirective).toHaveBeenCalledWith(
+    expect.stringContaining('Start a new funding to try again')
+  );
+  setTerminalDirective.mockClear();
+  const dropped = {
+    ...fixture(),
+    setTerminalDirective,
+    refs: {
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+    } as PaymentGatewayRefs,
+  };
+  mockRecover.mockRejectedValueOnce(new Error('No matching operation'));
+  mockReadPending.mockResolvedValueOnce(null);
+  beginPrimaryWalletCardCompletion(dropped);
+  await flush();
+  await flush();
+  expect(setTerminalDirective).toHaveBeenCalledWith(
+    expect.stringContaining('Start a new funding to try again')
+  );
 });
 it('recovers a non-pilot merchant without consulting the volatile capability cache', async () => {
   const input = fixture();

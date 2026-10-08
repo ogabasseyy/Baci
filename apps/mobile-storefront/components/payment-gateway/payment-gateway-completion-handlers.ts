@@ -21,8 +21,10 @@ interface PaymentGatewayCompletionHandlerInput
   queryClient: QueryClient;
   refs: PaymentGatewayRefs;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setConfirmedOperationReference?: (reference: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   setPaymentStatus: PaymentStatusSetter;
+  setTerminalDirective?: (message: string | null) => void;
 }
 
 export function createPaymentGatewayCompletionHandlers({
@@ -43,8 +45,10 @@ export function createPaymentGatewayCompletionHandlers({
   refs,
   returnTo,
   scheduleDelayedNavigation,
+  setConfirmedOperationReference,
   setErrorMessage,
   setPaymentStatus,
+  setTerminalDirective,
   trackingToken,
   utilityType,
 }: PaymentGatewayCompletionHandlerInput) {
@@ -121,8 +125,10 @@ export function createPaymentGatewayCompletionHandlers({
         refs,
         returnTo,
         scheduleDelayedNavigation,
+        setConfirmedOperationReference,
         setErrorMessage,
         setPaymentStatus,
+        setTerminalDirective,
       });
       return;
     }

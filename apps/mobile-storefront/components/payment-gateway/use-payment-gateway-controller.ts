@@ -68,6 +68,14 @@ export function usePaymentGatewayController() {
   const [status, setStatusState] = useState<PaymentGatewayStatus>('loading');
   const statusRef = useRef<PaymentGatewayStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Primary-card only: the recovered operation reference (never the raw
+  // URL parameter) and the terminal new-funding directive. Both are set
+  // exclusively by the card completion run that verified them.
+  const [confirmedOperationReference, setConfirmedOperationReference] =
+    useState<string | null>(null);
+  const [terminalDirective, setTerminalDirective] = useState<string | null>(
+    null
+  );
   const gatewayRefs: PaymentGatewayRefs = {
     copiedGatewayTextRef,
     isMountedRef,
@@ -166,8 +174,10 @@ export function usePaymentGatewayController() {
       refs: gatewayRefs,
       returnTo,
       scheduleDelayedNavigation,
+      setConfirmedOperationReference,
       setErrorMessage,
       setPaymentStatus,
+      setTerminalDirective,
       trackingToken,
       utilityType,
     });
@@ -277,9 +287,11 @@ export function usePaymentGatewayController() {
   return {
     amount,
     authorizationUrl,
+    confirmedOperationReference,
     errorMessage,
     gatewayName,
     returnTo,
+    terminalDirective,
     // Alias retained for checkout back-button consumers; both paths confirm cancellation.
     handleBack: handleClose,
     handleClose,

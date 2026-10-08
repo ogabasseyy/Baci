@@ -205,10 +205,22 @@ it.each([
   ['0x10', 'Enter an amount with no more than two decimal places.'],
   ['abc', 'Enter a valid amount using digits only.'],
   ['100000000', 'Enter a smaller amount.'],
+  ['0.01', 'Enter an amount of at least ₦50.00.'],
+  ['49.99', 'Enter an amount of at least ₦50.00.'],
 ])('rejects invalid amount %p with a specific message before consent', async (fundAmount, message) => {
   await fundPrimaryWalletCard({ ...input, fundAmount });
   expect(alert).toHaveBeenCalledWith('Check the amount', message);
   expect(mockStart).not.toHaveBeenCalled();
+});
+it('accepts exactly the Paystack minimum without a consent-blocking error', async () => {
+  await fundPrimaryWalletCard({ ...input, fundAmount: '50' });
+  expect(alert).not.toHaveBeenCalledWith(
+    'Check the amount',
+    expect.any(String)
+  );
+  expect(mockStart).toHaveBeenCalledWith(
+    expect.objectContaining({ amountKobo: 5000 })
+  );
 });
 it('renders the exact kobo-derived amount in the consent prompt', async () => {
   await fundPrimaryWalletCard({ ...input, fundAmount: '1250.5' });
@@ -236,4 +248,27 @@ it('re-sanitizes a tampered handoff before navigating on completed recovery', as
   });
   await fundPrimaryWalletCard(input);
   expect(router.replace).toHaveBeenCalledWith('/wallet');
+});
+it('refreshes the wallet balance before confirming a completed funding', async () => {
+  const refetchWalletBalance = jest.fn<() => Promise<unknown>>();
+  refetchWalletBalance.mockResolvedValue(undefined);
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockResolvedValue({ status: 'completed', returnTo: '/wallet' });
+  await fundPrimaryWalletCard({ ...input, refetchWalletBalance });
+  expect(refetchWalletBalance).toHaveBeenCalledTimes(1);
+  expect(alert).toHaveBeenCalledWith(
+    'Funding confirmed',
+    'Your wallet funding is confirmed.'
+  );
+});
+it('still confirms when the balance refresh fails', async () => {
+  const refetchWalletBalance = jest.fn<() => Promise<unknown>>();
+  refetchWalletBalance.mockRejectedValue(new Error('offline'));
+  mockRead.mockResolvedValue({ operationId: 'persisted' });
+  mockRecover.mockResolvedValue({ status: 'completed', returnTo: '/wallet' });
+  await fundPrimaryWalletCard({ ...input, refetchWalletBalance });
+  expect(alert).toHaveBeenCalledWith(
+    'Funding confirmed',
+    'Your wallet funding is confirmed.'
+  );
 });

@@ -92,6 +92,7 @@ export function WalletScreen({
     activeMerchantSlug: CONFIG.MERCHANT_SLUG?.trim() || undefined,
     customer,
     redeemPointsMutation: redeemMutation.mutateAsync,
+    refetchWalletBalance: refetch,
     routeAction,
     routeRequiredAmount,
     user,

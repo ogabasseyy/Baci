@@ -150,6 +150,7 @@ describe('primary savings provisioning connection', () => {
     { business_id: 'foreign' },
     { currency: 'USD' },
     { type: 'business' },
+    { api_customer_id: 'foreign-customer' },
   ])('does not enroll foreign or malformed wallet proof %j', async (change) => {
     const input = fixture();
     input.mode = 'recover';
@@ -176,6 +177,19 @@ describe('primary savings provisioning connection', () => {
     );
     expect(input.retrieveWallet).not.toHaveBeenCalled();
     expect(input.store.enroll).not.toHaveBeenCalled();
+  });
+  it('refuses a same-named wallet owned by a different provider customer', async () => {
+    const input = fixture();
+    input.mode = 'recover';
+    input.retrieveWallet.mockResolvedValue({
+      ...(await input.retrieveWallet()),
+      api_customer_id: 'foreign-customer',
+    });
+    const result = await provisionPrimarySavingsWallet(input);
+    expect(result.status).toBe('conflict');
+    expect(result.accounts).toEqual([]);
+    expect(input.store.enroll).not.toHaveBeenCalled();
+    expect(input.retrieveAccounts).not.toHaveBeenCalled();
   });
   it('quarantines ambiguous duplicate names without selecting a wallet', async () => {
     const input = fixture();

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { prepareCartHandoff } from './cart-handoff';
 
 type QueryResult = { data: unknown; error: unknown };
@@ -14,11 +14,14 @@ function chainable(result: QueryResult) {
   return chain;
 }
 
-function supabaseFor(tables: Record<string, QueryResult>) {
+function supabaseFor(
+  tables: Record<string, QueryResult>,
+  rpcResult: QueryResult = { data: [], error: null }
+) {
   return {
     from: (table: string) =>
       chainable(tables[table] ?? { data: null, error: null }),
-    rpc: async () => ({ data: [], error: null }),
+    rpc: async () => rpcResult,
   } as unknown as SupabaseClient;
 }
 
@@ -108,4 +111,116 @@ it('matches an uppercase variant UUID against canonical lowercase rows', async (
     requires_variant_selection: true,
     product_id: lower,
   });
+});
+
+it('gates a strict serialized line on anchor units despite stored stock', async () => {
+  const lower = '11111111-1111-4111-8111-111111111111';
+  const result = await prepareCartHandoff({
+    supabase: supabaseFor(
+      {
+        products: {
+          data: {
+            name: 'Phone',
+            price: 100,
+            manage_stock: false,
+            has_variants: false,
+            has_condition_offers: false,
+            stock_quantity: 99,
+          },
+          error: null,
+        },
+      },
+      {
+        data: [
+          {
+            product_id: lower,
+            effective_policy: 'serialized_strict',
+            available_units: 0,
+          },
+        ],
+        error: null,
+      }
+    ),
+    merchantId: 'merchant',
+    productId: lower,
+    quantity: 1,
+    formatPrice: String,
+  });
+  expect(result.structuredContent).toEqual({
+    success: false,
+    product_unavailable: true,
+  });
+});
+
+it('accepts a then-unlimited line with zero raw stock', async () => {
+  const lower = '11111111-1111-4111-8111-111111111111';
+  const result = await prepareCartHandoff({
+    supabase: supabaseFor(
+      {
+        products: {
+          data: {
+            name: 'Phone',
+            price: 100,
+            manage_stock: true,
+            has_variants: false,
+            has_condition_offers: false,
+            stock_quantity: 0,
+          },
+          error: null,
+        },
+      },
+      {
+        data: [
+          {
+            product_id: lower,
+            effective_policy: 'serialized_then_unlimited',
+            available_units: 0,
+          },
+        ],
+        error: null,
+      }
+    ),
+    merchantId: 'merchant',
+    productId: lower,
+    quantity: 1,
+    formatPrice: String,
+  });
+  expect(result.structuredContent).toMatchObject({
+    success: true,
+    product_id: lower,
+  });
+});
+
+it('fails open on stored stock when the anchor lookup errors', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const result = await prepareCartHandoff({
+      supabase: supabaseFor(
+        {
+          products: {
+            data: {
+              name: 'Phone',
+              price: 100,
+              manage_stock: true,
+              has_variants: false,
+              has_condition_offers: false,
+              stock_quantity: 0,
+            },
+            error: null,
+          },
+        },
+        { data: null, error: { code: 'XX000', message: 'boom' } }
+      ),
+      merchantId: 'merchant',
+      productId: '11111111-1111-4111-8111-111111111111',
+      quantity: 1,
+      formatPrice: String,
+    });
+    // Stored stock rejects, but the outage keeps the failure untyped so
+    // callers retry instead of treating the line as permanently dead.
+    expect(result.structuredContent).toEqual({ success: false });
+    expect(error).toHaveBeenCalled();
+  } finally {
+    error.mockRestore();
+  }
 });

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY } from '../src/lib/hydrate-public-products';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 type CartHandoffResult = {
@@ -66,9 +67,61 @@ export async function prepareCartHandoff({
     Boolean(productError) &&
     (productError as { code?: string }).code !== 'PGRST116';
   let unavailable = Boolean(productError || !product);
-  if (product?.manage_stock === true) {
+  // Simple serialized products resolve through the anchor projection RPC,
+  // mirroring search hydration: a serialized_strict anchor gates an
+  // otherwise unmanaged parent on its available units, while
+  // serialized_then_unlimited resolves empty anchors to the unlimited
+  // sentinel instead of rejecting a purchasable line. Absence of a row
+  // means no serialized policy (stored stock stands); an RPC failure keeps
+  // stored stock so a lookup outage fails open exactly like search, while
+  // staying transient so rejections remain retryable instead of typed as
+  // permanently unavailable.
+  let manageStock = product?.manage_stock;
+  let stockQuantity = product?.stock_quantity;
+  if (product && product.has_variants !== true) {
+    try {
+      const { data: anchors, error: anchorsError } = await supabase.rpc(
+        'get_mcp_search_serialized_anchor_policies',
+        { p_product_ids: [productId], p_merchant_id: merchantId }
+      );
+      if (anchorsError) throw anchorsError;
+      const anchor = (
+        anchors as
+          | {
+              product_id: string;
+              effective_policy: string;
+              available_units: number | null;
+            }[]
+          | null
+      )?.find(
+        (row) =>
+          row.product_id === productId &&
+          (row.effective_policy === 'serialized_strict' ||
+            row.effective_policy === 'serialized_then_unlimited')
+      );
+      if (anchor) {
+        const units = anchor.available_units ?? 0;
+        if (anchor.effective_policy === 'serialized_strict') {
+          manageStock = true;
+          stockQuantity = units;
+        } else {
+          manageStock =
+            product.manage_stock !== false ? false : product.manage_stock;
+          stockQuantity =
+            units === 0 ? SERIALIZED_THEN_UNLIMITED_STOCK_QUANTITY : units;
+        }
+      }
+    } catch (rpcError) {
+      console.error(
+        'Failed to fetch serialized anchor policy for cart handoff:',
+        rpcError
+      );
+      transient = true;
+    }
+  }
+  if (product && manageStock === true) {
     let optionAvailable = product.has_condition_offers === true && product.has_variants !== true &&
-      Number(product.stock_quantity ?? 0) >= quantity;
+      Number(stockQuantity ?? 0) >= quantity;
     if (product.has_condition_offers === true) {
       const { data: offers, error: offersError } = await supabase
         .from('product_offers')
@@ -94,7 +147,7 @@ export async function prepareCartHandoff({
     if (product.has_condition_offers === true || product.has_variants === true) {
       unavailable ||= !optionAvailable;
     } else {
-      const effectiveStock = Number(product.stock_quantity ?? 0);
+      const effectiveStock = Number(stockQuantity ?? 0);
       unavailable ||= !Number.isFinite(effectiveStock) || effectiveStock < quantity;
     }
   }

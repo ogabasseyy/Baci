@@ -111,8 +111,6 @@ export function registerGuestCartTool(
             };
           }
         }
-        const merchantId = await options.getMerchantId();
-        if (!merchantId) throw new Error('Store unavailable');
         // UUID text is case-insensitive but the variants check compares
         // exact strings, so canonicalize before validation the way the
         // store does before persistence: an uppercase ID must select
@@ -128,6 +126,11 @@ export function registerGuestCartTool(
             // cart and the website re-checks stock at transfer, so handoff
             // can only carry lines the catalog still honors.
             if (args.quantity === 0) return;
+            // Resolve the merchant inside the positive-quantity path: a
+            // removal needs only the cart token and the local file, so it
+            // must stay available when the catalog is unreachable.
+            const merchantId = await options.getMerchantId();
+            if (!merchantId) throw new Error('Store unavailable');
             const result = await prepareCartHandoff({
               supabase: options.supabase,
               merchantId,

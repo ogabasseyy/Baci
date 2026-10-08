@@ -10,6 +10,11 @@ import { rewriteCartLinkUrl } from './rewrite-cart-link-url';
 import { createClient } from './supabase/client';
 
 const QUIZ_PRIZE_PLATFORM = 'quiz_prize';
+// Crafted legacy links reach the catalog in one query: bound them to the
+// same 20-line budget the guest_cart path enforces upstream, plus a raw
+// length ceiling so a megabyte of commas never reaches the split.
+const MAX_CART_LINK_IDS = 20;
+const MAX_CART_LINK_IDS_LENGTH = 2000;
 
 export interface FetchAndAddCartItemsOptions {
   itemIds: string;
@@ -61,6 +66,18 @@ export async function fetchAndAddCartItems({
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean);
+
+    if (
+      itemIds.length > MAX_CART_LINK_IDS_LENGTH ||
+      ids.length > MAX_CART_LINK_IDS
+    ) {
+      toast({
+        title: 'Invalid link',
+        description: 'This cart link is invalid. Please try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
 
     if (ids.length === 0) return true;
 
@@ -145,6 +162,24 @@ export async function fetchAndAddCartItems({
           !hasQuizPrizeVoucher &&
           (product.has_variants || product.has_condition_offers)
         ) {
+          // A retained handoff is consumed once the website cart holds an
+          // option-bearing line for the product: the shopper followed the
+          // instruction and selected options on the PDP, so re-rejecting on
+          // every revisit would repeat the toast and pin the retry URL
+          // forever instead of completing the promised later merge. Each
+          // unmet need (variant selection, condition selection) must be
+          // satisfied by some line; the handoff itself carries no variant,
+          // so there is nothing further to top up.
+          const optionNeedSatisfied =
+            (!product.has_variants ||
+              cart.some(
+                (item) => item.id === product.id && item.variantId != null
+              )) &&
+            (!product.has_condition_offers ||
+              cart.some(
+                (item) => item.id === product.id && item.condition != null
+              ));
+          if (optionNeedSatisfied) continue;
           toast({
             title: 'Choose product options',
             description: `Choose the variant or condition for ${product.name} on its product page before adding it to your cart.`,

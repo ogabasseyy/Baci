@@ -192,6 +192,24 @@ it('reports degraded storage plainly instead of a generic failure', async () => 
   expect(JSON.stringify(result)).toContain('temporarily unavailable');
   expect(JSON.stringify(result)).not.toContain('product availability');
 });
+it('removes lines without a merchant lookup during catalog outages', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-removal-'));
+  type Args = { product_id: string; quantity: number; cart_token?: string };
+  let handler: ((args: Args) => Promise<unknown>) | undefined;
+  const registerTool = vi.fn((_name: string, _config: unknown, callback: (args: Args) => Promise<unknown>) => { handler = callback; });
+  const getMerchantId = vi.fn(async () => 'merchant');
+  try {
+    registerGuestCartTool({ registerTool } as unknown as McpServer, { store: new GuestCartStore(directory), supabase: {} as SupabaseClient, getMerchantId, formatPrice: String });
+    validate.mockResolvedValue({ structuredContent: { success: true } });
+    const created = await handler?.({ product_id: id, quantity: 1 }) as { structuredContent: { success: boolean; cart_token: string } };
+    expect(created.structuredContent.success).toBe(true);
+    getMerchantId.mockRejectedValue(new Error('catalog down'));
+    const removed = await handler?.({ product_id: id, quantity: 0, cart_token: created.structuredContent.cart_token }) as { structuredContent: { success: boolean; cart_emptied: boolean } };
+    expect(removed.structuredContent.success).toBe(true);
+    expect(removed.structuredContent.cart_emptied).toBe(true);
+    expect(getMerchantId).toHaveBeenCalledTimes(1);
+  } finally { releaseWriterLocks(); await rm(directory, { recursive: true, force: true }); }
+});
 it('rejects cross-field violations before quota or database work', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'guest-tool-shape-'));
   type Args = { product_id: string; quantity: number; cart_token?: string };

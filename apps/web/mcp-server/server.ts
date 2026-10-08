@@ -16,8 +16,8 @@ import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent'
 
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { prepareCartHandoff } from './cart-handoff';
 import { createGuestCartStoreOrDegraded } from './guest-cart-store';
+import { registerCartLinkTools } from './cart-link-tool';
 import { registerGuestCartTool } from './guest-cart-tool';
 import { releaseWriterLocks } from './guest-cart-writer-lock';
 import { createGracefulShutdown } from './server-shutdown';
@@ -1307,81 +1307,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
 
   registerGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp });
 
-  // Tool: Add to Cart (Widget-accessible)
-  // This tool can be called from the widget iframe using window.openai.callTool
-  const cartLinkInputSchema = {
-    product_id: z
-      .string()
-      .min(1)
-      .max(80)
-      .describe('The product ID to add to cart'),
-    quantity: z
-      .number()
-      .int()
-      .min(1)
-      .max(10)
-      .optional()
-      .default(1)
-      .describe('Quantity to add'),
-  };
-  const prepareCartLink = async (args: {
-    product_id: string;
-    quantity?: number;
-  }) => {
-    try {
-      const merchantId = await getMerchantId();
-      if (!merchantId) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Unable to access store.' }],
-          structuredContent: { success: false, message: 'Store temporarily unavailable.' },
-        };
-      }
-
-      return prepareCartHandoff({
-        supabase,
-        merchantId,
-        productId: args.product_id,
-        quantity: args.quantity ?? 1,
-        formatPrice,
-      });
-    } catch (error) {
-      console.error('Add to cart error:', error);
-      return {
-        content: [{ type: 'text' as const, text: '❌ Unable to add item to cart.' }],
-        structuredContent: { success: false, message: 'Unable to prepare cart link.' },
-      };
-    }
-  };
-  const cartLinkToolConfig = {
-    outputSchema: mcpToolOutputSchemas.prepare_storefront_cart_link,
-    title: 'Prepare Ogabassey Cart Link',
-
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-    description:
-      'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
-    inputSchema: cartLinkInputSchema,
-    _meta: {
-      'openai/widgetAccessible': true, // Enable widget-initiated calls
-      'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',
-      'openai/toolInvocation/invoked': 'Ready to add on Ogabassey',
-    },
-  };
-  server.registerTool(
-    'prepare_storefront_cart_link',
-    cartLinkToolConfig,
-    prepareCartLink
-  );
-  // Temporary compatibility alias for the pre-rename tool name: callers with
-  // a cached tools/list entry or a hardcoded name keep working after upgrade.
-  server.registerTool(
-    'add_to_cart',
-    {
-      ...cartLinkToolConfig,
-      title: 'Add to Cart (Deprecated Alias)',
-      description: `Deprecated alias of prepare_storefront_cart_link. ${cartLinkToolConfig.description}`,
-    },
-    prepareCartLink
-  );
+  registerCartLinkTools(server, { supabase, getMerchantId, formatPrice });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {

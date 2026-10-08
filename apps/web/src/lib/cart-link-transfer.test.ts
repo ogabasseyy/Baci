@@ -207,6 +207,61 @@ it('retains variant lines as retryable on the legacy item_id path', async () => 
   );
 });
 
+it('consumes a retained handoff once options are selected on the website', async () => {
+  setupProductsQuery({
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        has_variants: true,
+      },
+    ],
+    error: null,
+  });
+  const options = setupOptions({
+    itemIds: added,
+    guestQuantities: new Map([[added, 1]]),
+    cart: [
+      { id: added, quantity: 1, variantId: 'variant-1' },
+    ] as unknown as FetchAndAddCartItemsOptions['cart'],
+  });
+  window.history.pushState(
+    {},
+    '',
+    `/cart?guest_cart=${encodeURIComponent(JSON.stringify([{ product_id: added, quantity: 1 }]))}`
+  );
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).not.toHaveBeenCalled();
+  expect(options.toast).not.toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Choose product options' })
+  );
+  expect(guestCartParam()).toBeNull();
+});
+
+it('rejects crafted legacy links before the catalog query', async () => {
+  setupProductsQuery({ data: [], error: null });
+  const overCount = setupOptions({
+    itemIds: Array.from({ length: 21 }, (_, index) =>
+      index.toString(16).padStart(36, '0')
+    ).join(','),
+  });
+
+  await expect(fetchAndAddCartItems(overCount)).resolves.toBe(false);
+  expect(overCount.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Invalid link' })
+  );
+  expect(vi.mocked(createClient)).not.toHaveBeenCalled();
+
+  const overLength = setupOptions({ itemIds: `${'a'.repeat(2001)}` });
+  await expect(fetchAndAddCartItems(overLength)).resolves.toBe(false);
+  expect(overLength.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Invalid link' })
+  );
+});
+
 it('treats an uppercase item_id as found when the catalog returns lowercase', async () => {
   setupProductsQuery({
     data: [{ id: added, name: 'Phone', status: 'active', images: [] }],

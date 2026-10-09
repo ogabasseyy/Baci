@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createPrimaryWalletCardCheckoutExecutor } from '@/lib/piggyvest/primary-wallet-card-checkout-executor';
+import { isCheckoutRouteOwner } from '@/lib/piggyvest/primary-wallet-card-checkout-ownership';
 import { createPrimaryWalletCardCheckoutProvider } from '@/lib/piggyvest/primary-wallet-card-checkout-provider';
 import {
   readPrimaryWalletCardCheckoutRuntime,
@@ -58,20 +59,19 @@ export async function handlePrimaryWalletCardCheckout(
       .eq('user_id', auth.user.id)
       .maybeSingle();
     const identity = schemas.identity.safeParse(data);
-    // Initialization binds the checkout email at creation, so the stored
-    // address must match the confirmed one. Status recovery binds only the
-    // immutable IDs: a customer who changed email after initialize must
-    // still poll their unresolved or charged checkout (the service layer
-    // deliberately excludes email from identityKeys for the same reason,
-    // and the stored address is still compared as provider evidence at
-    // the collection boundary).
     if (
       queryError ||
       !identity.success ||
-      identity.data.merchant_id !== runtime.settings.merchantId ||
-      identity.data.user_id !== auth.user.id ||
-      (action === 'initialize' &&
-        identity.data.email.toLowerCase() !== auth.user.email.toLowerCase())
+      // Single source of truth with the service layer: ownership binds
+      // the immutable IDs; only initialize additionally requires the
+      // stored email to match the confirmed one.
+      !isCheckoutRouteOwner({
+        action,
+        settingsMerchantId: runtime.settings.merchantId,
+        authUserId: auth.user.id,
+        authEmail: auth.user.email,
+        identity: identity.data,
+      })
     )
       return error('OWNERSHIP_REQUIRED', 403);
     const scope = {

@@ -270,6 +270,10 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: 'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db',
   },
   {
+    repositoryPath: 'supabase/migrations/20261008230000_mcp_guest_carts.sql',
+    sha256: 'cfb49525158a17c1646973a3636f1265575091d31818b9363128516e0b8b6b1e',
+  },
+  {
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',
     sha256: '2d3dc25857186965c6bdafc8874b57d0ea64452b2ecba5fa14e13bc802272add',

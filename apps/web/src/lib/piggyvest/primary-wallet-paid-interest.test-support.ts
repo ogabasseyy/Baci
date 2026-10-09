@@ -5,6 +5,7 @@ export const paidInterestFixture = {
     businessId: 'fixture-business',
     providerToken: 'test-only-provider-token',
     webhookSecret: 'test-only-signing-secret',
+    retainedWebhookSecrets: [],
     database: {
       host: 'db.example.com',
       port: 5432,

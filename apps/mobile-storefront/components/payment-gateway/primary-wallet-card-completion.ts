@@ -11,6 +11,12 @@ const client = createPrimaryWalletCardFundingClient();
 
 const TERMINAL_DIRECTIVE_COPY =
   'This card checkout was cancelled before payment. No money moved. Start a new funding to try again.';
+// A dropped persisted record only proves the device lost the operation —
+// the server may still hold it (e.g. corrupt-record eviction after
+// payment). Never claim no money moved here: starting a new funding
+// re-adopts any surviving server operation, so nothing is lost either way.
+const DROPPED_DIRECTIVE_COPY =
+  'We could not find this funding on this device. Start a new funding to try again — any completed checkout will still be found and credited.';
 
 export function beginPrimaryWalletCardCompletion(
   input: Parameters<typeof beginWalletTopUpCompletion>[0]
@@ -119,8 +125,8 @@ export function beginPrimaryWalletCardCompletion(
       if (!input.refs.isMountedRef.current) return;
       input.setPaymentStatus('error');
       if (failureCause === 'operation_dropped') {
-        input.setErrorMessage(TERMINAL_DIRECTIVE_COPY);
-        input.setTerminalDirective?.(TERMINAL_DIRECTIVE_COPY);
+        input.setErrorMessage(DROPPED_DIRECTIVE_COPY);
+        input.setTerminalDirective?.(DROPPED_DIRECTIVE_COPY);
       } else
         input.setErrorMessage(
           'Could not check your funding status. This does not mean your card charge failed. Your operation is saved. Do not pay again; check its status later.'

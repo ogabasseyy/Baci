@@ -60,6 +60,25 @@ describe('signed production primary paid interest', () => {
     apply.mockResolvedValue(outcome);
     expect(await applyPrimaryWalletSignedPaidInterest(signed())).toBe(outcome);
   });
+  it('accepts a rotation-retained signature on the direct fallback path', async () => {
+    const rawBody = Buffer.from(JSON.stringify(fixture.event));
+    const retained = 'old-test-only-key';
+    expect(
+      await applyPrimaryWalletSignedPaidInterest({
+        rawBody,
+        signature: createHmac('sha512', retained).update(rawBody).digest('hex'),
+        configuration: {
+          ...fixture.config,
+          retainedWebhookSecrets: [retained],
+        },
+        involved,
+        resolveCrosswalk,
+        retrieveWallet,
+        apply,
+        now: () => new Date('2026-10-07T20:00:01.000Z'),
+      })
+    ).toBe('credited');
+  });
   it('fails authentication before lookup when signed bytes are changed', async () => {
     const request = signed();
     await expect(

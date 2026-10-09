@@ -1819,6 +1819,103 @@ BEGIN
 END;
 $platform_create_atomic$;
 
+DO $direct_write_guard$
+DECLARE
+  v_message TEXT;
+  v_saw_platform BOOLEAN := FALSE;
+  v_saw_update BOOLEAN := FALSE;
+  v_saw_merchant BOOLEAN := FALSE;
+BEGIN
+  -- Direct-write regression: a post that commits after the claim
+  -- snapshot but before byte removal must fail like an RPC-side
+  -- swept failure instead of re-referencing a doomed path the
+  -- delete policy still admits. Runs as the table owner; the
+  -- trigger is DEFINER and sees claimed rows for every caller.
+  RESET ROLE;
+
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/guard-doomed.webp', now() - interval '2 hours', TRUE);
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/guard-live.webp', now(), FALSE);
+
+  -- A direct platform INSERT referencing a claimed path aborts.
+  BEGIN
+    INSERT INTO public.blog_posts (
+      title, slug, content, status, is_platform_post, merchant_id,
+      author_name
+    )
+    VALUES (
+      'Guard draft', 'guard-draft',
+      '<img src="https://cdn.example.com/media/platform/blog/guard-doomed.webp">',
+      'draft', TRUE, NULL, 'Guard Author'
+    );
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_platform := (v_message LIKE 'platform_blog_media_swept_during_save%');
+  END;
+  IF NOT v_saw_platform THEN
+    RAISE EXCEPTION 'direct insert over a claimed path was not blocked';
+  END IF;
+
+  -- So does a direct UPDATE that newly references one.
+  INSERT INTO public.blog_posts (
+    title, slug, content, status, is_platform_post, merchant_id,
+    author_name
+  )
+  VALUES (
+    'Guard clean', 'guard-clean', '<p>Clean</p>',
+    'draft', TRUE, NULL, 'Guard Author'
+  );
+  BEGIN
+    UPDATE public.blog_posts
+       SET content = '<img src="https://cdn.example.com/media/platform/blog/guard-doomed.webp">'
+     WHERE slug = 'guard-clean';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_update := (v_message LIKE 'platform_blog_media_swept_during_save%');
+  END;
+  IF NOT v_saw_update THEN
+    RAISE EXCEPTION 'direct update over a claimed path was not blocked';
+  END IF;
+
+  -- Merchant rows get the merchant-side failure for the same race.
+  BEGIN
+    INSERT INTO public.blog_posts (
+      title, slug, content, status, is_platform_post, merchant_id,
+      author_name
+    )
+    VALUES (
+      'Guard merchant', 'guard-merchant',
+      '<img src="https://cdn.example.com/media/platform/blog/guard-doomed.webp">',
+      'draft', FALSE, '00000000-0000-0000-0000-000000000001', 'Guard Author'
+    );
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_merchant := (v_message LIKE 'merchant_blog_media_swept_during_save%');
+  END;
+  IF NOT v_saw_merchant THEN
+    RAISE EXCEPTION 'merchant direct write over a claimed path was not blocked';
+  END IF;
+
+  -- Unclaimed references pass: the claim scan, not the trigger,
+  -- owns them.
+  INSERT INTO public.blog_posts (
+    title, slug, content, status, is_platform_post, merchant_id,
+    author_name
+  )
+  VALUES (
+    'Guard live', 'guard-live',
+    '<img src="https://cdn.example.com/media/platform/blog/guard-live.webp">',
+    'draft', TRUE, NULL, 'Guard Author'
+  );
+
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN ('platform/blog/guard-doomed.webp', 'platform/blog/guard-live.webp');
+  DELETE FROM public.blog_posts
+   WHERE slug IN ('guard-clean', 'guard-live');
+END;
+$direct_write_guard$;
+
 RESET ROLE;
 
 ROLLBACK;

@@ -456,6 +456,8 @@ jobs:
           .github/scripts/smoke-gigl-worker-capability.test.mjs
           .github/scripts/refuse-publish-on-promote-overlap.test.mjs
           .github/scripts/probe-gigl-hook-reload.test.mjs
+          .github/scripts/probe-blog-media-hook-reload.test.mjs
+          .github/scripts/blog-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs
           .github/scripts/preview-workflow-contract-parsing.test.mjs
           .github/scripts/preview-workflow-redact-contract.test.mjs

@@ -31,12 +31,14 @@ export function useBlogMediaTombstoneHeartbeat({
       void stateRef.current.refresh(paths).catch(() => undefined);
     };
     // A suspended tab runs no timers while the server-side sweep
-    // continues, so beat immediately on resume instead of waiting up
-    // to a full interval for the next tick. The hidden transition
-    // itself never beats: the paths are still leased until the next
-    // tick or the resume that follows it.
+    // continues, so beat on every lifecycle transition: hiding
+    // extends the lease from the hide time (a phase-dependent beat
+    // up to a full interval old would otherwise be the last one),
+    // and resume beats immediately instead of waiting for the next
+    // tick. A suspension past the grace window still expires — no
+    // client code runs to renew it — and the save then fails loudly
+    // on the swept references rather than silently.
     const onResume = () => {
-      if (document.visibilityState === 'hidden') return;
       beat();
     };
     const timer = setInterval(beat, intervalMs);

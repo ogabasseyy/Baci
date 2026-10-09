@@ -1,62 +1,9 @@
 import { isZeroAreaClipPath } from './review-handoff-clip-path';
 import { resolveCssVariableReferences } from './review-handoff-css-variables';
 import { parseHandoffDom } from './review-handoff-dom';
-
-const IMPORTANT_SUFFIX_PATTERN = /!\s*important\s*$/i;
-
-function stripCssComments(style: string): string {
-  // Comments can hide anywhere outside strings — inside values
-  // (`display:/*x*/none`), names, even around `!important` — so
-  // strip them before declaration splitting. Quoted strings keep
-  // their text (`content:"/*"` is two characters, not a comment),
-  // and an unterminated comment runs to the end per CSS. Backslash
-  // escapes keep a quote inside its string.
-  let output = '';
-  let index = 0;
-  let quote: string | null = null;
-  while (index < style.length) {
-    const char = style[index] ?? '';
-    if (quote !== null) {
-      output += char;
-      if (char === '\\' && index + 1 < style.length) {
-        output += style[index + 1] ?? '';
-        index += 2;
-        continue;
-      }
-      if (char === quote) quote = null;
-      index += 1;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      output += char;
-      index += 1;
-      continue;
-    }
-    if (char === '/' && style[index + 1] === '*') {
-      const end = style.indexOf('*/', index + 2);
-      // CSS strips comments pre-tokenization (so `n/** /o/**/ne`
-      // reads as `none`); dropping them outright is exactly that.
-      index = end === -1 ? style.length : end + 2;
-      continue;
-    }
-    output += char;
-    index += 1;
-  }
-  return output;
-}
-
-function isImportantDeclaration(value: string): boolean {
-  // CSS allows whitespace between `!` and `important`, matched
-  // ASCII case-insensitively like every other declaration keyword.
-  return IMPORTANT_SUFFIX_PATTERN.test(value);
-}
-
-function normalizeDeclarationValue(value: string): string {
-  // CSS-wide keywords match ASCII case-insensitively, so `NONE`
-  // hides exactly like `none`.
-  return value.replace(IMPORTANT_SUFFIX_PATTERN, '').trim().toLowerCase();
-}
+import { inheritedCustomProperties } from './review-handoff-inherited-variables';
+import { collapsesBoxToZero } from './review-handoff-scale-collapse';
+import { finalDeclarationsForStyle } from './review-handoff-style-declarations';
 
 function isZeroAlphaColor(value: string): boolean {
   if (value === 'transparent') return true;
@@ -85,129 +32,34 @@ function isZeroFontSize(value: string): boolean {
   return match !== null && Number(match[1]) === 0;
 }
 
-const TRANSFORM_FUNCTION_PATTERN = /([a-z][a-z0-9]*)\(([^()]*)\)/g;
-
-function parseTransformNumbers(
-  args: string,
-  allowPercent: boolean
-): number[] | null {
-  const tokens = args.split(/[\s,]+/).filter((token) => token !== '');
-  const numbers: number[] = [];
-  for (const token of tokens) {
-    // Scale functions and the scale property accept percentages
-    // (0% collapses like 0); matrix() takes unitless numbers only,
-    // so a percentage there is an ignored declaration, not hiding.
-    const text =
-      allowPercent && token.endsWith('%') ? token.slice(0, -1) : token;
-    if (text === '') return null;
-    const parsed = Number(text);
-    if (!Number.isFinite(parsed)) {
-      return null;
-    }
-    numbers.push(parsed);
-  }
-  return numbers;
-}
-
-function isZeroScaleFunction(name: string, args: number[]): boolean {
-  switch (name) {
-    case 'scale':
-      return (
-        (args.length === 1 && args[0] === 0) ||
-        (args.length === 2 && (args[0] === 0 || args[1] === 0))
-      );
-    case 'scalex':
-    case 'scaley':
-      return args.length === 1 && args[0] === 0;
-    case 'scale3d':
-      return args.length === 3 && (args[0] === 0 || args[1] === 0);
-    case 'matrix':
-      return (
-        args.length === 6 &&
-        ((args[0] === 0 && args[1] === 0) || (args[2] === 0 && args[3] === 0))
-      );
-    case 'matrix3d': {
-      if (args.length !== 16) {
-        return false;
-      }
-      // Column-major: the X basis is (a1, a2, a3), the Y basis
-      // (a5, a6, a7). A zero basis collapses that axis.
-      const xCollapsed = args[0] === 0 && args[1] === 0 && args[2] === 0;
-      const yCollapsed = args[4] === 0 && args[5] === 0 && args[6] === 0;
-      return xCollapsed || yCollapsed;
-    }
-    default:
-      return false;
-  }
-}
-
-function isZeroScaleTransform(value: string): boolean {
-  TRANSFORM_FUNCTION_PATTERN.lastIndex = 0;
-  let match = TRANSFORM_FUNCTION_PATTERN.exec(value);
-  while (match !== null) {
-    const name = match[1] ?? '';
-    const args = parseTransformNumbers(
-      match[2] ?? '',
-      name.startsWith('scale')
-    );
-    if (args !== null && isZeroScaleFunction(name, args)) {
-      return true;
-    }
-    match = TRANSFORM_FUNCTION_PATTERN.exec(value);
-  }
-  return false;
-}
-
-function isZeroScaleProperty(value: string): boolean {
-  const args = parseTransformNumbers(value, true);
-  if (args === null || args.length < 1 || args.length > 3) {
-    return false;
-  }
-  return args[0] === 0 || (args.length >= 2 && args[1] === 0);
-}
+const OPACITY_FUNCTION_PATTERN = /opacity\(([^()]*)\)/g;
 
 function isZeroOpacityFilter(value: string): boolean {
   // A filter list applies its functions in order and opacity values
   // multiply, so any opacity(0) zeroes the final alpha. Only opacity
   // hides: brightness(0) paints black, blur paints unfocused pixels.
-  TRANSFORM_FUNCTION_PATTERN.lastIndex = 0;
-  let match = TRANSFORM_FUNCTION_PATTERN.exec(value);
+  OPACITY_FUNCTION_PATTERN.lastIndex = 0;
+  let match = OPACITY_FUNCTION_PATTERN.exec(value);
   while (match !== null) {
-    if (match[1] === 'opacity') {
-      const arg = (match[2] ?? '').trim().replace(/%$/, '');
-      // Out-of-range values clamp to [0,1], so negatives hide.
-      if (arg !== '' && Number(arg) <= 0) {
-        return true;
-      }
+    const arg = (match[1] ?? '').trim().replace(/%$/, '');
+    // Out-of-range values clamp to [0,1], so negatives hide.
+    if (arg !== '' && Number(arg) <= 0) {
+      return true;
     }
-    match = TRANSFORM_FUNCTION_PATTERN.exec(value);
+    match = OPACITY_FUNCTION_PATTERN.exec(value);
   }
   return false;
 }
 
 function hidingUtilityForStyle(
-  style: string
+  style: string,
+  inherited: ReadonlyMap<string, string>
 ): 'hidden' | 'text-transparent' | null {
-  // Importance beats order per property, mirroring the CSS
-  // cascade: `display:none!important;display:block` hides, while
-  // `display:none;display:block` shows and a later important
-  // declaration still overrides an earlier one.
-  const finals = new Map<string, { important: boolean; value: string }>();
-  for (const declaration of stripCssComments(style).split(';')) {
-    const separator = declaration.indexOf(':');
-    if (separator === -1) continue;
-    const rawName = declaration.slice(0, separator).trim();
-    // Custom property names are case-sensitive (`--State` is not
-    // `--state`); every other property matches ASCII
-    // case-insensitively.
-    const name = rawName.startsWith('--') ? rawName : rawName.toLowerCase();
-    const raw = declaration.slice(separator + 1);
-    const important = isImportantDeclaration(raw);
-    const existing = finals.get(name);
-    if (existing?.important && !important) continue;
-    finals.set(name, { important, value: normalizeDeclarationValue(raw) });
-  }
-  const customs = new Map<string, string>();
+  const finals = finalDeclarationsForStyle(style);
+  // Inherited declarations seed the environment; the own block
+  // overrides them, matching the CSS cascade for custom
+  // properties.
+  const customs = new Map<string, string>(inherited);
   for (const [name, entry] of finals) {
     if (name.startsWith('--')) customs.set(name, entry.value);
   }
@@ -252,13 +104,13 @@ function hidingUtilityForStyle(
   // content, so they map to hidden rather than text-transparent.
   const transform = finalValue('transform');
   if (transform !== undefined && transform !== 'none') {
-    if (isZeroScaleTransform(transform)) {
+    if (collapsesBoxToZero(transform, 'transform-list')) {
       return 'hidden';
     }
   }
   const scale = finalValue('scale');
   if (scale !== undefined && scale !== 'none') {
-    if (isZeroScaleProperty(scale)) {
+    if (collapsesBoxToZero(scale, 'scale-property')) {
       return 'hidden';
     }
   }
@@ -290,7 +142,10 @@ function hidingUtilityForStyle(
 export function convertHiddenInlineStyles(html: string): string {
   const doc = parseHandoffDom(html);
   for (const element of doc.querySelectorAll('[style]')) {
-    const utility = hidingUtilityForStyle(element.getAttribute('style') ?? '');
+    const utility = hidingUtilityForStyle(
+      element.getAttribute('style') ?? '',
+      inheritedCustomProperties(element)
+    );
     if (utility !== null) element.classList.add(utility);
   }
   return doc.body.innerHTML;

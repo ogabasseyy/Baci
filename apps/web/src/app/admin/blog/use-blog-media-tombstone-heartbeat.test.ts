@@ -79,4 +79,62 @@ describe('useBlogMediaTombstoneHeartbeat', () => {
 
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    'visible',
+    'prerender',
+  ])('beats immediately when the runtime resumes (%s)', (visibility) => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    renderHook(() =>
+      useBlogMediaTombstoneHeartbeat({
+        getPaths: () => ['platform/blog/draft.webp'],
+        intervalMs: 1000,
+        refresh,
+      })
+    );
+
+    setVisibility(visibility);
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pageshow'));
+      window.dispatchEvent(new Event('online'));
+    } finally {
+      setVisibility('prerender');
+    }
+
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips the beat when the tab hides and stops listeners on unmount', () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const hook = renderHook(() =>
+      useBlogMediaTombstoneHeartbeat({
+        getPaths: () => ['platform/blog/draft.webp'],
+        intervalMs: 1000,
+        refresh,
+      })
+    );
+
+    setVisibility('hidden');
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+    } finally {
+      setVisibility('prerender');
+    }
+    expect(refresh).not.toHaveBeenCalled();
+
+    hook.unmount();
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pageshow'));
+    window.dispatchEvent(new Event('online'));
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
+
+function setVisibility(state: string) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    value: state,
+  });
+}

@@ -30,9 +30,24 @@ export function useBlogMediaTombstoneHeartbeat({
       // a transient network blip never crashes the editor.
       void stateRef.current.refresh(paths).catch(() => undefined);
     };
+    // A suspended tab runs no timers while the server-side sweep
+    // continues, so beat immediately on resume instead of waiting up
+    // to a full interval for the next tick. The hidden transition
+    // itself never beats: the paths are still leased until the next
+    // tick or the resume that follows it.
+    const onResume = () => {
+      if (document.visibilityState === 'hidden') return;
+      beat();
+    };
     const timer = setInterval(beat, intervalMs);
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('pageshow', onResume);
+    window.addEventListener('online', onResume);
     return () => {
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('pageshow', onResume);
+      window.removeEventListener('online', onResume);
     };
   }, [intervalMs]);
 }

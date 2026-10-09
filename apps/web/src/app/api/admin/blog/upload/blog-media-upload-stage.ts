@@ -11,7 +11,7 @@ type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
  * unmount flush never runs when the tab closes mid-draft, so the
  * upload itself must leave the record the sweep reaps after the
  * grace window; a successful save clears the staged rows through
- * clearBlogMediaTombstonesForRow. Failing the upload on a staging
+ * the atomic mutation's media registration. Failing the upload on a staging
  * error leaves no unstaged orphan for the client to retry around.
  */
 export async function stageUploadedBlogMediaPaths(

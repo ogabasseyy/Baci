@@ -1318,6 +1318,76 @@ BEGIN
 END;
 $update_confinement$;
 
+DO $lease_floor_walk$
+DECLARE
+  v_message TEXT;
+  v_blocked_steps INTEGER := 0;
+  v_aged INTERVAL;
+BEGIN
+  -- Incremental-walk regression: five-minute steps die on the
+  -- server-time floor long before the one-hour cutoff. now() is
+  -- transaction-constant here, so the first two steps land inside
+  -- both tolerances and the third crosses the ten-minute floor
+  -- and raises (in production, where each UPDATE is its own
+  -- transaction, the walk dies a step earlier). Either way the
+  -- walk can age a fresh upload by ten minutes at most.
+  RESET ROLE;
+  CREATE POLICY blog_media_floor_probe_open_update
+    ON public.blog_media_delete_tombstones
+    FOR UPDATE TO authenticated
+    USING (TRUE)
+    WITH CHECK (TRUE);
+  CREATE POLICY blog_media_floor_probe_open_select
+    ON public.blog_media_delete_tombstones
+    FOR SELECT TO authenticated
+    USING (TRUE);
+
+  SET LOCAL ROLE service_role;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '', true);
+
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/floor-probe.webp', now(), FALSE);
+
+  SET LOCAL ROLE authenticated;
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = created_at - interval '5 minutes'
+   WHERE path = 'platform/blog/floor-probe.webp';
+  UPDATE public.blog_media_delete_tombstones
+     SET created_at = created_at - interval '5 minutes'
+   WHERE path = 'platform/blog/floor-probe.webp';
+
+  BEGIN
+    UPDATE public.blog_media_delete_tombstones
+       SET created_at = created_at - interval '5 minutes'
+     WHERE path = 'platform/blog/floor-probe.webp';
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    IF v_message = 'blog_media_lease_backdate_blocked' THEN
+      v_blocked_steps := v_blocked_steps + 1;
+    END IF;
+  END;
+  IF v_blocked_steps <> 1 THEN
+    RAISE EXCEPTION 'floor walk third step was not blocked';
+  END IF;
+
+  SELECT now() - created_at INTO v_aged
+    FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/floor-probe.webp';
+  IF v_aged > interval '11 minutes' THEN
+    RAISE EXCEPTION 'walk aged the lease by %', v_aged;
+  END IF;
+
+  RESET ROLE;
+  DROP POLICY blog_media_floor_probe_open_update
+    ON public.blog_media_delete_tombstones;
+  DROP POLICY blog_media_floor_probe_open_select
+    ON public.blog_media_delete_tombstones;
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path = 'platform/blog/floor-probe.webp';
+END;
+$lease_floor_walk$;
+
 DO $worker_scope$
 DECLARE
   v_message TEXT;
@@ -1654,6 +1724,100 @@ BEGIN
   DELETE FROM public.blog_posts WHERE id = v_post_id;
 END;
 $platform_patch_atomic$;
+
+DO $platform_create_atomic$
+DECLARE
+  v_row RECORD;
+  v_message TEXT;
+  v_saw_swept BOOLEAN := FALSE;
+  v_saw_unknown BOOLEAN := FALSE;
+BEGIN
+  -- A failed platform create persists nothing: the insert and its
+  -- media verification share one transaction, so no compensating
+  -- delete can fail and no slug lingers for the retry. Runs as the
+  -- table owner so RLS (unchanged INVOKER semantics) stays out of
+  -- the way; the route tests cover the permission path.
+  RESET ROLE;
+
+  INSERT INTO storage.objects (bucket_id, name, owner, version, metadata)
+  VALUES ('media', 'platform/blog/atomic-create-live.webp', NULL, '1', '{}');
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/atomic-create-live.webp', now() - interval '2 hours', FALSE);
+
+  -- Success clears the tombstone and returns the inserted row with
+  -- forced platform scope.
+  SELECT * INTO v_row
+    FROM public.mutate_platform_blog_post_create_atomic(
+      '{"title": "Atomic create", "slug": "atomic-create",'
+      ' "content": "<img src=\"https://cdn.example.com/media/platform/blog/atomic-create-live.webp\">",'
+      ' "author_name": "Atomic Author", "word_count": 7, "tags": ["c"]}',
+      ARRAY['platform/blog/atomic-create-live.webp']
+    );
+  IF v_row.title <> 'Atomic create' OR v_row.slug <> 'atomic-create'
+    OR v_row.word_count <> 7 OR v_row.tags <> ARRAY['c']
+  THEN
+    RAISE EXCEPTION 'atomic create returned the wrong row';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.blog_posts AS post
+     WHERE post.slug = 'atomic-create'
+       AND (post.is_platform_post IS NOT TRUE OR post.merchant_id IS NOT NULL)
+  ) THEN
+    RAISE EXCEPTION 'atomic create did not force platform scope';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.blog_media_delete_tombstones
+     WHERE path = 'platform/blog/atomic-create-live.webp'
+  ) THEN
+    RAISE EXCEPTION 'atomic create left the tombstone behind';
+  END IF;
+
+  -- A swept reference rolls the whole create back: no row persists,
+  -- so the retry meets no slug conflict.
+  INSERT INTO public.blog_media_delete_tombstones (path, created_at, claimed)
+  VALUES ('platform/blog/atomic-create-doomed.webp', now() - interval '2 hours', TRUE);
+  BEGIN
+    PERFORM public.mutate_platform_blog_post_create_atomic(
+      '{"title": "Doomed create", "slug": "doomed-create",'
+      ' "content": "<img src=\"https://cdn.example.com/media/platform/blog/atomic-create-doomed.webp\">",'
+      ' "author_name": "Atomic Author"}',
+      ARRAY['platform/blog/atomic-create-doomed.webp']
+    );
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
+    v_saw_swept := (v_message LIKE 'platform_blog_media_swept_during_save%');
+  END;
+  IF NOT v_saw_swept THEN
+    RAISE EXCEPTION 'swept media did not fail the create';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.blog_posts WHERE slug = 'doomed-create'
+  ) THEN
+    RAISE EXCEPTION 'failed create left a row behind';
+  END IF;
+
+  -- Unknown fields are rejected, not silently dropped.
+  BEGIN
+    PERFORM public.mutate_platform_blog_post_create_atomic(
+      '{"title": "X", "nope": 1}',
+      ARRAY[]::TEXT[]
+    );
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_saw_unknown := TRUE;
+  END;
+  IF NOT v_saw_unknown THEN
+    RAISE EXCEPTION 'unknown field was not rejected';
+  END IF;
+
+  DELETE FROM storage.objects
+   WHERE bucket_id = 'media' AND name = 'platform/blog/atomic-create-live.webp';
+  DELETE FROM public.blog_media_delete_tombstones
+   WHERE path IN (
+    'platform/blog/atomic-create-live.webp', 'platform/blog/atomic-create-doomed.webp'
+  );
+  DELETE FROM public.blog_posts WHERE slug = 'atomic-create';
+END;
+$platform_create_atomic$;
 
 RESET ROLE;
 

@@ -1,11 +1,11 @@
 /**
- * Resolve `var()` references against same-block custom properties.
+ * Resolve `var()` references against a custom-property environment.
  * A handoff can hide content behind `--state:none;display:var(
  * --state)`, which the browser resolves but a literal comparison
  * misses — publishing the draft note once sanitization strips the
- * style. Only the element's own declaration block resolves (no
- * inheritance: pasted fragments carry no ancestor styles). Names are
- * case-sensitive per CSS; fallbacks apply when the property is
+ * style. The caller supplies the merged environment (inherited
+ * declarations seeded first, the own block overriding them). Names
+ * are case-sensitive per CSS; fallbacks apply when the property is
  * missing or cyclic, and cyclic chains resolve to nothing (the
  * declaration is guaranteed-invalid, so the property stays visible).
  * Unresolvable references stay literal, which no hiding keyword

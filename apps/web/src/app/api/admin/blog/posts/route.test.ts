@@ -25,37 +25,47 @@ vi.mock('@/lib/cache-revalidation', () => ({
 }));
 
 const mockSupabase = {
-  delete: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
-  in: vi.fn(),
-  insert: vi.fn(),
   is: vi.fn(),
-  not: vi.fn(),
   order: vi.fn(),
   range: vi.fn(),
-  rpc: vi.fn((_name: string, args: { p_paths: string[] }) =>
-    Promise.resolve({
-      data: args.p_paths.map((path) => ({ path })),
+  rpc: vi.fn((name: string, args: Record<string, unknown>) => {
+    if (name === 'mutate_platform_blog_post_create_atomic') {
+      return Promise.resolve({
+        data: [{ id: 'post-1', slug: 'launch-faster', title: 'Launch Faster' }],
+        error: null,
+      });
+    }
+    const paths = (args.p_paths as string[] | undefined) ?? [];
+    return Promise.resolve({
+      data: paths.map((path) => ({ path })),
       error: null,
-    })
-  ),
+    });
+  }),
   select: vi.fn(),
-  single: vi.fn(),
 };
 
 mockSupabase.from.mockReturnValue(mockSupabase);
 mockSupabase.select.mockReturnValue(mockSupabase);
 mockSupabase.eq.mockReturnValue(mockSupabase);
 mockSupabase.is.mockReturnValue(mockSupabase);
-mockSupabase.not.mockReturnValue(mockSupabase);
 mockSupabase.order.mockReturnValue(mockSupabase);
 mockSupabase.range.mockReturnValue(mockSupabase);
-mockSupabase.insert.mockReturnValue(mockSupabase);
-mockSupabase.delete.mockReturnValue(mockSupabase);
-mockSupabase.in.mockResolvedValue({ error: null });
 
 import { GET, POST } from './route';
+
+function createPatchData(): Record<string, unknown> {
+  const calls = mockSupabase.rpc.mock.calls as [
+    string,
+    Record<string, unknown>,
+  ][];
+  const match = calls.find(
+    ([name]) => name === 'mutate_platform_blog_post_create_atomic'
+  );
+  if (!match) throw new Error('atomic create RPC was not called');
+  return match[1].p_post_data as Record<string, unknown>;
+}
 
 describe('GET /api/admin/blog/posts', () => {
   beforeEach(() => {
@@ -128,14 +138,6 @@ describe('POST /api/admin/blog/posts', () => {
       user: { email: 'admin@baci.com', id: 'user-1' },
     });
     mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
-    mockSupabase.single.mockResolvedValue({
-      data: {
-        id: 'post-1',
-        slug: 'launch-faster',
-        title: 'Launch Faster',
-      },
-      error: null,
-    });
   });
 
   it('checks auth before csrf on write requests', async () => {
@@ -185,9 +187,9 @@ describe('POST /api/admin/blog/posts', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('resurrects tombstones referenced by the created payload', async () => {
+  it('sends media paths to the atomic create RPC', async () => {
     // A concurrent tab may have staged an upload this payload reuses;
-    // the save clears its tombstone before the sweep can remove it.
+    // the RPC registers its paths in the insert transaction.
     const response = await POST(
       new NextRequest('http://localhost/api/admin/blog/posts', {
         body: JSON.stringify({
@@ -203,15 +205,16 @@ describe('POST /api/admin/blog/posts', () => {
     );
 
     expect(response.status).toBe(201);
-    expect(mockSupabase.from).toHaveBeenCalledWith(
-      'blog_media_delete_tombstones'
-    );
-    expect(mockSupabase.in).toHaveBeenCalledWith('path', [
-      'platform/blog/shared.webp',
-    ]);
+    const calls = mockSupabase.rpc.mock.calls as [
+      string,
+      Record<string, unknown>,
+    ][];
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toBe('mutate_platform_blog_post_create_atomic');
+    expect(calls[0]?.[1].p_media_paths).toEqual(['platform/blog/shared.webp']);
   });
 
-  it('forces platform post fields and revalidates on successful create', async () => {
+  it('strips ownership guards and revalidates on successful create', async () => {
     const response = await POST(
       new NextRequest('http://localhost/api/admin/blog/posts', {
         body: JSON.stringify({
@@ -228,15 +231,15 @@ describe('POST /api/admin/blog/posts', () => {
     );
 
     expect(response.status).toBe(201);
-    expect(mockSupabase.insert).toHaveBeenCalledWith(
+    expect(createPatchData()).toEqual(
       expect.objectContaining({
-        is_platform_post: true,
-        merchant_id: null,
         reading_time_minutes: expect.any(Number),
         slug: 'launch-faster',
         word_count: expect.any(Number),
       })
     );
+    expect(createPatchData()).not.toHaveProperty('is_platform_post');
+    expect(createPatchData()).not.toHaveProperty('merchant_id');
     expect(mockRevalidatePlatformBlog).toHaveBeenCalledWith('launch-faster');
   });
 
@@ -261,7 +264,7 @@ describe('POST /api/admin/blog/posts', () => {
       })
     );
     expect(response.status).toBe(201);
-    expect(mockSupabase.insert).toHaveBeenCalledWith(
+    expect(createPatchData()).toEqual(
       expect.objectContaining({
         intent: null,
         intent_source: null,
@@ -285,8 +288,7 @@ describe('POST /api/admin/blog/posts', () => {
       })
     );
     expect(response.status).toBe(201);
-    const inserted = mockSupabase.insert.mock.calls[0][0];
-    expect(inserted).toMatchObject({ intent_source: null });
-    expect(inserted).not.toHaveProperty('intent');
+    expect(createPatchData()).toMatchObject({ intent_source: null });
+    expect(createPatchData()).not.toHaveProperty('intent');
   });
 });

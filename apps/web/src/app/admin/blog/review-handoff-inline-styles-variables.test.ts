@@ -23,6 +23,22 @@ describe('inline styles custom properties', () => {
   });
 
   it.each([
+    // Inherited customs resolve: the browser hides the paragraph;
+    // the emptied shells are not themselves hidden, so they stay.
+    [
+      '<div style="--state:none"><p style="display:var(--state)">Draft note</p></div><p>Body</p>',
+      '<div></div><p>Body</p>',
+    ],
+    // The closest ancestor wins over the outer one.
+    [
+      '<div style="--state:block"><div style="--state:none"><p style="display:var(--state)">Draft note</p></div></div><p>Body</p>',
+      '<div><div></div></div><p>Body</p>',
+    ],
+  ])('strips inherited var()-hidden content: %s', (html, expected) => {
+    expect(validateImportedContent(html)).toBe(expected);
+  });
+
+  it.each([
     // Cyclic chains are guaranteed-invalid: the declaration stays
     // visible, exactly like the browser.
     '<p style="--a:var(--b);--b:var(--a);display:var(--a)">Shown</p>',
@@ -30,6 +46,8 @@ describe('inline styles custom properties', () => {
     '<p style="--State:none;display:var(--state)">Shown</p>',
     // An unresolvable reference with no fallback matches nothing hiding.
     '<p style="display:var(--missing)">Shown</p>',
+    // The own block overrides an inherited hiding value.
+    '<div style="--state:none"><p style="--state:block;display:var(--state)">Shown</p></div>',
   ])('leaves unresolvable var() references visible: %s', (html) => {
     expect(convertHiddenInlineStyles(html)).toBe(html);
   });

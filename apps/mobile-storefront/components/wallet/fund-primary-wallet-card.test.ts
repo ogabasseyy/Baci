@@ -114,6 +114,25 @@ it('confirms the adopted amount before opening a resumed checkout', async () => 
     expect.stringContaining('saved')
   );
 });
+it('warns when an adopted checkout would save the card', async () => {
+  mockStart.mockResolvedValue({ ...response, adopted: true, saveCard: true });
+  alert.mockImplementation((_title, _message, buttons) => {
+    (
+      buttons?.find((button) => button.text === 'Authorize one-time charge') ??
+      buttons?.find((button) => button.text === 'Cancel')
+    )?.onPress?.();
+  });
+  await fundPrimaryWalletCard(input);
+  // The consent prompt promised the card will not be saved; the stored
+  // checkout says otherwise, so the resume dialog must say so too.
+  expect(alert).toHaveBeenCalledWith(
+    'Resume pending funding',
+    expect.stringContaining('save your card'),
+    expect.any(Array),
+    expect.any(Object)
+  );
+  expect(router.push).not.toHaveBeenCalled();
+});
 it('opens the adopted checkout only after explicit resume confirmation', async () => {
   mockStart.mockResolvedValue({ ...response, adopted: true });
   alert.mockImplementation((_title, _message, buttons) => {

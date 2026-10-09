@@ -88,6 +88,7 @@ export function createPrimaryCardCustodyConnection(input: {
       return await applyPrimaryCardSignedCustody({
         ...input,
         secret: config.webhookSecret,
+        retainedSecrets: config.retainedWebhookSecrets,
         now: inputNow,
         loadContext: (selected) => execute('context', [selected]),
         observe,

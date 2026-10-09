@@ -93,13 +93,18 @@ export function createPrimaryWalletCardFundingClient() {
         })
       );
       // Adoption: when device storage was lost and the customer re-entered
-      // a different amount, the server returns its stored unresolved
-      // operation instead of failing. Persist the stored operation ID and
-      // amount so the possibly charged checkout stays recoverable, and
-      // flag it so the UI confirms the adopted amount before any payment.
-      // Status polls keep the strict binding: a different operation or
-      // amount there is a real inconsistency, not a recovery.
-      const adopted = initialize && response.amountKobo !== record.amountKobo;
+      // a different amount or consent, the server returns its stored
+      // unresolved operation instead of failing. Persist the stored
+      // operation ID, amount, and save-card choice so the possibly charged
+      // checkout stays recoverable, and flag it so the UI confirms the
+      // adopted amount/consent before any payment. Status polls keep the
+      // strict binding: a different operation or amount there is a real
+      // inconsistency, not a recovery.
+      const adopted =
+        initialize &&
+        (response.amountKobo !== record.amountKobo ||
+          (response.saveCard !== undefined &&
+            response.saveCard !== record.consent.saveCard));
       if (
         !adopted &&
         (response.amountKobo !== record.amountKobo ||
@@ -121,6 +126,14 @@ export function createPrimaryWalletCardFundingClient() {
                 ...record,
                 operationId: response.operationId,
                 amountKobo: response.amountKobo,
+                // The stored checkout runs under the server's consent, not
+                // the just-entered one — persist it so later starts bind
+                // against the effective choice. Absent echo (older server)
+                // keeps the local consent: then only the amount adopted.
+                consent: {
+                  ...record.consent,
+                  saveCard: response.saveCard ?? record.consent.saveCard,
+                },
               }
             : { ...record, operationId: response.operationId }
         );

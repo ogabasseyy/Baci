@@ -12,6 +12,15 @@ import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();
+// The consent this screen collects: one-time charge, never save the card.
+// The adoption dialog compares the stored checkout's echoed save-card
+// choice against this — a stored checkout that would save the card must
+// say so, because the consent prompt promised it will not be saved.
+const ENTERED_CONSENT = {
+  version: 'primary-wallet-card-v1',
+  oneTimeCharge: true,
+  saveCard: false,
+} as const;
 
 const MAX_FUND_AMOUNT_KOBO = 9999999999;
 
@@ -125,20 +134,17 @@ export async function fundPrimaryWalletCard(
         merchantId,
         userId,
         amountKobo,
-        consent: {
-          version: 'primary-wallet-card-v1',
-          oneTimeCharge: true,
-          saveCard: false,
-        },
+        consent: { ...ENTERED_CONSENT },
         returnTo: sanitizeWalletReturnTo(input.walletReturnTo),
       });
     }
     // Adopted checkout: the server resumed the customer's stored
-    // unresolved operation (lost device storage, re-entered amount) instead
-    // of the just-entered amount. Never open its checkout silently — the
-    // consent prompt showed a different figure — so confirm the stored
-    // amount first. A closed adoption just reports; the saved record was
-    // already dropped so the next attempt starts fresh.
+    // unresolved operation (lost device storage, re-entered amount or
+    // consent) instead of the just-entered values. Never open its checkout
+    // silently — the consent prompt showed a different figure or save-card
+    // choice — so confirm the stored values first. A closed adoption just
+    // reports; the saved record was already dropped so the next attempt
+    // starts fresh.
     if ('adopted' in result && result.adopted) {
       if (result.status === 'abandoned') {
         Alert.alert(
@@ -148,10 +154,15 @@ export async function fundPrimaryWalletCard(
         input.resetFundPanel();
         return;
       }
+      const consentChanged =
+        result.saveCard !== undefined &&
+        result.saveCard !== ENTERED_CONSENT.saveCard;
       const resume = await new Promise<boolean>((resolve) =>
         Alert.alert(
           'Resume pending funding',
-          `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. Continue with this amount?`,
+          consentChanged
+            ? `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. It was set up to save your card for faster checkout. Continue?`
+            : `Found your pending ₦${formatNairaFromKobo(result.amountKobo)} card funding. Continue with this amount?`,
           [
             { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
             {

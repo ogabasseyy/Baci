@@ -21,11 +21,14 @@ export function createPrimaryCardCustodyInboxIntake(input: {
       signature === null ||
       payload.byteLength === 0 ||
       payload.byteLength > 65536 ||
-      !verifyPiggyvestPayloadSignature({
-        payload,
-        signature,
-        secret: config.webhookSecret,
-      })
+      ![config.webhookSecret, ...(config.retainedWebhookSecrets ?? [])].some(
+        (secret) =>
+          verifyPiggyvestPayloadSignature({
+            payload,
+            signature,
+            secret,
+          })
+      )
     )
       return 'invalid_signature' as const;
     let decoded: unknown;

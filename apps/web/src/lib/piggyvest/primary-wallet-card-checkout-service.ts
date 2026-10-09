@@ -65,6 +65,11 @@ export function createPrimaryWalletCardCheckoutService(input: {
     amountKobo: intent.amountKobo,
     currency: 'NGN' as const,
     status: intent.status,
+    // Echo the stored save-card choice: adoption resumes a stored checkout
+    // whose consent may differ from the just-entered one, and the client
+    // must confirm a consent change before any payment. Only saveCard
+    // varies (version/oneTimeCharge are literals).
+    saveCard: intent.consent.saveCard,
     ...(intent.status === 'ready' && intent.authorizationUrl
       ? { authorizationUrl: intent.authorizationUrl }
       : {}),

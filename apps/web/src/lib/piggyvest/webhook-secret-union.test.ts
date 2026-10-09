@@ -53,7 +53,10 @@ it('unions current and retained primary keys with the legacy secret', () => {
     webhookSecret: 'bank-secret',
     retainedWebhookSecrets: [],
   });
-  mocks.custody.mockReturnValue({ webhookSecret: 'custody-secret' });
+  mocks.custody.mockReturnValue({
+    webhookSecret: 'custody-secret',
+    retainedWebhookSecrets: ['custody-retained-secret'],
+  });
   mocks.interest.mockReturnValue({
     webhookSecret: 'interest-secret',
     retainedWebhookSecrets: ['retained-secret', 'legacy-secret', '', 42],
@@ -67,6 +70,7 @@ it('unions current and retained primary keys with the legacy secret', () => {
     'legacy-secret',
     'bank-secret',
     'custody-secret',
+    'custody-retained-secret',
     'interest-secret',
     'retained-secret',
   ]);
@@ -154,6 +158,10 @@ it('verifies with a retained key and reports the matched secret', async () => {
 
 it('tags each secret with the family that configured it', () => {
   mocks.bank.mockReturnValue({ webhookSecret: 'bank-secret' });
+  mocks.custody.mockReturnValue({
+    webhookSecret: 'custody-secret',
+    retainedWebhookSecrets: ['custody-retained-secret'],
+  });
   mocks.interest.mockReturnValue({
     webhookSecret: 'interest-secret',
     retainedWebhookSecrets: ['retained-secret'],
@@ -166,6 +174,8 @@ it('tags each secret with the family that configured it', () => {
   ).toEqual([
     { secret: 'legacy-secret', family: 'legacy' },
     { secret: 'bank-secret', family: 'bank' },
+    { secret: 'custody-secret', family: 'custody' },
+    { secret: 'custody-retained-secret', family: 'custody' },
     { secret: 'interest-secret', family: 'interest' },
     { secret: 'retained-secret', family: 'interest' },
   ]);

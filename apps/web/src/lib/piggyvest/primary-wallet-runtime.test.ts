@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { readPrimaryWalletRuntime } from './primary-wallet-runtime';
+import {
+  readPrimaryWalletRuntime,
+  readPrimaryWalletRuntimeDrain,
+} from './primary-wallet-runtime';
 
 vi.mock('server-only', () => ({}));
 const env: NodeJS.ProcessEnv = {
@@ -38,6 +41,30 @@ describe('primary wallet runtime environment', () => {
     ).toBeNull();
     expect(
       readPrimaryWalletRuntime({ ...env, PIGGYVEST_PRIMARY_DB_CA: '' })
+    ).toBeNull();
+  });
+  it('lets the drain reader bypass only the enabled flag', () => {
+    // Flag off but credentials-bound: recovery lookups still resolve.
+    expect(
+      readPrimaryWalletRuntimeDrain({
+        ...env,
+        PIGGYVEST_PRIMARY_ENABLED: 'false',
+      })?.onboarding.merchantId
+    ).toBe('6b5cb8a4-5575-456c-b936-8cdfae30db74');
+    // Environment binding and credentials still fail closed.
+    expect(
+      readPrimaryWalletRuntimeDrain({
+        ...env,
+        PIGGYVEST_PRIMARY_ENABLED: 'false',
+        PIGGYVEST_PRIMARY_ENVIRONMENT: 'staging',
+      })
+    ).toBeNull();
+    expect(
+      readPrimaryWalletRuntimeDrain({
+        ...env,
+        PIGGYVEST_PRIMARY_ENABLED: 'false',
+        PIGGYVEST_PRIMARY_DB_PASSWORD: '',
+      })
     ).toBeNull();
   });
 });

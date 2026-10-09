@@ -10,6 +10,7 @@ export async function applyPrimaryCardSignedCustody(input: {
   rawBody: Uint8Array;
   signature: string | null;
   secret: string | undefined;
+  retainedSecrets?: readonly string[];
   operationId: string;
   inboxToken: string;
   loadContext: (operationId: string) => Promise<unknown>;
@@ -20,11 +21,13 @@ export async function applyPrimaryCardSignedCustody(input: {
   if (
     input.rawBody.byteLength === 0 ||
     input.rawBody.byteLength > 65536 ||
-    !verifyPiggyvestPayloadSignature({
-      payload: input.rawBody,
-      signature: input.signature,
-      secret: input.secret,
-    })
+    ![input.secret, ...(input.retainedSecrets ?? [])].some((secret) =>
+      verifyPiggyvestPayloadSignature({
+        payload: input.rawBody,
+        signature: input.signature,
+        secret,
+      })
+    )
   )
     throw new Error('Custody authentication failed');
   let decoded: unknown;

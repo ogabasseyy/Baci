@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import {
   clearPiggyvestPrimaryCapabilityCache,
   getPiggyvestPrimaryCapability,
+  getPiggyvestPrimaryCapabilitySnapshot,
   isPrimaryWalletNotReady,
   rollbackObservedCapabilityOnNotReady,
   usePiggyvestPrimaryCapability,
@@ -120,6 +121,24 @@ describe('getPiggyvestPrimaryCapability', () => {
     await getPiggyvestPrimaryCapability(PRIMARY_MERCHANT);
     expect(read).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the probe snapshot so callers reuse it instead of re-reading', async () => {
+    const account = {
+      accountName: 'Verified',
+      accountNumber: '0987654321',
+      bankName: 'Provider Bank',
+      provider: 'piggyvest',
+    };
+    read.mockResolvedValue({ account });
+    await expect(
+      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT)
+    ).resolves.toEqual({ available: true, account });
+    // Cached verdicts carry no snapshot: nothing was fetched.
+    await expect(
+      getPiggyvestPrimaryCapabilitySnapshot(PRIMARY_MERCHANT)
+    ).resolves.toEqual({ available: true });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('rollbackObservedCapabilityOnNotReady', () => {
@@ -213,12 +232,15 @@ describe('usePiggyvestPrimaryCapability', () => {
     await waitFor(() => expect(result.current).toBe(true));
   });
 
-  it('fails closed for non-pilot merchants until the server confirms primary', async () => {
+  it('stays unknown for non-pilot merchants until the server confirms primary', async () => {
     read.mockResolvedValue({ account: null });
     const { result } = renderHook(() =>
       usePiggyvestPrimaryCapability(OTHER_MERCHANT)
     );
-    expect(result.current).toBe(false);
+    // Unknown, not false: a never-observed non-pilot merchant must wait for
+    // the first verdict instead of creating a legacy DVA that a later
+    // primary verdict would orphan.
+    expect(result.current).toBeNull();
     await waitFor(() => expect(result.current).toBe(true));
   });
 
@@ -227,9 +249,9 @@ describe('usePiggyvestPrimaryCapability', () => {
     const { result } = renderHook(() =>
       usePiggyvestPrimaryCapability(OTHER_MERCHANT)
     );
-    expect(result.current).toBe(false);
+    expect(result.current).toBeNull();
     await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
-    expect(result.current).toBe(false);
+    await waitFor(() => expect(result.current).toBe(false));
   });
 
   it('stays unknown on ambiguous probe failure and reprobes instead of enabling legacy', async () => {

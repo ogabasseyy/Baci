@@ -19,6 +19,10 @@ const response = z
     operationId: z.uuid(),
     amountKobo,
     currency: z.literal('NGN'),
+    // Stored save-card choice echoed by the server. Optional: older
+    // servers predate the echo, and adoption must not misfire against
+    // them — the client only treats a defined mismatch as adoption.
+    saveCard: z.boolean().optional(),
     reference: z.string().regex(/^pvb-first-primary-[0-9a-f-]{36}$/),
     status: z.enum([
       'reserved',

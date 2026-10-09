@@ -29,6 +29,7 @@ describe('intake-only configured custody capability', () => {
     expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
       webhookSecret:
         fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+      retainedWebhookSecrets: [],
     });
     expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
     expect(
@@ -55,9 +56,42 @@ describe('intake-only configured custody capability', () => {
       expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
         webhookSecret:
           fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+        retainedWebhookSecrets: [],
       });
       expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
     }
+  });
+  it('exposes configured retained keys so rotation retries verify', () => {
+    const env = {
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS: JSON.stringify(
+        ['retained-custody-key']
+      ),
+    };
+    expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
+      webhookSecret:
+        fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+      retainedWebhookSecrets: ['retained-custody-key'],
+    });
+    expect(
+      readPrimaryCardCustodyIntakeRuntime(env, fixture.now)
+        ?.retainedWebhookSecrets
+    ).toEqual(['retained-custody-key']);
+  });
+  it('drops only the retained list on malformed rotation config', () => {
+    const env = {
+      ...fixture.environment,
+      PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS:
+        'malformed-secret-value',
+    };
+    // Secrets stay available (primary only) so the outer gate still
+    // verifies; the full runtime fails closed and intake answers 503.
+    expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
+      webhookSecret:
+        fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+      retainedWebhookSecrets: [],
+    });
+    expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
   });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },

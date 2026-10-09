@@ -39,7 +39,21 @@ describe('trusted custody deployment configuration', () => {
     expect(parsed?.transfer).toBeUndefined();
   });
   it('pins current deployment deadline and approved crosswalk authority without a goal or Paystack credential', () => {
-    expect(readPrimaryCardCustodyRuntime(env, fixture.now)).toEqual(config);
+    expect(readPrimaryCardCustodyRuntime(env, fixture.now)).toEqual({
+      ...config,
+      retainedWebhookSecrets: [],
+    });
+  });
+  it('exposes configured retained keys so the worker re-verifies rotation retries', () => {
+    const parsed = readPrimaryCardCustodyRuntime(
+      {
+        ...env,
+        PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS:
+          JSON.stringify(['retained-custody-key']),
+      },
+      fixture.now
+    );
+    expect(parsed?.retainedWebhookSecrets).toEqual(['retained-custody-key']);
   });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
@@ -50,6 +64,10 @@ describe('trusted custody deployment configuration', () => {
     { PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined },
     { PIGGYVEST_PRIMARY_CARD_TRANSACTION_CUSTOMER_ID: undefined },
     { PIGGYVEST_PRIMARY_CARD_CUSTODY_PASSWORD: undefined },
+    {
+      PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS:
+        'malformed-secret-value',
+    },
   ])('fails closed for unavailable configuration %#', (change) => {
     expect(
       readPrimaryCardCustodyRuntime({ ...env, ...change }, fixture.now)

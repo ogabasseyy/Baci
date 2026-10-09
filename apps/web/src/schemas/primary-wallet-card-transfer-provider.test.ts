@@ -4,9 +4,13 @@ import { primaryCardTransferProviderSchemas as schemas } from './primary-wallet-
 
 describe('restricted primary transfer configuration', () => {
   it('requires transfer authority without settlement credentials or a goal', () => {
-    expect(schemas.configuration.parse(fixture.configuration)).toEqual(
-      fixture.configuration
-    );
+    expect(schemas.configuration.parse(fixture.configuration)).toEqual({
+      ...fixture.configuration,
+      runtime: {
+        ...fixture.configuration.runtime,
+        retainedWebhookSecrets: [],
+      },
+    });
     expect(fixture.configuration.runtime).not.toHaveProperty('custody');
   });
   it('rejects missing transfer credentials', () =>

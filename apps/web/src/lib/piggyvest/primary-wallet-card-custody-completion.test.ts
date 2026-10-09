@@ -29,6 +29,7 @@ describe('durable custody completion to existing status API', () => {
       amountKobo: 25000,
       currency: 'NGN',
       status: 'completed',
+      saveCard: fixture.intent.consent.saveCard,
     });
     expect(provider.verify).not.toHaveBeenCalled();
     expect(provider.initialize).not.toHaveBeenCalled();

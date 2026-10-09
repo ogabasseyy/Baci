@@ -401,5 +401,7 @@ describe('durable goal-independent card checkout service', () => {
     });
     expect(adopted.amountKobo).toBe(25000);
     expect(adopted.operationId).toBe(fixture.intent.operationId);
+    // The stored consent echoes so the client can confirm the change.
+    expect(adopted.saveCard).toBe(fixture.intent.consent.saveCard);
   });
 });

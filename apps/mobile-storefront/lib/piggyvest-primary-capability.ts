@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { isPiggyvestPrimaryMerchant } from './is-piggyvest-primary-merchant';
 import {
   clearObservedPiggyvestPrimaryCapability,
   NEGATIVE_CAPABILITY_TTL_MS,
@@ -65,7 +64,20 @@ export function rollbackObservedCapabilityOnNotReady(
   return true;
 }
 
-const inflight = new Map<string, Promise<boolean>>();
+export interface PiggyvestPrimaryCapabilitySnapshot {
+  available: boolean;
+  /**
+   * The funding-account snapshot, present only when this call performed
+   * the network probe. Lets callers reuse the already-fetched account
+   * instead of re-reading it (null = primary enabled, none provisioned
+   * yet). Absent on cached verdicts, where no fetch happened.
+   */
+  account?: Awaited<
+    ReturnType<typeof piggyvestPrimaryWalletApi.read>
+  >['account'];
+}
+
+const inflight = new Map<string, Promise<PiggyvestPrimaryCapabilitySnapshot>>();
 
 export function clearPiggyvestPrimaryCapabilityCache() {
   clearObservedPiggyvestPrimaryCapability();
@@ -74,30 +86,31 @@ export function clearPiggyvestPrimaryCapabilityCache() {
 
 /**
  * Confirms with the server that the primary wallet capability is enabled
- * for this merchant. Probes every merchant so rollout is server-driven;
- * resolves false only on the server's explicit not-ready signal, while any
- * other failure rejects so callers never misroute money on an ambiguous
- * error.
+ * for this merchant, keeping the probe's funding-account snapshot so the
+ * caller can reuse it instead of re-reading the same account. Probes
+ * every merchant so rollout is server-driven; resolves unavailable only
+ * on the server's explicit not-ready signal, while any other failure
+ * rejects so callers never misroute money on an ambiguous error.
  */
-export async function getPiggyvestPrimaryCapability(
+export async function getPiggyvestPrimaryCapabilitySnapshot(
   merchantId: string
-): Promise<boolean> {
+): Promise<PiggyvestPrimaryCapabilitySnapshot> {
   const cached = readObservedPiggyvestPrimaryCapability(merchantId);
-  if (cached !== null) return cached;
+  if (cached !== null) return { available: cached };
   const pending = inflight.get(merchantId);
   if (pending) return pending;
   const probe = (async () => {
     try {
-      await piggyvestPrimaryWalletApi.read(merchantId);
+      const snapshot = await piggyvestPrimaryWalletApi.read(merchantId);
       observePiggyvestPrimaryCapability(merchantId, true);
-      return true;
+      return { available: true, account: snapshot.account };
     } catch (error) {
       if (!isPrimaryWalletNotReady(error)) throw error;
       // Feature-scoped codes resolve false once without caching: only the
       // base verdict describes the whole merchant integration.
       if (isBasePrimaryNotReady(error))
         observePiggyvestPrimaryCapability(merchantId, false);
-      return false;
+      return { available: false };
     } finally {
       inflight.delete(merchantId);
     }
@@ -107,11 +120,21 @@ export async function getPiggyvestPrimaryCapability(
 }
 
 /**
- * React binding for the primary capability probe. Pilot merchants fail open
- * while unknown (null reads as enabled; async actions re-check at call
- * time). Every other merchant fails closed until the server positively
- * confirms primary, so rollout stays server-driven without flashing
- * primary UI at unconfigured merchants.
+ * Boolean view of the capability probe for callers that only gate on the
+ * verdict and never need the funding account itself.
+ */
+export async function getPiggyvestPrimaryCapability(
+  merchantId: string
+): Promise<boolean> {
+  return (await getPiggyvestPrimaryCapabilitySnapshot(merchantId)).available;
+}
+
+/**
+ * React binding for the primary capability probe. Every merchant reads
+ * unknown (null) until the first verdict lands, so rollout stays
+ * server-driven: consumers wait instead of flashing primary UI at
+ * unconfigured merchants or minting legacy accounts a primary verdict
+ * would orphan. Async actions re-check the verdict at call time.
  */
 export function usePiggyvestPrimaryCapability(
   merchantId?: string | null
@@ -129,9 +152,12 @@ export function usePiggyvestPrimaryCapability(
     }
     let active = true;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-    const pilot = isPiggyvestPrimaryMerchant(merchantId);
     const observed = readObservedPiggyvestPrimaryCapability(merchantId);
-    setAvailable(pilot ? observed : observed === true);
+    // Unknown until the probe resolves for every merchant: a never-observed
+    // non-pilot merchant must not start at `false` (legacy) or DVA creation
+    // could route a primary-enabled merchant's deposits onto the legacy rail
+    // before the first verdict lands. Consumers treat `null` as "wait".
+    setAvailable(observed);
     void getPiggyvestPrimaryCapability(merchantId).then(
       (result) => {
         if (!active) return;

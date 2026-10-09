@@ -1,6 +1,17 @@
 jest.mock('@/components/wallet/use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
+// Resolved legacy verdict: these tests exercise DVA derivation from payment
+// settings and phone state, not the capability probe — the fixture merchant
+// reads as server-confirmed legacy so creation gating reflects only the
+// axis under test. Cold-start probe-wait behavior is covered in the
+// funding-account controller tests.
+jest.mock('@/lib/piggyvest-primary-capability', () => {
+  const actual = jest.requireActual(
+    '@/lib/piggyvest-primary-capability'
+  ) as typeof import('@/lib/piggyvest-primary-capability');
+  return { ...actual, usePiggyvestPrimaryCapability: () => false };
+});
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {

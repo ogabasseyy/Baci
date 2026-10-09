@@ -27,6 +27,8 @@ END $$;
 \ir ../../../../../supabase/migrations/20261008093100_primary_inflow_receipt_deletion_detach.sql
 \ir ../../../../../supabase/migrations/20261008093200_primary_card_unsettled_deletion_block.sql
 \ir ../../../../../supabase/migrations/20261008093300_primary_card_reconciliation_deletion_detach.sql
+\ir ../../../../../supabase/migrations/20261008093400_primary_savings_unsettled_deletion_block.sql
+\ir ../../../../../supabase/migrations/20261008093500_primary_card_saved_token_deletion_purge.sql
 -- Account deletion must succeed for a fully onboarded customer: all money
 -- evidence detaches (customer/goal/transaction NULL, row retained). Only
 -- provisioning-process intents cascade with their goal.
@@ -133,14 +135,20 @@ END $$;
 -- wallet to credit. Terminal operations keep detaching (main block).
 DO $$ DECLARE
   v_blocked uuid := '50000000-0000-4000-8000-000000000021';
+  v_deleted boolean := false;
 BEGIN
   INSERT INTO public.customers VALUES(v_blocked, '10000000-0000-4000-8000-000000000001', '50000000-0000-4000-8000-000000000022', 'blocked@example.test');
   INSERT INTO piggyvest_primary_card.operations(integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
   VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_blocked,'50000000-0000-4000-8000-000000000022','staging','fixture-business','blocked@example.test','50000000-0000-4000-8000-000000000023',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('d',64),'blocked-wallet','blocked-customer','custody_pending');
+  -- A probe RAISE inside the handler block would be caught by that same
+  -- handler (and roll the delete back), so it can never fail: record
+  -- the outcome in a flag instead (PL/pgSQL variables are not
+  -- transactional, so the flag survives either way).
   BEGIN
     DELETE FROM public.customers WHERE id = v_blocked;
-    RAISE EXCEPTION 'unsettled deletion allowed';
+    v_deleted := true;
   EXCEPTION WHEN raise_exception THEN NULL; END;
+  IF v_deleted THEN RAISE EXCEPTION 'unsettled deletion allowed'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.customers WHERE id = v_blocked) THEN RAISE EXCEPTION 'blocked customer deleted'; END IF;
   IF (SELECT customer_id FROM piggyvest_primary_card.operations WHERE email = 'blocked@example.test') <> v_blocked THEN RAISE EXCEPTION 'blocked operation detached'; END IF;
   UPDATE piggyvest_primary_card.operations SET state = 'completed' WHERE email = 'blocked@example.test';
@@ -161,4 +169,75 @@ BEGIN
   VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_review,'50000000-0000-4000-8000-000000000032','staging','fixture-business','review@example.test','50000000-0000-4000-8000-000000000033',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":false}',repeat('f',64),'review-wallet','review-customer','reconciliation_required');
   DELETE FROM public.customers WHERE id = v_review;
   IF (SELECT count(*) FROM piggyvest_primary_card.operations WHERE email = 'review@example.test' AND customer_id IS NULL AND amount_kobo = 25000 AND state = 'reconciliation_required') <> 1 THEN RAISE EXCEPTION 'review operation not retained'; END IF;
+END $$;
+-- Deletion is rejected while a savings transfer is dispatched: detaching
+-- the goal and wallet transaction would leave settle_savings unable to
+-- credit the goal or complete the hold, stranding accepted funds.
+DO $$ DECLARE
+  v_savings_blocked uuid := '50000000-0000-4000-8000-000000000041';
+  v_goal uuid := '50000000-0000-4000-8000-000000000042';
+  v_txn uuid := '50000000-0000-4000-8000-000000000043';
+  v_op uuid := '50000000-0000-4000-8000-000000000044';
+  v_user uuid := '50000000-0000-4000-8000-000000000045';
+  v_intent uuid;
+  v_deleted boolean := false;
+BEGIN
+  INSERT INTO public.customers VALUES(v_savings_blocked,'10000000-0000-4000-8000-000000000001',v_user,'savings-blocked@example.test');
+  INSERT INTO public.customer_savings_goals VALUES(v_goal,'10000000-0000-4000-8000-000000000001',v_savings_blocked);
+  INSERT INTO public.customer_wallet_transactions VALUES(v_txn,v_savings_blocked);
+  INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_savings_blocked,v_user,repeat('b',64),'verified','savings-blocked-customer','savings-blocked-wallet') RETURNING id INTO v_intent;
+  INSERT INTO piggyvest_primary.savings_operations VALUES(v_op,'10000000-0000-4000-8000-000000000004',v_intent,v_goal,25000,'savings-source','savings-blocked-wallet','savings-blocked-reference','dispatched',v_txn,clock_timestamp());
+  BEGIN
+    DELETE FROM public.customers WHERE id = v_savings_blocked;
+    v_deleted := true;
+  EXCEPTION WHEN raise_exception THEN NULL; END;
+  IF v_deleted THEN RAISE EXCEPTION 'dispatched savings deletion allowed'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.customers WHERE id = v_savings_blocked) THEN RAISE EXCEPTION 'savings-blocked customer deleted'; END IF;
+  UPDATE piggyvest_primary.savings_operations SET state = 'confirmed' WHERE id = v_op;
+  DELETE FROM public.customers WHERE id = v_savings_blocked;
+  IF (SELECT count(*) FROM piggyvest_primary.savings_operations WHERE id = v_op AND goal_id IS NULL AND wallet_transaction_id IS NULL AND state = 'confirmed') <> 1 THEN RAISE EXCEPTION 'settled savings not detached'; END IF;
+END $$;
+-- Goal deletion is rejected while a savings operation is reserved: the
+-- dispatch cannot run without its goal link. Cancelled operations keep
+-- detaching normally.
+DO $$ DECLARE
+  v_goal uuid := '50000000-0000-4000-8000-000000000046';
+  v_txn uuid := '50000000-0000-4000-8000-000000000047';
+  v_op uuid := '50000000-0000-4000-8000-000000000048';
+  v_customer uuid := '50000000-0000-4000-8000-000000000049';
+  v_user uuid := '50000000-0000-4000-8000-000000000050';
+  v_intent uuid;
+  v_deleted boolean := false;
+BEGIN
+  INSERT INTO public.customers VALUES(v_customer,'10000000-0000-4000-8000-000000000001',v_user,'savings-goal@example.test');
+  INSERT INTO public.customer_savings_goals VALUES(v_goal,'10000000-0000-4000-8000-000000000001',v_customer);
+  INSERT INTO public.customer_wallet_transactions VALUES(v_txn,v_customer);
+  INSERT INTO piggyvest_primary.onboarding_intents(integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES('10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_customer,v_user,repeat('c',64),'verified','savings-goal-customer','savings-goal-wallet') RETURNING id INTO v_intent;
+  INSERT INTO piggyvest_primary.savings_operations VALUES(v_op,'10000000-0000-4000-8000-000000000004',v_intent,v_goal,25000,'savings-source','savings-goal-wallet','savings-goal-reference','reserved',v_txn,clock_timestamp());
+  BEGIN
+    DELETE FROM public.customer_savings_goals WHERE id = v_goal;
+    v_deleted := true;
+  EXCEPTION WHEN raise_exception THEN NULL; END;
+  IF v_deleted THEN RAISE EXCEPTION 'reserved savings goal deletion allowed'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.customer_savings_goals WHERE id = v_goal) THEN RAISE EXCEPTION 'savings-blocked goal deleted'; END IF;
+  UPDATE piggyvest_primary.savings_operations SET state = 'cancelled' WHERE id = v_op;
+  DELETE FROM public.customer_savings_goals WHERE id = v_goal;
+  IF (SELECT count(*) FROM piggyvest_primary.savings_operations WHERE id = v_op AND goal_id IS NULL AND state = 'cancelled') <> 1 THEN RAISE EXCEPTION 'cancelled savings not detached'; END IF;
+END $$;
+-- Account deletion purges reusable card tokens: the collection keeps
+-- its non-secret evidence, but the saved authorization must not
+-- survive as a charging credential.
+DO $$ DECLARE
+  v_token uuid := '50000000-0000-4000-8000-000000000051';
+  v_op uuid := '50000000-0000-4000-8000-000000000052';
+BEGIN
+  INSERT INTO public.customers VALUES(v_token,'10000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000053','token@example.test');
+  INSERT INTO piggyvest_primary_card.operations(id,integration_id,merchant_id,customer_id,user_id,environment,business_id,email,idempotency_key,amount_kobo,consent,fingerprint,destination_wallet_id,destination_customer_id,state)
+  VALUES(v_op,'10000000-0000-4000-8000-000000000004','10000000-0000-4000-8000-000000000001',v_token,'50000000-0000-4000-8000-000000000053','staging','fixture-business','token@example.test','50000000-0000-4000-8000-000000000054',25000,'{"version":"primary-wallet-card-v1","oneTimeCharge":true,"saveCard":true}',repeat('a',64),'token-wallet','token-customer','completed');
+  INSERT INTO piggyvest_primary_card.collections(operation_id,integration_id,environment,provider_transaction_id,evidence,saved_token)
+  VALUES(v_op,'10000000-0000-4000-8000-000000000004','staging','424242','{"reference":"pvb-first-primary-token"}','{"authorizationCode":"AUTH_fixture","customerCode":"CUS_fixture","email":"token@example.test","reusable":true}');
+  DELETE FROM public.customers WHERE id = v_token;
+  IF (SELECT count(*) FROM piggyvest_primary_card.collections WHERE operation_id = v_op AND saved_token IS NULL AND provider_transaction_id = '424242' AND evidence = '{"reference":"pvb-first-primary-token"}') <> 1 THEN RAISE EXCEPTION 'saved token not purged'; END IF;
 END $$;

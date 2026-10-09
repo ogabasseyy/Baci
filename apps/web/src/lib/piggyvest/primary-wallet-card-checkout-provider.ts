@@ -59,7 +59,14 @@ export function createPrimaryWalletCardCheckoutProvider(
   now = Date.now
 ) {
   const config = schemas.settings.parse(settings);
-  const select = (input: unknown) => {
+  // The deployment deadline binds initialization only: every existing
+  // operation was reserved pre-expiry (reserve keeps the strict scope),
+  // so verification of a well-formed intent can only ever confirm a
+  // pre-expiry checkout. Status recovery and webhook reconciliation run
+  // on the drain runtime with the real (expired) settings — refusing
+  // verify there would 503 a paid checkout forever instead of recording
+  // its collection. Identity bindings still fail closed on both paths.
+  const select = (input: unknown, enforceExpiry: boolean) => {
     const intent = schemas.intent.parse(input);
     if (
       intent.environment !== config.environment ||
@@ -67,7 +74,7 @@ export function createPrimaryWalletCardCheckoutProvider(
       intent.merchantId !== config.merchantId ||
       intent.businessId !== config.businessId ||
       !Number.isFinite(now()) ||
-      now() >= Date.parse(config.expiresAt)
+      (enforceExpiry && now() >= Date.parse(config.expiresAt))
     )
       throw new Error('Primary card provider unavailable');
     return intent;
@@ -94,7 +101,7 @@ export function createPrimaryWalletCardCheckoutProvider(
   return {
     async initialize(input: unknown) {
       try {
-        const intent = select(input);
+        const intent = select(input, true);
         let raw: unknown;
         try {
           raw = await request('/transaction/initialize', {
@@ -142,7 +149,7 @@ export function createPrimaryWalletCardCheckoutProvider(
       }
     },
     async verify(input: unknown) {
-      const intent = select(input);
+      const intent = select(input, false);
       let raw: unknown;
       try {
         raw = await request(

@@ -81,6 +81,19 @@ describe('getPiggyvestPrimaryCapability', () => {
     );
   });
 
+  it('records a positive verdict when the customer profile is incomplete', async () => {
+    // The wallet GET emits PROFILE_VERIFICATION_REQUIRED only after the
+    // runtime check passes, so the 409 proves the merchant is
+    // primary-enabled even though this customer has no phone. Resolving
+    // true lets the wallet render its phone prompt instead of
+    // deadlocking on an unknown verdict with a repeated 409.
+    read.mockRejectedValue(notReady('PROFILE_VERIFICATION_REQUIRED'));
+    await expect(getPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).resolves.toBe(
+      true
+    );
+    expect(readObservedPiggyvestPrimaryCapability(PRIMARY_MERCHANT)).toBe(true);
+  });
+
   it('rethrows ambiguous failures instead of misrouting money', async () => {
     read.mockRejectedValue(new Error('timeout'));
     await expect(

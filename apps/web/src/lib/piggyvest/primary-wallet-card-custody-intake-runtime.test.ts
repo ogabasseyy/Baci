@@ -34,9 +34,22 @@ describe('intake-only configured custody capability', () => {
     expect(
       readPrimaryCardCustodyIntakeSecrets({
         ...fixture.environment,
-        PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false',
+        PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET: undefined,
       })
     ).toBeNull();
+  });
+  it('keeps signing keys available while intake processing is rolled back', () => {
+    for (const change of [
+      { PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
+      { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },
+    ]) {
+      const env = { ...fixture.environment, ...change };
+      expect(readPrimaryCardCustodyIntakeSecrets(env)).toEqual({
+        webhookSecret:
+          fixture.environment.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+      });
+      expect(readPrimaryCardCustodyIntakeRuntime(env, fixture.now)).toBeNull();
+    }
   });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED: 'false' },

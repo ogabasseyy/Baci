@@ -8,20 +8,23 @@ export type PrimaryCardCustodyIntakeSecrets = {
 /**
  * Authentication keys independent of intake readiness (see the bank
  * secrets reader): the outer gate verifies with these while the intake
- * itself still fails closed on incomplete provisioning.
+ * itself still fails closed on incomplete provisioning. The enabled
+ * flags gate processing only, never verification: during a processing
+ * rollback the keys stay available so legitimate deliveries retry
+ * instead of being silently dropped as invalid.
  */
 export function readPrimaryCardCustodyIntakeSecrets(
   env: NodeJS.ProcessEnv = process.env
 ): PrimaryCardCustodyIntakeSecrets | null {
   if (
-    env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true' ||
-    env.PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED !== 'true' ||
     (env.VERCEL_ENV === 'production') !==
-      (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
+    (env.PIGGYVEST_PRIMARY_CARD_ENVIRONMENT === 'production')
   )
     return null;
+  const webhookSecret = env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET;
+  if (typeof webhookSecret !== 'string' || !webhookSecret.trim()) return null;
   return {
-    webhookSecret: env.PIGGYVEST_PRIMARY_CARD_PIGGYVEST_WEBHOOK_SECRET,
+    webhookSecret,
   };
 }
 

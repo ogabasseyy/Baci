@@ -10,12 +10,14 @@ export type PrimaryWalletBankInboxSecrets = {
  * Authentication keys independent of worker readiness: the outer webhook
  * gate collects these so a bank-signed delivery still verifies (and then
  * receives a retryable 503 from the unready intake) instead of being
- * 200-ACKed as invalid when e.g. the database password is missing.
+ * 200-ACKed as invalid when e.g. the database password is missing. The
+ * enabled flag gates processing only, never verification: during a
+ * processing rollback the keys stay available so legitimate deliveries
+ * retry instead of being silently dropped as invalid.
  */
 export function readPrimaryWalletBankInboxSecrets(
   env: NodeJS.ProcessEnv = process.env
 ): PrimaryWalletBankInboxSecrets | null {
-  if (env.PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED !== 'true') return null;
   let retainedWebhookSecrets: unknown = [];
   try {
     if (env.PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS)
@@ -27,8 +29,15 @@ export function readPrimaryWalletBankInboxSecrets(
     // runtime still fails closed and the intake answers 503.
     retainedWebhookSecrets = [];
   }
+  const webhookSecret = env.PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET;
+  if (
+    (typeof webhookSecret !== 'string' || !webhookSecret.trim()) &&
+    (!Array.isArray(retainedWebhookSecrets) ||
+      retainedWebhookSecrets.length === 0)
+  )
+    return null;
   return {
-    webhookSecret: env.PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET,
+    webhookSecret,
     retainedWebhookSecrets,
   };
 }

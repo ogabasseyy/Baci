@@ -37,6 +37,21 @@ it('exposes signing keys while the worker stays unconfigured', () => {
   );
   expect(readPrimaryWalletBankInboxSecrets({ NODE_ENV: 'test' })).toBeNull();
 });
+it('keeps signing keys available while intake processing is rolled back', () => {
+  const disabled = {
+    NODE_ENV: 'test' as const,
+    PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'false',
+    PIGGYVEST_PRIMARY_BANK_INBOX_WEBHOOK_SECRET: 'bank-secret',
+    PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: JSON.stringify([
+      'bank-retained',
+    ]),
+  };
+  expect(readPrimaryWalletBankInboxSecrets(disabled)).toEqual({
+    webhookSecret: 'bank-secret',
+    retainedWebhookSecrets: ['bank-retained'],
+  });
+  expect(readPrimaryWalletBankInboxRuntime('intake', disabled)).toBeNull();
+});
 it('fails closed on explicitly enabled incomplete, malformed, expired or wrong-environment settings', () => {
   for (const env of [
     { NODE_ENV: 'test' as const, PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true' },

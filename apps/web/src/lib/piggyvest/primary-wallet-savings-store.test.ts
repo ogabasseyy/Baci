@@ -59,6 +59,18 @@ it('does not claim released funds when cancellation is refused', async () => {
     )
   ).rejects.toThrow('could not be released');
 });
+it('cancels only stale reservations from status checks', async () => {
+  const execute = vi.fn().mockResolvedValue({ rows: [{ result: false }] });
+  await expect(
+    createPrimaryWalletSavingsStore({ scope, execute }).cancelStaleReservation(
+      operationId
+    )
+  ).resolves.toBe(false);
+  expect(execute).toHaveBeenCalledWith(
+    'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result',
+    [JSON.stringify(scope), operationId, 'cancel_stale']
+  );
+});
 it('rejects injected wallet IDs before storage contact', async () => {
   const execute = vi.fn();
   await expect(

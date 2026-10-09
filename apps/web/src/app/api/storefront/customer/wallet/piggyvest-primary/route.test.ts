@@ -216,6 +216,18 @@ describe('primary wallet onboarding API', () => {
     expect((await POST(request())).status).toBe(409);
     expect(mocks.executor).not.toHaveBeenCalled();
   });
+  it('returns 422 with a correctable BVN message on definitive provider rejection', async () => {
+    mocks.onboard.mockResolvedValue({
+      status: 'rejected',
+      code: 'INVALID_BVN',
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: 'That BVN was rejected. Check the number and try again.',
+      code: 'INVALID_BVN',
+    });
+  });
   it('connects authenticated identity, scoped storage and provider creation', async () => {
     expect((await POST(request())).status).toBe(202);
     expect(mocks.store).toHaveBeenCalledWith(

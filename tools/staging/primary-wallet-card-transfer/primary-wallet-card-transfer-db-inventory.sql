@@ -23,18 +23,19 @@ SELECT jsonb_build_object(
       OR has_table_privilege(SESSION_USER,relation.oid,'TRUNCATE'))),
   'public_transfer_rpcs',(SELECT count(*) FROM pg_catalog.pg_proc routine JOIN pg_catalog.pg_namespace namespace ON namespace.oid=routine.pronamespace
     CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(routine.proacl,pg_catalog.acldefault('f',routine.proowner))) grant_item
-    WHERE namespace.nspname='piggyvest_primary_card' AND routine.proname IN ('claim_transfer','record_transfer',
+    WHERE namespace.nspname='piggyvest_primary_card' AND routine.proname IN ('claim_transfer','record_transfer','requeue_transfer',
       'dispatch_context','select_ready_transfers')
       AND grant_item.grantee=0 AND grant_item.privilege_type='EXECUTE'),
-  'transfer_rpcs_present',(SELECT count(*)=4 FROM pg_catalog.pg_proc routine JOIN pg_catalog.pg_namespace namespace ON namespace.oid=routine.pronamespace
+  'transfer_rpcs_present',(SELECT count(*)=5 FROM pg_catalog.pg_proc routine JOIN pg_catalog.pg_namespace namespace ON namespace.oid=routine.pronamespace
     WHERE namespace.nspname='piggyvest_primary_card'
       AND ((routine.proname='claim_transfer' AND routine.proargtypes='2950 25 2950'::oidvector)
         OR (routine.proname='record_transfer' AND routine.proargtypes='2950 25 2950 2950 16'::oidvector)
+        OR (routine.proname='requeue_transfer' AND routine.proargtypes='2950 25 2950 2950'::oidvector)
         OR (routine.proname='dispatch_context' AND routine.proargtypes='2950 25 2950 3802'::oidvector)
         OR (routine.proname='select_ready_transfers' AND routine.proargtypes='2950 25 3802 23'::oidvector))
       AND has_function_privilege(SESSION_USER,routine.oid,'EXECUTE')),
   'customer_or_service_transfer_execution',(SELECT count(*) FROM pg_catalog.pg_proc routine JOIN pg_catalog.pg_namespace namespace ON namespace.oid=routine.pronamespace
-    WHERE namespace.nspname='piggyvest_primary_card' AND routine.proname IN ('claim_transfer','record_transfer',
+    WHERE namespace.nspname='piggyvest_primary_card' AND routine.proname IN ('claim_transfer','record_transfer','requeue_transfer',
       'dispatch_context','select_ready_transfers')
       AND (has_function_privilege('anon',routine.oid,'EXECUTE') OR has_function_privilege('authenticated',routine.oid,'EXECUTE')
         OR has_function_privilege('service_role',routine.oid,'EXECUTE')))) AS restricted_inventory

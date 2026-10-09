@@ -91,6 +91,19 @@ describe('primary wallet storage boundary', () => {
     );
   });
 
+  it('releases definitively rejected intents through the release statement', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    const released = await createPrimaryWalletStore({
+      scope,
+      execute,
+    }).releaseIntent({ ...scope, intentId, claimToken });
+    expect(released).toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining('piggyvest_primary.release_onboarding_intent'),
+      [JSON.stringify(scope), intentId, claimToken]
+    );
+  });
+
   it('never exposes database diagnostic text', async () => {
     const execute = vi
       .fn()

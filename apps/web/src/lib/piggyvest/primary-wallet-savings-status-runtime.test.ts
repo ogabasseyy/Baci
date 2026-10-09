@@ -4,7 +4,7 @@ import { checkPrimaryWalletSavingsStatus } from './primary-wallet-savings-status
 const mocks = vi.hoisted(() => ({
   readStatus: vi.fn(),
   reconcile: vi.fn(),
-  cancel: vi.fn(),
+  cancelStale: vi.fn(),
   adoptPending: vi.fn(),
   lookupTransfer: vi.fn(),
   retrieveWallet: vi.fn(),
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./primary-wallet-savings-store', () => ({
   createPrimaryWalletSavingsStore: () => ({
     readStatus: mocks.readStatus,
-    cancelBeforeDispatch: mocks.cancel,
+    cancelStaleReservation: mocks.cancelStale,
     adoptPending: mocks.adoptPending,
   }),
 }));
@@ -84,18 +84,29 @@ it('releases an abandoned reservation only before provider dispatch', async () =
   mocks.readStatus
     .mockResolvedValueOnce('reserved')
     .mockResolvedValueOnce('cancelled');
-  mocks.cancel.mockResolvedValue(undefined);
+  mocks.cancelStale.mockResolvedValue(true);
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
     status: 'cancelled',
   });
-  expect(mocks.cancel).toHaveBeenCalledWith(operationId);
+  expect(mocks.cancelStale).toHaveBeenCalledWith(operationId);
+  expect(mocks.reconcile).not.toHaveBeenCalled();
+});
+it('keeps a live reservation pending instead of releasing it under the active submission', async () => {
+  mocks.readStatus
+    .mockResolvedValueOnce('reserved')
+    .mockResolvedValueOnce('reserved');
+  mocks.cancelStale.mockResolvedValue(false);
+  expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
+    status: 'pending',
+  });
+  expect(mocks.cancelStale).toHaveBeenCalledWith(operationId);
   expect(mocks.reconcile).not.toHaveBeenCalled();
 });
 it('reconciles without releasing funds if dispatch wins the cancellation race', async () => {
   mocks.readStatus
     .mockResolvedValueOnce('reserved')
     .mockResolvedValueOnce('dispatched');
-  mocks.cancel.mockRejectedValue(new Error('dispatch won'));
+  mocks.cancelStale.mockRejectedValue(new Error('dispatch won'));
   mocks.adoptPending.mockResolvedValue({ status: 'existing' });
   mocks.reconcile.mockResolvedValue({ status: 'pending' });
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({

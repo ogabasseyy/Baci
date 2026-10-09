@@ -40,6 +40,12 @@ export interface PrimaryWalletOnboardingStorage {
       claimToken: string;
     }
   ): Promise<void>;
+  releaseIntent(
+    input: PrimaryWalletIntentScope & {
+      intentId: string;
+      claimToken: string;
+    }
+  ): Promise<boolean>;
 }
 
 export interface PrimaryWalletCustomerRequest {

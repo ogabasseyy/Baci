@@ -65,6 +65,7 @@ export function createPrimaryCardTransferConnection(input: {
       lookupTransfer: (command) => lookup(command, context),
       record: (selected, token, submitted) =>
         execute('record', [selected, token, submitted]),
+      requeue: (selected, token) => execute('requeue', [selected, token]),
     });
   };
 }

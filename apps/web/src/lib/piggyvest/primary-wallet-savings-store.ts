@@ -15,7 +15,10 @@ export function createPrimaryWalletSavingsStore(input: {
     piggyvestPrimaryWalletStoreSchemas.scope.parse(input.scope)
   );
 
-  async function manage(operationId: string, action: 'dispatch' | 'cancel') {
+  async function manage(
+    operationId: string,
+    action: 'dispatch' | 'cancel' | 'cancel_stale'
+  ) {
     const parsed = schemas.request.shape.operationId.parse(operationId);
     const result = await input.execute(
       'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result',
@@ -73,6 +76,9 @@ export function createPrimaryWalletSavingsStore(input: {
     async cancelBeforeDispatch(operationId: string) {
       if (!(await manage(operationId, 'cancel')))
         throw new Error('Savings hold could not be released');
+    },
+    async cancelStaleReservation(operationId: string) {
+      return await manage(operationId, 'cancel_stale');
     },
   };
 }

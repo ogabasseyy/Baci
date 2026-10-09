@@ -14,9 +14,12 @@ import type { fundWallet } from './wallet-screen.handlers';
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();
 // The consent this screen collects: one-time charge, never save the card.
-// The adoption dialog compares the stored checkout's echoed save-card
-// choice against this — a stored checkout that would save the card must
-// say so, because the consent prompt promised it will not be saved.
+// The adoption dialog compares only the echoed save-card choice because
+// version and oneTimeCharge are schema-pinned literals on both client
+// and server (and the server echoes saveCard alone): drift there is
+// unrepresentable, so saveCard is the only user-visible variable. The
+// contract test below fails if those pins are ever loosened, forcing
+// this dialog to be revisited.
 const ENTERED_CONSENT = {
   version: 'primary-wallet-card-v1',
   oneTimeCharge: true,

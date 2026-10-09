@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 import { createPrimaryWalletCardCheckoutExecutor } from '@/lib/piggyvest/primary-wallet-card-checkout-executor';
 import { isCheckoutRouteOwner } from '@/lib/piggyvest/primary-wallet-card-checkout-ownership';
 import { createPrimaryWalletCardCheckoutProvider } from '@/lib/piggyvest/primary-wallet-card-checkout-provider';
@@ -107,7 +108,24 @@ export async function handlePrimaryWalletCardCheckout(
           : 200,
       headers: { 'Cache-Control': 'no-store' },
     });
-  } catch {
+  } catch (unknownError) {
+    // Redacted by construction: expiry vs provider outage vs ownership
+    // drift vs DB failure must be distinguishable in production, but the
+    // thrown message can carry provider bodies or secrets, so only the
+    // error class is logged — never the message.
+    logger.error({
+      message: 'Primary card checkout handler failed',
+      action,
+      merchantId: parsed.data.merchantId,
+      operationId:
+        action === 'status'
+          ? schemas.statusRequest.parse(parsed.data).operationId
+          : null,
+      errorClass:
+        unknownError instanceof Error
+          ? unknownError.constructor.name
+          : typeof unknownError,
+    });
     return error('PRIMARY_CARD_UNAVAILABLE', 503);
   }
 }

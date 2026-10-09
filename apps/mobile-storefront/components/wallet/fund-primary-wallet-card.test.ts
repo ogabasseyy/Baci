@@ -159,6 +159,27 @@ it('opens the adopted checkout only after explicit resume confirmation', async (
     }),
   });
 });
+it('tells the user a repeat tap while funding is in flight instead of dropping it silently', async () => {
+  let resolveStart!: (value: typeof response) => void;
+  mockStart.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveStart = resolve;
+    })
+  );
+  const first = fundPrimaryWalletCard(input);
+  // Let the first run reach its in-flight start (past consent): a
+  // macrotask flush runs after every pending mock microtask.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(mockStart).toHaveBeenCalledTimes(1);
+  await fundPrimaryWalletCard({ ...input, fundAmount: '2000' });
+  expect(alert).toHaveBeenCalledWith(
+    'Funding in progress',
+    expect.stringContaining('already running')
+  );
+  expect(mockStart).toHaveBeenCalledTimes(1);
+  resolveStart(response);
+  await first;
+});
 it('rechecks the account after resume confirmation before opening checkout', async () => {
   mockStart.mockResolvedValue({ ...response, adopted: true });
   alert.mockImplementation((title, _message, buttons) => {

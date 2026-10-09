@@ -4,10 +4,9 @@ import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
+import { prepareAgenticOfferEconomics } from '@/lib/agentic/prepare-agentic-offer-economics';
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
-import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
-import { resolveOrderOfferEconomics } from '@/lib/checkout/resolve-order-offer-economics';
 import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -111,47 +110,18 @@ export async function createAgenticCheckoutOrder(
   // Offer lines name a live offer of their own product: verify and
   // reconcile exactly like /api/orders before computing economics, or
   // the order would price and reserve the parent instead of the
-  // selected offer. The live maps feed assurance recompute and the
-  // agentic tax helper so every basis matches the RPC.
-  const offerEconomics = await resolveOrderOfferEconomics(
+  // selected offer.
+  const preparedOffers = await prepareAgenticOfferEconomics(
     (productId) =>
       supabase.rpc('get_product_offers', {
         p_product_id: productId,
       }) as unknown as Promise<OrderOfferQueryResult>,
     orderItemsPayload
   );
-  if (!offerEconomics.ok) {
-    if (offerEconomics.reason === 'verification_failed') {
-      logger.error({
-        error: sanitizeForLog(offerEconomics.error),
-        message: 'Agentic checkout offer verification failed',
-      });
-      return {
-        data: { error: 'Unable to verify order offers' },
-        error: 'Unable to verify order offers',
-        ok: false,
-        orderId: undefined,
-        status: 500,
-        statusText: 'Internal Server Error',
-      };
-    }
-    return {
-      data: { error: 'Invalid condition offer for order item' },
-      error: 'Invalid condition offer for order item',
-      ok: false,
-      orderId: undefined,
-      status: 400,
-      statusText: 'Bad Request',
-    };
+  if (!preparedOffers.ok) {
+    return preparedOffers.result;
   }
-  // Agentic assurance otherwise prices from the caller quote: recompute
-  // offer lines from the verified live basis (no negotiation reduction
-  // applies on this path).
-  recomputeOfferAssuranceFees(
-    orderItemsPayload,
-    offerEconomics.liveOfferPrices,
-    { applied: false, negotiation: null }
-  );
+  const liveOfferPrices = preparedOffers.liveOfferPrices;
 
   // B3.5 round 5 (Codex P1, PR #1622): agentic
   // `calculateCheckoutSession` produces `tax: 0` for every line item,
@@ -181,7 +151,7 @@ export async function createAgenticCheckoutOrder(
     computedTaxAmount = await computeAgenticOrderTax({
       items: orderItemsPayload,
       merchantId: body.merchant_id,
-      offerPrices: offerEconomics.liveOfferPrices,
+      offerPrices: liveOfferPrices,
       supabase,
     });
   } catch (taxError) {

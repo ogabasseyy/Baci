@@ -17,17 +17,16 @@ import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { useRecentlyViewed } from '@/hooks/use-recently-viewed';
-import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product, ProductVariant } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
-import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
 import type { ProductCondition } from './product-selection-condition';
 import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
+import { useProductCartSubmission } from './use-product-cart-submission';
 import { useProductOfferSelection } from './use-product-offer-selection';
 
 // Lazy load heavy components to reduce initial bundle size
@@ -136,8 +135,7 @@ export default function ProductDetailClient({
   const { merchant, basePath } = useMerchant();
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path}`;
-  const { cart, addToCart, updateQuantity, setMerchantSlug } = useCart();
-  const { toast } = useToast();
+  const { cart, updateQuantity } = useCart();
   const { formatCurrency, currencyCode } = useCurrency();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const [quantity, setQuantity] = useState(product.minimum_order_quantity || 1);
@@ -177,74 +175,24 @@ export default function ProductDetailClient({
     }
   }, [product?.id, merchant?.id, currencyCode, addToRecentlyViewed]);
 
+  const handleAddToCart = useProductCartSubmission({
+    product,
+    merchant,
+    currencyCode,
+    currentVariantSelection,
+    selectedOffer,
+    selectedCondition,
+    effectiveVariantAttributes,
+    currentPrice,
+    quantity,
+  });
+
   // Product is guaranteed to exist by server component, but guard against archived status
   // Note: Can't call notFound() after hooks in client components, so we render null
   // The server component already handles the notFound() case for missing products
   if (!product || product.status === 'archived') {
     return null;
   }
-
-  const handleAddToCart = () => {
-    const variantForCart = currentVariantSelection?.variant;
-    // The cart guard reads product stock: carry the exact option
-    // availability (serialized units or offer quantity) so a stocked
-    // selection on a zero-parent-stock product is not silently rejected.
-    const selectedOptionStock = variantForCart
-      ? (resolveSerializedVariantStock(variantForCart) ??
-        variantForCart.stock_quantity ??
-        product.stock)
-      : selectedOffer
-        ? (resolveSerializedOfferStock(selectedOffer, product) ??
-          selectedOffer.stock_quantity ??
-          product.stock)
-        : product.stock;
-    const productToAdd =
-      variantForCart || selectedOffer
-        ? { ...product, price: currentPrice, stock: selectedOptionStock }
-        : product;
-
-    // Store merchant slug for checkout
-    if (merchant?.slug) {
-      setMerchantSlug(merchant.slug);
-    }
-
-    if (product.has_variants && !variantForCart) {
-      toast({
-        title: 'Select a variant',
-        description: 'Please select a valid variant before adding this item.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    addToCart(
-      productToAdd,
-      quantity,
-      variantForCart
-        ? {
-            condition: selectedCondition,
-            variantId: variantForCart.id,
-            variantAttributes: effectiveVariantAttributes,
-          }
-        : selectedOffer
-          ? { condition: selectedCondition, offerId: selectedOffer.id }
-          : undefined
-    );
-
-    // Track add to cart for merchant analytics
-    if (merchant?.id) {
-      trackEvent.addToCart(merchant.id, productToAdd, quantity, currencyCode);
-    }
-
-    const variantInfo = variantForCart
-      ? ` (${Object.values(effectiveVariantAttributes).join(', ')})`
-      : '';
-
-    toast({
-      title: 'Added to cart!',
-      description: `${quantity} x ${product.name}${variantInfo} has been added to your cart.`,
-    });
-  };
 
   const handleQuantityChange = (newQuantity: number) => {
     const moq = product.minimum_order_quantity || 1;

@@ -66,8 +66,7 @@ describe('signed custody worker launch', () => {
     { PIGGYVEST_PRIMARY_CARD_TRANSFER_PASSWORD: 'forbidden' },
     { PIGGYVEST_PRIMARY_CARD_SIGNED_BATCH_SIZE: '2' },
     { PIGGYVEST_PRIMARY_CARD_WORKER_APPROVED: 'false' },
-    { PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-01-01T00:00:00Z' },
-  ])('refuses unsafe/unapproved/expired profile before claiming %#', async (change) => {
+  ])('refuses unsafe/unapproved profile before claiming %#', async (change) => {
     await expect(
       runPrimaryCardCustodyLaunch({
         ...input,
@@ -75,6 +74,19 @@ describe('signed custody worker launch', () => {
       })
     ).rejects.toThrow();
     expect(mocks.runWorker).not.toHaveBeenCalled();
+  });
+  it('drains acknowledged receipts past expiry instead of stranding charged checkouts', async () => {
+    expect(
+      await runPrimaryCardCustodyLaunch({
+        ...input,
+        mode: 'once',
+        environment: {
+          ...environment,
+          PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-01-01T00:00:00Z',
+        },
+      })
+    ).toMatchObject({ claimed: 1, deferred: 1 });
+    expect(mocks.runWorker).toHaveBeenCalledOnce();
   });
   it('propagates claim/settlement failure for scheduler retry', async () => {
     mocks.runWorker.mockRejectedValue(new Error('retry'));

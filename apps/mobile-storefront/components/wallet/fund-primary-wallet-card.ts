@@ -165,12 +165,17 @@ export async function fundPrimaryWalletCard(
     // storage/push chain into every importer of the wallet handlers.
     const { useAuthStore } =
       require('@/stores/auth-store') as typeof import('@/stores/auth-store');
-    if (useAuthStore.getState().user?.id !== userId) {
+    const activeAccountChanged = () =>
+      useAuthStore.getState().user?.id !== userId;
+    const rejectAccountSwitch = () => {
       Alert.alert(
         'Signed-in account changed',
         'You switched accounts during card funding. Any pending funding stays saved under the previous account.'
       );
       input.resetFundPanel();
+    };
+    if (activeAccountChanged()) {
+      rejectAccountSwitch();
       return;
     }
     // Adopted checkout: the server resumed the customer's stored
@@ -215,6 +220,13 @@ export async function fundPrimaryWalletCard(
         );
         return;
       }
+    }
+    // Re-read after the resume confirmation: the prompt above awaits user
+    // input, so the account may have changed since the guard above. Never
+    // navigate to a checkout bound to the previous account.
+    if (activeAccountChanged()) {
+      rejectAccountSwitch();
+      return;
     }
     if (result.status === 'ready' && result.authorizationUrl) {
       input.resetFundPanel();

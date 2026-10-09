@@ -55,10 +55,17 @@ describe('trusted custody deployment configuration', () => {
     );
     expect(parsed?.retainedWebhookSecrets).toEqual(['retained-custody-key']);
   });
+  it('loads past expiry so the worker drains acknowledged receipts instead of stranding them', () => {
+    const parsed = readPrimaryCardCustodyRuntime(
+      { ...env, PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-09-29T15:59:10Z' },
+      fixture.now
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed?.expiresAt).toBe('2026-09-29T15:59:10Z');
+  });
   it.each([
     { PIGGYVEST_PRIMARY_CARD_CUSTODY_ENABLED: 'false' },
     { VERCEL_ENV: 'production' },
-    { PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: '2026-09-29T15:59:10Z' },
     { PIGGYVEST_PRIMARY_CARD_CROSSWALK_ISSUER: undefined },
     { PIGGYVEST_PRIMARY_CARD_CROSSWALK_CONTRACT_ID: undefined },
     { PIGGYVEST_PRIMARY_CARD_TREASURY_WEBHOOK_CUSTOMER_ID: undefined },

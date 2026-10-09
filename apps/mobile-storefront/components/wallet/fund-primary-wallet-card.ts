@@ -102,9 +102,18 @@ export async function fundPrimaryWalletCard(
     return;
   }
   // Debounce repeat taps per funding scope: a global flag would silently
-  // drop a second account's funding while another is in flight.
+  // drop a second account's funding while another is in flight. The key
+  // stays scope-wide (never amount-scoped: parallel charges for one scope
+  // could double-charge), but a dropped tap says so instead of returning
+  // silently — a changed amount must never be mistaken for submitted.
   const fundingKey = `${merchantId} ${userId}`;
-  if (activeFundings.has(fundingKey)) return;
+  if (activeFundings.has(fundingKey)) {
+    Alert.alert(
+      'Funding in progress',
+      'Your card funding is already running. Wait for it to finish before starting another.'
+    );
+    return;
+  }
   activeFundings.add(fundingKey);
   input.setIsFundPending(true);
   let pending: Awaited<ReturnType<typeof client.readPending>> = null;

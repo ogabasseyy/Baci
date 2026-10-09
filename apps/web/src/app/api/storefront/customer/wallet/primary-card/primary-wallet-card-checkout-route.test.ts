@@ -13,9 +13,11 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   execute: vi.fn(),
   provider: vi.fn(),
+  loggerError: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
+vi.mock('@/lib/logger', () => ({ logger: { error: mocks.loggerError } }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-checkout-runtime', () => ({
   readPrimaryWalletCardCheckoutRuntime: mocks.runtime,
   readPrimaryWalletCardCheckoutRuntimeDrain: mocks.runtimeDrain,
@@ -175,6 +177,27 @@ describe.each([
     );
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private details');
+  });
+  it('logs a redacted failure record distinguishing the failed action without provider bodies', async () => {
+    const test = primaryWalletCardCheckoutRouteFixture(action);
+    mocks.auth.mockResolvedValue(test.auth);
+    mocks.initialize.mockRejectedValue(new Error('private details'));
+    mocks.status.mockRejectedValue(new Error('private details'));
+    const response = await handlePrimaryWalletCardCheckout(
+      test.request(),
+      action
+    );
+    expect(response.status).toBe(503);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action,
+        merchantId: fixture.settings.merchantId,
+        operationId: action === 'status' ? fixture.intent.operationId : null,
+        errorClass: 'Error',
+      })
+    );
+    for (const call of mocks.loggerError.mock.calls)
+      expect(JSON.stringify(call)).not.toContain('private details');
   });
   it('binds status recovery to immutable IDs while initialize still requires the stored email', async () => {
     const test = primaryWalletCardCheckoutRouteFixture(action);

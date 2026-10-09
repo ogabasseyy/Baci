@@ -1008,23 +1008,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Offer assurance fees recompute from the live offer price, never the
-    // client line price: the RPC charges live merchandise but stages the
-    // route fee, so a zero/stale client price naming a valid offer would
-    // otherwise buy live-priced goods with little or no fee. Verification
-    // above guarantees every carried offer_id has a live price here.
-    if (liveOfferPrices.size > 0) {
-      for (const line of orderItemsPayload) {
-        if (!line.offer_id || !line.has_assurance) continue;
-        const livePrice = liveOfferPrices.get(
-          `${line.product_id}::${line.offer_id}`
-        );
-        if (livePrice === undefined) continue;
-        line.assurance_fee = roundCurrency(
-          livePrice * line.quantity * SERVER_ASSURANCE_RATE
-        );
-      }
-    }
+    // Offer assurance fees recompute below, after the negotiation preflight
+    // validates (and possibly prices) the client basis: the fee follows the
+    // server-validated charged unit price, never the raw client price.
 
     let quizVoucherRouteProof: ReturnType<
       typeof createQuizRpcServerProof
@@ -1318,6 +1304,33 @@ export async function POST(request: NextRequest) {
     const serverDerivedDiscountAmount = shouldApplyServerDerivedDiscount
       ? (negotiationDiscount?.totalDiscount ?? 0)
       : 0;
+
+    // Offer assurance fees recompute from the server-validated charged unit
+    // price: the live offer price minus the validated per-unit merchandise
+    // reduction, and only when that reduction is actually applied to the
+    // order. The RPC charges live merchandise but stages the route fee, so a
+    // zero/stale client price naming a valid offer must not set the fee —
+    // while an approved negotiated price must not be overcharged either.
+    // lineDiscounts is positional with orderItemsPayload (null entries for
+    // lines without a reduction).
+    if (liveOfferPrices.size > 0) {
+      orderItemsPayload.forEach((line, index) => {
+        if (!line.offer_id || !line.has_assurance) return;
+        const livePrice = liveOfferPrices.get(
+          `${line.product_id}::${line.offer_id}`
+        );
+        if (livePrice === undefined) return;
+        const validatedReduction = shouldApplyServerDerivedDiscount
+          ? (negotiationDiscount?.lineDiscounts?.[index]?.merchandiseDiscount ??
+            0)
+          : 0;
+        const chargedUnit =
+          livePrice - validatedReduction / Math.max(line.quantity, 1);
+        line.assurance_fee = roundCurrency(
+          Math.max(chargedUnit, 0) * line.quantity * SERVER_ASSURANCE_RATE
+        );
+      });
+    }
 
     let redvaultQuote: Awaited<
       ReturnType<typeof computeRedvaultOrderQuote>

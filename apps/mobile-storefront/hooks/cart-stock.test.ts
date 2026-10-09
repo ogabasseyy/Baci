@@ -1,3 +1,4 @@
+import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import { checkStock, getTotalRequestedQuantityForStock } from './cart-stock';
@@ -29,6 +30,16 @@ jest.mock('../lib/storage', () => ({
     removeItem: jest.fn(),
   },
 }));
+
+jest.mock('@/lib/storefront-product-variants', () => ({
+  getStorefrontProductVariantsByProductIds: jest.fn(),
+}));
+
+function mockVariants(rows: Record<string, unknown>[]) {
+  (getStorefrontProductVariantsByProductIds as jest.Mock).mockResolvedValue({
+    'product-1': rows,
+  });
+}
 
 describe('cart-stock helpers', () => {
   beforeEach(() => {
@@ -219,11 +230,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('validates the variant stock instead of a zero parent total', async () => {
-    mockProductAndRpc(parent(), {
-      get_mcp_search_product_variants: [
-        { id: 'variant-2', stock_quantity: 2, effective_policy: 'off' },
-      ],
-    });
+    mockProductAndRpc(parent(), {});
+    mockVariants([
+      {
+        id: 'variant-2',
+        product_id: 'product-1',
+        stock_quantity: 2,
+        effective_policy: 'off',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 2, undefined, { variantId: 'variant-2' })
@@ -242,11 +257,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('lets a null variant quantity inherit the parent stock', async () => {
-    mockProductAndRpc(parent({ stock_quantity: 5 }), {
-      get_mcp_search_product_variants: [
-        { id: 'variant-9', stock_quantity: null, effective_policy: 'off' },
-      ],
-    });
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {});
+    mockVariants([
+      {
+        id: 'variant-9',
+        product_id: 'product-1',
+        stock_quantity: null,
+        effective_policy: 'off',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 4, undefined, { variantId: 'variant-9' })
@@ -258,15 +277,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('bypasses the quantity check for unlimited serialized variants', async () => {
-    mockProductAndRpc(parent(), {
-      get_mcp_search_product_variants: [
-        {
-          id: 'variant-s',
-          stock_quantity: 0,
-          effective_policy: 'serialized_then_unlimited',
-        },
-      ],
-    });
+    mockProductAndRpc(parent(), {});
+    mockVariants([
+      {
+        id: 'variant-s',
+        product_id: 'product-1',
+        stock_quantity: 0,
+        effective_policy: 'serialized_then_unlimited',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-s' })
@@ -278,15 +297,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('compares strict serialized variants against exact unit counts', async () => {
-    mockProductAndRpc(parent(), {
-      get_mcp_search_product_variants: [
-        {
-          id: 'variant-strict',
-          stock_quantity: 3,
-          effective_policy: 'serialized_strict',
-        },
-      ],
-    });
+    mockProductAndRpc(parent(), {});
+    mockVariants([
+      {
+        id: 'variant-strict',
+        product_id: 'product-1',
+        available_units: 3,
+        effective_policy: 'serialized_strict',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 3, undefined, { variantId: 'variant-strict' })
@@ -305,15 +324,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('reports zero for a strict variant with no available units', async () => {
-    mockProductAndRpc(parent({ stock_quantity: 5 }), {
-      get_mcp_search_product_variants: [
-        {
-          id: 'variant-strict',
-          stock_quantity: 0,
-          effective_policy: 'serialized_strict',
-        },
-      ],
-    });
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {});
+    mockVariants([
+      {
+        id: 'variant-strict',
+        product_id: 'product-1',
+        available_units: 0,
+        effective_policy: 'serialized_strict',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-strict' })
@@ -325,11 +344,15 @@ describe('cart-stock helpers', () => {
   });
 
   it('reports zero for a variant missing from the projection', async () => {
-    mockProductAndRpc(parent({ stock_quantity: 5 }), {
-      get_mcp_search_product_variants: [
-        { id: 'variant-other', stock_quantity: 9, effective_policy: 'off' },
-      ],
-    });
+    mockProductAndRpc(parent({ stock_quantity: 5 }), {});
+    mockVariants([
+      {
+        id: 'variant-other',
+        product_id: 'product-1',
+        stock_quantity: 9,
+        effective_policy: 'off',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-gone' })
@@ -341,22 +364,34 @@ describe('cart-stock helpers', () => {
   });
 
   it('throws when the variant projection lookup fails', async () => {
-    mockProductAndRpc(parent(), {
-      get_mcp_search_product_variants: { error: { message: 'boom' } },
-    });
+    mockProductAndRpc(parent(), {});
+    (getStorefrontProductVariantsByProductIds as jest.Mock).mockResolvedValue(
+      null
+    );
 
     await expect(
       checkStock('product-1', 1, undefined, { variantId: 'variant-2' })
     ).rejects.toThrow('Cannot verify stock availability');
   });
 
-  it('throws for a variant check without merchant scope', async () => {
-    mockProductAndRpc({ stock_quantity: 5, manage_stock: null }, {});
+  it('validates variants beyond the search projection row cap', async () => {
+    mockProductAndRpc(parent(), {});
+    mockVariants(
+      Array.from({ length: 130 }, (_, index) => ({
+        id: `variant-${index}`,
+        product_id: 'product-1',
+        stock_quantity: 4,
+        effective_policy: 'off',
+      }))
+    );
 
     await expect(
-      checkStock('product-1', 1, undefined, { variantId: 'variant-2' })
-    ).rejects.toThrow('Cannot verify stock availability');
-    expect(supabase.rpc).not.toHaveBeenCalled();
+      checkStock('product-1', 4, undefined, { variantId: 'variant-129' })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 4,
+      requestedQuantity: 4,
+    });
   });
 
   it('validates the offer stock instead of a zero parent total', async () => {
@@ -483,11 +518,16 @@ describe('cart-stock helpers', () => {
 
   it('prefers the variant identity when both option ids are present', async () => {
     mockProductAndRpc(parent(), {
-      get_mcp_search_product_variants: [
-        { id: 'variant-2', stock_quantity: 2, effective_policy: 'off' },
-      ],
       get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 9 }],
     });
+    mockVariants([
+      {
+        id: 'variant-2',
+        product_id: 'product-1',
+        stock_quantity: 2,
+        effective_policy: 'off',
+      },
+    ]);
 
     await expect(
       checkStock('product-1', 3, undefined, {
@@ -499,7 +539,8 @@ describe('cart-stock helpers', () => {
       currentStock: 2,
       requestedQuantity: 3,
     });
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(getStorefrontProductVariantsByProductIds).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it('counts existing quantities per offer line', async () => {

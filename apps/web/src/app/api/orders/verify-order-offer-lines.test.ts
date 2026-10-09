@@ -102,4 +102,30 @@ describe('fetchLiveOrderOffers', () => {
     expect(mismatch).toBeNull();
     expect(prices.size).toBe(0);
   });
+
+  it('bounds concurrent offer lookups across many products', async () => {
+    const productIds = Array.from(
+      { length: 25 },
+      (_, index) =>
+        `11111111-1111-4111-8111-${index.toString(16).padStart(12, '0')}`
+    );
+    let active = 0;
+    let maxActive = 0;
+    const fetchOffers = vi.fn(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { data: [], error: null };
+    });
+
+    const { mismatch } = await fetchLiveOrderOffers(
+      fetchOffers,
+      productIds.map((product_id) => ({ product_id, offer_id: OFFER_ID }))
+    );
+
+    expect(fetchOffers).toHaveBeenCalledTimes(25);
+    expect(maxActive).toBeLessThanOrEqual(10);
+    expect(mismatch).not.toBeNull();
+  });
 });

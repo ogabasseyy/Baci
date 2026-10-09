@@ -88,6 +88,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
+    // Public-catalog intent: this lookup is deliberately unscoped by
+    // merchant — prices/stock/status are public data (identical values
+    // render on unauthenticated PDPs) and carts carry no merchant session.
+    // Merchant-scoped price enforcement lives in the orders route
+    // (computeOrderNegotiationDiscount + the order RPC), so validating a
+    // foreign active ID here cannot discount or misprice an order.
     const [productsResult, variantsResult, offerMap] = await Promise.all([
       validFormatIds.length > 0
         ? supabase

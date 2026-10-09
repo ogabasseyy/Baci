@@ -45,12 +45,22 @@ export async function fetchLiveOrderOffers(
   const productIds = Array.from(
     new Set(offerLines.map((item) => String(item.product_id)))
   );
-  const results = await Promise.all(
-    productIds.map(async (productId) => ({
-      productId,
-      ...(await fetchOffers(productId)),
-    }))
-  );
+  // Bounded fan-out: a public order can name up to 200 lines, so never run
+  // one live lookup per product concurrently — chunk the reads instead.
+  const results: {
+    productId: string;
+    data: OrderOfferQueryResult['data'];
+    error: OrderOfferQueryResult['error'];
+  }[] = [];
+  for (let index = 0; index < productIds.length; index += 10) {
+    const chunk = await Promise.all(
+      productIds.slice(index, index + 10).map(async (productId) => ({
+        productId,
+        ...(await fetchOffers(productId)),
+      }))
+    );
+    results.push(...chunk);
+  }
   const lookupError = results.find((result) => result.error)?.error;
   if (lookupError) throw new Error(lookupError.message);
 

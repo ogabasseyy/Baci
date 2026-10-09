@@ -172,6 +172,18 @@ const orderCreateSchemaBase = z
           .refine(matchingAliasFields('variantName', 'variant_name'), {
             error: aliasFieldsMismatchMessage('variantName', 'variant_name'),
           })
+          .refine(matchingAliasFields('offerId', 'offer_id'), {
+            error: aliasFieldsMismatchMessage('offerId', 'offer_id'),
+          })
+          .refine(
+            (data) =>
+              !(data.variantId || data.variant_id) ||
+              !(data.offerId || data.offer_id),
+            {
+              error:
+                'variantId/variant_id and offerId/offer_id cannot be combined on one order item',
+            }
+          )
           .refine(matchingAliasFields('voucherToken', 'voucher_token'), {
             error: aliasFieldsMismatchMessage('voucherToken', 'voucher_token'),
           })
@@ -182,7 +194,10 @@ const orderCreateSchemaBase = z
             ),
           })
       )
-      .min(1),
+      // Matches admin-order-edit's order-items cap: bounds per-line offer
+      // verification fan-out (fetchLiveOrderOffers) on public requests.
+      .min(1)
+      .max(200),
     subtotal: z.coerce.number().nonnegative(),
     shipping_fee: z.coerce.number().nonnegative().prefault(0),
     discount_amount: z.coerce.number().nonnegative().prefault(0),

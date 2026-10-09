@@ -1,5 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { createLogger } from '@/lib/logger';
+import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
@@ -87,7 +88,7 @@ export async function checkStock(
 
   const { data, error } = await supabase
     .from('products')
-    .select('stock_quantity, stock, manage_stock, merchant_id')
+    .select('stock_quantity, stock, manage_stock')
     .eq('id', productId)
     .single();
 
@@ -128,7 +129,6 @@ export async function checkStock(
     ? await resolveVariantEffectiveStock(
         productId,
         options.variantId,
-        merchantIdOf(data),
         parentStock
       )
     : options?.offerId
@@ -145,50 +145,32 @@ export async function checkStock(
   };
 }
 
-function merchantIdOf(
-  data: { merchant_id?: unknown } | null | undefined
-): string | null {
-  return typeof data?.merchant_id === 'string' ? data.merchant_id : null;
-}
-
 /**
- * Variant effective stock through the shopper-safe public projection.
- * product_variants rows are merchant-only, so the check reads
- * get_mcp_search_product_variants (SECURITY DEFINER, anon-executable),
- * whose effective_policy already resolves variant/parent inheritance and
- * whose stock_quantity reports public available units for serialized
- * rows. Unlimited tracking bypasses; strict compares exact units; other
- * policies use the finite quantity with parent inheritance, mirroring the
- * price-options CTE. A variant absent from the projection (vanished,
- * unpublished, or beyond the PDP population cap) reports zero; other
- * lookup failures throw so the caller retries instead of overselling.
+ * Variant effective stock through the same unbounded storefront projection
+ * the PDP hydrates (get_storefront_product_variants, paginated past any
+ * population cap). The search MCP projection this check previously read is
+ * capped at 129 rows per product, so a selectable later variant reported
+ * zero and rolled back an available add. Unlimited tracking bypasses;
+ * strict compares the projection's exact available_units; other policies
+ * use the finite quantity with parent inheritance, mirroring the
+ * price-options CTE. A variant absent from the projection (vanished or
+ * unpublished) reports zero; other lookup failures throw so the caller
+ * retries instead of overselling.
  */
 async function resolveVariantEffectiveStock(
   productId: string,
   variantId: string,
-  merchantId: string | null,
   parentStock: number
 ): Promise<number> {
-  if (!merchantId) {
-    log.error('Variant stock check has no merchant scope:', productId);
+  const variantsByProduct = await getStorefrontProductVariantsByProductIds([
+    productId,
+  ]);
+  if (!variantsByProduct) {
     throw new Error('Cannot verify stock availability. Please try again.');
   }
-  const { data, error } = await supabase.rpc(
-    'get_mcp_search_product_variants',
-    { p_product_ids: [productId], p_merchant_id: merchantId }
+  const row = (variantsByProduct[productId] ?? []).find(
+    (entry) => entry?.id === variantId
   );
-  if (error) {
-    log.error('Variant stock check failed:', error);
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  const row = (Array.isArray(data) ? data : []).find(
-    (entry: { id?: unknown }) => entry?.id === variantId
-  ) as
-    | {
-        stock_quantity?: unknown;
-        effective_policy?: unknown;
-      }
-    | undefined;
   if (!row) {
     log.error('Variant stock check found no such variant:', variantId);
     return 0;
@@ -198,10 +180,10 @@ async function resolveVariantEffectiveStock(
   }
   if (row.effective_policy === 'serialized_strict') {
     if (
-      typeof row.stock_quantity === 'number' &&
-      Number.isFinite(row.stock_quantity)
+      typeof row.available_units === 'number' &&
+      Number.isFinite(row.available_units)
     ) {
-      return Math.max(0, row.stock_quantity);
+      return Math.max(0, row.available_units);
     }
     log.error('Variant stock check found no unit count:', variantId);
     throw new Error('Cannot verify stock availability. Please try again.');

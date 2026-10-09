@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveAgenticTaxLinePrice } from './resolve-agentic-tax-line-price';
 
 // Codex P1 (PR #1622 round 5): agentic checkout dispatch builds its
 // payload from `calculateCheckoutSession`, which currently computes
@@ -246,32 +247,16 @@ export async function computeAgenticOrderTax({
     const category = product.vat_category_code ?? 'S';
     if (category !== 'S') continue;
 
-    // High finding (PR #1622 review): variant must belong to the
-    // SAME product the order line claims. The RPC's LEFT JOIN
-    // (`v.product_id = p.id`) enforces this and falls back to base
-    // price for mismatched variant_ids; the helper must mirror it
-    // or a caller can spoof a variant_id from a different product
-    // and trip the parity guard. SDF returns variants for ALL
-    // products in `productIds`, so cross-line ambiguity exists when
-    // multiple products are in the cart.
     const candidateVariant = item.variant_id
       ? variantMap.get(item.variant_id)
       : null;
-    const variant =
-      candidateVariant && candidateVariant.product_id === item.product_id
-        ? candidateVariant
-        : null;
-    // Mirror the RPC precedence: the key pins the offer to this line's
-    // product, so a cross-product offer_id falls through to the parent
-    // price (the route rejects the mismatch before the RPC runs).
-    const offerPrice =
-      item.offer_id && item.product_id
-        ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
-        : undefined;
-    const priceRaw =
-      variant?.price_override ?? offerPrice ?? product.price ?? 0;
-    const price = Number(priceRaw);
-    if (!Number.isFinite(price) || price <= 0) continue;
+    const price = resolveAgenticTaxLinePrice({
+      candidateVariant,
+      item,
+      offerPrices,
+      product,
+    });
+    if (price === null) continue;
 
     const quantity = Number(item.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) continue;

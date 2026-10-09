@@ -4950,6 +4950,153 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     );
   });
 
+  it('rejects order lines combining a variant with a condition offer', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => buildMockSupabase() as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              ...baseOrderPayload.items[0],
+              variantId: '77777777-7777-4777-8777-777777777777',
+              offerId: '55555555-5555-4555-8555-555555555555',
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('prices offer-line assurance from the validated negotiated basis', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const products = [
+      {
+        id: OFFER_PRODUCT_ID,
+        name: 'iPhone 13',
+        brand: 'Apple',
+        price: 500_000,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ];
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [{ offer_id: LIVE_OFFER_ID, price: 400_000 }],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      const baseFrom = sb.from.bind(sb);
+      sb.from = ((table: string, ...rest: unknown[]) => {
+        if (table === 'merchants') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: () =>
+                  Promise.resolve({
+                    data: { vat_registration_status: null },
+                    error: null,
+                  }),
+                single: () =>
+                  Promise.resolve({
+                    data: {
+                      id: MERCHANT_ID,
+                      business_name: 'Test',
+                      plan_tier: 'pro',
+                      slug: 'ogabassey',
+                      vat_registration_status: null,
+                    },
+                    error: null,
+                  }),
+              }),
+            }),
+          };
+        }
+        if (table === 'products') {
+          return {
+            select: () => ({
+              eq: () => ({
+                in: () => ({
+                  returns: () =>
+                    Promise.resolve({ data: products, error: null }),
+                  overrideTypes: () =>
+                    Promise.resolve({ data: products, error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+        return (baseFrom as (...args: unknown[]) => unknown)(table, ...rest);
+      }) as typeof sb.from;
+      return sb;
+    }) as unknown as never);
+
+    // Client negotiated 1% below the live offer on a negotiable brand via
+    // mobile (discount applied): the fee follows the validated 396,000 NGN
+    // charged basis, not the undiscounted 400,000 NGN offer.
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        source: 'mobile_app',
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 396_000,
+            name: 'Used iPhone',
+            has_assurance: true,
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            has_assurance: true,
+            assurance_fee: 19_800, // (400000 - 4000) * 1 * 0.05 validated
+          }),
+        ],
+      })
+    );
+  });
+
   it('does not persist condition fallback as a raw variant label for normal orders', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: [

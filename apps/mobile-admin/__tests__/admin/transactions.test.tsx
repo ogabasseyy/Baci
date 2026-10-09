@@ -1,12 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
-import type React from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -22,392 +15,126 @@ const mocks = vi.hoisted(() => ({
   useUpdateTransactionCostPrice: vi.fn(),
 }));
 
-vi.mock('react-native', async () => {
-  const React = await import('react');
+vi.mock(
+  'react-native',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.reactNative
+);
 
-  return {
-    AppState: { addEventListener: mocks.appStateListener },
-    StatusBar: () => null,
-    ActivityIndicator: () =>
-      React.createElement('div', { role: 'progressbar' }),
-    Alert: {
-      alert: mocks.alert,
-    },
-    Pressable: ({
-      accessibilityLabel,
-      children,
-      disabled,
-      onPress,
-    }: {
-      accessibilityLabel?: string;
-      children?: React.ReactNode;
-      disabled?: boolean;
-      onPress?: () => void;
-    }) =>
-      React.createElement(
-        'button',
-        {
-          'aria-label': accessibilityLabel,
-          disabled,
-          onClick: () => onPress?.(),
-        },
-        children
-      ),
-    ScrollView: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
-    StyleSheet: {
-      create: <T,>(styles: T) => styles,
-      hairlineWidth: 1,
-    },
-    Text: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('span', null, children),
-    TextInput: ({
-      accessibilityLabel,
-      onChangeText,
-      placeholder,
-      value,
-    }: {
-      accessibilityLabel?: string;
-      onChangeText?: (value: string) => void;
-      placeholder?: string;
-      value?: string;
-    }) =>
-      React.createElement('input', {
-        'aria-label': accessibilityLabel ?? placeholder,
-        onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
-          onChangeText?.(event.target.value),
-        placeholder,
-        value: value ?? '',
-      }),
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
-  };
-});
+vi.mock(
+  'react-native-safe-area-context',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.safeArea
+);
 
-vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children }: { children?: React.ReactNode }) => children,
+vi.mock(
+  '@react-native-vector-icons/ionicons',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.ionicons
+);
+
+vi.mock(
+  'expo-router',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.expoRouter
+);
+
+vi.mock(
+  '@/hooks/useTheme',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.theme
+);
+
+vi.mock(
+  '@/hooks/useCurrency',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.currency
+);
+
+vi.mock(
+  '@/hooks/useAnalyticsOverview',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.analyticsOverview
+);
+
+vi.mock(
+  '@/hooks/useTransactionReview',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.transactionReview
+);
+
+vi.mock(
+  '@/hooks/useDebounce',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.debounce
+);
+
+vi.mock(
+  '@/hooks/useMonthlyTransactionCount',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.monthlyCount
+);
+
+vi.mock(
+  '@/hooks/useUpdateTransactionCostPrice',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.costPrice
+);
+
+vi.mock(
+  '@/lib/search-transaction-review-orders',
+  async () =>
+    (
+      await import('./transactions-screen-test-harness')
+    ).createTransactionsScreenHarness(mocks).modules.searchLimit
+);
+
+vi.mock('@/components/transactions/TransactionsSummary', async () => ({
+  TransactionsSummary: (await import('./transactions-screen-test-components'))
+    .transactionsScreenTestComponents.TransactionsSummary,
 }));
 
-vi.mock('@react-native-vector-icons/ionicons', () => ({
-  Ionicons: () => null,
-
-  default: () => null,
-  __esModule: true,
+vi.mock('@/components/transactions/TransactionOrderCard', async () => ({
+  TransactionOrderCard: (await import('./transactions-screen-test-components'))
+    .transactionsScreenTestComponents.TransactionOrderCard,
 }));
 
-vi.mock('expo-router', async () => {
-  const React = await import('react');
-
-  return {
-    Stack: {
-      Screen: () => React.createElement('div'),
-    },
-    useLocalSearchParams: mocks.useLocalSearchParams,
-    useRouter: () => ({
-      push: mocks.routerPush,
-    }),
-  };
-});
-
-vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      background: '#fff',
-      border: '#ddd',
-      card: '#fff',
-      error: '#f00',
-      primary: '#2563eb',
-      text: '#111',
-      textMuted: '#666',
-      textOnPrimary: '#fff',
-      textSecondary: '#555',
-      warning: '#d97706',
-    },
-    isDark: false,
-  }),
-}));
-
-vi.mock('@/hooks/useCurrency', () => ({
-  useCurrency: () => ({
-    format: (amount: number) => `₦${amount.toLocaleString('en-US')}`,
-    symbol: '₦',
-  }),
-}));
-
-vi.mock('@/hooks/useAnalyticsOverview', () => ({
-  useAnalyticsOverview: mocks.useAnalyticsOverview,
-}));
-
-vi.mock('@/hooks/useTransactionReview', () => ({
-  useTransactionReview: mocks.useTransactionReview,
-}));
-
-vi.mock('@/hooks/useDebounce', () => ({
-  useDebounce: mocks.useDebounce,
-}));
-
-vi.mock('@/hooks/useMonthlyTransactionCount', () => ({
-  useMonthlyTransactionCount: mocks.useMonthlyTransactionCount,
-}));
-
-vi.mock('@/hooks/useUpdateTransactionCostPrice', () => ({
-  useUpdateTransactionCostPrice: mocks.useUpdateTransactionCostPrice,
-}));
-
-vi.mock('@/lib/search-transaction-review-orders', () => ({
-  TRANSACTION_REVIEW_SEARCH_LIMIT: 100,
-}));
-
-function Text({ children }: { children?: React.ReactNode }) {
-  return <span>{children}</span>;
-}
-
-vi.mock('@/components/transactions/TransactionsSummary', () => ({
-  TransactionsSummary: ({
-    activeTab,
-    estimatedProfitLabel,
-    onTabChange,
-    summary,
-  }: {
-    activeTab?: 'paid' | 'missing-costs';
-    estimatedProfitLabel: string;
-    onTabChange?: (tab: 'paid' | 'missing-costs') => void;
-    summary: { missingCosts: number; transactions: number };
-  }) => (
-    <div>
-      <button
-        aria-pressed={activeTab === 'paid'}
-        type="button"
-        onClick={() => onTabChange?.('paid')}
-      >
-        <Text>Paid transactions tab</Text>
-      </button>
-      <button
-        aria-pressed={activeTab === 'missing-costs'}
-        type="button"
-        onClick={() => onTabChange?.('missing-costs')}
-      >
-        <Text>Missing costs tab</Text>
-      </button>
-      <Text>{estimatedProfitLabel}</Text>
-      <Text>{`${summary.transactions} transactions`}</Text>
-      <Text>{`${summary.missingCosts} missing costs`}</Text>
-    </div>
-  ),
-}));
-
-vi.mock('@/components/transactions/TransactionOrderCard', () => ({
-  TransactionOrderCard: ({
-    onOpenEditor,
-    order,
-  }: {
-    onOpenEditor: (
-      order: {
-        createdAt: string;
-        id: string;
-      },
-      item: {
-        costPrice: number | null;
-        id: string;
-        name: string;
-        productId: string | null;
-        supplierName: string;
-        variantId: string | null;
-      }
-    ) => void;
-    order: {
-      createdAt: string;
-      id: string;
-      items: Array<{
-        costPrice: number | null;
-        id: string;
-        name: string;
-        productId: string | null;
-        supplierName: string;
-        variantId: string | null;
-      }>;
-      orderNumber: string;
-    };
-  }) => (
-    <div>
-      <button type="button" onClick={() => onOpenEditor(order, order.items[0])}>
-        <Text>{`Edit ${order.orderNumber}`}</Text>
-      </button>
-      {order.items.map((item) => (
-        <Text key={item.id}>{item.name}</Text>
-      ))}
-    </div>
-  ),
-}));
-
-vi.mock('@/components/transactions/CostPriceEditorModal', () => ({
-  CostPriceEditorModal: ({
-    costPriceInput,
-    dateInput,
-    onChangeCostPrice,
-    onChangeDate,
-    onChangeSupplier,
-    onClose,
-    onSave,
-    saveError,
-    supplierInput,
-    visible,
-  }: {
-    costPriceInput: string;
-    dateInput?: string;
-    onChangeCostPrice: (value: string) => void;
-    onChangeDate?: (value: string) => void;
-    onChangeSupplier?: (value: string) => void;
-    onClose: () => void;
-    onSave: () => void;
-    saveError: string | null;
-    supplierInput?: string;
-    visible: boolean;
-  }) =>
-    visible ? (
-      <div>
-        <input
-          aria-label="Cost price input"
-          value={costPriceInput}
-          onChange={(event) => onChangeCostPrice(event.target.value)}
-        />
-        <input
-          aria-label="Transaction date input"
-          value={dateInput ?? ''}
-          onChange={(event) => onChangeDate?.(event.target.value)}
-        />
-        <input
-          aria-label="Vendor or supplier input"
-          value={supplierInput ?? ''}
-          onChange={(event) => onChangeSupplier?.(event.target.value)}
-        />
-        {saveError ? <Text>{saveError}</Text> : null}
-        <button type="button" onClick={onSave}>
-          <Text>Save cost price</Text>
-        </button>
-        <button type="button" onClick={onClose}>
-          <Text>Close editor</Text>
-        </button>
-      </div>
-    ) : null,
+vi.mock('@/components/transactions/CostPriceEditorModal', async () => ({
+  CostPriceEditorModal: (await import('./transactions-screen-test-components'))
+    .transactionsScreenTestComponents.CostPriceEditorModal,
 }));
 
 import TransactionsScreen from '@/app/(admin)/transactions';
 import { buildTransactionDateIso } from '@/lib/transaction-review';
+import { createTransactionsScreenHarness } from './transactions-screen-test-harness';
 
-const sampleOrders = [
-  {
-    createdAt: '2026-04-10T10:00:00.000Z',
-    customerEmail: null,
-    customerName: 'Bassey',
-    customerPhone: null,
-    estimatedProfit: 3000,
-    id: 'order-1',
-    items: [
-      {
-        costPrice: null,
-        costSource: null,
-        imeiValues: ['353232106161443'],
-        id: 'item-1',
-        name: 'Samsung Galaxy S26',
-        productId: 'product-1',
-        profit: null,
-        quantity: 1,
-        revenue: 5000,
-        searchText:
-          'samsung galaxy s26 bassey 353232106161443 sn-123 old supplier',
-        serialValues: ['SN-123'],
-        sku: 'SG-S26',
-        supplierName: 'Old Supplier',
-        variantId: null,
-      },
-      {
-        costPrice: 4000,
-        costSource: 'product' as const,
-        imeiValues: [],
-        id: 'item-known',
-        name: 'Known Cost Accessory',
-        productId: 'product-known',
-        profit: 1000,
-        quantity: 1,
-        revenue: 5000,
-        searchText: 'known cost accessory',
-        serialValues: [],
-        sku: 'KNOWN',
-        supplierName: 'Known Supplier',
-        variantId: null,
-      },
-    ],
-    missingCostCount: 1,
-    orderNumber: 'ORD-1',
-    paymentMethod: 'card',
-    searchText:
-      'ord-1 bassey samsung galaxy s26 353232106161443 sn-123 old supplier known cost accessory known supplier',
-    total: 5000,
-  },
-  {
-    createdAt: '2026-04-09T10:00:00.000Z',
-    customerEmail: null,
-    customerName: 'Efosa',
-    customerPhone: null,
-    estimatedProfit: 1000,
-    id: 'order-2',
-    items: [
-      {
-        costPrice: 2000,
-        costSource: 'product' as const,
-        imeiValues: [],
-        id: 'item-2',
-        name: 'Itel Buds Neo 3',
-        productId: 'product-2',
-        profit: 1000,
-        quantity: 1,
-        revenue: 3000,
-        searchText: 'itel buds neo 3 efosa',
-        serialValues: [],
-        sku: null,
-        supplierName: '',
-        variantId: null,
-      },
-    ],
-    missingCostCount: 0,
-    orderNumber: 'ORD-2',
-    paymentMethod: 'transfer',
-    searchText: 'ord-2 efosa itel buds neo 3',
-    total: 3000,
-  },
-];
+const { wireDefaults } = createTransactionsScreenHarness(mocks);
 
 describe('TransactionsScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.useLocalSearchParams.mockReturnValue({});
-    mocks.appStateListener.mockReturnValue({ remove: vi.fn() });
-    mocks.mutateAsync.mockResolvedValue(undefined);
-    mocks.useAnalyticsOverview.mockReturnValue({
-      data: {
-        summary: {
-          profit: { value: 1250 },
-        },
-      },
-    });
-    mocks.useDebounce.mockImplementation((value) => value);
-    mocks.useMonthlyTransactionCount.mockReturnValue({
-      data: 2,
-      error: null,
-      refetch: vi.fn(),
-    });
-    mocks.useTransactionReview.mockReturnValue({
-      data: sampleOrders,
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-    });
-    mocks.useUpdateTransactionCostPrice.mockReturnValue({
-      isPending: false,
-      mutateAsync: mocks.mutateAsync,
-    });
+    wireDefaults();
   });
 
   it('renders a loading state', () => {
@@ -486,76 +213,6 @@ describe('TransactionsScreen', () => {
     render(<TransactionsScreen />);
 
     expect(screen.getByText('No transactions yet.')).toBeInTheDocument();
-  });
-
-  it('shows a placeholder missing-costs count while the range summary is pending', () => {
-    mocks.useTransactionReview.mockImplementation(
-      (
-        _range: unknown,
-        options?: {
-          enabled?: boolean;
-          fetchAllRange?: boolean;
-          search?: string;
-        }
-      ) => {
-        // The summary query passes { fetchAllRange } while the list query
-        // passes { search }.
-        if (options && 'fetchAllRange' in options) {
-          return {
-            data: undefined,
-            error: null,
-            isPending: true,
-            refetch: vi.fn(),
-          };
-        }
-        return {
-          data: sampleOrders,
-          error: null,
-          isLoading: false,
-          isPending: false,
-          isRefetching: false,
-          refetch: vi.fn(),
-        };
-      }
-    );
-
-    render(<TransactionsScreen />);
-
-    expect(screen.getByText('-- missing costs')).toBeInTheDocument();
-  });
-
-  it('shows an unavailable missing-costs count when the range summary fails', () => {
-    mocks.useTransactionReview.mockImplementation(
-      (
-        _range: unknown,
-        options?: {
-          enabled?: boolean;
-          fetchAllRange?: boolean;
-          search?: string;
-        }
-      ) => {
-        if (options && 'fetchAllRange' in options) {
-          return {
-            data: [],
-            error: new Error('range boom'),
-            isPending: false,
-            refetch: vi.fn(),
-          };
-        }
-        return {
-          data: sampleOrders,
-          error: null,
-          isLoading: false,
-          isPending: false,
-          isRefetching: false,
-          refetch: vi.fn(),
-        };
-      }
-    );
-
-    render(<TransactionsScreen />);
-
-    expect(screen.getByText('Unavailable missing costs')).toBeInTheDocument();
   });
 
   it('loads the estimated profit from the current-month analytics range', () => {
@@ -1130,225 +787,5 @@ describe('TransactionsScreen', () => {
 
     expect(await screen.findByText('save failed')).toBeInTheDocument();
     expect(screen.getByText('Save cost price')).toBeInTheDocument();
-  });
-
-  it('refreshes the monthly anchor at local midnight without reopening the screen', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 3, 30, 23, 59, 59));
-    const view = render(<TransactionsScreen />);
-    try {
-      expect(screen.getByText('2 transactions')).toBeInTheDocument();
-      const beforeMidnight =
-        mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
-      expect(beforeMidnight.getMonth()).toBe(3);
-      act(() => vi.advanceTimersByTime(1000));
-      const afterMidnight =
-        mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
-      expect(afterMidnight.getMonth()).toBe(4);
-      expect(afterMidnight.getDate()).toBe(1);
-      // Historical IMEIs remain searchable after the monthly reset.
-      fireEvent.change(screen.getByLabelText('Search transactions'), {
-        target: { value: '353232106161443' },
-      });
-      expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
-      expect(screen.queryByText('Edit ORD-2')).not.toBeInTheDocument();
-    } finally {
-      view.unmount();
-      vi.useRealTimers();
-    }
-  });
-
-  it('searches historical IMEIs even when a date range is selected', () => {
-    mocks.useLocalSearchParams.mockReturnValue({
-      startDate: '2026-05-01',
-      endDate: '2026-05-31',
-    });
-    mocks.useTransactionReview.mockImplementation((range) => ({
-      data: range ? [] : sampleOrders,
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-    }));
-    render(<TransactionsScreen />);
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: '353232106161443' },
-    });
-    expect(mocks.useDebounce).toHaveBeenCalledWith('353232106161443', 250);
-    expect(mocks.useTransactionReview).toHaveBeenCalledWith(undefined, {
-      search: '353232106161443',
-      tab: 'paid',
-    });
-    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
-  });
-
-  it('discloses truncated search results from the hook signal', () => {
-    mocks.useTransactionReview.mockImplementation((_range, options) => ({
-      data: options?.search ? [sampleOrders[0]] : sampleOrders,
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-      searchTruncated: Boolean(options?.search),
-    }));
-
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: '353232106161443' },
-    });
-
-    expect(
-      screen.getByText(
-        'Showing 1 match (partial results). Refine your search to narrow results.'
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
-  });
-
-  it('keeps the range query enabled while searching', () => {
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: '353232106161443' },
-    });
-
-    // The summary card renders during search: a disabled range query would
-    // ignore cost-edit invalidations and show pre-edit values.
-    const options = mocks.useTransactionReview.mock.calls.map(
-      (call) => call[1] as { enabled?: boolean; fetchAllRange?: boolean }
-    );
-    expect(options.some((o) => o?.fetchAllRange === true)).toBe(true);
-    expect(options.some((o) => o?.enabled === false)).toBe(false);
-  });
-
-  it('refines with the debounced query while searching', () => {
-    mocks.useDebounce.mockImplementation(() => 'Efosa');
-
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: 'Galaxy' },
-    });
-
-    expect(screen.queryByText('Edit ORD-1')).not.toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-2')).toBeInTheDocument();
-  });
-
-  it('holds the browse list while the debounced query lags behind typing', () => {
-    mocks.useDebounce.mockImplementation(() => '');
-
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: 'zzz-no-match-in-window' },
-    });
-
-    expect(
-      screen.queryByText('No matching transactions.')
-    ).not.toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-2')).toBeInTheDocument();
-  });
-
-  it('shows no-matching when a server search returns nothing', () => {
-    mocks.useTransactionReview.mockReturnValue({
-      data: [],
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-    });
-
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: 'no-such-imei' },
-    });
-
-    expect(screen.getByText('No matching transactions.')).toBeInTheDocument();
-    expect(screen.queryByText('No transactions yet.')).not.toBeInTheDocument();
-  });
-
-  it('keeps the missing-costs summary on the browsing list while searching', () => {
-    mocks.useTransactionReview.mockImplementation((_range, options) => ({
-      data: options?.search ? [sampleOrders[0]] : sampleOrders,
-      error: null,
-      isLoading: false,
-      isRefetching: false,
-      refetch: vi.fn(),
-    }));
-
-    render(<TransactionsScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search transactions'), {
-      target: { value: '353232106161443' },
-    });
-
-    expect(screen.getByText('1 missing costs')).toBeInTheDocument();
-    expect(screen.getByText('Edit ORD-1')).toBeInTheDocument();
-    expect(screen.queryByText('Edit ORD-2')).not.toBeInTheDocument();
-  });
-
-  it('shows the monthly count without loading monthly rows', () => {
-    mocks.useMonthlyTransactionCount.mockReturnValue({
-      data: 41,
-      error: null,
-      refetch: vi.fn(),
-    });
-    render(<TransactionsScreen />);
-    expect(screen.getByText('41 transactions')).toBeInTheDocument();
-    expect(mocks.useTransactionReview).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ fetchAll: true })
-    );
-  });
-
-  it('shows a zero monthly count instead of a placeholder', () => {
-    mocks.useMonthlyTransactionCount.mockReturnValue({
-      data: 0,
-      error: null,
-      refetch: vi.fn(),
-    });
-    render(<TransactionsScreen />);
-    expect(screen.getByText('0 transactions')).toBeInTheDocument();
-  });
-
-  it('shows a placeholder while the monthly count loads', () => {
-    mocks.useMonthlyTransactionCount.mockReturnValue({
-      data: undefined,
-      error: null,
-      refetch: vi.fn(),
-    });
-    render(<TransactionsScreen />);
-    expect(screen.getByText('-- transactions')).toBeInTheDocument();
-  });
-
-  it('refreshes the monthly anchor after resuming in a new month', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 3, 30, 12));
-    const view = render(<TransactionsScreen />);
-    try {
-      expect(screen.getByText('2 transactions')).toBeInTheDocument();
-      vi.setSystemTime(new Date(2026, 4, 1, 12));
-      const listener = mocks.appStateListener.mock.calls.at(-1)?.[1];
-      act(() => listener('active'));
-      const anchor = mocks.useMonthlyTransactionCount.mock.calls.at(-1)?.[0];
-      expect(anchor.getMonth()).toBe(4);
-      expect(anchor.getDate()).toBe(1);
-    } finally {
-      view.unmount();
-      vi.useRealTimers();
-    }
-  });
-  it('does not present an unavailable monthly count as zero', () => {
-    mocks.useMonthlyTransactionCount.mockReturnValue({
-      data: undefined,
-      error: new Error('Monthly query failed'),
-      refetch: vi.fn(),
-    });
-    render(<TransactionsScreen />);
-    expect(screen.getByText('Unavailable transactions')).toBeInTheDocument();
-    expect(screen.queryByText('0 transactions')).not.toBeInTheDocument();
   });
 });

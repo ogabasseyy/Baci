@@ -79,6 +79,24 @@ describe('useCurrentDate', () => {
     expect(result.current).toEqual(new Date(2026, 9, 9, 12, 1, 0));
   });
 
+  it('refreshes when the timezone offset changes within the same day', () => {
+    const { result } = renderHook(() => useCurrentDate());
+    const initial = result.current;
+    const offsetSpy = vi
+      .spyOn(Date.prototype, 'getTimezoneOffset')
+      .mockReturnValue(new Date().getTimezoneOffset() + 60);
+    try {
+      act(() => {
+        vi.advanceTimersByTime(60 * 1000);
+      });
+
+      expect(result.current).not.toBe(initial);
+      expect(result.current).toEqual(new Date(2026, 9, 8, 12, 1, 0));
+    } finally {
+      offsetSpy.mockRestore();
+    }
+  });
+
   it('renders nothing on minute ticks when the day is unchanged', () => {
     const { result } = renderHook(() => useCurrentDate());
     const initial = result.current;

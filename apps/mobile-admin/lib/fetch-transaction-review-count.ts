@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { buildTransactionReviewOrFilter } from './build-transaction-review-or-filter';
 import { isMissingSchemaColumn } from './is-missing-transaction-review-schema-column';
+import { isTransactionReviewSchemaCacheError } from './is-transaction-review-schema-cache-error';
 import { buildTransactionReviewRangeFilters } from './transaction-review';
 import type { TransactionReviewQueryError } from './transaction-review-fallback-types';
 
@@ -62,6 +63,7 @@ export async function fetchTransactionReviewCount({
 }) {
   let includeCancelledAt = true;
   let includeTransactionDate = true;
+  let retriedSchemaCacheError = false;
   let result = await runTransactionReviewCountQuery({
     endDateIso,
     includeCancelledAt,
@@ -81,6 +83,15 @@ export async function fetchTransactionReviewCount({
       isMissingSchemaColumn(result.error, 'cancelled_at')
     ) {
       includeCancelledAt = false;
+    } else if (
+      !retriedSchemaCacheError &&
+      isTransactionReviewSchemaCacheError(result.error)
+    ) {
+      // A schema-cache error naming neither retried column (e.g. a transient
+      // PostgREST cache miss): retry the same query once, mirroring the
+      // row-list recovery, instead of surfacing Unavailable. Bounded to one
+      // retry so persistent errors still surface.
+      retriedSchemaCacheError = true;
     } else {
       break;
     }

@@ -119,6 +119,50 @@ describe('fetchTransactionReviewCount', () => {
     expect(result).toEqual({ count: 5, error: null });
   });
 
+  it('retries the same query once on an unnamed schema-cache error', async () => {
+    const { fetchTransactionReviewCount } = await import(
+      './fetch-transaction-review-count'
+    );
+    mocks.or
+      .mockResolvedValueOnce({
+        count: null,
+        error: {
+          code: 'PGRST204',
+          message:
+            "Could not find the 'merchant_id' column of 'orders' in the schema cache",
+        },
+      })
+      .mockResolvedValue({ count: 4, error: null });
+
+    const result = await fetchTransactionReviewCount({
+      merchantId: 'merchant-1',
+    });
+
+    expect(mocks.or).toHaveBeenCalledTimes(2);
+    expect(mocks.gte).not.toHaveBeenCalled();
+    expect(mocks.lte).not.toHaveBeenCalled();
+    expect(result).toEqual({ count: 4, error: null });
+  });
+
+  it('surfaces a persistent schema-cache error after one retry', async () => {
+    const { fetchTransactionReviewCount } = await import(
+      './fetch-transaction-review-count'
+    );
+    const error = {
+      code: 'PGRST204',
+      message:
+        "Could not find the 'merchant_id' column of 'orders' in the schema cache",
+    };
+    mocks.or.mockResolvedValue({ count: null, error });
+
+    const result = await fetchTransactionReviewCount({
+      merchantId: 'merchant-1',
+    });
+
+    expect(mocks.or).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ count: null, error });
+  });
+
   it('surfaces unrelated errors without retrying', async () => {
     const { fetchTransactionReviewCount } = await import(
       './fetch-transaction-review-count'

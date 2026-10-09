@@ -153,13 +153,11 @@ const mockUseStorefrontInsets = jest.fn();
 let mockMerchantId = 'configured-merchant';
 let mockMerchantSlug = 'ogabassey';
 const mockUsePrimaryCapability = jest.fn<(...args: unknown[]) => unknown>();
-const mockGetPrimaryCapability = jest.fn<
-  (...args: unknown[]) => Promise<boolean>
->();
+const mockGetPrimaryCapability =
+  jest.fn<(...args: unknown[]) => Promise<boolean>>();
 const mockReadObservedCapability = jest.fn<(...args: unknown[]) => unknown>();
-const mockFundPrimaryWalletCard = jest.fn<
-  (...args: unknown[]) => Promise<void>
->();
+const mockFundPrimaryWalletCard =
+  jest.fn<(...args: unknown[]) => Promise<void>>();
 const mockInitializeWalletTopUp =
   jest.fn<
     (input: unknown) => Promise<{

@@ -395,3 +395,66 @@ it('scans undated legacy rows after the dated phase ends', async () => {
   );
   expect(result.data?.map((row) => row.id)).toContain('legacy-last');
 });
+
+it('keeps the newest undated rows when dated rows alone exceed the scan cap', async () => {
+  const { fetchTransactionReviewRows } = await import(
+    './fetch-transaction-review-rows'
+  );
+  // Nine-plus full dated pages (effective 2026-01-01) plus one full undated
+  // page (effective 2026-10-01): the merged scan must keep all 200 undated
+  // rows ahead of the oldest dated rows instead of capping inside the dated
+  // set. The mock serves fixtures by the phase filter on each call, like the
+  // server would: a dated-first scan never reaches the undated fixture.
+  const datedPage = (page: number) => ({
+    data: Array.from({ length: 200 }, (_, index) => ({
+      created_at: '2026-01-02T00:00:00Z',
+      id: `old-dated-p${page}-${String(index).padStart(3, '0')}`,
+      transaction_date: '2026-01-01T00:00:00Z',
+    })),
+    error: null,
+  });
+  const undatedPage = {
+    data: Array.from({ length: 200 }, (_, index) => ({
+      created_at: '2026-10-01T00:00:00Z',
+      id: `new-undated-${String(index).padStart(3, '0')}`,
+      transaction_date: null,
+    })),
+    error: null,
+  };
+  const emptyPage = { data: [], error: null };
+  const orFilters: string[] = [];
+  mocks.or.mockImplementation((filter: string) => {
+    orFilters.push(filter);
+    return query;
+  });
+  let datedCalls = 0;
+  let undatedCalls = 0;
+  mocks.returns.mockImplementation(() => {
+    const filter = orFilters[orFilters.length - 1] ?? '';
+    if (filter.includes('or(transaction_date.is.null)')) {
+      undatedCalls += 1;
+      return Promise.resolve(undatedCalls === 1 ? undatedPage : emptyPage);
+    }
+    datedCalls += 1;
+    return Promise.resolve(
+      datedCalls <= 10 ? datedPage(datedCalls) : emptyPage
+    );
+  });
+
+  const result = await fetchTransactionReviewRows({
+    fetchAll: true,
+    includeCancelledAt: true,
+    includeTransactionDate: true,
+    merchantId: 'merchant-1',
+    selectStatement: 'id',
+  });
+
+  expect(result.error).toBeNull();
+  expect(result.data).toHaveLength(2000);
+  expect(result.truncated).toBe(true);
+  const ids = result.data?.map((row) => row.id) ?? [];
+  expect(ids.slice(0, 200).every((id) => id.startsWith('new-undated-'))).toBe(
+    true
+  );
+  expect(mocks.returns).toHaveBeenCalledTimes(11);
+});

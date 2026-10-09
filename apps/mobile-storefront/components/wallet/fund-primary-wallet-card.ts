@@ -8,8 +8,8 @@ import {
 import { createPrimaryWalletCardFundingClient } from '@/lib/primary-wallet-card';
 import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { PRIMARY_WALLET_CARD_MIN_AMOUNT_KOBO } from '@/schemas/primary-wallet-card';
-import type { fundWallet } from './wallet-screen.handlers';
 import { alertPrimaryWalletCardFundingFailure } from './primary-wallet-card-funding-alerts';
+import type { fundWallet } from './wallet-screen.handlers';
 
 const client = createPrimaryWalletCardFundingClient();
 const activeFundings = new Set<string>();

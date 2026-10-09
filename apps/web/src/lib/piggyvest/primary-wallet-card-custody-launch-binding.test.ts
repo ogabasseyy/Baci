@@ -29,8 +29,33 @@ const input = {
   rawBytes: bytes,
   approval,
   configuration: fixture.configuration,
-  now: () => fixture.now,
 };
+function sealedBytes(expiresAt: string, crosswalkExpiresAt: string) {
+  const candidate = Buffer.from(
+    JSON.stringify({
+      deliveryContract: 'approved-primary-card-crosswalk-file-v1',
+      integrationId: fixture.context.integrationId,
+      environment: 'staging',
+      expiresAt,
+      records: [
+        {
+          operationId: fixture.context.operationId,
+          crosswalk: { ...fixture.crosswalk, expiresAt: crosswalkExpiresAt },
+        },
+      ],
+    })
+  );
+  return {
+    rawBytes: candidate,
+    approval: {
+      ...approval,
+      sha256: createHash('sha256').update(candidate).digest('hex'),
+      signature: createHmac('sha256', issuerKey)
+        .update(candidate)
+        .digest('hex'),
+    },
+  };
+}
 describe('approved internal crosswalk delivery (not a PiggyVest signing contract)', () => {
   it('does not authorize a new payment from reusable wallet ownership alone', async () => {
     const operationId = '10000000-0000-4000-8000-000000000099';
@@ -73,15 +98,41 @@ describe('approved internal crosswalk delivery (not a PiggyVest signing contract
       })
     ).toThrow();
   });
-  it('rechecks expiry after initial construction', async () => {
-    let now = fixture.now;
-    const resolve = createPrimaryCardCustodyLaunchBinding({
-      ...input,
-      now: () => now,
+  it('resolves past the evidence windows so post-expiry runs still drain acknowledged receipts', async () => {
+    // Every window is long past; only the hierarchy ordering and identity
+    // pins still apply. Freshness gates new work at the intake/runtime
+    // layer, never this drain-only binding.
+    const past = sealedBytes('2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z');
+    await expect(
+      createPrimaryCardCustodyLaunchBinding({
+        ...input,
+        ...past,
+        configuration: {
+          ...fixture.configuration,
+          expiresAt: '2026-10-01T00:00:00Z',
+        },
+      })(fixture.context, fixture.single)
+    ).resolves.toEqual({
+      ...fixture.crosswalk,
+      expiresAt: '2026-10-01T00:00:00Z',
     });
-    now = Date.parse(fixture.configuration.expiresAt);
-    await expect(resolve(fixture.context, fixture.single)).rejects.toThrow(
-      'unavailable'
+  });
+  it('rejects evidence that outlives the configuration it was issued under', () => {
+    const future = sealedBytes('2099-06-01T00:00:00Z', '2099-01-01T00:00:00Z');
+    expect(() =>
+      createPrimaryCardCustodyLaunchBinding({ ...input, ...future })
+    ).toThrow('unavailable');
+  });
+  it('rejects a record that outlives its delivery file', async () => {
+    const skewed = sealedBytes(
+      fixture.configuration.expiresAt,
+      '2099-06-01T00:00:00Z'
     );
+    await expect(
+      createPrimaryCardCustodyLaunchBinding({ ...input, ...skewed })(
+        fixture.context,
+        fixture.single
+      )
+    ).rejects.toThrow('scope');
   });
 });

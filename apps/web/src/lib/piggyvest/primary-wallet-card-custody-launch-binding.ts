@@ -8,7 +8,6 @@ export function createPrimaryCardCustodyLaunchBinding(input: {
   rawBytes: Uint8Array;
   approval: unknown;
   configuration: unknown;
-  now?: () => number;
 }) {
   const config = custody.runtime.parse(input.configuration);
   const approval = launch.approval.parse(input.approval);
@@ -26,13 +25,15 @@ export function createPrimaryCardCustodyLaunchBinding(input: {
   const binding = launch.binding.parse(
     JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
   );
-  const clock = input.now ?? Date.now;
+  // No process-clock expiry check (see the worker runtime readers): this
+  // binding serves the drain worker only, and a post-expiry run must still
+  // settle already-acknowledged receipts instead of stranding charged
+  // checkouts in custody_pending. Freshness gates new work at the
+  // intake/runtime layer; here authenticity (HMAC + hash above), identity
+  // pins below, and the evidence-hierarchy ordering still fail closed,
+  // and the database remains the settlement authority.
   const verify = () => {
-    const now = clock();
     if (
-      !Number.isFinite(now) ||
-      now >= Date.parse(binding.expiresAt) ||
-      now >= Date.parse(config.expiresAt) ||
       Date.parse(binding.expiresAt) > Date.parse(config.expiresAt) ||
       binding.integrationId !== config.integrationId ||
       binding.environment !== config.environment
@@ -72,8 +73,6 @@ export function createPrimaryCardCustodyLaunchBinding(input: {
           config.crosswalkAuthority.treasuryWebhookCustomerId ||
         crosswalk.transactionCustomerId !==
           config.crosswalkAuthority.transactionCustomerId ||
-        clock() < Date.parse(crosswalk.observedAt) ||
-        clock() >= Date.parse(crosswalk.expiresAt) ||
         Date.parse(crosswalk.expiresAt) > Date.parse(binding.expiresAt)
       )
         throw new Error('Approved crosswalk scope unavailable');

@@ -10,10 +10,12 @@ import { readObservedPiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-
  * a cold start cannot mint a legacy top-up the server would have routed
  * primary moments later. An ambiguous probe failure blocks funding
  * ('blocked', after alerting) rather than guessing a rail with money on
- * the line.
+ * the line — the verdict stays fail-closed, but the alert offers a retry
+ * (via onRetry) so a transient probe failure is not a dead end.
  */
 export async function resolveFundWalletRail(
-  activeMerchantId?: string
+  activeMerchantId?: string,
+  options?: { onRetry?: () => void }
 ): Promise<'primary' | 'legacy' | 'blocked'> {
   if (isPiggyvestPrimaryMerchant(activeMerchantId)) return 'primary';
   if (
@@ -25,10 +27,22 @@ export async function resolveFundWalletRail(
         ? 'primary'
         : 'legacy';
     } catch {
-      Alert.alert(
-        'Unable to fund wallet',
-        'We could not confirm your wallet rail. Please try again.'
-      );
+      if (options?.onRetry) {
+        const onRetry = options.onRetry;
+        Alert.alert(
+          'Unable to fund wallet',
+          'We could not confirm your wallet rail. Please try again.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Try again', onPress: onRetry },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Unable to fund wallet',
+          'We could not confirm your wallet rail. Please try again.'
+        );
+      }
       return 'blocked';
     }
   }

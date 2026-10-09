@@ -46,12 +46,13 @@ export function readPrimaryWalletSavingsRuntime(
 }
 
 /**
- * Recovery-only savings configuration: durable pending lookups must run
- * even when the savings runtime or the base primary flag is disabled, so a
- * restart can never mistake "runtime off" for "no outstanding operation"
- * and reroute a new legacy contribution alongside an already-submitted
- * primary transfer. Never used to reserve or dispatch — those stay behind
- * the enabled flags.
+ * Recovery-only savings configuration: durable pending lookups, status
+ * reconciliation, and outflow attribution must run even when the savings
+ * runtime or the base primary flag is disabled, so a rollback can never
+ * mistake "runtime off" for "no outstanding operation" and strand a
+ * provider-accepted transfer as pending permanently. The reconciliation
+ * handles here only settle or release already-dispatched operations —
+ * reserving or dispatching new ones stays behind the enabled flags.
  */
 export function readPrimaryWalletSavingsRecoveryRuntime(
   env: NodeJS.ProcessEnv = process.env
@@ -59,7 +60,17 @@ export function readPrimaryWalletSavingsRecoveryRuntime(
   const { primary, configuration } = readPrimaryWalletSavingsCore(env, true);
   return {
     configuration,
+    reconciliationConfiguration: piggyvestPrimaryInflowRuntimeSchema.parse({
+      integrationId: primary.onboarding.integrationId,
+      environment: primary.onboarding.environment,
+      database: {
+        ...primary.database,
+        login: 'baci_piggyvest_primary_evidence',
+        password: env.PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD,
+      },
+    }),
     merchantId: primary.onboarding.merchantId,
     businessId: primary.onboarding.businessId,
+    providerToken: primary.providerToken,
   };
 }

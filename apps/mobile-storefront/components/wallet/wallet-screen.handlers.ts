@@ -157,7 +157,23 @@ export async function fundWallet({
     );
     return;
   }
-  const rail = await resolveFundWalletRail(activeMerchantId);
+  // A transient probe failure blocks with a retry affordance instead of a
+  // dead end: the retry re-runs funding (and the probe) with these params.
+  const rail = await resolveFundWalletRail(activeMerchantId, {
+    onRetry: () => {
+      void fundWallet({
+        activeMerchantId,
+        activeMerchantSlug,
+        customer,
+        fundAmount,
+        refetchWalletBalance,
+        resetFundPanel,
+        setIsFundPending,
+        user,
+        walletReturnTo,
+      });
+    },
+  });
   if (rail === 'blocked') return;
   if (rail === 'primary') {
     // Recovery runs before any amount validation: a saved primary-card

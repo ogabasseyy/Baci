@@ -1,6 +1,9 @@
 import 'server-only';
 import { runPrimaryWalletSavingsOutflowReconciliation } from './primary-wallet-savings-outflow-reconciliation';
-import { readPrimaryWalletSavingsRuntime } from './primary-wallet-savings-runtime';
+import {
+  readPrimaryWalletSavingsRecoveryRuntime,
+  readPrimaryWalletSavingsRuntime,
+} from './primary-wallet-savings-runtime';
 
 export interface SavingsOutflowProcessorDeps {
   savingsRuntime?: {
@@ -12,7 +15,12 @@ export interface SavingsOutflowProcessorDeps {
 
 function readSavingsRuntimeForOutflow(): SavingsOutflowProcessorDeps['savingsRuntime'] {
   try {
-    return readPrimaryWalletSavingsRuntime();
+    // Outflow attribution drains through the recovery runtime when the
+    // flags are off so an accepted transfer still confirms after rollback.
+    return (
+      readPrimaryWalletSavingsRuntime() ??
+      readPrimaryWalletSavingsRecoveryRuntime()
+    );
   } catch (error) {
     // Savings is auxiliary to the legacy outflow path: a misconfigured
     // savings runtime must not 503 legacy webhooks (the savings routes

@@ -109,6 +109,69 @@ describe('launch to existing signed custody dispatcher', () => {
     ).toBe('completed');
     expect(fetchImplementation).toHaveBeenCalledTimes(5);
   });
+  it('drains acknowledged receipts past every evidence window instead of stranding charged checkouts', async () => {
+    const pastExpiresAt = '2026-10-01T00:00:00Z';
+    const pastBytes = Buffer.from(
+      JSON.stringify({
+        deliveryContract: 'approved-primary-card-crosswalk-file-v1',
+        integrationId: fixture.context.integrationId,
+        environment: 'staging',
+        expiresAt: pastExpiresAt,
+        records: [
+          {
+            operationId: fixture.context.operationId,
+            crosswalk: {
+              ...fixture.crosswalk,
+              observedAt: '2026-09-30T00:00:00Z',
+              expiresAt: pastExpiresAt,
+            },
+          },
+        ],
+      })
+    );
+    const pastEnvironment = {
+      ...environment,
+      PIGGYVEST_PRIMARY_CARD_EXPIRES_AT: pastExpiresAt,
+      PIGGYVEST_PRIMARY_CARD_CROSSWALK_FILE_SHA256: createHash('sha256')
+        .update(pastBytes)
+        .digest('hex'),
+      PIGGYVEST_PRIMARY_CARD_CROSSWALK_FILE_SIGNATURE: createHmac(
+        'sha256',
+        issuerKey
+      )
+        .update(pastBytes)
+        .digest('hex'),
+    };
+    const fetchImplementation = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        expect(init?.method).toBe('GET');
+        const parsed = new URL(String(url));
+        const payload = parsed.pathname.endsWith('/verify')
+          ? fixture.verification
+          : parsed.pathname.includes('/transaction/')
+            ? fixture.single
+            : parsed.pathname.endsWith(fixture.context.sourceWalletId)
+              ? fixture.sourceWallet
+              : fixture.destinationWallet;
+        return Response.json(payload);
+      }
+    );
+    const result = await runPrimaryCardCustodyLaunch({
+      mode: 'once',
+      environment: pastEnvironment,
+      readBinding: async () => pastBytes,
+      fetchImplementation,
+      now: () => Date.parse('2026-10-08T00:00:00Z'),
+    });
+    expect(result).toMatchObject({
+      status: 'batch_finished',
+      claimed: 1,
+      receiptsProcessed: 1,
+    });
+    expect(
+      mocks.query.mock.calls.filter(([sql]) => sql.includes('settle_custody'))
+    ).toHaveLength(1);
+  });
   it('does not finish successfully when independent provider observation fails', async () => {
     const fetchImplementation = vi.fn(async () => {
       throw new Error('private-provider-failure');

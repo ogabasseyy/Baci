@@ -29,11 +29,13 @@ export function verifyPrimaryCardCustodyProof(input: {
     const crosswalk = schemas.crosswalk.parse(input.crosswalk);
     const now = input.now ?? Date.now();
     const aliases = [...new Set(crosswalk.transactionAliases)].sort();
+    // The crosswalk is a static identity mapping (HMAC+hash bound, hierarchy
+    // ordered); it carries no liveness attestation, so its observedAt and
+    // expiresAt never gate verification. Liveness comes from the provider
+    // reads in this same pipeline plus the DB settlement fence, which
+    // requires proof.observedAt (= now, below) within 60s.
     if (
       !Number.isFinite(now) ||
-      now - Date.parse(crosswalk.observedAt) < 0 ||
-      now - Date.parse(crosswalk.observedAt) > 60000 ||
-      now >= Date.parse(crosswalk.expiresAt) ||
       aliases.length !== crosswalk.transactionAliases.length ||
       !aliases.includes(single.id) ||
       !aliases.includes(crosswalk.bankInflowTransactionId) ||

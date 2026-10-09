@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
   runtime: vi.fn(),
+  recovery: vi.fn(),
   identity: vi.fn(),
   submit: vi.fn(),
   features: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 vi.mock('@/lib/piggyvest/primary-wallet-savings-runtime', () => ({
   readPrimaryWalletSavingsRuntime: mocks.runtime,
+  readPrimaryWalletSavingsRecoveryRuntime: mocks.recovery,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
@@ -94,6 +96,27 @@ it('does not disclose another customer operation through status refresh', async 
     (await PATCH(request({ merchantId, operationId: body.operationId }))).status
   ).toBe(404);
   expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('drains status recovery through the recovery runtime after rollback', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.recovery.mockReturnValue({
+    merchantId,
+    businessId: 'business',
+    providerToken: 'test-only',
+    configuration: { integrationId: 'integration', environment: 'staging' },
+  });
+  const response = await PATCH(
+    request({ merchantId, operationId: body.operationId })
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    status: 'pending',
+    operationId: body.operationId,
+  });
+  expect(mocks.submit).not.toHaveBeenCalled();
+  expect(checkStatus).toHaveBeenCalledWith(
+    expect.objectContaining({ operationId: body.operationId })
+  );
 });
 it('checks auth before configuration or transfer processing', async () => {
   mocks.auth.mockResolvedValue({ user: null });

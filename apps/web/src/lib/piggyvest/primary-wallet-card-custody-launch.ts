@@ -36,7 +36,6 @@ export async function runPrimaryCardCustodyLaunch(input: {
     rawBytes: await input.readBinding(approval.path),
     approval,
     configuration: custodyConfig,
-    now: input.now,
   });
   const runtime = createPrimaryCardCustodySignedRuntime({
     ...input,

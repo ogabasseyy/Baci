@@ -3,7 +3,10 @@ import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/c
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
-import { readPrimaryWalletSavingsRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import {
+  readPrimaryWalletSavingsRecoveryRuntime,
+  readPrimaryWalletSavingsRuntime,
+} from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { checkPrimaryWalletSavingsStatus } from '@/lib/piggyvest/primary-wallet-savings-status-runtime';
 import { submitPrimaryWalletSavings } from '@/lib/piggyvest/primary-wallet-savings-submission-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
@@ -33,7 +36,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   try {
-    const runtime = readPrimaryWalletSavingsRuntime();
+    // Status recovery drains through the recovery runtime when the flags
+    // are off so a rollback cannot strand a dispatched transfer as
+    // pending; POST below stays strictly behind the enabled flags.
+    const runtime =
+      readPrimaryWalletSavingsRuntime() ??
+      readPrimaryWalletSavingsRecoveryRuntime();
     if (!runtime || runtime.merchantId !== parsed.data.merchantId)
       return NextResponse.json(
         {

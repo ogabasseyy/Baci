@@ -17,13 +17,15 @@ export function createPrimaryCardCustodyReader(input: {
     const context = schemas.context.parse(selected);
     const event = prefundedCardProviderEvidenceSchemas.envelope.parse(envelope);
     const now = (input.now ?? Date.now)();
+    // Live provider reads stay available past the evidence window so the
+    // worker can drain; settlement freshness is enforced by the DB fence
+    // (proof observedAt within 60s), not by this clock.
     if (
       context.integrationId !== config.integrationId ||
       context.merchantId !== config.merchantId ||
       context.businessId !== config.businessId ||
       context.environment !== config.environment ||
       !Number.isFinite(now) ||
-      now >= Date.parse(config.expiresAt) ||
       event.eventType !== 'wallet-transfer.outflow.success' ||
       event.pvb_wallet !== context.sourceWalletId ||
       !event.pvb_reference

@@ -13,7 +13,10 @@ import { supabase } from '@/lib/supabase';
 import { ALL_BRANCH_SCOPE, type BranchScope } from '@/schemas/branch';
 import { useBranchScope } from '../useBranchScope';
 import { useMerchant } from '../useMerchant';
-import { mapOrderItems } from './useOrderDetails-helpers';
+import {
+  attachOrderItemOfferLabels,
+  mapOrderItems,
+} from './useOrderDetails-helpers';
 
 function getFirstDisplayNamePart(value: string | null | undefined) {
   return value?.trim().split(/\s+/)[0] || null;
@@ -193,7 +196,16 @@ export async function fetchOrderById(
     balance,
     payment_status: paymentStatus,
     fulfillment_details: orderWithMeta.fulfillment_details ?? null,
-    items: mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
+    items: await attachOrderItemOfferLabels(
+      mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
+      (productId) =>
+        supabase.rpc('get_product_offers', {
+          p_product_id: productId,
+        }) as unknown as Promise<{
+          data: { offer_id?: unknown }[] | null;
+          error: unknown;
+        }>
+    ),
     recorded_by_name: recordedByName,
     staff_terminal: staffTerminal,
     virtual_account:

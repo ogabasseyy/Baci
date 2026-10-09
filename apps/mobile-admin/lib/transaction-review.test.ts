@@ -98,6 +98,7 @@ describe('transaction review helpers', () => {
     ]);
 
     expect(order.items[0]).toMatchObject({ offerId: 'offer-1' });
+    expect(order.items[0]).toMatchObject({ condition: 'used' });
     expect(order.items[0].searchText).toContain('offer-1');
     expect(order.searchText).toContain('offer-1');
   });

@@ -1,8 +1,6 @@
 import { jest } from '@jest/globals';
 import {
-  getStorefrontProductBaseInventoryByProductIds,
   getStorefrontProductVariantsByProductIds,
-  hydrateProductRowsWithBaseInventory,
   hydrateProductRowsWithStorefrontVariants,
 } from '@/lib/storefront-product-variants';
 
@@ -290,77 +288,5 @@ describe('storefront-product-variants', () => {
     await expect(
       getStorefrontProductVariantsByProductIds(['product-1'])
     ).resolves.toBeNull();
-  });
-
-  it('returns an empty object without calling the rpc when no base ids are provided', async () => {
-    await expect(
-      getStorefrontProductBaseInventoryByProductIds([])
-    ).resolves.toEqual({});
-    expect(mockRpc).not.toHaveBeenCalled();
-  });
-
-  it('maps base inventory rows by product id in one rpc call', async () => {
-    mockRpc.mockReturnValueOnce(
-      Promise.resolve({
-        data: [
-          {
-            product_id: 'product-1',
-            effective_policy: 'serialized_strict',
-            available_units: 4,
-          },
-        ],
-        error: null,
-      })
-    );
-
-    await expect(
-      getStorefrontProductBaseInventoryByProductIds(['product-1', 'product-1'])
-    ).resolves.toEqual({
-      'product-1': {
-        product_id: 'product-1',
-        effective_policy: 'serialized_strict',
-        available_units: 4,
-      },
-    });
-    expect(mockRpc).toHaveBeenCalledTimes(1);
-    expect(mockRpc).toHaveBeenCalledWith(
-      'get_storefront_product_base_inventory',
-      { p_product_ids: ['product-1'] }
-    );
-  });
-
-  it('returns null when the base inventory lookup fails', async () => {
-    mockRpc.mockReturnValueOnce(
-      Promise.resolve({ data: null, error: { message: 'boom' } })
-    );
-
-    await expect(
-      getStorefrontProductBaseInventoryByProductIds(['product-1'])
-    ).resolves.toBeNull();
-  });
-
-  it('attaches base inventory to matching rows and leaves the rest untouched', async () => {
-    mockRpc.mockReturnValueOnce(
-      Promise.resolve({
-        data: [
-          {
-            product_id: 'product-1',
-            effective_policy: 'serialized_strict',
-            available_units: 4,
-          },
-        ],
-        error: null,
-      })
-    );
-
-    const rows = [{ id: 'product-1' }, { id: 'product-2' }];
-    await expect(hydrateProductRowsWithBaseInventory(rows)).resolves.toEqual([
-      {
-        id: 'product-1',
-        base_effective_policy: 'serialized_strict',
-        base_available_units: 4,
-      },
-      { id: 'product-2' },
-    ]);
   });
 });

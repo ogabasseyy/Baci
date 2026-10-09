@@ -2,6 +2,7 @@ import { normalizeVariantAttributes } from '@/lib/product-picker-variant-rows';
 import { getJoinedRecord } from '@/lib/supabase-utils';
 
 interface OrderItemRow {
+  offer_id?: string | null;
   condition: string | null;
   has_assurance: boolean | null;
   id: string;
@@ -70,6 +71,7 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
       id: item.id,
       image_url: item.image_url ?? undefined,
       name: itemName,
+      offer_id: item.offer_id ?? undefined,
       price: item.price,
       product_id: item.product_id ?? null,
       product_match_status: item.product_match_status ?? undefined,
@@ -79,6 +81,96 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
         normalizeVariantAttributes(item.variant_attributes) ?? undefined,
       variant_id: item.variant_id ?? null,
       variant_name: item.variant_name ?? undefined,
+    };
+  });
+}
+
+type OfferLabelRow = {
+  offer_id?: unknown;
+  grade?: unknown;
+  condition_notes?: unknown;
+};
+
+/**
+ * Attach the selected offer's grade/notes to mapped order items through
+ * the shopper-safe get_product_offers RPC (single order, so one lookup
+ * per distinct product with offer lines). Fail-soft: offer lines keep
+ * their persisted condition and short ref when the lookup fails.
+ */
+export async function attachOrderItemOfferLabels<
+  TItem extends { offer_id?: string; product_id?: string | null },
+>(
+  items: TItem[],
+  fetchOffers: (productId: string) => Promise<{
+    data: OfferLabelRow[] | null;
+    error: unknown;
+  }>
+): Promise<
+  (TItem & { offer_grade?: string; offer_condition_notes?: string })[]
+> {
+  const offerItems = items.filter(
+    (item): item is TItem & { offer_id: string; product_id: string } =>
+      typeof item.offer_id === 'string' &&
+      item.offer_id !== '' &&
+      typeof item.product_id === 'string' &&
+      item.product_id !== ''
+  );
+  if (offerItems.length === 0) {
+    return items;
+  }
+
+  const productIds = Array.from(
+    new Set(offerItems.map((item) => item.product_id))
+  );
+  let labels = new Map<string, { grade?: string; notes?: string }>();
+  try {
+    const results = await Promise.all(
+      productIds.map(async (productId) => ({
+        productId,
+        ...(await fetchOffers(productId)),
+      }))
+    );
+    if (results.some((result) => result.error)) {
+      return items;
+    }
+    labels = new Map(
+      results.flatMap((result) =>
+        (result.data ?? []).flatMap((row) =>
+          typeof row?.offer_id === 'string'
+            ? [
+                [
+                  `${result.productId}::${row.offer_id}`,
+                  {
+                    grade:
+                      typeof row.grade === 'string' ? row.grade : undefined,
+                    notes:
+                      typeof row.condition_notes === 'string'
+                        ? row.condition_notes
+                        : undefined,
+                  },
+                ] as const,
+              ]
+            : []
+        )
+      )
+    );
+  } catch {
+    return items;
+  }
+
+  return items.map((item) => {
+    if (
+      typeof item.offer_id !== 'string' ||
+      typeof item.product_id !== 'string'
+    ) {
+      return item;
+    }
+    const label = labels.get(`${item.product_id}::${item.offer_id}`);
+    if (!label) return item;
+    return {
+      ...item,
+      offer_grade: label.grade,
+      offer_condition_notes: label.notes,
     };
   });
 }

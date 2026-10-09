@@ -36,4 +36,30 @@ describe('fetchCartOfferPrices', () => {
       fetchCartOfferPrices(fetchOffers, [{ id: PRODUCT_ID, offerId: OFFER_ID }])
     ).rejects.toThrow('offer query failed');
   });
+
+  it('bounds concurrent offer lookups across many products', async () => {
+    const productIds = Array.from(
+      { length: 25 },
+      (_, index) =>
+        `11111111-1111-4111-8111-${index.toString(16).padStart(12, '0')}`
+    );
+    let active = 0;
+    let maxActive = 0;
+    const fetchOffers = vi.fn(async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { data: [], error: null };
+    });
+
+    const offerMap = await fetchCartOfferPrices(
+      fetchOffers,
+      productIds.map((id) => ({ id, offerId: OFFER_ID }))
+    );
+
+    expect(fetchOffers).toHaveBeenCalledTimes(25);
+    expect(maxActive).toBeLessThanOrEqual(10);
+    expect(offerMap.size).toBe(0);
+  });
 });

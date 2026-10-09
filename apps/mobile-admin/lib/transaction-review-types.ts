@@ -72,6 +72,7 @@ export interface TransactionReviewOrderRow {
 }
 
 export interface TransactionReviewItem {
+  condition?: string | null;
   costPrice: number | null;
   costSource: 'unit' | 'order_item' | 'variant' | 'product' | null;
   id: string;

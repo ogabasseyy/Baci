@@ -103,6 +103,24 @@ describe('fetchLiveOrderOffers', () => {
     expect(prices.size).toBe(0);
   });
 
+  it('returns the live condition map in raw merchant spellings', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [
+        { offer_id: OFFER_ID, price: 400_000, condition: 'refurbished' },
+        { offer_id: OTHER_OFFER_ID, price: '420000', condition: null },
+      ],
+      error: null,
+    }));
+
+    const { mismatch, conditions } = await fetchLiveOrderOffers(fetchOffers, [
+      { product_id: PRODUCT_ID, offer_id: OFFER_ID },
+    ]);
+
+    expect(mismatch).toBeNull();
+    expect(conditions.get(`${PRODUCT_ID}::${OFFER_ID}`)).toBe('refurbished');
+    expect(conditions.has(`${PRODUCT_ID}::${OTHER_OFFER_ID}`)).toBe(false);
+  });
+
   it('bounds concurrent offer lookups across many products', async () => {
     const productIds = Array.from(
       { length: 25 },

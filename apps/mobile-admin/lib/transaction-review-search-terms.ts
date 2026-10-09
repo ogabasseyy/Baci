@@ -34,7 +34,7 @@ export function filterTransactionOrders(
   orders: TransactionReviewOrder[],
   searchQuery: string
 ) {
-  const terms = splitTransactionSearchTerms(searchQuery.toLowerCase());
+  const terms = splitTransactionSearchTerms(searchQuery);
 
   if (terms.length === 0) {
     return orders;

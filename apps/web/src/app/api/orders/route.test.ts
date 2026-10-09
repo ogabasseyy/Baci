@@ -4906,7 +4906,9 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         }
         if (name === 'get_product_offers') {
           return Promise.resolve({
-            data: [{ offer_id: LIVE_OFFER_ID, price: 400_000 }],
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
             error: null,
           });
         }
@@ -5010,7 +5012,9 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         }
         if (name === 'get_product_offers') {
           return Promise.resolve({
-            data: [{ offer_id: LIVE_OFFER_ID, price: 400_000 }],
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
             error: null,
           });
         }
@@ -5091,6 +5095,127 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
             offer_id: LIVE_OFFER_ID,
             has_assurance: true,
             assurance_fee: 19_800, // (400000 - 4000) * 1 * 0.05 validated
+          }),
+        ],
+      })
+    );
+  });
+
+  it('rejects an offer line whose condition canonically mismatches the live offer', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string) => {
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              {
+                offer_id: LIVE_OFFER_ID,
+                price: 400_000,
+                condition: 'refurbished',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'new',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid condition offer for order item',
+    });
+  });
+
+  it('persists the live offer condition when the caller spelling canonically matches', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              {
+                offer_id: LIVE_OFFER_ID,
+                price: 400_000,
+                condition: 'refurbished',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    // Caller sends the canonical spelling; the row stores the merchant
+    // spelling. Same family, so the line persists the live condition.
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'open_box',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            condition: 'refurbished',
           }),
         ],
       })

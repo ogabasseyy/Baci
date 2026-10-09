@@ -195,6 +195,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
           });
 
           return {
+            condition: item.condition ?? null,
             costPrice: resolvedUnit.costPrice,
             costSource: resolvedUnit.costSource,
             id:

@@ -25,6 +25,9 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/storefront-product-variants', () => ({
   hydrateProductRowsWithStorefrontVariants: (...args: unknown[]) =>
     mockHydrateProductRowsWithStorefrontVariants(...args),
+}));
+
+jest.mock('@/lib/storefront-product-base-inventory', () => ({
   hydrateProductRowsWithBaseInventory: (...args: unknown[]) =>
     mockHydrateProductRowsWithBaseInventory(...args),
 }));

@@ -4,7 +4,13 @@ export type OrderOfferLine = {
 };
 
 export type OrderOfferQueryResult = {
-  data: { offer_id: string; price?: number | string | null }[] | null;
+  data:
+    | {
+        offer_id: string;
+        price?: number | string | null;
+        condition?: string | null;
+      }[]
+    | null;
   error: { message: string } | null;
 };
 
@@ -12,6 +18,8 @@ export type LiveOrderOffers = {
   mismatch: OrderOfferLine | null;
   /** `${product_id}::${offer_id}` → live offer price (finite only). */
   prices: Map<string, number>;
+  /** `${product_id}::${offer_id}` → live offer condition (raw spelling). */
+  conditions: Map<string, string>;
 };
 
 const uuidRegex =
@@ -30,8 +38,9 @@ export async function fetchLiveOrderOffers(
   items: OrderOfferLine[]
 ): Promise<LiveOrderOffers> {
   const prices = new Map<string, number>();
+  const conditions = new Map<string, string>();
   const offerLines = items.filter((item) => item.offer_id);
-  if (offerLines.length === 0) return { mismatch: null, prices };
+  if (offerLines.length === 0) return { mismatch: null, prices, conditions };
 
   const malformed = offerLines.find(
     (item) =>
@@ -40,7 +49,7 @@ export async function fetchLiveOrderOffers(
       typeof item.offer_id !== 'string' ||
       !uuidRegex.test(item.offer_id)
   );
-  if (malformed) return { mismatch: malformed, prices };
+  if (malformed) return { mismatch: malformed, prices, conditions };
 
   const productIds = Array.from(
     new Set(offerLines.map((item) => String(item.product_id)))
@@ -79,6 +88,9 @@ export async function fetchLiveOrderOffers(
           const price = Number(offer.price);
           if (Number.isFinite(price)) prices.set(key, price);
         }
+        if (typeof offer.condition === 'string' && offer.condition !== '') {
+          conditions.set(key, offer.condition);
+        }
         return key;
       })
     )
@@ -87,7 +99,7 @@ export async function fetchLiveOrderOffers(
     offerLines.find(
       (item) => !liveOfferIds.has(`${item.product_id}::${item.offer_id}`)
     ) ?? null;
-  return { mismatch, prices };
+  return { mismatch, prices, conditions };
 }
 
 /**

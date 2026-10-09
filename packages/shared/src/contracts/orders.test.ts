@@ -113,6 +113,7 @@ describe('order column constants', () => {
         'details:item_description',
         'image_url',
         'item_description',
+        'offer_id',
         'product_name:name',
         'product_match_status',
         'variant_id',

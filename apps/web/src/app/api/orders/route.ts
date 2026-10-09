@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
@@ -979,6 +980,7 @@ export async function POST(request: NextRequest) {
     // two offers can share one condition, so the stored id is the only
     // thing distinguishing them at fulfillment time.
     const liveOfferPrices = new Map<string, number>();
+    const liveOfferConditions = new Map<string, string>();
     if (orderItemsPayload.some((item) => item.offer_id)) {
       let mismatchedOfferLine: OrderOfferLine | null = null;
       try {
@@ -993,6 +995,9 @@ export async function POST(request: NextRequest) {
         for (const [key, price] of liveOffers.prices) {
           liveOfferPrices.set(key, price);
         }
+        for (const [key, condition] of liveOffers.conditions) {
+          liveOfferConditions.set(key, condition);
+        }
       } catch (error) {
         console.error('Order offer verification failed:', error);
         return NextResponse.json(
@@ -1005,6 +1010,37 @@ export async function POST(request: NextRequest) {
           { error: 'Invalid condition offer for order item' },
           { status: 400 }
         );
+      }
+      // The stored condition must name the reserved offer: a refurbished
+      // offer line carrying condition 'new' would reserve and charge the
+      // offer but tell fulfillment another condition. Canonical-compare
+      // (callers send canonical spellings, rows store merchant ones) and
+      // reject mismatches; persist the live condition otherwise so the
+      // stored line always matches the priced offer exactly.
+      for (const item of orderItemsPayload) {
+        if (!item.offer_id) continue;
+        const liveCondition = liveOfferConditions.get(
+          `${item.product_id}::${item.offer_id}`
+        );
+        // A live row without a condition cannot bind fulfillment: reject
+        // rather than persist an unverified caller label.
+        if (liveCondition === undefined) {
+          return NextResponse.json(
+            { error: 'Invalid condition offer for order item' },
+            { status: 400 }
+          );
+        }
+        if (
+          item.condition != null &&
+          normalizeCanonicalProductCondition(item.condition) !==
+            normalizeCanonicalProductCondition(liveCondition)
+        ) {
+          return NextResponse.json(
+            { error: 'Invalid condition offer for order item' },
+            { status: 400 }
+          );
+        }
+        item.condition = liveCondition;
       }
     }
 
@@ -1624,6 +1660,8 @@ export async function POST(request: NextRequest) {
             : await computeRedvaultOrderQuote({
                 items: orderItemsPayload,
                 merchantId: merchant_id,
+                offerConditions: liveOfferConditions,
+                offerPrices: liveOfferPrices,
                 supabase: redvaultOrderRpcClient,
               });
       } catch (error) {

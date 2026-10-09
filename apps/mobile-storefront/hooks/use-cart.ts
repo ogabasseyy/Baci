@@ -14,7 +14,7 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
-import { getCachedProductStock } from './cart-query-cache';
+import { getCachedOptionStock } from './cart-query-cache';
 import {
   type AddToCartInput,
   checkStock,
@@ -77,7 +77,10 @@ export function useCart() {
       const stockCheck = await checkStock(
         item.product_id,
         totalQuantity,
-        getCachedProductStock(queryClient, item.product_id),
+        getCachedOptionStock(queryClient, item.product_id, {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }),
         {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,
@@ -187,7 +190,10 @@ export function useCart() {
       const stockCheck = await checkStock(
         item.product_id,
         quantity,
-        getCachedProductStock(queryClient, item.product_id),
+        getCachedOptionStock(queryClient, item.product_id, {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }),
         {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,

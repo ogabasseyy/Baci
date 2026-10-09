@@ -79,6 +79,20 @@ export function OrderDetailsItemsCard({
                   Condition: {conditionLabel}
                 </Text>
               ) : null}
+              {item.offer_id ? (
+                <Text
+                  style={[styles.itemVariant, { color: colors.textSecondary }]}
+                >
+                  Offer:{' '}
+                  {[
+                    item.offer_grade ? `Grade ${item.offer_grade}` : null,
+                    item.offer_condition_notes ?? null,
+                    `ref ${item.offer_id.slice(0, 8)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              ) : null}
               {item.variant_name ? (
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}

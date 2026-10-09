@@ -43,12 +43,23 @@ export async function fetchCartOfferPrices(
     )
   );
 
-  const results = await Promise.all(
-    offerProductIds.map(async (productId) => {
-      const result = await fetchOffers(productId);
-      return { productId, ...result };
-    })
-  );
+  // Bounded fan-out: a public validation can name up to 50 cart lines,
+  // so never run one live lookup per product concurrently — chunk the
+  // reads like the order-offer verifier does.
+  const results: {
+    productId: string;
+    data: OfferQueryResult['data'];
+    error: OfferQueryResult['error'];
+  }[] = [];
+  for (let index = 0; index < offerProductIds.length; index += 10) {
+    const chunk = await Promise.all(
+      offerProductIds.slice(index, index + 10).map(async (productId) => ({
+        productId,
+        ...(await fetchOffers(productId)),
+      }))
+    );
+    results.push(...chunk);
+  }
 
   const offerError = results.find((result) => result.error)?.error;
   if (offerError) {

@@ -1,9 +1,7 @@
 import { createLogger } from '@/lib/logger';
+import { hydrateProductRowsWithBaseInventory } from '@/lib/storefront-product-base-inventory';
 import { hydrateProductRowsWithConditionOffers } from '@/lib/storefront-product-offers';
-import {
-  hydrateProductRowsWithBaseInventory,
-  hydrateProductRowsWithStorefrontVariants,
-} from '@/lib/storefront-product-variants';
+import { hydrateProductRowsWithStorefrontVariants } from '@/lib/storefront-product-variants';
 import { isVariantBearingProduct } from './product-variant-state';
 
 const log = createLogger('ProductHydration');

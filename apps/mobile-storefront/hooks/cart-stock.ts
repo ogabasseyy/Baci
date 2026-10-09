@@ -1,10 +1,11 @@
 import NetInfo from '@react-native-community/netinfo';
 import { createLogger } from '@/lib/logger';
-import { getStorefrontProductVariantsByProductIds } from '@/lib/storefront-product-variants';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import type { CartItem } from '@/stores/cart-store.types';
+import { resolveBaseEffectiveStock } from './cart-stock-base';
 import { resolveOfferEffectiveStock } from './cart-stock-offers';
+import { resolveVariantEffectiveStock } from './cart-stock-variant';
 
 const log = createLogger('Cart');
 
@@ -52,8 +53,10 @@ export function getTotalRequestedQuantityForStock(item: AddToCartInput) {
  * Check stock availability from the database.
  *
  * @param cachedStock - Last known stock from TanStack Query cache, used as
- *   fallback when offline or on query error. If no cached value exists,
- *   stock check will fail to prevent overselling.
+ *   fallback when offline or on query error. Callers pass the exact
+ *   option availability for option lines (see getCachedOptionStock); a
+ *   parent fallback for an option line would misvalidate. If no cached
+ *   value exists, stock check will fail to prevent overselling.
  * @param options.variantId - Selected variant identity. A managed option
  *   validates its own effective stock instead of the parent total, so a
  *   stocked variant on a zero-stock parent stays purchasable.
@@ -145,102 +148,4 @@ export async function checkStock(
     currentStock,
     requestedQuantity,
   };
-}
-
-/**
- * Variant effective stock through the same unbounded storefront projection
- * the PDP hydrates (get_storefront_product_variants, paginated past any
- * population cap). The search MCP projection this check previously read is
- * capped at 129 rows per product, so a selectable later variant reported
- * zero and rolled back an available add. Unlimited tracking bypasses;
- * strict compares the projection's exact available_units; other policies
- * use the finite quantity with parent inheritance, mirroring the
- * price-options CTE. A variant absent from the projection (vanished or
- * unpublished) reports zero; other lookup failures throw so the caller
- * retries instead of overselling.
- */
-async function resolveVariantEffectiveStock(
-  productId: string,
-  variantId: string,
-  parentStock: number
-): Promise<number> {
-  const variantsByProduct = await getStorefrontProductVariantsByProductIds([
-    productId,
-  ]);
-  if (!variantsByProduct) {
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  const row = (variantsByProduct[productId] ?? []).find(
-    (entry) => entry?.id === variantId
-  );
-  if (!row) {
-    log.error('Variant stock check found no such variant:', variantId);
-    return 0;
-  }
-  if (row.effective_policy === 'serialized_then_unlimited') {
-    return Number.MAX_SAFE_INTEGER;
-  }
-  if (row.effective_policy === 'serialized_strict') {
-    if (
-      typeof row.available_units === 'number' &&
-      Number.isFinite(row.available_units)
-    ) {
-      return Math.max(0, row.available_units);
-    }
-    log.error('Variant stock check found no unit count:', variantId);
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  return typeof row.stock_quantity === 'number' &&
-    Number.isFinite(row.stock_quantity)
-    ? row.stock_quantity
-    : parentStock;
-}
-
-/**
- * Base-option effective stock through the shopper-safe base inventory
- * projection (anchor-first effective policy plus base available units).
- * Unlimited tracking bypasses; strict compares exact units; other
- * policies use the scalar parent stock, mirroring the price-options base
- * branch and the PDP predicate. A product absent from the projection
- * (vanished or unpublished) reports zero; other lookup failures throw so
- * the caller retries instead of overselling.
- */
-async function resolveBaseEffectiveStock(
-  productId: string,
-  parentStock: number
-): Promise<number> {
-  const { data, error } = await supabase.rpc(
-    'get_storefront_product_base_inventory',
-    { p_product_ids: [productId] }
-  );
-  if (error) {
-    log.error('Base stock check failed:', error);
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  const row = (Array.isArray(data) ? data : []).find(
-    (entry: { product_id?: unknown }) => entry?.product_id === productId
-  ) as
-    | {
-        effective_policy?: unknown;
-        available_units?: unknown;
-      }
-    | undefined;
-  if (!row) {
-    log.error('Base stock check found no such product:', productId);
-    return 0;
-  }
-  if (row.effective_policy === 'serialized_then_unlimited') {
-    return Number.MAX_SAFE_INTEGER;
-  }
-  if (row.effective_policy === 'serialized_strict') {
-    if (
-      typeof row.available_units === 'number' &&
-      Number.isFinite(row.available_units)
-    ) {
-      return Math.max(0, row.available_units);
-    }
-    log.error('Base stock check found no unit count:', productId);
-    throw new Error('Cannot verify stock availability. Please try again.');
-  }
-  return parentStock;
 }
